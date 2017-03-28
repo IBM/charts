@@ -1,0 +1,73 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+#
+# WARNING: DO NOT MODIFY. Changes may be overwritten in future updates.
+#
+# The following build goals are designed to be generic for any docker image.
+# This Makefile is designed to be included in other Makefiles.
+# You must ensure that Make variables are defined for IMAGE_REPO, IMAGE_NAME,
+# DOCKER_USERNAME and DOCKER_PASSWORD.
+#
+# If you are using a Bluemix image registry, you must use a token for DOCKER_PASSWORD
+# created with the command `bx cr token-add --description "" --non-expiring --readwrite`
+###############################################################################
+
+.DEFAULT_GOAL=image
+
+.PHONY: docker-login
+docker-login:
+ifndef $(and DOCKER_USERNAME, DOCKER_PASSWORD)
+	$(error DOCKER_USERNAME and DOCKER_PASSWORD must be defined, required for goal (docker-login))
+endif
+	@docker login -u $(DOCKER_USERNAME) -p $(DOCKER_PASSWORD) $(DOCKER_SERVER)
+
+.PHONY: app-version
+app-version:
+	$(eval WORKING_CHANGES := $(shell git status --porcelain))
+	$(eval BUILD_DATE := $(shell date +%m/%d@%H:%M:%S))
+	$(eval GIT_COMMIT := $(shell git rev-parse --short HEAD))
+	$(eval VCS_REF := $(if $(WORKING_CHANGES),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT)))
+	$(eval APP_VERSION ?= $(if $(shell cat VERSION 2> /dev/null),$(shell cat VERSION 2> /dev/null),0.0.1))
+	$(eval IMAGE_VERSION ?= $(APP_VERSION)-$(GIT_COMMIT))
+	@echo "App: $(IMAGE_NAME) $(IMAGE_VERSION)"
+
+.PHONY: check-env
+check-env:
+ifndef IMAGE_REPO
+	$(error IMAGE_REPO is undefined)
+endif
+ifndef IMAGE_NAME
+	$(error IMAGE_NAME is undefined)
+endif
+
+.PHONY: image
+image:: check-env app-version
+	docker build -t $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_VERSION) \
+           --build-arg "VCS_REF=$(VCS_REF)" \
+           --build-arg "VCS_URL=$(GIT_REMOTE_URL)" \
+           --build-arg "IMAGE_NAME=$(IMAGE_NAME)" \
+           --build-arg "IMAGE_DESCRIPTION=$(IMAGE_DESCRIPTION)" .
+
+.PHONY: push
+push: check-env image
+	docker push $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_VERSION)
+
+.PHONY: release
+release: check-env app-version
+	docker tag $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_VERSION) $(IMAGE_REPO)/$(IMAGE_NAME):$(RELEASE_TAG)
+	docker push $(IMAGE_REPO)/$(IMAGE_NAME):$(RELEASE_TAG)
+
+.PHONY: show-labels
+show-labels: app-version
+	@docker inspect $(IMAGE_REPO)/$(IMAGE_NAME):$(IMAGE_VERSION) --format='{{json .Config.Labels}}' | tr , '\n' | tr -d '{' | tr -d '}'
+
+.PHONY: clean
+clean::
+	@echo "Cleaning up generated files"
