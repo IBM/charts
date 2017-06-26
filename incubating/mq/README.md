@@ -4,7 +4,7 @@ IBM® MQ is messaging middleware that simplifies and accelerates the integration
 
 By connecting virtually everything from a simple pair of applications to the most complex business environments, IBM MQ helps you improve business responsiveness, control costs, reduce risk—and gain real-time insight from mobile, IoT and sensor data.
 
-[![Brief introduction to IBM MQ](https://www.youtube.com/watch?v=iHktrluYeA4/0.jpg)](https://www.youtube.com/watch?v=iHktrluYeA4)
+[![Brief introduction to IBM MQ](https://img.youtube.com/vi/iHktrluYeA4/0.jpg)](https://www.youtube.com/watch?v=iHktrluYeA4)
 
 Learn more about IBM MQ at the following link: [https://www.ibm.com/support/knowledgecenter/SSFKSJ_9.0.0/com.ibm.mq.pro.doc/q001020_.htm](hhttps://www.ibm.com/support/knowledgecenter/SSFKSJ_9.0.0/com.ibm.mq.pro.doc/q001020_.htm).
 
