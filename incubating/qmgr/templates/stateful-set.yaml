@@ -1,0 +1,45 @@
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  serviceName: {{ .Values.service.name }}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        QM_IDENTIFIER: "{{ .Release.Name }}"
+    spec:
+      containers:
+        - name: qmgr
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 1414
+          - containerPort: 9443
+          env:
+          - name: LICENSE
+            value: accept
+          - name: MQ_QMGR_NAME
+            value: {{ .Values.queuemanager.name }}
+          volumeMounts:
+          - mountPath: "/mnt/mqm"
+            name: {{ template "fullname" . }}
+          resources:
+            limits:
+{{ toYaml .Values.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.resources.requests | indent 14 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ template "fullname" . }}
+      annotations:
+        volume.beta.kubernetes.io/storage-class: "{{ .Values.resources.storage.class }}"
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.resources.storage.size }}
