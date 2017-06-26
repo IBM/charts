@@ -1,0 +1,53 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  serviceName: {{ .Values.service.name }}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        QM_IDENTIFIER: "{{ .Release.Name }}"
+    spec:
+      containers:
+        - name: qmgr
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 1414
+          - containerPort: 9443
+          env:
+          - name: LICENSE
+            value: {{ .Values.license }}
+          - name: MQ_QMGR_NAME
+            value: {{ .Values.queuemanager.name }}
+          volumeMounts:
+          - mountPath: "/mnt/mqm"
+            name: {{ template "fullname" . }}
+          resources:
+            limits:
+{{ toYaml .Values.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.resources.requests | indent 14 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ template "fullname" . }}
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.resources.storage.size }}
+      storageClassName: {{ .Values.resources.storage.class }}
