@@ -7,7 +7,6 @@ The `IBM/charts` repository provides [helm](https://github.com/kubernetes/helm) 
 The repository is organized as follows:
 
 - The `master` branch serves as a landing ground for new `helm` charts.
-- The `stable` branch is pushed from a built version of the `helm` chart repository. The published chart repository can be consumed directly from GitHub.
 
 ## Development 
 
