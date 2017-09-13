@@ -17,7 +17,7 @@ $(STABLE_BUILD_DIR):
 $(INCUBATING_BUILD_DIR):
 	@mkdir -p $@
 
-.PHONY: charts charts-stable charts-incubating
+.PHONY: charts charts-stable charts-incubating $(STABLE_CHARTS) $(INCUBATING_CHARTS)
 
 # Default aliases: charts, repo
 
@@ -37,10 +37,10 @@ $(INCUBATING_CHARTS): $(INCUBATING_BUILD_DIR)
 
 .PHONY: repo repo-stable repo-incubating
 
-repo-stable: $(STABLE_CHARTS)
+repo-stable: $(STABLE_CHARTS) $(STABLE_BUILD_DIR)
 	helm repo index $(STABLE_BUILD_DIR) --url $(STABLE_REPO_URL)
 
-repo-incubating: $(INCUBATING_CHARTS)
+repo-incubating: $(INCUBATING_CHARTS) $(INCUBATING_BUILD_DIR)
 	helm repo index $(INCUBATING_BUILD_DIR) --url $(INCUBATING_REPO_URL)
 
 .PHONY: all
