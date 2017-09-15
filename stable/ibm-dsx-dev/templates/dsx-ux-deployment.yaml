@@ -1,0 +1,56 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: dsx-ux-server
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: dsx-ux-server-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: dsx-ux-server-deployment-pod
+  template:
+    metadata:
+      labels:
+        component: dsx-ux-server
+        run: dsx-ux-server-deployment-pod
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.image.secret }}
+      containers:
+        - name: dsx-ux-server-container
+          image: "{{ .Values.dsxUxServerContainer.image.repository }}:{{ .Values.dsxUxServerContainer.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+          command: ["/scripts/startup.sh"]
+          resources:
+{{ toYaml .Values.dsxUxServerContainer.resources | indent 12 }}
+          ports:
+            - containerPort: 443
+              protocol: TCP
+            - containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /user-home
+              name: user-home-mount
+      volumes:
+        - name: "user-home-mount"
+          persistentVolumeClaim:
+          {{- if .Values.userHomePvc.persistence.existingClaimName }}
+            claimName: {{ .Values.userHomePvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}-{{ .Values.userHomePvc.name }}
+          {{- end }}

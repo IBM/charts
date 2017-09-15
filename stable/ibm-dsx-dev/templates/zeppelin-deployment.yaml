@@ -1,0 +1,54 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: zeppelin-server
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: zeppelin-server-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: zeppelin-server-deployment-pod
+  template:
+    metadata:
+      labels:
+        component: zeppelin-server
+        run: zeppelin-server-deployment-pod
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.image.secret }}
+      containers:
+        - name: zeppelin-server-container
+          image: {{ .Values.zeppelinServerContainer.image.repository }}:{{ .Values.zeppelinServerContainer.image.tag }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+          command: ["/scripts/startup.sh"]
+          resources:
+{{ toYaml .Values.zeppelinServerContainer.resources | indent 12 }}
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /user-home
+              name: user-home-mount
+      volumes:
+        - name: "user-home-mount"
+          persistentVolumeClaim:
+          {{- if .Values.userHomePvc.persistence.existingClaimName }}
+            claimName: {{ .Values.userHomePvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}-{{ .Values.userHomePvc.name }}
+          {{- end }}

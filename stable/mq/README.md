@@ -14,13 +14,19 @@ Learn more about IBM MQ at the following link: [https://www.ibm.com/support/know
 $ helm install incubating/mq
 ```
 
+# Deprecation notice
+
+**Please note:** that this chart has now been deprecated and replaced by the chart available in `stable/ibm-mqadvanced-server-dev`.
+Although you can still continue to use this chat we suggest you now use the new chart.
+
+
 # Quick Start
 
 1. Create a Persistent Volume which will be utilized for storage
 
-The MQ chart requires access to storage in order to persist the database, which is performed through the Kubernetes Volume Claim mechanism. The storage can be allocated in the private cloud admin console. 
+The MQ chart requires access to storage in order to persist the database, which is performed through the Kubernetes Volume Claim mechanism. The storage can be allocated in the private cloud admin console.
 
-For minikube, use the following command to allocate a Persistent Volume directly on the minikube virtual machine: 
+For minikube, use the following command to allocate a Persistent Volume directly on the minikube virtual machine:
 
 ```cat <<EOF | kubectl create -f -
 apiVersion: v1

@@ -17,7 +17,10 @@ $(STABLE_BUILD_DIR):
 $(INCUBATING_BUILD_DIR):
 	@mkdir -p $@
 
-.PHONY: charts charts-stable charts-incubating $(STABLE_CHARTS) $(INCUBATING_CHARTS)
+$(REFERENCE_BUILD_DIR):
+	@mkdir -p $@
+
+.PHONY: charts charts-stable charts-incubating charts-reference $(STABLE_CHARTS) $(INCUBATING_CHARTS) $(REFERENCE_CHARTS)
 
 # Default aliases: charts, repo
 
@@ -35,7 +38,12 @@ $(INCUBATING_CHARTS): $(INCUBATING_BUILD_DIR)
 	helm lint --strict $@
 	helm package $@ -d $(INCUBATING_BUILD_DIR)
 
-.PHONY: repo repo-stable repo-incubating
+charts-reference: $(REFERENCE_CHARTS)
+$(REFERENCE_CHARTS): $(REFERENCE_BUILD_DIR) 
+	helm lint --strict $@
+	helm package $@ -d $(REFERENCE_BUILD_DIR)
+
+.PHONY: repo repo-stable repo-incubating repo-reference
 
 repo-stable: $(STABLE_CHARTS) $(STABLE_BUILD_DIR)
 	helm repo index $(STABLE_BUILD_DIR) --url $(STABLE_REPO_URL)
@@ -43,9 +51,12 @@ repo-stable: $(STABLE_CHARTS) $(STABLE_BUILD_DIR)
 repo-incubating: $(INCUBATING_CHARTS) $(INCUBATING_BUILD_DIR)
 	helm repo index $(INCUBATING_BUILD_DIR) --url $(INCUBATING_REPO_URL)
 
-.PHONY: all
-all: repo-stable repo-incubating $(STABLE_CHARTS) $(INCUBATING_CHARTS)
+repo-reference: $(REFERENCE_CHARTS) $(REFERENCE_BUILD_DIR)
+	helm repo index $(REFERENCE_BUILD_DIR) --url $(REFERENCE_REPO_URL)
 
-image:: repo-stable repo-incubating
+.PHONY: all
+all: repo-stable repo-incubating repo-reference $(STABLE_CHARTS) $(INCUBATING_CHARTS)  $(REFERENCE_CHARTS)
+
+image:: repo-stable repo-incubating repo-reference
 
 include Makefile.docker
