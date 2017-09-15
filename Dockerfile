@@ -24,7 +24,10 @@ LABEL org.label-schema.vendor="IBM" \
       org.label-schema.schema-version="1.0"
 
 RUN mkdir -p /usr/share/nginx/html/stable && \
-    mkdir -p /usr/share/nginx/html/incubating
+    mkdir -p /usr/share/nginx/html/incubating && \
+    mkdir -p /usr/share/nginx/html/reference 
+    
 
 ADD repo/incubating /usr/share/nginx/html/incubating
 ADD repo/stable /usr/share/nginx/html/stable
+ADD repo/reference /usr/share/nginx/html/reference
