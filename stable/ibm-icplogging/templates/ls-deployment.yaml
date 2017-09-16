@@ -1,0 +1,71 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+metadata:
+  labels:
+    app: {{ template "logstash.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    component: "{{ .Values.logstash.name }}"
+  name: {{ template "logstash.fullname" . }}
+spec:
+  replicas: {{ .Values.logstash.replicas }}
+  selector:
+    matchLabels:
+      name: logstash
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  revisionHistoryLimit: 3
+  minReadySeconds: 5
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        name: logstash
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+      - env:
+        - name: LS_JAVA_OPTS
+          value: -Xmx{{ .Values.logstash.heapSize }} -Xms{{ .Values.logstash.heapSize }}
+        image: {{ .Values.logstash.image.repository }}:{{ .Values.logstash.image.tag }}
+        name: logstash
+        ports:
+        - containerPort: {{ .Values.logstash.port }}
+        resources: {}
+        volumeMounts:
+        - mountPath: /usr/share/logstash/pipeline
+          name: pipeline-config
+        - mountPath: /usr/share/logstash/config/logstash.yml
+          subPath: logstash.yml
+          name: config
+        - name: data
+          mountPath: /usr/share/logstash/data
+      restartPolicy: Always
+      volumes:
+      - name: pipeline-config
+        configMap:
+          name: {{ template "logstash.fullname" . }}-config
+          items:
+          - key: k8s.conf
+            path: k8s.conf
+      - name: config
+        configMap:
+          name: {{ template "logstash.fullname" . }}-config
+          items:
+          - key: logstash.yml
+            path: logstash.yml
+      - emptyDir:
+          medium: ""
+        name: data
+status: {}

@@ -1,0 +1,54 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  labels:
+    app: {{ template "prometheus.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: nodeexporter
+    release: {{ .Release.Name }}
+  name: {{ template "prometheus.fullname" . }}-nodeexporter
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "prometheus.fullname" . }}
+        component: nodeexporter
+        release: {{ .Release.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+        - name: nodeexporter
+          image: {{ .Values.nodeExporter.image.name }}:{{ .Values.nodeExporter.image.tag }}
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - --collector.procfs=/host/proc
+            - --collector.sysfs=/host/sys
+          ports:
+            - name: metrics
+              containerPort: 9100
+          resources: {}
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly:  true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+      hostNetwork: true
+      hostPID: true
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+

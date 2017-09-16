@@ -1,0 +1,54 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "prometheus.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: alertmanager
+    release: {{ .Release.Name }}
+  name: {{ template "prometheus.fullname" . }}-alertmanager
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "prometheus.fullname" . }}
+        component: alertmanager
+        release: {{ .Release.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+        - name: alertmanager
+          image: {{ .Values.alertmanager.image.name }}:{{ .Values.alertmanager.image.tag }}
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - --config.file=/etc/config/alertmanager.yml
+            - --storage.path=/var/lib/alertmanager/data
+          ports:
+            - containerPort: 9093
+          resources: {}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+            - name: storage-volume
+              mountPath: "/var/lib/alertmanager/data"
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ template "prometheus.fullname" . }}-alertmanager
+        - name: storage-volume
+        {{- if .Values.alertmanager.persistentVolume.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "prometheus.fullname" . }}-alertmanager
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+

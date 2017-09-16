@@ -1,0 +1,101 @@
+image:
+  pullPolicy: IfNotPresent
+
+logstash:
+  replicas: 1
+  name: logstash
+  heapSize: "256m"
+  port: 5000
+  image:
+    repository: "ibmcom/logstash"
+    tag: "5.5.1"
+
+kibana:
+  replicas: 1
+  name: kibana
+  internal: 5601
+  external: 32601
+  image:
+    repository: ibmcom/kibana
+    tag: 5.5.1
+
+filebeat:
+  name: filebeat-ds
+  image:
+    repository: "ibmcom/filebeat"
+    tag: 5.5.1
+  serverConfigFile:
+    filebeat.yml: |-
+      filebeat.prospectors:
+      - input_type: log
+        paths:
+          - /var/log/containers/*.log
+        scan_frequency: 10s
+        symlinks: true
+        json.message_key: log
+        json.keys_under_root: true
+        json.add_error_key: true
+        multiline.pattern: '^\s'
+        multiline.match: after
+        fields_under_root: true
+        fields:
+          type: kube-logs
+          node_hostname: ${NODE_HOSTNAME}
+          pod_ip: ${POD_IP}
+        fields_under_root: true
+
+        tags:
+            - k8s-app
+
+      filebeat.config.modules:
+        # Set to true to enable config reloading
+        reload.enabled: true
+
+      output.logstash:
+        hosts: logstash:5000
+        timeout: 15
+
+      logging.level: info
+
+elasticsearch:
+  name: "elasticsearch"
+  internalPort: 9300
+  image:
+    repository: "ibmcom/elasticsearch"
+    tag: "5.5.1"
+
+  client:
+    name: client
+    replicas: 1
+    serviceType: ClusterIP
+    heapSize: "256m"
+    restPort: 9200
+    antiAffinity: soft
+
+  master:
+    name: master
+    replicas: 1
+    heapSize: "256m"
+    antiAffinity: soft
+
+  data:
+    name: data
+    replicas: 2
+    heapSize: "512m"
+    antiAffinity: soft
+    storage:
+      size: 10Gi
+      accessModes:
+        - ReadWriteOnce
+      subPath: ""
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName is set to "", which disables dynamic provisioning
+      ## If set to null, storageClassName is not included
+      storageClass: "manual"
+
+xpack:
+  monitoring: false
+  security: false
+  graph: false
+  reporting: false
+  ml: false

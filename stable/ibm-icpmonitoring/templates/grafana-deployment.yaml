@@ -1,0 +1,52 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "grafana.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    component: grafana
+    release: "{{ .Release.Name }}"
+  name: {{ template "grafana.fullname" . }}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "grafana.fullname" . }}
+        component: grafana
+        release: "{{ .Release.Name }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+        - name: grafana
+          image: {{ .Values.grafana.image.name }}:{{ .Values.grafana.image.tag }}
+          imagePullPolicy: "IfNotPresent"
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "{{ .Values.grafana.user }}"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "{{ .Values.grafana.password }}"
+          ports:
+          - name: web
+            containerPort: 3000
+          resources: {}
+          volumeMounts:
+            - name: grafana-storage
+              mountPath: "/var/lib/grafana"
+      volumes:
+        - name: grafana-storage
+      {{- if .Values.grafana.persistentVolume.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "grafana.fullname" . }}
+      {{- else }}
+          emptyDir: {}
+      {{- end }}
+

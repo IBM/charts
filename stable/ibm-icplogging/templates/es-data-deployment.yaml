@@ -1,0 +1,107 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "elasticsearch.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: "{{ .Values.elasticsearch.data.name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  name: {{ template "data.fullname" . }}
+spec:
+  replicas: {{ .Values.elasticsearch.data.replicas }}
+  selector:
+    matchLabels:
+      component: elasticsearch
+      role: data
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  revisionHistoryLimit: 3
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+        component: elasticsearch
+        role: data
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      {{- if eq .Values.elasticsearch.data.antiAffinity "hard" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: "{{ template "elasticsearch.fullname" . }}"
+                  release: "{{ .Release.Name }}"
+                  component: "{{ .Values.elasticsearch.data.name }}"
+      {{- else if eq .Values.elasticsearch.data.antiAffinity "soft" }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: "{{ template "elasticsearch.fullname" . }}"
+                  release: "{{ .Release.Name }}"
+                  component: "{{ .Values.elasticsearch.data.name }}"
+      {{- end }}
+      initContainers:
+      - name: "sysctl"
+        image: "busybox"
+        imagePullPolicy: "IfNotPresent"
+        command: ["sysctl", "-w", "vm.max_map_count=262144"]
+        securityContext:
+          privileged: true
+      - name: "chmod"
+        image: "busybox"
+        imagePullPolicy: "IfNotPresent"
+        command: ["chmod", "777", "/data-dir"]
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: data
+          mountPath: /data-dir
+      containers:
+      - name: es-data
+        securityContext:
+          privileged: false
+          capabilities:
+            add:
+              - IPC_LOCK
+        image: {{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: "ES_JAVA_OPTS"
+          value: "-Xms{{ .Values.elasticsearch.data.heapSize }} -Xmx{{ .Values.elasticsearch.data.heapSize }}"
+        ports:
+        - containerPort: {{ .Values.elasticsearch.internalPort }}
+          name: transport
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: /usr/share/elasticsearch/data
+        - name: config
+          mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+          subPath: elasticsearch.yml
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ template "elasticsearch.fullname" . }}-pvc
+        - name: config
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-config
+            items:
+              - key: data.yml
+                path: elasticsearch.yml
