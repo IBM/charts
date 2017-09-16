@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "logstash.fullname" . }}-config
+data:
+  logstash.yml: |-
+    config.reload.automatic: true
+    http.host: "0.0.0.0"
+    path.config: /usr/share/logstash/pipeline
+    xpack.monitoring.enabled: {{ .Values.xpack.monitoring }}
+    xpack.monitoring.elasticsearch.url: {{ .Values.logstash.elasticsearch }}
+    xpack.monitoring.elasticsearch.username: logstash_system
+    xpack.monitoring.elasticsearch.password: changeme
+  k8s.conf: |-
+    input {
+      beats {
+        port => {{ .Values.logstash.port }}
+      }
+    }
+
+    filter {
+      if [type] == "kube-logs" {
+
+        mutate {
+          rename => ["log", "message"]
+          remove_field => ["host", "beat.hostname"]
+        }
+
+        date {
+          match => ["time", "ISO8601"]
+          remove_field => ["time"]
+        }
+
+        grok {
+          "match" => {
+            "container" => "%{DATA:container_prefix}-(?<container_id>[0-9A-Za-z]{64,64})"
+          }
+        }
+
+        grok {
+          "match" => {
+            "pod" => "(?<pod_prefix>.+)-(?<pod_suffix1>[^-]+)-(?<pod_suffix2>[^-]+)"
+          }
+        }
+      }
+    }
+
+    output {
+      elasticsearch {
+        hosts => "{{ .Values.elasticsearch.name }}:{{ .Values.elasticsearch.client.restPort }}"
+        index => "%{[@metadata][beat]}-%{+YYYY.MM.dd}"
+        document_type => "%{[@metadata][type]}"
+      }
+    }

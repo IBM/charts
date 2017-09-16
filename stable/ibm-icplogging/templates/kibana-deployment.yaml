@@ -1,0 +1,61 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "kibana.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    component: "{{ .Values.kibana.name }}"
+    release: {{ .Release.Name }}
+  name: {{ template "kibana.fullname" . }}
+spec:
+  replicas: {{ .Values.kibana.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  minReadySeconds: 5
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: {{ template "name" . }}
+        component: {{ .Values.kibana.name }}
+        release: {{ .Release.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+      - image: {{ .Values.kibana.image.repository }}:{{ .Values.kibana.image.tag }}
+        name: kibana
+        ports:
+        - containerPort: {{ .Values.kibana.internal }}
+        resources: {}
+        ports:
+        - containerPort: {{ .Values.kibana.internal }}
+          name: ui
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/kibana/config/kibana.yml
+          subPath: kibana.yml
+        - name: cache
+          mountPath: /usr/share/kibana/optimize
+      volumes:
+          - emptyDir:
+              medium: ""
+            name: cache
+          - name: config
+            configMap:
+              name: {{ template "kibana.fullname" . }}-config
+              items:
+                - key: kibana.yml
+                  path: kibana.yml
+      restartPolicy: Always
+status: {}

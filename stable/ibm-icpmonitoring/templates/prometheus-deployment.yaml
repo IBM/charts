@@ -1,0 +1,55 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "prometheus.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: prometheus
+    release: {{ .Release.Name }}
+  name: {{ template "prometheus.fullname" . }}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "prometheus.fullname" . }}
+        component: prometheus
+        release: {{ .Release.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+        - name: prometheus
+          image: {{ .Values.prometheus.image.name }}:{{ .Values.prometheus.image.tag }}
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - --alertmanager.url=http://{{ template "prometheus.fullname" . }}-alertmanager:{{ .Values.alertmanager.port }}
+            - --config.file=/etc/config/prometheus.yml
+            - --storage.local.path=/var/lib/prometheus/data
+          ports:
+            - containerPort: 9090
+          resources: {}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+            - name: storage-volume
+              mountPath: /var/lib/prometheus/data
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ template "prometheus.fullname" . }}
+        - name: storage-volume
+        {{- if .Values.prometheus.persistentVolume.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "prometheus.fullname" . }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+

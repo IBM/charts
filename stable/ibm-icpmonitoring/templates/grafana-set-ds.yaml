@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: {{ template "grafana.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    component: setds
+    release: "{{ .Release.Name }}"
+  name: {{ template "grafana.fullname" . }}-ds
+spec:
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app: {{ template "grafana.fullname" . }}
+        component: setds
+        release: "{{ .Release.Name }}"
+    spec:
+      containers:
+      - name: grafana-ds
+        image: "ibmcom/curl:3.6"
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "{{ .Values.grafana.user }}"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "{{ .Values.grafana.password }}"
+        args:
+          - "http://$(GF_SECURITY_ADMIN_USER):$(GF_SECURITY_ADMIN_PASSWORD)@{{ template "grafana.fullname" . }}:{{ .Values.grafana.port }}/api/datasources"
+          - "--silent"
+          - "--fail"
+          - "--show-error"
+          - "--header"
+          - "Content-Type: application/json"
+          - "--data-binary"
+          - "{\"name\":\"prometheus\",\"type\":\"prometheus\",\"url\":\"http://{{ template "prometheus.fullname" . }}:{{ .Values.prometheus.port }}\",\"access\":\"proxy\",\"isDefault\":true}"
+      restartPolicy: OnFailure
