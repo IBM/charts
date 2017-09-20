@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-credentials-test"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"  
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+  - name: {{ template "fullname" . }}-credentials-test
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+    env:
+      - name: DBCMD
+        value: {{ default "mongo" .Values.database.dbcmd | quote  }}
+      - name: HOST
+        value: {{ template "fullname" . }}
+      - name: DATABASE_NAME
+        value: {{ default "admin" .Values.database.name | quote }}
+      - name: USER
+        value: {{ default "mongo" .Values.database.user | quote }}
+      - name: PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ template "fullname" . }}
+            key: password
+    command: ["sh", "-c", "$DBCMD $HOST:27017/${DATABASE_NAME} -u ${USER} -p ${PASSWORD}"]
+  restartPolicy: Never

@@ -1,0 +1,78 @@
+apiVersion: v1
+data:
+  .dockercfg: "eyJuYS5jdW11bHVzcmVwby5jb20iOnsidXNlcm5hbWUiOiJ0b2tlbiIsInBhc3N3b3JkIjoiOTkxOTE5NGIwMDU3MDM0N2FmZTA1YmQzNjljN2Y3MmYiLCJlbWFpbCI6ImlkZWxpZGphQGNhLmlibS5jb20iLCJhdXRoIjoiZEc5clpXNDZPVGt4T1RFNU5HSXdNRFUzTURNME4yRm1aVEExWW1Rek5qbGpOMlkzTW1ZPSJ9fQ=="
+kind: Secret
+metadata:
+  name: {{ template "fullname" . }}-mongodb-secret
+type: kubernetes.io/dockercfg
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+    spec:
+      containers:
+      - name: {{ template "fullname" . }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ default "" .Values.image.imagePullPolicy | quote }}
+        env:
+        - name: LICENSE
+          value: {{ .Values.license }}
+        - name: MONGODB_USERNAME
+          value: {{ default "mongo" .Values.database.user | quote }}
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}
+              key: password
+        - name: MONGODB_DATABASE
+          value: {{ default "" .Values.database.name | quote }}
+        ports:
+        - name: mongodb
+          containerPort: 27017
+        livenessProbe:
+          exec:
+            command:
+            - mongo
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - mongo
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+        - name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"
+          mountPath: /data/db
+          subPath: {{ .Values.volumeMounts.data.subPath }}
+      imagePullSecrets:
+          - name: {{ template "fullname" . }}-mongodb-secret
+      volumes:
+      - name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"   
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.dataVolume.existingClaimName }}
+          claimName: {{ .Values.dataVolume.existingClaimName }}
+        {{- else }}
+          claimName: {{ template "fullname" . }}-{{ .Values.dataVolume.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
