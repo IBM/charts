@@ -1,0 +1,89 @@
+apiVersion: v1
+data:
+  .dockercfg: {{ .Values.image.secret }}
+kind: Secret
+metadata:
+  name: {{ template "fullname" . }}-dsm-secret
+type: kubernetes.io/dockercfg
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+    spec:
+      containers:
+      - name: dsm
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: LICENSE
+          value: {{ .Values.license }}
+        - name: DSM_ADMIN
+          value: "{{ .Values.login.user }}"
+        - name: DSM_ADMIN_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}
+              key: password
+        ports:
+        - containerPort: 11080
+        - containerPort: 11081
+        livenessProbe:
+          initialDelaySeconds: 180
+          httpGet:
+            path: /
+            port: 11081
+            scheme: HTTPS
+        readinessProbe:
+          initialDelaySeconds: 180
+          httpGet:
+            path: /
+            port: 11080
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+        - name: all
+          mountPath: /opt/ibm-datasrvrmgr/
+      - name: dsmsc
+        image: "{{ .Values.imageSidecar.repository }}:{{ .Values.imageSidecar.tag }}"
+        imagePullPolicy: {{ .Values.imageSidecar.pullPolicy }}
+        env:
+        - name: LICENSE
+          value: {{ .Values.license }}
+        - name: DSM_APP_NAME
+          value: {{ template "fullname" . }}
+        - name: DSM_RELEASE_NAME
+          value: {{ .Release.Name }}
+        - name: DSM_CHART_NAME
+          value: {{ .Chart.Name }}
+        - name: DSM_CHART_VERSION
+          value: {{ .Chart.Version }} 
+        - name: DSM_MY_SVC_NAME
+          value: {{ template "fullname" . }}
+        - name: REPODB_SECRET
+          value: {{ .Values.image.secret }}
+      imagePullSecrets:
+        - name: {{ template "fullname" . }}-dsm-secret
+      volumes:
+      - name: all
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.dsmVolume.existingClaimName }}
+          claimName: {{ .Values.dsmVolume.existingClaimName }}
+        {{- else }}
+          claimName: {{ template "fullname" . }}-{{ .Values.dsmVolume.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+
