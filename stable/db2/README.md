@@ -1,3 +1,10 @@
+# Deprecation notice
+ +
+ + **Please note:** that this chart has now been deprecated and replaced by the chart available in `stable/ibm-db2oltp-dev`.
+ + Although you can still continue to use this chat we suggest you now use the new chart.
+ +
+
+
 # Db2 Developer-C 11.1.2.2 Helm chart
 
 IBM® Db2® is a multi-workload database designed to help you quickly develop, test and build applications for your business. Designed for operational and analytic workloads, the solution provides in-memory computing and other features to help ensure high performance and scalability. Storage optimization and compression can make your applications more cost efficient, and continuous ingest ensures that they run at the speed of business.
