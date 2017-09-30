@@ -1,0 +1,71 @@
+# The values variable below picks the pattern-specific config options from
+# values.yaml. For example, if patternName is "webApplicationProxy" it will pick
+# the webApplicationProxy config options from the map structure in values.yaml.
+{{- $values := index .Values .Values.patternName }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    chart: {{ .Chart.Name}}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }} 
+        stdin: true
+        tty: true
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory | quote }}
+          requests: 
+            cpu: {{ .Values.resources.requests.cpu}}
+            memory: {{ .Values.resources.requests.memory | quote }}
+        env:
+        - name: DATAPOWER_ACCEPT_LICENSE
+          value: "true"
+        - name: DATAPOWER_INTERACTIVE
+          value: "true"
+        - name: DATAPOWER_LOG_COLOR
+          value: "false"
+        - name: DATAPOWER_WORKER_THREADS
+          value: {{ .Values.datapowerEnv.workerThreads | quote }}
+{{- if ne .Values.patternName "none"}}
+        ports:
+        - name: service
+          containerPort: {{ $values.containerPort }}
+        volumeMounts:
+            - mountPath: "/drouter/config"
+              name: {{ template "fullname" . }}-config-volume
+            - mountPath: "/drouter/secure/usrcerts"
+              name: {{ template "fullname" . }}-secret-volume
+      volumes:
+        - name: {{ template "fullname" . }}-config-volume
+          configMap: 
+            name: {{ template "fullname" . }}-config
+            items:
+            - key: {{ .Values.patternName }}.cfg
+              path: "{{ .Values.patternName }}/{{ .Values.patternName }}.cfg"
+            - key: auto-user.cfg
+              path: "auto-user.cfg"
+            - key: auto-startup.cfg
+              path: "auto-startup.cfg"
+
+        - name: {{ template "fullname" . }}-secret-volume
+          secret:
+            secretName: {{ template "fullname" . }}-secret
+            items:
+            - key: key.pem
+              path: "{{ .Values.patternName }}/key.pem"
+            - key: cert.pem
+              path: "{{ .Values.patternName }}/cert.pem"
+{{- end }}

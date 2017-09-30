@@ -78,7 +78,7 @@ The following tables lists the configurable parameters of the ibm-dsm-dev chart 
 | `login.password`                      | `DSM` admin password                                         | `nil`                                                      |                                       
 | `dsmVolume.name`                      | The PVC name to persist data                                 | `dsmvolume`                                                |     
 | `persistence.enabled`                 | Use a PVC to persist data                                    | `true`                                                     |
-| `persistence.useDynamicProvisioning`  | Specify a storage class or leave empty                       | `false`						    | 
+| `persistence.useDynamicProvisioning`  | Dynamic provision persistent volume or not                   | `false`						    
 | `dsmVolume.persistence.existingClaim` | Provide an existing PersistentVolumeClaim                    | `nil`                                                      |
 | `dsmVolume.persistence.storageClass`  | Storage class of backing PVC                                 | `nil`                                                      |
 | `dsmVolume.persistence.size`          | Size of data volume                                          | `4Gi`                                                      |
@@ -86,8 +86,12 @@ The following tables lists the configurable parameters of the ibm-dsm-dev chart 
 | `service.httpPort`                    | Internal http port                                           | `11080`                                                    |
 | `service.httpPort`                    | Interal https port                                           | `11081`                                                    |
 | `service.type`                        | k8s service type exposing ports, e.g.`ClusterIP`| `NodePort` |                                                            |
-| `service.name`                        | k8s service type exposing ports name | `console`             |                                                            |
-
+| `service.name`                        | k8s service type exposing ports name | `console`             |    
+| `repository.image.repository`         | Repository image                                             | `na.cumulusrepo.com/hcicp_dev/db2server_dec`                         
+| `repository.image.tag`                | Repository image tag                                         | `11.1.2.2`                                                    | `repository.image.pullPolicy`         | Repository image pull policy                                 | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
+| `repository.persistence.useDynamicProvisioning`  | Dynamic provision persistent volume or not        | `false`	
+| `repository.dsmVolume.persistence.storageClass`  | Storage class of backing PVC                      | `nil`                                                      | `repository.dsmVolume.persistence.size`          | Size of data volume                               | `8Gi` 
+| `resources`                           | CPU/Memory resource requests/limits                          | Memory: `2Gi`, CPU: `1`                                    
 
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
@@ -127,14 +131,7 @@ The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/pers
 
 If you have Db2 created in your namespace (no matter created before or after DSM), DSM will automatically connect to it and start to manage it.
 
-A repository DB is created automatically to store your monitor and administration metadata. The minimum resource requied: 1 CPU 1G memory and 16G storage. It may need ten minutes to create DSM, repository DB and bind them.
+A repository DB is created automatically to store your monitor and administration metadata. The minimum resource requied: 1 CPU 2G memory and 8G storage. It may need a long time when DSM deploy, creat repository DB and bind to it. If you delete DSM, its repository DB will also be deleted automatically. 
 
-You can only have one DSM per namespace.If you deployed a second DSM, it will be deleted silently in a while in backend.If you delete DSM, its repository DB will not be deleted automatically. When you create a new DSM, it will reuse the repository and load the metadata.
+You can only run one DSM per namespace. If you deploy the second DSM, it will be deleted silently in a while in backend. 
 
-To permanently delete repository(after DSM deleted), please use the following command:
-
-
-```bash
-helm ls --tiller-namespace=<namespace>
-helm delete --purge <namespace>-<name>-repodb --tiller-namespace=<namespace>
-```
