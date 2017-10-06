@@ -17,25 +17,27 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     app: "{{ template "fullname" . }}"
 spec:
-  replicas: 1
+  replicas: {{ .Values.service.replicas }}
   template:
     metadata:
       name: {{ template "fullname" . }} 
       labels:
         app: {{ template "fullname" . }} 
     spec:
+      {{- if .Values.image.pullSecret }}
       imagePullSecrets:
-      - name: admin.registrykey
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
       containers:
       - name: {{ template "fullname" . }} 
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}        
         ports:
-        - containerPort: 7800
+        - containerPort: {{ .Values.service.serverlistenerPort }}
           name: serverlistener
-        - containerPort: 7080
+        - containerPort: {{ .Values.service.nodelistenerPort }}
           name: nodelistener
-        - containerPort: 4414
+        - containerPort: {{ .Values.service.webuiPort }}
           name: webui
         env:
         -
@@ -47,3 +49,14 @@ spec:
         -
          name : SERVERNAME
          value : {{ .Values.servername }}
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 4414
+          initialDelaySeconds: 15
+          timeoutSeconds: 1
+        resources:
+          limits:
+{{ toYaml .Values.resources.limits | indent 14 }}
+          requests:
+{{ toYaml .Values.resources.requests | indent 14 }}

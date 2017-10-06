@@ -11,12 +11,14 @@ This chart is consist of IBM Db2 Developer-C Edition and is a persistent relatio
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release --set license=accept stable/ibm-db2oltp-dev
+$ helm install --name my-release stable/ibm-db2oltp-dev
 ```
 
 The command deploys ibm-db2oltp-dev on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
 > **Tip**: List all releases using `helm list`
+
+For full step-by-step documentation for installing this chart click [Db2 Integration Into IBM Cloud Private](https://developer.ibm.com/recipes/tutorials/db2-integration-into-ibm-cloud-private/) for the developerWorks recipe.
 
 ## Verifying the Chart
 See NOTES.txt associated with this chart for verification instructions
@@ -47,7 +49,7 @@ The following tables lists the configurable parameters of the db2-oltp-prod char
 | Parameter                     | Description                                     | Default                                                    |
 | ---------------------------   | ---------------------------------------------   | ---------------------------------------------------------- |
 | `image`                       | `Db2 Developer-C` image repository              | `db2server_dec-ma`                                         |
-| `imageRepository`             | `Db2 Developer-C` image repository              | `na.cumulusrepo.com/db2dg/`                                |                    
+| `imageRepository`             | `Db2 Developer-C` image repository              | `na.cumulusrepo.com/hcicp_dev/`                            |                    
 | `imageTag`                    | `Db2 Developer-C` image tag                     | `11.1.2.2`                                                 |
 | `imagePullPolicy`             | Image pull policy                               | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
 | `db2inst.instname`            | `Db2` instance name                             | `nil`                                                      |                     
@@ -59,12 +61,11 @@ The following tables lists the configurable parameters of the db2-oltp-prod char
 | `dataVolume.existingClaim`    | Provide an existing PersistentVolumeClaim       | `nil`                                                      |
 | `dataVolume.storageClass`     | Storage class of backing PVC                    | `nil`                                                      |
 | `dataVolume.size`             | Size of data volume                             | `200Gi`                                                    |
-| `resources`                   | CPU/Memory resource requests/limits             | Memory: `1Gi`, CPU: `1000m`                                |
-| `persistence.subPath`         | Subdirectory of the volume to mount at          | `nil`                                                      |
+| `resources`                   | CPU/Memory resource requests/limits             | Memory: `2Gi`, CPU: `1000m`                                |
 | `service.port`                | TCP port                                        | `50000`                                                    |
 | `service.type`                | k8s service type exposing ports, e.g.`ClusterIP`| `NodePort`                                                 |
 
-The above parameters map to the env variables defined in [Db2 Developer-C Edition](DATABASEDOCKERURL). For more information please refer to the [Db2 Developer-C Edition](DATABASEDOCKERURL) image documentation.
+The above parameters map to the env variables defined in Db2 Developer-C Edition. 
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
@@ -77,13 +78,13 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 - Persistent storage using kubernetes dynamic provisioning. Uses the default storageclass defined by the kubernetes admin or by using a custom storageclass which will override the default.
   - Set global values to:
     - persistence.enabled: true (default)
-    - persistence.useDynamicProvisioning: true
+    - persistence.useDynamicProvisioning: true (non-default)
   - Specify a custom storageClassName per volume or leave the value empty to use the default storageClass.
 
 
 - Persistent storage using a predefined PersistentVolumeClaim or PersistentVolume setup prior to the deployment of this chart
   - Set global values to:
-    - persistence.enabled: true
+    - persistence.enabled: true (default)
     - persistence.useDynamicProvisioning: false (default)
   - Specify an existingClaimName per volume or leave the value empty and let the kubernetes binding process select a pre-existing volume based on the accessMode and size.    
 

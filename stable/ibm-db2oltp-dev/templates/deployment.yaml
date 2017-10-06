@@ -1,3 +1,4 @@
+{{- if not (.Values.secretOverride) }}
 apiVersion: v1
 data:
   .dockercfg: {{ .Values.image.secret }}
@@ -6,6 +7,7 @@ metadata:
   name: {{ template "fullname" . }}-db2-secret
 type: kubernetes.io/dockercfg
 ---
+{{- end }}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -34,21 +36,20 @@ spec:
       {{- else }}
         emptyDir: {}
       {{- end }}
-      hostIPC: true
       containers:
       - name: {{ template "fullname" . }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           capabilities:
-            add: ["SYS_RESOURCE", "IPC_OWNER"]
+            add: ["SYS_RESOURCE", "IPC_OWNER", "SYS_NICE"]
         ports:
         - containerPort: 50000
         env:
         - name: LICENSE
-          value: "{{ .Values.acceptLicense }}"
+          value: "accept"
         - name: DB2INSTANCE
-          value: "{{ .Values.db2inst.instname }}"
+          value: {{ default "db2inst1" .Values.db2inst.instname | quote }}
         - name: DB2INST1_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -84,6 +85,7 @@ spec:
         volumeMounts:
         - mountPath: /database
           name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"
-          subPath: {{ .Values.dataVolume.subPath }}
+{{- if not (.Values.secretOverride) }}
       imagePullSecrets:
           - name: {{ template "fullname" . }}-db2-secret
+{{- end }}
