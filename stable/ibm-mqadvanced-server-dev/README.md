@@ -1,6 +1,6 @@
 <p align="center"><img src="https://developer.ibm.com/messaging/wp-content/uploads/sites/18/2017/07/IBM-MQ-Square-200.png" width="150"></p>
 
-# IBM MQ (Beta Version)
+# IBM MQ
 
 IBM® MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms. It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
 
@@ -10,14 +10,14 @@ This chart deploys a single IBM MQ Advanced for Developers server (queue manager
 
 ## Prerequisites
 
-- Kubernetes 1.5 or greater, with beta APIs enabled
+- Kubernetes 1.7 or greater, with beta APIs enabled
 - If persistence is enabled (see [configuration](#configuration)), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
 
 ## Installing the Chart
 
 To install the chart with the release name `foo`:
 
-```bash
+```sh
 helm install --name foo stable/ibm-mqadvanced-server-dev --set license=accept
 ```
 
@@ -29,13 +29,13 @@ This command accepts the [IBM MQ Advanced for Developers license](LICENSE) and d
 
 To uninstall/delete the `foo` release:
 
-```bash
+```sh
 helm delete foo
 ```
 
 The command removes all the Kubernetes components associated with the chart, except any Persistent Volume Claims (PVCs).  This is the default behavior of Kubernetes, and ensures that valuable data is not deleted.  In order to delete the Queue Manager's data, you can delete the PVC using the following command:
 
-```bash
+```sh
 kubectl delete pvc -l release=foo
 ```
 
@@ -49,9 +49,11 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `image.tag`                      | Image tag                                       | `9`                                                        |
 | `image.pullPolicy`               | Image pull policy                               | `IfNotPresent`                                             |
 | `image.pullSecret`               | Image pull secret, if you are using a private Docker registry | `nil`                                        |
-| `persistence.enabled`       | Use a PersistentVolume to persist MQ data (under `/var/mqm`)  | `true`                                       |
-| `persistence.storageClass`  | Storage class of backing Persistent Volume                    | `nil`                                        |
-| `persistence.size`          | Size of data volume                             | `2Gi`                                                      |
+| `persistence.enabled`           | Use persistent volumes for all defined volumes                  | `true`                                     |
+| `persistence.useDynamicProvisioning` | Use dynamic provisioning (storage classes) for all volumes | `true`                                     |
+| `dataPVC.name`                  | Suffix for the PVC name                                         | `"data"`                                   |
+| `dataPVC.storageClassName`      | Storage class of volume for main MQ data (under `/var/mqm`)     | `""`                                       |
+| `dataPVC.size`                  | Size of volume for main MQ data (under `/var/mqm`)              | `2Gi`                                      |
 | `service.name`                   | Name of the Kubernetes service to create        | `qmgr`                                                     |
 | `service.type`                   | Kubernetes service type exposing ports, e.g. `NodePort`       | `ClusterIP`                                  |
 | `resources.limits.cpu`          | Kubernetes CPU limit for the Queue Manager container | `500m`                                                   |

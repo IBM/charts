@@ -1,11 +1,13 @@
+{{- if not (.Values.secretOverride) }}
 apiVersion: v1
 data:
-  .dockercfg: {{ .Values.image.secret }}
+  .dockercfg: {{ .Values.global.image.secret }}
 kind: Secret
 metadata:
   name: {{ template "fullname" . }}-dsm-secret
 type: kubernetes.io/dockercfg
 ---
+{{- end }}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -27,7 +29,7 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
         - name: LICENSE
-          value: {{ .Values.license }}
+          value: accept
         - name: DSM_ADMIN
           value: "{{ .Values.login.user }}"
         - name: DSM_ADMIN_PWD
@@ -39,13 +41,13 @@ spec:
         - containerPort: 11080
         - containerPort: 11081
         livenessProbe:
-          initialDelaySeconds: 180
+          initialDelaySeconds: 200 
           httpGet:
             path: /
             port: 11081
             scheme: HTTPS
         readinessProbe:
-          initialDelaySeconds: 180
+          initialDelaySeconds: 200
           httpGet:
             path: /
             port: 11080
@@ -59,7 +61,7 @@ spec:
         imagePullPolicy: {{ .Values.imageSidecar.pullPolicy }}
         env:
         - name: LICENSE
-          value: {{ .Values.license }}
+          value: accept
         - name: DSM_APP_NAME
           value: {{ template "fullname" . }}
         - name: DSM_RELEASE_NAME
@@ -70,10 +72,13 @@ spec:
           value: {{ .Chart.Version }} 
         - name: DSM_MY_SVC_NAME
           value: {{ template "fullname" . }}
-        - name: REPODB_SECRET
-          value: {{ .Values.image.secret }}
+        - name: DSM_REPO_SVC_NAME
+          value: {{ template "repoDB.fullname" . }}
+
+{{- if not (.Values.secretOverride) }}
       imagePullSecrets:
         - name: {{ template "fullname" . }}-dsm-secret
+{{- end }}
       volumes:
       - name: all
       {{- if .Values.persistence.enabled }}

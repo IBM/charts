@@ -1,4 +1,4 @@
-# IBM Datapower Gateway (Beta Version)
+# IBM Datapower Gateway
 
 ## Introduction
 [IBM DataPower Gateway](http://www-03.ibm.com/software/products/en/datapower-gateway) is a market leading extensible gateway platform for developers & enterprises. It helps you quickly secure, control, connect and accelerate the delivery of APIs, applications and data across digital business channels in the cloud and on premise to enable digital innovation and transformation.
