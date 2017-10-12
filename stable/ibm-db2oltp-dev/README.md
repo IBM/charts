@@ -1,4 +1,4 @@
-# IBM Db2 Developer-C Helm Chart - BETA
+# IBM Db2 Developer-C Helm Chart
 
 [Db2 Developer-C Edition](http://www-03.ibm.com/software/products/sv/db2-developer-edition) enables you to develop, test, evaluate and demonstrate database and warehousing applications in a non-production environment. 
 
@@ -6,12 +6,31 @@
 
 This chart is consist of IBM Db2 Developer-C Edition and is a persistent relational database intended to be deployed in IBM Cloud-Private environments. 
 
+## Prerequisites
+- Retrieve image.secret from http://ibm.biz/db2-dsm-license by reviewing and accepting the terms and conditions.
+- PersistentVolume needs to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using the IBM Cloud private UI or via a yaml file as the following example: 
+
+```
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv0001
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "" 
+    storage: 20Gi
+  hostPath:
+    path: /data/pv0001/
+EOF
+```
+
 ## Installing the Chart
 
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release stable/ibm-db2oltp-dev
+$ helm install --name my-release --set image.secret=<IMAGE SECRET> stable/ibm-db2oltp-dev
 ```
 
 The command deploys ibm-db2oltp-dev on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
