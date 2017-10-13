@@ -1,0 +1,92 @@
+# © Copyright IBM Corporation 2017
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#
+# The transadv-server pod deploys Transformation Advisor in Liberty server as a container
+#
+
+kind: Deployment
+apiVersion: extensions/v1beta1
+
+metadata:
+  name: {{ template "name" . }}-{{ .Values.transadv.service.name }}
+  labels:
+    app: {{ template "name" . }}-{{ .Values.transadv.service.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "name" . }}-{{ .Values.transadv.service.name }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}-{{ .Values.transadv.service.name }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}-{{ .Values.transadv.service.name }}
+          image: "{{ .Values.transadv.image.repository }}:{{ .Values.transadv.image.tag }}"
+          imagePullPolicy: {{ .Values.transadv.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.transadv.resources | indent 12 }}
+          ports:
+            - containerPort: {{ .Values.transadv.service.internalPort }}
+              name: {{ .Values.transadv.service.name }}
+          env:
+            - name: TA_DB_HOST
+              value: http://$({{ template "k8name" . }}_{{ .Values.couchdb.service.name | upper  }}_SERVICE_HOST)
+            - name: TA_DB_PORT
+              value: $({{ template "k8name" . }}_{{ .Values.couchdb.service.name | upper  }}_SERVICE_PORT)
+            - name: TA_DB_USER
+              value: {{ .Values.couchdb.user }}
+            - name:  TA_DB_PASSWORD
+              value: {{ .Values.couchdb.password }}
+            - name:  TA_LA_HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name:  TA_LA_CLUSTER_HOST
+              value: http://$(TA_LA_HOST_IP)
+            - name:  TA_LA_NODE_PORT
+              value: "{{ .Values.transadv.service.nodePort }}"
+            - name:  TA_UI_HOST
+              value: http://$({{ template "k8name" . }}_{{ .Values.transadvui.service.name | upper  }}_SERVICE_HOST)
+            - name:  TA_UI_PORT
+              value: $({{ template "k8name" . }}_{{ .Values.transadvui.service.name | upper  }}_SERVICE_PORT)
+
+          # set liveness probe to determine if container needs to be restarted
+          # this test is the same as the readiness probe however this tests for multiple long periods
+          # of time of non-responsiveness - if fails the tests, restarts the container
+          # - command, http, or tcp
+          # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.transadv.service.internalPort }}
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # set readiness probe to determine if container is ready to accept traffic
+          # - command, http, or tcp
+          # looks for short durations of non-responsiveness to identify as unavail to accept traffic
+          # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.transadv.service.internalPort }}
+            initialDelaySeconds: 5
+            timeoutSeconds: 3
+            periodSeconds: 5

@@ -1,0 +1,91 @@
+# © Copyright IBM Corporation 2017
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#
+# The couchdbpod deploys a simple couchdb database
+#
+kind: Deployment
+apiVersion: extensions/v1beta1
+
+metadata:
+  name: {{ template "name" . }}-{{ .Values.couchdb.service.name }}
+  labels:
+    app: {{ template "name" . }}-{{ .Values.couchdb.service.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "name" . }}-{{ .Values.couchdb.service.name }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}-{{ .Values.couchdb.service.name }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}-{{ .Values.couchdb.service.name }}
+          image: "{{ .Values.couchdb.image.repository }}:{{ .Values.couchdb.image.tag }}"
+          imagePullPolicy: {{ .Values.couchdb.image.pullPolicy }}
+          resources:          
+{{ toYaml .Values.couchdb.resources | indent 12 }}
+          ports:
+            - containerPort: {{ .Values.couchdb.service.internalPort }}
+              name: {{ .Values.couchdb.service.name }}
+          env:
+            - name: COUCHDB_USER
+              value: {{ default "" .Values.couchdb.user | quote }}
+            - name: COUCHDB_PASSWORD
+              value: {{ default "" .Values.couchdb.password | quote }}
+          volumeMounts:
+            - mountPath: "/opt/couchdb/data"
+              name: couchdb-data
+          # set liveness probe to determine if container needs to be restarted
+          # this test is the same as the readiness probe however this tests for multiple long periods
+          # of time of non-responsiveness - if fails the tests, restarts the container
+          # - command, http, or tcp
+          # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.couchdb.service.internalPort }}
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # set readiness probe to determine if container is ready to accept traffic
+          # - command, http, or tcp
+          # looks for short durations of non-responsiveness to identify as unavail to accept traffic
+          # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.couchdb.service.internalPort }}
+            initialDelaySeconds: 5
+            timeoutSeconds: 3
+            periodSeconds: 5
+
+      volumes:
+        - name: couchdb-data
+      {{- if .Values.couchdb.persistence.enabled }}
+          persistentVolumeClaim:
+            {{- if .Values.couchdb.persistence.existingClaim }}
+              claimName: {{ .Values.couchdb.persistence.existingClaim }}  
+            {{- else }}
+              claimName: {{ default (include "name" .) }}-{{ .Values.couchdb.service.name }}
+            {{- end -}}
+      {{- else }}
+          emptyDir: {}
+      {{- end -}}

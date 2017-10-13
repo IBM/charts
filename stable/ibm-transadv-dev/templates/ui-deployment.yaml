@@ -1,0 +1,82 @@
+# © Copyright IBM Corporation 2017
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#
+# The transadvui pod deploys the Transformation Advisor UI as a container
+#
+
+kind: Deployment
+apiVersion: extensions/v1beta1
+
+metadata:
+  name: {{ template "name" . }}-{{ .Values.transadvui.service.name }}
+  labels:
+    app: {{ template "name" . }}-{{ .Values.transadvui.service.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "name" . }}-{{ .Values.transadvui.service.name }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}-{{ .Values.transadvui.service.name }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}-{{ .Values.transadvui.service.name }}
+          image: "{{ .Values.transadvui.image.repository }}:{{ .Values.transadvui.image.tag }}"
+          imagePullPolicy: {{ .Values.transadvui.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.transadvui.resources | indent 12 }}
+          ports:
+            - containerPort: {{ .Values.transadvui.service.internalPort }}
+              name: {{ .Values.transadvui.service.name }}
+          env:
+            - name: TA_API_SERVER
+              value: http://$({{ template "k8name" . }}_{{ .Values.transadv.service.name | upper  }}_SERVICE_HOST):{{ .Values.transadv.service.internalPort }}/lands_advisor
+            - name:  TA_LA_HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name:  TA_LA_CLUSTER_HOST
+              value: http://$(TA_LA_HOST_IP)
+            - name:  TA_LA_NODE_PORT
+              value: "{{ .Values.transadv.service.nodePort }}"
+
+          # set liveness probe to determine if container needs to be restarted
+          # this test is the same as the readiness probe however this tests for multiple long periods
+          # of time of non-responsiveness - if fails the tests, restarts the container
+          # - command, http, or tcp
+          # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.transadvui.service.internalPort }}
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # set readiness probe to determine if container is ready to accept traffic
+          # - command, http, or tcp
+          # looks for short durations of non-responsiveness to identify as unavail to accept traffic
+          # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.transadvui.service.internalPort }}
+            initialDelaySeconds: 60
+            timeoutSeconds: 3
+            periodSeconds: 5
