@@ -3,7 +3,7 @@ WebSphere Liberty is a fast, dynamic, easy-to-use Java EE application server. Id
 
 ## Requirements
 
-1. A persistent volume is required, if you plan on using the transaction service within Liberty. The server.xml Liberty configuration document must be configured to place the transaction log on this volume so that it will survive the server restarting upon failure.
+A persistent volume is required, if you plan on using the transaction service within Liberty. The server.xml Liberty configuration document must be configured to place the transaction log on this volume so that it will survive the server restarting upon failure.
 
 
 ## Accessing Liberty
@@ -14,14 +14,15 @@ From a browser, use http://*external ip*:*nodeport* to access the application.
 
 ### Parameters
 
-The helm chart has the following Values that can be overriden using the install --set parameter. For example:
+The helm chart has the following values that can be overriden using the --set parameter. For example:
 
-`helm install --name liberty1 --namespace liberty-test1  liberty --debug`
+*    `helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable/`
+*    `helm install --name liberty2 --set resources.constraints.enabled=true --set autoscaling.enabled=true --set autoscaling.minReplicas=2 ibm-charts/ibm-websphere-liberty --debug`
 
 ##### Common Parameters
 
 | Qualifier | Parameter  | Definition | Allowed Value |
-|-----------|--------------|----------|--------------|
+|---|---|---|---|
 | image     | pullPolicyImage | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise  |
 |           | name         | Name of image, including repository prefix (if required) | see Extended description of Docker tags |
 |           | tag          | Docker image tag | see Docker tag description |
