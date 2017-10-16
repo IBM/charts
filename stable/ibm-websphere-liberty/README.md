@@ -36,18 +36,18 @@ The helm chart has the following values that can be overriden using the --set pa
 |           | port          | The port that this container exposes.  |   |
 |           | targetPort  | Port that will be exposed externally by the pod | |
 | resources | constraints.enabled    | Specifies whether the resource constraints specified in this helm chart are enabled.   | false (default) or true  |
-|  | limits.cpu    | Describes the maximum amount of CPU allowed. | see Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
-|           | limits.memory | Describes the maximum amount of memory allowed. | see Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
-|           | requests.cpu  | Describes the minimum amount of CPU required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | see Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
-|           | requests.memory | Describes the minimum amount of memory required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | see Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
-| replicaCount |     |  Describes the number of desired replica pods running at the same time | See [Replica Sets](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset) |
+|  | limits.cpu    | Describes the maximum amount of CPU allowed. | Default is 500m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
+|           | limits.memory | Describes the maximum amount of memory allowed. | Default is 512Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+|           | requests.cpu  | Describes the minimum amount of CPU required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | Default is 500m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
+|           | requests.memory | Describes the minimum amount of memory required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | Default is 512Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+| replicaCount |     |  Describes the number of desired replica pods running at the same time | Default is 1.  See [Replica Sets](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset) |
 | autoscaling | enabled | Specifies whether or not a horizontal pod autoscaler (HPA) is deployed.  Please note that enabling this field will disable the `replicaCount` field | false (default) or true |
 |     |  minReplicas  | Lower limit for the number of pods that can be set by the autoscaler.   |  Positive integer (default to 1)  |
 |     |  maxReplicas  | Upper limit for the number of pods that can be set by the autoscaler.  Cannot be lower than `minReplicas`.   |  Positive integer (default to 10)  |
 |     |  targetCPUUtilizationPercentage  | Target average CPU utilization (represented as a percentage of requested CPU) over all the pods.  |  Integer between 1 and 100 (default to 50)  |
 | ingress  |  enabled        | Specifies whether or not to use ingress.        |  false (default) or true  |
-|          |  rewriteTarget  | Specifies ingress.kubernetes.io/rewrite-target  | see Kubernetes ingress.kubernetes.io/rewrite-target - https://github.com/kubernetes/ingress/blob/master/controllers/nginx/configuration.md#rewrite  |
-|          |  path           | Specifies the path for the ingress http rule    |  see Kubernetes - https://kubernetes.io/docs/concepts/services-networking/ingress/  |
+|          |  rewriteTarget  | Specifies ingress.kubernetes.io/rewrite-target  | See Kubernetes ingress.kubernetes.io/rewrite-target - https://github.com/kubernetes/ingress/blob/master/controllers/nginx/configuration.md#rewrite  |
+|          |  path           | Specifies the path for the ingress http rule    |  See Kubernetes - https://kubernetes.io/docs/concepts/services-networking/ingress/  |
 
 
 ##### Configuring Liberty within IBM Cloud Private
