@@ -1,0 +1,33 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "fullname" . }}  
+    release: {{.Release.Name | quote }}    
+    heritage: {{.Release.Service | quote }} 
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+    spec:
+      containers:
+      - name: zipkin
+        image: ibmcom/zipkin:2.1.0
+        ports:
+        - containerPort: 9411
+        env:
+        - name: JAVA_OPTS
+          value: {{ .Values.javaOpts }}
+        {{/* Only define the ES bindings if the es host is set */}}
+        {{ if (not (eq .Values.elasticsearchHosts "")) }}
+        - name: STORAGE_TYPE
+          value: elasticsearch
+        - name: ES_HOSTS
+          value: {{ .Values.elasticsearchHosts }}
+        {{end}}
+        - name: COLLECTOR_SAMPLE_RATE
+          value: '{{ .Values.collectorSampleRatePct }}'

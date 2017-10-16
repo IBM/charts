@@ -1,0 +1,148 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    component: "{{.Release.Name}}-{{.Values.Master.Name}}"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      component: "{{.Release.Name}}-{{.Values.Master.Component}}"
+  template:
+    metadata:
+      labels:
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        component: "{{.Release.Name}}-{{.Values.Master.Component}}"
+      annotations:
+        pod.alpha.kubernetes.io/init-containers: '[
+              {
+                  "name": "copy-default-config",
+                  "image": "{{.Values.Master.Image}}:{{.Values.Master.ImageTag}}",
+                  "imagePullPolicy": "{{.Values.Master.ImagePullPolicy}}",
+                  "command": [ "sh", "/var/jenkins_config/apply_config.sh" ],
+                  "volumeMounts": [
+                      {
+                          "name": "jenkins-config",
+                          "mountPath": "/var/jenkins_config"
+                      },
+                      {
+                          "name": "jenkins-home",
+                          "mountPath": "/var/jenkins_home"
+                      }
+                  ]
+              }
+          ]'
+    spec:
+{{- if .Values.Master.ImagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.Master.ImagePullSecret.Name }}
+{{- end }}
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: {{ template "fullname" . }}
+          image: "{{.Values.Master.Image}}:{{.Values.Master.ImageTag}}"
+          imagePullPolicy: "{{.Values.Master.ImagePullPolicy}}"
+          env:
+            - name: JAVA_OPTS
+              value: "{{ default "" .Values.Master.JavaOpts}}"
+            - name: PIPELINE_TEMPLATE_LOCATION
+              value: {{ .Values.Pipeline.Template.RepositoryUrl }}
+            - name: PIPELINE_TEMPLATE_DEFAULT_VERSION
+              value: {{ .Values.Pipeline.Template.Version }}
+            - name: REGISTRY
+              value: {{ .Values.Pipeline.Registry.Url }}
+            - name: REGISTRY_SECRET
+              value: {{ .Values.Pipeline.Registry.Secret }}
+            - name: BUILD
+              value: "{{ .Values.Pipeline.Build }}"
+            - name: CHART_FOLDER
+              value: "{{ .Values.Pipeline.ChartFolder }}"
+            - name: MANIFEST_FOLDER
+              value: "{{ .Values.Pipeline.ManifestFolder }}"
+            - name: DEPLOY
+              value: "{{ .Values.Pipeline.Deploy }}"
+            - name: TEST
+              value: "{{ .Values.Pipeline.Test }}"
+            - name: DEBUG
+              value: "{{ .Values.Pipeline.Debug }}"
+            - name: DEFAULT_DEPLOY_BRANCH
+              value: "{{ .Values.Pipeline.DeployBranch }}"
+            - name: GITHUB_URL
+              value: {{ .Values.GitHub.Url }}
+            - name: GITHUB_NAME
+              value: {{ .Values.GitHub.Name }}
+            - name: GITHUB_OAUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-github-secrets
+                  key: oauth-token
+            - name: GITHUB_OAUTH_USER
+              value: {{ .Values.GitHub.OAuth.User }}
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-github-secrets
+                  key: app-id
+            - name: GITHUB_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-github-secrets
+                  key: app-secret
+            - name: GITHUB_ADMINS
+              value: {{ .Values.GitHub.Admins }}
+            - name: GITHUB_ORGS
+              value: {{ .Values.GitHub.Orgs }}
+            - name: GITHUB_REPO_PATTERN
+              value: {{ .Values.GitHub.RepoPattern }}
+            - name: NAMESPACE
+              value: {{ .Values.Pipeline.TargetNamespace }}
+            - name: LIBERTY_LICENSE_JAR_BASE_URL
+              value: {{ .Values.Pipeline.LibertyLicenseJar.BaseUrl }}
+            - name: LIBERTY_LICENSE_JAR_NAME
+              value: {{ .Values.Pipeline.LibertyLicenseJar.Name }}
+
+          ports:
+            - containerPort: {{.Values.Master.ContainerPort}}
+              name: http
+            - containerPort: {{.Values.Master.SlaveListenerPort}}
+              name: slavelistener
+          resources:
+            requests:
+              cpu: "{{.Values.Master.Cpu}}"
+              memory: "{{.Values.Master.Memory}}"
+          volumeMounts:
+{{- if .Values.Persistence.mounts }}
+{{ toYaml .Values.Persistence.mounts | indent 12 }}
+{{- end }}
+            -
+              mountPath: /var/jenkins_home
+              name: jenkins-home
+              readOnly: false
+            -
+              mountPath: /var/jenkins_config
+              name: jenkins-config
+              readOnly: true
+      volumes:
+{{- if .Values.Persistence.volumes }}
+{{ toYaml .Values.Persistence.volumes | indent 6 }}
+{{- end }}
+      - name: jenkins-config
+        configMap:
+          name: {{ template "fullname" . }}
+      - name: jenkins-home
+      {{- if .Values.Persistence.Enabled }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.Persistence.ExistingClaim | default (include "fullname" .) }}
+      {{- else }}
+        emptyDir: {}
+      {{- end -}}

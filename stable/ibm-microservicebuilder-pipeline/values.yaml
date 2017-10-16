@@ -1,0 +1,165 @@
+######
+# Microservice builder pipeline values.
+######
+
+# gitHub section contains all of the information needed to integrate your gitHub with Jenkins
+# more information at: https://www.ibm.com/support/knowledgecenter/en/SS5PWC/pipeline.html
+GitHub:
+
+  # URL of the GitHub or GitHub Enterprise to build from
+  Url: https://github.com
+  
+  # name of the type of repo 
+  Name: GitHub
+  
+  #  Comma-separated list of GitHub organizations that Jenkins should build from.
+  Orgs: WASdev
+  
+  # A regular expression that matches the repositories in the organizations that should be built by Jenkins. .* will build all repositories.
+  RepoPattern: sample.microservicebuilder.*
+  
+  # oAuth section defines the github user account and token the pipeline should use when accessing git
+  OAuth:
+  
+    # Personal access token created earlier.
+    Token: <GITHUB_OAUTH_TOKEN>
+    
+    # GitHub ID of the user associated with the personal access token.
+    User: <GITHUB_OAUTH_USER>
+  
+  # app section contains tOAuth integration so that users can log in to Jenkins using GitHub for authentication
+  # refer to knowledge center for instructions to generate these values
+  # https://www.ibm.com/support/knowledgecenter/en/SS5PWC/pipeline.html
+  App:
+  
+    # Client ID created earlier.
+    Id: <CLIENT_ID>
+    
+    # Client secret created earlier.
+    Secret: <CLIENT_SECRET>
+  
+  # Comma-separated list of GitHub IDs for the users that should be able to access Jenkins as an administrator. For a description of the other parameters, see the community Jenkins chart from which they are inherited.  
+  Admins: <GITHUB_ADMINS>
+
+# pipeline section used to modify the default pipeline
+Pipeline:
+
+  # Build step for all pipelines that are built by this Jenkins.
+  Build: true
+  
+  # Deploy step for all pipelines built by this Jenkins.
+  Deploy: true
+
+  #  Setting this to true enables testing in the pipeline.
+  Test: true
+  
+  #  Setting this to 'true' will prevent temporary namespaces from being deleted after tests are run against them.
+  Debug: false 
+  
+  # Each pipeline's Deploy step executes only when commits are made to a particular branch. This setting defines the default branch for all pipelines. The default value is master. It may be overridden for a particular repository by setting the deployBranch property in the JenkinsFile.
+  DeployBranch: "master"
+  
+  # registry section points to a docker registry where images that are built via this pipeline are stored
+  Registry:
+  
+    # The URL of the Docker registry for this pipeline.
+    Url: mycluster.icp:8500/default
+    
+    # The name of the Kubernetes secret to be used for registry access.
+    Secret: admin.registrykey
+    
+  # targetNamespace is the namespace that the pipeline will deploy to. an empty string will deploy to the jenkins namespace  
+  TargetNamespace: ""
+  
+  # template section defines the location of the Git repository from which the microserviceBuilderPipeline.groovy library is obtained
+  Template:
+  
+    # repositoryUrl of the pipeline template
+    RepositoryUrl: "https://github.com/WASdev/microservicebuilder.lib.git"
+    
+    # version is the branch or tag to be used when downloading the library
+    Version: "2.0.0"
+  
+  # Folder used by a build  
+  ChartFolder: "chart"
+  
+  # We recommend that repositories not use this, and instead use Helm charts to deploy their microservices. This setting is carried over from version 1, in which configuration was stored in kubernetes.yaml in the folder pointed to by this setting.
+  ManifestFolder: "manifests"
+  
+  # Optionally defines the location of a license upgrade JAR file
+  LibertyLicenseJar:
+    BaseUrl:
+    
+    # Appended to BaseUrl - can be overridden by libertyLicenseJarName in Jenkinsfile
+    Name: wlp-core-license.jar
+
+####################################################
+# Jenkins master/slave config from https://github.com/kubernetes/charts/tree/master/stable/jenkins
+####################################################
+
+Master:
+  Name: jenkins-master
+  Image: ibmcom/mb-jenkins
+  ImageTag: 2.0.0
+  ImagePullPolicy: "Always"
+  ImagePullSecret:
+#    Name: <KUBE_SECRET>
+  Component: "jenkins-master"
+#
+  Cpu: "200m"
+  Memory: "256Mi"
+# Set min/max heap here if needed with:
+  JavaOpts: "-Xmx512m -Dfile.encoding=UTF-8 -Dhudson.security.ArtifactsPermission=true"
+  ServicePort: 8080
+# ServiceType may be NodePort, LoadBalancer, or ClusterIP if your setup includes ingress controller
+  ServiceType: NodePort
+  NodePort: 31000
+# Used to create Ingress record (should used with ServiceType: ClusterIP)
+# HostName: jenkins.cluster.local
+# NodePort: <to set explicitly, choose port between 30000-32767
+  ContainerPort: 8080
+  SlaveListenerPort: 50000
+  LoadBalancerSourceRanges:
+  - 0.0.0.0/0
+# List of groovy init scripts to be executed during Jenkins master start
+  InitScripts:
+#  - |
+#    print 'adding global pipeline libraries, register properties, bootstrap jobs...'
+  CustomConfigMap: false
+
+  Ingress:
+    Annotations:
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+
+    TLS:
+      # - secretName: jenkins.cluster.local
+      #   hosts:
+      #     - jenkins.cluster.local
+
+Agent:
+  Image: ibmcom/mb-jenkins-slave
+  ImageTag: 2.5.2
+  Cpu: "200m"
+  Memory: "256Mi"
+
+Persistence:
+  Enabled: false
+  ## A manually managed Persistent Volume and Claim
+  ## Requires Persistence.Enabled: true
+  ## If defined, PVC must be created manually before volume will be bound
+  ExistingClaim:
+
+  ## If defined, volume.beta.kubernetes.io/storage-class: <StorageClass>
+  ## Default: volume.alpha.kubernetes.io/storage-class: default
+  ##
+  StorageClass:
+  AccessMode: ReadWriteOnce
+  Size: 8Gi
+  volumes:
+#  - name: nothing
+#    emptyDir: {}
+  mounts:
+#  - mountPath: /var/nothing
+#    name: nothing
+#    readOnly: true
