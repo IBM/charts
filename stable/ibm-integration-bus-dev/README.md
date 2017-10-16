@@ -1,4 +1,4 @@
-<!-- Copyright IBM Corporation 2017. All Rights Resevred. -->
+
 # IBM INTEGRATION BUS
 
 <img align="left" src="https://raw.githubusercontent.com/ot4i/iib-helm/master/ibm-integration-bus-dev/IBM_Integration_Bus_Icon.svg?sanitize=true">
@@ -11,22 +11,22 @@ This chart deploys a single IBM Integration Bus for Developers integration node,
 
 ## Installing the Chart
 
-To install the chart with the release name `foo`:
+To install the chart with the release name `rel1`:
 
 ```bash
-helm install --name foo ibm-integration-bus-dev --set license=accept
+helm install --name rel1 ibm-integration-bus-dev --set license=accept
 ```
 
 This command accepts the [IBM Integration Bus for Developers license](LICENSE) and deploys an IBM Integration Bus for Developers server on the Kubernetes cluster. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
-> **Tip**: See all the resources deployed by the chart using `kubectl get all -l release=foo`
+> **Tip**: See all the resources deployed by the chart using `kubectl get all -l release=rel1`
 
 ## Uninstalling the Chart
 
-To uninstall/delete the `foo` release:
+To uninstall/delete the `rel1` release:
 
 ```bash
-helm delete foo
+helm delete rel1
 ```
 
 The command removes all the Kubernetes components associated with the chart.
@@ -36,19 +36,18 @@ The following table lists the configurable parameters of the `ibm-integration-bu
 
 | Parameter                        | Description                                     | Default                                                    |
 | -------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
-| `license`                        | Set to `accept` to accept the terms of the IBM license  | `Not accepted`                                     |
+| `license`                        | Set this to accept the terms of the IBM license | `Not accepted`                                     |
 | `image.repository`               | Image full name including repository            | `ibmcom/iib`                                                |
 | `image.tag`                      | Image tag                                       | `10.0.0.10`                                                        |
 | `image.pullPolicy`               | Image pull policy                               | `IfNotPresent`                                             |
 | `image.pullSecret`               | Image pull secret, if you are using a private Docker registry | `nil`                                        |
-| `service.name`                   | Name of the Kubernetes service to create        | `qmgr`                                                     |
-| `service.type`                   | Kubernetes service type exposing ports, e.g. `NodePort`       | `NodePort`                                  |
-| `resources.limits.cpu`          | Kubernetes CPU limit for the Queue Manager container | `2`                                                   |
-| `resources.limits.memory`       | Kubernetes memory limit for the Queue Manager container | `2048Mi`                                              |
-| `resources.requests.cpu`        | Kubernetes CPU request for the Queue Manager container | `1`                                                 |
-| `resources.requests.memory`     | Kubernetes memory request for the Queue Manager container | `512Mi`                                            |
+| `service.type`                   | Kubernetes service type for exposing ports       | `NodePort`                                  |
+| `resources.limits.cpu`          | Kubernetes CPU limit for the IIB container | `2`                                                   |
+| `resources.limits.memory`       | Kubernetes memory limit for the IIB container | `2048Mi`                                              |
+| `resources.requests.cpu`        | Kubernetes CPU request for the IIB container | `1`                                                 |
+| `resources.requests.memory`     | Kubernetes memory request for the IIB container | `512Mi`                                            |
 | `nodename`              | IBM Integration Bus integration node name                           | IIB_NODE                                          |
-| `servername`              | IBM Integration Bus integration node name                           | IIB_SERVER                                          |
+| `servername`              | IBM Integration Bus integration server name                           | IIB_SERVER                                          |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 

@@ -48,6 +48,10 @@ The following tables lists the configurable parameters of the MongoDB chart and 
 | `service.port`                               | MongoDB port                          | `27017`                                                  |
 | `persistence.enabled`                        | Use a PVC to persist data             | `true`                                                   |
 | `persistence.useDynamicProvisioning`         | Specify a storageclass or leave empty | `false`                                                  |
+| `resources.limits.cpu`                       | Container CPU limit                   | 2                   |
+| `resources.limits.memory`                    | Container memory limit                | 4Gi                |
+| `resources.requests.cpu`                     | Container CPU requested               | 100m                |
+| `resources.requests.memory`                  | Container Memory requested            | 258Mi                 |
 | `dataVolume.name`                            | Name of the PVC to be created         | `datavolume`                                             |
 | `dataVolume.storageClassName`                | Storage class of backing PVC          | `nil` (uses alpha storage class annotation)              |
 | `dataVolume.existingClaimName`               | Name of the Existing Claim to be used | `nil`                                                    |

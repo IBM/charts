@@ -1,5 +1,28 @@
 MongoDB can be accessed via port 27017 on the following DNS name from within your cluster:
 {{ template "fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
 
+To get your user password run:
+
+    MONGOPASSWORD=$(kubectl get secret --namespace {{ .Release.Namespace }} {{ template "fullname" . }} -o jsonpath="{.data.password}" | base64 --decode; echo)
+
 To connect to your database run the following command:
-{{ default "mongo" .Values.database.dbcmd  }} {{ template "fullname" . }}:27017/{{ default "admin" .Values.database.name }} -u {{ default "mongo" .Values.database.user }} -p {{  default "mongo" .Values.database.password }}
+
+   kubectl run {{ template "fullname" . }}-client --rm --tty -i --image mongo \
+    --command -- mongo {{ template "fullname" . }}:27017/{{ default "admin" .Values.database.name }} -u {{ default "mongo" .Values.database.user }} -p $MONGOPASSWORD
+
+To connect to your database directly from outside the K8s cluster:
+
+   {{- if contains "NodePort" .Values.service.type }}
+     MONGOHOST=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath='{.items[0].status.addresses[0].address}')
+     MONGOPORT=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ template "fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+
+   {{- else if contains "ClusterIP" .Values.service.type }}
+     MONGOHOST=127.0.0.1
+     MONGOPORT={{ default "27017" .Values.service.port }}
+
+     # Execute the following commands to route the connection:
+     export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ template "fullname" . }}" -o jsonpath="{.items[0].metadata.name}")
+     kubectl port-forward $POD_NAME {{ default "27017" .Values.service.port }}:{{ default "27017" .Values.service.port }}
+
+   {{- end }}
+
