@@ -4,25 +4,24 @@
 
 ## Introduction
 
-This chart is consist of IBM Db2 Developer-C Edition and is a persistent relational database intended to be deployed in IBM Cloud-Private environments. 
+This chart is consist of IBM Db2 Developer-C Edition and is a persistent relational database intended to be deployed in IBM Cloud Private environments. 
 
 ## Prerequisites
 - Retrieve image.secret from http://ibm.biz/db2-dsm-license by reviewing and accepting the terms and conditions.
-- PersistentVolume needs to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using the IBM Cloud private UI or via a yaml file as the following example: 
+- PersistentVolume needs to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using the IBM Cloud Private UI or via a yaml file as the following example: 
 
 ```
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: pv0001
+  name: <persistent volume name>
 spec:
+  capacity:
+    storage: 20Gi
   accessModes:
     - ReadWriteOnce
-  storageClassName: "" 
-    storage: 20Gi
   hostPath:
-    path: /data/pv0001/
-EOF
+    path: <PATH>
 ```
 
 ## Installing the Chart

@@ -1,21 +1,4 @@
 
-- [DSX Developer Edition Helm chart](#dsx-developer-edition-helm-chart)
-	- [Requirements](#requirements)
-		- [Namespace](#namespace)
-		- [Storage](#storage)
-	- [Deploying DSX Developer](#deploying-dsx-developer)
-	- [Accessing DSX Developer](#accessing-dsx-developer)
-	- [Uninstalling DSX Developer](#uninstalling-dsx-developer)
-	- [Detailed example](#detailed-example)
-	- [Configuration](#configuration)
-		- [Common Parameters](#common-parameters)
-		- [Persistence Parameters](#persistence-parameters)
-		- [Containers Parameters](#containers-parameters)
-	- [Test drive DSX](#test-drive-dsx)
-		- [Jupyter](#jupyter)
-		- [Zeppelin](#zeppelin)
-		- [RStudio](#rstudio)
-
 # DSX Developer Edition Helm Chart
 
 Data Science Experience (DSX) is delivered as an integrated set of pods and kubernetes services. DSX pods use kube-dns to discover each other by a _fixed_ name - hence its important that each independent copy of DSX gets deployed in a separate Kube namespace.
@@ -42,12 +25,14 @@ wheel next to the namespace to activate it.
 
 ### Storage
 
-Deploying DSX Developer requires a persistent volume.  If you deploy DSX using ICp UI, the process will configure persistent volume automatically. If you deploy DSX manually, please follow the options below:
+Deploying DSX Developer requires a persistent volume.
 
 Cluster with Dynamic Provisioning enabled (e.g. GlusterFS), and set the parameter during deployment:
 ```shell
 --set persistence.useDynamicProvisioning=true
 ```
+
+You can also set this parameter from ICp UI by setting `true` in *useDynamicProvisioning* field.
 
 **OR**
 
@@ -58,6 +43,8 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: <persistent volume name>
+  labels:
+    assign-to: "user-home"
 spec:
   capacity:
     storage: 2Gi
@@ -73,8 +60,13 @@ Note: For NFS PATH you need to create your directory manually before deploying t
 You can create a PV using the above template by executing:
 
 ```shell
-kubectl create pv -f <yaml-file>
+kubectl create -f <yaml-file>
 ```
+
+You can also create a PV from ICp UI by following these steps:
+- Click Create resource on (top right corner)
+- Copy and paste the PV's template
+- Click Create button
 
 ## Deploying DSX Developer
 
@@ -127,7 +119,9 @@ This sample deployment uses NFS PV.
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: user-home-pv-dsx
+  name: user-home-pv
+  labels:
+    assign-to: "user-home"
 spec:
   capacity:
     storage: 2Gi

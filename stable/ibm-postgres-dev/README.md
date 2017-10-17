@@ -4,25 +4,24 @@ PostgreSQL Development
 
 ## Introduction
 
-This chart is a generic chart for persistent relational and non-relational databases intended to be deployed in IBM Cloud private environments.  Both IBM and open source databases are supported.
+This chart is a generic chart for persistent relational and non-relational databases intended to be deployed in IBM Cloud Private environments.  Both IBM and open source databases are supported.
 
 ## Prerequisites
 
-- Persistent Volume is required if persistance is enabled and no dynamic provisioning has been set up. You can create a persistent volume via the IBM Cloud private interface or through a yaml file. For example:
+- Persistent Volume is required if persistance is enabled and no dynamic provisioning has been set up. You can create a persistent volume via the IBM Cloud Private interface or through a yaml file. For example:
 
 ```
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: pv0001
+  name: <persistent volume name>
 spec:
+  capacity:
+    storage: 20Gi
   accessModes:
     - ReadWriteOnce
-  storageClassName: anything
-    storage: 5Gi
   hostPath:
-    path: /data/pv0001/
-EOF
+    path: <PATH>
 ```
 
 ## Installing the Chart

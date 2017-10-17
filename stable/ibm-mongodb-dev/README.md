@@ -10,6 +10,21 @@ This chart bootstraps a [MongoDB](https://github.ibm.com/tools-for-aps/dsm_on_cl
 
 - Kubernetes 1.4+ with Beta APIs enabled
 - PV provisioner support in the underlying infrastructure
+- Persistent Volume is required if persistance is enabled and no dynamic provisioning has been set up. You can create a persistent volume via the IBM Cloud Private interface or through a yaml file. For example:
+
+```
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: <persistent volume name>
+spec:
+  capacity:
+    storage: 8Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: <PATH>
+```
 
 ## Installing the Chart
 

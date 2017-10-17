@@ -4,7 +4,7 @@
 
 ## Introduction
 
-This chart is consist of IBM Data Server Manager which is a database management tool intended to be deployed in IBM Cloud-Private environments. 
+This is a chart for IBM Data Server Manager. IBM Data Server Manager which is a database management tool. This chart is intended to be deployed in IBM Cloud Private.
 
 ## Prerequisites
 
@@ -90,26 +90,34 @@ The following tables lists the configurable parameters of the ibm-dsm-dev chart 
 | `image.pullPolicy`                    | `DSM` image pull policy                                      | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
 | `imageSidecar.pullPolicy`             | `DSM` sidecar image pull policy                              | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
 | `global.image.secret`                 | `DSM` and repository image secret                            | `VISIT http://ibm.biz/db2-dsm-license TO RETRIEVE IMAGE SECRET`|
-| `login.user`                          | `DSM` admin user name                                        | `admin`                                                    |                                
-| `login.password`                      | `DSM` admin password                                         | `nil`                                                      |                                       
+| `login.user`                          | `DSM` admin user name                                        | `admin`                                                    |              
+| `login.password`                      | `DSM` admin password                                         | `nil`                                                      |                       
 | `dsmVolume.name`                      | The PVC name to persist data                                 | `dsmvolume`                                                |     
 | `persistence.enabled`                 | Use a PVC to persist data                                    | `true`                                                     |
-| `persistence.useDynamicProvisioning`  | Dynamic provision persistent volume or not                   | `false`						    
+| `persistence.useDynamicProvisioning`  | Dynamic provision persistent volume or not                   | `false`				                                            |
 | `dsmVolume.persistence.existingClaim` | Provide an existing PersistentVolumeClaim                    | `nil`                                                      |
 | `dsmVolume.persistence.storageClass`  | Storage class of backing PVC                                 | `nil`                                                      |
 | `dsmVolume.persistence.size`          | Size of data volume                                          | `4Gi`                                                      |
-| `resources`                           | CPU/Memory resource requests/limits                          | Memory: `4Gi`, CPU: `2`                                    |
+| `resources.limits.cpu`                | Container CPU limit                                          | `4`                                                        |
+| `resources.limits.memory`             | Container memory limit                                       | `16Gi`                                                     |
+| `resources.requests.cpu`              | Container CPU requested                                      | `2`                                                        |
+| `resources.requests.memory`           | Container Memory requested                                   | `4Gi`                                                      |
 | `service.httpPort`                    | Internal http port                                           | `11080`                                                    |
 | `service.httpPort`                    | Interal https port                                           | `11081`                                                    |
-| `service.type`                        | k8s service type exposing ports, e.g.`ClusterIP`| `NodePort` |                                                            |
-| `service.name`                        | k8s service type exposing ports name | `console`             |    
-| `repository.image.repository`         | Repository image                                             | `na.cumulusrepo.com/hcicp_dev/db2server_dec`                         
-| `repository.image.tag`                | Repository image tag                                         | `11.1.2.2`                                                 
-| `repository.image.pullPolicy`         | Repository image pull policy                                 | `Always` if `imageTag` is `latest`, else `IfNotPresent`    
-| `repository.persistence.useDynamicProvisioning`  | Dynamic provision persistent volume or not        | `false`	
-| `repository.dsmVolume.persistence.storageClass`  | Storage class of backing PVC                      | `nil`                                                       
-| `repository.dsmVolume.persistence.size`          | Size of data volume                               | `20Gi` 						
-| `resources`                           | CPU/Memory resource requests/limits                          | Memory: `2Gi`, CPU: `1`                                    
+| `service.type`                        | k8s service type exposing ports, e.g.`ClusterIP`             | `NodePort`                                                 |  
+| `service.name`                        | k8s service type exposing ports name                         | `console`                                                  | 
+| `repository.image.repository`         | Repository image                                             | `na.cumulusrepo.com/hcicp_dev/db2server_dec`               |
+| `repository.image.tag`                | Repository image tag                                         | `11.1.2.2`                                                 | 
+| `repository.image.pullPolicy`         | Repository image pull policy                                 | `Always` if `imageTag` is `latest`, else `IfNotPresent`    | 
+| `repository.persistence.useDynamicProvisioning`  | Dynamic provision persistent volume or not        | `false`	                                                  |
+| `repository.dsmVolume.persistence.storageClass`  | Storage class of backing PVC                      | `nil`                                                      |   
+| `repository.dsmVolume.persistence.size`          | Size of data volume                               | `20Gi` 					                                          |	
+| `repository.resources.limits.cpu`                | Repository container CPU limit                    | `4000m`                                                    |
+| `repository.resources.limits.memory`             | Repository container memory limit                 | `16Gi`                                                     |
+| `repository.resources.requests.cpu`              | Repository container CPU requested                | `1000m`                                                    |
+| `repository.resources.requests.memory`           | Repository container Memory requested             | `2Gi`                                                      |
+
+                                 
 
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
