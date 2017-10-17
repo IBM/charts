@@ -1,0 +1,42 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    metadata:
+      name: {{ template "fullname" . }}
+      labels:
+        app: {{ template "fullname" . }}
+    spec:
+      volumes:
+      - name: {{ template "fullname" . }}-pvc1
+        persistentVolumeClaim:
+        {{- if .Values.persistentVolumeClaimSettings2.existingClaimName }}
+          claimName: {{ .Values.persistentVolumeClaimSettings2.existingClaimName }}
+        {{- else }}
+          claimName: {{ template "fullname" . }}-pvc1
+        {{- end }}
+      containers:
+      - name: {{ template "fullname" . }}
+        image: "icpdashdb/devc:v2.0.0-icp-linux"
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        env:
+        - name: BLUADMPASS
+          value: "{{ .Values.BLUADMPASS.password }}"
+        volumeMounts:
+        - mountPath: /mnt/bludata0
+          name: {{ template "fullname" . }}-pvc1
+        - mountPath: /mnt/blumeta0
+          name: {{ template "fullname" . }}-pvc1
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+      imagePullSecrets:
+      - name: {{ template "fullname" . }}-secret
