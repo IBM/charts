@@ -1,210 +1,232 @@
 
-<!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
-
-- [DSX Helm chart](#dsx-helm-chart)
+- [DSX Developer Edition Helm chart](#dsx-developer-edition-helm-chart)
 	- [Requirements](#requirements)
-	- [Accessing DSX](#accessing-dsx)
+		- [Namespace](#namespace)
+		- [Storage](#storage)
+	- [Deploying DSX Developer](#deploying-dsx-developer)
+	- [Accessing DSX Developer](#accessing-dsx-developer)
+	- [Uninstalling DSX Developer](#uninstalling-dsx-developer)
 	- [Detailed example](#detailed-example)
+	- [Configuration](#configuration)
+		- [Common Parameters](#common-parameters)
+		- [Persistence Parameters](#persistence-parameters)
+		- [Containers Parameters](#containers-parameters)
 	- [Test drive DSX](#test-drive-dsx)
 		- [Jupyter](#jupyter)
 		- [Zeppelin](#zeppelin)
 		- [RStudio](#rstudio)
 
-<!-- /TOC -->
-
-# DSX Developer Edition Helm Chart (Beta)
+# DSX Developer Edition Helm Chart
 
 Data Science Experience (DSX) is delivered as an integrated set of pods and kubernetes services. DSX pods use kube-dns to discover each other by a _fixed_ name - hence its important that each independent copy of DSX gets deployed in a separate Kube namespace.
 
 ## Requirements
 
-1). **A persistent volume is required**
+### Namespace
 
-2). **A unique node port** must be selected at helm install time to be able to access the DSX web application from a browser.
+Deploying DSX Developer requires a namesapce to be created before deployment.
 
-3). **One Kubernetes namespace per DSX instance**
+You can create a namespace by executing:
 
-for example - here is how one could set these properties via  helm install :
-
+```shell
+kubectl create namespace <a namespace>
 ```
---namespace <a namespace> --set dsxservice.externalPort=<a node port>
-```
+You can also create a namespace from ICp UI by following these steps:
+- From Menu navigate to Workloads -> Admin -> Namespaces
+- Click Create Namespace Button
+- Enter a namespace and click Create button
 
-If these properties are not set, the *'default'* namespace and node port *32443* will be used.
+Make sure this namespace is shown as active under the ICp UI in
+`System -> Admin -> Namespaces`. If this is not the case, simply click the
+wheel next to the namespace to activate it.
 
+### Storage
 
-## Accessing DSX
+Deploying DSX Developer requires a persistent volume.  If you deploy DSX using ICp UI, the process will configure persistent volume automatically. If you deploy DSX manually, please follow the options below:
 
-from a browser, use
-``
-http://<external ip>:<nodeport>
-``
-to access the application.
-
-
-## Detailed example
-
-1). Note: You must ensure that a persistent volume exists for DSX to work.
-
-example of creating a _dummy_ NFS PV:
-
+Cluster with Dynamic Provisioning enabled (e.g. GlusterFS), and set the parameter during deployment:
+```shell
+--set persistence.useDynamicProvisioning=true
 ```
 
-cat test-user-home-pv2.yaml
+**OR**
+
+A `PersistentVolume`s in a shared storage (e.g. NFS) with the following spec:
+
+```yaml
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: tmp-user-home-pv-dsx
+  name: <persistent volume name>
 spec:
   capacity:
     storage: 2Gi
   accessModes:
     - ReadWriteMany
   nfs:
-    server: <nfs server ip>
-    path: <your path>
-
-
-kubectl create -f ./test-user-home-pv2.yaml
-
-```
-*Warning* . this dummy PV is just for illustration. please ensure that a real ReadWriteMany PV is created upfront**
-
-2). install via helm into a namespace (example - dsx-test07)
-
+    server: <NFS Server IP>
+    path: <NFS PATH>
 ```
 
-helm install --name dsx07 --namespace dsx-test07 --set dsxservice.externalPort=32000 ibm-dsx-dev
+Note: For NFS PATH you need to create your directory manually before deploying the persistent volume.
 
+You can create a PV using the above template by executing:
+
+```shell
+kubectl create pv -f <yaml-file>
+```
+
+## Deploying DSX Developer
+
+To deploy DSX Developer using ICp UI, please do the following steps:
+- Click Configure button
+- Fill in release name
+- Fill in namespace
+- Accept the license agreement
+- Click on Install button
+
+Once the install process is completed, open a browser and enter `http://<external ip>:32443`
+
+You can deploy DSX Developer manually by executing:
+```shell
+helm install --namespace <a namespace> --name <a release name> ibm-dsx-dev
+```
+
+You can add the `--debug --dry-run` options to show the template being generated before doing the actual deployment.
+
+Note: By default is port `32443`. If you want to use a different port, you can specify your port by executing:
+```shell
+helm install --namespace <a namespace> --name <a release name> ibm-dsx-dev --set dsxservice.externalPort=<a node port>
+```
+
+## Accessing DSX Developer
+
+from a browser, use
+``
+http://<external ip>:<node port>
+``
+to access the application. Login for the first time with `admin/password`
+
+## Uninstalling DSX Developer
+
+To uninstall DSX Developer simply delete the name that was deployed:
+
+```shell
+helm delete --purge <release name>
+```
+
+Note: This will not delete the `PesistentVolume`, if it was created manually.
+
+## Detailed example
+
+This sample deployment uses NFS PV.
+
+1) Create a yaml named user-home-pv-dsx.yaml file with the following content:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: user-home-pv-dsx
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: 192.168.1.200
+    path: /mnt/user-home
+```
+Note: Please ensure that /mnt/user-home is created in your NFS server.
+
+2) Create a PV:
+
+```shell
+kubectl create -f ./user-home-pv-dsx.yaml
+```
+
+3) Create a namespace:
+
+```shell
+kubectl create namespace dsx-desktop
+```
+
+4) Deploy DSX Developer using the helm install command:
+
+```shell
+helm install --name dsx01 --namespace dsx-desktop --set dsxservice.externalPort=32000 ibm-dsx-dev
+```
+
+5) Open a browser and enter:
+``
+http://<external ip>:32000
+``
+
+6) Uninstall DSX Developer:
+
+```shell
+helm delete --purge dsx01
 ```
 
 ## Configuration
+The following tables show parameters that can be customized eithe by using `--set <paramter>=<value>` one by one, or the _recommended_ method of having a `overrides.yaml` file with the list of values and passing them this file during deployment with `-f overrides.yaml`.
 
-Parameters
-------------
-The helm chart has the following Values that can be overriden using the install `--set` parameter. For example:
 
-`helm install --set dsxservice.externalPort=32000`
+### Common Parameters
 
-**Common Parameters**
+| Parameter                                 | Description                       | Default Value                |
+|-------------------------------------------|-----------------------------------|------------------------------|
+| image.pullPolicy                          | Image Pull Policy                 | IfNotPresent                 |
+| persistence.useDynamicProvisioning        | Use Dynamic PV Provisioning       | false                        |
+| dsxservice.externalPort                   | The external port                 | 32443                        |
 
-| Parameter                                 | Description                         | Default                      | Constraints |
-|-------------------------------------------|-------------------------------------|------------------------------|-------------|
-| image.secret                              | The secret to pull the images       | dsx-cumulus-registry-secret  |             |
-| image.pullPolicy                          | Image Pull Policy                   | IfNotPresent                 |             |
-| dsxservice.externalPort                   | The external port                   | 32443                        |             |
-| userHomePvc.name                          | The PVC name                        | user-home-pvc                |             |
-| userHomePvc.persistence.existingClaimName | Existing claim name                 |                              |             |
-| userHomePvc.persistence.storageClassName  | Storage class name                  |                              |             |
-| userHomePvc.persistence.size              | Storage Size                        | 1Gi                          | Min: 1Gi    |
+
+### Persistence Parameters
+
+If `persistence.useDynamicProvisioning` has been set to `true`, the `.storageClass` of each of the following values should be set to the class that provides this feature, unless the `default` StorageClass provides Dynamic Provisioning already. The following table show the default values for each of the `<prefix>.<suffix>`:
+
+| Prefix/Suffix      | name                | persistence.storageClass | persistence.existingClaimName| persistence.size|
+|--------------------|---------------------|--------------------------|------------------------------|-----------------|
+|**userHomePvc**     | user-home-mount     | _(None)_                 | _(None)_                     | 1Gi             |
 
 
 DSX Persistence storage requires the following setting which can not be modified at deployment.
 
-| Parameter                                 | Description                         | Default                      | Constraints |
-|-------------------------------------------|-------------------------------------|------------------------------|-------------|
-| userHomePvc.persistence.enabled           | Is persistence storage enabled      | true                         | required    |
-| userHomePvc.persistence.accessMode        | Storage Access Mode                 | ReadWriteMany                | required    |
+| Parameter                                 | Description                         | Default            | Constraints  |
+|-------------------------------------------|-------------------------------------|--------------------|--------------|
+| userHomePvc.persistence.enabled           | Is persistence storage enabled      | true               | required     |
+| userHomePvc.persistence.accessMode        | Storage Access Mode                 | ReadWriteMany      | required     |
 
+**Description**:
+- `name` The name of the PVC
+- `persistence.storageClass` The storage class to use with the PVC (required for Dynamic Provisioning)
+- `persistence.existingClaimName` Use an already existing PVC
+- `persistence.size` The minimum size of the persistent volume to attach to/request.
 
-**UX Container Parameters**
+### Containers Parameters
 
-Example
-`helm install --set dsxUxServerContainer.image.tag=v1`
+#### Image Parameters
 
-Note: Each value starts with *dsxUxServerContainer*
+Default parameters values for the images and tag to use in each container in the format `<prefix>.<suffix>`
 
-| Parameter                     | Description                                   | Default                                     | Constraints |
-|-------------------------------|-----------------------------------------------|---------------------------------------------|-------------|
-| .image.repository             | The image repository                          | "na.cumulusrepo.com/homer/dsx_starter_ux"   |             |
-| .image.tag                    | The image version/tag                         | v1                                          |             |
-| .resources.requests.cpu       | CPU Request                                   | 1000m                                       | Min: 1000m  |
-| .resources.requests.memory    | Memory Request                                | 256Mi                                       | Min: 256Mi  |
-| .resources.limits.cpu         | CPU Limit                                     | 2000m                                       |             |
-| .resources.limits.memory      | Memory Limit                                  | 512Mi                                       |             |
+|  Prefix/Suffix                | image.repository                      |image.tag|
+|-------------------------------|---------------------------------------|---------|
+|**dsxUxServerContainer**	  		|hybridcloudibm/dsx-dev-icp-dsx-core		|v1.015   |
+|**zeppelinServerContainer**		|hybridcloudibm/dsx-dev-icp-zeppelin		|v1.015   |
+|**notebookServerContainer**		|hybridcloudibm/dsx-dev-icp-jupyter			|v1.015   |
+|**rstudioServerContainer**			|hybridcloudibm/dsx-dev-icp-rstudio 		|v1.015   |
 
+#### Resources Parameters
 
-**Zeppelin Container Parameters**
+Default parameters values for the cpu and memory to use in each container in the format `<prefix>.<suffix>`
 
-Example
-`helm install --set zeppelinServerContainer.image.tag=v1`
+|  Prefix/Suffix                |resources.requests.cpu|resources.limits.cpu|resources.requests.memory|resources.limits.memory|
+|-------------------------------|----------------------|--------------------|-------------------------|-----------------------|
+|**dsxUxServerContainer**		  	|1000m                 |2000m               |256Mi                    |512Mi                  |
+|**zeppelinServerContainer**		|500m                  |1000m               |2048Mi                   |4096Mi                 |
+|**notebookServerContainer**		|500m                  |2000m               |1024Mi                   |2048Mi                 |
+|**rstudioServerContainer**	  	|500m                  |1000m               |2Gi                      |3Gi                    |
 
-Note: Each value starts with *zeppelinServerContainer*
-
-| Parameter                     | Description                                   | Default                                     | Constraints |
-|-------------------------------|-----------------------------------------------|---------------------------------------------|-------------|
-| .image.repository             | The image repository                          | "na.cumulusrepo.com/homer/dsx_starter_ux"   |             |
-| .image.tag                    | The image version/tag                         | v1                                          |             |
-| .resources.requests.cpu       | CPU Request                                   | 500m                                        | Min: 500m   |
-| .resources.requests.memory    | Memory Request                                | 2048Mi                                      | Min: 2048Mi |
-| .resources.limits.cpu         | CPU Limit                                     | 1000m                                       |             |
-| .resources.limits.memory      | Memory Limit                                  | 4096Mi                                      |             |
-
-
-**Jupyter Container Parameters**
-
-Example
-`helm install --set notebookServerContainer.image.tag=v1`
-
-Note: Each value starts with *notebookServerContainer*
-
-| Parameter                     | Description                                   | Default                                        | Constraints |
-|-------------------------------|-----------------------------------------------|------------------------------------------------|-------------|
-| .image.repository             | The image repository                          | "na.cumulusrepo.com/homer/dsx_starter_jupyter" |             |
-| .image.tag                    | The image version/tag                         | v1                                             |             |
-| .resources.requests.cpu       | CPU Request                                   | 500m                                           | Min: 500m   |
-| .resources.requests.memory    | Memory Request                                | 1024Mi                                         | Min: 1024Mi |
-| .resources.limits.cpu         | CPU Limit                                     | 2000m                                          |             |
-| .resources.limits.memory      | Memory Limit                                  | 512Mi                                          |             |
-
-
-**RStudio Container Parameters**
-
-Example
-`helm install --set rstudioServerContainer.image.tag=v1`
-
-Note: Each value starts with *rstudioServerContainer*
-
-| Parameter                     | Description                                   | Default                                         | Constraints |
-|-------------------------------|-----------------------------------------------|-------------------------------------------------|-------------|
-| .image.repository             | The image repository                          | "na.cumulusrepo.com/homer/dsx_starter_rstudio"  |             |
-| .image.tag                    | The image version/tag                         | v1                                              |             |
-| .resources.requests.cpu       | CPU Request                                   | 500m                                            | Min: 500m   |
-| .resources.requests.memory    | Memory Request                                | 2Gi                                             | Min: 2Gi    |
-| .resources.limits.cpu         | CPU Limit                                     | 1000m                                           |             |
-| .resources.limits.memory      | Memory Limit                                  | 3Gi                                             |             |
-
-
-3). Verify deployment
-
-Use kubectl against the targetted namespace to verify if the pods and services are running correctly. Note that the DSX images are big and can take quite a bit of time to be pulled from public registries.
-
-``
-kubectl get pods,svc -n=dsx-test07 -o wide
-``
-
-
-
-```
-NAME                                  READY     STATUS    RESTARTS   AGE       IP              NODE
-po/dsx-ux-server-318946341-rdx1k      1/1       Running   4          12m       192.168.0.29    187c-master-2.fyre.ibm.com
-po/notebook-server-1006682539-zb2mj   1/1       Running   0          12m       192.168.96.33   187c-master-1.fyre.ibm.com
-po/rstudio-server-1880015003-d2d1t    1/1       Running   0          12m       192.168.96.34   187c-master-1.fyre.ibm.com
-po/zeppelin-server-757514753-hzgv7    1/1       Running   0          12m       192.168.0.28    187c-master-2.fyre.ibm.com
-
-NAME           CLUSTER-IP      EXTERNAL-IP   PORT(S)                      AGE       SELECTOR
-svc/dsx-ux     10.3.75.55      <nodes>       443:31126/TCP,80:32000/TCP   12m       component=dsx-ux-server,run=dsx-ux-server-deployment-pod
-svc/jupyter    10.10.173.198   <none>        8888/TCP                     12m       component=notebook-server,run=notebook-server-deployment-pod
-svc/rstudio    10.1.211.93     <none>        8787/TCP                     12m       component=rstudio-server,run=rstudio-server-deployment-pod
-svc/zeppelin   10.12.87.162    <none>        8080/TCP                     12m       component=zeppelin-server,run=zeppelin-server-deployment-pod
-```
-
-4). Access the newly installed DSX instance
-
-From the browser - acccess  
-``
-http://<host>:32000
-``
 
 ## Test drive DSX
 
@@ -231,11 +253,11 @@ Import scikit-learn Cookbook from URL:
 
 3). Run
 
- all cells (note some parts are memory intensive)
+all cells (note some parts are memory intensive)
 
-  ``
-      Cell -> Run All
-  ``
+``
+    Cell -> Run All
+``
 
 ### Zeppelin
 
@@ -244,12 +266,12 @@ Import scikit-learn Cookbook from URL:
 For example:
 
 ``
-        wget --no-check-certificate  -O starter-bank.json "https://raw.githubusercontent.com/hortonworks-gallery/zeppelin-notebooks/master/2A94M5J1Z/note.json"
+wget --no-check-certificate  -O starter-bank.json "https://raw.githubusercontent.com/hortonworks-gallery/zeppelin-notebooks/master/2A94M5J1Z/note.json"
 ``
 
 2). Add a  Zeppelin notebook:
 ``
-        My Notebooks >  Zeppelin Notebooks and click on   (+) add new notebook   -> from file
+My Notebooks >  Zeppelin Notebooks and click on   (+) add new notebook   -> from file
 ``
 
 Pick starter-bank.json (the sample file you downloaded earlier)
@@ -270,16 +292,16 @@ Click on the play icon button at the top to run all paragraphs
 paste the following code:
 
 ```
-            library(sparklyr)
-            library(dplyr)
-            sc <- spark_connect(master = "local")
+library(sparklyr)
+library(dplyr)
+sc <- spark_connect(master = "local")
 ```
 (or you can use the Spark view pane on the top right too)
 
 2). run the 'mtcars' sample:
 
 ```
-            source('~/ibm-sparkaas-demos/sparkaas_mtcars.R', echo=TRUE)
+source('~/ibm-sparkaas-demos/sparkaas_mtcars.R', echo=TRUE)
 ```
 
 You will see the table mtcars open up. You can also switch to the Spark pane  (top right) & open up other tables
