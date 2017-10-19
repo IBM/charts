@@ -16,30 +16,24 @@ By default Transformation Advisor expects a Persistence Volume (PV) to be availa
 
 ### Create a Persistence Volume:
 
-Create pv.yaml file with following content
+Complete the following steps to add the Persistent Volume
 
-```
-kind: PersistentVolume
-apiVersion: v1
-metadata:
-  name: transadv-pv-volume
-  labels:
-    type: local
-spec:
-  persistentVolumeReclaimPolicy: Recycle
-  capacity:
-    storage: 8Gi
-  accessModes:
-    - ReadWriteMany
-  hostPath:
-    path: "/tmp/data"
-```
-
-Create pv
-
-```
-kubectl create -f pv.yaml
-```
+1. Navigate to **Platform** > **Storage**
+1. Click **Create PersistentVolume**
+1. Set the following values:
+    - Name: transdev-pv-volume
+    - Capacity: 8
+    - Unit: Gi
+    - Access mode: Read write many
+    - Reclaim policy: Recycle
+    - Storage type: Host path
+1. On the left menu select **Labels** and enter the following values:
+    - Label: type
+    - Value: local  
+1. On the left menu select **Parameters** and enter the following values:
+    - Key: path
+    - Value: /tmp/data3  
+**Note**: *Value here should be a value appropriate to your system*
 
 ### Using an existing Persistence Volume Claim
 
@@ -52,9 +46,9 @@ If you already have a suitable claim available then you can use that as follows:
 
 You may install Transformation Advisor without using a Persistence Volume, however this has a number of limitations:
  - If the couchDB container is restarted for any reason then **all of your data will be lost**
- - If the couchDB container is restarted for any resaon you will then need to **restart the server container** to re-initialize the couchDB
+ - If the couchDB container is restarted for any reason you will then need to **restart the server container** to re-initialize the couchDB
 
-To use no Persistence Volumes as follows:
+To use no Persistence Volumes complete the following steps:
  - During the install you will be prompted with a list of parameter values
 -  Untick the following option **couchdb.persistence.enabled** 
 
@@ -114,6 +108,33 @@ The following tables lists the configurable parameters of the Transformation Adv
 - Ensure kubectl points to your ICP
 https://github.com/IBM/charts
 - Ensure `helm` is installed
+
+### Create a Persistence Volume:
+
+Create pv.yaml file with following content
+
+```
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: transadv-pv-volume
+  labels:
+    type: local
+spec:
+  persistentVolumeReclaimPolicy: Recycle
+  capacity:
+    storage: 8Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: "/tmp/data"
+```
+
+Create pv
+
+```
+kubectl create -f pv.yaml
+```
 
 ## Installing the Chart
 

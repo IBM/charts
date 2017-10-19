@@ -4,7 +4,7 @@
 
 ## Introduction
 
-This chart bootstraps a [MongoDB](https://github.ibm.com/tools-for-aps/dsm_on_cloud/tree/master/platform/Kubernetes/IBMCp/Databases/MongoDB) deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
+This chart bootstraps a MongoDB deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
 ## Prerequisites
 
@@ -72,7 +72,8 @@ The following tables lists the configurable parameters of the MongoDB chart and 
 | `dataVolume.existingClaimName`               | Name of the Existing Claim to be used | `nil`                                                    |
 | `dataVolume.size`                            | Size of data volume                   | `8Gi`                                                    |
 
-The above parameters map to the env variables defined in [mongodb](https://github.ibm.com/tools-for-aps/dsm_on_cloud/tree/master/platform/Kubernetes/IBMCp/Databases/MongoDB). For more information please refer to the [mongodb](https://github.ibm.com/tools-for-aps/dsm_on_cloud/tree/master/platform/Kubernetes/IBMCp/Databases/MongoDB) image documentation.
+The above parameters map to the env variables defined in [values.yaml](https://github.ibm.com/IBMPrivateCloud/charts/blob/master/stable/ibm-mongodb-dev/values.yaml). 
+
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
@@ -90,10 +91,8 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 $ helm install --name my-release -f values.yaml stable/ibm-mongodb-dev
 ```
 
-> **Tip**: You can use the default [values.yaml](values.yaml)
-
 ## Persistence
 
-The [mongoDB](https://github.ibm.com/tools-for-aps/dsm_on_cloud/tree/master/platform/Kubernetes/IBMCp/Databases/MongoDB) image stores the MongoDB data at the `/data/db` path of the container.
+The MongoDB image stores the MongoDB data at the `/data/db` path of the container.
 
 The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) volume at this location. The volume is created using dynamic volume provisioning.

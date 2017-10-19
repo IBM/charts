@@ -1,3 +1,7 @@
+# Deprecation notice
+
+**Warning**: This chart is deprecated, and is only suitable for use with IBM Cloud Private V1.2.  Please use the `stable/ibm-mqadvanced-server-dev` chart instead. 
+
 # IBM MQ
 
 IBM® MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms. It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
@@ -13,12 +17,6 @@ Learn more about IBM MQ at the following link: [https://www.ibm.com/support/know
 ```bash
 $ helm install incubating/mq
 ```
-
-# Deprecation notice
-
-**Please note:** that this chart has now been deprecated and replaced by the chart available in `stable/ibm-mqadvanced-server-dev`.
-Although you can still continue to use this chat we suggest you now use the new chart.
-
 
 # Quick Start
 
