@@ -1,5 +1,5 @@
-apiVersion: extensions/v1beta1
-kind: Deployment
+apiVersion: apps/v1beta1
+kind: StatefulSet
 metadata:
   labels:
     app: {{ template "elasticsearch.fullname" . }}
@@ -9,18 +9,15 @@ metadata:
     release: {{ .Release.Name }}
   name: {{ template "data.fullname" . }}
 spec:
+  serviceName: {{ .Values.elasticsearch.name }}-data
   replicas: {{ .Values.elasticsearch.data.replicas }}
   selector:
     matchLabels:
       component: elasticsearch
       role: data
-  strategy:
+  updateStrategy:
     type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 1
   revisionHistoryLimit: 3
-  minReadySeconds: 5
   template:
     metadata:
       labels:
@@ -57,15 +54,11 @@ spec:
                   release: "{{ .Release.Name }}"
                   component: "{{ .Values.elasticsearch.data.name }}"
       {{- end }}
+      securityContext:
+        fsGroup: 1000
       initContainers:
-      - name: "sysctl"
-        image: "busybox"
-        imagePullPolicy: "IfNotPresent"
-        command: ["sysctl", "-w", "vm.max_map_count=262144"]
-        securityContext:
-          privileged: true
       - name: "chmod"
-        image: "busybox"
+        image: "{{ .Values.elasticsearch.initImage.repository }}:{{ .Values.elasticsearch.initImage.tag }}"
         imagePullPolicy: "IfNotPresent"
         command: ["chmod", "777", "/data-dir"]
         securityContext:
@@ -73,6 +66,12 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /data-dir
+      - name: "sysctl"
+        image: "{{ .Values.elasticsearch.initImage.repository }}:{{ .Values.elasticsearch.initImage.tag }}"
+        imagePullPolicy: "IfNotPresent"
+        command: ["/bin/sh", "-c", "sysctl -w vm.max_map_count=262144 && sed -i '/^vm.max_map_count /d' /etc/sysctl.conf && echo 'vm.max_map_count = 262144' >> /etc/sysctl.conf"]
+        securityContext:
+          privileged: true
       containers:
       - name: es-data
         securityContext:
@@ -96,12 +95,33 @@ spec:
           mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
           subPath: elasticsearch.yml
       volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: {{ template "elasticsearch.fullname" . }}-pvc
         - name: config
           configMap:
             name: {{ template "elasticsearch.fullname" . }}-config
             items:
               - key: data.yml
                 path: elasticsearch.yml
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app: {{ template "elasticsearch.fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        component: "{{ .Values.elasticsearch.data.name }}"
+        heritage: "{{ .Release.Service }}"
+        release: "{{ .Release.Name }}"
+    spec:
+      accessModes:
+    {{- range .Values.elasticsearch.data.storage.accessModes }}
+        - {{ . | quote }}
+    {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.elasticsearch.data.storage.size | quote }}
+    {{- if not (eq "null" .Values.elasticsearch.data.storage.storageClass) }}
+    {{- if (eq "-" .Values.elasticsearch.data.storage.storageClass) }}
+      storageClassName: ""
+    {{- else }}
+      storageClassName: "{{ .Values.elasticsearch.data.storage.storageClass }}"
+    {{- end }}
+    {{- end }}

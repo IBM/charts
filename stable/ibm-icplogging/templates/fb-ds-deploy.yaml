@@ -1,3 +1,4 @@
+---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
@@ -5,7 +6,7 @@ metadata:
     app: {{ template "filebeat.fullname" . }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     component: "{{ .Values.filebeat.name }}"
-  name: {{ template "filebeat.fullname" . }}
+  name: {{ template "filebeat.fullname" . }}-amd64
 spec:
   updateStrategy:
     type: RollingUpdate
@@ -16,16 +17,11 @@ spec:
     metadata:
       labels:
         name: {{ template "filebeat.fullname" . }}
+        arch: amd64
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: beta.kubernetes.io/arch
-                operator: In
-                values:
-                - amd64
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        beta.kubernetes.io/arch: amd64
       securityContext:
         runAsUser: 0
       containers:
@@ -55,11 +51,6 @@ spec:
         - name: docker-log
           mountPath: /var/lib/docker/containers/
           readOnly: true
-      terminationGracePeriodSeconds: 30
-      tolerations:
-        - key: "dedicated"
-          operator: "Exists"
-          effect: "NoSchedule"
       volumes:
       - name: config
         configMap:

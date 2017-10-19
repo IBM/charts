@@ -9,4 +9,32 @@ metadata:
     release: "{{ .Release.Name }}"
   name: {{ template "filebeat.fullname" . }}-config
 data:
-{{ toYaml .Values.filebeat.serverConfigFile | indent 2 }}
+  filebeat.yml: |-
+    filebeat.prospectors:
+    - input_type: log
+      paths:
+        - /var/log/containers/*.log
+      scan_frequency: 10s
+      symlinks: true
+      json.message_key: log
+      json.keys_under_root: true
+      json.add_error_key: true
+      multiline.pattern: '^\s'
+      multiline.match: after
+      fields_under_root: true
+      fields:
+        type: kube-logs
+        node.hostname: ${NODE_HOSTNAME}
+        pod.ip: ${POD_IP}
+      tags:
+          - k8s-app
+
+    filebeat.config.modules:
+      # Set to true to enable config reloading
+      reload.enabled: true
+
+    output.logstash:
+      hosts: {{ .Values.logstash.name }}:{{ .Values.logstash.port }}
+      timeout: 15
+
+    logging.level: info

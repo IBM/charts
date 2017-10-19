@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: es-curator-config
+data:
+  action.yml: |-
+    # Remember, leave a key empty if there is no value.  None will be a string,
+    # not a Python "NoneType"
+    #
+    # Also remember that all examples have 'disable_action' set to True.  If you
+    # want to use this action as a template, be sure to set this to False after
+    # copying it.
+    actions:
+      1:
+        action: delete_indices
+        description: "Delete user log indices that are older than {{ .Values.curator.app.count }} {{ .Values.curator.app.unit }}. Cron schedule: {{ .Values.curator.schedule }}"
+        options:
+          timeout_override:
+          continue_if_exception: True
+          ignore_empty_list: True
+          disable_action: False
+        filters:
+        - filtertype: pattern
+          kind: prefix
+          value: filebeat-
+        - filtertype: age
+          source: name
+          direction: older
+          timestring: '%Y.%m.%d'
+          unit: {{ .Values.curator.app.unit }}
+          unit_count: {{ .Values.curator.app.count }}
+      2:
+        action: delete_indices
+        description: "Delete elastic system monitoring log indices that are older than {{ .Values.curator.monitoring.count }} {{ .Values.curator.monitoring.unit }}. Cron schedule: {{ .Values.curator.schedule }}"
+        options:
+          timeout_override:
+          continue_if_exception: True
+          ignore_empty_list: True
+          disable_action: False
+        filters:
+        - filtertype: pattern
+          kind: prefix
+          value: .monitoring
+        - filtertype: pattern
+          kind: prefix
+          value: .monitoring-alerts
+          exclude: True
+        - filtertype: age
+          source: name
+          direction: older
+          timestring: '%Y.%m.%d'
+          unit: {{ .Values.curator.monitoring.unit }}
+          unit_count: {{ .Values.curator.monitoring.count }}
+      3:
+        action: delete_indices
+        description: "Delete elastic watcher history indices that are older than {{ .Values.curator.watcher.count }} {{ .Values.curator.watcher.unit }}. Cron schedule: {{ .Values.curator.schedule }}"
+        options:
+          timeout_override:
+          continue_if_exception: True
+          ignore_empty_list: True
+          disable_action: False
+        filters:
+        - filtertype: pattern
+          kind: prefix
+          value: .watcher-history
+        - filtertype: age
+          source: name
+          direction: older
+          timestring: '%Y.%m.%d'
+          unit: {{ .Values.curator.watcher.unit }}
+          unit_count: {{ .Values.curator.watcher.count }}
+  config.yml: |-
+    # Remember, leave a key empty if there is no value.  None will be a string,
+    # not a Python "NoneType"
+    client:
+      hosts:
+        - {{ .Values.elasticsearch.name }}
+      port: {{ .Values.elasticsearch.client.restPort }}
+      url_prefix:
+      use_ssl: False
+      certificate:
+      client_cert:
+      client_key:
+      ssl_no_validate: False
+      http_auth:
+      timeout: 30
+      master_only: False
+
+    logging:
+      loglevel: INFO
+      logformat: default
+      blacklist: ['elasticsearch', 'urllib3']
+  cron: |-
+    {{ .Values.curator.schedule }} root /bin/bash /clean-indices.sh
+    # An empty line is required at the end of this file for a valid cron file.

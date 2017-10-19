@@ -56,12 +56,28 @@ spec:
       {{- end }}
       initContainers:
       - name: "sysctl"
-        image: "busybox"
+        image: "{{ .Values.elasticsearch.initImage.repository }}:{{ .Values.elasticsearch.initImage.tag }}"
         imagePullPolicy: "IfNotPresent"
-        command: ["sysctl", "-w", "vm.max_map_count=262144"]
+        command: ["/bin/sh", "-c", "sysctl -w vm.max_map_count=262144 && sed -i '/^vm.max_map_count /d' /etc/sysctl.conf && echo 'vm.max_map_count = 262144' >> /etc/sysctl.conf"]
         securityContext:
           privileged: true
       containers:
+      - name: indices-cleaner
+        image: {{ .Values.curator.image.repository }}:{{ .Values.curator.image.tag }}
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: actionfile
+          mountPath: /action.yml
+          subPath: action.yml
+        - name: localtime
+          mountPath: "/etc/localtime"
+          readOnly: true
+        - name: curator-config
+          mountPath: /etc/curator.yml
+          subPath: curator.yml
+        - name: cron
+          mountPath: /etc/cron.d/curator-cron
+          subPath: curator-cron
       - name: es-client
         securityContext:
           privileged: false
@@ -83,16 +99,37 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /usr/share/elasticsearch/data
-        - name: config
+        - name: es-config
           mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
           subPath: elasticsearch.yml
       volumes:
           - emptyDir:
               medium: ""
             name: data
-          - name: config
+          - name: es-config
             configMap:
               name: {{ template "elasticsearch.fullname" . }}-config
               items:
                 - key: client.yml
                   path: elasticsearch.yml
+          - name: "actionfile"
+            configMap:
+              name: es-curator-config
+              items:
+                - key: action.yml
+                  path: action.yml
+          - name: "localtime"
+            hostPath:
+              path: /etc/localtime
+          - name: "curator-config"
+            configMap:
+              name: es-curator-config
+              items:
+                - key: config.yml
+                  path: curator.yml
+          - name: "cron"
+            configMap:
+              name: es-curator-config
+              items:
+                - key: cron
+                  path: curator-cron

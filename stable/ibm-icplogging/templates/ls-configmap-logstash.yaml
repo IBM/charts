@@ -9,8 +9,6 @@ data:
     path.config: /usr/share/logstash/pipeline
     xpack.monitoring.enabled: {{ .Values.xpack.monitoring }}
     xpack.monitoring.elasticsearch.url: {{ .Values.logstash.elasticsearch }}
-    xpack.monitoring.elasticsearch.username: logstash_system
-    xpack.monitoring.elasticsearch.password: changeme
   k8s.conf: |-
     input {
       beats {
@@ -20,27 +18,38 @@ data:
 
     filter {
       if [type] == "kube-logs" {
-
         mutate {
-          rename => ["log", "message"]
-          remove_field => ["host", "beat.hostname"]
+          rename => { "message" => "log" }
+          remove_field => ["host"]
         }
 
         date {
           match => ["time", "ISO8601"]
-          remove_field => ["time"]
+        }
+
+        # Sample:
+        # tiller-1279707952-sgd08_kube-system_tiller-0c51282d195d1c21307f6a48b9118d690441cda498fc5a2790c043407eab235b.log
+        # filebeat-j357d_default_filebeat-1a3113e374ad7937a3efa36c4bb42b46b976bcd7cd96223e6b9e6e3df08d802a.log
+        # appstdoutpod_default_app-stdout-container-01c2e7a7b105d9141825ea3ae5634b580fdd20a5a4ee890cdbe0816ca002623c.log
+        # unified-router-4047118581-sm913_kube-system_unified-router-ddda8a8cbcb74c45b64a4b18997b4f2928c998a37e45037cd0304eaa56d1634f.log
+        dissect {
+          mapping => {
+            "source" => "/var/log/containers/%{kubernetes.pod}_%{kubernetes.namespace}_%{container_file_ext}"
+          }
+        }
+
+        dissect {
+          mapping => {
+            "container_file_ext" => "%{container}.%{?file_ext}"
+          }
+          remove_field => ["host", "container_file_ext"]
         }
 
         grok {
           "match" => {
-            "container" => "%{DATA:container_prefix}-(?<container_id>[0-9A-Za-z]{64,64})"
+            "container" => "^%{DATA:kubernetes.container_name}-(?<kubernetes.container_id>[0-9A-Za-z]{64,64})"
           }
-        }
-
-        grok {
-          "match" => {
-            "pod" => "(?<pod_prefix>.+)-(?<pod_suffix1>[^-]+)-(?<pod_suffix2>[^-]+)"
-          }
+          remove_field => ["container"]
         }
       }
     }
