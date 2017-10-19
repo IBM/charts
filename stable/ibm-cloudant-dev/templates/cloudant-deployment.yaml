@@ -1,0 +1,54 @@
+#
+# The Cloudant Pod deploys a Cloudant database.
+#
+
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: "{{ template "fullname" . }}"
+  labels:
+    app: "{{ template "fullname" . }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: "{{ template "fullname" . }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /_up
+              port: 80
+            periodSeconds: {{ .Values.database.readinessProbePeriodSeconds }}
+            initialDelaySeconds: {{ .Values.database.readinessProbeInitialDelaySeconds }}
+          livenessProbe:
+            httpGet:
+              path: /_up
+              port: 80
+            periodSeconds: {{ .Values.database.livenessProbePeriodSeconds }}
+            initialDelaySeconds: {{ .Values.database.livenessProbeInitialDelaySeconds }}
+          volumeMounts:
+            - mountPath: /srv
+              name: cloudant-mount
+              subPath: srv
+      restartPolicy: Always
+      volumes:
+        - name: cloudant-mount
+          persistentVolumeClaim:
+            claimName: {{ .Values.databasePVC.name | quote }}
