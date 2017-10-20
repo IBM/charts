@@ -1,0 +1,39 @@
+# Licensed Materials - Property of IBM
+# (C) Copyright IBM Corp. 2017. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas:  {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-selector
+    spec:
+      containers:
+      - name: {{ .Chart.Name  }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.service.port }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds}}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds}}
+        env:
+          - name: PORT
+            value : "{{ .Values.service.port }}"
+      # Restrict which workers the deployment will go to
+      # the use of a multi-arch Docker image should ensure we don't get exec format errors
+      # nodeSelector:
+        # beta.kubernetes.io/arch: amd64
+        # beta.kubernetes.io/arch: ppc64le
+        # beta.kubernetes.io/arch: s390x
