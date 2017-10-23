@@ -23,8 +23,8 @@ The Helm chart has the following values that can be overriden using the --set pa
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
-| image     | pullPolicyImage | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise  |
-|           | name         | Name of image, including repository prefix (if required). | See Extended description of Docker tags |
+| image     | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise  |
+|           | repository         | Name of image, including repository prefix (if required). | See Extended description of Docker tags |
 |           | tag          | Docker image tag. | See Docker tag description |
 |           | license          |  The license state of the image being deployed. | Empty (default) for development or "accept" if you have previously accepted the production license. |
 |  tranlog.persistence   | name | Name of the transaction log that is shared to the persistent volume.	| |

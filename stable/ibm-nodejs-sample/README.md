@@ -2,7 +2,7 @@
 
 ### This sample is for demonstrative purposes only and is NOT for production use! ###
 
-### For all features to be available this is best viewed in Google Chrome or Safari!
+### For all features to be available this is best viewed in Google Chrome or Safari.
 
 ## Introduction
 This sample application is intended to guide you through the process of deploying your own Node.js applications into IBM Cloud Private. Useful links and examples are provided and the application itself is one that makes use of various monitoring capabilities. Note that this sample was produced in early October 2017 and so the code you are provided with by using the generators may differ!
@@ -21,6 +21,8 @@ This allows developers to quickly determine how the application is performing ac
 - This example can be deployed using the IBM Cloud Developer Tools, for example: `idt deploy -t container --deploy-image-target mycluster.icp:8500/default/nodejs-sample`.
 
 The `mycluster.icp` example here should match up with the entry you've added in `/etc/hosts`: it is the location of the private registry.
+
+The source code for this application is available on [GitHub](https://github.com/ibm-developer/icp-nodejs-sample).
 
 ## Prerequisites
 
