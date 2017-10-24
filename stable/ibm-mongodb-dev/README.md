@@ -72,7 +72,7 @@ The following tables lists the configurable parameters of the MongoDB chart and 
 | `dataVolume.existingClaimName`               | Name of the Existing Claim to be used | `nil`                                                    |
 | `dataVolume.size`                            | Size of data volume                   | `8Gi`                                                    |
 
-The above parameters map to the env variables defined in [values.yaml](https://github.ibm.com/IBMPrivateCloud/charts/blob/master/stable/ibm-mongodb-dev/values.yaml). 
+The above parameters map to the env variables defined in [values.yaml](https://github.com/IBM/charts/blob/master/stable/ibm-mongodb-dev/values.yaml). 
 
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,

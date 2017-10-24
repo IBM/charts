@@ -1,0 +1,58 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-slave"
+  labels:
+    # This makes it easy to search for all components of a release using kubectl.
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+    # This makes it easy to audit chart usage.
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: "{{ .Release.Name }}-slave"
+spec:
+  replicas: {{ .Values.global.lsf.worker.replicas }}
+  selector:
+    matchLabels:
+      app: "{{ .Release.Name }}-slave"
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-slave"
+      labels:
+        app: "{{ .Release.Name }}-slave"
+        release: {{.Release.Name | quote }}
+    spec:
+      containers:
+      - name: "{{ .Release.Name }}-slave"
+        image: "{{.Values.global.lsf.image.repository}}:{{.Values.global.lsf.image.tag}}"
+        imagePullPolicy: "{{.Values.global.lsf.image.pullPolicy}}"
+        resources:
+          limits:
+            cpu: {{ .Values.global.lsf.worker.cpu }}
+            memory: {{ .Values.global.lsf.worker.memory }}
+        securityContext:
+          privileged: false
+        args: ["slave", "-", "{{ .Release.Name }}"]
+        volumeMounts:
+        - mountPath: /home/lsfadmin
+          name: "{{ template "fullname" . }}-{{ .Values.global.storage.existingVolumeClaim }}"
+      volumes:
+        - name: "{{ template "fullname" . }}-{{ .Values.global.storage.existingVolumeClaim }}"
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.storage.existingVolumeClaim }}
+      imagePullSecrets:
+        - name: admin.registrykey
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        deploy_lsf: "true"
+
