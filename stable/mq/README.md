@@ -10,7 +10,7 @@ By connecting virtually everything from a simple pair of applications to the mos
 
 [![Brief introduction to IBM MQ](https://img.youtube.com/vi/iHktrluYeA4/0.jpg)](https://www.youtube.com/watch?v=iHktrluYeA4)
 
-Learn more about IBM MQ at the following link: [https://www.ibm.com/support/knowledgecenter/SSFKSJ_9.0.0/com.ibm.mq.pro.doc/q001020_.htm](hhttps://www.ibm.com/support/knowledgecenter/SSFKSJ_9.0.0/com.ibm.mq.pro.doc/q001020_.htm).
+Learn more about IBM MQ at the following link: [https://www.ibm.com/support/knowledgecenter/SSFKSJ_9.0.0/com.ibm.mq.pro.doc/q001020_.htm](https://www.ibm.com/support/knowledgecenter/SSFKSJ_9.0.0/com.ibm.mq.pro.doc/q001020_.htm).
 
 ## TL;DR;
 
