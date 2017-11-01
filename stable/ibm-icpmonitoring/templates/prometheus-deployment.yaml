@@ -33,18 +33,25 @@ spec:
             - --alertmanager.url=http://{{ template "prometheus.fullname" . }}-alertmanager:{{ .Values.alertmanager.port }}
             - --config.file=/etc/config/prometheus.yml
             - --storage.local.path=/var/lib/prometheus/data
+            - --web.external-url=http://alertmanager.icp.com
           ports:
             - containerPort: 9090
-          resources: {}
+          resources:
+{{ toYaml .Values.prometheus.resources | indent 12 }}
           volumeMounts:
             - name: config-volume
               mountPath: /etc/config
+            - name: rules-volume
+              mountPath: /etc/alert-rules
             - name: storage-volume
               mountPath: /var/lib/prometheus/data
       volumes:
         - name: config-volume
           configMap:
             name: {{ template "prometheus.fullname" . }}
+        - name: rules-volume
+          configMap:
+            name: {{ template "prometheus.fullname" . }}-alertrules
         - name: storage-volume
         {{- if .Values.prometheus.persistentVolume.enabled }}
           persistentVolumeClaim:

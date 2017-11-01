@@ -35,9 +35,14 @@ Parameter                                       | Description                   
 `alertmanager.image.name`                       | alertmanager container image name        | ibmcom/alertmanager
 `alertmanager.image.tag`                        | alertmanager container image tag         | v0.5.1
 `alertmanager.port`                             | alertmanager service port                | 80
-`alertmanager.persistentVolume.enabled`         | Create a volume to store dat             | false
+`alertmanager.persistentVolume.enabled`         | Create a volume to store data            | false
 `alertmanager.persistentVolume.size`            | Size of persistent volume claim          | 1Gi
 `alertmanager.persistentVolume.storageClass`    | storageClass for alertmanager PV         | -
+`alertmanager.resources.limits.cpu`             | alertmanager cpu limits                  | 200m
+`alertmanager.resources.limits.memory`          | alertmanager memory imits                | 256Mi
+`alertmanager.resources.requests.cpu`           | alertmanager cpu requests                | 10m
+`alertmanager.resources.requests.memory`        | alertmanager memory requests             | 64Mi
+`alertmanager.configFiles`                      | alertmanager configurations              | sample configuration
 `kubeStateMetrics.image.name`                   | kube-state-metrics container image name  | ibmcom/kube-state-metrics
 `kubeStateMetrics.image.tag`                    | kube-state-metrics container image tag   | v1.0.0
 `kubeStateMetrics.port`                         | kube-state-metrics service port          | 80
@@ -50,6 +55,12 @@ Parameter                                       | Description                   
 `prometheus.persistentVolume.enabled`           | Create a volume to store data            | false
 `prometheus.persistentVolume.size`              | Size of persistent volume claim          | 10Gi
 `prometheus.persistentVolume.storageClass`      | storageClass for prometheus PV           | -
+`prometheus.resources.limits.cpu`               | prometheus cpu limits                    | 500m
+`prometheus.resources.limits.memory`            | prometheus memory imits                  | 512Mi
+`prometheus.resources.requests.cpu`             | prometheus cpu requests                  | 100m
+`prometheus.resources.requests.memory`          | prometheus memory requests               | 128Mi
+`prometheus.alertRuleFiles`                     | Prometheus alert rules configuration     | ""
+`prometheus.configFiles`                        | Prometheus configurations                | sample configuration
 `grafana.image.name`                            | Grafana Docker Image Name                | ibmcom/grafana
 `grafana.image.tag`                             | Grafana Docker Image Tag                 | 4.4.3
 `grafana.port`                                  | Grafana Container Exposed Port           | 3000
@@ -58,6 +69,10 @@ Parameter                                       | Description                   
 `grafana.persistentVolume.enabled`              | Create a volume to store data            | false
 `grafana.persistentVolume.size`                 | Size of persistent volume claim          | 1Gi 
 `grafana.persistentVolume.storageClass`         | storageClass for persistent volume       | - 
+`grafana.resources.limits.cpu`                  | grafana cpu limits                       | 500m
+`grafana.resources.limits.memory`               | grafana memory imits                     | 512Mi
+`grafana.resources.requests.cpu`                | grafana cpu requests                     | 100m
+`grafana.resources.requests.memory`             | grafana memory requests                  | 128Mi
 `collectdExporter.image.name`                   | Collectd Exporter Image Name             | ibmcom/collectd-exporter
 `collectdExporter.image.tag`                    | Collectd Exporter Image Tag              | 0.3.1 
 `collectdExporter.service.serviceMetricsPort`   | Metrics Service Exposed Port             | 9103    

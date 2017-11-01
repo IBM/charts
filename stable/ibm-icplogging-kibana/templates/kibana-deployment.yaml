@@ -1,0 +1,62 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: "{{ .Values.kibana.name }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    component: "{{ .Values.kibana.name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  name: "{{ .Values.kibana.name }}"
+  namespace: {{ .Values.kibana.namespace }}
+spec:
+  replicas: {{ .Values.kibana.replicas }}
+  template:
+    metadata:
+      labels:
+        app: "{{ .Values.kibana.name }}"
+        component: "{{ .Values.kibana.name }}"
+        release: {{ .Release.Name }}
+    spec:
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"      
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+              {{- if eq .Values.kibana.managementNodeOnly true}}
+              - key: management
+                operator: In
+                values:
+                - "true"
+              {{- end}}
+      restartPolicy: Always
+      containers:
+      - name: kibana
+        image: "{{ .Values.kibana.image.repository }}:{{ .Values.kibana.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.kibana.internal }}
+        volumeMounts:
+        - name: "kibana-conf"
+          mountPath: "/usr/share/kibana/config/kibana.yml"
+          subPath: kibana.yml
+        - name: cache
+          mountPath: /usr/share/kibana/optimize
+      volumes:
+        - emptyDir:
+            medium: ""
+          name: cache
+        - name: "kibana-conf"
+          configMap:
+            name: {{ .Values.kibana.name }}-config
+            items:
+              - key: kibana.yml
+                path: kibana.yml
