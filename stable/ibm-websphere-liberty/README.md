@@ -63,7 +63,7 @@ The server.xml Liberty configuration file must be configured to place the transa
     transactionLogDirectory="/opt/tranlog" />
 ```
 
-See [transaction log](https://www.ibm.com/support/knowledgecenter/en/SSD28V_8.5.5/com.ibm.websphere.wlp.core.doc/autodita/rwlp_metatype_core.html#mtFile139) for more information on the transaction element and its attributes.
+For more information about the transaction element and its attributes, see [transaction - Transaction Manager](https://www.ibm.com/support/knowledgecenter/en/SSAW57_liberty/com.ibm.websphere.liberty.autogen.nd.doc/ae/rwlp_config_transaction.html) in the Liberty documentation.
 
 ###### More information
-See [Liberty information center](https://www.ibm.com/support/knowledgecenter/en/SSD28V_8.5.5/com.ibm.websphere.wlp.core.doc/ae/cwlp_core_welcome.html) for configuration options for deploying the Liberty server.
+See the [Liberty documentation](https://www.ibm.com/support/knowledgecenter/en/SSAW57_liberty/as_ditamaps/was900_welcome_liberty_ndmp.html) for configuration options for deploying the Liberty server.
