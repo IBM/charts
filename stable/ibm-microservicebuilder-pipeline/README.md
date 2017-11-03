@@ -38,13 +38,12 @@ The command removes all the Kubernetes components associated with the chart. The
 ## Configuration
 The following table lists the configurable parameters of the `ibm-microservicebuilder-pipeline` chart and their default values.
 
-
 | Parameter | Description | Default |
 | - | - | - |
-| Agent.Cpu  | Jenkins build agent cpu | 200m |
+| Agent.Cpu  | Jenkins build agent cpu |  |
 | Agent.Image  | Jenkings build agent image | jenkinsci/jnlp-slave |
 | Agent.ImageTag  | Jenkings build agent image tag| 2.52 |
-| Agent.Memory  | Jenkins build agent | 256Mi |
+| Agent.Memory  | Jenkins build agent | |
 | GitHub.Admins  | Comma-separated list of GitHub IDs for the users that should be able to access Jenkins as an administrator. For a description of the other parameters, see the community Jenkins chart from which they are inherited. |                            <GITHUB_ADMINS> |
 | GitHub.App.Id  | Client ID created earlier. | <CLIENT_ID> |
 | GitHub.App.Secret  | Client secret created earlier. | <CLIENT_SECRET> |
@@ -90,10 +89,9 @@ The following table lists the configurable parameters of the `ibm-microservicebu
 | Pipeline.LibertyLicenseJar.BaseUrl | Optionally defines the location of a license upgrade JAR file |  |
 | Pipeline.LibertyLicenseJar.Name |  Appended to BaseUrl - can be overridden by libertyLicenseJarName in Jenkinsfile | wlp-core-license.jar |
 
+In version 2.0.0 of this chart, `Agent.Cpu` had a default value of `200m` and `Agent.Memory` a default of `256Mi`. These defaults were removed because they were found to be too low for some environments, causing semi-random breaks and failures in pipeline builds. Set values higher than these if you find it necessary to set these constraints. 
 
-Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
-
-Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
+Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
 
 To use a YAML file with overrides, specify `--values <override.yaml>` argument to `helm install'
 
