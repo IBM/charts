@@ -2,6 +2,31 @@
 
 * Installs Filebeat, Elasticsearch, Logstash and Kibana, providing log streaming, storage and search management services.
 
+## Prerequisites
+
+* IBM Cloud Private 2.1 or higher
+* PV provisioner support in the underlying infrastructure
+
+> **Tip**: A persistent volume is required if no dynamic provisioning has been set up. You can create a persistent volume via the IBM Cloud Private interface or through a yaml file. An example is below. See [official Kubernetes documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) for more.
+
+>```yaml
+>kind: PersistentVolume
+>apiVersion: v1
+>metadata:
+>  name: es-data-1
+>  labels:
+>    type: local
+>spec:
+>  storageClassName: manual
+>  capacity:
+>    storage: 150Gi
+>  accessModes:
+>    - ReadWriteOnce
+>  hostPath:
+>    path: "/nfsdata/logging/1"
+>  persistentVolumeReclaimPolicy: Recycle
+>```
+
 ## Installing the Chart
 
 To install the chart with the release name `my-release`:
@@ -38,6 +63,8 @@ Parameter | Description | Default
 `filebeat.name`             | The internal name of the Filebeat pod        | `filebeat-ds`
 `filebeat.image.repository` | Full repository and path to image            | `docker.elastic.co/beats/filebeat`
 `filebeat.image.tag`        | The version of Filebeat to deploy            | `5.5.1`
+`filebeat.scope.nodes`    | One or more label key/value pairs that refine [node selection](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector) for Filebeat pods| `empty (nil)`
+`filebeat.scope.namespaces`    | List of log namespaces to monitor upon. Logs from all namespaces will be collected if value is set to empty | `empty (nil)`
 
 ### Logstash
 
