@@ -42,7 +42,7 @@ Parameter                                       | Description                   
 `alertmanager.resources.limits.memory`          | alertmanager memory imits                | 256Mi
 `alertmanager.resources.requests.cpu`           | alertmanager cpu requests                | 10m
 `alertmanager.resources.requests.memory`        | alertmanager memory requests             | 64Mi
-`alertmanager.configFiles`                      | alertmanager configurations              | sample configuration
+`alertmanager.configFiles`                      | alertmanager configurations              | alermanagerConfig
 `kubeStateMetrics.image.name`                   | kube-state-metrics container image name  | ibmcom/kube-state-metrics
 `kubeStateMetrics.image.tag`                    | kube-state-metrics container image tag   | v1.0.0
 `kubeStateMetrics.port`                         | kube-state-metrics service port          | 80
@@ -59,8 +59,8 @@ Parameter                                       | Description                   
 `prometheus.resources.limits.memory`            | prometheus memory imits                  | 512Mi
 `prometheus.resources.requests.cpu`             | prometheus cpu requests                  | 100m
 `prometheus.resources.requests.memory`          | prometheus memory requests               | 128Mi
-`prometheus.alertRuleFiles`                     | Prometheus alert rules configuration     | ""
-`prometheus.configFiles`                        | Prometheus configurations                | sample configuration
+`prometheus.alertRuleFiles`                     | Prometheus alert rules template          | alertRules
+`prometheus.configFiles`                        | Prometheus configurations template       | prometheusConfig
 `grafana.image.name`                            | Grafana Docker Image Name                | ibmcom/grafana
 `grafana.image.tag`                             | Grafana Docker Image Tag                 | 4.4.3
 `grafana.port`                                  | Grafana Container Exposed Port           | 3000
