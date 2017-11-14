@@ -43,7 +43,7 @@ Parameter | Description | Default
 `kibana.internal`           | The port for Kubernetes-internal networking  | `5601`
 `kibana.external`           | The port used by external users              | `32601`
 `kibana.elasticsearch.url`  | URL of the ElasticSearch endpoint            | `http://elasticsearch:9200`
-`kibana.managementNodeOnly` | Run Kibana on ICP management service nodes only | `true`
+`kibana.managementNodeOnly` | Run Kibana on ICP management service nodes only | `false`
 
 ### XPack
 
