@@ -57,6 +57,7 @@ The following table lists the configurable parameters of the `ibm-microservicebu
 | Master.ContainerPort  | Jenkins master ContainerPort | 8080 |
 | Master.Cpu  | Jenkins master cpu | 200m |
 | Master.CustomConfigMap | Advanced configuration - reference offical jenkins chart at https://github.com/kubernetes/charts/tree/master/stable/jenkins | false |
+| Master.HostName | External hostame for Ingress | |
 | Master.Image  | Jenkins master docker image  | ibmcom/mb-jenkins |
 | Master.ImagePullPolicy  | Jenkins master docker image pull policy | Always |
 | Master.ImagePullSecret  | Jenkins master docker image pull secret, nil means do not use a pull secret. | nil |
