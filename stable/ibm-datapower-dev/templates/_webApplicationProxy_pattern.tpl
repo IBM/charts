@@ -1157,7 +1157,9 @@ auto-startup.cfg: |
     %if% available "product-insights"
 
     product-insights
-      admin-state enabled
+      admin-state disabled
+      host "example.ibm.com"
+      credentials "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     exit
 
     %endif%

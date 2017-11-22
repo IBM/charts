@@ -14,9 +14,9 @@ The repository is organized as follows:
 
 To access the kubernetes `apiserver`, you will need an authorization token and the `kubectl` as the access client. In IBM® Cloud private®, authorization tokens can be requested via the dashboard or the REST API.
 
-- Dashboard: [Get authorization tokens via Dashboard](https://www-03preprod.ibm.com/support/knowledgecenter/XXICL_1.2.0/manage_cluster/cfc_cli.html#task_gfd_1tx_fx)
+- Dashboard: [Get authorization tokens via Dashboard](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0/manage_cluster/cfc_cli.html)
 
-- KnowledgeCenter: [Accessing the APIs](https://www.ibm.com/support/knowledgecenter/SS8TQM_1.1.0/apis/access_api.html).
+- KnowledgeCenter: [APIs](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0/apis/cfc_api.html).
 
 Once you have an authorization token, you can configure `kubectl`:
 
@@ -32,7 +32,7 @@ kubectl config set-context $CLUSTER_NAME --user=user --namespace=default
 kubectl config use-context $CLUSTER_NAME
 ```
 
-Then [configure your helm command line interface](https://www.ibm.com/support/knowledgecenter/SSBS6K_1.2.0/app_center/create_helm_cli.html) to work with `helm`.
+Then [configure your helm command line interface](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0/app_center/create_helm_cli.html) to work with `helm`.
 
 ## Building the Chart Repository and associated image
 

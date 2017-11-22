@@ -10,7 +10,7 @@ This chart deploys a single IBM MQ Advanced for Developers server (queue manager
 
 ## Prerequisites
 
-- Kubernetes 1.7 or greater, with beta APIs enabled
+- Kubernetes 1.6 or greater, with beta APIs enabled
 - If persistence is enabled (see [configuration](#configuration)), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
 
 ## Installing the Chart
