@@ -1,7 +1,7 @@
 
 ## Introduction
 
-Transformation Advisor has the capability to quickly evaluate your on-premise applications for rapid deployment on WebSphere Application Server and Liberty on Public and/or Private Cloud environments. 
+[Transformation Advisor](https://developer.ibm.com/product-insights/transformation-advisor/) has the capability to quickly evaluate your on-premise applications for rapid deployment on WebSphere Application Server and Liberty on Public and/or Private Cloud environments. 
 
 Transformation Advisor will:
  - Gather your preferences regarding your current and desired target environments
@@ -12,9 +12,7 @@ The Transformation Advisor is delivered as an interconnected set of pods and kub
 
 ## Persistence
 
-By default Transformation Advisor expects a Persistence Volume (PV) to be available. You can change the default value to use an existing claim, or to not use any storage. Please see below for the different options:
-
-### Create a Persistence Volume:
+By default Transformation Advisor expects a Persistence Volume (PV) to be available. You can change the default value to use dynamic provisioning, an existing claim, or to not use any storage. Please see below for the different options:
 
 Complete the following steps to add the Persistent Volume
 
@@ -32,25 +30,31 @@ Complete the following steps to add the Persistent Volume
     - Value: local  
 1. On the left menu select **Parameters** and enter the following values:
     - Key: path
-    - Value: /tmp/data3  
+    - Value: /usr/data  
 **Note**: *Value here should be a value appropriate to your system*
 
-### Using an existing Persistence Volume Claim
+- Persistent storage using a predefined PersistentVolumeClaim or PersistentVolume setup prior to the deployment of this chart
+  - Set global values to:
+    - couchdb.persistence.enabled: true (default)
+    - couchdb.persistence.useDynamicProvisioning: false (default)
+  - Specify an existingClaimName per volume or leave the value empty and let the kubernetes binding process select a pre-existing volume based on the accessMode and size.  
+  
 
-If you already have a suitable claim available then you can use that as follows:
-- During the install you will be prompted with a list of parameter values
-- Set the value of **couchdb.persistence.existingClaim** to the claim that you already have
+- Persistent storage using kubernetes dynamic provisioning. Uses the default storageclass defined by the kubernetes admin or by using a custom storageclass which will override the default.
+  - Set global values to:
+    - couchdb.persistence.enabled: true (default)
+    - couchdb.persistence.useDynamicProvisioning: true (non-default)
+  - Specify a custom storageClassName per volume or leave the value empty to use the default storageClass. 
 
-### No Persistence Volumes
-*This option is not recommended*
 
-You may install Transformation Advisor without using a Persistence Volume, however this has a number of limitations:
- - If the couchDB container is restarted for any reason then **all of your data will be lost**
- - If the couchDB container is restarted for any reason you will then need to **restart the server container** to re-initialize the couchDB
+- No persistent storage (This option is not recommended). 
+  - You may install Transformation Advisor without using a Persistence Volume, however this has a number of limitations:
+    - If the couchDB container is restarted for any reason then **all of your data will be lost**
+    - If the couchDB container is restarted for any reason you will then need to **restart the server container** to re-initialize the couchDB
+  - Enable this mode by setting the global values to:
+    - couchdb.persistence.enabled: false (non-default)
+    - couchdb.persistence.useDynamicProvisioning: false (default)
 
-To use no Persistence Volumes complete the following steps:
- - During the install you will be prompted with a list of parameter values
--  Untick the following option **couchdb.persistence.enabled** 
 
 ## Open Transformation Advisor UI
 - From Menu navigate to Workloads -> Deployments
@@ -61,44 +65,38 @@ To use no Persistence Volumes complete the following steps:
 
 The following tables lists the configurable parameters of the Transformation Advisor helm chart and their default values.
 
-| Parameter                                      | Description                       | Default                                                                     |
-| -------------------------------                | -------------------------------   | ----------------------------------------------------------------           |
-| couchdb.image.repository                       | couchdb image repository          | klaemo/couchdb                                                             |
-| couchdb.image.tag                              | couchdb image tag                 | 2.0.0                                                                       |
-| couchdb.image.pullPolicy                       | couchdb image pull policy         | IfNotPresent                                                               |
-| couchdb.resources.requests.memory              | requests memory                   | 2Gi                                                                         |
-| couchdb.resources.requests.cpu                 | requests cpu                      | 1000m                                                                       |
-| couchdb.resources.limits.memory                | limits memory                     | 8Gi                                                                         |
-| couchdb.resources.limits.cpu                   | limits cpu                        | 16000m                                                                     |
-| couchdb.service.name                           | couchdb service name              | couchdb                                                                     |
-| couchdb.service.internalPort                   | couchdb internal port             | 5984                                                                       |
-| couchdb.user                                   | couchdb user                      | admin                                                                       |
-| couchdb.password                               | couchdb password                  | admindbpass                                                                 |
-| couchdb.persistence.enabled                    | persistence enabled               | true                                                                       |
-| couchdb.persistence.accessMode                 | couchdb access mode               | ReadWriteMany                                                               |
-| couchdb.persistence.size                       | couchdb storage size              | 8Gi                                                                         |
-| couchdb.persistence.useDynamicProvisioning     | use dynamic provisioning          | false                                                                       |
-| couchdb.persistence.existingClaim              | use existing pv claim             | false                                                                       |
-| couchdb.persistence.storageClassName           | couchdb storage class name        |                                                                            |
-| transadv.image.repository                      | transadv server image             | ibmcom/icp-transformation-advisor-dc                                       |
-| transadv.image.tag                             | transadv server image tag         | 1.1.0                                                                       |
-| transadv.image.pullPolicy                      | image pull policy                 | IfNotPresent                                                               |
-| transadv.resources.requests.memory             | requests memory                   | 2Gi                                                                         |
-| transadv.resources.requests.cpu                | requests cpu                      | 1000m                                                                       |
-| transadv.resources.limits.memory               | limits memory                     | 4Gi                                                                         |
-| transadv.resources.limits.cpu                  | limits cpu                        | 16000m                                                                     |
-| transadv.service.name                          | transadv service name             | transadv                                                                   |
-| transadv.service.internalPort                  | transadv sevice internal port     | 9080                                                                       |
-| transadv.service.nodePort                      |transadv sevice node port          | 30111                                                                       |
-| transadvui.image.repository                    | transadv ui image                 | ibmcom/icp-transformation-advisor-ui                                       |
-| transadvui.image.tag                           | transadv ui image tag             | 1.1.0                                                                       |
-| transadvui.image.pullPolicy                    | image pull policy                 | IfNotPresent                                                               |
-| transadvui.resources.requests.memory           | requests memory                   | 2Gi                                                                         |
-| transadvui.resources.requests.cpu              | requests cpu                      | 1000m                                                                       |
-| transadvui.resources.limits.memory             | limits memory                     | 4Gi                                                                         |
-| transadvui.resources.limits.cpu                | limits cpu                        | 16000m                                                                     |
-| transadvui.service.name                        | transadv ui service name          | ui                                                                         |
-| transadvui.service.internalPort                | transadv sevice internal port     | 3000 
+| Parameter                                      | Description                       | Default                                   |
+| -------------------------------                | -------------------------------   | ----------------------------------------- |
+| couchdb.image.repository                       | couchdb image repository          | klaemo/couchdb                            |
+| couchdb.image.tag                              | couchdb image tag                 | 2.0.0                                     |
+| couchdb.image.pullPolicy                       | couchdb image pull policy         | IfNotPresent                              |
+| couchdb.resources.requests.memory              | requests memory                   | 2Gi                                       |
+| couchdb.resources.requests.cpu                 | requests cpu                      | 1000m                                     |
+| couchdb.resources.limits.memory                | limits memory                     | 8Gi                                       |
+| couchdb.resources.limits.cpu                   | limits cpu                        | 16000m                                    |
+| couchdb.user                                   | couchdb user                      | admin                                     |
+| couchdb.password                               | couchdb password                  | admindbpass                               |
+| couchdb.persistence.enabled                    | persistence enabled               | true                                      |
+| couchdb.persistence.accessMode                 | couchdb access mode               | ReadWriteMany                             |
+| couchdb.persistence.size                       | couchdb storage size              | 8Gi                                       |
+| couchdb.persistence.useDynamicProvisioning     | use dynamic provisioning          | false                                     |
+| couchdb.persistence.existingClaim              | use existing pv claim             | false                                     |
+| couchdb.persistence.storageClassName           | couchdb storage class name        |                                           |
+| transadv.image.repository                      | transadv server image             | ibmcom/icp-transformation-advisor-dc      |
+| transadv.image.tag                             | transadv server image tag         | 1.1.0                                     |
+| transadv.image.pullPolicy                      | image pull policy                 | IfNotPresent                              |
+| transadv.resources.requests.memory             | requests memory                   | 2Gi                                       |
+| transadv.resources.requests.cpu                | requests cpu                      | 1000m                                     |
+| transadv.resources.limits.memory               | limits memory                     | 4Gi                                       |
+| transadv.resources.limits.cpu                  | limits cpu                        | 16000m                                    |
+| transadv.service.nodePort                      | transadv sevice node port         | 30111                                     |
+| transadvui.image.repository                    | transadv ui image                 | ibmcom/icp-transformation-advisor-ui      |
+| transadvui.image.tag                           | transadv ui image tag             | 1.1.0                                     |
+| transadvui.image.pullPolicy                    | image pull policy                 | IfNotPresent                              |
+| transadvui.resources.requests.memory           | requests memory                   | 2Gi                                       |
+| transadvui.resources.requests.cpu              | requests cpu                      | 1000m                                     |
+| transadvui.resources.limits.memory             | limits memory                     | 4Gi                                       |
+| transadvui.resources.limits.cpu                | limits cpu                        | 16000m                                    |
 
 
 # For those who use Kubectl CLI
@@ -117,7 +115,7 @@ Create pv.yaml file with following content
 kind: PersistentVolume
 apiVersion: v1
 metadata:
-  name: transadv-pv-volume
+  name: <pv name>
   labels:
     type: local
 spec:
@@ -127,7 +125,7 @@ spec:
   accessModes:
     - ReadWriteMany
   hostPath:
-    path: "/tmp/data"
+    path: "/usr/data"
 ```
 
 Create pv
@@ -139,14 +137,14 @@ kubectl create -f pv.yaml
 ## Installing the Chart
 
 ```
-helm install -n ibm-transadv-dev ./ --debug
+helm install -n <release name> ./ --debug
 ```
 ## Verifying the installation
 Go to the URL displayed in Notes.txt and ensure application is running
 
 ## Uninstalling the Chart
 ```
-helm delete --purge ibm-transadv-dev
+helm delete --purge <release name>
 ```
 ## Open Transformation Advisor UI
 Go to the URL displayed in Notes.txt

@@ -16,8 +16,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{/*
-Expand the name of the chart, make all the letters upper case, replce "-" with "_"
+Create a default fully qualified app name.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 */}}
 {{- define "k8name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" | replace "-" "_"  | upper -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- printf "%s_%s" .Release.Name $name | trunc 63 | trimSuffix "-" | replace "-" "_" | upper -}}
 {{- end -}}

@@ -19,9 +19,9 @@ kind: Deployment
 apiVersion: extensions/v1beta1
 
 metadata:
-  name: {{ template "name" . }}-{{ .Values.couchdb.service.name }}
+  name: {{ template "fullname" . }}-couchdb
   labels:
-    app: {{ template "name" . }}-{{ .Values.couchdb.service.name }}
+    app: {{ template "fullname" . }}-couchdb
     chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -30,23 +30,23 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: {{ template "name" . }}-{{ .Values.couchdb.service.name }}
+      app: {{ template "fullname" . }}-couchdb
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "name" . }}-{{ .Values.couchdb.service.name }}
+        app: {{ template "fullname" . }}-couchdb
         release: {{ .Release.Name }}
     spec:
       containers:
-        - name: {{ .Chart.Name }}-{{ .Values.couchdb.service.name }}
+        - name: {{ .Chart.Name }}-couchdb
           image: "{{ .Values.couchdb.image.repository }}:{{ .Values.couchdb.image.tag }}"
           imagePullPolicy: {{ .Values.couchdb.image.pullPolicy }}
           resources:          
 {{ toYaml .Values.couchdb.resources | indent 12 }}
           ports:
-            - containerPort: {{ .Values.couchdb.service.internalPort }}
-              name: {{ .Values.couchdb.service.name }}
+            - containerPort: 5984
+              name: couchdb
           env:
             - name: COUCHDB_USER
               value: {{ default "" .Values.couchdb.user | quote }}
@@ -62,7 +62,7 @@ spec:
           # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
           livenessProbe:
             tcpSocket:
-              port: {{ .Values.couchdb.service.internalPort }}
+              port: 5984
             initialDelaySeconds: 60
             timeoutSeconds: 5
             failureThreshold: 6
@@ -72,7 +72,7 @@ spec:
           # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.couchdb.service.internalPort }}
+              port: 5984
             initialDelaySeconds: 5
             timeoutSeconds: 3
             periodSeconds: 5
@@ -84,7 +84,7 @@ spec:
             {{- if .Values.couchdb.persistence.existingClaim }}
               claimName: {{ .Values.couchdb.persistence.existingClaim }}  
             {{- else }}
-              claimName: {{ default (include "name" .) }}-{{ .Values.couchdb.service.name }}
+              claimName: {{ default (include "fullname" .) }}-couchdb
             {{- end -}}
       {{- else }}
           emptyDir: {}
