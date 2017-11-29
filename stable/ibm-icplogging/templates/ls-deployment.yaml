@@ -47,9 +47,23 @@ spec:
           name: pipeline-config
         - mountPath: /usr/share/logstash/config/logstash.yml
           subPath: logstash.yml
-          name: config
+          name: logstash-config
         - name: data
           mountPath: /usr/share/logstash/data
+{{ if .Values.logstash.probe.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /logstash/health
+            port: 9601
+          initialDelaySeconds: 300
+          periodSeconds: {{ .Values.logstash.probe.periodSeconds }}
+      - name: logstash-liveness-probe
+        image: {{ .Values.logstash.probe.image.repository }}:{{ .Values.logstash.probe.image.tag }}
+        volumeMounts:
+        - mountPath: /opt/ibm/logstash-liveness-probe/config/app.json
+          subPath: app.json
+          name: probe-config
+{{ end }}
       restartPolicy: Always
       volumes:
       - name: pipeline-config
@@ -58,12 +72,20 @@ spec:
           items:
           - key: k8s.conf
             path: k8s.conf
-      - name: config
+      - name: logstash-config
         configMap:
           name: {{ template "logstash.fullname" . }}-config
           items:
           - key: logstash.yml
             path: logstash.yml
+{{ if .Values.logstash.probe.enabled }}
+      - name: probe-config
+        configMap:
+          name: {{ template "logstash.fullname" . }}-config
+          items:
+          - key: app.json
+            path: app.json
+{{ end }}
       - emptyDir:
           medium: ""
         name: data

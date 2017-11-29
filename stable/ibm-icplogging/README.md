@@ -1,4 +1,4 @@
-# ELK Helm Chart
+# ELK Helm Chart Beta
 
 * Installs Filebeat, Elasticsearch, Logstash and Kibana, providing log streaming, storage and search management services.
 
@@ -76,7 +76,12 @@ Parameter | Description | Default
 `logstash.replicas`         | The initial pod cluster size                 | `1`
 `logstash.heapSize`         | The maximum allowable memory for Logstash    | `256m`
 `logstash.port`             | The port on which Logstash listens for beats | `5000`
-
+`logstash.probe.enabled`    | Enables the [liveness probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/) for logstash. Logstash instance is considered not alive when: <ul><li>logstash endpoint is not available for  `logstash.probe.periodSeconds` * `logstash.probe.maxUnavailablePeriod`, or</li><li> processed event count is smaller than `logstash.probe.minEventsPerPeriod` within `logstash.probe.periodSeconds`</li></ul> | `false`
+`logstash.probe.periodSeconds` | Seconds probe waits before calling logstash endpoint for status again | `60`
+`logstash.probe.minEventsPerPeriod`             | Logstash instance is considered healthy if number of log events processed is greater than `logstash.probe.minEventsPerPeriod` within `logstash.probe.periodSeconds`| `1`
+`logstash.probe.maxUnavailablePeriod`             | Logstash instance is considered unhealthy after API endpoint is unavailable for `logstash.probe.periodSeconds` * `logstash.probe.maxUnavailablePeriod` seconds | `5`
+`logstash.probe.image.repository`             | Full repository and path to image | `ibmcom/logstash-liveness-probe`
+`logstash.probe.image.tag`             | Image version | `0.1.5`
 ### Kibana
 
 Parameter | Description | Default
@@ -148,3 +153,24 @@ Parameter | Description | Default
 `curator.monitoring.count`  | The number of `curator.monitoring.unit`s to retain monitoring logs | `1`
 `curator.watcher.unit`      | The [age unit type](https://www.elastic.co/guide/en/elasticsearch/client/curator/5.2/filtertype_age.html) to retain watcher logs | `days`
 `curator.watcher.count`     | The number of `curator.watcher.unit`s to retain watcher logs | `1`
+
+## Troubleshooting
+
+### Security Policies
+
+**Symptom:** After deploying the helm chart, none of the pods are in ready state. After running the command `kubectl describe pod <pod_name>` the "Events" section contains text such as `unable to validate against any pod security policy`, `Privileged containers are not allowed`, or `Invalid value: "IPC_LOCK": capability may not be added`.
+
+**Cause:** Some deployment types in Kubernetes are queued and fulfilled asynchronously. When Kubernetes executes the queued deployment, however, it does so in the context of its internal _service account_ instead of using the security context of the user that invoked the deployment originally. The error indicates that the _service account_ is not permitted to deploy into the target namespace any pods requiring the `IPC_LOCK` privilege. (See [Kubernetes issue 55973](https://github.com/kubernetes/kubernetes/issues/55973) for the public discussion.)
+
+**Resolving:** Depending on your environment, one of the following may resolve the problem.
+
+1. If you do not have permission to change privileges yourself, ask an administrator to add the `IPC_LOCK` privilege for the target namespace to the _service account's_ `PodSecurityPolicy`.
+2. If you are able to modify security policies, the steps below describe one way to enable the deployment. Your environment may require more fine-grained policy changes.
+   1. Run `kubectl edit clusterrolebindings privileged-psp-users`. This will open the contents of the file in a `vi` editor.
+   2. Append your namespace to the list. For example, if your namespace is named `test`, then it might look like the following:
+      ```
+      - apiGroup: rbac.authorization.k8s.io
+        kind: Group
+        name: system:serviceaccounts:test
+      ```
+   3. Save the change and close the editor. Kubernetes will automatically apply the updated configuration.
