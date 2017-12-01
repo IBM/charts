@@ -160,9 +160,11 @@ Parameter | Description | Default
 
 **Symptom:** After deploying the helm chart, none of the pods are in ready state. After running the command `kubectl describe pod <pod_name>` the "Events" section contains text such as `unable to validate against any pod security policy`, `Privileged containers are not allowed`, or `Invalid value: "IPC_LOCK": capability may not be added`.
 
-**Cause:** Some deployment types in Kubernetes are queued and fulfilled asynchronously. When Kubernetes executes the queued deployment, however, it does so in the context of its internal _service account_ instead of using the security context of the user that invoked the deployment originally. The error indicates that the _service account_ is not permitted to deploy into the target namespace any pods requiring the `IPC_LOCK` privilege. (See [Kubernetes issue 55973](https://github.com/kubernetes/kubernetes/issues/55973) for the public discussion.)
+**Cause:** The error indicates that the Kubernetes service account is not permitted to deploy into the target namespace any pods requiring the `IPC_LOCK` privilege.
 
-**Resolving:** Depending on your environment, one of the following may resolve the problem.
+**Explanation:** Some deployment types in Kubernetes are queued and fulfilled asynchronously. When Kubernetes executes the queued deployment, however, it does so in the context of its internal _service account_ instead of using the security context of the user that invoked the deployment originally. (See [Kubernetes issue 55973](https://github.com/kubernetes/kubernetes/issues/55973) for the public discussion.)
+
+**Resolution:** Depending on your environment, one of the following may resolve the problem.
 
 1. If you do not have permission to change privileges yourself, ask an administrator to add the `IPC_LOCK` privilege for the target namespace to the _service account's_ `PodSecurityPolicy`.
 2. If you are able to modify security policies, the steps below describe one way to enable the deployment. Your environment may require more fine-grained policy changes.
@@ -174,3 +176,13 @@ Parameter | Description | Default
         name: system:serviceaccounts:test
       ```
    3. Save the change and close the editor. Kubernetes will automatically apply the updated configuration.
+
+### Invalid DNS
+
+**Symptom:** The Kibana status page reports `Elasticsearch plugin status is red`, and when you run `kubectl describe deploy <deployment_name>` you see an error message that contains `spec.hostname: Invalid value`.
+
+**Cause:** The user specified an invalid value for one or more of the `name` keys (e.g. `kibana.name`) in the Helm chart.
+
+**Explanation:** The deployment name for a Kubernetes pod also resolves as its hostname within the network. As such, the deployment name must conform to DNS rules, described by Kubernetes this way: `a DNS-1123 label must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character (e.g. 'my-name', or '123-abc', regex used for validation is 'a-z0-9?')`.
+
+**Resolution:** Delete the deployment, and reinstall with name values that conform to the rules as required by Kubernetes.

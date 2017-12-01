@@ -1,10 +1,15 @@
-# IBM Db2 Developer-C Helm Chart
+# IBM Db2 Developer-C Helm Chart - BETA
 
 [Db2 Developer-C Edition](http://www-03.ibm.com/software/products/sv/db2-developer-edition) enables you to develop, test, evaluate and demonstrate database and warehousing applications in a non-production environment. 
 
 ## Introduction
 
 This chart is consist of IBM Db2 Developer-C Edition and is a persistent relational database intended to be deployed in IBM Cloud Private environments. 
+
+### New in this BETA release
+
+1. Multi-platform manifest support 
+2. Base OS with latest patches
 
 ## Prerequisites
 - Retrieve image.secret from http://ibm.biz/db2-dsm-license by reviewing and accepting the terms and conditions.
@@ -125,3 +130,4 @@ $ helm install --set persistence.existingClaim=PVC_NAME
 ```
 
 The volume defaults to mount at a subdirectory of the volume instead of the volume root to avoid the volume's hidden directories from interfering with database creation.
+
