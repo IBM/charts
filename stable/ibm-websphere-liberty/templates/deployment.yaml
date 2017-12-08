@@ -29,31 +29,75 @@ spec:
         app: {{ template "fullname" . }}
     spec:
       volumes:
-        - name: "{{ template "fullname" . }}-{{ .Values.tranlog.name }}"
-        {{- if .Values.tranlog.persistence.enabled }}
+        {{ if and .Values.ssl.enabled .Values.ssl.useClusterSSLConfiguration }}
+        - name: keystores
+          secret:
+            secretName: mb-keystore
+        - name: truststores
+          secret:
+            secretName: mb-truststore
+        - name: ssl-config
+          configMap:
+            name: liberty-config
+            items:
+              - key: keystore.xml
+                path: defaults/keystore.xml
+        {{ end }}
+        {{ if .Values.tranlog.persistence.enabled }}
+        - name: "{{ template "fullname" . }}-{{ .Values.tranlog.name | trunc 38 | lower | trimSuffix "-" }}"
           persistentVolumeClaim:
           {{- if .Values.tranlog.persistence.existingClaimName }}
             claimName: {{ .Values.tranlog.persistence.existingClaimName }}
           {{- else }}
-            claimName: {{ template "fullname" . }}-{{ .Values.tranlog.name }}
+            claimName: "{{ template "fullname" . }}-{{ .Values.tranlog.name | trunc 38 | lower | trimSuffix "-" }}"
           {{- end }}
-        {{- else }}
-          emptyDir: {}
-        {{- end }}
+        {{ end }}
       containers:
       - name: {{ .Chart.Name }}
         readinessProbe:
           httpGet:
+          {{ if .Values.microprofile.health.enabled }}
+            path: /health
+          {{ else }}
             path: /
+          {{ end }}
             port: {{ .Values.service.targetPort }}
+            {{ if .Values.ssl.enabled}}
+            scheme: HTTPS
+            {{ end }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
         - name: LICENSE
           value: {{ .Values.image.license }}
+        {{ if and .Values.ssl.enabled .Values.ssl.useClusterSSLConfiguration }}
+        - name: MB_KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mb-keystore-password
+              key: password
+        - name: MB_TRUSTSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mb-truststore-password
+              key: password
+        {{ end }}
         volumeMounts:
+        {{ if and .Values.ssl.enabled .Values.ssl.useClusterSSLConfiguration }}
+        - name: keystores
+          mountPath: /etc/wlp/config/keystore 
+          readOnly: true
+        - name: truststores
+          mountPath: /etc/wlp/config/truststore
+          readOnly: true
+        - name: ssl-config
+          mountPath: /config/configDropins
+          readOnly: true
+        {{ end }}
+        {{ if .Values.tranlog.persistence.enabled }}
         - mountPath: /opt/tranlog
-          name: "{{ template "fullname" . }}-{{ .Values.tranlog.name }}"     
+          name: "{{ template "fullname" . }}-{{ .Values.tranlog.name | trunc 38 | lower | trimSuffix "-" }}"
+        {{ end }}
         resources:
           {{- if .Values.resources.constraints.enabled}}      
           limits:

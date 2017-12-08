@@ -18,8 +18,8 @@ The Helm chart has the following values that can be overriden using the --set pa
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
-| image     | pullPolicyImage | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise  |
-|           | name         | Name of image, including repository prefix (if required). | See Extended description of Docker tags |
+| image     | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise  |
+|           | repository         | Name of image, including repository prefix (if required). | See Extended description of Docker tags |
 |           | tag          | Docker image tag. | See Docker tag description |
 | service   | name         | The name of the port service.  | |
 |           | type          | Specify type of service. | Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer. see Publishing services - service types |
@@ -36,7 +36,7 @@ The Helm chart has the following values that can be overriden using the --set pa
 |     |  maxReplicas  | Upper limit for the number of pods that can be set by the autoscaler.  Cannot be lower than `minReplicas`.   |  Positive integer (default to 10)  |
 |     |  targetCPUUtilizationPercentage  | Target average CPU utilization (represented as a percentage of requested CPU) over all the pods.  |  Integer between 1 and 100 (default to 50)  |
 | ingress  |  enabled        | Specifies whether or not to use ingress.        |  false (default) or true  |
-|          |  rewriteTarget  | Specifies ingress.kubernetes.io/rewrite-target  | See Kubernetes ingress.kubernetes.io/rewrite-target - https://github.com/kubernetes/ingress/blob/master/controllers/nginx/configuration.md#rewrite  |
+|          |  rewriteTarget  | Specifies ingress.kubernetes.io/rewrite-target  | See Kubernetes ingress.kubernetes.io/rewrite-target - https://github.com/kubernetes/ingress-nginx/tree/master/docs/examples/rewrite |
 |          |  path           | Specifies the path for the ingress http rule.    |  See Kubernetes - https://kubernetes.io/docs/concepts/services-networking/ingress/  |
 
 ###### More information
