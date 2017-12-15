@@ -73,6 +73,7 @@ Parameter                                       | Description                   
 `grafana.resources.limits.memory`               | grafana memory imits                     | 512Mi
 `grafana.resources.requests.cpu`                | grafana cpu requests                     | 100m
 `grafana.resources.requests.memory`             | grafana memory requests                  | 128Mi
+`grafana.configFiles`                           | grafana configurations                   | grafanaConfig
 `collectdExporter.image.name`                   | Collectd Exporter Image Name             | ibmcom/collectd-exporter
 `collectdExporter.image.tag`                    | Collectd Exporter Image Tag              | 0.3.1 
 `collectdExporter.service.serviceMetricsPort`   | Metrics Service Exposed Port             | 9103    

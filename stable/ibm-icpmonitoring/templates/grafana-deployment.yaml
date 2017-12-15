@@ -3,9 +3,10 @@ kind: Deployment
 metadata:
   labels:
     app: {{ template "grafana.fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
     component: grafana
-    release: "{{ .Release.Name }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
   name: {{ template "grafana.fullname" . }}
 spec:
   replicas: 1
@@ -29,6 +30,7 @@ spec:
         - name: grafana
           image: {{ .Values.grafana.image.name }}:{{ .Values.grafana.image.tag }}
           imagePullPolicy: "IfNotPresent"
+          command: ["/opt/entry/entrypoint.sh"]
           env:
             - name: GF_SECURITY_ADMIN_USER
               value: "{{ .Values.grafana.user }}"
@@ -42,6 +44,12 @@ spec:
           volumeMounts:
             - name: grafana-storage
               mountPath: "/var/lib/grafana"
+            - name: config-volume
+              mountPath: "/etc/grafana"
+            - name: dashboard-volume
+              mountPath: "/var/lib/grafana/dashboards"
+            - mountPath: "/opt/entry"
+              name: grafana-entry
       volumes:
         - name: grafana-storage
       {{- if .Values.grafana.persistentVolume.enabled }}
@@ -50,4 +58,13 @@ spec:
       {{- else }}
           emptyDir: {}
       {{- end }}
-
+        - name: config-volume
+          configMap:
+            name: {{ template "grafana.fullname" . }}
+        - name: dashboard-volume
+          configMap:
+            name: {{ template "grafana.fullname" . }}-dashboards
+        - name: grafana-entry
+          configMap:
+            name: {{ template "grafana.fullname" . }}-entry-config
+            defaultMode: 0744

@@ -1,4 +1,4 @@
-PostgreSQL Development
+# PostgreSQL
 
 [PostgreSQL](https://www.postgresql.org/) is an object-relational database management system (ORDBMS) with an emphasis on extensibility and on standards-compliance.
 
@@ -63,6 +63,9 @@ The following tables lists the configurable parameters of the IBM PostgreSQL cha
 
 | Parameter                            | Description                                     | Default                                                    |
 | ----------------------------------   | ---------------------------------------------   | ---------------------------------------------------------- |
+| `arch.amd64`                  | `Amd64 worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
+| `arch.ppc64le`                | `Ppc64le worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
+| `arch.s390x`                  | `S390x worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
 | `image`                              | `postgresql` image repository                   | `postgresql`                                               |
 | `imageTag`                           | `postgresql` image tag                          | `9.6.4`                                                    |
 | `imagePullPolicy`                    | Image pull policy                               | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
@@ -75,7 +78,6 @@ The following tables lists the configurable parameters of the IBM PostgreSQL cha
 | `user`                               | Username of new user to create.                 | `nil`                                                      |
 | `password`                           | Password for the new user.                      | custom or random 10 characters                             |
 | `initialDatabase`                    | Name for new database to create.                | `nil`                                                      |
-| `initdbArgs`                         | Initdb Arguments                                | `nil`                                                      |
 | `persistence.subPath`                | Subdirectory of the volume to mount at          | `nil`                                                       |
 | `service.port`                       | TCP port                                        | `5432`                                                     |
 | `service.type`                       | k8s service type exposing ports, e.g. `NodePort`| `NodePort`                                                 |
@@ -86,6 +88,21 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
+
+## Architecture
+
+- Three major architectures are now available for Db2 Developer-C Edition on IBM Cloud Private worker nodes:
+  - AMD64 / x86_64
+  - s390x
+  - ppc64le
+
+An ‘arch’ field in values.yaml is required to specify supported architectures to be used during scheduling and includes ability to give preference to certain architecture(s) over another.
+
+Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
+   0 - Do not use
+   1 - Least preferred
+   2 - No preference
+   3 - Most preferred
 
 ## Persistence
 
