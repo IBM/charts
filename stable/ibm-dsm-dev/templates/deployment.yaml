@@ -23,6 +23,8 @@ spec:
       labels:
         app: {{ template "fullname" . }}
     spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
       containers:
       - name: dsm
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -37,6 +39,8 @@ spec:
             secretKeyRef:
               name: {{ template "fullname" . }}
               key: password
+        - name: DEV_EDITION
+          value: "true"
         ports:
         - containerPort: 11080
         - containerPort: 11081
@@ -55,13 +59,15 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
         - name: all
-          mountPath: /opt/ibm-datasrvrmgr/
+          mountPath: /opt/ibm-datasrvrmgr-data/
       - name: dsmsc
         image: "{{ .Values.imageSidecar.repository }}:{{ .Values.imageSidecar.tag }}"
         imagePullPolicy: {{ .Values.imageSidecar.pullPolicy }}
         env:
         - name: LICENSE
           value: accept
+        - name: DEV_EDITION
+          value: "true"
         - name: DSM_APP_NAME
           value: {{ template "fullname" . }}
         - name: DSM_RELEASE_NAME
@@ -83,10 +89,10 @@ spec:
       - name: all
       {{- if .Values.persistence.enabled }}
         persistentVolumeClaim:
-        {{- if .Values.dsmVolume.existingClaimName }}
-          claimName: {{ .Values.dsmVolume.existingClaimName }}
+        {{- if .Values.dataVolume.existingClaimName }}
+          claimName: {{ .Values.dataVolume.existingClaimName }}
         {{- else }}
-          claimName: {{ template "fullname" . }}-{{ .Values.dsmVolume.name }}
+          claimName: {{ template "fullname" . }}-{{ .Values.dataVolume.name }}
         {{- end }}
       {{- else }}
         emptyDir: {}

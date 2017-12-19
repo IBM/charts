@@ -6,6 +6,11 @@
 
 This chart bootstraps a MongoDB deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
+### New in this release
+
+1. Multi-platform manifest support
+2. Base OS with latest patches
+
 ## Prerequisites
 
 - Kubernetes 1.4+ with Beta APIs enabled
@@ -54,7 +59,11 @@ The following tables lists the configurable parameters of the MongoDB chart and 
 
 |                  Parameter                   |             Description               |                         Default                          |
 |----------------------------------------------|---------------------------------------|----------------------------------------------------------|
-| `image`                                      | MongoDB image                         | `mongodb`                                                |
+| `arch.amd64`                  | `Amd64 worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
+| `arch.ppc64le`                | `Ppc64le worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
+| `arch.s390x`                  | `S390x worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
+| `image.repository`                           | MongoDB repository                    | `na.cumulusrepo.com/hcicp_dev/mongodb`                   |
+| `image.tag`                                  | Image tag                             | `3.6.0`                      	                          |
 | `image.imagePullPolicy`                      | Image pull policy                     | `Always` if `imageTag` is `latest`, else `IfNotPresent`. |
 | `database.user`                              | MongoDB admin user                    | `mongo`                                                  |
 | `database.password`                          | MongoDB admin user password           | `nil`                                                    |

@@ -6,6 +6,12 @@
 
 This is a chart for IBM Data Server Manager. IBM Data Server Manager which is a database management tool. This chart is intended to be deployed in IBM Cloud Private.
 
+### New in this release
+
+1. Multi-platform manifest support
+2. Base OS with latest patches
+3. PostgreSQL and MongoDB beta support
+
 ## Prerequisites
 
 - Kubernetes 1.6 with Beta APIs enabled
@@ -37,7 +43,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   storageClassName: anything
-    storage: 8Gi
+    storage: 20Gi
   hostPath:
     path: /data/pv0002/
 EOF
@@ -84,6 +90,9 @@ The following tables lists the configurable parameters of the ibm-dsm-dev chart 
 
 | Parameter                             | Description                                                  | Default                                                    |
 | ------------------------------        | ----------------------------------------------------------   | ---------------------------------------------------------- |
+| `arch.amd64`                  | `Amd64 worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
+| `arch.ppc64le`                | `Ppc64le worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
+| `arch.s390x`                  | `S390x worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
 | `image.repository`                    | `DSM` image                                                  | `na.cumulusrepo.com/hcicp_dev/dsm`                         | 
 | `image.tag`                           | `DSM` image tag                                              | `2.1.4`                                                    |	
 | `imageSidecar.Tag`                    | `DSM` sidecar image tag                                      | `0.3.0`                                                    |
@@ -92,12 +101,12 @@ The following tables lists the configurable parameters of the ibm-dsm-dev chart 
 | `global.image.secret`                 | `DSM` and repository image secret                            | `VISIT http://ibm.biz/db2-dsm-license TO RETRIEVE IMAGE SECRET`|
 | `login.user`                          | `DSM` admin user name                                        | `admin`                                                    |              
 | `login.password`                      | `DSM` admin password                                         | `nil`                                                      |                       
-| `dsmVolume.name`                      | The PVC name to persist data                                 | `dsmvolume`                                                |     
+| `dataVolume.name`                      | The PVC name to persist data                                 | `datavolume`                                                |     
 | `persistence.enabled`                 | Use a PVC to persist data                                    | `true`                                                     |
 | `persistence.useDynamicProvisioning`  | Dynamic provision persistent volume or not                   | `false`				                                            |
-| `dsmVolume.persistence.existingClaim` | Provide an existing PersistentVolumeClaim                    | `nil`                                                      |
-| `dsmVolume.persistence.storageClass`  | Storage class of backing PVC                                 | `nil`                                                      |
-| `dsmVolume.persistence.size`          | Size of data volume                                          | `4Gi`                                                      |
+| `dataVolume.persistence.existingClaim` | Provide an existing PersistentVolumeClaim                    | `nil`                                                      |
+| `dataVolume.persistence.storageClass`  | Storage class of backing PVC                                 | `nil`                                                      |
+| `dataVolume.persistence.size`          | Size of data volume                                          | `4Gi`                                                      |
 | `resources.limits.cpu`                | Container CPU limit                                          | `4`                                                        |
 | `resources.limits.memory`             | Container memory limit                                       | `16Gi`                                                     |
 | `resources.requests.cpu`              | Container CPU requested                                      | `2`                                                        |
@@ -107,11 +116,11 @@ The following tables lists the configurable parameters of the ibm-dsm-dev chart 
 | `service.type`                        | k8s service type exposing ports, e.g.`ClusterIP`             | `NodePort`                                                 |  
 | `service.name`                        | k8s service type exposing ports name                         | `console`                                                  | 
 | `repository.image.repository`         | Repository image                                             | `na.cumulusrepo.com/hcicp_dev/db2server_dec`               |
-| `repository.image.tag`                | Repository image tag                                         | `11.1.2.2`                                                 | 
+| `repository.image.tag`                | Repository image tag                                         | `11.1.2.2b`                                                 | 
 | `repository.image.pullPolicy`         | Repository image pull policy                                 | `Always` if `imageTag` is `latest`, else `IfNotPresent`    | 
 | `repository.persistence.useDynamicProvisioning`  | Dynamic provision persistent volume or not        | `false`	                                                  |
-| `repository.dsmVolume.persistence.storageClass`  | Storage class of backing PVC                      | `nil`                                                      |   
-| `repository.dsmVolume.persistence.size`          | Size of data volume                               | `20Gi` 					                                          |	
+| `repository.dataVolume.persistence.storageClass`  | Storage class of backing PVC                      | `nil`                                                      |   
+| `repository.dataVolume.persistence.size`          | Size of data volume                               | `20Gi` 					                                          |	
 | `repository.resources.limits.cpu`                | Repository container CPU limit                    | `4000m`                                                    |
 | `repository.resources.limits.memory`             | Repository container memory limit                 | `16Gi`                                                     |
 | `repository.resources.requests.cpu`              | Repository container CPU requested                | `1000m`                                                    |
@@ -126,6 +135,21 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
 The volume defaults to mount at a subdirectory of the volume instead of the volume root to avoid the volume's hidden directories from interfering with database creation.
+
+## Architecture
+
+- Three major architectures are now available for DSM Developer-C Edition on IBM Cloud Private worker nodes:
+  - AMD64 / x86_64
+  - s390x
+  - ppc64le
+
+An ‘arch’ field in values.yaml is required to specify supported architectures to be used during scheduling and includes ability to give preference to certain architecture(s) over another.
+
+Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
+   0 - Do not use
+   1 - Least preferred
+   2 - No preference
+   3 - Most preferred
 
 ## Persistence
 
