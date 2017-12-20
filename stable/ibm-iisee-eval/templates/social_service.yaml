@@ -1,0 +1,71 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-gov-social-service
+  labels:
+     app: {{ template "fullname" . }}-gov-social-service
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}" 
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-gov-social-service
+      annotations:
+        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
+        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
+        productVersion: "11.7"
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      hostname: gov-social-service
+      initContainers:
+      - name: install
+        image: busybox
+        command: ['sh', '-c', 'while [ ! -f /tmp/jwtkey.cer ]; do sleep 2; done;']
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /tmp
+      containers:
+      - name: gov-social-service
+        image: {{ .Values.release.image.repository }}/gov-social-service:{{ .Values.release.image.tag }}
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }} 
+        env:
+        - name: SOCIAL_DB_TYPE
+          value: db2
+        - name: SOCIAL_DB_HOST
+          value: {{ .Release.Name }}-iisdocker
+        - name: SOCIAL_DB_PORT
+          value: "50000"
+        - name: SOCIAL_DB_USER
+          value: xmeta
+        - name: SOCIAL_DB_PASSWORD
+          value: P455w0rd
+        - name: SOCIAL_DB_NAME
+          value: xmeta
+        - name: SOCIAL_EVENTS_KAFKA_BOOTSTRAP_SERVERS
+          value: {{ .Release.Name }}-shop4info-kafka:9092
+        ports:
+        - containerPort: 9080
+        - containerPort: 9443
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /config/secrets
+        readinessProbe:
+          httpGet:
+            path: /ibm/iis/api/social/v1
+            port: 9080
+          initialDelaySeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /ibm/iis/api/social/v1/health
+            port: 9080
+          initialDelaySeconds: 60 
+      imagePullSecrets:
+      - name: {{ template "fullname" . }}-igc-registry-secret
+      volumes:
+      - name: secrets-pv-volume
+        persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-{{ .Values.iisService.volumeClaim.name }}  

@@ -1,0 +1,103 @@
+{{ if eq (.Values.license|lower) "accept" }}
+kind: Deployment 
+apiVersion: extensions/v1beta1
+metadata:
+  name: {{ template "fullname" . }}-iis-server
+  labels:
+     app: {{ template "fullname" . }}-iis-server 
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"   
+spec:
+  replicas: 1
+  selector:
+     matchLabels:
+       app: {{ template "fullname" . }}-iis-server  
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-iis-server
+      annotations:
+        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
+        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
+        productVersion: "11.7"
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      hostname: {{ .Release.Name }}-iisdocker
+      hostIPC: true 
+      containers:
+        - name: iisdocker-container 
+          image: {{ .Values.release.image.repository }}/iisdocker11700:{{ .Values.release.image.tag }}
+          command: [ "/bin/bash", "-c", "--" ]
+          args: [ "/opt/IBM/InformationServer/jdk/jre/bin/keytool -genkeypair -alias jwtkey 
+                  -keyalg RSA -dname CN=\"iisdocker,OU=Software Group,O=IBM,C=US\" -keypass passw0rd 
+                  -storepass passw0rd -keystore 
+                  /opt/IBM/InformationServer/wlp/usr/servers/iis/lib/iis/15properties/tokenservice.keystore; 
+                  /opt/IBM/InformationServer/jdk/jre/bin/keytool -exportcert -keystore 
+                  /opt/IBM/InformationServer/wlp/usr/servers/iis/lib/iis/15properties/tokenservice.keystore -alias jwtkey 
+                  -file /opt/IBM/InformationServer/wlp/usr/servers/iis/lib/iis/15properties/tokenservicepublic.cer -storepass passw0rd; 
+                  mkdir -p /opt/IBM/InformationServer/wlp/usr/servers/iis/lib/iis/15properties/secrets;
+                  cp /opt/IBM/InformationServer/wlp/usr/servers/iis/lib/iis/15properties/tokenservicepublic.cer 
+                    /opt/IBM/InformationServer/wlp/usr/servers/iis/lib/iis/15properties/secrets/jwtkey.cer;
+                  sed -i \"s/iisdocker/{{ .Release.Name }}-iisdocker/g\" /home/db2inst1/sqllib/db2nodes.cfg;
+                  echo \"DB2SYSTEM='{{ .Release.Name }}-iisdocker'\" >> /home/db2inst1/sqllib/profile.env; 
+                  su - db2inst1 -c 'rm ~/sqllib/.ftok; ~/sqllib/bin/db2ftok';
+                  sed -i \"s/iisdocker/{{ .Release.Name }}-iisdocker/g\" /opt/IBM/InformationServer/shared-open-source/zookeeper/conf/zoo1.cfg; 
+                  echo \"127.0.0.1   iisdocker\" >> /etc/hosts;
+                  sed -i \"s/iisdocker/{{ .Release.Name }}-iisdocker/g\" /opt/IBM/InformationServer/Server/Configurations/default.apt;
+                  /opt/IBM/InformationServer/bin/services.sh; 
+                  /opt/ug-setup.sh > /opt/ug-setup-output.txt; 
+                  cd /opt/IBM/InformationServer/ASBNode/CognitiveDesignerEngine && ./startCognitiveDesignerServer.sh; 
+                  while true; do sleep 30; done;" 
+                ]
+          imagePullPolicy: {{ .Values.release.image.pullPolicy }} 
+          securityContext:
+             capabilities:
+                 add: ["IPC_OWNER", "SYS_NICE", "SYS_RESOURCE", "SYS_ADMIN"]
+          resources:
+             requests:
+                memory: "{{ .Values.iisService.resources.requests.memory }}"
+                cpu: "{{ .Values.iisService.resources.requests.cpu }}" 
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+            - containerPort: 31531
+            - containerPort: 31538
+            - containerPort: 52181
+            - containerPort: 52888 
+            - containerPort: 53888 
+            - containerPort: 59092
+            - containerPort: 58983 
+            - containerPort: 50000 
+              protocol: TCP
+          volumeMounts:
+            - name: test-data 
+              mountPath: /opt/testData
+            - name: secrets-pv-volume
+              mountPath: /opt/IBM/InformationServer/wlp/usr/servers/iis/lib/iis/15properties/secrets
+            - name: config-postscript
+              mountPath: /opt/ug-setup.sh
+              subPath: ug-setup.sh
+            - name: config-postscript
+              mountPath: /opt/iadb-db2-connector-imam-import-params.xml
+              subPath: iadb-db2-connector-imam-import-params.xml
+            - name: config-postscript
+              mountPath: /opt/UGDefaultWorkspace.xml
+              subPath: UGDefaultWorkspace.xml   
+      imagePullSecrets:
+        - name: {{ template "fullname" . }}-igc-registry-secret
+      volumes:
+        - name: test-data
+        - name: config-postscript
+          configMap:
+            name: {{ .Release.Name }}-iis-server
+            defaultMode: 0755
+        - name: secrets-pv-volume
+          persistentVolumeClaim:
+          {{- if .Values.iisService.volumeClaim.existingClaimName }}
+            claimName: {{ .Values.iisService.volumeClaim.existingClaimName }}
+          {{- else }} 
+            claimName: {{ .Release.Name }}-{{ .Values.iisService.volumeClaim.name }} 
+          {{- end }} 
+{{ end }} 

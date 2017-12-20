@@ -1,0 +1,61 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-gov-catalog-search-service
+  labels:
+     app: {{ template "fullname" . }}-gov-catalog-search-service
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+         app: {{ template "fullname" . }}-gov-catalog-search-service
+      annotations:
+        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
+        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
+        productVersion: "11.7"
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      initContainers:
+      - name: install
+        image: busybox
+        command: ['sh', '-c', 'while [ ! -f /tmp/jwtkey.cer ]; do sleep 2; done;']
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /tmp
+      containers:
+      - name: gov-catalog-search-service
+        image: {{ .Values.release.image.repository }}/gov-catalog-search-service:{{ .Values.release.image.tag }}
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }} 
+        env:
+        - name: XMETA_DB_TYPE
+          value: db2
+        - name: XMETA_DB_HOST
+          value: {{ .Release.Name }}-iisdocker
+        - name: XMETA_DB_PORT
+          value: "50000"
+        - name: XMETA_DB_NAME
+          value: xmeta
+        - name: XMETA_DB_USER
+          value: xmeta
+        - name: XMETA_DB_PASSWORD
+          value: P455w0rd
+        - name: SOLR_ZOOKEEPER_CONNECT
+          value: {{ .Release.Name }}-iisdocker:52181
+        - name: SOLR_DATA_COLLECTION
+          value: da-datasets
+        ports:
+        - containerPort: 9080
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /config/secrets
+      imagePullSecrets:
+      - name: {{ template "fullname" . }}-igc-registry-secret
+      volumes:
+      - name: secrets-pv-volume
+        persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-{{ .Values.iisService.volumeClaim.name }}

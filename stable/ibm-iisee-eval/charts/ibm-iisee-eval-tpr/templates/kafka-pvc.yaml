@@ -1,0 +1,27 @@
+{{ if and .Values.global.persistence.enabled (not .Values.kafka.volumeClaim.existingClaimName) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-{{ .Values.kafka.volumeClaim.name }}
+  labels:
+    app: {{ .Release.Name }}-{{ .Chart.Name }}-kafka
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  {{- if .Values.global.persistence.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  #storageClassName: {{ default nil .Values.kafka.volumeClaim.storageClassName | quote }}
+  {{- else }}
+  ## disable dynamic provisioning
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - {{ .Values.kafka.volumeClaim.accessMode }} 
+  resources:
+    requests:
+      storage: {{ .Values.kafka.volumeClaim.size }}
+ {{- end }}

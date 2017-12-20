@@ -1,0 +1,81 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-{{ .Chart.Name }}-elasticsearch
+  labels:
+    component: {{ .Release.Name }}-{{ .Chart.Name }}-elasticsearch
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    role: client
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: {{ .Release.Name }}-{{ .Chart.Name }}-elasticsearch
+        role: client
+    spec:
+      hostname: elasticsearch
+      containers:
+        - name: elasticsearch
+          securityContext:
+            capabilities:
+              add:
+                - AUDIT_CONTROL
+                - CHOWN
+                - FOWNER
+                - FSETID
+                - IPC_LOCK
+                - IPC_OWNER
+                - LINUX_IMMUTABLE
+                - MAC_ADMIN
+                - MAC_OVERRIDE
+                - NET_ADMIN
+                - NET_BIND_SERVICE
+                - SETGID
+                - SETFCAP
+                - SETPCAP
+                - SYS_ADMIN
+                - SYS_BOOT
+                - SYS_MODULE
+                - SYS_PACCT
+                - SYS_RAWIO
+                - SYS_RESOURCE
+          image: {{ .Values.elasticsearch.image }}  
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: CLUSTER_NAME
+            value: "es-cluster"
+          - name: "ES_JAVA_OPTS"
+            value: "-Xms512m -Xmx512m"
+          - name: NODE_MASTER
+            value: "true"
+          - name: NODE_DATA
+            value: "true"
+          - name: HTTP_ENABLE
+            value: "true"
+          ports:
+          - containerPort: 9200
+            name: http
+            protocol: TCP
+          - containerPort: 9300
+            name: transport
+            protocol: TCP
+          volumeMounts:
+            - mountPath: /usr/share/elasticsearch/data
+              name: es-pv-volume
+            - name: config-volume
+              mountPath: /usr/share/elasticsearch/config/log4j2.properties
+              subPath: log4j2.properties
+      volumes:
+        - name: es-pv-volume
+          persistentVolumeClaim:
+            {{- if .Values.elasticsearch.volumeClaim.existingClaimName }}
+            claimName: {{ .Values.elasticsearch.volumeClaim.existingClaimName }}
+            {{- else }} 
+            claimName: {{ .Release.Name }}-{{ .Values.elasticsearch.volumeClaim.name }}
+            {{- end }}
+        - name: config-volume
+          configMap:
+            name: {{ .Release.Name }}-es 

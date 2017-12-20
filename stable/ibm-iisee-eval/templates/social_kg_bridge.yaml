@@ -1,0 +1,33 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-gov-social-kg-bridge
+  labels:
+     app: {{ template "fullname" . }}-gov-social-kg-bridge
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}" 
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-gov-social-kg-bridge
+      annotations:
+        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
+        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
+        productVersion: "11.7"
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      containers:
+      - name: gov-social-kg-bridge
+        image: {{ .Values.release.image.repository }}/gov-social-kg-bridge:{{ .Values.release.image.tag }}
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+        env:
+        - name: SOCIAL_KG_BRIDGE_KG_BOOTSTRAP_SERVERS
+          value: {{ .Release.Name }}-iisdocker:59092
+        - name: SOCIAL_KG_BRIDGE_SOCIAL_BOOTSTRAP_SERVERS
+          value: {{ .Release.Name }}-shop4info-kafka:9092
+      imagePullSecrets:
+      - name: {{ template "fullname" . }}-igc-registry-secret

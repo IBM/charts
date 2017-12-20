@@ -1,0 +1,34 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-{{ .Chart.Name }}-zookeeper
+  labels:
+    app: {{ .Release.Name }}-{{ .Chart.Name }}-zookeeper
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-{{ .Chart.Name }}-zookeeper
+    spec:
+      hostname: zookeeper
+      containers:
+        - name: zookeeper
+          image: {{ .Values.zookeeper.image }}  
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 2181
+          volumeMounts:
+            - mountPath: /opt/zookeeper-3.4.9/data
+              name: zookeeper-pv-volume
+      volumes:
+      - name: zookeeper-pv-volume
+        persistentVolumeClaim:
+          {{- if .Values.zookeeper.volumeClaim.existingClaimName }}
+          claimName: {{ .Values.zookeeper.volumeClaim.existingClaimName }}
+          {{- else }}  
+          claimName: {{ .Release.Name }}-{{ .Values.zookeeper.volumeClaim.name }}
+          {{- end }}  

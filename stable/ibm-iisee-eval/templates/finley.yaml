@@ -1,0 +1,39 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-finley-ml
+  labels:
+     app: {{ template "fullname" . }}-finley-ml
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}" 
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-finley-ml
+      annotations:
+        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
+        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
+        productVersion: "11.7"
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      hostname: finley
+      containers:
+      - name: finley-ml
+        image: {{ .Values.release.image.repository }}/finley:{{ .Values.release.image.tag }}
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }} 
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+            - name: config-volume
+              mountPath: /finley/config.ini
+              subPath: config.ini
+      imagePullSecrets:
+      - name: {{ template "fullname" . }}-igc-registry-secret
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ .Release.Name }}-finley

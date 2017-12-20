@@ -1,0 +1,38 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-shop4info-demoapp
+  labels:
+     app: {{ template "fullname" . }}-shop4info-demoapp 
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}" 
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-shop4info-demoapp
+      annotations:
+        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
+        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
+        productVersion: "11.7"
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      containers:
+        - name: shop4info-demoapp
+          image: {{ .Values.release.image.repository }}/shop4info-demoapp:{{ .Values.release.image.tag }}
+          imagePullPolicy: {{ .Values.release.image.pullPolicy }} 
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+          env:
+            - name: TOKEN_SERVICE_URL
+              value: https://{{ .Release.Name }}-iis-service:9443/ibm/iis/api/auth_token
+            - name: SHOP4INFO_SERVICE_URL
+              value: http://{{ template "fullname" . }}-shop4info-server:9080/shop4info
+            - name: SOCIAL_SERVICE_URL
+              value: http://{{ template "fullname" . }}-gov-social-service:9080/ibm/iis/api/social
+      imagePullSecrets:
+      - name: {{ template "fullname" . }}-igc-registry-secret 

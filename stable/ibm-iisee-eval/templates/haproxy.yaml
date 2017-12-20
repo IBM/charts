@@ -1,0 +1,41 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-haproxy
+  labels:
+     app: {{ template "fullname" . }}-haproxy
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-haproxy
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      hostname: haproxy-host 
+      containers:
+      - name: haproxy
+        image: haproxy:1.7 
+        command: [ "/bin/bash", "-c", "--" ]
+        args: [ "apt-get update; apt-get install -y openssl;
+                 openssl req -new -x509 -days 365 -sha1 -newkey rsa:1024 -nodes -keyout /etc/ssl/certs/haproxy-host.key
+                   -out /etc/ssl/certs/haproxy-host.crt -subj \"/C=/ST=/L=/O=/CN=haproxy-host\"; 
+                 cat /etc/ssl/certs/haproxy-host.key /etc/ssl/certs/haproxy-host.crt > /etc/ssl/certs/haproxy-host.pem;
+                 /docker-entrypoint.sh haproxy -f /usr/local/etc/haproxy/haproxy.cfg;"
+              ]
+        imagePullPolicy: IfNotPresent 
+        ports:
+        - containerPort: 80
+        - containerPort: 443 
+        volumeMounts:
+        - name: haproxy-config 
+          mountPath: /usr/local/etc/haproxy/haproxy.cfg 
+          subPath: haproxy.cfg
+      volumes:
+      - name: haproxy-config 
+        configMap:
+          name: {{ template "fullname" . }}-haproxy-configmap 

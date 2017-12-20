@@ -1,0 +1,57 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-gov-app-config-service
+  labels:
+     app: {{ template "fullname" . }}-gov-app-config-service
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}" 
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-gov-app-config-service
+      annotations:
+        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
+        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
+        productVersion: "11.7"
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      initContainers:
+      - name: install
+        image: busybox
+        command: ['sh', '-c', 'while [ ! -f /tmp/jwtkey.cer ]; do sleep 2; done;']
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /tmp
+      containers:
+      - name: gov-app-config-service
+        image: {{ .Values.release.image.repository }}/gov-app-config-service:{{ .Values.release.image.tag }}
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }} 
+        env:
+        - name: APP_CONFIG_DB_TYPE
+          value: db2
+        - name: APP_CONFIG_DB_HOST
+          value: {{ .Release.Name }}-iisdocker
+        - name: APP_CONFIG_DB_PORT
+          value: "50000"
+        - name: APP_CONFIG_DB_USER
+          value: xmeta
+        - name: APP_CONFIG_DB_PASSWORD
+          value: P455w0rd
+        - name: APP_CONFIG_DB_NAME
+          value: xmeta
+        ports:
+        - containerPort: 9083
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /config/secrets
+      imagePullSecrets:
+      - name: {{ template "fullname" . }}-igc-registry-secret
+      volumes:
+      - name: secrets-pv-volume
+        persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-{{ .Values.iisService.volumeClaim.name }}

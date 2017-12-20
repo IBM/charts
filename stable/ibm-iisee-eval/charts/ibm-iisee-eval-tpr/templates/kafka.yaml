@@ -1,0 +1,42 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-{{ .Chart.Name }}-shop4info-kafka
+  labels:
+    component: {{ .Release.Name }}-{{ .Chart.Name }}-shop4info-kafka
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-{{ .Chart.Name }}-shop4info-kafka
+    spec:
+      containers:
+        - name: shop4info-kafka
+          image: {{ .Values.kafka.image }} 
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9092
+          env:
+            - name: KAFKA_ADVERTISED_HOST_NAME
+              value: {{ .Release.Name }}-shop4info-kafka
+            - name: KAFKA_ADVERTISED_PORT
+              value: "9092"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: {{ .Release.Name }}-zookeeper:2181
+            - name: KAFKA_CREATE_TOPICS
+              value: social:1:1,igc-kg-bridge-out:1:1
+          volumeMounts:
+            - mountPath: /kafka
+              name: kafka-pv-volume
+      volumes:
+        - name: kafka-pv-volume
+          persistentVolumeClaim:
+            {{- if .Values.kafka.volumeClaim.existingClaimName }}
+            claimName: {{ .Values.kafka.volumeClaim.existingClaimName }}
+           {{- else }} 
+            claimName: {{ .Release.Name }}-{{ .Values.kafka.volumeClaim.name }}
+           {{- end }} 

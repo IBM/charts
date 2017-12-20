@@ -1,0 +1,110 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-shop4info-server
+  labels:
+     app: {{ template "fullname" . }}-shop4info-server
+     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+     release: "{{ .Release.Name }}"
+     heritage: "{{ .Release.Service }}" 
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-shop4info-server
+      annotations:
+        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
+        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
+        productVersion: "11.7"
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      hostname: shop4info-server
+      initContainers:
+      - name: install
+        image: busybox
+        command: ['sh', '-c', 'while [ ! -f /tmp/jwtkey.cer ]; do sleep 2; done;']
+        volumeMounts:
+        - name: secrets-pv-volume
+          mountPath: /tmp
+      containers:
+        - name: shop4info-server
+          image: {{ .Values.release.image.repository }}/shop4info-server:{{ .Values.release.image.tag }}
+          imagePullPolicy: {{ .Values.release.image.pullPolicy }} 
+          ports:
+            - containerPort: 9080
+            - containerPort: 9443
+          env:
+            - name: SHOP4INFO_CASSANDRA_HOST
+              value: {{ .Release.Name }}-cassandra
+            - name: SHOP4INFO_SOLR_ZOOKEEPER_CONNECT
+              value: {{ .Release.Name }}-zookeeper:2181/{{ .Release.Name }}-shop4info-solr
+            - name: SHOP4INFO_KAFKA_ZOOKEEPER_CONNECT
+              value: {{ .Release.Name }}-iisdocker:52181
+            - name: SHOP4INFO_KAFKA_CONNECT
+              value: {{ .Release.Name }}-iisdocker:59092
+          volumeMounts:
+            - name: config-properties
+              mountPath: /config/conf/templates
+            - name: config-properties
+              mountPath: /config/conf/log4j2.xml
+              subPath: log4j2.xml
+            - name: config-properties
+              mountPath: /config/jvm.options
+              subPath: jvm.options
+            - name: config-properties
+              mountPath: /config/conf/search/search.properties
+              subPath: search.properties
+            - name: config-properties
+              mountPath: /config/conf/scheduler.properties
+              subPath: scheduler.properties
+            - name: config-properties
+              mountPath: /config/conf/event-consumer.properties
+              subPath: event-consumer.properties
+            - name: secrets-pv-volume
+              mountPath: /config/secrets
+              #readOnly: true
+            - name: shop4info-log
+              mountPath: /opt/ibm/wlp/output/shop4InfoServer/logs
+          readinessProbe:
+            httpGet:
+              path: /shop4info/v1/health
+              port: 9080
+            periodSeconds: 60
+            initialDelaySeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /shop4info/v1/health
+              port: 9080
+            periodSeconds: 60
+            initialDelaySeconds: 450
+            timeoutSeconds: 30
+            failureThreshold: 3
+        - name: logstashsidecar
+          image: docker.elastic.co/logstash/logstash:5.5.2
+          securityContext:
+            runAsUser: 0
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: sidecarconfig
+              mountPath: /opt/logstash/pipeline
+            - name: shop4info-log
+              mountPath: /opt/ibm/wlp/output/shop4InfoServer/logs 
+      imagePullSecrets:
+        - name: {{ template "fullname" . }}-igc-registry-secret
+      volumes:
+        - name: config-properties
+          configMap:
+            name: {{ .Release.Name }}-s4is-config
+        - name: secrets-pv-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-{{ .Values.iisService.volumeClaim.name }} 
+        - name: shop4info-log
+          emptyDir: {}
+        - name: sidecarconfig
+          configMap:
+            name: {{ .Release.Name }}-sidecar
+ 
