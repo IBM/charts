@@ -89,10 +89,12 @@ The following table lists the configurable parameters of the `ibm-microservicebu
 | Pipeline.Test | Setting this to true enables testing in the pipeline. | true |
 | Pipeline.LibertyLicenseJar.BaseUrl | Optionally defines the location of a license upgrade JAR file |  |
 | Pipeline.LibertyLicenseJar.Name |  Appended to BaseUrl - can be overridden by libertyLicenseJarName in Jenkinsfile | wlp-core-license.jar |
+| Pipeline.MirrorOf | The ID of the Maven repository for which the mirror given by `MirrorUrl` should be used e.g. `central` for Maven Central or `*` for all repositories | _central_ |
+| Pipeline.MirrorUrl | Optional URL for Maven mirror e.g. http://nexus:8081/repository/maven-central/ | |
 
 In version 2.0.0 of this chart, `Agent.Cpu` had a default value of `200m` and `Agent.Memory` a default of `256Mi`. These defaults were removed because they were found to be too low for some environments, causing semi-random breaks and failures in pipeline builds. Set values higher than these if you find it necessary to set these constraints. 
 
-Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
+Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
 
 To use a YAML file with overrides, specify `--values <override.yaml>` argument to `helm install'
 

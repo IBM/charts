@@ -51,13 +51,14 @@ The following table lists the configurable parameters of the `ibm-microservicebu
 
 | Parameter | Description | Default |
 | - | - | - |
-| zipkin.collectorSampleRatePct | Proportion of traces for Zipkin to retain; between 0.0 (none) and 1.0 (all) | 1.0 |
-| zipkin.elasticsearchHosts | A comma-separated list of Elasticsearch base URLs to provide persistence for Zipkin; defaults to in-memory storage if not set | "" |
+| zipkin.collectorSampleRatePct | Proportion of traces for Zipkin to retain; between 0.0 (none) and 1.0 (all) | `1.0` |
+| zipkin.elasticsearchHosts | A comma-separated list of Elasticsearch base URLs to provide persistence for Zipkin; defaults to in-memory storage if not set | `""` |
 | zipkin.javaOpts | the Java options that are used for the Zipkin process | `"-Xmx512m"` |
-| zipkin.replicaCount | the number of replica instances for the Zipkin deployment; this should only be increased above one if Elasticsearch is being used rather than in-memory storage | 1 |
-| zipkin.service.name | the name that is used for the Kubernetes service fronting the Zipkin deployment | `zipkin` |
-| zipkin.service.port | if zipkin.service.type is NodePort, the port to expose for the Zipkin Kubernetes service | 30411|
-| zipkin.service.type | the type of the Kubernetes service for Zipkin e.g. ClusterIP or NodePort; if using NodePort, note that there is no access control around the Zipkin endpoint and UI | ClusterIP|
-
+| zipkin.replicaCount | the number of replica instances for the Zipkin deployment; this should only be increased above one if Elasticsearch is being used rather than in-memory storage | `1` |
+| zipkin.service.name | the name that is used for the Kubernetes service fronting the Zipkin deployment | `"zipkin"` |
+| zipkin.service.port | if zipkin.service.type is NodePort, the port to expose for the Zipkin Kubernetes service | `30411` |
+| zipkin.service.type | the type of the Kubernetes service for Zipkin e.g. ClusterIP or NodePort; if using NodePort, note that there is no access control around the Zipkin endpoint and UI | `"ClusterIP"` |
+| zipkin.image | image pulled for Zipkin | `"ibmcom/zipkin"` | 
+| zipkin.imageTag | tag for Zipkin image | `"2.1.0"` |
 
 For more information about Microservice Builder fabric, see [About the Microservices Builder fabric](https://www.ibm.com/support/knowledgecenter/en/SS5PWC/fabric_concept.html).
