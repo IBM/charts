@@ -1,0 +1,21 @@
+Get the application URL by running these commands:
+{{- if contains "NodePort" .Values.master.serviceType }}
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  export WEBGUI_NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }}-master)
+  export EGOREST_NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[1].nodePort}" services {{ template "fullname" . }}-master)
+  export SYMREST_NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[2].nodePort}" services {{ template "fullname" . }}-master)
+  export SSH_NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }}-client)
+  echo WEB GUI: https://$NODE_IP:$WEBGUI_NODE_PORT/platform
+  echo EGO REST: https://$NODE_IP:$EGOREST_NODE_PORT/platform/rest/ego/v1/
+  echo SYM REST: https://$NODE_IP:$SYMREST_NODE_PORT/platform/rest/symrest/v1/clientapi/
+  echo Client: ssh root@$NODE_IP -p $SSH_NODE_PORT
+{{- else if contains "LoadBalancer" .Values.master.serviceType }}
+     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+           You can watch the status of by running 'kubectl get svc -w {{ template "fullname" . }}'
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ template "fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo https://$SERVICE_IP:{{ .Values.master.uiPort }}
+{{- else if contains "ClusterIP" .Values.master.serviceType }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ template "name" . }},release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Visit https://127.0.0.1:8080 to use your application"
+  kubectl port-forward $POD_NAME 8080:{{ .Values.master.uiPort }}
+{{- end }}

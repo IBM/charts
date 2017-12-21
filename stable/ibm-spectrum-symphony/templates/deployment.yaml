@@ -1,0 +1,57 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-master
+  labels:
+    app: {{ template "name" . }}
+    release: {{ .Release.Name }}
+    version: {{ .Chart.Version }}
+    role: master
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.master.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}
+        release: "{{ .Release.Name }}"
+        role: master
+      annotations:
+        productID: "{{ .Values.cluster.productID }}"
+        productName: "{{ .Values.cluster.productName }}"
+        productVersion: "{{ .Values.cluster.productVersion }}"
+    spec:
+     affinity:
+     {{- include "nodeaffinity" . | indent 6 }}
+     containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.master.resources | indent 12 }}
+          env:
+            - name: LICENSE
+              value: "accept"
+          ports:
+            - containerPort: {{ .Values.master.uiPort }}
+            - containerPort: {{ .Values.master.egoRestPort }}
+            - containerPort: {{ .Values.master.symRestPort }}
+          securityContext:
+            capabilities:
+              add:
+                - SYS_NICE
+                - NET_BIND_SERVICE
+          volumeMounts:
+            - mountPath: /shared
+              name: persistdir
+     volumes:
+       - name: persistdir
+         persistentVolumeClaim:
+         {{- if .Values.cluster.pvc.existingClaimName }}
+           claimName: {{ .Values.cluster.pvc.existingClaimName }}
+         {{- else }}
+           claimName: {{ template "fullname" . }}
+        {{- end }}
+     restartPolicy: Always
+     terminationGracePeriodSeconds: 30
