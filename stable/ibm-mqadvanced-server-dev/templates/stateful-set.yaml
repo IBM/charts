@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+{{- if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+apiVersion: apps/v1beta2
+{{- else }}
 apiVersion: apps/v1beta1
+{{- end }}
 kind: StatefulSet
 metadata:
   name: {{ template "fullname" . }}
@@ -22,9 +26,14 @@ metadata:
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
 spec:
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
   serviceName: {{ .Values.service.name }}
   replicas: 1
-  {{- if and (ge (.Capabilities.KubeVersion.Major | int) 1) (ge (.Capabilities.KubeVersion.Minor | int) 7) }}
+  {{- if and (.Capabilities.KubeVersion.Major | hasPrefix "1") (.Capabilities.KubeVersion.Minor | hasPrefix "7") }}
+  # Set updateStrategy to "RollingUpdate", if we're on Kubernetes 1.7.
+  # It's already the default for apps/v1beta2 (Kubernetes 1.8 onwards)
   updateStrategy:
     type: RollingUpdate
   {{- end }}
@@ -37,6 +46,19 @@ spec:
         heritage: "{{ .Release.Service }}"
         QM_IDENTIFIER: "{{ .Release.Name }}"
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+              - key: beta.kubernetes.io/os
+                operator: In
+                values:
+                - linux                
       {{- if .Values.image.pullSecret }}
       imagePullSecrets:
         - name: {{ .Values.image.pullSecret }}
