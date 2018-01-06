@@ -74,7 +74,9 @@ Parameter | Description | Default
 `logstash.image.repository` | Full repository and path to image            | `docker.elastic.co/logstash/logstash`
 `logstash.image.tag`        | The version of Logstash to deploy            | `5.5.1`
 `logstash.replicas`         | The initial pod cluster size                 | `1`
-`logstash.heapSize`         | The maximum allowable memory for Logstash    | `256m`
+`logstash.heapSize`         | The JVM heap size to allocate to Logstash    | `256m`
+`logstash.memoryLimit`      | The maximum allowable memory for Logstash. This includes both JVM heap and file system cache    | `512M`
+
 `logstash.port`             | The port on which Logstash listens for beats | `5000`
 `logstash.probe.enabled`    | Enables the [liveness probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/) for logstash. Logstash instance is considered not alive when: <ul><li>logstash endpoint is not available for  `logstash.probe.periodSeconds` * `logstash.probe.maxUnavailablePeriod`, or</li><li> processed event count is smaller than `logstash.probe.minEventsPerPeriod` within `logstash.probe.periodSeconds`</li></ul> | `false`
 `logstash.probe.periodSeconds` | Seconds probe waits before calling logstash endpoint for status again | `60`
@@ -107,19 +109,21 @@ Parameter | Description | Default
 `elasticsearch.client.replicas`     | The number of initial pods in the client cluster                   | `1`
 `elasticsearch.client.serviceType`  | The way in which the client service should be published. [See official documentation.](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services---service-types) | `ClusterIP`
 `elasticsearch.client.heapSize`     | The maximum memory to allocate to each Elasticsearch client        | `256m`
+`elasticsearch.master.memoryLimit`     | The maximum memory to allocate to each Elasticsearch client pod. This includes both JVM heap and file system cache        | `512M`
 `elasticsearch.client.restPort`     | The port to which the client node will bind the REST APIs          | `9200`
 `elasticsearch.client.antiAffinity` | Whether Kubernetes "may" (`soft`) or "must not" (`hard`) [deploy client pods onto the same node](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/) | `soft`
 `elasticsearch.master.name`         | The internal name of the master node cluster                       | `master`
 `elasticsearch.master.replicas`     | The number of initial pods in the master cluster                   | `1`
 `elasticsearch.master.heapSize`     | The maximum memory to allocate to each Elasticsearch master        | `256m`
+`elasticsearch.master.memoryLimit`     | The maximum memory to allocate to each Elasticsearch master pod. This includes both JVM heap and file system cache        | `512M`
 `elasticsearch.master.antiAffinity` | Whether Kubernetes "may" (`soft`) or "must not" (`hard`) [deploy master pods onto the same node](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/) | `soft`
 `elasticsearch.data.name`         | The internal name of the data node cluster                       | `data`
 `elasticsearch.data.replicas`     | The number of initial pods in the data cluster                   | `2`
-`elasticsearch.data.heapSize`     | The maximum memory to allocate to each Elasticsearch data        | `512m`
+`elasticsearch.data.heapSize`     | The JVM heap size to allocate to each Elasticsearch data        | `512m`
+`elasticsearch.data.memoryLimit`     | The maximum memory to allocate to each Elasticsearch data pod. This includes both JVM heap and file system cache        | `1024M`
 `elasticsearch.data.antiAffinity` | Whether Kubernetes "may" (`soft`) or "must not" (`hard`) [deploy data pods onto the same node](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/) | `hard`
 `elasticsearch.data.storage.size`         | The minimum [size of the persistent volume](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/resources.md#resource-quantities)    | `10Gi`
 `elasticsearch.data.storage.accessModes`  | [See official documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes) | `ReadWriteOnce`
-`elasticsearch.data.storage.subPath`      | An optional path within the persistent volume that the Elasticsearch data should be stored | ""
 `elasticsearch.data.storage.storageClass` | [See official documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#storageclasses) | `manual`
 
 ### XPack

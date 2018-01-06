@@ -1,4 +1,3 @@
----
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
@@ -6,6 +5,8 @@ metadata:
     app: {{ template "filebeat.fullname" . }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     component: "{{ .Values.filebeat.name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
   name: {{ template "filebeat.fullname" . }}-amd64
 spec:
   updateStrategy:
@@ -20,11 +21,19 @@ spec:
         arch: amd64
     spec:
       terminationGracePeriodSeconds: 30
+      {{- if .Values.filebeat.scope.nodes }}
       nodeSelector:
-        beta.kubernetes.io/arch: amd64
-        {{- if .Values.filebeat.scope.nodes }}
 {{ toYaml .Values.filebeat.scope.nodes | indent 8 }}
-        {{- end }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
       securityContext:
         runAsUser: 0
       containers:
