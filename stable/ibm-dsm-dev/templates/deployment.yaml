@@ -1,13 +1,3 @@
-{{- if not (.Values.secretOverride) }}
-apiVersion: v1
-data:
-  .dockercfg: {{ .Values.global.image.secret }}
-kind: Secret
-metadata:
-  name: {{ template "fullname" . }}-dsm-secret
-type: kubernetes.io/dockercfg
----
-{{- end }}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -22,9 +12,13 @@ spec:
     metadata:
       labels:
         app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
     spec:
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
+      serviceAccountName: dsm-{{ template "fullname" . }}
       containers:
       - name: dsm
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -37,7 +31,7 @@ spec:
         - name: DSM_ADMIN_PWD
           valueFrom:
             secretKeyRef:
-              name: {{ template "fullname" . }}
+              name: {{ template "fullname" . }}-dsm-passwd
               key: password
         - name: DEV_EDITION
           value: "true"
@@ -83,7 +77,7 @@ spec:
 
 {{- if not (.Values.secretOverride) }}
       imagePullSecrets:
-        - name: {{ template "fullname" . }}-dsm-secret
+        - name: {{ template "fullname" . }}-dsm-image
 {{- end }}
       volumes:
       - name: all

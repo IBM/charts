@@ -20,6 +20,7 @@ Complete the following steps to add the Persistent Volume
 1. Click **Create PersistentVolume**
 1. Set the following values:
     - Name: transdev-pv-volume
+    - Storage class name: (leave blank)
     - Capacity: 8
     - Unit: Gi
     - Access mode: Read write many
@@ -67,8 +68,8 @@ The following tables lists the configurable parameters of the Transformation Adv
 
 | Parameter                                      | Description                       | Default                                   |
 | -------------------------------                | -------------------------------   | ----------------------------------------- |
-| couchdb.image.repository                       | couchdb image repository          | klaemo/couchdb                            |
-| couchdb.image.tag                              | couchdb image tag                 | 2.0.0                                     |
+| couchdb.image.repository                       | couchdb image repository          | ibmcom/transformation-advisor-db         |
+| couchdb.image.tag                              | couchdb image tag                 | 1.2.0                                     |
 | couchdb.image.pullPolicy                       | couchdb image pull policy         | IfNotPresent                              |
 | couchdb.resources.requests.memory              | requests memory                   | 2Gi                                       |
 | couchdb.resources.requests.cpu                 | requests cpu                      | 1000m                                     |
@@ -82,21 +83,22 @@ The following tables lists the configurable parameters of the Transformation Adv
 | couchdb.persistence.useDynamicProvisioning     | use dynamic provisioning          | false                                     |
 | couchdb.persistence.existingClaim              | use existing pv claim             | false                                     |
 | couchdb.persistence.storageClassName           | couchdb storage class name        |                                           |
-| transadv.image.repository                      | transadv server image             | ibmcom/icp-transformation-advisor-dc      |
-| transadv.image.tag                             | transadv server image tag         | 1.1.0                                     |
+| transadv.image.repository                      | transadv server image             | ibmcom/transformation-advisor-server      |
+| transadv.image.tag                             | transadv server image tag         | 1.2.0                                     |
 | transadv.image.pullPolicy                      | image pull policy                 | IfNotPresent                              |
 | transadv.resources.requests.memory             | requests memory                   | 2Gi                                       |
 | transadv.resources.requests.cpu                | requests cpu                      | 1000m                                     |
 | transadv.resources.limits.memory               | limits memory                     | 4Gi                                       |
 | transadv.resources.limits.cpu                  | limits cpu                        | 16000m                                    |
 | transadv.service.nodePort                      | transadv sevice node port         | 30111                                     |
-| transadvui.image.repository                    | transadv ui image                 | ibmcom/icp-transformation-advisor-ui      |
-| transadvui.image.tag                           | transadv ui image tag             | 1.1.0                                     |
+| transadvui.image.repository                    | transadv ui image                 | ibmcom/transformation-advisor-ui         |
+| transadvui.image.tag                           | transadv ui image tag             | 1.2.0                                     |
 | transadvui.image.pullPolicy                    | image pull policy                 | IfNotPresent                              |
 | transadvui.resources.requests.memory           | requests memory                   | 2Gi                                       |
 | transadvui.resources.requests.cpu              | requests cpu                      | 1000m                                     |
 | transadvui.resources.limits.memory             | limits memory                     | 4Gi                                       |
-| transadvui.resources.limits.cpu                | limits cpu                        | 16000m                                    |
+| transadvui.resources.limits.cpu                | limits cpu                        | 16000m                                   |
+| transadvui.service.nodePort                    | transadv sevice node port         | 30222                                     |
 
 
 # For those who use Kubectl CLI
@@ -170,6 +172,10 @@ Kubernetes master is running at https://9.162.177.182:8001
                                         ^^^^^^^^^^^^^
                                         9.162.177.182 is the NodeIP in this instance
 ```
+
+## ICp Content Pipeline
+
+We are delivering into the ICp Content Pipeline after a rename to ibm-transadv-dev
 
 ## Copyright
 

@@ -52,6 +52,8 @@ Parameter                                       | Description                   
 `prometheus.image.name`                         | Prometheus server container image name   | ibmcom/prometheus
 `prometheus.image.tag`                          | Prometheus server container image tag    | v1.7.1
 `prometheus.port`                               | Prometheus server service port           | 80
+`prometheus.args.retention`                     | Prometheus storage retention time        | 24h
+`prometheus.args.memoryChunks`                  | Prometheus memory chunks setting         | 500000
 `prometheus.persistentVolume.enabled`           | Create a volume to store data            | false
 `prometheus.persistentVolume.size`              | Size of persistent volume claim          | 10Gi
 `prometheus.persistentVolume.storageClass`      | storageClass for prometheus PV           | -
@@ -78,3 +80,5 @@ Parameter                                       | Description                   
 `collectdExporter.image.tag`                    | Collectd Exporter Image Tag              | 0.3.1 
 `collectdExporter.service.serviceMetricsPort`   | Metrics Service Exposed Port             | 9103    
 `collectdExporter.service.serviceCollectorPort` | Collector Service Exposed Port           | 25826
+`configmapReload.image.name`                    | configmapReload Docker Image Name        | ibmcom/configmap-reload
+`configmapReload.image.tag`                     | configmapReload Docker Image Tag         | v0.1

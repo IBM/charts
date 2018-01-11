@@ -27,6 +27,20 @@ spec:
                 values:
                 - amd64
       containers:
+        - name: configmap-reload
+          image: {{ .Values.configmapReload.image.name }}:{{ .Values.configmapReload.image.tag }}
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - --volume-dir=/etc/config
+            - --volume-dir=/etc/alert-rules
+            - --webhook-url=http://localhost:9090/-/reload
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+              readOnly: true
+            - name: rules-volume
+              mountPath: /etc/alert-rules
+              readOnly: true
         - name: prometheus
           image: {{ .Values.prometheus.image.name }}:{{ .Values.prometheus.image.tag }}
           imagePullPolicy: "IfNotPresent"
@@ -34,7 +48,8 @@ spec:
             - --alertmanager.url=http://{{ template "prometheus.fullname" . }}-alertmanager:{{ .Values.alertmanager.port }}
             - --config.file=/etc/config/prometheus.yml
             - --storage.local.path=/var/lib/prometheus/data
-            - --web.external-url=http://alertmanager.icp.com
+            - --storage.local.retention={{ .Values.prometheus.args.retention }}
+            - --storage.local.memory-chunks={{ .Values.prometheus.args.memoryChunks }}
           ports:
             - containerPort: 9090
           resources:
