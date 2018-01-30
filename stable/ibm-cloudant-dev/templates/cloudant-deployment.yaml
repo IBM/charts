@@ -24,6 +24,17 @@ spec:
         heritage: {{ .Release.Service }}
     spec:
       terminationGracePeriodSeconds: 0
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+      - name: "chmod"
+        image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+        imagePullPolicy: "IfNotPresent"
+        command: ["chmod", "777", "/data-dir"]
+        volumeMounts:
+        - name: cloudant-mount
+          mountPath: /data-dir
       containers:
         - name: "{{ template "fullname" . }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -46,8 +57,6 @@ spec:
           volumeMounts:
             - mountPath: /srv
               name: cloudant-mount
-              subPath: srv
-      restartPolicy: Always
       volumes:
         - name: cloudant-mount
         {{- if .Values.persistence.enabled }}

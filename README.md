@@ -34,40 +34,4 @@ kubectl config use-context $CLUSTER_NAME
 
 Then [configure your helm command line interface](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0/app_center/create_helm_cli.html) to work with `helm`.
 
-## Building the Chart Repository and associated image
-
-A `Makefile` is included which allows you to package charts, generate the chart repository index, and package the entire repo into a docker image. 
-
-### Build stable charts
-```shell
-make charts
-```
-
-### Build charts under incubation
-```shell
-make charts-incubating
-```
-
-### Build the stable repository
-```shell
-make repo
-```
-
-### Build the incubation repository
-```shell
-make repo-incubating
-```
-
-### Build docker image with the contents of the repository
-```shell
-make image release
-```
-
-### Run the chart repository server
-```shell
-docker run -d --rm -p 9081:80 registry.ng.bluemix.net/mdelder/ibm-charts
-curl -vvL localhost:9081/stable/index.yaml
-curl -vvL localhost:9081/incubating/index.yaml
-```
-
 _Copyright IBM Corporation 2017. All Rights Reserved._
