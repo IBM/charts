@@ -1,5 +1,5 @@
 # WebSphere Liberty Helm Chart
-WebSphere Liberty is a fast, dynamic, easy-to-use Java EE application server. Ideal for developers but also ready for production, Liberty is a combination of IBM technology and open source software, with fast startup times (<2 seconds), and a simple XML configuration. All in a package that’s <70 MB to download. You can be developing applications in no time. With a flexible, modular runtime, you can download additional features from the Liberty Repository or strip it back to the bare essentials for deployment into production environments. Everything in Liberty is designed to help you get your job done how you want to do it.
+WebSphere Liberty is a fast, dynamic, easy-to-use Java EE application server. Ideal for developers but also ready for production, Liberty is a combination of IBM technology and open source software, with fast startup times (<2 seconds), and a simple XML configuration. All in a package that's <70 MB to download. You can be developing applications in no time. With a flexible, modular runtime, you can download additional features from the Liberty Repository or strip it back to the bare essentials for deployment into production environments. Everything in Liberty is designed to help you get your job done how you want to do it.
 
 ## Requirements
 
@@ -27,16 +27,18 @@ The Helm chart has the following values that can be overriden using the --set pa
 |           | repository         | Name of image, including repository prefix (if required). | See Extended description of Docker tags |
 |           | tag          | Docker image tag. | See Docker tag description |
 |           | license          |  The license state of the image being deployed. | Empty (default) for development or "accept" if you have previously accepted the production license. |
-|  tranlog.persistence   | name | Name of the transaction log that is shared to the persistent volume.	| |
-| | enabled | 	Boolean value that specifies whether a persistent volume claim is required to hold the WebSphere transaction log. If set to true, a persistent volume is required.  See the transaction log information at the end of this page for more information.  |   false or true     |             
-|           | existingClaimName | Name of specific, existing Persistence Volume Claim (PVC). If you do not specify a name, then a name is created for you. The name includes the Helm chart name and the name that you specified for the transaction log.	 | |
-|           | storageClassName  | Specifies a StorageClass pre-created by the Kubernetes sysadmin. If you do not specify a storage class name, then the PVC is bound to a PV that has no storage class name specified.	 | |
-|           | accessMode        | How many pods can be accessing the volume at once. | The transaction log assumes that only a single pod can be reading and writing to it at once. "ReadWriteOnce"|
-|           | size              | Size of the volume to hold the transaction log. | Size in Gi (default is 1Gi) |
 | service   | name         | The name of the port service.  | |
 |           | type          | Specify type of service. | Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer. see Publishing services - service types |
 |           | port          | The port that this container exposes.  |   |
 |           | targetPort  | Port that will be exposed externally by the pod. | |
+| persistence | name                   | Descriptive name that will be used prefix the generated persistence volume claim. A volume is only bound if either tranlog.persistLogs or logs.persistLogs is set to true. | |
+|             | useDynamicProvisioning | If true, the persistent volume claim will use the storageClassName to bind the volume. If storageClassName is not set it will use the default storageClass setup by kube Administrator.  If false, the selector will be used for the binding process. | true (default) or false |
+|             | storageClassName       | Specifies a StorageClass pre-created by the Kubernetes sysadmin. When set to "", then the PVC is bound to the default storageClass setup by kube Administrator. | |
+|             | selector.label         | When matching a PV, the label is used to find a match on the key. See Kubernetes - https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ | |
+|             | selector.value         | When matching a PV, the value is used to find a match on the values. See Kubernetes - https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ | |
+|             | size                   | Size of the volume to hold all the persisted data. | Size in Gi (default is 1Gi) |
+| tranlog     | persistLogs            | When true, the transaction logs will be persisted to the volume bound according to the persistence parameters. | false (default) or true |
+| logs        | persistLogs            | When true, the server logs will be persisted to the volume bound according to the persistence parameters. | false (default) or true |
 | resources | constraints.enabled    | Specifies whether the resource constraints specified in this helm chart are enabled.   | false (default) or true  |
 |  | limits.cpu    | Describes the maximum amount of CPU allowed. | Default is 500m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
 |           | limits.memory | Describes the maximum amount of memory allowed. | Default is 512Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
@@ -112,3 +114,4 @@ To turn off SSL:
 
 ###### More information
 See the [Liberty documentation](https://www.ibm.com/support/knowledgecenter/en/SSAW57_liberty/as_ditamaps/was900_welcome_liberty_ndmp.html) for configuration options for deploying the Liberty server.
+
