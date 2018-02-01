@@ -1,0 +1,70 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  template:
+    metadata:
+      labels:
+        run: {{ template "name" . }}
+        app: {{ template "name" . }}
+        release: {{ .Release.Name }}
+      annotations:
+        productName: "IBM Operational Decision Manager"
+        productID: "OperationalDecisionManager_8920_nonprod_00000"
+        productVersion: {{ .Chart.AppVersion }}
+    spec:
+      {{- if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) }}
+      volumes:
+      - name: {{ template "fullname" . }}-volume
+        persistentVolumeClaim:
+          claimName: {{ template "odm.persistenceclaim.fullname" . }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.image.repository}}/odm:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: LICENSE
+            value: "accept"
+          {{- if empty .Values.externalDatabase.serverName }}
+          - name: DB_TYPE
+            value: "h2"
+          - name: SAMPLE
+            value: "{{ .Values.internalDatabase.populateSampleData }}"
+          {{- else }}
+          - name: DB_TYPE
+            value: "postgresql"
+          - name: DB_SERVER_NAME
+            value: "{{ .Values.externalDatabase.serverName }}"
+          - name: DB_NAME
+            value: "{{ .Values.externalDatabase.databaseName }}"
+          - name: DB_USER
+            value: "{{ .Values.externalDatabase.user }}"
+          - name: DB_PASSWORD
+            value: "{{ .Values.externalDatabase.password }}"
+          - name: DB_PORT_NUMBER
+            value: "{{ .Values.externalDatabase.port }}"
+          {{- end }}
+          {{- if not .Values.internalDatabase.populateSampleData }}
+          - name: DC_PERSISTENCE_LOCALE
+            value: "{{ .Values.decisionCenter.persistenceLocale }}"
+          {{- end }}
+          ports:
+          - containerPort: 9060
+          {{- if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) }}
+          volumeMounts:
+          - name: {{ template "fullname" . }}-volume
+            mountPath: /config/dbdata/
+          {{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{- if (not (empty .Values.image.pullSecrets )) }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecrets }}
+      {{- end }}

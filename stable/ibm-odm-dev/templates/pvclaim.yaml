@@ -1,0 +1,26 @@
+{{if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "odm.persistenceclaim.fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  {{- if .Values.internalDatabase.persistence.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.internalDatabase.persistence.storageClassName | quote }}
+  {{- else }}
+  ## disable dynamic provisioning
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - ReadWriteOnce
+  resources:  
+{{ toYaml .Values.internalDatabase.persistence.resources | indent 4 }}
+{{- end }}
