@@ -1,8 +1,6 @@
-This repository is the home directory of IBM Operational Decision Manager for Developers Helm chart, where you can find early access material for this program.
+# IBM Operational Decision Manager V8.9.2 (dev)
 
-# ODM for developers Helm chart (ibm-odm-dev)(Beta Version)
-
-The [IBM® Operational Decision Manager](https://www.ibm.com/hr-en/marketplace/operational-decision-management) (ODM) chart (`ibm-odm-dev`) is used to deploy a cluster for evaluation purposes on IBM Cloud Private or other Kubernetes environments.
+The [IBM® Operational Decision Manager](https://www.ibm.com/hr-en/marketplace/operational-decision-management) (ODM) chart (`ibm-odm-dev`) is used to deploy a development cluster in IBM Cloud Private or other Kubernetes environments.
 
 ## Introduction
 
@@ -18,7 +16,7 @@ The following options are supported for ODM persistence:
 ## Prerequisites
 
 - Kubernetes 1.7.5+ with beta APIs enabled.
-- Persistent Volume (PV) provisioner support in the underlying infrastructure. A PV in Kubernetes represents an underlying storage capacity in the infrastructure. PV must be created with accessMode ReadWriteOnce and storage capacity of 2Gi or more. You create a persistent volume in the IBM Cloud Private interface or with a .yaml file.
+- Persistent Volume (PV) provisioner support in the underlying infrastructure. A PV in Kubernetes represents an underlying storage capacity in the infrastructure. PV must be created with accessMode ReadWriteOnce and storage capacity of 5Gi or more. You create a persistent volume in the IBM Cloud Private interface or with a .yaml file.
 
 ## Installing ODM releases
 
@@ -80,20 +78,21 @@ The following table shows the available parameters to configure the `ibm-odm-dev
 
 | Parameter                                   | Description                             | Default value                                   |
 | ------------------------------------------- | --------------------------------------- | ----------------------------------------------- |
-| `decisionCenter.persistenceLocale`   | The persistence locale for Decision Center. This parameter is not taken into account when the database contains some sample data. | `en_US` |
-| `externalDatabase.databaseName`             | The name of the external database used for ODM | `""` (empty) |
-| `externalDatabase.password`                 | The password of the user used to connect to the external database | `""` (empty) |
-| `externalDatabase.port`                     | The port used to connect to the external database | `5432` |
-| `externalDatabase.serverName`               | The name of the server running the database used for ODM. Only PostgreSQL is supported as external database. | `""` (empty) |
-| `externalDatabase.user`                     | The name of the user used to connect to the external database | `""` (empty) |
-| `image.pullPolicy`                          | The image pull policy         | `IfNotPresent`                                  |
-| `image.pullSecrets`                         | The image pull secrets        | `nil` (does not add image pull secrets to deployed pods) |
-| `image.repository`                          | The repository                | `ibmcom`                                        |
+| `image.repository`                          | Specifies the repository                | `ibmcom`                                        |
 | `image.tag`                                 | The image tag version                   | `8.9.2`                                         |
-| `internalDatabase.persistence.enabled`      | To use a Persistent Volume Claim (PVC) to persist data | `true` |
-| `internalDatabase.persistence.useDynamicProvisioning` | To use dynamic provisioning for Persistent Volume Claim. If this parameter is set to `false`, the Kubernetes binding process selects a pre-existing volume. Ensure, in this case, that there is a remaining volume that is not already bound before installing the chart. | `false` |
-| `internalDatabase.persistence.storageClassName`       | The storage class name for Persistent Volume  | `""` (empty) |
-| `internalDatabase.persistence.resources` | The requested storage size for Persistent Volume | `requests`: `storage` `2Gi`  |
-| `internalDatabase.populateSampleData`       | To use a H2 database containing some sample data or not. If it is set to `true`, the database contains some sample data and uses `en_US` as persistence locale for Decision Center. | `true` |
-| `resources`                                 | The CPU/Memory resource requests/limits     | `requests`: `cpu` `1`, `memory` `1024Mi`; `limits`: `cpu` `2`, `memory` `2048Mi` |
-| `service.type`                              | The Kubernetes Service type   | `NodePort`                                   |
+| `image.pullSecrets`                         | Specifies the image pull secrets        | `nil` (does not add image pull secrets to deployed pods) |
+| `image.pullPolicy`                          | Specifies the image pull policy         | `IfNotPresent`                                  |
+| `service.type`                              | Specifies the Kubernetes Service type   | `NodePort`                                      |
+| `service.port`                              | Port exposed for the Kubernetes Service | `9060`                                          |
+| `resources`                                 | CPU/Memory resource requests/limits     | `requests`: `cpu` `1`, `memory` `1024Mi`; `limits`: `cpu` `2`, `memory` `2048Mi` |
+| `decisionCenter.persistenceLocale`   | Specifies the persistence locale for Decision Center. This parameter is not taken into account when the database contains some sample data. | `en_US` |
+| `internalDatabase.populateSampleData`       | Specifies whether to use a H2 database containing some sample data or not. If it is set to `true`, the database contains some sample data and uses `en_US` as persistence locale for Decision Center. | `true` |
+| `internalDatabase.persistence.enabled`      | Use a Persistent Volume Claim (PVC) to persist data | `true` |
+| `internalDatabase.persistence.useDynamicProvisioning` | Use dynamic provisioning for Persistent Volume Claim. If this parameter is set to `false`, the Kubernetes binding process selects a pre-existing volume. Ensure, in this case, that there is a remaining volume that is not already bound before installing the chart. | `false` |
+| `internalDatabase.persistence.storageClassName`       | Specifies the storage class name for Persistent Volume  | `""` (empty) |
+| `internalDatabase.persistence.resources` | Specifies the requested storage size for Persistent Volume | `requests`: `storage` `2Gi`  |
+| `externalDatabase.serverName`               | Name of the server running the database used for ODM. Only PostgreSQL is supported as external database. | `""` (empty) |
+| `externalDatabase.databaseName`             | Name of the external database used for ODM | `""` (empty) |
+| `externalDatabase.user`                     | User name of the user used to connect to the external database | `""` (empty) |
+| `externalDatabase.password`                 | Password of the user used to connect to the external database | `""` (empty) |
+| `externalDatabase.port`                     | Port used to connect to the external database | `5432` |
