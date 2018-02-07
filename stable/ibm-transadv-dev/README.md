@@ -66,39 +66,40 @@ Complete the following steps to add the Persistent Volume
 
 The following tables lists the configurable parameters of the Transformation Advisor helm chart and their default values.
 
-| Parameter                                      | Description                       | Default                                   |
-| -------------------------------                | -------------------------------   | ----------------------------------------- |
-| couchdb.image.repository                       | couchdb image repository          | ibmcom/transformation-advisor-db         |
-| couchdb.image.tag                              | couchdb image tag                 | 1.2.0                                     |
-| couchdb.image.pullPolicy                       | couchdb image pull policy         | IfNotPresent                              |
-| couchdb.resources.requests.memory              | requests memory                   | 2Gi                                       |
-| couchdb.resources.requests.cpu                 | requests cpu                      | 1000m                                     |
-| couchdb.resources.limits.memory                | limits memory                     | 8Gi                                       |
-| couchdb.resources.limits.cpu                   | limits cpu                        | 16000m                                    |
-| couchdb.user                                   | couchdb user                      | admin                                     |
-| couchdb.password                               | couchdb password                  | admindbpass                               |
-| couchdb.persistence.enabled                    | persistence enabled               | true                                      |
-| couchdb.persistence.accessMode                 | couchdb access mode               | ReadWriteMany                             |
-| couchdb.persistence.size                       | couchdb storage size              | 8Gi                                       |
-| couchdb.persistence.useDynamicProvisioning     | use dynamic provisioning          | false                                     |
-| couchdb.persistence.existingClaim              | use existing pv claim             | false                                     |
-| couchdb.persistence.storageClassName           | couchdb storage class name        |                                           |
-| transadv.image.repository                      | transadv server image             | ibmcom/transformation-advisor-server      |
-| transadv.image.tag                             | transadv server image tag         | 1.2.0                                     |
-| transadv.image.pullPolicy                      | image pull policy                 | IfNotPresent                              |
-| transadv.resources.requests.memory             | requests memory                   | 2Gi                                       |
-| transadv.resources.requests.cpu                | requests cpu                      | 1000m                                     |
-| transadv.resources.limits.memory               | limits memory                     | 4Gi                                       |
-| transadv.resources.limits.cpu                  | limits cpu                        | 16000m                                    |
-| transadv.service.nodePort                      | transadv sevice node port         | 30111                                     |
-| transadvui.image.repository                    | transadv ui image                 | ibmcom/transformation-advisor-ui         |
-| transadvui.image.tag                           | transadv ui image tag             | 1.2.0                                     |
-| transadvui.image.pullPolicy                    | image pull policy                 | IfNotPresent                              |
-| transadvui.resources.requests.memory           | requests memory                   | 2Gi                                       |
-| transadvui.resources.requests.cpu              | requests cpu                      | 1000m                                     |
-| transadvui.resources.limits.memory             | limits memory                     | 4Gi                                       |
-| transadvui.resources.limits.cpu                | limits cpu                        | 16000m                                   |
-| transadvui.service.nodePort                    | transadv sevice node port         | 30222                                     |
+| Parameter                                      | Description                                                | Default                                                 |
+| -----------------------------------------------| -----------------------------------------------------------| --------------------------------------------------------|
+| arch.amd64                                     | Amd64 worker node scheduler preference in a hybrid cluster | 3 - Most preferred                                      |
+| couchdb.image.repository                       | couchdb image repository                                   | ibmcom/transformation-advisor-db                        |
+| couchdb.image.tag                              | couchdb image tag                                          | 1.3.0                                                   |
+| couchdb.image.pullPolicy                       | couchdb image pull policy                                  | IfNotPresent                                            |
+| couchdb.resources.requests.memory              | requests memory                                            | 2Gi                                                     |
+| couchdb.resources.requests.cpu                 | requests cpu                                               | 1000m                                                   |
+| couchdb.resources.limits.memory                | limits memory                                              | 8Gi                                                     |
+| couchdb.resources.limits.cpu                   | limits cpu                                                 | 16000m                                                  |
+| couchdb.user                                   | couchdb user                                               | admin                                                   |
+| couchdb.password                               | couchdb password                                           | admindbpass                                             |
+| couchdb.persistence.enabled                    | persistence enabled                                        | true                                                    |
+| couchdb.persistence.accessMode                 | couchdb access mode                                        | ReadWriteMany                                           |
+| couchdb.persistence.size                       | couchdb storage size                                       | 8Gi                                                     |
+| couchdb.persistence.useDynamicProvisioning     | use dynamic provisioning                                   | false                                                   |
+| couchdb.persistence.existingClaim              | use existing pv claim                                      | false                                                   |
+| couchdb.persistence.storageClassName           | couchdb storage class name                                 |                                                         |
+| transadv.image.repository                      | transadv server image                                      | ibmcom/transformation-advisor-server                    |
+| transadv.image.tag                             | transadv server image tag                                  | 1.3.0                                                   |
+| transadv.image.pullPolicy                      | image pull policy                                          | IfNotPresent                                            |
+| transadv.resources.requests.memory             | requests memory                                            | 2Gi                                                     |
+| transadv.resources.requests.cpu                | requests cpu                                               | 1000m                                                   |
+| transadv.resources.limits.memory               | limits memory                                              | 4Gi                                                     |
+| transadv.resources.limits.cpu                  | limits cpu                                                 | 16000m                                                  |
+| transadv.service.nodePort                      | transadv sevice node port                                  | 30111                                                   |
+| transadvui.image.repository                    | transadv ui image                                          | ibmcom/transformation-advisor-ui                        |
+| transadvui.image.tag                           | transadv ui image tag                                      | 1.3.0                                                   |
+| transadvui.image.pullPolicy                    | image pull policy                                          | IfNotPresent                                            |
+| transadvui.resources.requests.memory           | requests memory                                            | 2Gi                                                     |
+| transadvui.resources.requests.cpu              | requests cpu                                               | 1000m                                                   |
+| transadvui.resources.limits.memory             | limits memory                                              | 4Gi                                                     |
+| transadvui.resources.limits.cpu                | limits cpu                                                 | 16000m                                                  |
+| transadvui.service.nodePort                    | transadv sevice node port                                  | 30222                                                   |
 
 
 # For those who use Kubectl CLI
