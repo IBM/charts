@@ -1,0 +1,111 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+#
+# Deployment of a RabbitMQ server.
+#
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: "{{ template "fullname" . }}"
+  labels:
+    app: "{{ template "fullname" . }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    metadata:
+      annotations:
+        productID: RabbitMQ_373_free_00000
+        productName: RabbitMQ
+        productVersion: 3.7.3
+      labels:
+        app: {{ template "fullname" . }}
+    spec:
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+      containers:
+      - name: {{ template "fullname" . }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ default "" .Values.image.pullPolicy | quote }}
+        env:
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: K8S_SERVICE_NAME
+          value: {{ template "fullname" . }}
+        - name: RABBITMQ_DEFAULT_USER
+          value: {{ default "" .Values.rabbitmqUsername | quote }}
+        - name: RABBITMQ_DEFAULT_PASS
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}
+              key: rabbitmq-password
+        - name: RABBITMQ_ERLANG_COOKIE
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}
+              key: rabbitmq-erlang-cookie
+        - name: RABBITMQ_NODE_PORT
+          value: {{ default "5672" .Values.rabbitmqNodePort | quote }}
+        - name: RABBITMQ_NODE_TYPE
+          value: {{ default "stats" .Values.rabbitmqNodeType | quote }}
+        - name: RABBITMQ_NODENAME
+          value: {{ printf "%s@%s" (default "rabbit" .Values.rabbitmqNodeName) "localhost" | quote }}
+        - name: RABBITMQ_CLUSTER_NODE_NAME
+          value: {{ default "" .Values.rabbitmqClusterNodeName | quote }}
+        - name: RABBITMQ_DEFAULT_VHOST
+          value: {{ default "/" .Values.rabbitmqVhost | quote }}
+        - name: RABBITMQ_MANAGER_PORT
+          value: {{ default "15672" .Values.rabbitmqManagerPort | quote }}
+        ports:
+        - name: epmd
+          containerPort: 4369
+        - name: ampq
+          containerPort: {{ default "5672" .Values.rabbitmqNodePort }}
+        - name: dist
+          containerPort: {{ default "5672" .Values.rabbitmqNodePort | add 20000 }}
+        - name: stats
+          containerPort: {{ default "15672" .Values.rabbitmqManagerPort }}
+        livenessProbe:
+          exec:
+            command:
+            - rabbitmqctl
+            - status
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          exec:
+            command:
+            - rabbitmqctl
+            - status
+          initialDelaySeconds: 10
+          timeoutSeconds: 3
+          periodSeconds: 5
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/rabbitmq
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+      volumes:
+      - name: data
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          {{- if .Values.dataPVC.existingClaimName }}
+          claimName: {{ .Values.dataPVC.existingClaimName }}
+          {{- else }}
+          claimName: {{ .Release.Name }}-{{ .Values.dataPVC.name }}
+          {{- end -}}
+      {{- else }}
+        emptyDir: {}
+      {{- end -}}
