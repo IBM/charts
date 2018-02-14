@@ -18,9 +18,9 @@ spec:
         release: "{{ .Release.Name }}"
         role: master
       annotations:
-        productID: "{{ .Values.cluster.productID }}"
-        productName: "{{ .Values.cluster.productName }}"
-        productVersion: "{{ .Values.cluster.productVersion }}"
+        productName: "IBM Spectrum Symphony"
+        productVersion: "7.2"
+        productID: "IBMSpectrumSymphony_5725G86_72_CE_000"
     spec:
      affinity:
      {{- include "nodeaffinity" . | indent 6 }}
@@ -33,15 +33,40 @@ spec:
           env:
             - name: LICENSE
               value: "accept"
+            - name: CLUSTER_NAME
+              value: "{{ .Values.cluster.clustertName }}"
+            {{- if .Values.master.regenSSLCert }}
+            - name: GENERATE_SSL_CERT
+              value: "Y"
+            {{- end }}
+            {{- if .Values.cluster.enableSSHD }}
+            - name: START_SSHD
+              value: "Y"
+            {{- end }}
           ports:
-            - containerPort: {{ .Values.master.uiPort }}
-            - containerPort: {{ .Values.master.egoRestPort }}
-            - containerPort: {{ .Values.master.symRestPort }}
+            {{- if .Values.master.uiEnabled }}
+            - containerPort: 8443
+            {{- end }}
+            {{- if .Values.master.uiEnabled }}
+            - containerPort: 8543
+            {{- end }}
+            {{- if .Values.master.uiEnabled }}
+            - containerPort: 8050
+            {{- end }}
           securityContext:
             capabilities:
               add:
-                - SYS_NICE
+                - LEASE
+                - NET_ADMIN
                 - NET_BIND_SERVICE
+                - NET_BROADCAST
+                - SETGID
+                - SETUID
+                - SYS_ADMIN
+                - SYS_CHROOT
+                - SYS_NICE
+                - SYS_RESOURCE
+                - SYS_TIME
           volumeMounts:
             - mountPath: /shared
               name: persistdir
@@ -52,6 +77,6 @@ spec:
            claimName: {{ .Values.cluster.pvc.existingClaimName }}
          {{- else }}
            claimName: {{ template "fullname" . }}
-        {{- end }}
+         {{- end }}
      restartPolicy: Always
      terminationGracePeriodSeconds: 30
