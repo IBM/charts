@@ -1,7 +1,5 @@
 # PostgreSQL
 
-THIS VERSION OF THE CHART IS NOW DEPRECATED. THE SUBSEQUENT VERSION IS v1.1.2
-
 [PostgreSQL](https://www.postgresql.org/) is an object-relational database management system (ORDBMS) with an emphasis on extensibility and on standards-compliance.
 
 ## Introduction

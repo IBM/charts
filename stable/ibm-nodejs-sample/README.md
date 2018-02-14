@@ -2,25 +2,16 @@
 
 ### This sample is for demonstrative purposes only and is NOT for production use. ###
 
-### For all features to be available this is best viewed in Google Chrome or Safari.
-
 ## Introduction
-This sample application is intended to guide you through the process of deploying your own Node.js applications into IBM Cloud Private. Useful links and examples are provided and the application itself is one that makes use of various monitoring capabilities. Note that this sample was produced in early October 2017 and so the code you are provided with by using the generators may differ! The application provided uses the `ibmcom/ibmnode` Docker images.
+This Helm Chart deploys a sample Node.js web application hosting its own documentation which guides you through the process of creating and deploying your own Node.js applications into IBM Cloud Private.
 
-This sample was created using `idt create` with the following choices:
-- Web App
-- Basic Web
-- Node
-
-Modifications were then made to use EJS, to add a gulp task, and to add the content. The stylesheet provided is largely based on the [Node.js @ IBM developer center](https://developer.ibm.com/node).
+This sample was created using `idt create` and more information can be found within the application itself.
 
 - This example uses [appmetrics](https://github.com/RuntimeTools/appmetrics) and [appmetrics-dash](https://github.com/RuntimeTools/appmetrics-dash): the endpoint being `/appmetrics-dash`.
 - This example features the "scrape" annotation in the `<chart directory>/templates/service.yaml` file. In combination with the [appmetrics-prometheus](https://github.com/RuntimeTools/appmetrics-prometheus) module inclusion and usage, this enables the sample to be automatically scraped by a deployed instance of Prometheus in order for metrics to be gathered and displayed using the Prometheus web UI. You can view the raw data that will be available to Prometheus at the `/metrics` endpoint.
 This allows developers to quickly determine how the application is performing across potentially many Kubernetes pods.
-- This example uses [appmetrics-zipkin](https://github.com/RuntimeTools/appmetrics-zipkin). If Zipkin is deployed (e.g. with the Microservice Builder fabric), trace information will be available under the service name "icp-nodejs-sample". To enable this feature, modify `Dockerfile` and set `USE_ZIPKIN` to `true`. You can dynamically modify applications as well using the IBM CLoud Private web UI - this includes the setting of environment variables and it's recommended you restart the pod for the change to take effect.
-- This example can be deployed using the IBM Cloud Developer Tools, for example: `idt deploy -t container --deploy-image-target mycluster.icp:8500/default/nodejs-sample`.
-
-The `mycluster.icp` example here should match up with the entry you've added in `/etc/hosts`: it is the location of the private registry.
+- This example uses [appmetrics-zipkin](https://github.com/RuntimeTools/appmetrics-zipkin). If Zipkin is deployed (e.g. with the Microservice Builder fabric), trace information will be available under the service name "icp-nodejs-sample". To enable this feature, modify `Dockerfile` and set `USE_ZIPKIN`. You can dynamically modify applications as well using the IBM CLoud Private web UI - this includes the setting of environment variables and it's recommended you restart the pod for the change to take effect.
+- This example can be deployed using the IBM Cloud Developer Tools.
 
 ## Prerequisites
 
@@ -30,15 +21,16 @@ There is only one optional requirement to make the most out of this sample: you 
 
 The Helm chart can be installed from the app center by finding the nodejs-sample and following the installation steps.
 
-The Helm chart can also be installed with the following command from the directory containing `Chart.yaml`:
+If you prefer to use the command line instead, run the following command from the directory containing `Chart.yaml`:
 
-`helm install --name tester .` where tester can be anything.
+`helm install --name tester .` where tester can be anything: this is the desired  name of the release so it won't be an automatically generated one.
 
 You can find more information about deployment methods in the [IBM Cloud Private documentation](https://www.ibm.com/support/knowledgecenter/SSBS6K/product_welcome_cloud_private.html).
 
 ## Verifying the Chart
-You can view the deployed sample in your web browser. To retrieve the IP and port:
+You can view the deployed sample in your web browser, for all features to be available the sample application is best viewed in Google Chrome or Safari.
 
+To retrieve the IP and port of this deployed application:
 `export SAMPLE_NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")`
 
 `export SAMPLE_NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }})`
@@ -53,7 +45,7 @@ If you installed it with `helm install --name tester .` you'd remove the sample 
 
 You can programatically run the test in the following ways.
 - `cd chart/ibm-nodejs-sample` then do `./test-chart.sh` OR
-- `helm test sample`: assuming you've deployed it with the release name `sample`.
+- `helm test tester`: assuming you've deployed it with the release name `sample`.
 
 ## Configuration
 
@@ -61,8 +53,6 @@ The following table lists the configurable parameters of the ibm-nodejs-sample c
 
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
-| `replicaCount`             | How many pods to deploy                         | 1                                                          |
-| `revisionHistoryLimit`     | Optional field that specifies the number of old ReplicaSets to retain to allow rollback   | 1                |
 | `image.repository`         | image repository                                | `ibmcom/icp-nodejs-sample`                                 |
 | `image.tag`                | Image tag                                       | `latest`                                                    |
 | `image.pullPolicy`         | Image pull policy                               | `Always`                                                   |
@@ -85,4 +75,4 @@ See the [Node.js @ IBM developer center](https://developer.ibm.com/node/) for al
 ### Disclaimers
 Node.js is an official trademark of Joyent. Images are used according to the Node.js visual guidelines - no copyright claims are made. You can view the guidelines [here](https://nodejs.org/static/documents/foundation-visual-guidelines.pdf).
 
-This icp-nodejs-sample is not formally related to or endorsed by the official Node.js open source or commercial project.
+This sample is not formally related to or endorsed by the official Node.js open source or commercial project.

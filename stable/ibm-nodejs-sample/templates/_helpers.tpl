@@ -1,4 +1,4 @@
-{{/*Copyright IBM Corporation 2017. All Rights Reserved.*/}}
+{{/*Copyright IBM Corporation 2018. All Rights Reserved.*/}}
 {{/* vim: set filetype=mustache: */}}
 {{/*
 Expand the name of the chart.

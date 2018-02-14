@@ -6,12 +6,13 @@ helm delete --purge sample 2> /dev/null
 kubectl delete pod sample-main-endpoint-test 2> /dev/null
 kubectl delete pod sample-metrics-endpoint-test 2> /dev/null
 kubectl delete pod sample-dash-endpoint-test 2> /dev/null
-kubectl delete pod sample-stays-up-test 2> /dev/null
+kubectl delete pod sample-version-6-test 2> /dev/null
+kubectl delete pod sample-version-8-test 2> /dev/null
 
-sleep 15
+#sleep 15
 
 helm install --name sample .
 
-sleep 45
+#sleep 45
 
-helm test --cleanup --debug --timeout 45 sample
+helm test --timeout 45 sample
