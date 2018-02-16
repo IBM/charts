@@ -1,7 +1,5 @@
 # MariaDB
 
-THIS VERSION OF THE CHART IS NOW DEPRECATED. THE SUBSEQUENT VERSION IS v1.1.1
-
 [MariaDB](https://www.mariadb.org/) is a community-developed fork of the MySQL relational database management system intended to remain free under the GNU GPL.
 
 ## Introduction
