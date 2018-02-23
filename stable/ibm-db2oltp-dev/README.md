@@ -1,4 +1,6 @@
 # IBM Db2 Developer-C Helm Chart
+
+THIS VERSION OF THE CHART IS NOW DEPRECATED. THE SUBSEQUENT VERSION IS V1.1.3
   
 [Db2 Developer-C Edition](http://www-03.ibm.com/software/products/sv/db2-developer-edition) enables you to develop, test, evaluate and demonstrate database and warehousing applications in a non-production environment.
 
