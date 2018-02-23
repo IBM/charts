@@ -1,18 +1,3 @@
-{{- if not (.Values.secretOverride) }}
-apiVersion: v1
-data:
-  .dockercfg: {{ .Values.image.secret }}
-kind: Secret
-metadata:
-  name: {{ template "fullname" . }}-db2-secret
-  labels:
-    app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
-type: kubernetes.io/dockercfg
----
-{{- end }}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -29,8 +14,27 @@ spec:
       labels:
         app: {{ template "fullname" . }}
     spec:
+      #https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
       affinity:
-      {{- include "nodeaffinity" . | indent 6 }}
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types,
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms,
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.arch }}
+                - {{ .Values.arch }}
+                {{- else }}
+                - {{ template "arch" . }}
+                {{- end }}
       volumes:
       - name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"
       {{- if .Values.persistence.enabled }}
@@ -45,7 +49,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ template "fullname" . }}
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           capabilities:
@@ -86,14 +90,26 @@ spec:
             - sh
             - -c
             - /database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s
-          initialDelaySeconds: 300
+          initialDelaySeconds: 400
           periodSeconds: 90
+          failureThreshold: 3 
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 20
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
         - mountPath: /database
           name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"
-{{- if not (.Values.secretOverride) }}
+{{- if .Values.global.image.secretName }}
       imagePullSecrets:
-          - name: {{ template "fullname" . }}-db2-secret
+          - name: {{ .Values.global.image.secretName }}
 {{- end }}
+
+
