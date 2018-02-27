@@ -1,5 +1,5 @@
 # MongoDB
-THIS VERSION OF THE CHART IS NOW DEPRECATED. THE SUBSEQUENT VERSION IS v1.1.2
+
 [MongoDB](https://www.mongodb.com/) is a cross-platform document-oriented database. Classified as a NoSQL database, MongoDB eschews the traditional table-based relational database structure in favor of JSON-like documents with dynamic schemas, making the integration of data in certain types of applications easier and faster.
 
 ## Introduction
@@ -62,7 +62,7 @@ The following tables lists the configurable parameters of the MongoDB chart and 
 | `arch.amd64`                  | `Amd64 worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
 | `arch.ppc64le`                | `Ppc64le worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
 | `arch.s390x`                  | `S390x worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
-| `image.repository`                           | MongoDB repository                    | `na.cumulusrepo.com/hcicp_dev/mongodb`                   |
+| `image.repository`                           | MongoDB repository                    | `ibmcom/mongodb`                   |
 | `image.tag`                                  | Image tag                             | `3.6.0`                      	                          |
 | `image.imagePullPolicy`                      | Image pull policy                     | `Always` if `imageTag` is `latest`, else `IfNotPresent`. |
 | `database.user`                              | MongoDB admin user                    | `mongo`                                                  |
