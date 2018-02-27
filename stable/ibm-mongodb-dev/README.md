@@ -1,5 +1,5 @@
 # MongoDB
-
+THIS VERSION OF THE CHART IS NOW DEPRECATED. THE SUBSEQUENT VERSION IS v1.1.2
 [MongoDB](https://www.mongodb.com/) is a cross-platform document-oriented database. Classified as a NoSQL database, MongoDB eschews the traditional table-based relational database structure in favor of JSON-like documents with dynamic schemas, making the integration of data in certain types of applications easier and faster.
 
 ## Introduction
@@ -104,4 +104,4 @@ $ helm install --name my-release -f values.yaml stable/ibm-mongodb-dev
 
 The MongoDB image stores the MongoDB data at the `/data/db` path of the container.
 
-The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) volume at this location. The volume is created using dynamic volume provisioning.
+The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) volume at this location. User need to create a PV before chart deployed, or enable dynamic volume provisioning in chart configuration.
