@@ -19,6 +19,22 @@ spec:
         productID: "OperationalDecisionManagerForDevelopers"
         productVersion: {{ .Chart.AppVersion }}
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types,
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms,
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.image.arch }}
       {{- if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) }}
       volumes:
       - name: {{ template "fullname" . }}-volume
@@ -35,8 +51,10 @@ spec:
           {{- if empty .Values.externalDatabase.serverName }}
           - name: DB_TYPE
             value: "h2"
+          {{- if eq .Values.decisionCenter.persistenceLocale "en_US" }}
           - name: SAMPLE
             value: "{{ .Values.internalDatabase.populateSampleData }}"
+          {{- end }}
           {{- else }}
           - name: DB_TYPE
             value: "postgresql"
@@ -51,10 +69,8 @@ spec:
           - name: DB_PORT_NUMBER
             value: "{{ .Values.externalDatabase.port }}"
           {{- end }}
-          {{- if not .Values.internalDatabase.populateSampleData }}
           - name: DC_PERSISTENCE_LOCALE
             value: "{{ .Values.decisionCenter.persistenceLocale }}"
-          {{- end }}
           ports:
           - containerPort: 9060
           {{- if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) }}

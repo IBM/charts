@@ -1,5 +1,3 @@
-This repository is the home directory of the IBM Operational Decision Manager for Developers Helm chart, where you can find materials for the early access program.
-
 # Early Access: ODM for developers Helm chart (Beta Version)
 
 The [IBM® Operational Decision Manager](https://www.ibm.com/hr-en/marketplace/operational-decision-management) (ODM) chart (`ibm-odm-dev`) is used to deploy a cluster for evaluation purposes on IBM Cloud Private or other Kubernetes environments.
@@ -18,18 +16,28 @@ This readme include the following sections:
 
 The `ibm-odm-dev` chart helps you to discover and evaluate ODM. The chart bootstraps an ODM deployment on a Kubernetes cluster. The deployment uses the Helm package manager.
 
+The following options are supported for ODM persistence:
+
+- H2 as an internal database. This is the **default** option.
+- PostgreSQL as an external database. If you specify a server name for the external database, the external database is used otherwise the internal database is used. Before you select this option, you must have an external PostgreSQL database up and running.
+
 ## How to create a release of ODM for developers
 
 1. In the `ibm-odm-dev` Helm chart page of the IBM Cloud Private Admin console, click Configure.
 2. Enter a value for the **Release**, and accept the license agreement. An example release name is *my-release*.
 3. *Optional*: Modify the parameter values to change the defaults. For more information, see [Configuration parameters](#configuration-parameters).
-> By default, the `internalDatabase.populateSampleData` parameter is set to true, which adds sample data to the database. 
-> A decision service is created in Decision Center and is also deployed to Rule Execution Server. 
-> The sample data can be used to test your newly created release. 
+
+	> By default, the `internalDatabase.populateSampleData` parameter is set to `true`, which adds sample data to the database. A decision service is created in Decision Center and is also deployed to Rule Execution Server. The sample data can be used to test your newly created release.
+	
+	> **Note:** The ability to populate the database with sample data is available only when using the internal database and the persistence locale for Decision Center is set to English (United States).
+
 4. Click Install.
-> The package is deployed asynchronously in a matter of minutes, and is composed of a single service.
+
+	> The package is deployed asynchronously in a matter of minutes, and is composed of a single service.
+
 5. When the installation is complete, click **View Helm Release** to see the details of the release. 
-> The release name shows a status of DEPLOYED. The release is an instance of the `ibm-odm-dev` chart, which is now running in a Kubernetes cluster.
+
+	> The release name shows a status of DEPLOYED. The release is an instance of the `ibm-odm-dev` chart, which is now running in a Kubernetes cluster.
 
 ## What to do next
 
@@ -44,12 +52,14 @@ To view the ODM for developers service:
 
 ### View the rules of the sample
 
-If the `internalDatabase.populateSampleData` parameter is set to true, a sample decision service is added to the H2 database in the Kubernetes cluster. The Loan Validation sample is a decision service that determines whether a borrower is eligible for a loan. The decision service validates transaction data, checks customer eligibility, assigns a score, and computes insurance rates that are based on the assigned score.
+If the `internalDatabase.populateSampleData` parameter is set to `true` and the persistence locale for Decision Center is set to  English (United States), a sample decision service is added to the H2 internal database in the Kubernetes cluster. The Loan Validation sample is a decision service that determines whether a borrower is eligible for a loan. The decision service validates transaction data, checks customer eligibility, assigns a score, and computes insurance rates that are based on the assigned score.
 
-**Note:** The persistence locale for Decision Center is set to `en_US`, which means that the project can be viewed only in English.
+**Note:** The persistence locale for Decision Center is set to English (United States), which means that the project can be viewed only in English.
 
 1. Log in to Decision Center /decisioncenter with odmAdmin/odmAdmin by opening the service in a browser.
-> The first level of identification is the decision service. Rules are stored within rule projects contained in a decision service. A decision service contains one or more rule projects. Each rule project contains action rules and decision tables. The second level of identification is through branches. Decision Center uses branches to manage rules over time.
+
+	> The first level of identification is the decision service. Rules are stored within rule projects contained in a decision service. A decision service contains one or more rule projects. Each rule project contains action rules and decision tables. The second level of identification is through branches. Decision Center uses branches to manage rules over time.
+
 2. Navigate to the Library tab, select the project then the release and browse Decision Artifacts to view the rules and make changes.
 
 ### Execute the sample decision service
@@ -60,7 +70,8 @@ If the `internalDatabase.populateSampleData` parameter is set to true, a sample 
 4. Select **REST** in the Service protocol type field, and select the **Open API - JSON format**.
 5. Select the **Decision trace information** option, and then click **Test**.
 6. On the **Decision Service** page, replace the template JSON code to request a loan with the following data:
-```JSON
+
+	```JSON
 {
   "loan": {
     "numberOfMonthlyPayments": 180,
@@ -134,9 +145,11 @@ If the `internalDatabase.populateSampleData` parameter is set to true, a sample 
     "infoBoundObjectSerializationType": "ClassName"
   }
 }
-```
+	```
+	
 7. Click **Execute Request**, and check the **Server Response** section. The trace shows that the service fired 15 rules, and the loan request is approved.
-```JSON
+
+	```JSON
 {
   "score": 5950,
   "__decisionTrace__": {
@@ -167,7 +180,8 @@ If the `internalDatabase.populateSampleData` parameter is set to true, a sample 
   },
   "__DecisionID__": "test"
 }
-```
+	```
+	
 ### For more information
 
 see [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.9.1/welcome/kc_welcome_odmV.html).
@@ -178,11 +192,11 @@ The following table shows the available parameters to configure the `ibm-odm-dev
 
 | Parameter                                   | Description                             | Default value                                   |
 | ------------------------------------------- | --------------------------------------- | ----------------------------------------------- |
-| `decisionCenter.persistenceLocale`   | The persistence locale for Decision Center. This parameter is not taken into account when the database contains some sample data. | `en_US` |
+| `decisionCenter.persistenceLocale`   | The persistence locale for Decision Center. | `en_US` |
 | `externalDatabase.databaseName`             | The name of the external database used for ODM | `""` (empty) |
 | `externalDatabase.password`                 | The password of the user used to connect to the external database | `""` (empty) |
 | `externalDatabase.port`                     | The port used to connect to the external database | `5432` |
-| `externalDatabase.serverName`               | The name of the server running the database used for ODM. Only PostgreSQL is supported as external database. Sample data is not available for externalDatabase. | `""` (empty) |
+| `externalDatabase.serverName`               | The name of the server running the database used for ODM. If it is not specified, the H2 internal database is used. Only PostgreSQL is supported as external database. Sample data is not available for the external database. | `""` (empty) |
 | `externalDatabase.user`                     | The name of the user used to connect to the external database | `""` (empty) |
 | `image.pullPolicy`                          | The image pull policy         | `IfNotPresent`                                  |
 | `image.pullSecrets`                         | The image pull secrets        | `nil` (does not add image pull secrets to deployed pods) |
@@ -192,14 +206,9 @@ The following table shows the available parameters to configure the `ibm-odm-dev
 | `internalDatabase.persistence.useDynamicProvisioning` | To use dynamic provisioning for Persistent Volume Claim. If this parameter is set to `false`, the Kubernetes binding process selects a pre-existing volume. Ensure, in this case, that there is a remaining volume that is not already bound before installing the chart. | `false` |
 | `internalDatabase.persistence.storageClassName`       | The storage class name for Persistent Volume  | `""` (empty) |
 | `internalDatabase.persistence.resources` | The requested storage size for Persistent Volume | `requests`: `storage` `2Gi`  |
-| `internalDatabase.populateSampleData`       | To use a H2 database containing some sample data or not. If it is set to `true`, the database contains some sample data and uses `en_US` as persistence locale for Decision Center. | `true` |
+| `internalDatabase.populateSampleData`       | To populate sample data in the H2 internal database or not. This option is available only when the persistence locale for Decision Center is set to English (United States).| `true` |
 | `resources`                                 | The CPU/Memory resource requests/limits     | `requests`: `cpu` `1`, `memory` `1024Mi`; `limits`: `cpu` `2`, `memory` `2048Mi` |
 | `service.type`                              | The Kubernetes Service type   | `NodePort`                                   |
-
-The following options are supported for ODM persistence:
-- H2 as an internal database. This is the **default** option.
-- PostgreSQL as an external database. Before you select this option, you must have an external PostgreSQL database up and running.
-
 
 ## How to create a release of ODM for developers from the command line
 
@@ -260,4 +269,5 @@ $ helm delete my-odm-dev-release
 ```
 
 The command removes all of the Kubernetes components that are associated with the chart, and deletes the release.
+
 
