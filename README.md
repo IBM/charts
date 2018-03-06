@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `IBM/charts` repository provides [helm](https://github.com/kubernetes/helm) charts for IBM and Third Party middleware. 
+The `IBM/charts` repository provides [helm](https://github.com/kubernetes/helm) charts provided by IBM. 
 
 The repository is organized as follows:
 
