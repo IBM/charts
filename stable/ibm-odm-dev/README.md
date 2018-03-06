@@ -232,7 +232,11 @@ Using Helm, you specify each parameter with a `--set key=value` argument in the 
 For example:
 
 ```console
-$ helm install --name my-odm-dev-release --set internalDatabase.databaseName=my-db --set internalDatabase.user=my-user --set internalDatabase.password=my-password stable/ibm-odm-dev
+$ helm install --name my-odm-dev-release \
+  --set internalDatabase.databaseName=my-db \
+  --set internalDatabase.user=my-user \
+  --set internalDatabase.password=my-password \
+  stable/ibm-odm-dev
 ```
 
 It is also possible to use a custom-made .yaml file to specify the values of the parameters when you install the chart.
@@ -257,7 +261,10 @@ If the Docker images are pulled from a private registry, you must [specify an im
    To install the chart from the Helm command line, add the `--set image.pullSecrets` parameter.
 
    ```console
-   $ helm install --name my-odm-dev-release --set image.pullSecrets=admin.registryKey --set image.repository=mycluster.icp:8500/ibmcom stable/ibm-odm-dev
+   $ helm install --name my-odm-dev-release \
+     --set image.pullSecrets=admin.registryKey \
+     --set image.repository=mycluster.icp:8500/ibmcom \
+     stable/ibm-odm-dev
    ```
 
 ## How to uninstall releases of ODM for developers
