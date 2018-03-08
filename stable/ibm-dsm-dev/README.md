@@ -1,6 +1,5 @@
 # IBM DSM Developer-C Helm Chart
 
-THIS VERSION OF THE CHART IS NOW DEPRECATED. THE SUBSEQUENT VERSION IS v1.1.4
 
 [IBM Data Server Manager](https://www.ibm.com/developerworks/cn/downloads/im/dsm/index.html) enables you to manage database applications in a non-production environment. 
 
@@ -95,9 +94,9 @@ The following tables lists the configurable parameters of the ibm-dsm-dev chart 
 | `arch.amd64`                  | `Amd64 worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
 | `arch.ppc64le`                | `Ppc64le worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
 | `arch.s390x`                  | `S390x worker node scheduler preference in a hybrid cluster` | `2 - No preference` - worker node is chosen by scheduler       |
-| `image.repository`                    | `DSM` image                                                  | `na.cumulusrepo.com/hcicp_dev/dsm`                         | 
-| `image.tag`                           | `DSM` image tag                                              | `2.1.4`                                                    |	
-| `imageSidecar.Tag`                    | `DSM` sidecar image tag                                      | `0.3.0`                                                    |
+| `image.repository`                    | `DSM` image                                                  | `store/ibmcorp/data_server_manager_dev`                         | 
+| `image.tag`                           | `DSM` image tag                                              | `2.1.4.1`                                                    |	
+| `imageSidecar.Tag`                    | `DSM` sidecar image tag                                      | `0.4.0`                                                    |
 | `image.pullPolicy`                    | `DSM` image pull policy                                      | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
 | `imageSidecar.pullPolicy`             | `DSM` sidecar image pull policy                              | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
 | `global.image.secret`                 | `DSM` and repository image secret                            | `VISIT http://ibm.biz/db2-dsm-license TO RETRIEVE IMAGE SECRET`|
@@ -117,7 +116,7 @@ The following tables lists the configurable parameters of the ibm-dsm-dev chart 
 | `service.httpPort`                    | Interal https port                                           | `11081`                                                    |
 | `service.type`                        | k8s service type exposing ports, e.g.`ClusterIP`             | `NodePort`                                                 |  
 | `service.name`                        | k8s service type exposing ports name                         | `console`                                                  | 
-| `repository.image.repository`         | Repository image                                             | `na.cumulusrepo.com/hcicp_dev/db2server_dec`               |
+| `repository.image.repository`         | Repository image                                             | `db2server_dec`               |
 | `repository.image.tag`                | Repository image tag                                         | `11.1.2.2b`                                                 | 
 | `repository.image.pullPolicy`         | Repository image pull policy                                 | `Always` if `imageTag` is `latest`, else `IfNotPresent`    | 
 | `repository.persistence.useDynamicProvisioning`  | Dynamic provision persistent volume or not        | `false`	                                                  |

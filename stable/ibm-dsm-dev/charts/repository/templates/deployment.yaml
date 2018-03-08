@@ -1,18 +1,3 @@
-{{- if not (.Values.secretOverride) }}
-apiVersion: v1
-data:
-  .dockercfg: {{ .Values.global.image.secret }}
-kind: Secret
-metadata:
-  name: {{ template "fullname" . }}-db2-image
-  labels:
-    app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
-type: kubernetes.io/dockercfg
----
-{{- end }}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -46,7 +31,11 @@ spec:
       {{- end }}
       containers:
       - name: {{ template "fullname" . }}
+      {{- if .Values.image.arch }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      {{- end }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           capabilities:
@@ -94,7 +83,3 @@ spec:
         volumeMounts:
         - mountPath: /database
           name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"
-{{- if not (.Values.secretOverride) }}
-      imagePullSecrets:
-          - name: {{ template "fullname" . }}-db2-image
-{{- end }}

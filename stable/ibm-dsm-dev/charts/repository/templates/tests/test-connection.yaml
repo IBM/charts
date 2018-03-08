@@ -1,24 +1,42 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ .Release.Name }}-port-test"
+  name: "{{ .Release.Name }}-credentials-test"
   labels:
-    app: {{ template "fullname" . }}-service-test
+    app: {{ template "fullname" . }}-credentials-test
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
   annotations:
     "helm.sh/hook": test-success
 spec:
+  serviceAccountName: dsm-repodb-{{ template "fullname" . }}
   containers:
   - name: {{ template "fullname" . }}
-    image: alpine:latest
+  {{- if .Values.image.arch }}
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}-{{ .Values.image.arch }}"
+  {{- else }}
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+  {{- end }}
     env:
-      - name: IIB_HOST
+      - name: DB
+        value: "{{ .Values.options.databaseName }}"
+      - name: HOST
         value: {{ template "fullname" . }}
+      - name: USER
+        value: {{ default "db2inst1" .Values.db2inst.instname | quote }}
+      - name: PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ template "fullname" . }}-db2-passwd
+            key: password
       - name: PORT
         value: {{ default "50000" .Values.service.port | quote }}
-    command: ["sh"]
-    args: ["-xc", "apk update; apk add nmap ; nmap -Pn -p$PORT $IIB_HOST | grep ibm-db2"]
+    {{- if .Values.options.databaseName }}
+    command: ["sh", "-c", "useradd -m $USER  && /opt/ibm/db2/V11.1/instance/db2icrt -s client -u $USER $USER && su - $USER -c \". sqllib/db2profile ; db2cli validate -connect -database $DB:$HOST:$PORT -user $USER -passwd $PASSWORD\""]
+    {{- else }}
+    command: ["sh", "-c", "yum install nc -y; echo $HOST; nc --sh-exec ls -v -w10 $HOST $PORT"]
+    {{- end }}
   restartPolicy: Never
+
 
