@@ -1,5 +1,7 @@
 # IBM DSM Developer-C Helm Chart
 
+THIS VERSION OF THE CHART IS NOW DEPRECATED. THE SUBSEQUENT VERSION IS v1.1.4
+
 [IBM Data Server Manager](https://www.ibm.com/developerworks/cn/downloads/im/dsm/index.html) enables you to manage database applications in a non-production environment. 
 
 ## Introduction
@@ -187,5 +189,4 @@ If you have Db2 created in your namespace (no matter created before or after DSM
 A repository DB is created automatically to store your monitor and administration metadata. The minimum resource requied: 1 CPU 2G memory and 8G storage. It may need a long time when DSM deploy, creat repository DB and bind to it. If you delete DSM, its repository DB will also be deleted automatically. 
 
 You can only run one DSM per namespace. If you deploy the second DSM, it will be deleted silently in a while in backend. 
-
 
