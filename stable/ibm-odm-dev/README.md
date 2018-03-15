@@ -1,77 +1,97 @@
-# Early Access: ODM for developers Helm chart (Beta Version)
+# ODM for developers Helm chart (ibm-odm-dev)
 
-The [IBM® Operational Decision Manager](https://www.ibm.com/hr-en/marketplace/operational-decision-management) (ODM) chart (`ibm-odm-dev`) is used to deploy a cluster for evaluation purposes on IBM Cloud Private or other Kubernetes environments.
+The [IBM® Operational Decision Manager](https://www.ibm.com/hr-en/marketplace/operational-decision-manager) (ODM) chart (`ibm-odm-dev`) is used to deploy an ODM evaluation cluster in IBM  Kubernetes environments.
 
-ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.9.1/welcome/kc_welcome_odmV.html).
+ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.9.2/welcome/kc_welcome_odmV.html).
 
-This readme include the following sections:
-- [What is the ODM for developers Helm chart?](#What-is-the-ODM-for-developers-Helm-chart?)
-- [How to create a release of ODM for developers](#How-to-create-a-release-of-ODM-for-developers)
-- [What to do next](#What-to-do-next)
+This readme includes the following sections:
+
+- [Prerequisites](#prerequisites)
+- [What is the ODM for developers Helm chart?](#what-is-the-odm-for-developers-helm-chart)
+- [How to create a release of ODM for developers](#how-to-create-a-release-of-odm-for-developers)
+- [What to do next](#what-to-do-next)
+- [How to create a release of ODM for developers from the command line](#how-to-create-a-release-of-odm-for-developers-from-the-command-line)
 - [Configuration parameters](#configuration-parameters)
-- [How to create a release of ODM for developers from the command line](#How-to-create-a-release-of-ODM-for-developers-from-the-command-line)
-- [How to uninstall releases of ODM for developers](#How-to-uninstall-releases-of-ODM-for-developers)
+- [How to uninstall releases of ODM for developers](#how-to-uninstall-releases-of-odm-for-developers)
+
+## Prerequisites
+
+Before you install a release of  ODM for developers, you should ensure you have  a good understanding of the following technologies:
+
+- Knowledge of concepts like Helm chart, Docker, container
+- Knowledge of Kubernetes
+- Familiarity with Helm commands (if you choose to install an ODM release with the command line)
+- Familiarity with the Kubernetes command line tool (if you choose to install an ODM release with the command line)
+
+Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [Configuration parameters](#configuration-parameters).
 
 ## What is the ODM for developers Helm chart?
 
-The `ibm-odm-dev` chart helps you to discover and evaluate ODM. The chart bootstraps an ODM deployment on a Kubernetes cluster. The deployment uses the Helm package manager.
+The `ibm-odm-dev` Helm chart is a package of preconfigured Kubernetes resources that bootstrap an ODM deployment on a Kubernetes cluster. Configuration parameters are available to customize some aspects of the deployment. However, the chart is designed to get you up and running as quickly as possible, with appropriate default values. If you accept the default values, sample data is added to the database as part of the installation, and you can begin exploring rules in ODM immediately.
 
-The following options are supported for ODM persistence:
+If you choose not to use the default values, be sure to review the configuration parameters [Configuration parameters](#configuration-parameters) that are available to you and understand the impact of changes before you start the installation process.
+
+The `ibm-odm-dev` chart supports the following options for persistence:
 
 - H2 as an internal database. This is the **default** option.
-- PostgreSQL as an external database. If you specify a server name for the external database, the external database is used otherwise the internal database is used. Before you select this option, you must have an external PostgreSQL database up and running.
+Persistent Volume (PV) is required if you choose to use an internal database. PV represents an underlying storage capacity in the infrastructure. PV must be created with accessMode ReadWriteOnce and storage capacity of 5Gi or more, before you install ODM. You create a PV in the Admin console or with a .yaml file.
+- PostgreSQL as an external database. If you specify a server name for the external database, the external database is used, otherwise the internal database is used. Before you select this option, you must have an external PostgreSQL database up and running.
+	> By default, the `internalDatabase.populateSampleData` parameter is set to `true`, which adds sample data to the database. A decision service is created in Decision Center and is also deployed to Rule Execution Server. The sample data can be used to test your newly created release.
+
+	> **Note:** The ability to populate the database with sample data is available only when using the internal database and the persistence locale for Decision Center is set to English (United States). Sample data is not available for the external database.
 
 ## How to create a release of ODM for developers
 
-1. In the `ibm-odm-dev` Helm chart page of the IBM Cloud Private Admin console, click Configure.
+1. In the `ibm-odm-dev` Helm chart page of the Admin console, click Configure.
 2. Enter a value for the **Release**, and accept the license agreement. An example release name is *my-release*.
 3. *Optional*: Modify the parameter values to change the defaults. For more information, see [Configuration parameters](#configuration-parameters).
-
-	> By default, the `internalDatabase.populateSampleData` parameter is set to `true`, which adds sample data to the database. A decision service is created in Decision Center and is also deployed to Rule Execution Server. The sample data can be used to test your newly created release.
-	
-	> **Note:** The ability to populate the database with sample data is available only when using the internal database and the persistence locale for Decision Center is set to English (United States).
 
 4. Click Install.
 
 	> The package is deployed asynchronously in a matter of minutes, and is composed of a single service.
 
-5. When the installation is complete, click **View Helm Release** to see the details of the release. 
+5. When the installation is complete, click **View Helm Release** to see the details of the release.
 
-	> The release name shows a status of DEPLOYED. The release is an instance of the `ibm-odm-dev` chart, which is now running in a Kubernetes cluster.
+	> The release name shows a status of DEPLOYED. The release is an instance of the `ibm-odm-dev` chart: all the ODM components are now running in a  Kubernetes cluster.
 
 ## What to do next
 
-To view the ODM for developers service:
+Inspect the ODM for developers release:
 
-1. In the Admin console, click **Menu** > **Network Access** > **Services**, and search for the name you entered for the release, for example  *my-release*. The service name always includes **odm**, so this string selects all of the ODM services.
+1. In the Admin console, click **Menu** > **Network Access** > **Services**, and search for the name you entered for the release, for example  *my-release*.
 2. Click your service to view the **Service** details, then click the **Node port** link.
- - Add /decisioncenter or /teamserver to the URL to access the Business console or the Enterprise console. To log in, use odmAdmin/odmAdmin.
- - Add /DecisionRunner to the URL to access Decision Runner.
- - Add /DecisionService to the URL to access the Decision Service Runtime. To log in, use odmAdmin/odmAdmin
- - Add /res to the URL to access the Rule Execution Server console. To log in, use odmAdmin/odmAdmin.
 
-### View the rules of the sample
+A **Welcome to IBM Operational Decision Manager** page displays with links to the different ODM services.
+ - Decision Center Business Console
+ - Decision Center Enterprise Console
+ - Decision Server Console
+ - Decision Server Runtime
+ - Decision Server Runner
 
-If the `internalDatabase.populateSampleData` parameter is set to `true` and the persistence locale for Decision Center is set to  English (United States), a sample decision service is added to the H2 internal database in the Kubernetes cluster. The Loan Validation sample is a decision service that determines whether a borrower is eligible for a loan. The decision service validates transaction data, checks customer eligibility, assigns a score, and computes insurance rates that are based on the assigned score.
+3. Right-click any of the links to access the services in a new window. To log in, use odmAdmin/odmAdmin.
+
+### Explore the sample rules
+
+If you accepted the default persistence, a sample project is available in your ODM release and you can explore and modify the rules and decision tables. The Loan Validation sample is a decision service that determines whether a borrower is eligible for a loan. The decision service validates transaction data, checks customer eligibility, assigns a score, and computes insurance rates that are based on the assigned score.
 
 **Note:** The persistence locale for Decision Center is set to English (United States), which means that the project can be viewed only in English.
 
-1. Log in to Decision Center /decisioncenter with odmAdmin/odmAdmin by opening the service in a browser.
+1. Log in to Decision Center by opening the service in a browser.
 
-	> The first level of identification is the decision service. Rules are stored within rule projects contained in a decision service. A decision service contains one or more rule projects. Each rule project contains action rules and decision tables. The second level of identification is through branches. Decision Center uses branches to manage rules over time.
-
-2. Navigate to the Library tab, select the project then the release and browse Decision Artifacts to view the rules and make changes.
+2. Navigate to the Library tab, select the decision service, then the release and browse Decision Artifacts to view the rules and make changes.
 
 ### Execute the sample decision service
 
-1. Log in to Decision Server Console. /res with odmAdmin/odmAdmin by opening the service in a new private browser window.
-2. Click the **Explorer** tab. In the Navigator pane, expand **RuleApps**. Expand the sample RuleApp, and click on the sample Ruleset to open the **Ruleset View**.
+Now you want to execute the sample decision service to request a loan.
+
+1. Log in to Decision Server Console by opening the service in a new private browser window.
+2. Click the **Explorer** tab. In the Navigator pane, expand **RuleApps**. Expand the sample RuleApp **LoanValidationDS**, and click the sample Ruleset **loan_validation_production** to open the **Ruleset View**.
 3. On the **Ruleset View** page, click **Retrieve HTDS Description File**.
 4. Select **REST** in the Service protocol type field, and select the **Open API - JSON format**.
 5. Select the **Decision trace information** option, and then click **Test**.
 6. On the **Decision Service** page, replace the template JSON code to request a loan with the following data:
 
-	```JSON
+```JSON
 {
   "loan": {
     "numberOfMonthlyPayments": 180,
@@ -145,11 +165,11 @@ If the `internalDatabase.populateSampleData` parameter is set to `true` and the 
     "infoBoundObjectSerializationType": "ClassName"
   }
 }
-	```
-	
+```
+
 7. Click **Execute Request**, and check the **Server Response** section. The trace shows that the service fired 15 rules, and the loan request is approved.
 
-	```JSON
+```JSON
 {
   "score": 5950,
   "__decisionTrace__": {
@@ -180,47 +200,21 @@ If the `internalDatabase.populateSampleData` parameter is set to `true` and the 
   },
   "__DecisionID__": "test"
 }
-	```
-	
+```
+
 ### For more information
 
-see [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.9.1/welcome/kc_welcome_odmV.html).
+See [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.9.2/welcome/kc_welcome_odmV.html).
 
-## Configuration parameters
+If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-rule-designer)
 
-The following table shows the available parameters to configure the `ibm-odm-dev` chart.
-
-| Parameter                                   | Description                             | Default value                                   |
-| ------------------------------------------- | --------------------------------------- | ----------------------------------------------- |
-| `decisionCenter.persistenceLocale`   | The persistence locale for Decision Center. | `en_US` |
-| `externalDatabase.databaseName`             | The name of the external database used for ODM | `""` (empty) |
-| `externalDatabase.password`                 | The password of the user used to connect to the external database | `""` (empty) |
-| `externalDatabase.port`                     | The port used to connect to the external database | `5432` |
-| `externalDatabase.serverName`               | The name of the server running the database used for ODM. If it is not specified, the H2 internal database is used. Only PostgreSQL is supported as external database. Sample data is not available for the external database. | `""` (empty) |
-| `externalDatabase.user`                     | The name of the user used to connect to the external database | `""` (empty) |
-| `image.pullPolicy`                          | The image pull policy         | `IfNotPresent`                                  |
-| `image.pullSecrets`                         | The image pull secrets        | `nil` (does not add image pull secrets to deployed pods) |
-| `image.repository`                          | The repository                | `ibmcom`                                        |
-| `image.tag`                                 | The image tag version                   | `8.9.2`                                         |
-| `internalDatabase.persistence.enabled`      | To use a Persistent Volume Claim (PVC) to persist data | `true` |
-| `internalDatabase.persistence.useDynamicProvisioning` | To use dynamic provisioning for Persistent Volume Claim. If this parameter is set to `false`, the Kubernetes binding process selects a pre-existing volume. Ensure, in this case, that there is a remaining volume that is not already bound before installing the chart. | `false` |
-| `internalDatabase.persistence.storageClassName`       | The storage class name for Persistent Volume  | `""` (empty) |
-| `internalDatabase.persistence.resources` | The requested storage size for Persistent Volume | `requests`: `storage` `2Gi`  |
-| `internalDatabase.populateSampleData`       | To populate sample data in the H2 internal database or not. This option is available only when the persistence locale for Decision Center is set to English (United States).| `true` |
-| `resources`                                 | The CPU/Memory resource requests/limits     | `requests`: `cpu` `1`, `memory` `1024Mi`; `limits`: `cpu` `2`, `memory` `2048Mi` |
-| `service.type`                              | The Kubernetes Service type   | `NodePort`                                   |
 
 ## How to create a release of ODM for developers from the command line
 
-### Prerequisites to install ODM for developers
-
-- Kubernetes 1.7.5+ with beta APIs enabled.
-- Persistent Volume (PV) provisioner support in the underlying infrastructure. A PV in Kubernetes represents an underlying storage capacity in the infrastructure. PV must be created with accessMode ReadWriteOnce and storage capacity of 2Gi or more. You create a persistent volume in the IBM Cloud Private interface or with a .yaml file.
-
 ### Release configuration
-A release must be configured before it is installed. For information about the parameters to configure ODM for installation, see [Configuration parameters](#configuration-parameters). Click **Configure**, enter the parameter values in the deployment configuration, and then click **Install**.
+A release must be configured before it is installed. For information about the parameters to configure ODM for installation, see [Configuration parameters](#configuration-parameters).
 
-A release can also be installed from the Helm command-line. To install a release with the default configuration and a release name of `my-odm-dev-release`, use the following command:
+To install a release with the default configuration and a release name of `my-odm-dev-release` from the command line, use the following command:
 
 ```console
 $ helm install --name my-odm-dev-release stable/ibm-odm-dev
@@ -248,17 +242,17 @@ $ helm install --name my-odm-dev-release -f values.yaml stable/ibm-odm-dev
 
 > **Tip**: The default values are in the `values.yaml` file of the `ibm-odm-dev` chart.
 
-If the Docker images are pulled from a private registry, you must [specify an image pull secret](https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod).
+If the Docker images are pulled from a private registry, you must [specify an image pull secret](https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod). Proceed as follows:
 
 1. [Create an image pull secret](https://kubernetes.io/docs/concepts/containers/images/#creating-a-secret-with-a-docker-config) in the namespace. For information about setting an appropriate secret, see the documentation of your image registry.
 
-2. To set the secret in the `values.yaml` file, add the SECRET_NAME to the `pullSecrets` parameter.
+2. Set the secret in the `values.yaml` file by adding the SECRET_NAME to the `pullSecrets` parameter, as follows:
 
    ```yaml
    image:
      pullSecrets: SECRET_NAME
    ```
-   To install the chart from the Helm command line, add the `--set image.pullSecrets` parameter.
+3. Add the `--set image.pullSecrets` parameter in the Helm install command line, as follows:
 
    ```console
    $ helm install --name my-odm-dev-release \
@@ -267,9 +261,38 @@ If the Docker images are pulled from a private registry, you must [specify an im
      stable/ibm-odm-dev
    ```
 
+## Configuration parameters
+
+The following table shows the available parameters to configure the `ibm-odm-dev` chart.
+
+| Parameter                                   | Description                             | Default value                                   |
+| ------------------------------------------- | --------------------------------------- | ----------------------------------------------- |
+| `decisionCenter.persistenceLocale`   | The persistence locale for Decision Center. | `en_US` |
+| `externalDatabase.databaseName`             | The name of the external database used for ODM. If this parameter is empty, `odmdb` is used by default. | `""` (empty) |
+| `externalDatabase.password`                 | The password of the user used to connect to the external database. If this parameter is empty, `odmpwd` is used by default. | `""` (empty) |
+| `externalDatabase.port`                     | The port used to connect to the external database | `5432` |
+| `externalDatabase.serverName`               | The name of the server running the database used for ODM. If it is not specified, the H2 internal database is used. Only PostgreSQL is supported as external database. Sample data is not available for the external database. | `""` (empty) |
+| `externalDatabase.user`                     | The name of the user used to connect to the external database. If this parameter is empty, `odmusr` is used by default. | `""` (empty) |
+| `image.pullPolicy`                          | The image pull policy         | `IfNotPresent`                                  |
+| `image.pullSecrets`                         | The image pull secrets        | `nil` (does not add image pull secrets to deployed pods) |
+| `image.repository`                          | The repository                | `ibmcom`                                        |
+| `image.tag`                                 | The image tag version                   | `8.9.2`                                         |
+| `internalDatabase.persistence.enabled`      | To use a Persistent Volume Claim (PVC) to persist data | `true` |
+| `internalDatabase.persistence.useDynamicProvisioning` | To use dynamic provisioning for Persistent Volume Claim. If this parameter is set to `false`, the Kubernetes binding process selects a pre-existing volume. Ensure, in this case, that there is a remaining volume that is not already bound before installing the chart. | `false` |
+| `internalDatabase.persistence.storageClassName`       | The storage class name for Persistent Volume  | `""` (empty) |
+| `internalDatabase.persistence.resources` | The requested storage size for Persistent Volume | `requests`: `storage` `2Gi`  |
+| `internalDatabase.populateSampleData`       | To populate sample data in the H2 internal database or not. This option is available only when the persistence locale for Decision Center is set to English (United States).| `true` |
+| `resources`                                 | The CPU/Memory resource requests/limits     | `requests`: `cpu` `1`, `memory` `1024Mi`; `limits`: `cpu` `2`, `memory` `2048Mi` |
+| `service.type`                              | The Kubernetes Service type   | `NodePort`                                   |
+
+
 ## How to uninstall releases of ODM for developers
 
-To uninstall and delete a release with a name `my-odm-dev-release`, use the following command:
+To uninstall and delete a release through the user interface:
+
+- In the list of Helm releases (under **Menu > Workload  >Helm Releases**), click the three-dotted Action button next to your release, and select Delete.
+
+To uninstall and delete a release named `my-odm-dev-release` through the command line, use the following command:
 
 ```console
 $ helm delete my-odm-dev-release
@@ -278,3 +301,5 @@ $ helm delete my-odm-dev-release
 The command removes all of the Kubernetes components that are associated with the chart, and deletes the release.
 
 
+> >**Note**: The associated Persistent Volume remains available.
+Whichever uninstallation method you choose, you must delete the Persistent Volume manually.
