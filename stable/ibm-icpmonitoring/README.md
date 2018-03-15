@@ -1,8 +1,8 @@
-# IBM ICP Monitoring Service Helm Chart (Beta Version)
+# IBM ICP Monitoring Service Helm Chart
 
 * Installs components for IBM ICP monitoring service
 
-## TL;DR;
+## Quick Start
 
 ```console
 $ helm install stable/ibm-icpmonitoring
@@ -33,7 +33,7 @@ The following tables lists the configurable parameters of the Prometheus chart a
 Parameter                                       | Description                              | Default
 ----------------------------------------------- | ---------------------------------------- | -------
 `alertmanager.image.name`                       | alertmanager container image name        | ibmcom/alertmanager
-`alertmanager.image.tag`                        | alertmanager container image tag         | v0.5.1
+`alertmanager.image.tag`                        | alertmanager container image tag         | v0.13.0
 `alertmanager.port`                             | alertmanager service port                | 80
 `alertmanager.persistentVolume.enabled`         | Create a volume to store data            | false
 `alertmanager.persistentVolume.size`            | Size of persistent volume claim          | 1Gi
@@ -44,13 +44,13 @@ Parameter                                       | Description                   
 `alertmanager.resources.requests.memory`        | alertmanager memory requests             | 64Mi
 `alertmanager.configFiles`                      | alertmanager configurations              | alermanagerConfig
 `kubeStateMetrics.image.name`                   | kube-state-metrics container image name  | ibmcom/kube-state-metrics
-`kubeStateMetrics.image.tag`                    | kube-state-metrics container image tag   | v1.0.0
+`kubeStateMetrics.image.tag`                    | kube-state-metrics container image tag   | v1.2.0
 `kubeStateMetrics.port`                         | kube-state-metrics service port          | 80
 `nodeExporter.image.name`                       | node-exporter container image name       | ibmcom/node-exporter
-`nodeExporter.image.tag`                        | node-exporter container image tag        | v0.14.0
+`nodeExporter.image.tag`                        | node-exporter container image tag        | v0.15.2
 `nodeExporter.port`                             | node-exporter service port               | 9100
 `prometheus.image.name`                         | Prometheus server container image name   | ibmcom/prometheus
-`prometheus.image.tag`                          | Prometheus server container image tag    | v1.7.1
+`prometheus.image.tag`                          | Prometheus server container image tag    | v2.0.0
 `prometheus.port`                               | Prometheus server service port           | 80
 `prometheus.args.retention`                     | Prometheus storage retention time        | 24h
 `prometheus.args.memoryChunks`                  | Prometheus memory chunks setting         | 500000
@@ -64,7 +64,7 @@ Parameter                                       | Description                   
 `prometheus.alertRuleFiles`                     | Prometheus alert rules template          | alertRules
 `prometheus.configFiles`                        | Prometheus configurations template       | prometheusConfig
 `grafana.image.name`                            | Grafana Docker Image Name                | ibmcom/grafana
-`grafana.image.tag`                             | Grafana Docker Image Tag                 | 4.4.3
+`grafana.image.tag`                             | Grafana Docker Image Tag                 | 4.6.3
 `grafana.port`                                  | Grafana Container Exposed Port           | 3000
 `grafana.user`                                  | Grafana user's name                      | admin
 `grafana.password`                              | Grafana user's password                  | admin

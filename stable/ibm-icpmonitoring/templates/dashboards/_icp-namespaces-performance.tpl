@@ -1,3 +1,10 @@
+{{/*
+  Licensed Materials - Property of IBM
+  5737-E67
+  @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+  US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+*/}}
+
 {{/* ICP Namespaces Performance Monitoring Dashboard File */}}
 {{- define "ICPNamespacesPerformanceMonitoring" }}
 ICP2.1-Namespaces-Performance.json: |-
@@ -536,7 +543,10 @@ ICP2.1-Namespaces-Performance.json: |-
           },
           {
             "allValue": null,
-            "current": {},
+            "current": {
+              "text": "default",
+              "value": "default"
+            },
             "datasource": "prometheus",
             "hide": 0,
             "includeAll": false,

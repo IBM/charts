@@ -1,0 +1,27 @@
+1. Get your '{{ .Values.master.adminUser }}' user password by running:
+  echo $(kubectl get secret --namespace {{ .Release.Namespace }} {{ template "fullname" . }} -o jsonpath="{.data.jenkins-admin-password}" | base64 --decode)
+
+2. Get the Jenkins URL to visit by running these commands in the same shell:
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }})
+  echo http://<external_ip>:$NODE_PORT/login
+
+3. Login with username "{{ .Values.master.adminUser }}" and the password from step 1
+
+{{- if .Values.rbac.install }}
+
+4. Configure the Kubernetes plugin in Jenkins to use the following Service Account name "{{ template "fullname" . }}" using the following steps:
+  - Go to Manage Jenkins
+  - Select Configure System
+  - Scroll down to Cloud and find the Kubernete configuration and its Credentials configuration
+  - Add a new credential of provider Jenkins selecting a Kind of "Kubernetes Service account" with an ID of "{{ template "fullname" . }}" 
+  - Select the newly added credential named "{{ template "fullname" . }}" and Save
+{{- end }}
+
+{{- if not .Values.persistence.enabled }}
+
+#################################################################################
+######   WARNING: Persistence is disabled!!! You will lose your data when   #####
+######            the Jenkins pod is terminated.                            #####
+#################################################################################
+{{- end }}
+

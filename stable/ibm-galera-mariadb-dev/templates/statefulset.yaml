@@ -1,0 +1,138 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ template "dnsname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  serviceName: {{ template "dnsname" . }}
+  replicas: {{ default "" .Values.replicas.replicaCount }}
+  template:
+    metadata:
+      annotations:
+        productID: "GaleraMariaDB_101_free_00000"
+        productName: "GaleraMariaDB"
+        productVersion: "10.1"
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 8 }}
+{{- if .Values.persistence.enabled }}
+      initContainers:
+      - name: galera-mariadb-prepare
+        image: busybox
+        command: [ "sh", "-c", "chown -R 27:27 /var/lib/mysql" ]
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/mysql
+          subPath: data
+{{- end }}
+      volumes:
+      - name: localtime
+        hostPath:
+          path: /etc/localtime
+{{- if .Values.mariadb.configMapName }}
+      - name: config
+        configMap:
+          name: {{ .Values.mariadb.configMapName }}
+{{- end }}
+      containers:
+      - name: {{ template "dnsname" . }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: MYSQL_USER
+            value: {{ default "" .Values.mariadb.user | quote }}
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "fullname" . }}
+                key: mysql-password
+          - name: MYSQL_DATABASE
+            value: {{ default "" .Values.mariadb.database | quote }}
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "fullname" . }}
+                key: mysql-root-password
+        ports:
+        - containerPort: 3306
+          name: mysql
+        - containerPort: 4444
+          name: sst
+        - containerPort: 4567
+          name: replication
+        - containerPort: 4568
+          name: ist
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/readiness-probe.sh
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+{{- if .Values.mariadb.configMapName }}
+        - name: config
+          mountPath: /etc/config
+{{- end }}
+        - name: localtime
+          mountPath: /etc/localtime
+{{- if .Values.persistence.enabled }}
+        - name: {{ .Values.dataPVC.name | quote }}
+          mountPath: /var/lib/mysql
+{{- end }}
+{{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ .Values.dataPVC.name | quote }}
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kube Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+      {{- else }}
+      # bind to an existing pv.
+      # setting storageClassName to "" disables dynamic provisioning 
+      storageClassName: {{ default "" .Values.dataPVC.storageClassName | quote }}
+      {{- if .Values.dataPVC.selector.label }}
+      # use selectors in the binding process
+      selector:
+        matchExpressions:
+          - {key: {{ .Values.dataPVC.selector.label }}, operator: In, values: [{{ .Values.dataPVC.selector.value }}]}
+      {{- end }}      
+      {{- end }}
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.dataPVC.size | quote }}
+{{- end }}

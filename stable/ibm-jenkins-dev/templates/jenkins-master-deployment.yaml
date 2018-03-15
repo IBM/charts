@@ -1,0 +1,141 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    component: "{{.Release.Name}}-{{.Values.master.name}}"
+  annotations:
+    "helm.sh/created": {{.Release.Time.Seconds | quote }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      component: "{{.Release.Name}}-{{.Values.master.name}}"
+  template:
+    metadata:
+      annotations:
+        productName: "Jenkins (dev)"
+        productID: "ibm-jenkins-dev-100"
+        productVersion: "1.0.0"
+      labels:
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        component: "{{.Release.Name}}-{{.Values.master.name}}"
+        app: {{template "fullname" . }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}    
+      securityContext:
+        runAsUser: 0
+      containers:
+      - name: {{ template "fullname" . }}
+        {{- if eq .Values.arch "ppc64le" }}
+        image: "{{.Values.master.image.repository}}-ppc64le:{{.Values.master.image.tag}}"
+        {{- else }}
+        image: "{{.Values.master.image.repository}}:{{.Values.master.image.tag}}"
+        {{- end }}
+        imagePullPolicy: "{{.Values.master.image.pullPolicy}}"
+        args: [ "--argumentsRealm.passwd.$(ADMIN_USER)=$(ADMIN_PASSWORD)",  "--argumentsRealm.roles.$(ADMIN_USER)=admin"]
+        env:
+          - name: ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "fullname" . }}
+                key: jenkins-admin-password
+          - name: ADMIN_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "fullname" . }}
+                key: jenkins-admin-user
+        ports:
+          - containerPort: {{.Values.master.service.internalPort}}
+            name: {{.Values.master.service.name}}
+          - containerPort: {{.Values.master.agentListenerPort}}
+            name: slavelistener
+        # set liveness probe to determine if container needs to be restarted
+        # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+        livenessProbe:
+          exec:
+            command: 
+            - /tmp/probe/liveness.sh
+          # the readness probe continually runs!!  
+          #wait time before running probe  
+          initialDelaySeconds: 120
+          #how long to wait for probe to complete
+          timeoutSeconds: 120
+          #how many times to try before failing (restarting pod)
+          failureThreshold: 2
+        {{- if .Values.master.resourceConstraints.enabled }}
+        resources:
+{{ toYaml .Values.master.resources | indent 10 }}
+        {{- end }}
+        volumeMounts:
+          - mountPath: /var/jenkins_home
+            name: jenkins-home
+            readOnly: false
+          - mountPath: /var/jenkins_config
+            name: jenkins-config
+            readOnly: true
+          - mountPath: /tmp/probe
+            name: jenkins-probe-scripts
+            readOnly: false
+      serviceAccountName: {{ if .Values.rbac.install }}{{ template "fullname" . }}{{ else }}"{{ .Values.rbac.serviceAccountName }}"{{ end }}
+      initContainers:
+      - name: copy-default-config
+        {{- if eq .Values.arch "ppc64le" }}
+        image: "{{.Values.master.image.repository}}-ppc64le:{{.Values.master.image.tag}}"
+        {{- else }}
+        image: "{{.Values.master.image.repository}}:{{.Values.master.image.tag}}"
+        {{- end }}
+        imagePullPolicy: "{{.Values.master.image.pullPolicy}}"
+        command: ["cp", "-n", "/var/jenkins_config/config.xml", "/var/jenkins_home"]
+        volumeMounts:
+          - mountPath: /var/jenkins_config
+            name: jenkins-config
+          - mountPath: /var/jenkins_home
+            name: jenkins-home
+      nodeSelector:
+        beta.kubernetes.io/arch: {{ .Values.arch | quote }}
+      volumes:
+      - name: jenkins-config
+        configMap:
+          name: {{ template "fullname" . }}
+      - name: jenkins-probe-scripts
+        configMap:
+          name: {{ template "fullname" . }}-probe-scripts
+          defaultMode: 0744
+      - name: jenkins-home
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.homePVC.existingClaimName }}
+          claimName: {{ .Values.homePVC.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Release.Name }}-{{ .Values.homePVC.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end -}}

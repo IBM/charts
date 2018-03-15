@@ -1,8 +1,23 @@
+{{/*
+  Licensed Materials - Property of IBM
+  5737-E67
+  @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+  US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+*/}}
+
 {{/* Prometheus Configuration Files */}}
 {{- define "prometheusConfig" }}
 prometheus.yml: |-
+  alerting:
+    alertmanagers:
+    - scheme: http
+      static_configs:
+      - targets:
+        - '{{ template "prometheus.fullname" . }}-alertmanager:{{ .Values.alertmanager.port }}'
+
   rule_files:
     - /etc/alert-rules/*.rules
+    - /etc/alert-rules/*.yml
 
   scrape_configs:
     - job_name: prometheus
@@ -135,7 +150,7 @@ prometheus.yml: |-
       - source_labels: [__meta_kubernetes_node_name]
         regex: (.+)
         target_label: __metrics_path__
-        replacement: /api/v1/nodes/${1}:4194/proxy/metrics
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
 
     # Scrape config for service endpoints.
     #

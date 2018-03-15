@@ -1,0 +1,95 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+{{ include "labels.standard" . | indent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      release: "{{ .Release.Name }}"
+  template:
+    metadata:
+      annotations:
+        productID: WebTerminal_281_free_00000
+        productName: Web Terminal
+        productVersion: 2.8.1
+      labels:
+        name: {{ template "fullname" . }}
+{{ include "labels.standard" . | indent 8 }}
+    spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 8 }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        ports:
+          - containerPort: 3000
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/readiness-probe.sh
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        env:
+          - name: USERNAME
+            value: {{ .Values.credentials.username }}
+          - name: PASSWORD
+            value: {{ .Values.credentials.password }}
+{{- if .Values.calicoctl.enabled }}
+          # The location of the Calico etcd cluster.
+          - name: ETCD_ENDPOINTScalico
+            valueFrom:
+              configMapKeyRef:
+                name: calico-config
+                key: etcd_endpoints
+          # Location of the CA certificate for etcd.
+          - name: ETCD_CA_CERT_FILE
+            valueFrom:
+              configMapKeyRef:
+                name: calico-config
+                key: etcd_ca
+          # Location of the client key for etcd.
+          - name: ETCD_KEY_FILE
+            valueFrom:
+              configMapKeyRef:
+                name: calico-config
+                key: etcd_key
+          # Location of the client certificate for etcd.
+          - name: ETCD_CERT_FILE
+            valueFrom:
+              configMapKeyRef:
+                name: calico-config
+                key: etcd_cert
+        volumeMounts:
+          - mountPath: /calico-secrets
+            name: etcd-secrets
+            readOnly: true
+      volumes:
+      - name: etcd-secrets
+        secret:
+          secretName: calico-etcd-secrets
+{{- end }}
