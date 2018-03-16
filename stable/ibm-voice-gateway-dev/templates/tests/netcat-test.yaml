@@ -1,0 +1,37 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation
+###############################################################################
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app: {{ template "fullname" . }}-test
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}" 
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+  hostNetwork: true
+  containers:
+    - name: "{{ template "fullname" . }}-test"
+      image: ubuntu
+      env:
+        - name: SIP_HOST
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: SIP_PORT
+          value: "{{ .Values.sipOrchestratorEnvVariables.sipPort }}"
+      command: ["sh", "-c", 'apt-get update && apt-get -y install netcat; nc -vz $SIP_HOST $SIP_PORT; echo $?'] 
+  restartPolicy: Never

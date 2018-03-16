@@ -1,0 +1,328 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation
+###############################################################################
+
+kind: Deployment
+apiVersion: apps/v1beta2
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: {{ template "fullname" . }} 
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        app: {{ template "fullname" . }} 
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: IBM Voice Gateway
+        productID: IBMVoiceGateway_5737D52_1005_IL_0000
+        productVersion: 1.0.0.5
+    spec:
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+      volumes:
+      {{- if eq .Values.mediaRelayEnvVariables.enableRecording true }}
+      - persistentVolumeClaim:
+          claimName: {{ template "fullname" . }}-{{ .Values.recordingsVolume.name }}
+        name: {{ template "fullname" . }}-{{ .Values.recordingsVolume.name }}
+      {{- end}}
+      hostNetwork: true
+      containers:
+      - name: {{ .Values.image.mediaRelay.containerName }}
+        image: "{{ .Values.image.mediaRelay.image }}:{{ .Values.image.tag }}"
+        ports:
+        - containerPort: {{ .Values.mediaRelayEnvVariables.mediaRelayWsPort }}
+          hostPort: {{ .Values.mediaRelayEnvVariables.mediaRelayWsPort }}
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.mediaRelayEnvVariables.mediaRelayWsPort }}
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.mediaRelayEnvVariables.mediaRelayWsPort }}
+          initialDelaySeconds: 20
+          periodSeconds: 35
+        env:
+        - name: SDP_ADDRESS
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: MEDIA_RELAY_WS_HOST
+          value: "{{ .Values.mediaRelayEnvVariables.mediaRelayWsHost }}"
+        - name: MEDIA_RELAY_WS_PORT
+          value: "{{ .Values.mediaRelayEnvVariables.mediaRelayWsPort }}"
+        - name: RTP_UDP_PORT_RANGE
+          value: {{ .Values.mediaRelayEnvVariables.rtpUdpPortRange }}
+        - name: CLUSTER_WORKERS
+          value: "{{ .Values.mediaRelayEnvVariables.clusterWorkers }}"
+        - name: MAX_SESSIONS
+          value: "{{ .Values.mediaRelayEnvVariables.maxSessions }}"
+        - name: ENABLE_RECORDING
+          value: "{{ .Values.mediaRelayEnvVariables.enableRecording }}"
+        - name: STEREO_RECORDING
+          value: "{{ .Values.mediaRelayEnvVariables.stereoRecording }}"
+          
+        - name: MEDIA_RELAY_LOG_LEVEL
+          value: "{{ .Values.mediaRelayEnvVariables.mediaRelayLogLevel }}"
+        - name: MEDIA_RELAY_LOG_ROTATION_FILE_COUNT
+          value: "{{ .Values.mediaRelayEnvVariables.mediaRelayLogRotationFileCount }}"
+        - name: MEDIA_RELAY_LOG_ROTATION_PERIOD
+          value: "{{ .Values.mediaRelayEnvVariables.mediaRelayLogRotationPeriod }}"
+        - name: RTP_PACKET_LOSS_REPORTING_THRESHOLD
+          value: "{{ .Values.mediaRelayEnvVariables.rtpPacketLossReportingThreshold }}"
+          
+        - name: PROXY_TYPE
+          value: "{{ .Values.mediaRelayEnvVariables.proxyType }}"
+        {{ if .Values.mediaRelayEnvVariables.proxyHost }}
+        - name: PROXY_HOST
+          value: "{{ .Values.mediaRelayEnvVariables.proxyHost }}"
+        {{ end }}
+        {{ if .Values.mediaRelayEnvVariables.proxyPort }}
+        - name: PROXY_PORT
+          value: "{{ .Values.mediaRelayEnvVariables.proxyPort }}"
+        {{ end }}
+        {{ if .Values.mediaRelayEnvVariables.proxyUsername }}
+        - name: PROXY_USERNAME
+          value: "{{ .Values.mediaRelayEnvVariables.proxyUsername }}"
+        {{ end }}
+        {{ if .Values.mediaRelayEnvVariables.proxyPassword }}
+        - name: PROXY_PASSWORD
+          value: "{{ .Values.mediaRelayEnvVariables.proxyPassword }}"
+        {{ end }}
+        - name: WATSON_STT_ENABLE_PROXY
+          value: "{{ .Values.mediaRelayEnvVariables.watsonSttEnableProxy }}"
+        - name: WATSON_TTS_ENABLE_PROXY
+          value: "{{ .Values.mediaRelayEnvVariables.watsonTtsEnableProxy }}"
+        - name: MUSIC_ON_HOLD_ENABLE_PROXY
+          value: "{{ .Values.mediaRelayEnvVariables.musicOnHoldEnableProxy }}"
+        
+        - name: WATSON_STT_USERNAME
+          value: "{{ .Values.serviceCredentials.watsonSttUsername }}"
+        - name: WATSON_STT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+                name: {{ template "fullname" . }}-secret-creds
+                key: WATSON_STT_PASSWORD
+        - name: WATSON_STT_URL
+          value: "{{ .Values.serviceCredentials.watsonSttUrl }}"
+        - name: WATSON_STT_MODEL
+          value: "{{ .Values.mediaRelayEnvVariables.watsonSttModel }}" 
+        - name: ECHO_SUPPRESSION
+          value: "{{ .Values.mediaRelayEnvVariables.echoSuppression }}"
+
+        - name: WATSON_TTS_USERNAME
+          value: "{{ .Values.serviceCredentials.watsonTtsUsername }}"
+        - name: WATSON_TTS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+                name: {{ template "fullname" . }}-secret-creds
+                key: WATSON_TTS_PASSWORD
+
+        - name: WATSON_TTS_URL
+          value: "{{ .Values.serviceCredentials.watsonTtsUrl }}"
+        - name: WATSON_TTS_VOICE
+          value: "{{ .Values.mediaRelayEnvVariables.watsonTtsVoice }}"
+        
+        - name: TTS_CACHE_TIME_TO_LIVE
+          value: "{{ .Values.mediaRelayEnvVariables.ttsCacheTimeToLive }}"
+
+        resources: {}
+        volumeMounts:
+        {{- if eq .Values.mediaRelayEnvVariables.enableRecording true }}
+        - name: {{ template "fullname" . }}-{{ .Values.recordingsVolume.name }}
+          mountPath: "/vgw-media-relay/recordings"
+        {{- end}}
+        terminationMessagePath: "/dev/termination-log"
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+      - name: "{{ .Values.image.sipOrchestrator.containerName }}"
+        image: "{{ .Values.image.sipOrchestrator.image }}:{{ .Values.image.tag }}"
+        ports:
+        - containerPort: {{ .Values.sipOrchestratorEnvVariables.sipPort }}
+          hostPort: {{ .Values.sipOrchestratorEnvVariables.sipPort }}
+          protocol: TCP
+        - containerPort: {{ .Values.sipOrchestratorEnvVariables.sipPort }}
+          hostPort: {{ .Values.sipOrchestratorEnvVariables.sipPort }}
+          protocol: UDP
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.sipOrchestratorEnvVariables.sipPort }}
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.sipOrchestratorEnvVariables.sipPort }}
+          initialDelaySeconds: 20
+          periodSeconds: 35
+        env:
+        - name: SIP_HOST
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: MEDIA_RELAY_HOST
+          value: "{{ .Values.sipOrchestratorEnvVariables.mediaRelayHost }}"
+        - name: SIP_PORT
+          value: "{{ .Values.sipOrchestratorEnvVariables.sipPort }}"
+        - name: SIP_PORT_TCP
+          value: "{{ .Values.sipOrchestratorEnvVariables.sipPortTcp }}"
+        - name: SIP_PORT_TLS
+          value: "{{ .Values.sipOrchestratorEnvVariables.sipPortTls }}"
+
+        - name: LOG_LEVEL
+          value: "{{ .Values.sipOrchestratorEnvVariables.logLevel }}"
+        - name: LOG_MAX_FILES
+          value: "{{ .Values.sipOrchestratorEnvVariables.logMaxFiles }}"
+        - name: LOG_MAX_FILE_SIZE
+          value: "{{ .Values.sipOrchestratorEnvVariables.logMaxFileSize }}"
+        - name: ENABLE_AUDIT_MESSAGES
+          value: "{{ .Values.sipOrchestratorEnvVariables.enableAuditMessages }}"
+        - name: ENABLE_TRANSCRIPTION_AUDIT_MESSAGES
+          value: "{{ .Values.sipOrchestratorEnvVariables.enableTranscriptionAuditMessages }}"
+        - name: LATENCY_REPORTING_THRESHOLD
+          value: "{{ .Values.sipOrchestratorEnvVariables.latencyReportingThreshold }}"
+        - name: RELAY_LATENCY_REPORTING_THRESHOLD
+          value: "{{ .Values.sipOrchestratorEnvVariables.relayLatencyReportingThreshold }}"
+
+        {{ if .Values.sipOrchestratorEnvVariables.proxyHost }}
+        - name: PROXY_HOST
+          value: "{{ .Values.sipOrchestratorEnvVariables.proxyHost }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.proxyPort }}
+        - name: PROXY_PORT
+          value: "{{ .Values.sipOrchestratorEnvVariables.proxyPort }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.proxyUsername }}
+        - name: PROXY_USERNAME
+          value: "{{ .Values.sipOrchestratorEnvVariables.proxyUsername }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.proxyPassword }}
+        - name: PROXY_PASSWORD
+          value: "{{ .Values.sipOrchestratorEnvVariables.proxyPassword }}"
+        {{ end }}
+        - name: WHITELIST_FROM_URI
+          value: "{{ .Values.sipOrchestratorEnvVariables.whitelistFromUri }}"
+        - name: WHITELIST_TO_URI
+          value: "{{ .Values.sipOrchestratorEnvVariables.whitelistToUri }}"
+        - name: TRUSTED_IP_LIST
+          value: "{{ .Values.sipOrchestratorEnvVariables.trustedIpList }}"
+
+        {{ if .Values.sipOrchestratorEnvVariables.customSipInviteHeader }}
+        - name: CUSTOM_SIP_INVITE_HEADER
+          value: "{{ .Values.sipOrchestratorEnvVariables.customSipInviteHeader }}"
+        {{ end }}
+        - name: CUSTOM_SIP_SESSION_HEADER
+          value: "{{ .Values.sipOrchestratorEnvVariables.customSipSessionHeader }}"
+        - name: SEND_PROVISIONAL_RESPONSE
+          value: "{{ .Values.sipOrchestratorEnvVariables.sendProvisionalResponse }}"
+        - name: SEND_SIP_CALL_ID_TO_CONVERSATION
+          value: "{{ .Values.sipOrchestratorEnvVariables.sendSipCallIdToConversation }}"
+        - name: SEND_SIP_REQUEST_URI_TO_CONVERSATION
+          value: "{{ .Values.sipOrchestratorEnvVariables.sendSipRequestUriToConversation }}"
+        - name: SEND_SIP_TO_URI_TO_CONVERSATION
+          value: "{{ .Values.sipOrchestratorEnvVariables.sendSipToUriToConversation }}"
+        - name: SEND_SIP_FROM_URI_TO_CONVERSATION
+          value: "{{ .Values.sipOrchestratorEnvVariables.sendSipFromUriToConversation }}"
+        - name: CONVERSATION_FAILED_REPLY_MESSAGE
+          value: "{{ .Values.sipOrchestratorEnvVariables.conversationFailedReplyMessage }}"
+        {{ if .Values.sipOrchestratorEnvVariables.transferDefaultTarget }}
+        - name: TRANSFER_DEFAULT_TARGET
+          value: "{{ .Values.sipOrchestratorEnvVariables.transferDefaultTarget }}"
+        {{ end }}
+        - name: TRANSFER_FAILED_REPLY_MESSAGE
+          value: "{{ .Values.sipOrchestratorEnvVariables.transferFailedReplyMessage }}"
+        - name: DISCONNECT_CALL_ON_TRANSFER_FAILURE
+          value: "{{ .Values.sipOrchestratorEnvVariables.disconnectCallOnTransferFailure }}"
+        - name: PUT_CALLER_ON_HOLD_ON_TRANSFER
+          value: "{{ .Values.sipOrchestratorEnvVariables.putCallerOnHoldOnTransfer }}"
+        {{ if .Values.sipOrchestratorEnvVariables.cmrHealthCheckFailErrCode }}  
+        - name: CMR_HEALTH_CHECK_FAIL_ERR_CODE
+          value: {{ .Values.sipOrchestratorEnvVariables.cmrHealthCheckFailErrCode }}
+        {{ end }}
+
+        {{ if .Values.sipOrchestratorEnvVariables.reportingUrl }}
+        - name: REPORTING_URL
+          value: "{{ .Values.sipOrchestratorEnvVariables.reportingUrl }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.reportingUsername }}
+        - name: REPORTING_USERNAME
+          value: "{{ .Values.sipOrchestratorEnvVariables.reportingUsername }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.reportingPassword }}
+        - name: REPORTING_PASSWORD
+          value: "{{ .Values.sipOrchestratorEnvVariables.reportingPassword }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.reportingCdrEventIndex }}
+        - name: REPORTING_CDR_EVENT_INDEX
+          value: "{{ .Values.sipOrchestratorEnvVariables.reportingCdrEventIndex }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.reportingConversationEventIndex }}
+        - name: REPORTING_CONVERSATION_EVENT_INDEX
+          value: "{{ .Values.sipOrchestratorEnvVariables.reportingConversationEventIndex }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.reportingTranscriptionEventIndex }}
+        - name: REPORTING_TRANSCRIPTION_EVENT_INDEX
+          value: "{{ .Values.sipOrchestratorEnvVariables.reportingTranscriptionEventIndex }}"
+        {{ end }}
+
+        - name: WATSON_CONVERSATION_WORKSPACE_ID
+          value: "{{ .Values.serviceCredentials.watsonConversationWorkspaceId }}"
+        - name: WATSON_CONVERSATION_USERNAME
+          value: "{{ .Values.serviceCredentials.watsonConversationUsername }}"
+        - name: WATSON_CONVERSATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+                name: {{ template "fullname" . }}-secret-creds
+                key: WATSON_CONVERSATION_PASSWORD
+        - name: WATSON_CONVERSATION_URL
+          value: "{{ .Values.serviceCredentials.watsonConversationUrl }}"
+        - name: WATSON_CONVERSATION_API_VERSION
+          value: "{{ .Values.sipOrchestratorEnvVariables.watsonConversationApiVersion }}"
+        - name: WATSON_CONVERSATION_READ_TIMEOUT
+          value: "{{ .Values.sipOrchestratorEnvVariables.watsonConversationReadTimeout }}"
+        - name: WATSON_CONVERSATION_CONNECT_TIMEOUT
+          value: "{{ .Values.sipOrchestratorEnvVariables.watsonConversationConnectTimeout }}"
+
+        {{ if .Values.sipOrchestratorEnvVariables.watsonVaUrl }}
+        - name: WATSON_VA_URL
+          value: "{{ .Values.sipOrchestratorEnvVariables.watsonVaUrl }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.watsonVaBotId }}
+        - name: WATSON_VA_BOT_ID
+          value: "{{ .Values.sipOrchestratorEnvVariables.watsonVaBotId }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.watsonVaClientId }}
+        - name: WATSON_VA_CLIENT_ID
+          value: "{{ .Values.sipOrchestratorEnvVariables.watsonVaClientId }}"
+        {{ end }}
+        {{ if .Values.sipOrchestratorEnvVariables.watsonVaClientSecret }}
+        - name: WATSON_VA_CLIENT_SECRET
+          value: "{{ .Values.sipOrchestratorEnvVariables.watsonVaClientSecret }}"
+        {{ end }}
+
+        resources: {}
+        terminationMessagePath: "/dev/termination-log"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+status: {}
