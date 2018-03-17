@@ -12,8 +12,28 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 */}}
 {{- define "fullname" -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- $shortname := .Release.Name | trunc 10 -}}
+{{- printf "%s-%s" $shortname $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+{{/*
+Create a default hadr store name
+We truncate at 10 chars for the name as we reach a limit when PVCs for the statefulset are created
+*/}}
+{{- define "hadrstorname" -}}
+{{- $name := default .Release.Name | trunc 10 | trimSuffix "-" -}}
+{{- printf "%s-%s" $name .Values.hadrVolume.name -}}
+{{- end -}}
+
+{{/*
+Create a default data store name
+We truncate at 10 chars for the name as we reach a limit when PVCs for the statefulset are created
+*/}}
+{{- define "datastorname" -}}
+{{- $name := default .Release.Name | trunc 10 | trimSuffix "-" -}}
+{{- printf "%s-%s" $name .Values.dataVolume.name -}}
+{{- end -}}
+
 
 {{/*
 Check if tag contains specific platform suffix and if not set based on kube platform

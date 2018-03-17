@@ -1,13 +1,15 @@
 ## Metadata for IBM Db2 configuration
 ## This metadata is used to augment the value.yaml to drive IPC UI for configuration of the Helm chart installation
      
+## Architecture configuration metadata
+## Arch metadata
 
-## Global value explicit declarationrchitecture configuration metadata
+## Global value explicit declaration architecture configuration metadata
 arch:
   __metadata:
     name: "Architecture"
     label: "Worker node architecture"
-    description: "Worker node architecture to deploy to. The helm chart will try to detect the architecture based on the master node. Choose an explicit architecture here to overwrite it."
+    description: "Worker node architecture to deploy to. The helm chart will try to detect the architecture based on the master node. If worker node architecture is different from master node, you must select explicit architecture here to overwrite it."
     type: "string"
     immutable: "false"
     required: false
@@ -19,6 +21,7 @@ arch:
       - label: "zLinux platforms"
         value: "s390x"
 
+## Global value explicit declaration
 global:
   __metadata:
     label: "Docker-registry secret"
@@ -57,22 +60,7 @@ image:
         value: "Always"
       - label: "Never"
         value: "Never"
-  arch:
-    __metadata:
-      name: "imageArch"
-      label: "Docker image architecture"
-      description: "Choose x86_64, ppc64le, or s390x. One must be selected or chart deployment will fail"
-      type: "string"
-      immutable: "false"
-      required: true
-      options:
-      - label: "x86_64"
-        value: "x86_64"
-      - label: "ppc64le"
-        value: "ppc64le"
-      - label: "s390x"
-        value: "s390x"
-
+  
 ## Db2 specific configuration
 db2inst:
   __metadata:
@@ -102,10 +90,10 @@ options:
     __metadata:
       name: "databaseName"
       label: "Database Name"
-      description: "Database name to be created. Defaults to no database."
+      description: "Database name must be provided."
       type: "string"
       immutable: "false"
-      required: false
+      required: true
    oracleCompatibility:
     __metadata:
       name: "oracleCompatibility"
@@ -132,7 +120,7 @@ service:
     __metadata:
       name: "Type"
       label: "Service Type"
-      description: "This is the Service Type"
+      description: "This is the Service Type. ClusterIP type is only accessible within the ICP cluster. NodePort type is accessbile outside of the ICP cluster. Choose one depending on your application requirements"
       type: "string"
       immutable: "false"
       required: true
@@ -142,6 +130,48 @@ service:
         - label: "Node Port"
           value: "NodePort"
 
+## Persistence options
+persistence:
+  __metadata:
+    label: "Data persistence configuration"
+  enabled:
+   __metadata:
+      name: "enabled"
+      label: "Enable persistence for this deployment"
+      description: "Enables persistence for this deployment. Defaults to true. A persistent volume is required."
+      type: "boolean"
+      immutable: "false"
+      required: true
+  useDynamicProvisioning:
+   __metadata:
+      name: "useDynamicProvisioning"
+      label: "Use dynamic provisioning for persistent volume"
+      description: "If dynamic provisioning is available in the cluster this option will automatically provision the requested volume if set to true. Defaults to false."
+      type: "boolean"
+      immutable: "false"
+      required: true
+
+## Db2 HADR options
+hadr:
+  __metadata:
+    label: "Db2 HADR configuration"
+  enabled:
+   __metadata:
+      name: "enabled"
+      label: "Configure Db2 HADR on this install"
+      description: "Enables and configure Db2 HADR on this install. Defaults to false. Persistent volumes data-stor, hadr-stor, etcd-stor below are required."
+      type: "boolean"
+      immutable: "false"
+      required: true
+  useDynamicProvisioning:
+   __metadata:
+      name: "useDynamicProvisioning"
+      label: "Use dynamic provisioning for Db2 HADR persistent volume"
+      description: "If dynamic provisioning is available in the cluster this option will automatically provision the requested volume if set to true. Defaults to false."
+      type: "boolean"
+      immutable: "false"
+      required: true
+
 ## Data volume claim options
 dataVolume:
   __metadata:
@@ -149,6 +179,43 @@ dataVolume:
   name:
     __metadata:
       name: "data-stor"
+      label: "Name of the persistent volume claim"
+      description: "By default a persistent volume claim will be created with this name."
+      type: "string"
+      immutable: "false"
+      required: true
+  existingClaimName:
+    __metadata:
+      name: "existingClaimName"
+      label: "Existing volume claim"
+      description: "By default a new persistent volume claim will be created. Specify an existing claim here if one is available. NOT SUPPORTED IF HADR IS ENABLED."
+      type: "string"
+      immutable: "false"
+      required: false
+  storageClassName:
+    __metadata:
+      name: "storageClassName"
+      label: "Existing storage class name"
+      description: "Choose a specific storage class name. Defaults to the default storage class in the cluster."
+      type: "string"
+      immutable: "false"
+      required: false
+  size:
+    __metadata:
+      name: "size"
+      label: "Size of the volume claim"
+      description: "Defaults to 20Gi of storage request. Choose a different size of disk if needed."
+      type: "string"
+      immutable: "false"
+      required: true
+
+## Db2 HADR volume claim options
+hadrVolume:
+  __metadata:
+    label: "Db2 HADR volume configuration"
+  name:
+    __metadata:
+      name: "hadr-stor"
       label: "Name of the persistent volume claim"
       description: "By default a persistent volume claim will be created with this name."
       type: "string"
@@ -174,29 +241,37 @@ dataVolume:
     __metadata:
       name: "size"
       label: "Size of the volume claim"
-      description: "Defaults to 20Gi of storage request. Choose a different size of disk if needed."
+      description: "Defaults to 1Gi of storage request. Choose a different size of disk if needed."
       type: "string"
       immutable: "false"
       required: true
 
-## Persistence options
-persistence:
+## Etcd volume claim options
+etcdVolume:
   __metadata:
-    label: "Data persistence configuration"
-  enabled:
-   __metadata:
-      name: "enabled"
-      label: "Enable persistence for this deployment"
-      description: "Enables persistence for this deployment. Defaults to true. A persistent volume is required."
-      type: "boolean"
+    label: "Etcd volume configuration"
+  name:
+    __metadata:
+      name: "etcd-stor"
+      label: "Name of the persistent volume claim"
+      description: "By default a persistent volume claim will be created with this name."
+      type: "string"
       immutable: "false"
       required: true
-  useDynamicProvisioning:
-   __metadata:
-      name: "useDynamicProvisioning"
-      label: "Use dynamic provisioning for persistent volume"
-      description: "If dynamic provisioning is available in the cluster this option will automatically provision the requested volume if set to true. Defaults to false."
-      type: "boolean"
+  storageClassName:
+    __metadata:
+      name: "storageClassName"
+      label: "Existing storage class name"
+      description: "Choose a specific storage class name. Defaults to the default storage class in the cluster."
+      type: "string"
+      immutable: "false"
+      required: false
+  size:
+    __metadata:
+      name: "size"
+      label: "Size of the volume claim"
+      description: "Defaults to 1Gi of storage request. Choose a different size of disk if needed."
+      type: "string"
       immutable: "false"
       required: true
 

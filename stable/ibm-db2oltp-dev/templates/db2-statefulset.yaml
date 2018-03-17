@@ -1,0 +1,229 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    component: "db2"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  ports:
+  - port: 50000
+    name: main
+    targetPort: 50000
+    protocol: TCP
+  - port: 55000
+    name: text
+    targetPort: 55000
+    protocol: TCP
+  - port: 60006
+    name: db2hadrp
+    targetPort: 60006
+    protocol: TCP
+  - port: 60007
+    name: db2hadrs
+    targetPort: 60007
+    protocol: TCP
+  clusterIP: None
+  selector:
+    app: {{ template "fullname" . }}
+---
+
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    component: "db2"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  serviceName: {{ template "fullname" . }}
+{{- if .Values.hadr.enabled }}  
+  replicas: 2
+{{- else }}
+  replicas: 1
+{{- end }}
+  template:
+    metadata:
+      name: {{ template "fullname" . }}
+      labels:
+        app: {{ template "fullname" . }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types, 
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms, 
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.arch }}
+                - {{ .Values.arch }}
+                {{- else }}
+                - {{ template "arch" . }}
+                {{- end }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: "{{ template "fullname" . }}"
+                  release: "{{ .Release.Name }}"
+                  component: "db2"
+      volumes:
+      - name: {{ template "datastorname" . }}
+      {{- if and (.Values.persistence.enabled) (not .Values.hadr.enabled) }}
+        persistentVolumeClaim:
+        {{- if .Values.dataVolume.existingClaimName }}
+          claimName: {{ .Values.dataVolume.existingClaimName }}
+        {{- else }}
+          claimName: {{ template "datastorname" . }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: {{ template "hadrstorname" . }}
+      {{- if and (.Values.persistence.enabled) (.Values.hadr.enabled) }}
+        persistentVolumeClaim:
+        {{- if .Values.hadrVolume.existingClaimName }}
+          claimName: {{ .Values.hadrVolume.existingClaimName }}
+        {{- else }}
+          claimName: {{ template "hadrstorname" . }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+    {{- if .Values.hadr.enabled }}
+      hostIPC: true
+    {{- end }}
+      containers:
+      - name: {{ template "fullname" . }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+      {{- if .Values.hadr.enabled }}
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["SYS_RESOURCE", "IPC_OWNER", "SYS_NICE"]
+      {{- else }} 
+        securityContext:
+          capabilities:
+            add: ["SYS_RESOURCE", "IPC_OWNER", "SYS_NICE"]
+      {{- end }}
+        ports:
+        - containerPort: 50000
+        - containerPort: 55000
+        env:
+        - name: LICENSE
+          value: "accept"
+        - name: DB2INSTANCE
+          value: {{ default "db2inst1" .Values.db2inst.instname | quote }}
+        - name: DB2INST1_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}
+              key: password 
+      {{- if not .Values.hadr.enabled }}
+        - name: DBNAME
+          value: "{{ .Values.options.databaseName }}"
+      {{- else }}
+        - name: DBNAME
+          value: {{ default "sample" .Values.options.databaseName| quote }}
+      {{- end }} 
+        - name: BLU
+          value: "false"
+        - name: ENABLE_ORACLE_COMPATIBILITY
+          value: "{{ .Values.options.oracleCompatibility }}"
+        - name: UPDATEAVAIL
+          value: "NO"
+        - name: ETCD_ENDPOINT
+          value: "http://{{ template "fullname" . }}-etcd-0.{{ template "fullname" . }}-etcd:2379,http://{{ template "fullname" . }}-etcd-1.{{ template "fullname" . }}-etcd:2379,http://{{ template "fullname" . }}-etcd-2.{{ template "fullname" . }}-etcd:2379"
+        - name: TO_CREATE_SAMPLEDB
+          value: "false" 
+        - name: IS_OSXFS
+          value: "false"
+        - name: REPODB
+          value: "false"
+        - name: HADR_ENABLED
+          value: "{{ .Values.hadr.enabled }}"
+      {{- if not .Values.hadr.enabled }}  
+        # set liveness probe to determine if container needs to be restarted
+        # - command, http, or tcp
+        # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s
+          initialDelaySeconds: 810
+          periodSeconds: 90
+          failureThreshold: 3 
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - /database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 25
+      {{- end }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /database
+        {{- if .Values.hadr.enabled }}
+          name: {{ .Values.dataVolume.name | quote }}
+        {{- else }}
+          name: {{ template "datastorname" . }}
+        {{- end }}
+        - mountPath: /hadr
+          name: {{ template "hadrstorname" . }}
+
+{{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+          - name: {{ .Values.global.image.secretName }}
+{{- end }}
+
+  volumeClaimTemplates:
+  {{- if and (.Values.persistence.enabled) ( .Values.hadr.enabled) (not .Values.dataVolume.existingClaimName) }}
+  - metadata:
+      name: {{ .Values.dataVolume.name | quote }}
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        component: "db2"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      # If present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by Kubernetes Administrator
+      #
+      # Setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.dataVolume.storageClassName | quote }}
+      {{- else }}
+      storageClassName: {{ default "" .Values.dataVolume.storageClassName | quote }}
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.dataVolume.size | quote }}
+  {{- end }}
+
+
+
+
