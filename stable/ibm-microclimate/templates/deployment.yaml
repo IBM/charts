@@ -1,0 +1,240 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+# "Restricted Materials of IBM"
+#
+# Copyright IBM Corp. 2017 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#*******************************************************************************
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" .}}
+  labels:
+    app: {{ template "fullname" .}}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" .}}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: "IBM Microclimate v1"
+        productID: "IBMMicroclimate_1.0_perpetual_00000"
+        productVersion: "1.0"
+
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 8 }}
+
+      volumes:
+      - name: shared-workspace
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "fullname" .}}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: docker-socket
+        hostPath:
+          path: /var/run/
+      {{- if .Values.jenkins.Pipeline.Registry.Secret }}
+      - name: registry-secret
+        secret:
+          secretName: "{{ .Values.jenkins.Pipeline.Registry.Secret}}"
+      {{- end }}
+
+      containers:
+
+      - name: microclimate-portal
+        image: {{ .Values.portal.repository}}:{{ .Values.portal.tag}}
+        imagePullPolicy: "{{ .Values.imagePullPolicy}}"
+        volumeMounts:
+        - name: shared-workspace
+          mountPath: /microclimate-workspace
+        - name: docker-socket
+          mountPath: /var/run/
+        env:
+          - name: IN_K8
+            value: "true"
+          - name: JMETER_IMAGE
+            value: {{ .Values.jmeter.repository}}:{{ .Values.jmeter.tag}}
+          - name: SERVICE_NAME
+            value: {{ template "fullname" .}}
+          - name: EDITOR_IMAGE
+            value: {{ .Values.theia.repository}}:{{ .Values.theia.tag}}
+          - name: EDITOR_MEM_REQUEST
+            value: {{ .Values.theia.resources.memRequest}}
+          - name: EDITOR_CPU_REQUEST
+            value: {{ .Values.theia.resources.cpuRequest}}
+          - name: EDITOR_MEM_LIMIT
+            value: {{ .Values.theia.resources.memLimit}}
+          - name: EDITOR_CPU_LIMIT
+            value: {{ .Values.theia.resources.cpuLimit}}
+        ports:
+        - containerPort: {{ .Values.ports.portal }}
+        livenessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          httpGet:
+            path: /
+            port: {{ .Values.ports.portal }}
+        readinessProbe:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          httpGet:
+            path: /
+            port: {{ .Values.ports.portal }}
+        resources:
+          requests:
+            memory: {{ .Values.portal.resources.memRequest }}
+            cpu: {{ .Values.portal.resources.cpuRequest }}
+          limits:
+            memory: {{ .Values.portal.resources.memLimit }}
+            cpu: {{ .Values.portal.resources.cpuLimit }}
+
+      - name: microclimate-editor
+        image: {{ .Values.theia.repository}}:{{ .Values.theia.tag}}
+        imagePullPolicy: "{{ .Values.imagePullPolicy}}"
+        volumeMounts:
+        - name: shared-workspace
+          mountPath: /home/microclimate-workspace
+        ports:
+          - containerPort: {{ .Values.ports.theia }}
+        livenessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          httpGet:
+            path: /
+            port: {{ .Values.ports.theia }}
+        readinessProbe:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          httpGet:
+            path: /
+            port: {{ .Values.ports.theia }}
+        resources:
+          requests:
+            memory: {{ .Values.theia.resources.memRequest }}
+            cpu: {{ .Values.theia.resources.cpuRequest }}
+          limits:
+            memory: {{ .Values.theia.resources.memLimit }}
+            cpu: {{ .Values.theia.resources.cpuLimit }}
+
+
+      - name: microclimate-file-watcher
+        image: {{ .Values.filewatcher.repository}}:{{ .Values.filewatcher.tag}}
+        imagePullPolicy: "{{ .Values.imagePullPolicy}}"
+        volumeMounts:
+        - name: shared-workspace
+          mountPath: /microclimate-workspace
+        - name: docker-socket
+          mountPath: /var/run/
+        {{- if .Values.jenkins.Pipeline.Registry.Secret }}
+        - name: registry-secret
+          mountPath: /tmp/secret
+        {{- end }}
+        env:
+          - name: IN_K8
+            value: "true"
+          - name: JMETER_IMAGE
+            value: {{ .Values.jmeter.repository}}:{{ .Values.jmeter.tag}}
+          {{- if .Values.jenkins.Pipeline.Registry.Url }}
+          - name: DOCKER_REGISTRY
+            value: "{{ .Values.jenkins.Pipeline.Registry.Url }}"
+          {{- end }}
+        ports:
+          - containerPort: {{ .Values.ports.filewatcher }}
+        command: ["/scripts/root-watcher.sh", "/microclimate-workspace"]
+        livenessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          httpGet:
+            path: /health
+            port: 9091
+        readinessProbe:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          httpGet:
+            path: /health
+            port: {{ .Values.ports.filewatcher }}
+        resources:
+          requests:
+            memory: {{ .Values.filewatcher.resources.memRequest }}
+            cpu: {{ .Values.filewatcher.resources.cpuRequest }}
+          limits:
+            memory: {{ .Values.filewatcher.resources.memLimit }}
+            cpu: {{ .Values.filewatcher.resources.cpuLimit }}
+---
+# Dedicated deployment for devops piece
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-devops
+  labels:
+    app: {{ template "fullname" . }}-devops
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}-devops
+      release: {{ .Release.Name }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-devops
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: devops-chart
+        image: "{{ .Values.devops.repository }}:{{ .Values.devops.tag }}"
+        imagePullPolicy: {{ .Values.devops.pullPolicy }}
+        ports:
+          - containerPort: {{ .Values.service.internalPort }}
+        livenessProbe:
+          httpGet:
+            path: /health/liveness
+            port: {{ .Values.service.internalPort }}
+          initialDelaySeconds: 600
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /health/readiness
+            port: {{ .Values.service.internalPort }}
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        env:
+        - name: JENKINS_URL
+          value: "http://{{ .Release.Name }}-jenkins:8080"
+        - name: JENKINS_EXTERNAL_URL
+          value: "http://{{ .Values.jenkins.Master.HostName }}"
+        - name: JENKINS_USE_SECURITY
+          value: "{{ .Values.jenkins.Master.UseSecurity }}"
+        - name: JENKINS_USER
+          value: "{{ .Values.jenkins.Master.AdminUser }}"
+        - name: JENKINS_API_TOKEN
+          value: "be652e0e60b0af067c2b54cd04720df3"
+        - name: GITLAB_URL
+          value: "http://{{ .Release.Name }}-gitlab-ce:80"
+        - name: GITLAB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-gitlab-ce
+              key: gitlab-root-password
+        resources:
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}
