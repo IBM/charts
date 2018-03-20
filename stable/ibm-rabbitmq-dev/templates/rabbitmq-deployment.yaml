@@ -35,7 +35,7 @@ spec:
       containers:
       - name: {{ template "fullname" . }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        imagePullPolicy: {{ default "" .Values.image.pullPolicy | quote }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         env:
         - name: MY_POD_IP
           valueFrom:
@@ -44,7 +44,7 @@ spec:
         - name: K8S_SERVICE_NAME
           value: {{ template "fullname" . }}
         - name: RABBITMQ_DEFAULT_USER
-          value: {{ default "" .Values.rabbitmqUsername | quote }}
+          value: {{ .Values.rabbitmqUsername | quote }}
         - name: RABBITMQ_DEFAULT_PASS
           valueFrom:
             secretKeyRef:
@@ -55,27 +55,44 @@ spec:
             secretKeyRef:
               name: {{ template "fullname" . }}
               key: rabbitmq-erlang-cookie
-        - name: RABBITMQ_NODE_PORT
-          value: {{ default "5672" .Values.rabbitmqNodePort | quote }}
+        {{ if .Values.tls.enabled -}}
+        - name: RABBITMQ_CTL_ERL_ARGS
+          value: "-proto_dist inet_tls"
+        {{ end -}}
         - name: RABBITMQ_NODE_TYPE
-          value: {{ default "stats" .Values.rabbitmqNodeType | quote }}
+          value: {{ .Values.rabbitmqNodeType | quote }}
         - name: RABBITMQ_NODENAME
-          value: {{ printf "%s@%s" (default "rabbit" .Values.rabbitmqNodeName) "localhost" | quote }}
+          value: {{ printf "%s@%s" .Values.rabbitmqNodeName "localhost" | quote }}
         - name: RABBITMQ_CLUSTER_NODE_NAME
-          value: {{ default "" .Values.rabbitmqClusterNodeName | quote }}
+          value: {{ .Values.rabbitmqClusterNodeName | quote }}
         - name: RABBITMQ_DEFAULT_VHOST
-          value: {{ default "/" .Values.rabbitmqVhost | quote }}
-        - name: RABBITMQ_MANAGER_PORT
-          value: {{ default "15672" .Values.rabbitmqManagerPort | quote }}
+          value: {{ .Values.rabbitmqVhost | quote }}
+        {{ if .Values.tls.enabled -}}  
+        - name: RABBITMQ_SSL_CERT_FILE
+          value: "/opt/rabbitmq/tls/cert.pem"
+        - name: RABBITMQ_SSL_KEY_FILE
+          value: "/opt/rabbitmq/tls/key.pem"
+        - name: RABBITMQ_SSL_CA_FILE
+          value: "/opt/rabbitmq/tls/cacert.pem"         
+        {{ end -}}
         ports:
         - name: epmd
           containerPort: 4369
+        {{ if .Values.tls.enabled -}}  
         - name: ampq
-          containerPort: {{ default "5672" .Values.rabbitmqNodePort }}
+          containerPort: 5671
         - name: dist
-          containerPort: {{ default "5672" .Values.rabbitmqNodePort | add 20000 }}
+          containerPort: 25671
         - name: stats
-          containerPort: {{ default "15672" .Values.rabbitmqManagerPort }}
+          containerPort: 15671
+        {{ else }}
+        - name: ampq
+          containerPort: 5672
+        - name: dist
+          containerPort: 25672
+        - name: stats
+          containerPort: 15672
+        {{ end }}
         livenessProbe:
           exec:
             command:
@@ -95,9 +112,27 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /var/lib/rabbitmq
+        {{ if .Values.tls.enabled -}}  
+        - name: tls
+          mountPath: /opt/rabbitmq/tls   
+        {{ end -}}         
         resources:
 {{ toYaml .Values.resources | indent 10 }}
       volumes:
+      {{ if .Values.tls.enabled -}}  
+      - name: tls
+        secret:
+          secretName: {{ template "fullname" . }}
+          defaultMode: 0644
+          items:
+          - key: tls.crt
+            path: cert.pem
+          - key: tls.key
+            path: key.pem
+  
+          - key: tls.cacrt
+            path: cacert.pem              
+      {{ end -}}
       - name: data
       {{- if .Values.persistence.enabled }}
         persistentVolumeClaim:

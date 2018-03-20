@@ -8,8 +8,8 @@ This chart bootstraps a [RabbitMQ](https://www.rabbitmq.com/) deployment on a [K
 
 ## Prerequisites
 
-- Kubernetes 1.7 or later
-- Tiller 2.6.0 or later
+- Kubernetes 1.9 or later
+- Tiller 2.7.2 or later
 - To persist data, a PersistentVolume needs to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using the IBM Cloud Private UI or with the CLI. Create a `pv.yaml` file with the following content:
   ```bash
   apiVersion: v1
@@ -71,12 +71,12 @@ The following tables lists the configurable parameters of the RabbitMQ chart and
 | `rabbitmqUsername`         | RabbitMQ default username                               | `admin`                                                  |
 | `rabbitmqPassword`         | RabbitMQ default user password                          | `admin`                                                  |
 | `rabbitmqErlangCookie`     | Erlang cookie (how clustered nodes authenticate)        | _random 32 character long alphanumeric string_           |
-| `rabbitmqNodePort`         | Node port                                               | `5672`                                                   |
+| `rabbitmqNodePort`         | Node port (5671 with TLS, else 5672)                    | `5671`                                                   |
 | `rabbitmqNodeType`         | Node type                                               | `stats`                                                  |
 | `rabbitmqNodeName`         | Node name                                               | `rabbit`                                                 |
 | `rabbitmqClusterNodeName`  | Node name to cluster with. e.g.: `clusternode@hostname` |                                                          |
 | `rabbitmqVhost`            | RabbitMQ application vhost                              | `/`                                                      |
-| `rabbitmqManagerPort`      | RabbitMQ Manager port                                   | `15672`                                                  |
+| `rabbitmqManagerPort`      | RabbitMQ Manager port (15671 with TLS, else 15672)      | `15671`                                                  |
 | `persistence.enabled`      | Use a PVC to persist data                               | `true`                                                   |
 | `persistence.useDynamicProvisioning` | Use dynamic provisioning                      | `false`                                                  |
 | `dataPVC.name`             | Name of the Persistent Volume Claim to create           | `rabbitmq-data-pvc`                                      |
@@ -88,6 +88,10 @@ The following tables lists the configurable parameters of the RabbitMQ chart and
 | `dataPVC.size`             | Size of data volume                                     | `8Gi`                                                    |
 | `resources.requests.cpu`   | Requested CPU                                           | `100m`                                                   |
 | `resources.requests.memory` | Requested memory                                       | `256Mi`                                                  |
+| `tls.enabled`              | Enabled TLS security on communications ports            | `true`                                                   |
+| `tls.key`                  | Size of data volume                                     | `8Gi`                                                    |
+| `tls.crt`                  | Size of data volume                                     | `8Gi`                                                    |
+| `tls.cacrt`                | CA certficate for TLS (Base64 encoded)                  |                                                          |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 

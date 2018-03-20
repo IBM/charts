@@ -46,6 +46,9 @@ The Helm chart has the following values that can be overriden using the --set pa
 |             | size                   | Size of the volume to hold all the persisted data. | Size in Gi (default is 1Gi) |
 | logs        | persistLogs            | When true, the server logs will be persisted to the volume bound according to the persistence parameters. | false (default) or true |
 |             | persistTransactionLogs | When true, the transaction logs will be persisted to the volume bound according to the persistence parameters. | false (default) or true |
+|             | consoleFormat          | [18.0.0.1+] Specifies container log output format | json (default) or basic |
+|             | consoleLogLevel        | [18.0.0.1+] Controls the granularity of messages that go to the container log | info (default), audit, warning, error or off | 
+|             | consoleSource          | [18.0.0.1+] Specifies the sources that are written to the container log. Use a comma separated list for multiple sources. This property only applies when consoleFormat=json.  | message,trace,accessLog,ffdc (default) |
 | microprofile | health.enabled | Specifies whether to use the [MicroProfile Health](https://www.ibm.com/support/knowledgecenter/SSEQTP_liberty/com.ibm.websphere.wlp.doc/ae/twlp_sec_json.html) endpoint (`/health`) for readiness probe of the container. | false (default) or true |
 | replicaCount |     |  Describes the number of desired replica pods running at the same time. | Default is 1.  See [Replica Sets](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset) |
 | autoscaling | enabled                        | Specifies whether a horizontal pod autoscaler (HPA) is deployed.  Note that enabling this field disables the `replicaCount` field. | false (default) or true |
