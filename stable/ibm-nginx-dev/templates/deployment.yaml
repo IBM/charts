@@ -1,0 +1,98 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $compName := .sch.chart.components.nginx.name }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      annotations:
+        productID: NGINX_100_free_00000
+        productName: NGINX
+        productVersion: 1.0.0
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.service.port }}
+          protocol: TCP
+        {{- if .Values.liveness.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.liveness.path }}
+            port: {{ .Values.service.port }}
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.liveness.periodSeconds }}
+        {{- end }}
+        {{- if .Values.readiness.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.readiness.path }}
+            port: {{ .Values.service.port }}
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readiness.periodSeconds }}
+        {{- end }}
+        volumeMounts:
+        {{- if .Values.configMapName }}
+        - name: config
+          mountPath: /etc/nginx
+        {{- end }}
+        {{- if .Values.confdPVC.enabled }}
+        - name: confd
+          mountPath: /etc/nginx/conf.d
+        {{- end }}
+        - name: html
+          mountPath: /usr/share/nginx/html
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+      volumes:
+      {{- if .Values.configMapName }}
+      - name: config
+        configMap:
+          name: {{ .Values.configMapName }}
+      {{- end }}
+      {{- if .Values.confdPVC.enabled }}
+      - name: confd
+        persistentVolumeClaim:
+          {{- if .Values.confdPVC.existingClaimName }}
+          claimName: {{ .Values.confdPVC.existingClaimName }}
+          {{- else }}
+          claimName: {{ .Release.Name }}-nginx-confd-pvc
+          {{- end -}}
+      {{- end }}
+      - name: html
+      {{- if .Values.htmlPVC.enabled }}
+        persistentVolumeClaim:
+          {{- if .Values.htmlPVC.existingClaimName }}
+          claimName: {{ .Values.htmlPVC.existingClaimName }}
+          {{- else }}
+          claimName: {{ .Release.Name }}-nginx-html-pvc
+          {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
