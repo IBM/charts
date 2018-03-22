@@ -9,7 +9,124 @@ This chart consists of IBM InfoSphere Information Server for Evaluation v11.7 in
 ## Prerequisites
 
 - Chart should be installed by reviewing and accepting the license terms and conditions.
-- Chart uses Persistent Volumes. Dynamic provisioning of Persistent Volumes is enabled by default. The cluster should be set up with Dynamic Provisioning (e.g. GlusterFS). See [persistence](#persistence) section.
+- If deploying the chart to a non-default namespace, ensure to set the Pod Security Policy as per [this link](https://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0/app_center/nd_helm.html). The chart uses `HOST_IPC` access and the following capabilities: `IPC_OWNER, SYS_NICE, SYS_RESOURCE, SYS_ADMIN`
+- Chart uses Persistent Volumes. Dynamic provisioning of Persistent Volumes is enabled by default. The cluster should be set up with Dynamic Provisioning (e.g. GlusterFS). See [persistence](#persistence) section. If dynamic provisioning is not enabled, create the persistent volumes using the template below
+
+
+```
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: cas-pv
+  labels:
+    assign-to: "cassandra"
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <NFS SERVER> 
+    path: <NFS PATH>/cassandra
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: es-pv
+  labels:
+    assign-to: "es"
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <NFS SERVER>
+    path: <NFS PATH>/es
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: kafka-pv
+  labels:
+    assign-to: "kafka"
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <NFS SERVER>
+    path: <NFS PATH>/kafka
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: log-pv
+  labels:
+    assign-to: "logstash"
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <NFS SERVER>
+    path: <NFS PATH>/log
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: zk-pv
+  labels:
+    assign-to: "zookeeper"
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <NFS SERVER>
+    path: <NFS PATH>/zk
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: secret-pv
+  labels:
+    assign-to: "iiscert"
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <NFS SERVER>
+    path: <NFS PATH>/secret
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: solr-pv
+  labels:
+    assign-to: "solr"
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <NFS SERVER>
+    path: <NFS PATH>/solr
+
+```
 
 
 ## Deploying IIS Evaluation 
@@ -54,7 +171,7 @@ The following tables lists the configurable parameters of the ibm-iisee-eval cha
 | Parameter                                 | Description                       | Default Value                |
 |-------------------------------------------|-----------------------------------|------------------------------|
 | release.image.pullPolicy                  | Image Pull Policy                 | IfNotPresent                 |
-| release.image.repository                  | Image Repository                  | na.cumulusrepo.com/iigicp   |
+| release.image.repository                  | Image Repository                  | iighostd                     |
 | release.image.tag                         | Image Tag                         | 11.7                        |
 | persistence.enabled                       | Enable persistence                | true                         |
 | persistence.useDynamicProvisioning        | Use Dynamic PV Provisioning       | true                         |

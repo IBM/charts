@@ -1,0 +1,165 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "master-fullname" . }}
+  labels:
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ template "master-fullname" . }}
+spec:
+  #serviceName: {{ template "master-fullname" . }}
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: {{ template "master-fullname" . }}
+      heritage: {{.Release.Service | quote }}
+      release: {{.Release.Name | quote }}
+      chart: "{{.Chart.Name}}"
+  template:
+    metadata:
+      labels:
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{ template "master-fullname" . }}
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      hostname: {{ template "master-fullname" . }}
+      serviceAccountName: cws-{{ .Release.Name }}
+      imagePullSecrets:
+        - name: registrykey-{{ .Release.Name }}
+      initContainers:
+      - name: helmget
+        image: {{ template "helmImage" . }}
+        command:
+        - /bin/cp 
+        - "/helm"
+        - "/helmdir/helm"
+        volumeMounts:
+        - name: helmdir
+          mountPath: "/helmdir"        
+      containers:
+        - args:
+          - /kubectl
+          - proxy
+          - -p
+          - "8001"
+          image: {{ template "kubectlImage" . }}
+          imagePullPolicy: IfNotPresent
+          name: kubectlproxy
+        {{- if eq .Values.cluster.proxyOption "IngressProxy" }}  
+        - image: {{ template "dnsmasqImage" . }}
+          name: {{ template "master-fullname" . }}-dnsmasq
+          command: ["/bin/sh","-c"]
+          args: ["$(sh /var/tmp/cfc/startDnsmasq.sh)"]
+          volumeMounts:
+           - mountPath: /var/tmp/cfc
+             name: license
+        - image: nginx:1.13.8
+          name: {{ template "master-fullname" . }}-proxy
+          ports:
+           - containerPort: {{ template "proxyHttpsPort" . }}
+          command: ["/bin/sh", "-c"]
+          args: ["$(sh /nginx/startnginx.sh)"]
+          volumeMounts:
+           - mountPath: /nginx
+             name: license
+           - mountPath: /var/share
+             name: sharedir
+        {{- end }}     
+        - name: {{ template "master-fullname" . }}
+          image: {{ template "cwsImage" . }}
+          command: ["/bin/bash","-c"]
+          args: ["$(bash /var/tmp/cfc/startMaster.sh)"]
+          imagePullPolicy: {{.Values.master.imagePullPolicy}}
+          readinessProbe:
+            tcpSocket:
+              {{- if eq .Values.cluster.proxyOption "IngressProxy" }}
+              port: {{ template "guiPort" . }}
+              {{- else }}
+              port: 8443
+              {{- end }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 17869
+            initialDelaySeconds: 300
+            periodSeconds: 10
+          securityContext:
+            capabilities:
+              add:
+                - SETGID 
+                - SETUID
+                - SYS_CHROOT 
+                - SYS_ADMIN 
+                - SYS_NICE 
+                - SYS_RESOURCE 
+                - SYS_TIME 
+                - NET_BROADCAST 
+                - NET_ADMIN
+                - LEASE
+          resources:
+            requests:
+              cpu: "{{.Values.master.cpu}}"
+              memory: "{{.Values.master.memory}}"
+          env:
+              - name: HELM_HOST
+                value: {{ template "helmHost" . }}
+              - name: LDAP_SERVER_IP
+                value: {{.Values.cluster.ldapServerIp}}
+              - name: BASE_DN
+                value: {{.Values.cluster.ldapBaseDn}}
+          volumeMounts:
+              {{- if .Values.dli.enabled }}
+              - mountPath: /opt/DL
+                name: dldir
+              - mountPath: /mygpfs
+                name: mygpfs
+              {{- end }}
+              - mountPath: /var/shareDir
+                name: persistsharedir
+              - mountPath: /var/tmp/cfc
+                name: license
+              - mountPath: /var/tmp/prerequisite
+                name: prerequisite
+              - mountPath: /var/run/docker.sock
+                name: docker-sock                    
+              {{- if eq .Values.cluster.proxyOption "IngressProxy" }}  
+              - mountPath: /var/share
+                name: sharedir
+              {{- end }}  
+              - name: helmdir
+                mountPath: /tmp/helmdir
+      volumes:
+        {{- if .Values.dli.enabled }}
+        - name: dldir
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-dl
+        - name: mygpfs
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-mygpfs
+        {{- end }}
+        - name: persistsharedir
+          persistentVolumeClaim:
+            claimName: "{{ .Release.Name }}-cws-share"
+        - name: license
+          configMap:
+            name: "{{ .Release.Name }}-conductor-master-bootstrap"
+        - name: prerequisite
+          configMap:
+            name: {{ .Release.Name }}-prerequisite
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock             
+        {{- if eq .Values.cluster.proxyOption "IngressProxy" }}    
+        - name: sharedir
+          emptyDir: {}
+        {{- end }}  
+        - name: helmdir
+          emptyDir: {}        
+      terminationGracePeriodSeconds: 30   

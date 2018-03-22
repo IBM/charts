@@ -1,0 +1,44 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  # Pay attention to the redis-role label at runtime. The self-determination logic in the image sets this value accordingly.
+  name: {{ template "fullname" . }}-server
+  labels:
+    name: "redis-server"
+    redis-node: "true"
+{{ include "labels.standard" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicas.servers }}
+  template:
+    metadata:
+      annotations:
+        productID: RedisHA_406r0_free_00000
+        productName: Redis HA
+        productVersion: 4.0.6-r0
+      labels:
+        name: "redis-server"
+        redis-node: "true"
+{{ include "labels.standard" . | indent 8 }}
+    spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 8 }}
+      serviceAccountName: {{ template "redis-ha.serviceAccountName" . }}
+      containers:
+      - name: redis
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote  }}
+        resources:
+{{ toYaml .Values.resources.server | indent 10 }}
+        env:
+          - name: REDIS_SENTINEL_SERVICE_HOST
+            value: "redis-sentinel"
+          - name: REDIS_CHART_PREFIX
+            value: {{ template "fullname" . }}-
+        ports:
+          - containerPort: 6379
+        volumeMounts:
+          - mountPath: /redis-master-data 
+            name: data
+      volumes:
+      - name: data
+

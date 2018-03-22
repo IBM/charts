@@ -1,0 +1,1268 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-conductor-master-bootstrap
+  labels:
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ template "master-fullname" . }}
+data:
+  license.dat: |- 
+      ego_base   3.6   31/07/2018   ()   ()   ()   a22e075ab69adff8a7e1b949f3458c0c2431510b
+      conductor_spark   2.2.1   31/07/2018   ()   ()   ()   f7ab7e7733ec4a853107b04a25759241b7a637c6
+      {{- if .Values.dli.enabled }}
+      conductor_deep_learning   1.1.0   31/07/2018   ()   ()   ()   cc205753fee2e13a9cf8808fb3f3e8a20bf612b4
+      {{- end }}
+  {{- if eq .Values.cluster.proxyOption "IngressProxy" }}
+  startDnsmasq.sh: |-
+    dnsmasq -k &
+    while [ true ]
+    do
+        sleep 10
+        killall dnsmasq
+        dnsmasq -k &
+    done
+
+  startnginx.sh: |-
+    while [ true ]
+    do
+      if [ -f /var/share/tls.key ];then
+           nginx -c /nginx/nginx.conf
+      else
+          sleep 10
+      fi
+    done
+
+  nginx.conf: |-
+    daemon off;
+    worker_processes 8;
+    pid /run/nginx.pid;
+    worker_rlimit_nofile 7168;
+    worker_shutdown_timeout 10s ;
+    events {
+        multi_accept        on;
+        worker_connections  16384;
+        use                 epoll;
+    }
+    http {
+        real_ip_header      X-Forwarded-For;
+        real_ip_recursive   on;
+        set_real_ip_from    0.0.0.0/0;
+        sendfile            on;
+        aio                 threads;
+        tcp_nopush          on;
+        tcp_nodelay         on;
+        log_subrequest      on;
+        reset_timedout_connection on;
+        keepalive_timeout  75s;
+        keepalive_requests 100;
+        client_header_buffer_size       1k;
+        client_header_timeout           60s;
+        large_client_header_buffers     4 8k;
+        client_body_buffer_size         8k;
+        client_body_timeout             60s;
+        http2_max_field_size            4k;
+        http2_max_header_size           16k;
+        types_hash_max_size             2048;
+        server_names_hash_max_size      1024;
+        server_names_hash_bucket_size   32;
+        map_hash_bucket_size            64;
+        proxy_headers_hash_max_size     512;
+        proxy_headers_hash_bucket_size  64;
+        variables_hash_bucket_size      64;
+        variables_hash_max_size         2048;
+        underscores_in_headers          off;
+        ignore_invalid_headers          on;
+        resolver 127.0.0.1 valid=30s;
+        include /etc/nginx/mime.types;
+        default_type text/html;
+        gzip on;
+        gzip_comp_level 5;
+        gzip_http_version 1.1;
+        gzip_min_length 256;
+        gzip_types application/atom+xml application/javascript application/x-javascript application/json application/rss+xml application/vnd.ms-fontobject application/x-font-ttf application/x-web-app-manifest+json application/xhtml+xml application/xml font/opentype image/svg+xml image/x-icon text/css text/plain text/x-component;
+        gzip_proxied any;
+        # Custom headers for response
+        server_tokens on;
+        # disable warnings
+        uninitialized_variable_warn off;
+        log_format upstreaminfo '$the_real_ip - [$the_real_ip] - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time $upstream_addr $upstream_response_length $upstream_response_time $upstream_status';
+        map $request_uri $loggable {
+            default 1;
+        }
+        access_log off;
+        error_log  /var/log/nginx/error.log notice;
+        # Retain the default nginx handling of requests without a "Connection" header
+        map $http_upgrade $connection_upgrade {
+            default          upgrade;
+            ''               close;
+        }
+        # trust http_x_forwarded_proto headers correctly indicate ssl offloading
+        map $http_x_forwarded_proto $pass_access_scheme {
+            default          $http_x_forwarded_proto;
+            ''               $scheme;
+        }
+        map $http_x_forwarded_port $pass_server_port {
+           default           $http_x_forwarded_port;
+           ''                $server_port;
+        }
+        map $http_x_forwarded_for $the_real_ip {
+            default          $http_x_forwarded_for;
+            ''               $realip_remote_addr;
+        }
+        map $pass_server_port $pass_port {
+            443              443;
+            default          $pass_server_port;
+        }
+        # Map a response error watching the header Content-Type
+        map $http_accept $httpAccept {
+            default          html;
+            application/json json;
+            application/xml  xml;
+            text/plain       text;
+        }
+        map $httpAccept $httpReturnType {
+            default          text/html;
+            json             application/json;
+            xml              application/xml;
+            text             text/plain;
+        }
+        # Obtain best http host
+        map $http_host $this_host {
+            default          $http_host;
+            ''               $host;
+        }
+        map $http_x_forwarded_host $best_http_host {
+            default          $http_x_forwarded_host;
+            ''               $this_host;
+        }
+        server_name_in_redirect off;
+        port_in_redirect        off;
+        ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+        # turn on session caching to drastically improve performance
+        ssl_session_cache builtin:1000 shared:SSL:10m;
+        ssl_session_timeout 10m;
+        # allow configuring ssl session tickets
+        ssl_session_tickets on;
+        # slightly reduce the time-to-first-byte
+        ssl_buffer_size 4k;
+        proxy_ssl_session_reuse on;
+        server {
+            server_name {{ template "master-fullname" . }};
+            listen 80;
+            listen [::]:80;
+    
+            listen {{ template "proxyHttpsPort" . }}  ssl http2;
+            listen [::]:{{ template "proxyHttpsPort" . }}  ssl http2;
+
+            ssl_certificate     /var/share/tls.crt;
+            ssl_certificate_key /var/share/tls.key;
+    
+            location ~* ^/(https*)-(.+)-(\d+)$ {
+                rewrite ^/(https*)-(.+)-(\d+)$ / break;
+                proxy_pass $1://$2:$3;
+            }
+    
+            location ~* ^/https*-.+-\d+/.*$ {
+                rewrite ^/(https*)-(.+)-(\d+)/(.*)$ /$4 break;
+                proxy_pass $1://$2:$3;
+            }
+    
+            fastcgi_param       HTTP_X_Code             503;
+            fastcgi_param       HTTP_X_Format           $http_accept;
+            fastcgi_param       HTTP_X_Original_URI     $request_uri;
+        }
+    }
+  {{- end }}
+  generate_ssl.sh: |- 
+    topdir=/opt/ibm/spectrumcomputing
+    exec 1<>$topdir/generatessl.log
+    exec 2>&1
+    set -x
+    CLUSTERADMIN=root
+    domain=`dnsdomainname`
+    if [ "$domain" = "" ]; then
+        domain=`hostname -f`
+    else
+        domain="*.$domain"
+    fi
+    . $topdir/jre/profile.jre
+    dnsname=`hostname -f`
+    cd $topdir/security
+    rm -f tier2and3ServerKeyStore.jks tier*
+    egojre=$topdir/jre
+    egokeytool=`find $egojre -name keytool`
+    $egokeytool -genkeypair -noprompt -alias tier2alias -dname "CN=$domain,O=Platform,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier2passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+    $egokeytool -certreq -alias tier2alias -file tier2alias.csr -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+    $egokeytool -gencert -infile tier2alias.csr -outfile tier2aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+    $egokeytool -importcert -noprompt -alias caalias -file cacert.pem -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword
+    $egokeytool -import -noprompt -alias tier2alias -file tier2aliascertcasigned.pem -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks
+    $egokeytool -genkeypair -noprompt -alias tier3alias -dname "CN=$domain,O=Platform,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier3passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+    $egokeytool -certreq -alias tier3alias -file tier3alias.csr -storepass SparkPassword -keypass tier3passwd  -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+    $egokeytool -gencert -infile tier3alias.csr -outfile tier3aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+    $egokeytool -import -noprompt -alias tier3alias -file tier3aliascertcasigned.pem -storepass SparkPassword -keypass tier3passwd -keystore tier2and3ServerKeyStore.jks
+    #Convert Tier 3 keys in Java Keystore to OpenSSL PKCS12 format
+    $egokeytool -importkeystore -srckeystore tier2and3ServerKeyStore.jks -srcalias tier3alias -srcstoretype jks -srcstorepass SparkPassword -srckeypass tier3passwd -destkeystore tier3KeyStore.p12 -deststoretype pkcs12 -deststorepass tier3passwd -destkeypass tier3passwd -noprompt
+    openssl pkcs12 -in tier3KeyStore.p12 -passin pass:tier3passwd -nocerts -out tier3opensslprivate.key -passout pass:tier3passwd
+    openssl pkcs12 -in tier3KeyStore.p12 -passin pass:tier3passwd -clcerts -nokeys -out tier3opensslpublic.pem
+    chmod 444 $topdir/security/tier2and3ServerKeyStore.jks
+    chmod 444 $topdir/security/tier3KeyStore.p12
+    chown -Rh $CLUSTERADMIN:$CLUSTERADMIN $topdir/security
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /var/share/tls.key -out /var/share/tls.crt -subj "/CN=$dnsname"
+    #=========
+    cd $topdir/wlp/usr/shared/resources/security
+    rm -f servercertcasigned.pem serverKeyStore.jks srvcertreq.csr serverTrustStore.jks
+    $egokeytool -genkeypair -noprompt -alias srvalias -dname "CN=$domain,O=Platform,C=CA" -keystore serverKeyStore.jks -storepass Liberty -keypass Liberty -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+    $egokeytool -certreq -alias srvalias -file srvcertreq.csr -storepass Liberty -keystore serverKeyStore.jks -ext "san=dns:$dnsname"
+    $egokeytool -gencert -infile srvcertreq.csr -outfile servercertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+    $egokeytool -importcert -noprompt -alias caalias -file cacert.pem -keystore serverKeyStore.jks -storepass Liberty
+    $egokeytool -import -noprompt -alias srvalias -file servercertcasigned.pem -storepass Liberty -keystore serverKeyStore.jks
+    $egokeytool -importcert -noprompt -alias srvalias -file cacert.pem -keystore serverTrustStore.jks -storepass Liberty
+    #==========
+    {{- if .Values.dli.enabled }}
+    # create certificate and key to enable https for monitor and optimizer Flask server
+    CWS_TOP=$topdir
+    DLMAO_HOME=/opt/ibm/spectrumcomputing/dli/dlmao
+    KEYSTR=$CWS_TOP/wlp/usr/shared/resources/security/serverKeyStore.jks
+    if [ -z "$KEYSTRPASS" ]; then
+        KEYSTRPASS=Liberty
+    fi
+    DESTKEYSTR_DIR=$DLMAO_HOME/conf
+    DESTKEYSTR=$DESTKEYSTR_DIR/serverKeyStore.p12
+    DESTCRT=$DESTKEYSTR_DIR/srv.crt
+    DESTKEY=$DESTKEYSTR_DIR/srv.key
+    keytool -importkeystore -srckeystore $KEYSTR -srcstorepass $KEYSTRPASS -destkeystore $DESTKEYSTR \
+    -deststoretype PKCS12 -srckeypass $KEYSTRPASS -destkeypass $KEYSTRPASS -deststorepass $KEYSTRPASS \
+    -noprompt -srcalias srvalias -storepass $KEYSTRPASS
+    openssl pkcs12 -in $DESTKEYSTR -nokeys -out $DESTCRT -password pass:$KEYSTRPASS
+    openssl pkcs12 -in $DESTKEYSTR -nodes -nocerts -out $DESTKEY -password pass:$KEYSTRPASS
+    #Important: secure the key
+    rm -f $DESTKEYSTR
+    chmod 400 $DESTCRT $DESTKEY
+    chown $CLUSTERADMIN:$CLUSTERADMIN $DESTCRT $DESTKEY
+    {{- end }}
+  enableLdapLogon: |-
+    topdir=/opt/ibm/spectrumcomputing
+    sed -i '/EGO_SEC_PLUGIN/d' $topdir/kernel/conf/ego.conf
+    echo "EGO_SEC_PLUGIN=sec_ego_pam_default" >> $topdir/kernel/conf/ego.conf
+    if [ "x$LDAP_SERVER_IP" = "x" -o "x$BASE_DN" = "x" ]; then
+      exit 0
+    fi
+    disabled=`grep @Ldap_server /etc/nslcd.conf`
+    if [ "x$disabled" != "x" ]; then
+      sed -i "s/@Ldap_server/$LDAP_SERVER_IP/g" /etc/nslcd.conf 
+      sed -i "s/@Ldap_server/$LDAP_SERVER_IP/g" /etc/ldap.conf
+      sed -i "s/@Base_DN/$BASE_DN/g" /etc/nslcd.conf 
+      sed -i "s/@Base_DN/$BASE_DN/g" /etc/ldap.conf 
+      auth-client-config -t nss -p lac_ldap
+      echo "session required pam_mkhomedir.so skel=/etc/skel umask=0022" >> /etc/pam.d/common-session  
+      update-rc.d nslcd enable
+      cp /etc/pam.d/common-password /etc/pam.d/common-password.bak  
+      sed -i 's/use_authtok//' /etc/pam.d/common-password
+      /etc/init.d/nscd restart
+    fi
+  startPrequisiteServices: |-
+    export HELM_HOST={{ template "helmHost" . }}
+    echo "initializing helm."
+    helm init --client-only
+    if [ $? -ne 0 ]; then
+      echo "helm init failed. you may not be able to create any Spark Instance Groups."
+    fi
+   
+    etcdservice=$(curl http://127.0.0.1:8001/api/v1/namespaces/{{ template "etcdServiceNamespace" . }}/services/{{template "etcdService" . }} | grep  '"kind"'|cut -d '"' -f4)
+    if [ x"$etcdservice" != "xService" ]; then
+      mkdir -p /tmp/conductor-etcd/templates
+      cp /var/tmp/prerequisite/etcd-Chart /tmp/conductor-etcd/Chart.yaml
+      cp /var/tmp/prerequisite/etcd-template /tmp/conductor-etcd/templates/etcd
+      helm install /tmp/conductor-etcd/ --name {{template "etcdService" . }}
+      if [ $? -ne 0 ]; then
+         echo "failed to create prerequisite etcd service automatically."
+      fi
+    fi
+
+{{- if eq .Values.cluster.proxyOption "HttpProxy" }} 
+    # cws proxy
+    proxyservice=$(curl http://127.0.0.1:8001/api/v1/namespaces/default/services/{{template "cwsProxyService" . }} | grep  '"kind"'|cut -d '"' -f4)
+    if [ x"$proxyservice" != "xService" ]; then
+      mkdir -p /tmp/conductor-proxy/templates
+      cp /var/tmp/prerequisite/cws-proxy-Chart /tmp/conductor-proxy/Chart.yaml
+      cp /var/tmp/prerequisite/cws-proxy-template /tmp/conductor-proxy/templates/cws-proxy
+      helm install /tmp/conductor-proxy/ --name {{template "cwsProxyService" . }}
+      if [ $? -ne 0 ]; then
+         echo "failed to create prerequisite CwS proxy service automatically."
+      fi
+    fi
+{{- end }}
+
+  startMaster.sh: |- 
+    topdir=/opt/ibm/spectrumcomputing
+    exec 1<>$topdir/startmaster.log
+    exec 2>&1
+    set -x
+    cd /bin
+    rm -rf sh
+    ln -s bash sh
+    cp /tmp/helmdir/helm /usr/bin/helm
+    
+    echo "export PATH=$PATH" >> /etc/profile
+    sh /var/tmp/cfc/startPrequisiteServices
+    sh /var/tmp/cfc/enableLdapLogon
+    sh /var/tmp/cfc/generate_ssl.sh 
+   
+    # workaroud to help get ego linux version 
+    binarytypename=`cat $topdir/kernel/conf/profile.ego |grep "BINARY_TYPE = \"fail\""|awk '{print $3}'|awk -F$ '{print $2 }'`
+    egoversion=`ls $topdir/|grep 3`
+    binarytype=`ls $topdir/$egoversion |grep linux`
+    sed -i "/BINARY_TYPE = \"fail\"/i\\$binarytypename=$binarytype" $topdir/kernel/conf/profile.ego
+
+    if [ ! -f /var/shareDir/profile.platform ]; then
+          echo "Set up a new Cluster..."
+          sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch.xml
+          sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch_master.xml
+          sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_manager.xml
+          sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch_data.xml
+          sed -i '/ASC_HOME/a\      <ego:EnvironmentVariable name="K8S_NAMESPACE">{{.Release.Namespace}}</ego:EnvironmentVariable>'  $topdir/eservice/esc/conf/services/ascd_service.xml
+          sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/kernel/conf/ego.shared
+          mv $topdir/kernel/conf/ego.cluster.iCluster_docker $topdir/kernel/conf/ego.cluster.{{ .Release.Name }}
+          #update Spark version Yaml files
+          escape()
+          {
+            repl='s/\//\\\//g'
+            rep2='s/\*/\\\*/g'
+            ret1=`echo $1 | sed $repl`
+            ret=`echo $ret1 | sed $rep2`
+          }
+          escape "http://127.0.0.1:8001"; MasterURL4SS=$ret
+          {{- if eq .Values.cluster.proxyOption "IngressProxy" }}
+          sed -i "s/8443/{{ template "guiPort" . }}/g" $topdir/gui/conf/server_gui.xml
+          sed -i "s/8543/{{ template "egoRestPort" . }}/g" $topdir/kernel/conf/server_rest.xml
+          sed -i "s/8643/{{ template "ascdPort" . }}/g" $topdir/ascd/conf/server_ascd.xml
+          {{- if .Values.dli.enabled }}
+          sed -i "s/5000/{{ template "dliMonitorPort" . }}/g" /opt/ibm/spectrumcomputing/dli/dlmao/conf/profile.dlmao 
+          sed -i "s/5001/{{ template "dliOptimizerPort" . }}/g" /opt/ibm/spectrumcomputing/dli/dlmao/conf/profile.dlmao
+          sed -i "s/9243/{{ template "dlRestPort" . }}/g" /opt/ibm/spectrumcomputing/dli/dlpd/liberty/dlrest/server.xml
+          sed -i "s/9243/{{ template "dlRestPort" . }}/g" /opt/ibm/spectrumcomputing/wlp/usr/servers/dlrest/server.xml
+          {{- end }}  
+          {{- end }}  
+          spark_pkg_dir=$topdir/conductorspark/conf/packages
+          if [ -f $spark_pkg_dir/Spark2.1.1-Conductor{{ template "conductorVersion" . }}/*.k8s.yaml ]; then
+              mv $spark_pkg_dir/Spark2.1.1-Conductor{{ template "conductorVersion" . }}/Spark2.1.1.k8s.yaml $spark_pkg_dir/Spark2.1.1-Conductor{{ template "conductorVersion" . }}/Spark2.1.1.yaml 
+              mv $spark_pkg_dir/Spark1.6.1-Conductor{{ template "conductorVersion" . }}/Spark1.6.1.k8s.yaml $spark_pkg_dir/Spark1.6.1-Conductor{{ template "conductorVersion" . }}/Spark1.6.1.yaml 
+              mv $spark_pkg_dir/Spark2.2.0-Conductor{{ template "conductorVersion" . }}/Spark2.2.0.k8s.yaml $spark_pkg_dir/Spark2.2.0-Conductor{{ template "conductorVersion" . }}/Spark2.2.0.yaml 
+          fi
+
+          for sparkyaml in $spark_pkg_dir/Spark2.1.1-Conductor{{ template "conductorVersion" . }}/Spark2.1.1.yaml  $spark_pkg_dir/Spark1.6.1-Conductor{{ template "conductorVersion" . }}/Spark1.6.1.yaml $spark_pkg_dir/Spark2.2.0-Conductor{{ template "conductorVersion" . }}/Spark2.2.0.yaml
+          do 
+            sed -i "s/@RELNAME/{{ .Release.Name }}/" $sparkyaml
+            sed -i "s#@K8SMASTERURL#$MasterURL4SS#" $sparkyaml
+            sed -i "s/@SSALCUNITGPU/{{.Values.sig.maxGpu}}/" $sparkyaml
+            sed -i "s/@SSALCUNIT/{{ template "getmaxslots" .}}/" $sparkyaml
+            sed -i "s/@SSALCMAXPERCYCLE/{{.Values.sig.ssAllocationUnit}}/" $sparkyaml
+            sed -i "s/@SSALCMAX/{{ .Values.sig.maxReplicas }}/" $sparkyaml
+            sed -i "s/@SSALCINTVAL/{{ .Values.sig.ssAllocationInterval }}/" $sparkyaml
+            {{- if eq .Values.cluster.proxyOption "IngressProxy" }}
+            sed -i "s/@SPARKPREFIX/\"https:\/\/{{template "master-fullname" .}}:{{ template "proxyHttpsPort" . }}\/\", { get_param: web_url_protocol }, \"-\"/g" $sparkyaml
+            sed -i "s/@PORTLINK/-/g" $sparkyaml
+            sed -i "s/@PROTOCOLLINK/-/g" $sparkyaml
+            sed -i "s/@INGRESSPREFIX/\"https:\/\/{{template "master-fullname" .}}:{{ template "proxyHttpsPort" . }}\/\",/g" $sparkyaml
+            {{- else }}
+            sed -i "s/@SPARKPREFIX/\"spark:\/\/\"/g" $sparkyaml
+            sed -i "s/@PORTLINK/:/g" $sparkyaml
+            sed -i "s/@PROTOCOLLINK/:\/\//g" $sparkyaml
+            sed -i "s/@INGRESSPREFIX//g" $sparkyaml
+            {{- end }}
+          done
+          . $topdir/profile.platform
+          echo "$(hostname -i|awk '{print $1}')  {{ template "master-fullname" . }}.{{ template "master-fullname" . }}.{{.Release.Namespace}}.svc.cluster.local" >> /etc/hosts            
+          while [ true ]
+          do 
+            egoconfig join {{ template "master-fullname" . }}.{{ template "master-fullname" . }}.{{.Release.Namespace}}.svc.cluster.local -f 
+            if [ $? -eq 0 ]; then
+              break
+            fi             
+          done
+          egoconfig setentitlement /var/tmp/cfc/license.dat
+          egoconfig mghost /var/shareDir -f 
+          cp $topdir/profile.platform /var/shareDir/profile.platform
+          echo "EGO_DYNAMIC_HOST_TIMEOUT=10m" >> /var/shareDir/kernel/conf/ego.conf
+          echo "EGO_DYNAMIC_HOST_WAIT_TIME=1" >> /var/shareDir/kernel/conf/ego.conf
+          echo "EGO_RESOURCE_UPDATE_INTERVAL=1" >> /var/shareDir/kernel/conf/ego.conf
+          echo "EGO_ENABLE_RG_UPDATE_MEMBERSHIP=Y" >> /var/shareDir/kernel/conf/ego.conf
+          echo "EGO_RG_UPDATE_MEMBERSHIP_INTERVAL=10" >> /var/shareDir/kernel/conf/ego.conf
+          echo "EGO_ENABLE_BORROW_ONLY_CONSUMER=Y" >> /var/shareDir/kernel/conf/ego.conf
+          sed -i "s/ASC_AUTO_DEPLOY_ON_NEW_HOST=ON/ASC_AUTO_DEPLOY_ON_NEW_HOST=OFF/" /var/shareDir/ascd/conf/ascd.conf 
+          echo -e "\nCONDUCTOR_K8S_ENABLED=ON" >> /var/shareDir/ascd/conf/ascd.conf
+          echo "CONDUCTOR_K8S_NAMESPACE={{.Release.Namespace}}" >> /var/shareDir/ascd/conf/ascd.conf
+          echo "CONDUCTOR_K8S_CPUREQ={{.Values.sig.cpu}}" >> /var/shareDir/ascd/conf/ascd.conf
+          echo "CONDUCTOR_K8S_MEMREQ={{.Values.sig.memory}}" >> /var/shareDir/ascd/conf/ascd.conf
+          echo "CONDUCTOR_K8S_GPUREQ={{.Values.sig.gpu}}" >> /var/shareDir/ascd/conf/ascd.conf
+          echo "CONDUCTOR_K8S_CPUMAX={{.Values.sig.maxCpu}}" >> /var/shareDir/ascd/conf/ascd.conf
+          echo "CONDUCTOR_K8S_MEMMAX={{.Values.sig.maxMemory}}" >> /var/shareDir/ascd/conf/ascd.conf
+          echo "CONDUCTOR_K8S_GPUMAX={{.Values.sig.maxGpu}}" >> /var/shareDir/ascd/conf/ascd.conf
+          {{- if eq .Values.cluster.proxyOption "IngressProxy" }}
+          echo "CONDUCTOR_SPARK_UI_REVERSEPROXY=https://{{template "master-fullname" .}}:{{ template "proxyHttpsPort" . }}/@@PROTOCOL-@@HOSTNAME-@@PORT/" >> /var/shareDir/ascd/conf/ascd.conf
+          {{- end }}
+
+          . $topdir/profile.platform;
+    else
+          echo "Recover a master contiainer..."
+          sharedir=/var/shareDir
+          profiles=`cat $topdir/profile.platform|awk '{print $2}'`
+          for profile in $profiles
+          do
+            p=${profile##$topdir}
+            sharedprofile=$sharedir$p
+            if [ -f $sharedprofile ]; then
+              cp -f $sharedprofile $profile
+            fi
+          done
+          echo "$(hostname -i|awk '{print $1}')  {{ template "master-fullname" . }}.{{ template "master-fullname" . }}.{{.Release.Namespace}}.svc.cluster.local" >> /etc/hosts            
+          . $topdir/profile.platform
+    fi
+
+    {{- if .Values.dli.enabled }}
+    DLI_SHARED_FS=/mygpfs
+    IMAGE_HOSTNAME=900d7bfbe521
+    MASTER_HOST=`hostname -f`
+    HOSTIP=`getent ahostsv4 $MASTER_HOST | grep -Fw "$MASTER_HOST" | awk '{print $1}'`
+    HOSTNET=`ip addr show | grep inet | grep -Fw "$HOSTIP" | awk '{print $2}'`
+    FABRIC_COMMIPNETWORK=${FABRIC_COMMIPNETWORK:-$HOSTNET}
+    cp $topdir/dli/dlpd/conf/dlpd.conf $topdir/dli/dlpd/conf/dlpd.conf_bak
+    sed -i "s#@FABRIC_COMMIPNETWORK@#${FABRIC_COMMIPNETWORK}#g" /opt/ibm/spectrumcomputing/dli/dlpd/conf/dlpd.conf
+    sed -i "s#${IMAGE_HOSTNAME}#${MASTER_HOST}#g" /opt/ibm/spectrumcomputing/dli/dlpd/conf/dlpd.conf
+    sed -i "s#//.*:#//${MASTER_HOST}:#g" /opt/ibm/spectrumcomputing/wlp/usr/servers/gui/apps/dli/1.1.0/dlgui/apidocs/restful/dlpd/index.html
+    rm -rf $DLI_SHARED_FS/*
+    cp -r ${DLI_SHARED_FS}_bak/* $DLI_SHARED_FS
+    {{- end }}
+
+    sed -i '/docker_active/a\   sigName String 10 () ()' $EGO_CONFDIR/ego.shared
+    sed -i '/docker_active/a\sigName [default]' $EGO_CONFDIR/ego.cluster.{{ .Release.Name }}
+    
+    egosh ego start
+
+    {{- if or .Values.dli.enabled (gt (.Values.sig.gpu|int) 0) }}
+    retries=0
+    $topdir/conductorspark/{{ template "conductorVersion" . }}/etc/gpuconfig.sh enable --quiet -u Admin -x Admin
+    while [ $? -ne 0 -a $retries -le 60 ]
+    do
+       sleep 10
+       retries=$((retries+1))
+       $topdir/conductorspark/{{ template "conductorVersion" . }}/etc/gpuconfig.sh enable --quiet -u Admin -x Admin
+    done
+    if [ $retries -ge 60 ]; then
+       echo "Failed to enable GPU monitoring feature in EGO."
+       exit -1
+    fi
+    {{- end }}
+    #record self IP and name to ETCD 
+    curl -X PUT {{ template "etcdHostDir" .}}/$(hostname) -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+    curl -X PUT {{ template "etcdHostDir" .}}/$(hostname).$(hostname).{{.Release.Namespace}}.svc.cluster.local -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+    mkdir -p /var/shareDir/sig-template/templates
+    cp /var/tmp/cfc/sig-template_Chart.yaml /var/shareDir/sig-template/Chart.yaml
+    cp /var/tmp/cfc/sig-template_templates_cws-slave-deployment.yaml  /var/shareDir/sig-template/templates/cws-slave-deployment.yaml
+    sh /var/tmp/cfc/appendEtcHostfromShare.sh 
+  appendEtcHostfromShare.sh: |- 
+    #set -x
+    cp /etc/hosts /hosts.original
+    while [ true ] 
+    do
+        if [ -f /hosts.tmp ]; then
+            rm -f /hosts.tmp
+        fi
+        cat /hosts.original >> /hosts.tmp
+        curl -X PUT {{ template "etcdHostDir" .}}/$(hostname) -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+        curl -X PUT {{ template "etcdHostDir" .}}/$(hostname).$(hostname).{{.Release.Namespace}}.svc.cluster.local -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+        curl --silent  {{ template "etcdHostDir" .}} | python -c 'import json,sys;obj=json.load(sys.stdin); print "\n".join([":".join([x["value"], x["key"]]) for x in obj["node"]["nodes"]])' | sed "s/\/cwsnodemap\///" > /hostlist.yaml
+        tac /hostlist.yaml | while read -r line
+        do
+          ip=$(echo $line | cut -f 1 -d':' | xargs)
+          host=$(echo $line | cut -f 2 -d':' | xargs)
+          if [ ! -z "$host" ]; then 
+            ifit=$(grep "$ip  ${host}$" /hosts.tmp)
+            if [ -z "$ifit" ]; then
+               echo "get new host line - $line"
+               echo "$ip  $host"  >> /hosts.tmp
+            fi
+          fi
+        done
+        cat /hosts.tmp > /etc/hosts
+        sleep 10            
+    done
+
+  updateParameters.py: |-
+        import json,sys,os
+        if len(sys.argv) <= 2:
+          print "Path of parameters json file and target file must be specified"
+          sys.exit(1)
+        with open(sys.argv[1], "r") as f:
+          obj=json.load(f)
+          for k,v in obj.items():
+             if k == "cpu":
+                os.system('sed -i "s/@CPUREQUEST/%s/g" %s' % (v, sys.argv[2]))
+             elif k == "gpu":
+                os.system('sed -i "s/@GPUREQUEST/%s/g" %s' % (v, sys.argv[2]))
+             elif k == "memory":
+                os.system('sed -i "s/@MEMREQUEST/%s/g" %s' % (v, sys.argv[2]))
+             else:
+                print "ignore value of " + k
+
+  appendVolumes.py: |-
+        import json,sys,os
+        if len(sys.argv) <= 2:
+          print "Path of volumes json file and target file must be specified"
+          sys.exit(1)
+        with open(sys.argv[1], "r") as f:
+          obj=json.load(f)
+          if "volumes" in obj:
+            os.system('echo volumes: >> %s' % (sys.argv[2]))
+            for volume in obj["volumes"]:
+              os.system('echo "  - hostpath: %s" >> %s' % (volume["hostpath"], sys.argv[2]))
+              os.system('echo "    type: %s" >> %s' % (volume["type"], sys.argv[2]))
+              os.system('echo "    containerpath: %s" >> %s' % (volume["containerpath"], sys.argv[2]))
+          if "dataimages" in obj:
+            os.system('echo dataimages: >> %s' % (sys.argv[2]))
+            for img in obj["dataimages"]:
+              os.system('echo "  - imagename: %s" >> %s' % (img["imagename"], sys.argv[2]))
+              os.system('echo "    volumes:" >> %s' % (sys.argv[2]))
+              pathmap = {}
+              for volume in img["volumes"]:
+                containerpath = volume["containerpath"]
+                if containerpath not in pathmap:
+                  pathmap[containerpath] = []             
+                pathmap[containerpath].append({"type": volume["type"], "hostpath": volume["hostpath"]})
+              for k, v in pathmap.items():
+                os.system('echo "      - containerpath: %s" >> %s' % (k, sys.argv[2]))
+                os.system('echo "        hostpaths:" >> %s' % (sys.argv[2]))
+                for hp in v:
+                  os.system('echo "          - hostpath: %s" >> %s' % (hp["hostpath"], sys.argv[2]))
+                  os.system('echo "            type: %s" >> %s' % (hp["type"], sys.argv[2]))
+
+  createSIGContainer.sh: |-   
+        # redirect output to a log file.
+        topdir=/opt/ibm/spectrumcomputing
+        exec 1<>$topdir/conductorspark/logs/createSIGContainer.log
+        exec 2>&1
+        set -x
+        sig_name={{ .Release.Name }}-$1
+        sig_rg_name=$1
+        executor=$2
+        sig_ns=$3
+        paras=$4
+        volumes=$5
+        if [ "x$sig_rg_name" = "x" ]; then
+          echo "Missed to specify a SIG name, exit."
+          exit -1
+        fi        
+        if [ "x$executor" = "x" ]; then
+          echo "Missed to specify an executor name, exit."
+          exit -1
+        fi        
+        if [ "x$paras" = "x" ]; then
+          echo "Missed to specify file path of parameters for the SIG, exit."
+          exit -1
+        fi        
+        if [ "x$volumes" = "x" ]; then
+          echo "Missed to specify file path of volumes for the SIG, exit."
+          exit -1
+        fi        
+        #setup context
+        export HELM_HOST={{ template "helmHost" . }}
+        cd /var/shareDir/
+        . $topdir/profile.platform
+        #install the SIG helm chart
+        if [ -d "./$sig_name" ]; then
+          echo "./$sig_name has been created. Remove it firstly."
+          helm delete --purge $sig_name || exit -1
+          rm -rf ./$sig_name
+          egosh resourcegroup delete "$sig_rg_name"_services
+          egosh resourcegroup delete "$sig_rg_name"_workloads
+          egosh resourcegroup delete "$sig_rg_name"_gpu
+          docker rmi -f {{.Values.sig.registry}}/{{ template "cwsImageWithoutRegistryTag" .}}:$sig_name
+        fi        
+        #create the SIG deployment
+        cp -R ./sig-template ./$sig_name
+        #sed -i "s/@SIGNAME/$sig_name/g" ./$sig_name/values.yaml
+        sed -i "s/@SIGNAME/$sig_name/g" ./$sig_name/Chart.yaml
+        sed -i "s/@SIGNAME/$sig_name/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@EXECUTOR/$executor/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@SIG_NAME/$1/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@]/}/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@\[/{/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@new_namespace/.Values.new_namespace/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        
+        #input data volumes 
+        python /var/tmp/cfc/updateParameters.py $paras /var/shareDir/$sig_name/templates/cws-slave-deployment.yaml
+        python /var/tmp/cfc/appendVolumes.py $volumes /var/shareDir/$sig_name/values.yaml
+
+        namespace=$sig_ns
+        if [ x"$sig_ns" = "x" ]; then
+          namespace={{.Release.Namespace}}
+        fi
+        sed -i "s/@namespace/$namespace/g" ./$sig_name/templates/cws-slave-deployment.yaml
+
+        if [ $namespace != {{.Release.Namespace}} ]; then
+          echo "new_namespace: true" >> ./$sig_name/values.yaml
+        else
+          echo "new_namespace: false" >> ./$sig_name/values.yaml
+        fi
+        helm lint $sig_name || exit -1
+        helm install --name $sig_name $sig_name --namespace $namespace || exit -1
+        #create resoure group for the SIG
+        sleep 1
+        retries=0
+        egosh user logon -u Admin -x Admin
+        #create resource group for services
+        egosh resourcegroup add "$sig_rg_name"_services -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "getmaxslots" .}}))
+        while [ $? -ne 0 -a $retries -le 60 ]
+        do
+           sleep 10        
+           retries=$((retries+1))
+           egosh resourcegroup add "$sig_rg_name"_services -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "getmaxslots" .}}))
+        done
+        if [ $retries -ge 60 ]; then    
+           echo "Failed to create resource group <'$sig_rg_name'_services> in EGO."
+           exit -1
+        fi
+        #create resource group for workloads
+        egosh resourcegroup add "$sig_rg_name"_workloads -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "getmaxslots" .}}))
+        while [ $? -ne 0 -a $retries -le 60 ]
+        do
+           sleep 10
+           retries=$((retries+1))
+           egosh resourcegroup add "$sig_rg_name"_workloads -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "getmaxslots" .}}))
+        done
+        if [ $retries -ge 60 ]; then
+           echo "Failed to create resource group <'$sig_rg_name'_workloads> in EGO."
+           exit -1
+        fi   
+        # Todo: change the following .Values.sig.gpu to the one passed from ASCD parameter
+        {{- if gt (.Values.sig.gpu|int) 0 }}    
+        egosh resourcegroup add "$sig_rg_name"_gpu -t Dynamic -R "select(sigName=='$sig_rg_name')" -e ngpus
+        {{- end }}
+        exist=0
+        for consumer in `egosh consumer list|awk '{print $1}'`
+        do
+            if [ "$executor" = "$consumer"  ]; then
+               exist=1
+               break
+            fi
+        done
+        if [ $exist -eq 1 ]; then
+            {{- if gt (.Values.sig.gpu|int) 0 }}
+            egosh consumer addrg /$executor -g "$sig_rg_name"_gpu,"$sig_rg_name"_workloads,"$sig_rg_name"_services
+            {{- else }}
+            egosh consumer addrg /$executor -g "$sig_rg_name"_workloads,"$sig_rg_name"_services
+            {{- end }}
+        else
+            {{- if gt (.Values.sig.gpu|int) 0 }}
+            egosh consumer add /$executor -e $executor -a Admin -g "$sig_rg_name"_gpu,"$sig_rg_name"_workloads,"$sig_rg_name"_services
+            {{- else }}
+            egosh consumer add /$executor -e $executor -a Admin -g "$sig_rg_name"_workloads,"$sig_rg_name"_services
+            {{- end }}
+        fi
+        egosh user assignrole -u $executor -p /$executor -r "Consumer Admin"
+        exit 0        
+  deleteSIGContainer.sh: |-   
+        # redirect output to a log file.
+        topdir=/opt/ibm/spectrumcomputing
+        exec 1<>$topdir/conductorspark/logs/deleteSIGContainer.log
+        exec 2>&1
+        set -x
+        sig_name={{ .Release.Name }}-$1
+        sig_rg_name=$1
+        executor=$2
+        if [ "x$sig_rg_name" = "x" ]; then
+          echo "Missed to specify a SIG name, exit."
+          exit -1
+        fi        
+        if [ "x$executor" = "x" ]; then
+          echo "Missed to specify an executor name, exit."
+          exit -1
+        fi        
+        #setup context
+        export HELM_HOST={{ template "helmHost" . }}
+        cd /var/shareDir/
+        . $topdir/profile.platform
+        #uninstall the SIG helm chart
+        if [ -d "./$sig_name" ]; then
+          helm status $sig_name
+          if [ $? -eq 0 ]; then
+            helm delete --purge $sig_name || exit -1
+          fi
+          rm -rf ./$sig_name
+
+          egosh user logon -u Admin -x Admin
+          exist=0
+          for consumer in `egosh consumer list|awk '{print $1}'`
+          do
+            if [ "$executor" = "$consumer"  ]; then
+               exist=1
+               break
+            fi
+          done
+          if [ $exist -eq 1 ]; then
+            egosh consumer removerg /$executor -g "$sig_rg_name"_gpu,"$sig_rg_name"_workloads
+            inuse=`egosh consumer view $executor|grep ResourceGroupName`
+            if [ x"$inuse" = 'x' ]; then
+                egosh user unassignrole -u $executor -p /$executor -r "Consumer User"
+                egosh consumer delete /$executor
+            fi
+          fi
+
+          egosh resourcegroup delete "$sig_rg_name"_services
+          egosh resourcegroup delete "$sig_rg_name"_workloads
+          egosh resourcegroup delete "$sig_rg_name"_gpu
+          docker rmi -f {{.Values.sig.registry}}/{{ template "cwsImageWithoutRegistryTag" .}}:$sig_name
+        fi        
+        exit 0
+  sig-template_Chart.yaml: |- 
+        name: @SIGNAME
+        version: {{.Chart.Version}}
+        description: IBM Spectrum Conductor Spark Instance Group
+        home: https://www.ibm.com/support/knowledgecenter/SSZU2E/product_welcome_conductorspark.html
+        icon: https://www.ibm.com/developerworks/community/groups/service/html/image?communityUuid=281605c9-7369-46dc-ad03-70d9ad377480&lastMod=1464891144123&showDefaultForNoPermissions=true
+        keywords:
+        - Conductor
+        - Spark Instance Group
+        appVersion: 2.2.1
+        maintainers:
+        - email: hma@ca.ibm.com
+          name: IBM Spectrum Conductor Team  
+  sig-template_templates_cws-slave-deployment.yaml: |-  
+        @[@[- if @new_namespace @]@]
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: cws-@[@[ .Release.Name @]@]
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+            app: @SIGNAME
+        ---
+        kind: Role
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        metadata:
+          name: cws-@[@[ .Release.Name @]@]
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+            app: @SIGNAME
+        rules:
+        - apiGroups: [""]
+          resources: ["pods"]
+          verbs: ["create","delete","get","list","patch","update","watch"]
+        - apiGroups: [""]
+          resources: ["secrets"]
+          verbs: ["get"]
+        - apiGroups: ["extensions"]
+          resources: ["deployments", "deployments/scale"]
+          verbs: ["create","delete","get","list","patch","update","watch"]
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        kind: Role
+        metadata:
+          name: privileged-@[@[ .Release.Name @]@]
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+            app: @SIGNAME
+        rules:
+          -
+            apiGroups:
+              - extensions
+            resourceNames:
+              - privileged-{{ .Release.Name }}
+            resources:
+              - podsecuritypolicies
+            verbs:
+              - use
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        kind: RoleBinding
+        metadata:
+          name: privileged-psp-users-@[@[ .Release.Name @]@]
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+            app: @SIGNAME
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: privileged-@[@[ .Release.Name @]@]
+        subjects:
+          - kind: ServiceAccount
+            name: cws-@[@[ .Release.Name @]@]
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        kind: RoleBinding
+        metadata:
+          name: cws-@[@[ .Release.Name @]@]
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+            app: @SIGNAME
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: cws-@[@[ .Release.Name @]@]
+        subjects:
+        - kind: ServiceAccount
+          name: cws-@[@[ .Release.Name @]@]
+        ---
+        @[@[- end @]@]
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: registrykey-@[@[ .Release.Name @]@]
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+            app: @SIGNAME
+        data:
+          .dockerconfigjson: {{ template "cwsImagePullSecret" . }}
+        type: kubernetes.io/dockerconfigjson
+        ---
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: sigregistrykey-@[@[ .Release.Name @]@]
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+            app: @SIGNAME
+        data:
+          .dockerconfigjson: {{ template "sigImagePullSecret" . }}
+        type: kubernetes.io/dockerconfigjson
+        ---
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: @SIGNAME-bootstrap 
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+            app: @SIGNAME
+        data:
+          cpImageToContainer.sh: |-
+              image=$1
+              @[@[- range $i, $di := .Values.dataimages @]@]
+              if [ x"$image" = x@[@[$di.imagename@]@] ]; then
+              @[@[- range $index, $volume := $di.volumes @]@]
+              @[@[- range $, $v := $volume.hostpaths @]@]
+              @[@[- if eq $v.type "File" @]@]
+              cp @[@[$v.hostpath@]@] /@[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@] 
+              @[@[- else if eq $v.type "Directory" @]@]
+              cp -r @[@[trimSuffix "/" $v.hostpath@]@]/* /@[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@] 
+              @[@[- end @]@]
+              @[@[- end @]@]
+              @[@[- end @]@]
+              fi
+              @[@[- end @]@]
+
+          generate_ssl.sh: |- 
+              topdir=/opt/ibm/spectrumcomputing
+              exec 1<>$topdir/generatessl.log
+              exec 2>&1
+              set -x
+              CLUSTERADMIN=root
+              domain=`dnsdomainname`
+              if [ "$domain" = "" ]; then
+                domain=`hostname -f`
+              else
+                domain="*.$domain"
+              fi
+              . $topdir/jre/profile.jre
+              dnsname=`hostname -f`
+              cd $topdir/security
+              rm -f tier2and3ServerKeyStore.jks tier*
+              egojre=$topdir/jre
+              egokeytool=`find $egojre -name keytool`
+              $egokeytool -genkeypair -noprompt -alias tier2alias -dname "CN=$domain,O=Platform,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier2passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+              $egokeytool -certreq -alias tier2alias -file tier2alias.csr -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+              $egokeytool -gencert -infile tier2alias.csr -outfile tier2aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+              $egokeytool -importcert -noprompt -alias caalias -file cacert.pem -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword
+              $egokeytool -import -noprompt -alias tier2alias -file tier2aliascertcasigned.pem -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks
+              $egokeytool -genkeypair -noprompt -alias tier3alias -dname "CN=$domain,O=Platform,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier3passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+              $egokeytool -certreq -alias tier3alias -file tier3alias.csr -storepass SparkPassword -keypass tier3passwd  -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+              $egokeytool -gencert -infile tier3alias.csr -outfile tier3aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+              $egokeytool -import -noprompt -alias tier3alias -file tier3aliascertcasigned.pem -storepass SparkPassword -keypass tier3passwd -keystore tier2and3ServerKeyStore.jks
+              #Convert Tier 3 keys in Java Keystore to OpenSSL PKCS12 format
+              $egokeytool -importkeystore -srckeystore tier2and3ServerKeyStore.jks -srcalias tier3alias -srcstoretype jks -srcstorepass SparkPassword -srckeypass tier3passwd -destkeystore tier3KeyStore.p12 -deststoretype pkcs12 -deststorepass tier3passwd -destkeypass tier3passwd -noprompt
+              openssl pkcs12 -in tier3KeyStore.p12 -passin pass:tier3passwd -nocerts -out tier3opensslprivate.key -passout pass:tier3passwd
+              openssl pkcs12 -in tier3KeyStore.p12 -passin pass:tier3passwd -clcerts -nokeys -out tier3opensslpublic.pem
+              chmod 444 $topdir/security/tier2and3ServerKeyStore.jks
+              chmod 444 $topdir/security/tier3KeyStore.p12
+              chown -Rh $CLUSTERADMIN:$CLUSTERADMIN $topdir/security
+              #=========
+              cd $topdir/wlp/usr/shared/resources/security
+              rm -f servercertcasigned.pem serverKeyStore.jks srvcertreq.csr serverTrustStore.jks
+              $egokeytool -genkeypair -noprompt -alias srvalias -dname "CN=$domain,O=Platform,C=CA" -keystore serverKeyStore.jks -storepass Liberty -keypass Liberty -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+              $egokeytool -certreq -alias srvalias -file srvcertreq.csr -storepass Liberty -keystore serverKeyStore.jks -ext "san=dns:$dnsname"
+              $egokeytool -gencert -infile srvcertreq.csr -outfile servercertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+              $egokeytool -importcert -noprompt -alias caalias -file cacert.pem -keystore serverKeyStore.jks -storepass Liberty
+              $egokeytool -import -noprompt -alias srvalias -file servercertcasigned.pem -storepass Liberty -keystore serverKeyStore.jks
+              $egokeytool -importcert -noprompt -alias srvalias -file cacert.pem -keystore serverTrustStore.jks -storepass Liberty
+              #==========
+              {{- if .Values.dli.enabled }}
+              # create certificate and key to enable https for monitor and optimizer Flask server
+              CWS_TOP=$topdir
+              DLMAO_HOME=/opt/ibm/spectrumcomputing/dli/dlmao
+              
+              KEYSTR=$CWS_TOP/wlp/usr/shared/resources/security/serverKeyStore.jks
+              if [ -z "$KEYSTRPASS" ]; then
+                KEYSTRPASS=Liberty
+              fi
+              DESTKEYSTR_DIR=$DLMAO_HOME/conf
+              DESTKEYSTR=$DESTKEYSTR_DIR/serverKeyStore.p12
+              DESTCRT=$DESTKEYSTR_DIR/srv.crt
+              DESTKEY=$DESTKEYSTR_DIR/srv.key
+              keytool -importkeystore -srckeystore $KEYSTR -srcstorepass $KEYSTRPASS -destkeystore $DESTKEYSTR \
+              -deststoretype PKCS12 -srckeypass $KEYSTRPASS -destkeypass $KEYSTRPASS -deststorepass $KEYSTRPASS \
+              -noprompt -srcalias srvalias -storepass $KEYSTRPASS
+              openssl pkcs12 -in $DESTKEYSTR -nokeys -out $DESTCRT -password pass:$KEYSTRPASS
+              openssl pkcs12 -in $DESTKEYSTR -nodes -nocerts -out $DESTKEY -password pass:$KEYSTRPASS
+              #Important: secure the key
+              rm -f $DESTKEYSTR
+              chmod 400 $DESTCRT $DESTKEY
+              chown $CLUSTERADMIN:$CLUSTERADMIN $DESTCRT $DESTKEY
+              {{- end }}
+          getMasterIP.sh: |- 
+              masterIP=
+              while [ -z $masterIP ] 
+              do
+                sleep 3
+                master=`curl {{ template "etcdHostDir" .}}/{{ template "master-fullname" . }} | grep value` 
+                if [ x"$master" != x ];then
+                  masterIP=`echo $master | python -c 'import json,sys;obj=json.load(sys.stdin); print obj["node"]["value"]'`
+                fi
+              done
+              echo $masterIP
+          enableLdapLogon: |-
+            topdir=/opt/ibm/spectrumcomputing
+            sed -i '/EGO_SEC_PLUGIN/d' $topdir/kernel/conf/ego.conf
+            echo "EGO_SEC_PLUGIN=sec_ego_pam_default" >> $topdir/kernel/conf/ego.conf
+            if [ "x$LDAP_SERVER_IP" = "x" -o "x$BASE_DN" = "x" ]; then
+              exit 0
+            fi
+            disabled=`grep @Ldap_server /etc/nslcd.conf`
+            if [ "x$disabled" != "x" ]; then
+              sed -i "s/@Ldap_server/$LDAP_SERVER_IP/g" /etc/nslcd.conf
+              sed -i "s/@Ldap_server/$LDAP_SERVER_IP/g" /etc/ldap.conf
+              sed -i "s/@Base_DN/$BASE_DN/g" /etc/nslcd.conf
+              sed -i "s/@Base_DN/$BASE_DN/g" /etc/ldap.conf
+              auth-client-config -t nss -p lac_ldap
+              echo "session required pam_mkhomedir.so skel=/etc/skel umask=0022" >> /etc/pam.d/common-session
+              update-rc.d nslcd enable
+              cp /etc/pam.d/common-password /etc/pam.d/common-password.bak
+              sed -i 's/use_authtok//' /etc/pam.d/common-password
+              /etc/init.d/nscd restart
+            fi
+          elim.sig: |-
+              #!/bin/bash
+              while [ true ]
+              do
+                echo "1 sigName @SIG_NAME"
+                sleep 3600
+              done
+          startSlave.sh: |-
+              topdir=/opt/ibm/spectrumcomputing
+              exec 1<>$topdir/startslave.log
+              exec 2>&1
+              set -x
+              cd /bin
+              rm -rf sh
+              ln -s bash sh
+
+              # workaroud to help get ego linux version 
+              binarytypename=`cat $topdir/kernel/conf/profile.ego |grep "BINARY_TYPE = \"fail\""|awk '{print $3}'|awk -F$ '{print $2 }'`
+              egoversion=`ls $topdir/|grep 3`
+              binarytype=`ls $topdir/$egoversion |grep linux`
+              sed -i "/BINARY_TYPE = \"fail\"/i\\$binarytypename=$binarytype" $topdir/kernel/conf/profile.ego
+
+              echo "export PATH=$PATH" >> /etc/profile
+              sh /var/tmp/cfc/enableLdapLogon
+              ldconfig
+
+              # create the deploy home in advance
+              userInfo=`id @EXECUTOR`
+              if [ $? -ne 0 ]; then
+                  echo "executor:@EXECUTOR is not a valid user"
+                  exit -1
+              fi
+              group=`echo $userInfo| awk 'BEGIN{FS="("} {print $3}'|cut -d ")" -f1`
+              home=`getent passwd|grep "^@EXECUTOR:"|cut -d ":" -f 6`
+              #init user's home environment
+              su @EXECUTOR << EOF
+              exit
+              EOF
+              mkdir -p $home/@SIG_NAME
+              chown -R @EXECUTOR:$group $home
+              mkdir -p /tmp/@EXECUTOR
+              chown @EXECUTOR:$group /tmp/@EXECUTOR
+              
+              sh /var/tmp/cfc/generate_ssl.sh
+              echo $(sh /var/tmp/cfc/getMasterIP.sh) {{ template "master-fullname" . }}.{{ template "master-fullname" . }}.{{.Release.Namespace}}.svc.cluster.local {{ template "master-fullname" . }} >> /etc/hosts
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch_master.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_manager.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch_data.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/kernel/conf/ego.shared
+              mv $topdir/kernel/conf/ego.cluster.iCluster_docker $topdir/kernel/conf/ego.cluster.{{ .Release.Name }}
+              . $topdir/profile.platform
+              echo "EGO_DYNAMIC_HOST_WAIT_TIME=1" >> $EGO_CONFDIR/ego.conf
+              echo "EGO_RESOURCE_UPDATE_INTERVAL=1" >> $EGO_CONFDIR/ego.conf
+              egoconfig join {{ template "master-fullname" . }} -f
+              cp /var/tmp/cfc/elim.sig $EGO_SERVERDIR/elim.sig
+              chmod +x $EGO_SERVERDIR/elim.sig
+              egosh ego start
+              #record self IP and name to ETCD 
+              curl -X PUT {{ template "etcdHostDir" .}}/$(hostname) -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+              curl -X PUT {{ template "etcdHostDir" .}}/$(hostname).$(hostname).{{.Release.Namespace}}.svc.cluster.local -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+              sh /var/tmp/cfc/appendEtcHostfromShare.sh 
+          appendEtcHostfromShare.sh: |- 
+              #set -x
+              cp /etc/hosts /hosts.original
+              sed -i '/{{ template "master-fullname" . }}.{{ template "master-fullname" . }}.{{.Release.Namespace}}.svc.cluster.local/'d /hosts.original
+              while [ true ] 
+              do
+                if [ -f /hosts.tmp ]; then
+                    rm -f /hosts.tmp
+                fi
+                cat /hosts.original >> /hosts.tmp
+                masterIP=`cat /etc/hosts | grep {{ template "master-fullname" . }}.{{ template "master-fullname" . }}.{{.Release.Namespace}}.svc.cluster.local | awk '{print $1}'`
+                curl -X PUT {{ template "etcdHostDir" .}}/$(hostname) -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+                curl -X PUT {{ template "etcdHostDir" .}}/$(hostname).$(hostname).{{.Release.Namespace}}.svc.cluster.local -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+                curl --silent  {{ template "etcdHostDir" .}} | python -c 'import json,sys;obj=json.load(sys.stdin); print "\n".join([":".join([x["value"], x["key"]]) for x in obj["node"]["nodes"]])' | sed "s/\/cwsnodemap\///" > /hostlist.yaml
+                tac /hostlist.yaml | while read -r line
+                do
+                  ip=$(echo $line | cut -f 1 -d':' | xargs)
+                  host=$(echo $line | cut -f 2 -d':' | xargs)
+                  if [ ! -z "$host" ]; then 
+                    ifit=$(grep "$ip  ${host}$" /hosts.tmp)
+                    if [ -z "$ifit" ]; then
+                      echo "get new host line - $line"
+                      echo "$ip  $host"  >> /hosts.tmp
+                      if [ "$host" = {{ template "master-fullname" . }}.{{ template "master-fullname" . }}.{{.Release.Namespace}}.svc.cluster.local -a x"$ip" != x"$masterIP" ]; then
+                          echo "EGO master node {{ template "master-fullname" . }}.{{ template "master-fullname" . }}.{{.Release.Namespace}} IP changed from $masterIP to $ip, restart ego"
+                          . /opt/ibm/spectrumcomputing/profile.platform
+                          egosh ego restart -f
+                      fi
+                    fi 
+                  fi
+                done
+                cat /hosts.tmp > /etc/hosts
+                sleep 10
+              done     
+          commitSIG.sh: |- 
+                topdir=/opt/ibm/spectrumcomputing
+                exec 1<>$topdir/conductorspark/logs/commitSIG.log
+                exec 2>&1
+                set -x
+                touch $topdir/conductorspark/work/ascd_pkg_deployed
+                echo "Commit the SIG image to a registry."
+                sig_name=@SIGNAME
+                if [ "$sig_name" = "" ]; then
+                  echo "Missed to specify a SIG name, exit."
+                  exit -1
+                fi
+                hostname=`hostname`
+                sigimage={{.Values.sig.registry}}/{{ template "cwsImageWithoutRegistryTag" .}}:$sig_name
+                docker commit $(docker ps |grep $hostname | grep -v pause | grep -v kubectl | awk '{print $1}') $sigimage
+                if [ $? -ne 0 ]; then
+                    echo "docker commit failed."
+                    exit -2
+                fi
+                docker login -u {{.Values.sig.registryUser}} -p {{.Values.sig.registryPasswd}} {{.Values.sig.registry}} || exit -3
+                docker push $sigimage
+                if [ $? -ne 0 ]; then
+                    echo "docker push failed."
+                    exit -4
+                fi
+                echo "Replace the deployment image with the SIG one."
+                jstr=$(echo {\"spec\":\{\"template\":\{\"spec\":\{\"containers\":[\{\"name\":\"$sig_name\",\"imagePullPolicy\":\"IfNotPresent\",\"image\":\"$sigimage\"\}]\}\}\}\})
+                retries=0
+                while [ $retries -le 5 ]
+                do
+                    curlReturn=$(curl --write-out %{http_code} --silent --output /dev/null -X PATCH  -H 'Content-Type: application/strategic-merge-patch+json' --data $jstr "http://127.0.0.1:8001/apis/extensions/v1beta1/namespaces/@namespace/deployments/$sig_name" )
+                    if [ $curlReturn -ne 200 ]; then
+                       echo "Patching the deployment image got return code: $curlReturn" 
+                       sleep 3
+                       retries=$(expr $retries + 1)
+                    else
+                       break
+                    fi
+                done
+                if [ $retries -ge 6  ]; then
+                   echo "Failed to replace the deployment image. Need a manually update from ICP console."
+                   exit -5
+                fi          
+                exit 0
+        ---
+        apiVersion: extensions/v1beta1
+        kind: Deployment
+        metadata:
+          name: @SIGNAME
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+            app: @SIGNAME
+        spec:
+          replicas: 1
+          strategy:
+            type: RollingUpdate
+          selector:
+            matchLabels:
+              app: @SIGNAME
+              heritage: {{.Release.Service | quote }}
+              release: {{.Release.Name | quote }}
+              chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+          template:
+            metadata:
+              labels:
+                heritage: {{.Release.Service | quote }}
+                release: {{.Release.Name | quote }}
+                chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+                app: @SIGNAME
+            spec:
+              @[@[- if @new_namespace @]@]
+              serviceAccountName: cws-@[@[ .Release.Name @]@]
+              @[@[- else @]@]
+              serviceAccountName: cws-{{ .Release.Name }}
+              @[@[- end @]@]
+              imagePullSecrets:
+                - name: registrykey-@[@[ .Release.Name @]@]
+                - name: sigregistrykey-@[@[ .Release.Name @]@]
+              affinity:
+              {{- include "nodeaffinity" . | indent 14 }}
+              containers:
+                - args:
+                  - /kubectl
+                  - proxy
+                  - -p
+                  - "8001"
+                  image: {{ template "kubectlImage" . }}
+                  imagePullPolicy: IfNotPresent
+                  name: kubectlproxy
+                  lifecycle:
+                    preStop:
+                      exec:
+                         command: ["sh", "-c", "sleep 30"]
+                - name: @SIGNAME
+                  image: {{template "cwsImage" .}}
+                  imagePullPolicy: IfNotPresent
+                  command: ["/bin/bash","-c"]
+                  args: ["$(bash /var/tmp/cfc/startSlave.sh)"]
+                  livenessProbe:
+                    tcpSocket:
+                      port: 17869
+                    initialDelaySeconds: 120
+                    periodSeconds: 10
+                  securityContext:
+                    capabilities:
+                      add:
+                        - SETGID 
+                        - SETUID
+                        - SYS_CHROOT
+                        - SYS_ADMIN
+                        - SYS_NICE
+                        - SYS_RESOURCE
+                        - SYS_TIME
+                        - NET_BROADCAST
+                        - NET_ADMIN
+                        - LEASE
+                  env:
+                    - name: LDAP_SERVER_IP
+                      value: {{.Values.cluster.ldapServerIp}}
+                    - name: BASE_DN
+                      value: {{.Values.cluster.ldapBaseDn}}
+                  ports:
+                  resources:
+                    requests:
+                      cpu: "@CPUREQUEST"
+                      memory: "@MEMREQUEST"
+                    limits:
+                      {{- if or .Values.dli.enabled (gt (.Values.sig.gpu|int) 0) }}
+                      alpha.kubernetes.io/nvidia-gpu: "@GPUREQUEST"
+                      {{- end }}
+                      cpu: "{{.Values.sig.maxCpu}}"
+                      memory: "{{.Values.sig.maxMemory}}"
+                  volumeMounts:
+                      {{- if .Values.dli.enabled }}
+                      - mountPath: /opt/DL
+                        name: dldir
+                      - mountPath: /mygpfs
+                        name: mygpfs
+                      {{- end }}
+                      - mountPath: /var/tmp/cfc
+                        name: conductor-slave-bootstrap
+                      - mountPath: /var/run/docker.sock
+                        name: docker-sock        
+                      @[@[- range $index, $v := .Values.volumes @]@]
+                      - name: host-volume-@[@[$index@]@]
+                      @[@[- if eq $v.type "File" @]@]
+                        mountPath: @[@[trimSuffix "/" $v.containerpath@]@]/@[@[ base $v.hostpath @]@]
+                      @[@[- else if eq $v.type "Directory" @]@]
+                        mountPath: @[@[$v.containerpath@]@]
+                      @[@[- end @]@]
+                      @[@[- end @]@]
+                      @[@[- range $i, $di := .Values.dataimages @]@]
+                      @[@[- range $index, $v := $di.volumes @]@]
+                      - name: @[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@]
+                        mountPath: @[@[$v.containerpath@]@]
+                      @[@[- end @]@]
+                      @[@[- end @]@]
+              @[@[- if .Values.dataimages @]@]
+              initContainers:
+                @[@[- range $i, $di := .Values.dataimages @]@]
+                - name: @[@[$di.imagename | replace ":" "-"@]@]
+                  image: @[@[$di.imagename@]@]
+                  imagePullPolicy: IfNotPresent
+                  volumeMounts:
+                  - mountPath: /var/tmp/cfc
+                    name: conductor-slave-bootstrap
+                  @[@[- range $index, $v := $di.volumes @]@]
+                  - name: @[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@]
+                    mountPath: /@[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@] 
+                  @[@[- end @]@]
+                  command: ["/bin/sh","-c"]
+                  args: ["$(sh /var/tmp/cfc/cpImageToContainer.sh @[@[ $di.imagename@]@])"]
+                @[@[- end @]@]
+              @[@[- end @]@]
+              volumes:
+                {{- if .Values.dli.enabled }}
+                - name: dldir
+                  persistentVolumeClaim:
+                    claimName: {{ .Release.Name }}-dl
+                - name: mygpfs
+                  persistentVolumeClaim:
+                    claimName: {{ .Release.Name }}-mygpfs
+                {{- end }}
+                - name: conductor-slave-bootstrap
+                  configMap:
+                    name: "@SIGNAME-bootstrap"     
+                - name: docker-sock
+                  hostPath:
+                     path: /var/run/docker.sock            
+                @[@[- range $index, $v := .Values.volumes @]@]
+                - name: host-volume-@[@[$index@]@]
+                  hostPath:
+                     type: @[@[$v.type@]@]
+                     path: @[@[$v.hostpath@]@]
+                @[@[- end @]@]
+                @[@[- range $i, $di := .Values.dataimages @]@]
+                @[@[- range $index, $v := $di.volumes @]@]
+                - name: @[@[$di.imagename | replace ":" "-"@]@]-@[@[$index@]@]
+                  emptyDir: {}
+                @[@[- end @]@]
+                @[@[- end @]@]
+              terminationGracePeriodSeconds: 30

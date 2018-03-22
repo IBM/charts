@@ -1,0 +1,34 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-sentinel
+  labels:
+{{ include "labels.standard" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicas.sentinels }}
+  template:
+    metadata:
+      annotations:
+        productID: RedisHA_406r0_free_00000
+        productName: Redis HA
+        productVersion: 4.0.6-r0
+      labels:
+        name: {{ template "fullname" . }}-sentinel
+{{ include "labels.standard" . | indent 8 }}
+    spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 8 }}
+      serviceAccountName: {{ template "redis-ha.serviceAccountName" . }}
+      containers:
+      - name: sentinel
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote  }}
+        resources:
+{{ toYaml .Values.resources.sentinel | indent 10 }}
+        env:
+          - name: SENTINEL
+            value: "true"
+          - name: REDIS_CHART_PREFIX
+            value: {{ template "fullname" . }}-
+        ports:
+          - containerPort: 26379
