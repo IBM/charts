@@ -1,0 +1,19 @@
+{{- if .Values.prometheusProbe.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-prometheus-post-test"
+  annotations:
+    "helm.sh/hook": test-success    
+  labels:
+    app: {{ template "fullname" . }}-prometheus-posttest
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  containers:
+  - name: {{ .Release.Name }}-post-test
+    image: radial/busyboxplus:curl
+    command: ["sh", "-c", "curl -X POST -H 'cache-control: no-cache' -H 'content-type: application/json' -d '{\"liveness\" : \"probe-check\"}' http://{{ template "prometheus.servicename" . }}/probe/webhook/prometheus"]
+  restartPolicy: Never
+{{- end }}

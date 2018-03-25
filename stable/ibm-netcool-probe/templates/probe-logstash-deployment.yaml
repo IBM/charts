@@ -1,0 +1,147 @@
+{{- if .Values.logstashProbe.enabled -}}
+{{- if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+apiVersion: apps/v1beta2
+{{- else }}
+apiVersion: apps/v1beta1
+{{- end }}
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-logstashprobe
+  labels:
+    app: {{ template "fullname" . }}-logstashprobe
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    component: logstashprobe
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      component: logstashprobe
+  {{ if .Values.logstashProbe.autoscaling.enabled -}}
+  replicas: {{ .Values.logstashProbe.autoscaling.minReplicas | default 1 }}
+  {{- else -}}
+  replicas: {{ .Values.logstashProbe.replicaCount }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-logstashprobe
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        component: logstashprobe
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: "IBM Netcool/OMNIbus Probe for Message Bus"
+        productID: "2150A086BAF34CE8959EC9B9182036E4"
+        productVersion: '6.1'
+    spec:
+      #https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types, 
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms, 
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                {{- if .Values.arch }}
+                - {{ .Values.arch }}
+                {{- else }}
+                - {{ template "arch" . }}
+                {{ end }}
+      volumes:
+        - name: interfaces-file
+          configMap:
+            name: {{ .Release.Name }}-{{ .Chart.Name }}-logstashprobe-config
+            items:
+            - key: omni.dat
+              path: omni.dat
+        - name: rules-file
+          configMap:
+            name: {{ .Release.Name }}-{{ .Chart.Name }}-logstashprobe-config
+            items:
+            - key: message_bus.rules
+              path: message_bus.rules
+        - name: props-file
+          configMap:
+            name: {{ .Release.Name }}-{{ .Chart.Name }}-logstashprobe-config
+            items:
+            - key: message_bus.props
+              path: message_bus.props
+        - name: transport-file
+          configMap:
+            name: {{ .Release.Name }}-{{ .Chart.Name }}-logstashprobe-config
+            items:
+            - key: webhookTransport.properties
+              path: webhookTransport.properties
+      containers:
+        - name: messagebus-probe-logstash
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: LICENSE
+            value: {{ .Values.license | default "not accepted" }}
+          - name: PROBE_NAME
+            value: "nco_p_message_bus"
+          ports:
+            - containerPort: 80
+          volumeMounts:
+          - name: interfaces-file
+            mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+            subPath: omni.dat
+          - name: rules-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus.rules
+            subPath: message_bus.rules
+          - name: props-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus.props
+            subPath: message_bus.props
+          - name: transport-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/webhookTransport.properties
+            subPath: webhookTransport.properties
+          livenessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - POST
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - -d
+              - '{"liveness" : "probe-check"}'
+              - http://localhost:80/probe/webhook/logstash
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - POST
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - -d
+              - '{"readiness" : "probe-check"}'
+              - http://localhost:80/probe/webhook/logstash
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+{{- end -}}

@@ -1,0 +1,37 @@
+{{- if .Values.logstashProbe.enabled -}}
+{{- if .Values.logstashProbe.ingress.enabled -}}
+{{- $serviceName := include "logstash.servicename" . -}}
+{{- $servicePort := .Values.logstashProbe.service.externalPort -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ template "fullname" . }}-logstashprobe
+  labels:
+    app: {{ template "fullname" . }}-logstashprobe
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    component: logstashprobe
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  {{- if .Values.logstashProbe.ingress.annotations }}  
+  annotations:
+    {{- range $key, $value := .Values.logstashProbe.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+spec:
+  rules:
+    {{- range $host := .Values.logstashProbe.ingress.hosts }}
+    - host: {{ $host }}
+      http:
+        paths:
+          - path: /probe/webhook/logstash
+            backend:
+              serviceName: {{ $serviceName }}
+              servicePort: {{ $servicePort }}
+    {{- end -}}       
+  {{- if .Values.logstashProbe.ingress.tls }}
+  tls:
+{{ toYaml .Values.logstashProbe.ingress.tls | indent 4 }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}

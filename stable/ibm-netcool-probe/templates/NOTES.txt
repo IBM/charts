@@ -1,0 +1,35 @@
+{{- if .Values.logstashProbe.enabled }}
+Get the Logstash Webhook URL by running these commands:
+{{- if contains "NodePort" .Values.logstashProbe.service.type }}
+  export NODE_PORT_LOGSTASH=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "logstash.servicename" . }})
+  export NODE_IP_LOGSTASH=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP_LOGSTASH:$NODE_PORT_LOGSTASH/probe/webhook/logstash
+{{- else if contains "LoadBalancer" .Values.logstashProbe.service.type }}
+     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+           You can watch the status of by running 'kubectl get svc -w {{ template "logstash.servicename" . }}'
+  export SERVICE_IP_LOGSTASH=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ template "logstash.servicename" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP_LOGSTASH:{{ .Values.logstashProbe.service.externalPort }}/probe/webhook/logstash
+{{- else if contains "ClusterIP" .Values.logstashProbe.service.type }}
+  export POD_NAME_LOGSTASH=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ template "fullname" . }}-logstashprobe,release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl port-forward $POD_NAME_LOGSTASH 8080:{{ .Values.logstashProbe.service.externalPort }}
+  echo "Send HTTP GET or POST to http://127.0.0.1:8080/probe/webhook/logstash"
+{{- end }}
+{{- end }}
+
+{{- if .Values.prometheusProbe.enabled }}
+Get the Prometheus Webhook URL by running these commands:
+{{- if contains "NodePort" .Values.prometheusProbe.service.type }}
+  export NODE_PORT_PROMETHEUS=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "prometheus.servicename" . }})
+  export NODE_IP_PROMETHEUS=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP_PROMETHEUS:$NODE_PORT_PROMETHEUS/probe/webhook/prometheus
+{{- else if contains "LoadBalancer" .Values.prometheusProbe.service.type }}
+     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+           You can watch the status of by running 'kubectl get svc -w {{ template "prometheus.servicename" . }}'
+  export SERVICE_IP_PROMETHEUS=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ template "prometheus.servicename" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP_PROMETHEUS:{{ .Values.prometheusProbe.service.externalPort }}/probe/webhook/promethues
+{{- else if contains "ClusterIP" .Values.prometheusProbe.service.type }}
+  export POD_NAME_PROMETHEUS=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ template "fullname" . }}-prometheusprobe,release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl port-forward $POD_NAME_PROMETHEUS 8081:{{ .Values.prometheusProbe.service.externalPort }}
+  echo "Send HTTP GET or POST to http://127.0.0.1:8081/probe/webhook/prometheus"
+{{- end }}
+{{- end -}}
