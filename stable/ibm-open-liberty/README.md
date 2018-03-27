@@ -25,6 +25,9 @@ The Helm chart has the following values that can be overriden using the --set pa
 |           | type          | Specify type of service. | Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer. see Publishing services - service types |
 |           | port          | The port that this container exposes.  |   |
 |           | targetPort  | Port that will be exposed externally by the pod. | |
+| logs        | consoleFormat          | [18.0.0.1+] Specifies container log output format | json (default) or basic |
+|             | consoleLogLevel        | [18.0.0.1+] Controls the granularity of messages that go to the container log | info (default), audit, warning, error or off | 
+|             | consoleSource          | [18.0.0.1+] Specifies the sources that are written to the container log. Use a comma separated list for multiple sources. This property only applies when consoleFormat=json.  | message,trace,accessLog,ffdc (default) |
 | resources | constraints.enabled    | Specifies whether the resource constraints specified in this helm chart are enabled.   | false (default) or true  |
 |  | limits.cpu    | Describes the maximum amount of CPU allowed. | Default is 500m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
 |           | limits.memory | Describes the maximum amount of memory allowed. | Default is 512Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
