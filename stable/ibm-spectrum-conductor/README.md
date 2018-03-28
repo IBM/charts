@@ -7,9 +7,9 @@ IBM Spectrum Conductor with Spark helps you deploy Apache Spark applications eff
 IBM Spectrum Conductor Deep Learning Impact is an add-on to IBM Spectrum Conductor with Spark that provides deep learning capabilities to your IBM Spectrum Conductor with Spark environment. It provides robust, end-to-end workflow support for deep learning lifecycle management from installation and configuration, data ingest and preparation, building, optimizing, and training the model, to inference and testing. 
 
 ## Chart Details
-You can deploy IBM Spectrum Conductor with Spark as a Helm chart to quickly launch and run a master deployment with one pod in the Kubernetes cluster. The master deployment includes a cluster management console that you can access from you browser by way of an Http proxy or an ingress proxy that is deployed together with the master deployment. Through the cluster management console, a user with a certain role or permission (cluster administrator, consumer administrator, or has the Spark Instance Groups Configure permission) can create and manage multiple Spark instance groups for different tenants. One IBM Spectrum Conductor with Spark deployment represents one Spark as a service for a department or a business unit. 
+You can deploy IBM Spectrum Conductor with Spark as a Helm chart to quickly launch and run a master deployment with one pod in the Kubernetes cluster. The master deployment includes a cluster management console that you can access from your browser by way of an Http proxy or an ingress proxy that is deployed together with the master deployment. Through the cluster management console, a user with a certain role or permission (cluster administrator, consumer administrator, or has the Spark Instance Groups Configure permission) can create and manage multiple Spark instance groups for different tenants. One IBM Spectrum Conductor with Spark deployment represents one Spark as a service for a department or a business unit. 
 
-Based on your preference, a Spark instance group contains a dedicate Spark version, a customized Spark configuration, notebook (Jupyter/Zeppelin) editions, and end user application dependencies. Once a Spark instance group is created, IBM Spectrum Conductor with Spark automatically generates its Docker image and deploys it onto the Kubernetes cluster. A Spark instance group is a first class Kubernetes deployment, upon which Kubernetes can manage its resource usage respectively. 
+Based on your preference, a Spark instance group contains a dedicated Spark version, a customized Spark configuration, notebook (Jupyter/Zeppelin) editions, and end user application dependencies. Once a Spark instance group is created, IBM Spectrum Conductor with Spark automatically generates its Docker image and deploys it onto the Kubernetes cluster. A Spark instance group is a first class Kubernetes deployment, upon which Kubernetes can manage its resource usage respectively. 
 
 Each tenant logs in to the cluster management console through its own authority to access its own Spark instance group. A tenant can submit Spark batch jobs, notebook applications, and train their deep learning models and validate inference without overlapping with other tenants. Each Spark instance group grows its replicas based on its workload demands. You can also set up its replicas threshold by its namespace and an assigned quota.
 
@@ -65,7 +65,7 @@ kubectl create -f pv.yaml
 If you uncomment "sharedStorageClassName = gold" in the above sample, then only a deployment with a storage request with the class name "gold" matches. 
 
 ### Kernel parameters
-Before you install IBM Spectrum Conductor with Spark, the `vm_max_map_count` kernel must be set on the Kubernetes node(s) to a value of at least 262144 in order for the ELK services to start and run normally. To set the vm_max_map_count kernel to a value of at least 262144:
+Before you install IBM Spectrum Conductor with Spark, the `vm_max_map_count` kernel must be set on the Kubernetes node(s) to a value of at least 262144 for the ELK services to start and run normally. To set the vm_max_map_count kernel to a value of at least 262144:
 - Set the kernel value dynamically to ensure that the change takes effect immediately:
 ````
   # sysctl -w vm.max_map_count=262144
@@ -82,11 +82,11 @@ To use the full GPU functions in IBM Spectrum Conductor with Spark, you must bui
 ## Resources Required
 The `Conductor master CPU request` and `Conductor master memory request` parameters are the initial CPU and memory requests that are used to create the master container. The default values are 4 vcores and 4G memory. There is no limit enforcement against the master.
 
-The `Compute container CPU request`, `Compute container memory request`, and `Compute container GPU request` parameters define how many resources each computer container requests; however it cannot grow beyond the limits of `Compute container CPU limit`, `Compute container memory limit` and `Compute container GPU limit`. The default request values are 2 vcores and 2G memory for each container, with limits of 4 vcores and 6G memory. 
+The `Compute container CPU request`, `Compute container memory request`, and `Compute container GPU request` parameters define how many resources each computer container requests; however, it cannot grow beyond the limits of `Compute container CPU limit`, `Compute container memory limit` and `Compute container GPU limit`. The default request values are 2 vcores and 2G memory for each container, with limits of 4 vcores and 6G memory. 
 
 For the number that you can specify for the CPU and memory columns, refer to the [Kubernetes Specification](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu).
 
-The number of GPU is an integer equal or greater than zero. Defautl value is zero. A number greater than zero for `Compute container GPU request` is required to turn on IBM Spectrum Conductor with Spark on GPU, as well as to enable IBM Spectrum Conductor Deep Learning Impact. 
+The number of GPU is an integer equal or greater than zero. Default value is zero. A number greater than zero for `Compute container GPU request` is required to turn on IBM Spectrum Conductor with Spark on GPU, as well as to enable IBM Spectrum Conductor Deep Learning Impact. 
 
 ## Installing the Helm chart
 Install by a helm command: For example, install a IBM Spectrum Conductor with Spark deployment with the name "spaas1" in the namespace "spass1"     
@@ -108,7 +108,7 @@ The base image of the master container is defined by the `Conductor master image
 After you create a Spark instance group, an image is built and persisted into the `Spark instance group image registry` parameter. The default place is the default image registry: "mycluster.icp:8500". The credential to access the registry is defined in the `Spark instance group image registry user` and `Spark instance group image registry user password` parameters.
 
 ### Dynamic scaling
-The IBM Spectrum Conductor with Spark installation starts from only one master container. Then you start to create your Spark instance groups. Every Spark instance group initially has only one container. Once workloads reach the Spark master within the Spark instance group, the Spark master can request more containers from the Kubernetes API server based on its workloads demands. The total replicas of the Spark instance group can reach up to the value defined for the `Maximum computer containers` parameter. The Spark master scans only its current demands every X (defined by the `The interval of dynamic scaling compute containers` parameter) seconds and requests the defined number of containers (defined by the `The unit of dynamic scaling compute containers` parameter). 
+The IBM Spectrum Conductor with Spark installation starts from only one master container. Then you start to create your Spark instance groups. Every Spark instance group initially has only one container. Once workloads reach the Spark master within the Spark instance group, the Spark master can request more containers from the Kubernetes API server based on its workloads demands. The total replicas of the Spark instance group can reach up to the value defined for the `Maximum computer containers` parameter. The Spark master scans only its current demands every X (defined by `The interval of dynamic scaling compute containers` parameter) seconds and requests the defined number of containers (defined by the `The unit of dynamic scaling compute containers` parameter). 
 
 ### GPU support (for IBM Spectrum Conductor with Spark only)
 To turn on GPU support in IBM Spectrum Conductor with Spark, you must 
@@ -250,4 +250,4 @@ Note: We recommend that you remove Spark instance groups from the cluster manage
 ## Documentation
 To learn more about using IBM Spectrum Conductor with Spark, see the online [IBM Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSZU2E_2.2.1/icp/conductor_icp.html).
 
-To learn more about using IBM Spectrum Conductor Deep Leanring Impact, see the online [IBM Knowledge Center](http://www.ibm.com/support/knowledgecenter/SSWQ2D_1.1.0/icp/dli-icp.html).
+To learn more about using IBM Spectrum Conductor Deep Learning Impact, see the online [IBM Knowledge Center](http://www.ibm.com/support/knowledgecenter/SSWQ2D_1.1.0/icp/dli-icp.html).
