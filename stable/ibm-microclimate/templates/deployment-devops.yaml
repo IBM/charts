@@ -1,0 +1,81 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+# "Restricted Materials of IBM"
+#
+# Copyright IBM Corp. 2017 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#*******************************************************************************
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-devops
+  labels:
+    app: {{ template "fullname" . }}-devops
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}-devops
+      release: {{ .Release.Name }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-devops
+        release: {{ .Release.Name }}
+      annotations:
+        productName: "IBM Microclimate Devops v1"
+        productID: "IBMMicroclimate_Devops_18.03_perpetual_00000"
+        productVersion: "18.03"
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 8 }}
+      containers:
+      - name: devops-chart
+        image: "{{ .Values.devops.repository }}:{{ .Values.devops.tag }}"
+        imagePullPolicy: {{ .Values.devops.pullPolicy }}
+        ports:
+          - containerPort: {{ .Values.service.internalPort }}
+        livenessProbe:
+          httpGet:
+            path: /health/liveness
+            port: {{ .Values.service.internalPort }}
+          initialDelaySeconds: 600
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /health/readiness
+            port: {{ .Values.service.internalPort }}
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        env:
+        - name: JENKINS_URL
+          value: "http://{{ .Release.Name }}-jenkins:8080"
+        - name: JENKINS_EXTERNAL_URL
+          value: "http://{{ .Values.jenkins.Master.HostName }}"
+        - name: JENKINS_USE_SECURITY
+          value: "{{ .Values.jenkins.Master.UseSecurity }}"
+        - name: JENKINS_USER
+          value: "{{ .Values.jenkins.Master.AdminUser }}"
+        - name: JENKINS_API_TOKEN
+          value: "be652e0e60b0af067c2b54cd04720df3"
+        - name: GITLAB_URL
+          value: "{{ .Values.gitlab.url }}"
+        - name: GITLAB_API_TOKEN
+          value: "{{ .Values.gitlab.apiToken }}"
+        resources:
+          requests:
+            memory: {{ .Values.devops.resources.requests.memory }}
+            cpu: {{ .Values.devops.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.devops.resources.limits.memory }}
+            cpu: {{ .Values.devops.resources.limits.cpu }}
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}

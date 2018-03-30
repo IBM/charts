@@ -19,6 +19,10 @@ metadata:
     heritage: "{{ .Release.Service }}"
 
 spec:
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+      release: {{ .Release.Name }}
   replicas: 1
   template:
     metadata:
@@ -29,8 +33,8 @@ spec:
         heritage: "{{ .Release.Service }}"
       annotations:
         productName: "IBM Microclimate v1"
-        productID: "IBMMicroclimate_1.0_perpetual_00000"
-        productVersion: "1.0"
+        productID: "IBMMicroclimate_18.03_perpetual_00000"
+        productVersion: "18.03"
 
     spec:
       affinity:
@@ -38,7 +42,10 @@ spec:
 
       volumes:
       - name: shared-workspace
-      {{- if .Values.persistence.enabled }}
+      {{- if and .Values.persistence.enabled .Values.persistence.existingClaimName}}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.existingClaimName}}
+      {{- else if .Values.persistence.enabled }}
         persistentVolumeClaim:
           claimName: {{ template "fullname" .}}
       {{- else }}
@@ -73,13 +80,13 @@ spec:
           - name: EDITOR_IMAGE
             value: {{ .Values.theia.repository}}:{{ .Values.theia.tag}}
           - name: EDITOR_MEM_REQUEST
-            value: {{ .Values.theia.resources.memRequest}}
+            value: {{ .Values.theia.resources.requests.memory}}
           - name: EDITOR_CPU_REQUEST
-            value: {{ .Values.theia.resources.cpuRequest}}
+            value: {{ .Values.theia.resources.requests.cpu}}
           - name: EDITOR_MEM_LIMIT
-            value: {{ .Values.theia.resources.memLimit}}
+            value: {{ .Values.theia.resources.limits.memory}}
           - name: EDITOR_CPU_LIMIT
-            value: {{ .Values.theia.resources.cpuLimit}}
+            value: {{ .Values.theia.resources.limits.cpu}}
         ports:
         - containerPort: {{ .Values.ports.portal }}
         livenessProbe:
@@ -96,11 +103,11 @@ spec:
             port: {{ .Values.ports.portal }}
         resources:
           requests:
-            memory: {{ .Values.portal.resources.memRequest }}
-            cpu: {{ .Values.portal.resources.cpuRequest }}
+            memory: {{ .Values.portal.resources.requests.memory }}
+            cpu: {{ .Values.portal.resources.requests.cpu }}
           limits:
-            memory: {{ .Values.portal.resources.memLimit }}
-            cpu: {{ .Values.portal.resources.cpuLimit }}
+            memory: {{ .Values.portal.resources.limits.memory }}
+            cpu: {{ .Values.portal.resources.limits.cpu }}
 
       - name: microclimate-editor
         image: {{ .Values.theia.repository}}:{{ .Values.theia.tag}}
@@ -124,11 +131,11 @@ spec:
             port: {{ .Values.ports.theia }}
         resources:
           requests:
-            memory: {{ .Values.theia.resources.memRequest }}
-            cpu: {{ .Values.theia.resources.cpuRequest }}
+            memory: {{ .Values.theia.resources.requests.memory }}
+            cpu: {{ .Values.theia.resources.requests.cpu }}
           limits:
-            memory: {{ .Values.theia.resources.memLimit }}
-            cpu: {{ .Values.theia.resources.cpuLimit }}
+            memory: {{ .Values.theia.resources.limits.memory }}
+            cpu: {{ .Values.theia.resources.limits.cpu }}
 
 
       - name: microclimate-file-watcher
@@ -156,8 +163,8 @@ spec:
           - containerPort: {{ .Values.ports.filewatcher }}
         command: ["/scripts/root-watcher.sh", "/microclimate-workspace"]
         livenessProbe:
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          initialDelaySeconds: 420
+          periodSeconds: 100
           httpGet:
             path: /health
             port: 9091
@@ -169,72 +176,8 @@ spec:
             port: {{ .Values.ports.filewatcher }}
         resources:
           requests:
-            memory: {{ .Values.filewatcher.resources.memRequest }}
-            cpu: {{ .Values.filewatcher.resources.cpuRequest }}
+            memory: {{ .Values.filewatcher.resources.requests.memory }}
+            cpu: {{ .Values.filewatcher.resources.requests.cpu }}
           limits:
-            memory: {{ .Values.filewatcher.resources.memLimit }}
-            cpu: {{ .Values.filewatcher.resources.cpuLimit }}
----
-# Dedicated deployment for devops piece
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: {{ template "fullname" . }}-devops
-  labels:
-    app: {{ template "fullname" . }}-devops
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
-spec:
-  selector:
-    matchLabels:
-      app: {{ template "fullname" . }}-devops
-      release: {{ .Release.Name }}
-  replicas: {{ .Values.replicaCount }}
-  template:
-    metadata:
-      labels:
-        app: {{ template "fullname" . }}-devops
-        release: {{ .Release.Name }}
-    spec:
-      containers:
-      - name: devops-chart
-        image: "{{ .Values.devops.repository }}:{{ .Values.devops.tag }}"
-        imagePullPolicy: {{ .Values.devops.pullPolicy }}
-        ports:
-          - containerPort: {{ .Values.service.internalPort }}
-        livenessProbe:
-          httpGet:
-            path: /health/liveness
-            port: {{ .Values.service.internalPort }}
-          initialDelaySeconds: 600
-          periodSeconds: 3
-        readinessProbe:
-          httpGet:
-            path: /health/readiness
-            port: {{ .Values.service.internalPort }}
-          initialDelaySeconds: 30
-          periodSeconds: 5
-        env:
-        - name: JENKINS_URL
-          value: "http://{{ .Release.Name }}-jenkins:8080"
-        - name: JENKINS_EXTERNAL_URL
-          value: "http://{{ .Values.jenkins.Master.HostName }}"
-        - name: JENKINS_USE_SECURITY
-          value: "{{ .Values.jenkins.Master.UseSecurity }}"
-        - name: JENKINS_USER
-          value: "{{ .Values.jenkins.Master.AdminUser }}"
-        - name: JENKINS_API_TOKEN
-          value: "be652e0e60b0af067c2b54cd04720df3"
-        - name: GITLAB_URL
-          value: "http://{{ .Release.Name }}-gitlab-ce:80"
-        - name: GITLAB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-gitlab-ce
-              key: gitlab-root-password
-        resources:
-    {{- if .Values.nodeSelector }}
-      nodeSelector:
-{{ toYaml .Values.nodeSelector | indent 8 }}
-    {{- end }}
+            memory: {{ .Values.filewatcher.resources.limits.memory }}
+            cpu: {{ .Values.filewatcher.resources.limits.cpu }}
