@@ -1,0 +1,155 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cam-ui-basic
+  labels:
+    name: cam-ui-basic
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  namespace: {{ .Values.service.namespace }}
+spec:
+  replicas: {{ .Values.camUI.replicaCount }}
+  selector:
+    matchLabels:
+      name: cam-ui-basic
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  revisionHistoryLimit: 3
+  template:
+    metadata:
+      labels:
+        name: cam-ui-basic
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: "Cloud Automation Manager"
+        productID: "{{ .Values.global.id.productID }}"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostname: cam-ui-basic
+      volumes:
+      - name:  {{ .Values.camLogsPV.name }}
+      {{- if .Values.camLogsPV.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.camLogsPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camLogsPV.persistence.existingClaimName }}
+        {{- else }}
+          claimName:  {{ .Values.camLogsPV.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+      containers:
+      - name: cam-ui-basic
+        image: "{{ .Values.image.repository }}icam-ui-basic:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: liveness-port
+          containerPort: 39002
+        livenessProbe:
+          httpGet:
+            path: /ui/health
+            port: liveness-port
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /ui/health
+            port: liveness-port
+          initialDelaySeconds: 5
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+          - name:  {{ .Values.camLogsPV.name }}
+            mountPath: /var/camlog
+            subPath: cam-ui-basic
+        envFrom:
+        - configMapRef:
+            name: common-config
+        - configMapRef:
+            name: database-config
+        - configMapRef:
+            name: redis-config
+        env:
+        - name: APP_CONTEXT
+          value: /ui
+        - name: sessionKey
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.camUI.camUISecret.secretName }}
+              key: sessionKey
+        - name: sessionSecret
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.camUI.camUISecret.secretName }}
+              key: sessionSecret
+        - name: ICP_MASTER_IP
+          valueFrom:
+            configMapKeyRef:
+              name: oauth-client-map
+              key: MASTER_IP
+        - name: ORPHEUS_IDENTITY_API_URL
+          value: https://$(ICP_MASTER_IP):8443/idprovider
+        - name: ORPHEUS_IDENTITY_URL
+          value: https://$(ICP_MASTER_IP):8443/idprovider
+        - name: wlpClientId
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.camAPI.camSecret.secretName }}
+              key: wlp_client_id
+        - name: wlpClientSecret
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.camAPI.camSecret.secretName }}
+              key: wlp_client_secret
+        - name: wlp_scope
+          value: openid+profile+email
+        - name: ICP_PROXY_IP
+          valueFrom:
+            configMapKeyRef:
+              name: oauth-client-map
+              key: PROXY_IP
+        - name: wlpCallbackUrl
+          value: https://$(ICP_PROXY_IP):30000/auth/liberty/callback
+        - name: disableSectionIds
+          value: '["monitor","servicecomposer"]'
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+      initContainers:
+      - name: init-redis
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        command: ['sh', '-c', 'until nslookup {{ .Values.redis.host }}; do echo waiting for redis; sleep 2; done; sleep 120;']

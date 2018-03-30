@@ -1,0 +1,118 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if .Values.camBPDUI.bundled  }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cam-bpd-cds
+  labels:
+    name: cam-bpd-cds
+    app: {{ template "fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  namespace: {{ .Values.service.namespace }}
+spec:
+  replicas: {{ .Values.camBPDCDS.replicaCount }}
+  selector:
+    matchLabels:
+      name: cam-bpd-cds
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  revisionHistoryLimit: 3
+  template:
+    metadata:
+      labels:
+        name: cam-bpd-cds
+        app: {{ template "fullname" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: "Cloud Automation Manager"
+        productID: "{{ .Values.global.id.productID }}"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostname: cam-bpd-cds
+      containers:
+        - name: cam-bpd-cds
+          image: "{{ .Values.image.repository }}icam-bpd-cds:{{ .Values.image.tag }}{{ template "platform" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: liveness-port
+              containerPort: 7575
+          env:
+            - name: LICENSE
+              value: "accept"
+            - name: DEBUG
+              value: {{ default "false" .Values.camBPDCDS.options.debug.enabled | quote }}
+            - name: CAM_ENABLED
+              value: {{ default "false" .Values.camBPDUI.bundled | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          livenessProbe:
+            httpGet:
+              path: /
+              port: liveness-port
+            initialDelaySeconds: 15
+            timeoutSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: liveness-port
+            initialDelaySeconds: 5
+          resources:
+{{ toYaml .Values.camBPDCDS.resources | indent 12 }}
+          volumeMounts:
+            {{- if .Values.camBPDCDS.options.customSettingsFile }}
+            - name: settings-file
+              mountPath: /custom_settings
+            {{- end }}
+            - name:  {{ .Values.camLogsPV.name }}
+              mountPath: /var/camlog
+              subPath: cam-bpd-cds
+      volumes:
+        {{- if .Values.camBPDCDS.options.customSettingsFile }}
+        - name: settings-file
+          configMap:
+            name: {{ .Values.camBPDCDS.options.customSettingsFile }}
+        {{- end }}
+        - name:  {{ .Values.camLogsPV.name }}
+        {{- if .Values.camLogsPV.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.camLogsPV.persistence.existingClaimName }}
+            claimName: {{ .Values.camLogsPV.persistence.existingClaimName }}
+          {{- else }}
+            claimName:  {{ .Values.camLogsPV.name }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+       - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+{{- end }}

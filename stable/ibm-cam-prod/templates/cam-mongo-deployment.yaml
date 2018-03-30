@@ -1,0 +1,78 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+{{- if .Values.database.bundled  }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cam-mongo
+  labels:
+    name: cam-mongo
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  namespace: {{ .Values.service.namespace }}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: cam-mongo
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: "Cloud Automation Manager"
+        productID: "{{ .Values.global.id.productID }}"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostname: cam-mongo
+      volumes:
+      - name: {{ .Values.camMongoPV.name }}
+      {{- if .Values.camMongoPV.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.camMongoPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camMongoPV.persistence.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.camMongoPV.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+      containers:
+      - name: cam-mongo
+        image: "{{ .Values.image.repository }}icam-mongo:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: mongo
+          containerPort: 27017
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+          - name: "{{ .Values.camMongoPV.name }}"
+            mountPath: /data/db
+{{- end }}

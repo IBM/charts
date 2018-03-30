@@ -1,0 +1,132 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cam-provider-helm
+  labels:
+    name: cam-provider-helm
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  namespace: {{ .Values.service.namespace }}
+  annotations:
+    productName: "Cloud Automation Manager"
+    productID: "{{ .Values.global.id.productID }}"
+    productVersion: "{{ .Chart.AppVersion }}"
+spec:
+  replicas: {{ .Values.camProxy.replicaCount }}
+  selector:
+    matchLabels:
+      name: cam-provider-helm
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  revisionHistoryLimit: 3
+  template:
+    metadata:
+      labels:
+        name: cam-provider-helm
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: "Cloud Automation Manager"
+        productID: "{{ .Values.global.id.productID }}"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostname: cam-provider-helm
+      volumes:
+      - name: {{ .Values.camLogsPV.name }}
+      {{- if .Values.camLogsPV.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.camLogsPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camLogsPV.persistence.existingClaimName }}
+        {{- else }}
+          claimName:  {{ .Values.camLogsPV.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName}}
+      {{- end }}
+      {{- end }}
+      containers:
+      - name: cam-provider-helm
+        image: "{{ .Values.image.repository }}icam-provider-helm:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: liveness-port
+          containerPort: 7010
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: liveness-port
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: liveness-port
+          initialDelaySeconds: 5
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+          - name: {{ .Values.camLogsPV.name }}
+            mountPath: /var/camlog
+            subPath: cam-provider-helm
+        envFrom:
+        - configMapRef:
+            name: common-config
+        - configMapRef:
+            name: database-config
+        - configMapRef:
+            name: redis-config
+        env:
+        - name: CAM_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.camAPI.camSecret.secretName }}
+              key: token
+        - name: ICP_MASTER_IP
+          valueFrom:
+            configMapKeyRef:
+              name: oauth-client-map
+              key: MASTER_IP
+        - name: ICP_PROXY_IP
+          valueFrom:
+            configMapKeyRef:
+              name: oauth-client-map
+              key: PROXY_IP
+        - name: ORPHEUS_IDENTITY_API_URL
+          value: https://$(ICP_MASTER_IP):8443/idprovider
+        - name: ORPHEUS_IDENTITY_URL
+          value: https://$(ICP_MASTER_IP):8443/idprovider
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name

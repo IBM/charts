@@ -1,0 +1,194 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if and .Values.camBPDUI.bundled }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cam-bpd-ui
+  labels:
+    name: cam-bpd-ui
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  namespace: {{ .Values.service.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: cam-bpd-ui
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  revisionHistoryLimit: 3
+  template:
+    metadata:
+      labels:
+        name: cam-bpd-ui
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: "Cloud Automation Manager"
+        productID: "{{ .Values.global.id.productID }}"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostname: cam-bpd-ui
+      initContainers:
+      - name: "check-db-port"
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        {{- if .Values.camBPDDatabase.bundled }}
+        command: ["sh", "-c", "until nc -z cam-bpd-mariadb 3306; do echo waiting for cam-bpd-mariadb; sleep 2; done;"]
+        {{- else }}
+        command: ["sh", "-c", "until nc -z {{ .Values.camBPDExternalDatabase.url }} {{ .Values.camBPDExternalDatabase.port }}; do echo waiting for {{ .Values.camBPDExternalDatabase.url }}; sleep 2; done;"]
+        {{- end }}
+      containers:
+      - name: cam-bpd-ui
+        image: "{{ .Values.image.repository }}icam-bpd-ui:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /landscaper/login
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 180
+          periodSeconds: 5
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /landscaper/login
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+        env:
+        {{- if not .Values.camBPDDatabase.bundled }}
+          - name: DB_NAME
+            value: {{ .Values.camBPDExternalDatabase.name }}
+          - name: DB_USER
+            valueFrom:
+             secretKeyRef:
+              name: {{ .Values.camBPDExternalDatabase.secret }}
+              key: username
+          - name: DB_PASSWORD
+            valueFrom:
+             secretKeyRef:
+              name: {{ .Values.camBPDExternalDatabase.secret }}
+              key: password
+          - name: DB_TCP_PORT
+            value: {{ .Values.camBPDExternalDatabase.port | quote }}
+          - name: DB_TCP_URL
+            value: {{ .Values.camBPDExternalDatabase.url }}
+          - name: DB_TYPE
+            value: {{ .Values.camBPDExternalDatabase.type }}
+        {{- else }}
+          - name: DB_NAME
+            value: ibm_ucdp
+          - name: DB_USER
+            valueFrom:
+             secretKeyRef:
+              name: cam-bpd-mariadb-secret
+              key: username
+          - name: DB_PASSWORD
+            valueFrom:
+             secretKeyRef:
+              name: cam-bpd-mariadb-secret
+              key: password
+          - name: DB_TCP_PORT
+            value: "3306"
+          - name: DB_TCP_URL
+            value: cam-bpd-mariadb
+          - name: DB_TYPE
+            value: mariadb
+        {{- end }}
+          - name: WEB_SERVER_HOSTNAME
+            valueFrom:
+              configMapKeyRef:
+                name: oauth-client-map
+                key: MASTER_IP
+          - name: UCDP_PORT
+            value: "30000"
+          - name: SECURE
+            value: "N"
+          - name: LUCENE_INDEX
+            value: "N"
+          - name: DISCOVERY_SERVER_URL
+            value: http://cam-bpd-cds:7575
+          - name: CAM_ENABLED
+            value: {{ default "false" .Values.camBPDUI.bundled | quote }}
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        volumeMounts:
+          {{- if not .Values.camBPDDatabase.bundled }}
+          - name: ext-lib
+            mountPath: "/opt/ibm-ucd-patterns/ext_lib"
+          {{- end }}
+          - name: "{{ .Values.camBPDAppDataPV.name }}"
+            mountPath: "/opt/ibm-ucd-patterns/workspace"
+            subPath: workspace
+          - name: "{{ .Values.camBPDAppDataPV.name }}"
+            mountPath: "/opt/ibm-ucd-patterns/repositories"
+            subPath: repositories
+          - name:  {{ .Values.camLogsPV.name }}
+            mountPath: /var/camlog
+            subPath: cam-bpd-ui
+        resources:
+{{ toYaml .Values.camBPDResources | indent 12 }}
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+       - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+      volumes:
+      {{- if not .Values.camBPDDatabase.bundled }}
+      - name: ext-lib
+        persistentVolumeClaim:
+          claimName: {{ .Values.camBPDExternalDatabase.extlibPV.existingClaimName }}
+      {{- end }}
+      - name: "{{ .Values.camBPDAppDataPV.name }}"
+      {{- if .Values.camBPDAppDataPV.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.camBPDAppDataPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camBPDAppDataPV.persistence.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.camBPDAppDataPV.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name:  {{ .Values.camLogsPV.name }}
+      {{- if .Values.camLogsPV.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.camLogsPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camLogsPV.persistence.existingClaimName }}
+        {{- else }}
+          claimName:  {{ .Values.camLogsPV.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+{{- end }}

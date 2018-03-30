@@ -1,0 +1,114 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if and .Values.camBPDUI.bundled .Values.camBPDDatabase.bundled }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cam-bpd-mariadb
+  labels:
+    name: cam-bpd-mariadb
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  namespace: {{ .Values.service.namespace }}
+spec:
+  selector:
+    matchLabels:
+      name: cam-bpd-mariadb
+  template:
+    metadata:
+      labels:
+        name: cam-bpd-mariadb
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: "Cloud Automation Manager"
+        productID: "{{ .Values.global.id.productID }}"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostname: cam-bpd-mariadb
+      containers:
+      - name: cam-bpd-mariadb
+        image: "{{ .Values.image.repository }}icam-bpd-mariadb:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.camBPDDatabase.resources | indent 10 }}
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+           secretKeyRef:
+            name: cam-bpd-mariadb-secret
+            key: password
+        - name: MYSQL_PASSWORD
+          valueFrom:
+           secretKeyRef:
+            name: cam-bpd-mariadb-secret
+            key: password
+        - name: MYSQL_USER
+          valueFrom:
+           secretKeyRef:
+            name: cam-bpd-mariadb-secret
+            key: username
+        - name: MYSQL_DATABASE
+          value: ibm_ucdp
+        ports:
+        - name: cam-bpd-mariadb
+          containerPort: 3306
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD}"
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD}"
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+        volumeMounts:
+        - name: {{ .Values.camBPDAppDataPV.name }}
+          mountPath: /var/lib/mysql
+          subPath: mysql
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+       - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+      volumes:
+      - name: "{{ .Values.camBPDAppDataPV.name }}"
+      {{- if .Values.camBPDAppDataPV.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.camBPDAppDataPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camBPDAppDataPV.persistence.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.camBPDAppDataPV.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+{{- end }}
