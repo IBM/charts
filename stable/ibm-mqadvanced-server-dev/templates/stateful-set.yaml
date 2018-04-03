@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2017
+# © Copyright IBM Corporation 2017, 2018
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -75,8 +75,8 @@ spec:
             value: {{ .Values.license }}
           - name: MQ_QMGR_NAME
             value: {{ .Values.queueManager.name | default .Release.Name | replace "-" "" }}
-          #- name: MQ_DISABLE_WEB_CONSOLE
-          #  value: "true"
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "basic" }}
           - name: MQ_ADMIN_PASSWORD
             valueFrom:
               secretKeyRef:
@@ -94,6 +94,24 @@ spec:
           - mountPath: "/mnt/mqm"
             name: "{{ template "fullname" . }}-{{ .Values.dataPVC.name }}"
           {{- end }}
+          # Set liveness probe to determine if the queue manager is running
+          livenessProbe:
+            exec:
+              command:
+              - chkmqhealthy
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the MQ listener is running
+          readinessProbe:
+            exec:
+              command:
+              - chkmqready
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           resources:
             limits:
 {{ toYaml .Values.resources.limits | indent 14 }}
