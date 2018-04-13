@@ -13,33 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
-{{ if .Values.ingress.enabled }}
-apiVersion: extensions/v1beta1
-kind: Ingress
+{{- $stateful := or .Values.logs.persistTransactionLogs .Values.logs.persistLogs -}}
+{{ if $stateful }}
+apiVersion: v1
+kind: Service
 metadata:
   name: {{ template "fullname" . }}
   labels:
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     app: {{ template "fullname" . }}
     release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"     
-  annotations:
-    kubernetes.io/ingress.class: "nginx"
-    ingress.kubernetes.io/affinity: "cookie"
-    ingress.kubernetes.io/session-cookie-name: "route"
-    {{ if .Values.ingress.secureBackends }}
-    ingress.kubernetes.io/secure-backends: "true" 
-    {{ end }}
-    ingress.kubernetes.io/session-cookie-hash: "sha1"
-    ingress.kubernetes.io/rewrite-target: {{ .Values.ingress.rewriteTarget }}
-   
+    heritage: "{{ .Release.Service }}"    
 spec:
-  rules:
-  - host: 
-    http:
-      paths:
-      - path: {{ .Values.ingress.path }}
-        backend:
-          serviceName: {{ template "fullname" . }}
-          servicePort: {{ .Values.service.port }}
+  ports:
+  - port: {{ .Values.service.port }}
+  clusterIP: None
+  selector:
+    app: {{ template "fullname" . }}
 {{ end }}
