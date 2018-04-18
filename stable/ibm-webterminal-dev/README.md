@@ -16,7 +16,7 @@ Version [2.8.1](https://github.com/xtermjs/xterm.js/releases/tag/2.8.1) of xterm
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release stable/ibm-webterminal-dev
+helm install --name my-release stable/ibm-webterminal-dev
 ```
 
 The command deploys `ibm-webterminal` on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -24,6 +24,7 @@ The command deploys `ibm-webterminal` on the Kubernetes cluster in the default c
 > **Tip**: List all releases using `helm list`
 
 ## Verifying the Chart
+
 See NOTES.txt associated with this chart for verification instructions
 
 ## Uninstalling the Chart
@@ -31,12 +32,13 @@ See NOTES.txt associated with this chart for verification instructions
 To uninstall/delete the `my-release` deployment:
 
 ```bash
-$ helm delete --purge my-release
+helm delete --purge my-release
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.  If a delete can result in orphaned components include instructions additional commands required for clean-up.
 
 ## Configuration
+
 The following tables lists the configurable parameters of the `ibm-webterminal` chart and their default values.
 
 | Parameter                        | Description                                           | Default                                                   |
@@ -44,7 +46,7 @@ The following tables lists the configurable parameters of the `ibm-webterminal` 
 | `arch.amd64`                     | Preference to run on amd64 architecture               | `2 - No preference`                                       |
 | `arch.ppc64le`                   | Preference to run on ppc64le architecture             | `2 - No preference`                                       |
 | `image.repository`               | `web-terminal` image repository                       | `ibmcom/web-terminal`                                     |
-| `image.tag`                      | `web-terminal` image tag                              | `2.8.1-r1`                                                |
+| `image.tag`                      | `web-terminal` image tag                              | `2.8.1-r3`                                                |
 | `image.pullPolicy`               | Image pull policy                                     | `Always` if `imageTag` is `latest`, else `IfNotPresent`   |
 | `credentials.username`           | The username to access the terminal                   | `admin`                                                   |
 | `credentials.password`           | The password to secure access to the terminal         | `admin`                                                   |
