@@ -21,7 +21,7 @@ You can spend more time building applications and less time building environment
 ## Documentation
 
 Additional documentation on IBM Cloud Automation Manager (CAM) and installation of CAM can be found here:
-https://www.ibm.com/support/knowledgecenter/SS2L37/kc_welcome.html
+https://www.ibm.com/support/knowledgecenter/SS2L37_2.1.0.2/cam_install_CE.html
 
 ## Prerequisites
 
@@ -131,7 +131,8 @@ spec:
   nfs:
     server: mycluster.icp
     path: /export/CAM_db
-
+```
+```
 kubectl create -f ./ibm-cam-prod/pre-install/cam-mongo-pv.yaml
 ```
 
@@ -151,7 +152,8 @@ spec:
   nfs:
     server: mycluster.icp
     path: /export/CAM_logs
-
+```
+```
 kubectl create -f ./ibm-cam-prod/pre-install/cam-logs-pv.yaml
 ```
 
@@ -171,37 +173,13 @@ spec:
   nfs:
     server: mycluster.icp
     path: /export/CAM_terraform
-
+```
+```
 kubectl create -f ./ibm-cam-prod/pre-install/cam-terraform-pv.yaml
 ```
 
 * 4) Example of creating a PV for the Blueprint Designer application data
 ```
----
-kind: Endpoints
-apiVersion: v1
-metadata:
-  namespace: services
-  name: glusterfs-cluster
-subsets:
-- addresses:
-  - ip: <gluster node1 IP>
-  ports:
-  - port: 1729
-- addresses:
-  - ip: <gluster node2 IP>
-  ports:
-  - port: 1729
----
-kind: Service
-apiVersion: v1
-metadata:
-  namespace: services
-  name: glusterfs-cluster
-spec:
-  ports:
-  - port: 1729
----
 kind: PersistentVolume
 apiVersion: v1
 metadata:
@@ -216,7 +194,8 @@ spec:
   glusterfs:
     endpoints: glusterfs-cluster
     path: /glustervol1
-
+```
+```
 kubectl create -f ./ibm-cam-prod/pre-install/cam-bpd-appdata-pv.yaml
 ```
 

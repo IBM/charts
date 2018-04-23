@@ -1,10 +1,10 @@
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
-  name: "{{ template "fullname" . }}-agent"
+  name: {{ template "fullname" . }}-agent
   labels:
     app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    chart: "{{ .Chart.Name }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
 spec:
@@ -23,17 +23,37 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       hostPID: true
+{{ if .Values.image.imagePullSecrets }}
+      imagePullSecrets:
+      - name: {{ .Values.image.imagePullSecrets }}
+{{ end }}
       containers:
       - name: skydive-agent
         image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
-        imagePullPolicy: {{ default "" .Values.image.imagePullPolicy | quote }}
+        imagePullPolicy: {{ .Values.image.imagePullPolicy | default "" | quote }}
         args:
         - agent
+        - --listen=0.0.0.0:8081
         ports:
         - containerPort: 8081
+        readinessProbe:
+          httpGet:
+            port: 8081
+            path: /api/status
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            port: 8081
+            path: /api/status
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          failureThreshold: 10
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
         env:
         - name: SKYDIVE_ANALYZERS
-          value: "{{ template "fullname" . }}-service:{{ .Values.service.port }}"
+          value: {{ template "fullname" . }}-service:{{ .Values.service.port }}
         - name: SKYDIVE_FLOW_PROTOCOL
           value: websocket
         - name: SKYDIVE_AGENT_TOPOLOTY_PROBS
@@ -60,4 +80,3 @@ spec:
       - name: ovsdb
         hostPath:
           path: /var/run/openvswitch/db.sock
-          
