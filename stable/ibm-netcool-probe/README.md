@@ -1,5 +1,7 @@
 # IBM Tivoli Netcool/OMNIbus Integration - Probe for monitoring Kubernetes (Beta)
 
+THIS VERSION OF THE CHART IS NOW DEPRECATED. THE SUBSEQUENT VERSION IS v1.0.0 AND WILL BE MADE AVAILABLE ON [IBM PASSPORT ADVANTAGE](https://www-01.ibm.com/software/passportadvantage/).
+
 This is a helm package for deploying a cluster of Probes for Message Bus
 onto Kubernetes. These probes process events and alerts from
 Logstash HTTP output and Prometheus Alertmanager to a Netcool Operations Insight operational dashboard.
