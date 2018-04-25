@@ -1,5 +1,7 @@
 # Microservice Builder pipeline
 
+THIS CHART IS NOW DEPRECATED. PLEASE USE IBM-MICROCLIMATE
+
 The Microservice Builder pipeline runs on a Jenkins image in a Docker container, and it is deployed by using this Helm chart. It is designed to integrate with GitHub, GitHub Enterprise, or other Git services that are supported by the Jenkins GitHub plug-ins.
 
 ## Prerequisites

@@ -1,5 +1,7 @@
 # Microservice Builder fabric for Kubernetes
 
+THIS CHART IS NOW DEPRECATED. PLEASE USE IBM-MICROCLIMATE
+
 ## Introduction
 
 This chart serves two purposes:
