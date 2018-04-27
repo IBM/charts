@@ -12,25 +12,31 @@ metadata:
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .Values.datapower.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
   template:
     metadata:
       labels:
+        chart: {{ .Chart.Name}}-{{ .Chart.Version | replace "+" "_" }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
         app: {{ template "fullname" . }}
     spec:
       containers:
       - name: {{ .Chart.Name }}
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        imagePullPolicy: {{ .Values.image.pullPolicy }} 
+        image: "{{ .Values.datapower.image.repository }}:{{ .Values.datapower.image.tag }}"
+        imagePullPolicy: {{ .Values.datapower.image.pullPolicy }} 
         stdin: true
         tty: true
         resources:
           limits:
-            cpu: {{ .Values.resources.limits.cpu }}
-            memory: {{ .Values.resources.limits.memory | quote }}
+            cpu: {{ .Values.datapower.resources.limits.cpu }}
+            memory: {{ .Values.datapower.resources.limits.memory | quote }}
           requests: 
-            cpu: {{ .Values.resources.requests.cpu}}
-            memory: {{ .Values.resources.requests.memory | quote }}
+            cpu: {{ .Values.datapower.resources.requests.cpu}}
+            memory: {{ .Values.datapower.resources.requests.memory | quote }}
         env:
         - name: DATAPOWER_ACCEPT_LICENSE
           value: "true"
@@ -38,24 +44,36 @@ spec:
           value: "true"
         - name: DATAPOWER_LOG_COLOR
           value: "false"
+{{- if .Values.datapower.env.workerThreads }}
+{{- if gt .Values.datapower.env.workerThreads 0.0 }}
         - name: DATAPOWER_WORKER_THREADS
-          value: {{ .Values.datapowerEnv.workerThreads | quote }}
+          value: {{ .Values.datapower.env.workerThreads | quote }}
+{{- end }}
+{{- end }}
 {{- if ne .Values.patternName "none"}}
         livenessProbe:
           httpGet:
             path: /
             port: service
+{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
             scheme: HTTPS
+{{ else }}
+            scheme: HTTP
+{{ end }}
           initialDelaySeconds: 120
-          timeoutSeconds: 15
+          timeoutSeconds: 5
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /
             port: service
+{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
             scheme: HTTPS
+{{ else }}
+            scheme: HTTP
+{{ end }}
           initialDelaySeconds: 120
-          timeoutSeconds: 15
+          timeoutSeconds: 5
           periodSeconds: 10
         ports:
         - name: service
@@ -63,8 +81,10 @@ spec:
         volumeMounts:
             - mountPath: "/drouter/config"
               name: {{ template "fullname" . }}-config-volume
+{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
             - mountPath: "/drouter/secure/usrcerts"
               name: {{ template "fullname" . }}-secret-volume
+{{- end }}
       volumes:
         - name: {{ template "fullname" . }}-config-volume
           configMap: 
@@ -77,6 +97,7 @@ spec:
             - key: auto-startup.cfg
               path: "auto-startup.cfg"
 
+{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
         - name: {{ template "fullname" . }}-secret-volume
           secret:
             secretName: {{ template "fullname" . }}-secret
@@ -85,4 +106,5 @@ spec:
               path: "{{ .Values.patternName }}/key.pem"
             - key: cert.pem
               path: "{{ .Values.patternName }}/cert.pem"
+{{- end }}
 {{- end }}

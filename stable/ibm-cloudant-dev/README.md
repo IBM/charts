@@ -1,7 +1,8 @@
 [![IBM Cloudant](https://ablanks.cloudant.com/crud/welcome/ibm_cloudant_blue_x2.png)](https://ablanks.cloudant.com/crud/welcome/ibm_cloudant_blue_x2.png).
 
+THIS CHART IS NOW DEPRECATED.
+Here’s what you need to know: On May 25th, 2018 the helm chart for IBM Cloudant Developer Edition will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart. An alternative for NoSQL database is MongoDB. You can also create your own helm chart for a NoSQL database of your choice and import it into your IBM Cloud Private catalog for use.
 IBM® Cloudant is an IBM software product, which is primarily delivered as a cloud-based service. Cloudant is a non-relational, NoSQL, distributed database service.
-
 
 [![Brief introduction to IBM Cloudant](https://img.youtube.com/vi/oZqf5gsvHDc/0.jpg)](https://www.youtube.com/watch?v=oZqf5gsvHDc)
 
@@ -12,9 +13,9 @@ Learn more about IBM Cloudant at the following link: [https://www.ibm.com/suppor
 
 1. Create a Persistent Volume which will be utilized for storage
 
-The Cloudant chart requires access to storage in order to persist the database data, which is performed through the Kubernetes Volume Claim mechanism. The storage can be allocated in the private cloud admin console. 
+The Cloudant chart requires access to storage in order to persist the database data, which is performed through the Kubernetes Volume Claim mechanism. The storage can be allocated in the private cloud admin console.
 
-For minikube, use the following command to allocate a Persistent Volume directly on the minikube virtual machine: 
+For minikube, use the following command to allocate a Persistent Volume directly on the minikube virtual machine:
 
 ```console
 $ cat <<EOF | kubectl create -f -
