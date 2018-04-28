@@ -1,0 +1,27 @@
+{{ if (not .Values.ibmEsPvc.persistence.existingClaimName) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: "{{ .Values.ibmEsPvc.name }}"
+  labels:
+    app: eventstore
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  {{- if (index .Values "ibm-dsx-dev" "persistence" "useDynamicProvisioning") }}
+  storageClassName: {{ default nil .Values.ibmEsPvc.persistence.storageClassName | quote }}
+  {{ else }}
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: {{ default "100Gi" .Values.ibmEsPvc.persistence.size | quote }}
+  {{- if (not (index .Values "ibm-dsx-dev" "persistence" "useDynamicProvisioning")) }}
+  selector:
+    matchLabels:
+      assign-to: "ibm-htap-db"
+  {{- end }}
+{{- end }}

@@ -1,0 +1,38 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: eventstore-label-job
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    metadata:
+      labels:
+        app: eventstore-label-job
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+      - name: eventstore-init
+        image: busybox
+        command: ['/bin/sh', '-cx']
+        args:
+        - wget https://storage.googleapis.com/kubernetes-release/release/v{{ .Capabilities.KubeVersion.Major }}.{{ .Capabilities.KubeVersion.Minor }}.0/bin/linux/amd64/kubectl;
+          chmod +x ./kubectl;
+          if [ x$(./kubectl describe nodes | grep bluspark_node=H1 | awk '{print $1}') != 'xbluspark_node=H1' ]; then
+            ./kubectl label node {{ .Values.address.eventstoreNode }} bluspark_node=H1;
+          fi
+      restartPolicy: Never
