@@ -1,4 +1,3 @@
-{{/*Copyright IBM Corporation 2018. All Rights Reserved.*/}}
 {{- define "override_config_map" }}
 apiVersion: v1
 kind: ConfigMap
@@ -53,12 +52,6 @@ data:
         </hudson.search.UserSearchProperty>
       </properties>
     </user>
-  jenkins.model.JenkinsLocationConfiguration.xml: |-
-    <?xml version='1.1' encoding='UTF-8'?>
-    <jenkins.model.JenkinsLocationConfiguration>
-      <adminAddress>address not configured yet &lt;nobody@nowhere&gt;</adminAddress>
-      <jenkinsUrl>http://{{ .Values.Master.HostName }}/</jenkinsUrl>
-    </jenkins.model.JenkinsLocationConfiguration>
   config.xml: |-
     <?xml version='1.0' encoding='UTF-8'?>
     <hudson>
@@ -70,25 +63,7 @@ data:
       <authorizationStrategy class="hudson.security.FullControlOnceLoggedInAuthorizationStrategy">
         <denyAnonymousReadAccess>true</denyAnonymousReadAccess>
       </authorizationStrategy>
-{{- if .Values.Master.LoginOpenIdConnect }}
-      <securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm" plugin="oic-auth@1.3">
-        <clientId>jenkins00</clientId>
-        <clientSecret>SECRET</clientSecret>
-        <tokenServerUrl>(IDENTITY_URL)/oidc/endpoint/OP/token</tokenServerUrl>
-        <authorizationServerUrl>(IDENTITY_URL)/oidc/endpoint/OP/authorize</authorizationServerUrl>
-        <userInfoServerUrl>(IDENTITY_URL)/oidc/endpoint/OP/userinfo</userInfoServerUrl>
-        <userNameField>sub</userNameField>
-        <scopes>openid email</scopes>
-        <disableSslVerification>true</disableSslVerification>
-        <logoutFromOpenidProvider>true</logoutFromOpenidProvider>
-        <endSessionUrl>http://{{ .Values.Master.HostName }}/</endSessionUrl>
-        <postLogoutRedirectUrl>http://{{ .Values.Master.HostName }}/</postLogoutRedirectUrl>
-        <escapeHatchEnabled>false</escapeHatchEnabled>
-        <escapeHatchSecret>{AQAAABAAAAAQpZudokiKDm2HB49D0eWt4POfG9k0K7iqUf8R5K2Gd+k=}</escapeHatchSecret>
-      </securityRealm>
-{{- else }}
       <securityRealm class="hudson.security.LegacySecurityRealm"/>
-{{- end }}
       <disableRememberMe>false</disableRememberMe>
       <projectNamingStrategy class="jenkins.model.ProjectNamingStrategy$DefaultProjectNamingStrategy"/>
       <workspaceDir>${JENKINS_HOME}/workspace/${ITEM_FULLNAME}</workspaceDir>
@@ -245,25 +220,10 @@ data:
     echo "false" > /usr/share/jenkins/ref/secrets/slave-to-master-security-kill-switch;
     cp -n /var/jenkins_config/config.xml /var/jenkins_home;
     cp -n /var/jenkins_config/org.jenkinsci.plugins.workflow.libs.GlobalLibraries.xml /var/jenkins_home;
-{{- if .Values.Master.LoginOpenIdConnect }}
-    /usr/bin/curl -o /var/jenkins_home/kubectl -L https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
-    chmod +x /var/jenkins_home/kubectl
-    tmp=$(/var/jenkins_home/kubectl describe configmap platform-auth-idp --namespace=kube-system | sed -n '/IDENTITY_URL:/{n;n;p}')
-    if [ -z "$tmp" ];
-    then
-      sed -e 's/securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm"/!--securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm"/' /var/jenkins_home/config.xml | sed -e 's/securityRealm>/securityRealm--><securityRealm class="hudson.security.LegacySecurityRealm"\/>/' > /var/jenkins_home/config1.xml
-    else
-      master=$(echo $tmp | sed -e 's/\//\\\//g')
-      sed -e "s/(IDENTITY_URL)/${master}/" /var/jenkins_home/config.xml > /var/jenkins_home/config1.xml
-    fi
-    cp /var/jenkins_home/config1.xml /var/jenkins_home/config.xml
-{{- end }}
-    cp -n /var/jenkins_config/jenkins.model.JenkinsLocationConfiguration.xml /var/jenkins_home;
 {{- if .Values.Master.UseSecurity }}
     mkdir -p /var/jenkins_home/users/admin;
     cp -n /var/jenkins_config/user_config.xml /var/jenkins_home/users/admin/config.xml;
 {{- end }}
-    cp  /var/plugins/* /usr/share/jenkins/ref/plugins
 {{- if .Values.Master.InstallPlugins }}
     cp /var/jenkins_config/plugins.txt /var/jenkins_home;
     rm -rf /usr/share/jenkins/ref/plugins/*.lock

@@ -1,4 +1,4 @@
-{{/*Copyright IBM Corporation 2018. All Rights Reserved.*/}}
+{{/*Copyright IBM Corporation 2017. All Rights Reserved.*/}}
 {{/* vim: set filetype=mustache: */}}
 {{/*
 Expand the name of the chart.
@@ -15,3 +15,5 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- $name := default .Chart.Name .Values.nameOverride -}}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+
