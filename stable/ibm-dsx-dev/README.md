@@ -20,7 +20,7 @@ You can also create a namespace from ICp UI by following these steps:
 - Enter a namespace and click Create button
 
 Make sure this namespace is shown as active under the ICp UI in
-`System -> Admin -> Namespaces`. If this is not the case, simply click the
+`Manage -> Namespaces`. If this is not the case, simply click the
 wheel next to the namespace to activate it.
 
 ### Storage
