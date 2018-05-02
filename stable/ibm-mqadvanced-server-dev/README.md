@@ -76,8 +76,7 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `resources.requests.memory`     | Kubernetes memory request for the Queue Manager container | `512Mi`                                            |
 | `queueManager.name`              | MQ Queue Manager name                           | Helm release name                                          |
 | `queueManager.dev.adminPassword` | Developer defaults - administrator password     | Random generated string.  See the notes that appear when you install for how to retrieve this.                            |
-| `queueManager.dev.appPassword`   | Developer defaults - app password   | `nil` (no password required to connect an MQ client)  
-                |
+| `queueManager.dev.appPassword`   | Developer defaults - app password   | `nil` (no password required to connect an MQ client)                  |
 | `nameOverride`                  | Set to partially override the resource names used in this chart | `ibm-mq`                                   |
 | `livenessProbe.initialDelaySeconds` | The initial delay before starting the liveness probe. Useful for slower systems that take longer to start the Queue Manager. | 60 |
 | `livenessProbe.periodSeconds` | How often to run the probe | 10 |
