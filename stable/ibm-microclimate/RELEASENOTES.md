@@ -1,7 +1,7 @@
 # Breaking Changes
 * The docker-registry secret required by microclimate has been changed from microclimate-icp-secret to microclimate-registry-secret
 
-# What’s new in Chart Version 1.1.0
+# What’s new in Chart Version 1.1.1
 
 With Microclimate on IBM Cloud Private 2.1.0.2, the following new
 features are available:
