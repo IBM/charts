@@ -1,0 +1,64 @@
+####################################################################
+# Licensed Materials - Property of IBM                             #
+# 5737-E67                                                         #
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved     #
+# US Government Users Restricted Rights - Use, duplication or      #
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.#
+####################################################################
+
+## This manifest deploys a Job which deletes a bgpPeer
+{{- include "sch.config.init" (list . "calicoBgpPeer.sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.delPeer.name }}
+{{- $cmName :=  .sch.chart.components.configmap.name }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: delete-bgp-peer
+    spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
+      restartPolicy: OnFailure
+      containers:
+        - name: delete-bgp-peer
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+          - delete
+          - "-f"
+          - /bgp-peer.yaml
+          env:
+            # The location of the etcd cluster.
+            - name: ETCD_ENDPOINTS
+              value: {{ .Values.etcd.endpoint }}
+            # Location of the ca certificate for etcd.
+            - name: ETCD_CA_CERT_FILE
+              value: "/calico-secrets/etcd-ca"
+            # Location of the client key for etcd.
+            - name: ETCD_KEY_FILE
+              value: "/calico-secrets/etcd-key"
+            # Location of the client certificate for etcd.
+            - name: ETCD_CERT_FILE
+              value: "/calico-secrets/etcd-cert"
+          volumeMounts:
+            - mountPath: /calico-secrets
+              name: etcd-certs
+            - mountPath: /bgp-peer.yaml
+              name: bgp-peer-config
+              subPath: bgp-peer.yaml
+      volumes:
+        - name: etcd-certs
+          secret:
+            secretName: {{ .Values.etcd.secret }}
+        - name: bgp-peer-config
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $cmName) }}

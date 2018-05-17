@@ -1,0 +1,99 @@
+####################################################################
+# Licensed Materials - Property of IBM                             #
+# 5737-E67                                                         #
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved     #
+# US Government Users Restricted Rights - Use, duplication or      #
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.#
+####################################################################
+
+{{- include "sch.config.init" (list . "f5bigipctlr.sch.chart.config.values") }}
+{{- $crbName :=  .sch.chart.components.crb.name }}
+{{- $crName :=  .sch.chart.components.cr.name }}
+{{- $saName :=  .sch.chart.components.sa.name }}
+{{- $secretName :=  .sch.chart.components.secret.name }}
+{{- $ctlrName :=  .sch.chart.components.ctlr.name }}
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $ctlrName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $ctlrName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "sch.names.appName" (list .) }}
+  replicas: 1
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $ctlrName) }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $ctlrName) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . $saName) }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+{{- with .Values.affinity }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+      containers:
+        - name: k8s-bigip-ctlr
+          # Specify the path to your image here
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            # Get sensitive values from the bigip-credentials secret
+            - name: BIGIP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $secretName) }}
+                  key: username
+            - name: BIGIP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $secretName) }}
+                  key: password
+            - name: BIGIP_URL
+              value: {{ required "Enter a valid IP address" .Values.bigIp.url }}
+            - name: BIGIP_PARTITION
+              value: {{ required "Enter a valid Partition name" .Values.bigIp.partitionName }}
+          command: ["/app/bin/k8s-bigip-ctlr"]
+          args:
+            - "--bigip-url=$(BIGIP_URL)"
+            - "--bigip-username=$(BIGIP_USERNAME)"
+            - "--bigip-password=$(BIGIP_PASSWORD)"
+            - "--bigip-partition=$(BIGIP_PARTITION)"
+{{- if .Values.bigIp.poolMemberType }}
+            - "--pool-member-type={{ .Values.bigIp.poolMemberType }}"
+{{- end }}
+{{- if .Values.bigIp.defaultIngressIp }}
+            - "--default-ingress-ip={{ .Values.bigIp.defaultIngressIp }}"
+{{- end }}
+{{- if .Values.bigIp.namespaces }}
+  {{- range $key, $val := .Values.bigIp.namespaces }}
+            - "--namespace={{ $val }}"
+  {{- end }}
+{{- end }}
+{{- if .Values.bigIp.nodeLabelSelector }}
+            - "--node-label-selector={{ .Values.bigIp.nodeLabelSelector }}"
+{{- end }}
+{{- if .Values.bigIp.extraArgs }}
+  {{- range $key, $val := .Values.bigIp.extraArgs }}
+            - "--{{ $key }}={{ $val }}"
+  {{- end }}
+{{- end }}
