@@ -6,11 +6,16 @@
 
 This chart bootstraps a [RabbitMQ](https://www.rabbitmq.com/) deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
+### New in this version
+
+See [Release Notes](ReleaseNotes.md)
+
 ## Prerequisites
 
 - Kubernetes 1.9 or later
 - Tiller 2.7.2 or later
-- To persist data, a PersistentVolume needs to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using the IBM Cloud Private UI or with the CLI. Create a `pv.yaml` file with the following content:
+- To persist data, a PersistentVolume needs to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using the kubectl CLI. Create a `pv.yaml` file with the following content:
+
   ```bash
   apiVersion: v1
   kind: PersistentVolume
@@ -24,9 +29,11 @@ This chart bootstraps a [RabbitMQ](https://www.rabbitmq.com/) deployment on a [K
     hostPath:
       path: /var/data/my-release-rabbitmq
   ```
+
   From shell, run the following:
+
   ```bash
-  $ kubectl create -f pv.yaml
+  kubectl create -f pv.yaml
   ```
 
 ## Installing the Chart
@@ -36,25 +43,28 @@ This chart bootstraps a [RabbitMQ](https://www.rabbitmq.com/) deployment on a [K
 Install the chart with the release name `my-release` and default configuration:
 
 ```bash
-$ helm install -n my-release stable/ibm-rabbitmq-dev
+helm install -n my-release stable/ibm-rabbitmq-dev
 ```
 
 After the command runs, it will print the current status of the release and extra information such as how to access the RabbitMQ admin console with a browser. You can also access the admin console through the IBM Cloud Private UI:
+
 1. From Menu navigate to **Workloads -> Deployments**
 2. Click the deployment. The default from above is `my-release`
 3. Click on Endpoint **"access stats"**
 
+## Verifying the Chart
+
+See NOTES.txt associated with this chart for verification instructions
 
 ## Uninstalling the Chart
 
 To uninstall/delete the `my-release` deployment:
 
 ```bash
-$ helm delete --purge my-release
+helm delete --purge my-release
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release. It will delete create Persistent Volume Claims but not Persistent Volumes.
-
 
 ## Configuration
 
@@ -71,13 +81,14 @@ The following tables lists the configurable parameters of the RabbitMQ chart and
 | `rabbitmqUsername`         | RabbitMQ default username                               | `admin`                                                  |
 | `rabbitmqPassword`         | RabbitMQ default user password                          | `admin`                                                  |
 | `rabbitmqErlangCookie`     | Erlang cookie (how clustered nodes authenticate)        | _random 32 character long alphanumeric string_           |
+| `rabbitmqServerAdditionalErlArgs` | RabbitMQ additional Server configuration         |                                                          |
 | `rabbitmqNodePort`         | Node port (5671 with TLS, else 5672)                    | `5671`                                                   |
 | `rabbitmqNodeType`         | Node type                                               | `stats`                                                  |
 | `rabbitmqNodeName`         | Node name                                               | `rabbit`                                                 |
 | `rabbitmqClusterNodeName`  | Node name to cluster with. e.g.: `clusternode@hostname` |                                                          |
 | `rabbitmqVhost`            | RabbitMQ application vhost                              | `/`                                                      |
 | `rabbitmqManagerPort`      | RabbitMQ Manager port (15671 with TLS, else 15672)      | `15671`                                                  |
-| `persistence.enabled`      | Use a PVC to persist data                               | `true`                                                   |
+| `persistence.enabled`      | Enable persistence for this deployment                  | `true`                                                   |
 | `persistence.useDynamicProvisioning` | Use dynamic provisioning                      | `false`                                                  |
 | `dataPVC.name`             | Name of the Persistent Volume Claim to create           | `rabbitmq-data-pvc`                                      |
 | `dataPVC.selector.label`   | Field to select the volume                              |                                                          |
@@ -96,7 +107,7 @@ The following tables lists the configurable parameters of the RabbitMQ chart and
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
 ```bash
-$ helm install --name my-release \
+helm install --name my-release \
   --set rabbitmqUsername=admin,rabbitmqPassword=secretpassword,rabbitmqErlangCookie=secretcookie \
     stable/ibm-rabbitmq-dev
 ```
@@ -106,7 +117,7 @@ The above command sets the RabbitMQ admin username and password to `admin` and `
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/ibm-rabbitmq-dev
+helm install --name my-release -f values.yaml stable/ibm-rabbitmq-dev
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
@@ -122,9 +133,11 @@ The chart mounts a [Persistent Volume](kubernetes.io/docs/user-guide/persistent-
 1. Create the PersistentVolume
 2. Create the PersistentVolumeClaim
 3. Install the chart:
+
     ```bash
-    $ helm install --set dataPVC.existingClaimName=PVC_NAME stable/ibm-rabbitmq-dev
+    helm install --set dataPVC.existingClaimName=PVC_NAME stable/ibm-rabbitmq-dev
     ```
 
 ## Copyright
+
 © Copyright IBM Corporation 2018. All Rights Reserved.
