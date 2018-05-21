@@ -36,7 +36,9 @@ spec:
     metadata:
       labels:
         app: {{ template "fullname" . }}-ui
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
       annotations:
         productName: "IBM Transformation Advisor"
         productID: "Tool"
@@ -63,7 +65,25 @@ spec:
             - name:  TA_LA_CLUSTER_HOST
               value: http://$(TA_LA_HOST_IP)
             - name:  TA_LA_NODE_PORT
+              {{ if .Values.ingress.enabled -}}
+              value: ""
+              {{- else }}
               value: "{{ .Values.transadv.service.nodePort }}"
+              {{- end }}
+            - name: TA_API_SERVER_INGRESS_PATH
+              value: /{{ .Release.Name }}-server # forward slash is required
+            - name: TA_API_UI_INGRESS_PATH
+              value: /{{ .Release.Name }}-ui # forward slash is required
+            - name:  TA_UI_HOST # in case of non-ingress in use, Lands Advisor is in the same cluster of UI, assume the Cluster IP is public, like using public Worker(s)
+              value: $(TA_LA_CLUSTER_HOST)
+            - name:  TA_UI_PORT # in case of non-ingress in use
+              {{ if .Values.ingress.enabled -}}
+              value: ""
+              {{- else }}
+              value: "{{ .Values.transadvui.service.nodePort }}"
+              {{- end }}
+            - name: TA_MASTER_NODE_URL
+              value: "{{ .Values.transadvui.masternodeurl }}"
 
           # set liveness probe to determine if container needs to be restarted
           # this test is the same as the readiness probe however this tests for multiple long periods

@@ -36,7 +36,9 @@ spec:
     metadata:
       labels:
         app: {{ template "fullname" . }}-server
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
       annotations:
         productName: "IBM Transformation Advisor"
         productID: "Tool"
@@ -68,18 +70,22 @@ spec:
                   fieldPath: status.hostIP
             - name:  TA_LA_CLUSTER_HOST
               value: http://$(TA_LA_HOST_IP)
+            - name: TA_API_SERVER_INGRESS_PATH
+              value: /{{ .Release.Name }}-server # need forward slash is required
             - name:  TA_LA_NODE_PORT
+              {{ if .Values.ingress.enabled -}}
+              value: ""
+              {{- else }}
               value: "{{ .Values.transadv.service.nodePort }}"
-#            - name:  TA_UI_HOST
-#              value: http://$({{ template "k8name" . }}_UI_SERVICE_HOST)
-#            - name:  TA_UI_PORT
-#              value: $({{ template "k8name" . }}_UI_SERVICE_PORT)
+              {{- end }}
             - name:  TA_ALLOW_CORS
               value: "true"
+            - name: TA_UI_SERVICE_NAME
+              value: {{ template "fullname" . }}-ui
             - name:  TA_UI_HOST
-              value: http://$(TA_LA_HOST_IP)
+              value: http://$(TA_UI_SERVICE_NAME)
             - name:  TA_UI_PORT
-              value: "{{ .Values.transadvui.service.nodePort }}"
+              value: "3000"
 
           # set liveness probe to determine if container needs to be restarted
           # this test is the same as the readiness probe however this tests for multiple long periods
