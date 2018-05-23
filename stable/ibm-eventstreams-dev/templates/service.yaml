@@ -1,0 +1,41 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines a headless service to allow the Kafka cluster to be accessible
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $namePrefix := .sch.chart.components.kafka.headless.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'kafka' as this makes up part of implementing the Kafka cluster
+{{ $compName := .sch.chart.components.kafka.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $kafkaStatefulset := .sch.chart.components.kafka.statefulSet.name -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  ports:
+    # Ports that are opened by the Kafka broker container
+    - port: 9092
+      name: client-port
+    - port: 9093
+      name: external-port
+    # Port opened by the kafka-metrics-reporter container
+    - port: 8080
+      name: metrics-port
+  clusterIP: None
+  selector:
+    release: {{ .Release.Name | quote }}
+    serviceSelector: {{ $kafkaStatefulset | quote }}
+{{ end -}}

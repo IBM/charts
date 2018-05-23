@@ -1,0 +1,176 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Kubernetes pods that will make up the cluster of ZooKeeper nodes
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "zookeeper.sch.chart.config.values" ) -}}
+{{ $namePrefix := .sch.chart.components.zookeeper.statefulSet.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) }}
+# Component is 'zookeeper' as this makes up part of implementing the ZooKeeper cluster
+{{ $compName := .sch.chart.components.zookeeper.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# The headless service that will provide access to the ZooKeeper nodes defined below
+{{ $serviceName := .sch.chart.components.zookeeper.headless.name -}}
+# Services allowing access to individual ZooKeeper pods - there will be one of these for each node
+{{ $zookeeperFixedIPService := .sch.chart.components.zookeeper.fixed.name -}}
+{{ $zookeeperFixedIPServiceName := include "sch.names.fullCompName" (list . $zookeeperFixedIPService) -}}
+# Service Account to run the ZooKeeper pods as
+{{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    helm.sh/created: {{ .Release.Time.Seconds | quote }}
+spec:
+  # identify the headless service that will enable access to ZooKeeper nodes
+  serviceName: {{ include "sch.names.fullCompName" (list . $serviceName) | quote }}
+  # Deployed in parallel to enable faster deployments
+  podManagementPolicy: "Parallel"
+  # number of nodes in the ZooKeeper cluster
+  #  changing this after install may lead to problems with ZooKeeper
+  replicas: {{ .sch.config.zookeeper.replicas }}
+  # ZooKeeper node pods are uniquely identified based on release name
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      namespace: {{ .Release.Namespace | quote }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+      {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      volumes:
+      {{- include "license.accept.ref" . | indent 6 }}
+      affinity:
+      {{- include "customNodeaffinity" . | indent 6 }}
+        # we don't want multiple co-located ZooKeeper nodes
+        #  so this anti-affinity rule should prevent
+        #  nodes with the zookeeper name being scheduled on
+        #  the same host
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        - {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+        # we do want to colocate ZooKeeper nodes with Kafka nodes to
+        #  help minimise network traffic between them, but this is
+        #  requested in the Kafka stateful set definition
+      containers:
+        - name: "zookeeper"
+          image: '{{ .Values.global.image.repository }}/eventstreams-zookeeper:{{ .sch.chart.images.zookeeperTag }}'
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .sch.config.zookeeper.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .sch.config.zookeeper.resources.requests.memory }}
+          ports:
+            - containerPort: {{ .sch.config.zookeeper.ports.client }}
+              name: client
+            - containerPort: {{ .sch.config.zookeeper.ports.server }}
+              name: server
+            - containerPort: {{ .sch.config.zookeeper.ports.election }}
+              name: leader-election
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ZK_ENSEMBLE
+              value: '{{ range $index, $_ := until (.sch.config.zookeeper.replicas | int) }}{{ $zookeeperFixedIPServiceName }}-{{ $index }}.{{ $.Release.Namespace }}.svc.cluster.local;{{ end }}'
+            - name: ZK_HEAP_SIZE
+              value: '200M'
+            - name: ZK_TICK_TIME
+              value: '2000'
+            - name: ZK_INIT_LIMIT
+              value: '10'
+            - name: ZK_SYNC_LIMIT
+              value: '5'
+            - name: ZK_MAX_CLIENT_CNXNS
+              value: '60'
+            - name: ZK_SNAP_RETAIN_COUNT
+              value: '3'
+            - name: ZK_PURGE_INTERVAL
+              value: '1'
+            - name: ZK_CLIENT_PORT
+              value: {{ .sch.config.zookeeper.ports.client | quote }}
+            - name: ZK_SERVER_PORT
+              value: {{ .sch.config.zookeeper.ports.server | quote }}
+            - name: ZK_ELECTION_PORT
+              value: {{ .sch.config.zookeeper.ports.election | quote }}
+            - name: ZK_REPLICAS
+              value: {{ .sch.config.zookeeper.replicas | quote }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+          command:
+            - sh
+            - -c
+            - "add-ordinal-label.sh {{ .Release.Namespace }} zookeeper && zkGenConfig.sh && zkServer.sh start-foreground /var/lib/zookeeper/conf/zoo.cfg"
+          readinessProbe:
+            tcpSocket:
+              port: {{ .sch.config.zookeeper.ports.client }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          livenessProbe:
+            exec:
+              command:
+                - "zkOk.sh"
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 15
+            failureThreshold: 5
+{{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: {{ .Values.dataPVC.name }}
+              mountPath: /var/lib/zookeeper
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Values.dataPVC.name }}
+        labels:
+{{ $labels | indent 10 }}
+      spec:
+        {{- if .Values.persistence.useDynamicProvisioning }}
+        # If present, use the storageClassName from the values.yaml, else use the
+        # default storageClass setup by Kubernetes Administrator
+        #
+        # Setting storageClassName to nil means use the default storage class
+        storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+        {{- else }}
+        # Disable dynamic provisioning
+        storageClassName: ""
+        {{- end }}
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.dataPVC.size | quote }}
+{{ end -}}

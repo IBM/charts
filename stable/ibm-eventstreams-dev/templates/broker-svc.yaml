@@ -1,0 +1,46 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Kubernetes Services used to expose Kafka brokers within the K8S
+#  cluster.
+# One of these will be created for each Kafka broker in the cluster.
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+# The common prefix for names given to each of the services created
+{{ $namePrefix := .sch.chart.components.kafka.brokerService.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
+# Component is 'kafka' as this makes up part of implementing the Kafka cluster
+{{ $compName := .sch.chart.components.kafka.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# number of Kafka brokers in the cluster
+{{ $rep := int .Values.kafka.brokers -}}
+{{ range $index, $e := until $rep -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ $name }}-{{ $index }}"
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  ports:
+    - port: 9092
+      name: client-port
+    - port: 9093
+      name: external-port
+  clusterIP: None
+  selector:
+    release: {{ $.Release.Name | quote }}
+    kafka: "{{ $index }}"
+{{ if lt $index (sub $rep 1) -}}
+---
+{{ end -}}
+{{ end -}}
+{{ end -}}

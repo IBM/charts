@@ -1,0 +1,74 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines a config map that allows configuration of the proxy
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $namePrefix := .sch.chart.components.proxy.configMap.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
+# Component is 'proxy' as this makes up part of implementing the Kafka proxy
+{{ $compName := .sch.chart.components.proxy.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# number of Kafka brokers in the cluster to enable external access to
+{{ $rep := int .Values.kafka.brokers -}}
+# Names of proxy resources
+{{ $service := .sch.chart.components.proxy.service.name -}}
+{{ $serviceName := include "sch.names.fullCompName" (list . $service) -}}
+# Names of Kafka elements to refer to
+{{ $kafkaHeadless := .sch.chart.components.kafka.headless.name -}}
+{{ $kafkaHeadlessName := include "sch.names.fullCompName" (list . $kafkaHeadless) -}}
+{{ $kafkaService := .sch.chart.components.kafka.brokerService.name -}}
+{{ $kafkaServiceName := include "sch.names.fullCompName" (list . $kafkaService) -}}
+{{ $restService := .sch.chart.components.rest.service.name -}}
+{{ $restServiceName := include "sch.names.fullCompName" (list . $restService) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+data:
+  adminService: "{{ $restServiceName }}:9080"
+  # The string that sandwiches the broker ID between a '.'
+  # e.g. [release]-[chart_name]-kafka-broker-svc-[broker_id].<namespace>:[port]
+  brokerService: "-{{ $kafkaService }}-"
+  headlessService: "-{{ $kafkaHeadless }}."
+  serviceName: {{ $serviceName | quote }}
+  connectionTimeoutMs: "3600000"
+  externalAccessEnabled: "{{ .Values.proxy.externalAccessEnabled }}"
+  externalHostOrIP: "{{ .Values.proxy.externalEndpoint }}"
+  revision: "0"
+  routes: |
+    [
+      {{ if .Values.proxy.externalAccessEnabled -}}
+      {
+        "Port": 0,
+        "NodePort": 0,
+        "Service": "{{ $kafkaHeadlessName }}.{{ $.Release.Namespace }}:9093"
+      }
+      {{ range $i, $e := until $rep -}}
+      ,{
+        "Port": 0,
+        "NodePort": 0,
+        "Service": "{{ $kafkaServiceName }}-{{ $i }}.{{ $.Release.Namespace }}:9093"
+      }
+      {{- end -}}
+    {{- end }}
+    ]
+  tlsEnabled: "{{ .Values.proxy.secureConnectionsEnabled }}"
+  tlsHandshakeTimeoutMs: "10000"
+{{- if .Values.proxy.externalAccessEnabled  }}
+{{- else }}
+  {{- if .Values.proxy.secureConnectionsEnabled }}
+    {{ fail "Configuration error: You have selected 'Secure Connections Only', please also select 'Enable external access' to fully enable this feature." }}
+  {{- end}}
+{{- end }}
+{{ end -}}

@@ -1,0 +1,40 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the headless service to allow access to the ZooKeeper cluster
+###############################################################################
+{{ $namePrefix := .sch.chart.components.zookeeper.headless.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'zookeeper' as this makes up part of implementing the ZooKeeper cluster
+{{ $compName := .sch.chart.components.zookeeper.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $zookeeperStatefulset := .sch.chart.components.zookeeper.statefulSet.name -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  ports:
+    # Incoming client connections
+    - port: {{ .sch.config.zookeeper.ports.client }}
+      name: client
+    # Used for connections between ZooKeeper nodes
+    - port: {{ .sch.config.zookeeper.ports.server }}
+      name: server
+    # Used by ZooKeeper nodes for connections to the leader
+    - port: {{ .sch.config.zookeeper.ports.election }}
+      name: leader-election
+  clusterIP: None
+  selector:
+    release: {{ .Release.Name | quote }}
+    serviceSelector: {{ $zookeeperStatefulset | quote }}

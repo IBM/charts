@@ -1,0 +1,106 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines a config map that identifies the metrics from the Kafka brokers that
+#  should be pushed to Prometheus to allow Kafka cluster activity to be
+#  monitored.
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $namePrefix := .sch.chart.components.kafka.configMap.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'kafka' as this makes up part of implementing the Kafka cluster
+{{ $compName := .sch.chart.components.kafka.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+data:
+  kafka-config.yaml: |-
+    startDelaySecs: 10
+    hostPort: 127.0.0.1:9999
+    lowercaseOutputName: true
+    rules:
+    # Rules below match the Kafka MBeans in the jconsole order
+    # Skip kafka (log4j)
+    # Skip kafka.cluster (per partition metrics)
+    # Match all kafka.controller but per broker queue size
+    - pattern : kafka.controller<type=(\w+), name=(\w+)><>(Count|Value)
+      name: kafka_controller_$1_$2_$3
+    # Match kafka.controller per broker queue size
+    # eg: kafka.controller:type=ControllerChannelManager,name=QueueSize,broker-id=0
+    - pattern : kafka.controller<type=(\w+), name=(\w+), broker-id=(.+)><>(Value)
+      name: kafka_controller_$1_$2_$4
+      labels:
+        broker-id: "$3"
+    # Match all kafka.coordinator.*
+    - pattern : kafka.coordinator.(.+)<type=(\w+), name=(\w+)><>(Value)
+      name: kafka_coordinator_$1_$2_$3_$4
+    # Only match kafka.log<type=LogFlushStats>
+    # Skip type=Log (per partition) stats
+    - pattern : kafka.log<type=LogFlushStats, name=(\w+)><>(Count)
+      name: kafka_log_LogFlushStats_$1_$2
+    # Match total request/response queue sizes
+    - pattern : kafka.network<type=RequestChannel, name=(\w+)><>(Value)
+      name: kafka_network_RequestChannel_$1_$2
+    - pattern : kafka.network<type=RequestChannel, name=(\w+), processor=(.+)><>(Value)
+      name: kafka_network_RequestChannel_$1_$3
+      labels:
+        processor: "$2"
+    # Requests metrics
+    - pattern : kafka.network<type=RequestMetrics, name=(RequestsPerSec|TotalTimeMs), request=(\w+)><>(Count)
+      name: kafka_network_RequestMetrics_$1_$3
+      labels:
+        request: "$2"
+    - pattern : kafka.network<type=RequestMetrics, name=(TotalTimeMs), request=(\w+)><>(95thPercentile|99thPercentile)
+      name: kafka_network_RequestMetrics_$1_quantile
+      labels:
+        request: "$2"
+        quantile: "$3"
+    - pattern : kafka.network<type=RequestMetrics, name=(ErrorsPerSec), request=(\w+), error=(?!NONE)><>(Count)
+      name: kafka_network_RequestMetrics_$1_$4
+      labels:
+        request: "$2"
+        error: "$3"
+    # kafka.server
+    # Broker metrics
+    - pattern : kafka.server<type=BrokerTopicMetrics, name=(BytesInPerSec|BytesOutPerSec|MessagesInPerSec|ReplicationBytesInPerSec|ReplicationBytesOutPerSec)><>(Count)
+      name: kafka_server_BrokerTopicMetrics_$1_$2
+    # Replica fetcher
+    - pattern : kafka.server<type=FetcherStats, name=(RequestsPerSec), clientId=([\w-]+), brokerHost=(.+), brokerPort=(.+)><>(Count)
+      name: kafka_server_FetcherStats_$1_$5
+      labels:
+        clientId: "$2"
+    # Replica Max Lag
+    - pattern: kafka.server<type=ReplicaFetcherManager, name=(MaxLag), clientId=Replica><>(Value)
+      name: kafka_server_ReplicaFetcherManager_$1_$2
+    # Broker Replica Manager
+    - pattern: kafka.server<type=ReplicaManager, name=(\w+)><>(Value|Count)
+      name: kafka_server_ReplicaManager_$1_$2
+    # ZooKeeper latency
+    - pattern: kafka.server<type=ZooKeeperClientMetrics, name=(ZooKeeperRequestLatencyMs)><>(Count|95thPercentile|99thPercentile)
+      name: kafka_server_ZooKeeperClientMetrics_$1_$2
+    # SocketServer metrics
+    - pattern: kafka.server<type=socket-server-metrics, listener=(\w+), networkProcessor=(\d+)><>(connection-count|connection-close-total|connection-creation-total|failed-authentication-total|successful-authentication-total)
+      name: kafka_server_socketservermetrics_$3
+      labels:
+        listener: "$1"
+        networkProcessor: "$2"
+    # Purgatory
+    - pattern: kafka.server<type=DelayedOperationPurgatory, name=(PurgatorySize), delayedOperation=(Fetch|Produce)><>(Value)
+      name: kafka_server_DelayedOperation_$1_$3
+      labels:
+        delayedOperation: "$2"
+    # IBM JVM metrics
+    - pattern: com.ibm.lang.+
+{{ end -}}

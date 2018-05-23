@@ -1,3 +1,7 @@
+# What’s new in Chart Version 1.0.1
+ * UI improvements
+ * Bug fixes
+
 # What’s new in Chart Version 1.0.0
 
 With IBM Db2 Event Store on IBM Cloud Private, the following features are available:
@@ -18,4 +22,5 @@ For detailed documentation instructions go to https://www.ibm.com/support/knowle
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.0.1 | May, 2018 | 1.9.1 |  |  | Bug fixes and UI improvements  |
 | 1.0.0 | April, 2018 | 1.9.1 |  |  | IBM Db2 Event Store Dev. Edition. Initial Catalog Entry  |

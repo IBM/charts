@@ -1,0 +1,45 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# A simple test for validating Helm installs of IBM Event Streams by checking
+#  that we can connect to all expected ports
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $namePrefix := "service-test" -}}
+{{- $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
+{{ $compName := "service-test" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $kafkaHeadless := .sch.chart.components.kafka.headless.name -}}
+{{ $kafkaHeadlessName :=  (include "sch.names.fullCompName" (list . $kafkaHeadless)) -}}
+{{ $zookeeperHeadless := .sch.chart.components.zookeeper.headless.name -}}
+{{ $zookeeperHeadlessName :=  (include "sch.names.fullCompName" (list . $zookeeperHeadless)) }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $name | quote }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  containers:
+    - name: "helm-test"
+      image: alpine:3.6
+      command:
+        - /bin/sh
+        - -c
+        - "echo Connecting to Kafka headless service port {{ $kafkaHeadlessName }} 9092; \
+          nc -w2 -v {{ $kafkaHeadlessName }} 9092; \
+          echo Connecting to Kafka metrics endpoint http://{{ $kafkaHeadlessName }}:8080/metrics ; \
+          wget http://{{ $kafkaHeadlessName }}:8080/metrics; \
+          echo Connecting to ZooKeeper headless service port {{ $zookeeperHeadlessName }} 2181; \
+          nc -w2 -v {{ $zookeeperHeadlessName }} 2181; \
+          echo Test complete"
+  restartPolicy: Never

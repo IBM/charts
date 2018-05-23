@@ -1,0 +1,53 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the service that exposes the proxy which enables external access to Kafka
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $namePrefix := .sch.chart.components.proxy.service.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
+# Component is 'proxy' as this makes up part of implementing the external access proxy
+{{ $compName := .sch.chart.components.proxy.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# number of Kafka brokers in the cluster - needed as a port will be created for each
+{{ $rep := int .Values.kafka.brokers -}}
+# Starting number for the ports that will be created
+{{ $nodePort := int 30000 -}}
+{{ $deploymentName := .sch.chart.components.proxy.controller.name -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  type: NodePort
+  selector:
+    release: {{ .Release.Name | quote }}
+    serviceSelector: {{ $deploymentName | quote }}
+  {{ if .Values.proxy.externalAccessEnabled -}}
+  ports:
+    - name: bootstrap
+      protocol: TCP
+      port: {{ $nodePort }}
+    {{- range $i, $e := until $rep }}
+    - name: "broker-{{ $i }}"
+      protocol: TCP
+      port: {{ add $nodePort $i 1 }}
+    {{- end }}
+  {{ else -}}
+  ports:
+  # This is a placeholder service, since a service requires at least 1 port.
+    - name: placeholder
+      protocol: TCP
+      port: 80
+  {{ end -}}
+{{ end -}}

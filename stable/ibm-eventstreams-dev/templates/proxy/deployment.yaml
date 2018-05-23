@@ -1,0 +1,103 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Kubernetes pods that make up the proxy for external access to Kafka
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $namePrefix := .sch.chart.components.proxy.controller.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'proxy' as this makes up part of implementing the external access proxy
+{{ $compName := .sch.chart.components.proxy.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# number of Kafka brokers in the cluster - needed as a port will be created for each
+{{ $rep := int .Values.kafka.brokers -}}
+# Starting number for the ports that will be created
+{{ $nodePort := int 30000 -}}
+# Names of other elements to refer to
+{{ $secret := .sch.chart.components.proxy.secret.name -}}
+{{ $secretName := include "sch.names.fullCompName" (list . $secret) | quote -}}
+{{ $configMap := .sch.chart.components.proxy.configMap.name -}}
+{{ $configMapName := include "sch.names.fullCompName" (list . $configMap) | quote -}}
+# Service Account to grant Kubernetes access
+{{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  # Number of instances of the external access proxy to run
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+        helm.sh/created: {{ .Release.Time.Seconds | quote }}
+        prometheus.io/port: '10254'
+        prometheus.io/scrape: 'true'
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+{{- include "customNodeaffinity" . | indent 6 }}
+      containers:
+        - name: "proxy"
+          image: "{{ .Values.global.image.repository }}/eventstreams-proxy:{{ .sch.chart.images.proxyTag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: CONFIG_MAP_NAME
+              value: {{ $configMapName }}
+            - name: REST_ADMIN
+              value: "enabled"
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: "tls.cert"
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: "tls.key"
+          {{- if  .Values.proxy.externalAccessEnabled }}
+          ports:
+            - name: bootstrap
+              containerPort: {{ $nodePort }}
+            {{- range $i, $e := until $rep }}
+            - name: broker-{{ $i }}
+              containerPort: {{ add $nodePort 1 $i }}
+          {{- end }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: 8080
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: "/live"
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 15
+{{ end -}}

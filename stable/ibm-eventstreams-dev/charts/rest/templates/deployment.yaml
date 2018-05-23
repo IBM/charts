@@ -1,0 +1,155 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the pod that runs the admin REST API
+###############################################################################
+{{ $namePrefix := .sch.chart.components.rest.deployment.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $id := (include "asDnsLabel" .Release.Name) -}}
+# Component is 'rest' as this makes up part of implementing the Admin REST API
+{{ $compName := .sch.chart.components.rest.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# Service allowing access to the Kafka cluster
+{{ $kafkaHeadlessService := .sch.chart.components.kafka.headless.name -}}
+{{ $kafkaHeadlessServiceName := include "sch.names.fullCompName" (list . $kafkaHeadlessService) -}}
+# Service Account to grant Kubernetes access for the proxy
+{{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+# Secret and config map used by the proxy container
+{{ $secret := .sch.chart.components.proxy.secret.name -}}
+{{ $secretName := include "sch.names.fullCompName" (list . $secret) | quote -}}
+{{ $configMap := .sch.chart.components.restproxy.configMap.name -}}
+{{ $configMapName := include "sch.names.fullCompName" (list . $configMap) | quote -}}
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    helm.sh/created: {{ .Release.Time.Seconds | quote }}
+spec:
+  replicas: {{ .sch.config.rest.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      namespace: {{ .Release.Namespace | quote }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+      {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      volumes:
+      {{- include "license.accept.ref" . | indent 6 }}
+      affinity:
+      {{- include "customNodeaffinity" . | indent 6 }}
+      containers:
+        - name: "rest"
+          image: "{{ .Values.global.image.repository }}/eventstreams-rest:{{ .sch.chart.images.restTag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+            limits:
+{{ toYaml .sch.config.rest.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .sch.config.rest.resources.requests | indent 14 }}
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: {{ .sch.config.rest.ports.port }}
+              httpHeaders:
+                - name: Accept
+                  value: '*/*'
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: {{ .sch.config.rest.ports.port }}
+              httpHeaders:
+                - name: Accept
+                  value: '*/*'
+            initialDelaySeconds: 180
+            periodSeconds: 10
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ID
+              value: {{ $id }}
+            - name: "KAFKA_BOOTSTRAP_URL"
+              value: "{{ $kafkaHeadlessServiceName }}:9092"
+        - name: "codegen"
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+          image: "{{ .Values.global.image.repository }}/eventstreams-codegen:{{ .sch.chart.images.codegenTag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+            limits:
+{{ toYaml .sch.config.codegen.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .sch.config.codegen.resources.requests | indent 14 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .sch.config.codegen.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .sch.config.codegen.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+        # Proxy server container
+        - name: "proxy"
+          image: "{{ .Values.global.image.repository }}/eventstreams-proxy:{{ .sch.chart.images.proxyTag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: CONFIG_MAP_NAME
+              value: {{ $configMapName }}
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: "tls.cert"
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: "tls.key"
+          ports:
+            - name: restendpoint
+              containerPort: 32000
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: 8080
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: "/live"
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 15

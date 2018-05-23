@@ -1,0 +1,83 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Runs a container that registers the IBM Event Streams UI as an OAuth endpoint
+#  to allow log-ins to the Event Streams Admin UI
+###############################################################################
+{{ $namePrefix := .sch.chart.components.ui.oauth2ClientRegistration.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'ui' as this makes up part of implementing the web UI
+{{ $compName := .sch.chart.components.ui.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+#  Secret name and UI service name which are used while creating oauth secret.
+{{- $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
+{{- $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
+{{- $uiProxyServiceName :=  .sch.chart.components.uiproxy.service.name -}}
+{{- $uiProxySvcName := include "sch.names.fullCompName" (list . $uiProxyServiceName) -}}
+# Job needs to run in the kube-system namespace as this is registering with the
+#  existing oauth handler
+{{ $namespace := "kube-system" -}}
+# Name of the copy of the image pull secret in kube-system
+{{ $imagePullSecret := .sch.chart.components.essential.imagePullSecret.name -}}
+{{ $imagePullSecretName := include "sch.names.fullCompName" (list . $imagePullSecret) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ $namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    helm.sh/created: {{ .Release.Time.Seconds | quote }}
+spec:
+  template:
+    metadata:
+      namespace: {{ $namespace | quote }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      {{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ $imagePullSecretName | quote }}
+      {{- end }}
+      affinity:
+{{- include "customNodeaffinity" . | indent 6 }}
+      restartPolicy: Never
+      containers:
+        - name: {{ $name }}
+          image: "{{ .Values.global.image.repository }}/eventstreams-oauth-registration:{{ .sch.chart.images.oauthTag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: "ES_NAMESPACE"
+              value: {{ .Release.Namespace | quote }}
+            - name: "RELEASE_NAME"
+              value: {{ .Release.Name | quote }}
+            - name: "ES_SECRET_NAME"
+              value: {{ $oauthSecretName }}
+            - name: "UI_PROXY_SVC_NAME"
+              value: {{ $uiProxySvcName }}
+            - name: "BASE_OIDC_URL"
+              valueFrom:
+                configMapKeyRef:
+                  name: "platform-auth-idp"
+                  key: "BASE_OIDC_URL"
+            - name: "OAUTH2_CLIENT_REGISTRATION_SECRET"
+              valueFrom:
+                secretKeyRef:
+                  name: "platform-oidc-credentials"
+                  key: "OAUTH2_CLIENT_REGISTRATION_SECRET"
+            - name: "MASTER_HOST"
+              valueFrom:
+                configMapKeyRef:
+                  name: "platform-auth-idp"
+                  key: "MASTER_HOST"

@@ -1,0 +1,262 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Kubernetes pods that will make up the cluster of Kafka brokers
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $namePrefix := .sch.chart.components.kafka.statefulSet.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'kafka' as this makes up part of implementing the Kafka cluster
+{{ $compName := .sch.chart.components.kafka.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# The headless service that will provide access to the Kafka brokers defined below
+{{ $serviceName := .sch.chart.components.kafka.headless.name -}}
+# Name of the ZooKeeper stateful deployment that will orchestrate the Kafka brokers
+{{ $zookeeperName := .sch.chart.components.zookeeper.statefulSet.name -}}
+# Services allowing access to individual ZooKeeper nodes - there will be one of these for each node
+{{ $zookeeperFixedIPService := .sch.chart.components.zookeeper.fixed.name -}}
+{{ $zookeeperFixedIPServiceName := include "sch.names.fullCompName" (list . $zookeeperFixedIPService) -}}
+# Config map that identifies the metrics that should be pushed to Prometheus
+{{ $kafkaMetricsConfigMap := .sch.chart.components.kafka.configMap.name -}}
+{{ $kafkaMetricsConfigMapName := include "sch.names.fullCompName" (list . $kafkaMetricsConfigMap) | quote -}}
+# Service Account to grant Kubernetes access
+{{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    helm.sh/created: {{ .Release.Time.Seconds | quote }}
+spec:
+  # identify the headless service that will enable access to these pods
+  serviceName: {{ include "sch.names.fullCompName" (list . $serviceName) | quote }}
+  # Kafka pods are deployed in parallel to enable faster deployments
+  podManagementPolicy: "Parallel"
+  # the number of brokers in the kafka cluster
+  replicas: {{ .Values.kafka.brokers }}
+  # Kafka broker pods are uniquely identified based on the release name
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  updateStrategy:
+    type: RollingUpdate
+  # definition of the pods that run the Kafka brokers in the cluster
+  template:
+    metadata:
+      # Check release name is valid.
+      {{- if regexMatch "^[a-z][a-z0-9-]*[a-z0-9]*$" .Release.Name }}
+      name: {{ .Release.Name | quote }}
+      {{- else }}
+      {{ fail "Configuration error: Format of release name is invalid." }}
+      {{- end }}
+      # Check release name does not end with a dash.
+      {{- if regexMatch "-$" .Release.Name }}
+      {{ fail "Configuration error: Format of release name is invalid." }}
+      {{- end }}
+      namespace: {{ .Release.Namespace | quote }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8080'
+        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+      {{- include "customNodeaffinity" . | indent 6 }}
+        # we don't want multiple co-located Kafka nodes
+        #  so this anti-affinity rule should prevent
+        #  nodes with the kafka name being scheduled on
+        #  the same host
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+        # colocating Kafka nodes with ZooKeeper nodes could
+        #  help minimise network traffic between them, so
+        #  this affinity rule requests this where possible
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+             - weight: 1
+               podAffinityTerm:
+                 labelSelector:
+                    matchExpressions:
+                      - key: "release"
+                        operator: In
+                        values:
+                          -  {{ .Release.Name | quote }}
+                      - key: "serviceSelector"
+                        operator: In
+                        values:
+                          -  {{ $zookeeperName }}
+                 topologyKey: "kubernetes.io/hostname"
+      # Kafka pods are made up of two containers
+      #  1) Kafka broker
+      #  2) Metrics reporter that submits metrics from the Kafka broker to Prometheus
+      containers:
+        #
+        # Kafka broker pods
+        - name: kafka
+          {{- if .Values.global.image.repository }}
+          image: '{{ .Values.global.image.repository }}/eventstreams-kafka:{{ .sch.chart.images.kafkaTag }}'
+          {{- else }}
+          {{ fail "Configuration error: Please specify an image repository in global.image.repository." }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+            # The regex used to validate these resource limits are more restrictive
+            #  than the syntax that K8S normally allows, because these values are
+            #  also used to define the max heap for Kafka JVM processes.
+            limits:
+            {{- if regexMatch "^[0-9]*(Gi|Mi|G|M)$" .Values.kafka.resources.limits.memory }}
+{{ toYaml .Values.kafka.resources.limits | indent 14 }}
+            {{- else }}
+            {{ fail "Configuration error: You have entered an invalid Memory limit for Kafka brokers. Please enter the value in '^[0-9]*(Gi|Mi|G|M)$' format." }}
+            {{- end }}
+            requests:
+            {{- if regexMatch "^[0-9]*(Gi|Mi|G|M)$" .Values.kafka.resources.requests.memory }}
+{{ toYaml .Values.kafka.resources.requests | indent 14 }}
+            {{- else }}
+            {{ fail "Configuration error: You have entered an invalid Memory request for Kafka brokers. Please enter the value in '^[0-9]*(Gi|Mi|G|M)$' format." }}
+            {{- end }}
+          ports:
+            - containerPort: 9092
+              name: client-port
+            - containerPort: 9093
+              name: external-port
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            failureThreshold: 100
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            failureThreshold: 10
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ZK_FIXED_IP_NAME
+              value: {{ $zookeeperFixedIPServiceName }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: KAFKA_HEAP_OPTS
+              value: '-Xmx{{ .Values.kafka.resources.requests.memory | replace "i" "" }} -Xms{{ .Values.kafka.resources.requests.memory | replace "i" "" }}'
+            - name: KAFKA_LISTENERS
+              value: "INTERNAL://:9092,EXTERNAL://:9093"
+            - name: ADVERTISED_LISTENERS
+              value: "INTERNAL://:9092"
+            - name: LISTENER_SECURITY_PROTOCOL_MAP
+              value: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+            - name: AUTO_CREATE_TOPICS_ENABLE
+              value: {{ .Values.kafka.autoCreateTopicsEnable | quote }}
+            - name: DELETE_TOPIC_ENABLE
+              value: {{ .Values.kafka.deleteTopicEnable | quote }}
+            - name: COMPRESSION_TYPE
+              value: {{ .Values.kafka.compressionType | quote }}
+            - name: OFFSETS_TOPIC_REPLICATION_FACTOR
+            {{- if gt (int .Values.kafka.offsetsTopicReplicationFactor) (int .Values.kafka.brokers) }}
+            {{ fail "Configuration error: The value you provided for offsetsTopicReplicationFactor in the Apache Kafka section is too large. It must not be greater than the number of brokers in your Kafka cluster." }}
+            {{- else }}
+              value: {{ int .Values.kafka.offsetsTopicReplicationFactor | quote }}
+            {{- end }}
+            - name: MIN_INSYNC_REPLICAS
+            {{- if gt (int .Values.kafka.minInsyncReplicas) (int .Values.kafka.brokers) }}
+            {{ fail "Configuration error: The value you provided for minInsyncReplicas in the Apache Kafka section is too large. It must not be greater than the number of brokers in your Kafka cluster." }}
+            {{- else }}
+              value: {{ int .Values.kafka.minInsyncReplicas | quote }}
+            {{- end }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: {{ .Values.persistence.dataPVC.name }}
+              mountPath: /var/data
+          {{- end }}
+        #
+        # Metrics reporter sidecars - receives Kafka metrics and pushes to Prometheus
+        - name: metrics-reporter
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          {{- if .Values.global.image.repository }}
+          image: '{{ .Values.global.image.repository }}/eventstreams-kafka-metrics-reporter:{{ .sch.chart.images.metricsReporterTag }}'
+          {{- else }}
+          {{ fail "Configuration error: Please specify an image repository in global.image.repository." }}
+          {{- end }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: NAMESPACE
+              value: {{ $.Release.Namespace }}
+          ports:
+            - containerPort: 8080
+              name: metrics-port
+          readinessProbe:
+            timeoutSeconds: 15
+            periodSeconds: 30
+            initialDelaySeconds: 15
+            httpGet:
+              port: 8080
+              path: /metrics
+          livenessProbe:
+            timeoutSeconds: 15
+            periodSeconds: 30
+            initialDelaySeconds: 15
+            httpGet:
+              port: 8080
+              path: /metrics
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/kafka-metrics-reporter
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ $kafkaMetricsConfigMapName }}
+  {{ if .Values.persistence.enabled -}}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Values.persistence.dataPVC.name }}
+        labels:
+{{ $labels | indent 10 }}
+      spec:
+        {{ if .Values.persistence.useDynamicProvisioning -}}
+        # If present, use the storageClassName from the values.yaml, else use the
+        # default storageClass setup by Kubernetes Administrator
+        #
+        # Setting storageClassName to nil means use the default storage class
+        storageClassName: {{ default nil .Values.persistence.dataPVC.storageClassName | quote }}
+        {{ else -}}
+        # Disable dynamic provisioning
+        storageClassName: ""
+        {{ end -}}
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.persistence.dataPVC.size | quote }}
+  {{ end -}}
+{{ end -}}
