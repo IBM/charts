@@ -1,0 +1,131 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "pilot.fullname" . }}
+  labels:
+    app: {{ template "pilot.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    istio: pilot
+  annotations:
+    checksum/config-volume: {{ template "istio.configmap.checksum" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "pilot.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        istio: pilot
+      annotations:
+        sidecar.istio.io/inject: "false"
+        productName: {{ .Chart.Name }}
+        productID: IBMIstioPilot_0710_apachev2_00000
+        productVersion: {{ .Chart.Version }}
+    spec:
+      serviceAccountName: {{ template "pilot.serviceAccountName" . }}
+      containers:
+        - name: {{ template "pilot.name" . }}-discovery
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+          - "discovery"
+          - "--admission-service"
+          - "{{ template "pilot.fullname" . }}"
+          ports:
+          - containerPort: 8080
+          - containerPort: 15010
+          - containerPort: 443
+          readinessProbe:
+            httpGet:
+              path: /v1/registration
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/registration
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: PILOT_THROTTLE
+            value: "500"
+          - name: PILOT_CACHE_SQUASH
+            value: "5"
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+          - name: config-volume
+            mountPath: /etc/istio/config
+        - name: {{ template "pilot.name" . }}-proxy
+          image: "{{ .Values.global.proxy.repository }}:{{ .Values.global.proxy.tag }}"
+          imagePullPolicy: {{ .Values.global.proxy.imagePullPolicy }}
+          ports:
+          - containerPort: 15003
+          - containerPort: 15005
+          - containerPort: 15007
+          livenessProbe:
+            exec:
+              command:
+                - ls
+                - /etc/certs
+          readinessProbe:
+            exec:
+              command:
+                - ls
+                - /etc/certs
+          args:
+          - proxy
+          - pilot
+          - --discoveryAddress
+          - localhost:8080
+          - --controlPlaneAuthPolicy
+          - NONE #--controlPlaneAuthPolicy
+          - --customConfigFile
+          - /etc/istio/proxy/envoy_pilot.json
+          volumeMounts:
+          - name: istio-certs
+            mountPath: /etc/certs
+            readOnly: true
+      volumes:
+      - name: config-volume
+        configMap:
+          name: istio
+      - name: istio-certs
+        secret:
+          secretName: "istio.{{ template "pilot.serviceAccountName" . }}"
+          optional: true
+      {{- if .Values.management }}
+      nodeSelector:
+        management: 'true'
+      {{- end -}}
+      {{- if or .Values.dedicated .Values.criticalAddonsOnly }}
+      tolerations:
+      {{- if .Values.dedicated }}
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+      {{- end -}}
+      {{- if .Values.criticalAddonsOnly }}
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+      {{- end -}}
+      {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}

@@ -1,0 +1,122 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "ingress.fullname" . }}
+  labels:
+    app: {{ template "ingress.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    istio: ingress
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "ingress.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        istio: ingress
+      annotations:
+        sidecar.istio.io/inject: "false"
+        productName: {{ .Chart.Name }}
+        productID: IBMIstioIngress_0710_apachev2_00000
+        productVersion: {{ .Chart.Version }}
+    spec:
+      serviceAccountName: {{ template "ingress.serviceAccountName" . }}
+      containers:
+        - name: {{ template "ingress.name" . }}
+          image: "{{ .Values.global.proxy.repository }}:{{ .Values.global.proxy.tag }}"
+          imagePullPolicy: {{ .Values.global.proxy.imagePullPolicy }}
+          ports:
+            - containerPort: 80
+              containerPort: 443
+          livenessProbe:
+            exec:
+              command:
+                - ls
+                - /etc/istio/ingress-certs
+          readinessProbe:
+            exec:
+              command:
+                - ls
+                - /etc/istio/ingress-certs
+          args:
+          - proxy
+          - ingress
+          - -v
+          - "2"
+          - --discoveryRefreshDelay
+          - '1s' #discoveryRefreshDelay
+          - --drainDuration
+          - '45s' #drainDuration
+          - --parentShutdownDuration
+          - '1m0s' #parentShutdownDuration
+          - --connectTimeout
+          - '10s' #connectTimeout
+          - --serviceCluster
+          - {{ .Release.Name }}-ingress
+          - --zipkinAddress
+          - {{ .Release.Name }}-zipkin:9411
+          - --statsdUdpAddress
+          - {{ .Release.Name }}-mixer:9125
+          - --proxyAdminPort
+          - "15000"
+        {{- if .Values.global.controlPlaneSecurityEnabled }}
+          - --controlPlaneAuthPolicy
+          - MUTUAL_TLS
+          - --discoveryAddress
+          - {{ .Release.Name }}-pilot:15005
+        {{- else }}
+          - --controlPlaneAuthPolicy
+          - NONE
+          - --discoveryAddress
+          - {{ .Release.Name }}-pilot:8080
+        {{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          volumeMounts:
+          - name: istio-certs
+            mountPath: /etc/certs
+            readOnly: true
+          - name: ingress-certs
+            mountPath: /etc/istio/ingress-certs
+            readOnly: true
+      volumes:
+      - name: istio-certs
+        secret:
+          secretName: "istio.{{ template "ingress.serviceAccountName" . }}"
+          optional: true
+      - name: ingress-certs
+        secret:
+          secretName: istio-ingress-certs
+          optional: true
+      {{- if .Values.management }}
+      nodeSelector:
+        management: 'true'
+      {{- end -}}
+      {{- if or .Values.dedicated .Values.criticalAddonsOnly }}
+      tolerations:
+      {{- if .Values.dedicated }}
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+      {{- end -}}
+      {{- if .Values.criticalAddonsOnly }}
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+      {{- end -}}
+      {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}

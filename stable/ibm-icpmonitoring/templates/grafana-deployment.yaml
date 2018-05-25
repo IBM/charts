@@ -8,7 +8,7 @@ kind: Deployment
 metadata:
   labels:
     app: {{ template "grafana.fullname" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    chart: {{ .Chart.Name }}
     component: grafana
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -19,9 +19,21 @@ spec:
     metadata:
       labels:
         app: {{ template "grafana.fullname" . }}
+        chart: {{ .Chart.Name }}
         component: grafana
         release: "{{ .Release.Name }}"
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: grafana
+        productVersion: 4.6.3
+        productID: none
     spec:
+    {{- if eq .Values.mode "managed" }}
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+    {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -31,16 +43,29 @@ spec:
                 operator: In
                 values:
                 - amd64
+                - ppc64le
+            {{- if eq .Values.mode "managed" }}
+              - key: management
+                operator: In
+                values:
+                - "true"
+            {{- end }}
       containers:
         - name: grafana
-          image: {{ .Values.grafana.image.name }}:{{ .Values.grafana.image.tag }}
-          imagePullPolicy: "IfNotPresent"
+          image: {{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           command: ["/opt/entry/entrypoint.sh"]
           env:
             - name: GF_SECURITY_ADMIN_USER
-              value: "{{ .Values.grafana.user }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "grafana.fullname" . }}-secret
+                  key: username
             - name: GF_SECURITY_ADMIN_PASSWORD
-              value: "{{ .Values.grafana.password }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "grafana.fullname" . }}-secret
+                  key: password
           ports:
           - name: web
             containerPort: 3000
@@ -50,11 +75,40 @@ spec:
             - name: grafana-storage
               mountPath: "/var/lib/grafana"
             - name: config-volume
-              mountPath: "/etc/grafana"
+              mountPath: "/tmp/grafana/config"
             - name: dashboard-volume
-              mountPath: "/var/lib/grafana/dashboards"
+              mountPath: "/tmp/grafana/dashboards"
             - mountPath: "/opt/entry"
               name: grafana-entry
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router
+          image: {{ .Values.router.image.repository }}:{{ .Values.router.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/opt/ibm/router/entry/entrypoint.sh"]
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "grafana.fullname" . }}-secret
+                  key: username
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "grafana.fullname" . }}-secret
+                  key: password
+          ports:
+          - name: router
+            containerPort: 8080
+          volumeMounts:
+            - mountPath: "/opt/ibm/router/conf"
+              name: router-config
+            - mountPath: "/opt/ibm/router/certs"
+              name: monitoring-certs
+            - mountPath: "/opt/ibm/router/ca-certs"
+              name: monitoring-ca-cert
+            - mountPath: "/opt/ibm/router/entry"
+              name: router-entry
+      {{- end }}
       volumes:
         - name: grafana-storage
       {{- if .Values.grafana.persistentVolume.enabled }}
@@ -73,3 +127,18 @@ spec:
           configMap:
             name: {{ template "grafana.fullname" . }}-entry-config
             defaultMode: 0744
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router-config
+          configMap:
+            name: {{ template "grafana.fullname" . }}-router-nginx-config
+        - name: monitoring-certs
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-certs
+        - name: monitoring-ca-cert
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-ca-cert
+        - name: router-entry
+          configMap:
+            name: {{ template "monitoring.fullname" . }}-router-entry-config
+            defaultMode: 0744
+      {{- end }}

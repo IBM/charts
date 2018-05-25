@@ -1,3 +1,4 @@
+{{- if or (eq .Values.mode "managed") .Values.nodeExporter.enabled -}}
 # Licensed Materials - Property of IBM
 # 5737-E67
 # @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
@@ -8,7 +9,7 @@ kind: DaemonSet
 metadata:
   labels:
     app: {{ template "prometheus.fullname" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    chart: {{ .Chart.Name }}
     component: nodeexporter
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -20,20 +21,21 @@ spec:
         app: {{ template "prometheus.fullname" . }}
         component: nodeexporter
         release: {{ .Release.Name }}
+      annotations:
+        productName: node-exporter
+        productVersion: v0.15.2
+        productID: none
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: beta.kubernetes.io/arch
-                operator: In
-                values:
-                - amd64
+    {{- if eq .Values.mode "managed" }}
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+    {{- end }}
       containers:
         - name: nodeexporter
-          image: {{ .Values.nodeExporter.image.name }}:{{ .Values.nodeExporter.image.tag }}
-          imagePullPolicy: "IfNotPresent"
+          image: {{ .Values.nodeExporter.image.repository }}:{{ .Values.nodeExporter.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - --path.procfs=/host/proc
             - --path.sysfs=/host/sys
@@ -57,3 +59,5 @@ spec:
         - name: sys
           hostPath:
             path: /sys
+
+{{- end -}}

@@ -1,3 +1,4 @@
+{{- if or (eq .Values.mode "managed") .Values.collectdExporter.enabled -}}
 # Licensed Materials - Property of IBM
 # 5737-E67
 # @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
@@ -8,7 +9,7 @@ kind: Deployment
 metadata:
   labels:
     app: {{ template "collectdexporter.fullname" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    chart: {{ .Chart.Name }}
     component: collectdexporter
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -18,10 +19,22 @@ spec:
     metadata:
       labels:
         app: {{ template "collectdexporter.fullname" . }}
+        chart: {{ .Chart.Name }}
         component: collectdexporter
-        release: "{{ .Release.Name }}"
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
       name: {{ template "collectdexporter.fullname" . }}
+      annotations:
+        productName: collectd-exporter
+        productVersion: 0.3.1
+        productID: none
     spec:
+    {{- if eq .Values.mode "managed" }}
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+    {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -31,8 +44,15 @@ spec:
                 operator: In
                 values:
                 - amd64
+                - ppc64le
+            {{- if eq .Values.mode "managed" }}
+              - key: management
+                operator: In
+                values:
+                - "true"
+            {{- end }}
       containers:
-      - image: {{ .Values.collectdExporter.image.name }}:{{ .Values.collectdExporter.image.tag }}
+      - image: {{ .Values.collectdExporter.image.repository }}:{{ .Values.collectdExporter.image.tag }}
         name: collectd-exporter
         ports:
         - containerPort: 9103
@@ -41,3 +61,5 @@ spec:
           name: collector
           protocol: UDP
         args: [ "-collectd.listen-address=:25826" ]
+
+{{- end -}}

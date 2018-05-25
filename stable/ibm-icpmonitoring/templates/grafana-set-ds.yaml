@@ -14,7 +14,7 @@ metadata:
     heritage: {{ .Release.Service }}
   name: {{ template "grafana.fullname" . }}-ds
 spec:
-  activeDeadlineSeconds: 300
+  activeDeadlineSeconds: 1800
   template:
     metadata:
       labels:
@@ -22,6 +22,12 @@ spec:
         component: setds
         release: "{{ .Release.Name }}"
     spec:
+    {{- if eq .Values.mode "managed" }}
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+    {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -31,21 +37,56 @@ spec:
                 operator: In
                 values:
                 - amd64
+                - ppc64le
+            {{- if eq .Values.mode "managed" }}
+              - key: management
+                operator: In
+                values:
+                - "true"
+            {{- end }}
       containers:
       - name: grafana-ds
-        image: "ibmcom/curl:3.6"
+        image: {{ .Values.curl.image.repository }}:{{ .Values.curl.image.tag }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        command: ["/opt/entry/entrypoint.sh"]
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        volumeMounts:
+          - mountPath: "/opt/entry"
+            name: grafana-ds-entry
+          - mountPath: "/opt/ibm/monitoring/certs"
+            name: monitoring-client-certs
+          - mountPath: "/opt/ibm/monitoring/ca-certs"
+            name: monitoring-ca-cert
+      volumes:
+        - name: monitoring-client-certs
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-client-certs
+        - name: monitoring-ca-cert
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-ca-cert
+        - name: grafana-ds-entry
+          configMap:
+            name: {{ template "grafana.fullname" . }}-ds-entry-config
+            defaultMode: 0744  
+      {{- else }}
         env:
-        - name: GF_SECURITY_ADMIN_USER
-          value: "{{ .Values.grafana.user }}"
-        - name: GF_SECURITY_ADMIN_PASSWORD
-          value: "{{ .Values.grafana.password }}"
-        args:
-          - "http://$(GF_SECURITY_ADMIN_USER):$(GF_SECURITY_ADMIN_PASSWORD)@{{ template "grafana.fullname" . }}:{{ .Values.grafana.port }}/api/datasources"
-          - "--silent"
-          - "--fail"
-          - "--show-error"
-          - "--header"
-          - "Content-Type: application/json"
-          - "--data-binary"
-          - "{\"name\":\"prometheus\",\"type\":\"prometheus\",\"url\":\"http://{{ template "prometheus.fullname" . }}:{{ .Values.prometheus.port }}\",\"access\":\"proxy\",\"isDefault\":true}"
+          - name: GF_SECURITY_ADMIN_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "grafana.fullname" . }}-secret
+                key: username
+          - name: GF_SECURITY_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "grafana.fullname" . }}-secret
+                key: password
+        volumeMounts:
+          - mountPath: "/opt/entry"
+            name: grafana-ds-entry
+      volumes:
+        - name: grafana-ds-entry
+          configMap:
+            name: {{ template "grafana.fullname" . }}-ds-entry-config
+            defaultMode: 0744        
+      {{- end }}
       restartPolicy: OnFailure

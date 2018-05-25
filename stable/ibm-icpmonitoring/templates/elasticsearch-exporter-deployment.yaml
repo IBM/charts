@@ -1,0 +1,63 @@
+{{- if or (eq .Values.mode "managed") .Values.elasticsearchExporter.enabled -}}
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "prometheus.fullname" . }}
+    chart: {{ .Chart.Name }}
+    component: elasticsearchexporter
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "prometheus.fullname" . }}-elasticsearchexporter
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "prometheus.fullname" . }}
+        chart: {{ .Chart.Name }}
+        component: elasticsearchexporter
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: elasticsearch-exporter
+        productVersion: 1.0.2
+        productID: none
+    spec:
+    {{- if eq .Values.mode "managed" }}
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+    {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - ppc64le
+            {{- if eq .Values.mode "managed" }}
+              - key: management
+                operator: In
+                values:
+                - "true"
+            {{- end }}
+      containers:
+      - image: {{ .Values.elasticsearchExporter.image.repository }}:{{ .Values.elasticsearchExporter.image.tag }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        name: elk-exporter
+        ports:
+        - containerPort: 9108
+          name: metrics
+        args: [ "-es.uri={{ .Values.elasticsearchExporter.esUri }}" ]
+
+{{- end -}}

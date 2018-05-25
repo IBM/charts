@@ -1,0 +1,27 @@
+{{- if or (eq .Values.mode "managed") .Values.tls.enabled -}}
+
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ template "prometheus.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "monitoring.fullname" . }}-router-entry-config
+data:
+  entrypoint.sh: |
+    #!/bin/sh
+    cp -f /opt/ibm/router/certs/tls.crt /opt/ibm/router/nginx/conf/server.crt
+    cp -f /opt/ibm/router/certs/tls.key /opt/ibm/router/nginx/conf/server.key
+    cp -f /opt/ibm/router/conf/nginx.conf /opt/ibm/router/nginx/conf/nginx.conf
+    export GRAFANA_CRED_STR=$(echo -n "${GF_SECURITY_ADMIN_USER}:${GF_SECURITY_ADMIN_PASSWORD}" | base64)
+    sed -i "s/{GRAFANA_CRED}/${GRAFANA_CRED_STR}/g" /opt/ibm/router/nginx/conf/nginx.conf
+    nginx -g 'daemon off;'
+
+{{- end -}}

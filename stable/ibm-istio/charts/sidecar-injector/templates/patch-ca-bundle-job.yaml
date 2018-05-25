@@ -1,0 +1,62 @@
+{{- if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1beta1" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "sidecar-injector.fullname" . }}-patch-ca-bundle
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+  labels:
+    app: {{ template "sidecar-injector.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    istio: sidecar-injector-patch-ca-bundle
+spec:
+  template:
+    metadata:
+      name: {{ template "sidecar-injector.fullname" . }}-patch-ca-bundle
+      labels:
+        app: {{ template "sidecar-injector.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        istio: sidecar-injector-patch-ca-bundle
+    spec:
+      serviceAccountName: {{ template "sidecar-injector.caBundleServiceAccountName" . }}
+      containers:
+        - name: kubectl
+          image: "{{ .Values.global.kubectl.repository }}:{{ .Values.global.kubectl.tag }}"
+          imagePullPolicy: {{ .Values.global.kubectl.imagePullPolicy }}
+          command:
+            - /tmp/webhook/webhook-patch-ca-bundle.sh
+          volumeMounts:
+            - mountPath: "/tmp/webhook"
+              name: webhook-patch-ca-bundle-script
+      volumes:
+        - name: webhook-patch-ca-bundle-script
+          configMap:
+            name: {{ template "sidecar-injector.fullname" . }}-cm-patch-ca-bundle-script
+            defaultMode: 0744
+      restartPolicy: Never
+      {{- if .Values.management }}
+      nodeSelector:
+        management: 'true'
+      {{- end -}}
+      {{- if or .Values.dedicated .Values.criticalAddonsOnly }}
+      tolerations:
+      {{- if .Values.dedicated }}
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+      {{- end -}}
+      {{- if .Values.criticalAddonsOnly }}
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+      {{- end -}}
+      {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+{{- end -}}

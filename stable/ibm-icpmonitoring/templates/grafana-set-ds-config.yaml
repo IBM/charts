@@ -1,0 +1,60 @@
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ template "grafana.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: grafana
+  name: {{ template "grafana.fullname" . }}-ds-entry-config
+data:
+  entrypoint.sh: |
+    #!/bin/sh
+    {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+    SCHEME=https://
+    OPTIONS="-k --cert /opt/ibm/monitoring/certs/tls.crt --key /opt/ibm/monitoring/certs/tls.key"
+    export CA=$(sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g' /opt/ibm/monitoring/ca-certs/tls.crt)
+    export CERT=$(sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g' /opt/ibm/monitoring/certs/tls.crt)
+    export KEY=$(sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g' /opt/ibm/monitoring/certs/tls.key)
+    {{- else }}
+    SCHEME=http://${GF_SECURITY_ADMIN_USER}:${GF_SECURITY_ADMIN_PASSWORD}@
+    {{- end }}
+    curl -X DELETE ${OPTIONS} ${SCHEME}{{ template "grafana.fullname" . }}:{{ .Values.grafana.port }}/api/datasources/name/prometheus
+    rc=$?
+    if [[ $rc != 0 ]]; then
+      exit $rc
+    fi
+    request_body=$(cat <<EOF
+    {
+      "name": "prometheus",
+      "type": "prometheus",
+      "access": "proxy",
+      "isDefault": true,
+    {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+      "url": "https://{{ template "prometheus.fullname" . }}:{{ .Values.prometheus.port }}",
+      "jsonData": {
+        "tlsAuth": true,
+        "tlsAuthWithCACert": true
+      },
+      "secureJsonData": {
+        "tlsCACert": "$CA",
+        "tlsClientCert": "$CERT",
+        "tlsClientKey": "$KEY"
+      }
+    {{- else }}
+      "url": "http://{{ template "prometheus.fullname" . }}:{{ .Values.prometheus.port }}"
+    {{- end }}
+    }
+    EOF
+    )
+    resp=$(curl --write-out "STATUS_CODE:%{http_code}" -X POST ${OPTIONS} -H"Content-Type:application/json" --data-binary "$request_body" ${SCHEME}{{ template "grafana.fullname" . }}:{{ .Values.grafana.port }}/api/datasources)
+    echo $resp
+    if [[ ${resp##*:} != 200 ]]; then
+      exit -1
+    fi

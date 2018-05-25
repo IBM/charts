@@ -1,0 +1,64 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "zipkin.fullname" . }}
+  labels:
+    app: {{ template "zipkin.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "zipkin.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        sidecar.istio.io/inject: "false"
+        productName: {{ .Chart.Name }}
+        productID: IBMIstioZipkin_0710_apachev2_00000
+        productVersion: {{ .Chart.Version }}
+    spec:
+      containers:
+        - name: zipkin
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.internalPort }}
+          env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.service.internalPort }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.service.internalPort }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{- if .Values.management }}
+      nodeSelector:
+        management: 'true'
+      {{- end -}}
+      {{- if or .Values.dedicated .Values.criticalAddonsOnly }}
+      tolerations:
+      {{- if .Values.dedicated }}
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+      {{- end -}}
+      {{- if .Values.criticalAddonsOnly }}
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+      {{- end -}}
+      {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}

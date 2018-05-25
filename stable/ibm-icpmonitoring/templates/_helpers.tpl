@@ -8,6 +8,14 @@
 */}}
 
 {{/*
+Create a default fully qualified app name for monitoring.
+*/}}
+{{- define "monitoring.fullname" -}}
+{{- $name := default "monitoring" .Values.nameOverride -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
 Create a default fully qualified app name for prometheus.
 */}}
 {{- define "prometheus.fullname" -}}

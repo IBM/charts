@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "mixer.fullname" . }}-create-cr
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": hook-succeeded
+  labels:
+    app: {{ template "mixer.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    istio: mixer-create-cr
+spec:
+  template:
+    metadata:
+      name: {{ template "mixer.fullname" . }}-create-cr
+      labels:
+        app: {{ template "mixer.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        istio: mixer-create-cr
+    spec:
+      serviceAccountName: {{ template "mixer.serviceAccountName" . }}
+      containers:
+        - name: kubectl
+          image: "{{ .Values.global.kubectl.repository }}:{{ .Values.global.kubectl.tag }}"
+          imagePullPolicy: "{{ .Values.global.kubectl.imagePullPolicy }}"
+          command:
+            - kubectl
+            - apply
+            - -f
+            - /tmp/mixer/custom-resources.yaml
+          volumeMounts:
+            - mountPath: "/tmp/mixer"
+              name: tmp-configmap-mixer
+      volumes:
+        - name: tmp-configmap-mixer
+          configMap:
+            name: {{ template "mixer.fullname" . }}-custom-resources
+      restartPolicy: Never # CRD might take some time till they are available to consume
+      {{- if .Values.management }}
+      nodeSelector:
+        management: 'true'
+      {{- end -}}
+      {{- if or .Values.dedicated .Values.criticalAddonsOnly }}
+      tolerations:
+      {{- if .Values.dedicated }}
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+      {{- end -}}
+      {{- if .Values.criticalAddonsOnly }}
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+      {{- end -}}
+      {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}

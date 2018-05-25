@@ -8,12 +8,24 @@
 {{/* Prometheus Configuration Files */}}
 {{- define "prometheusConfig" }}
 prometheus.yml: |-
+  global:
+    scrape_interval: {{ .Values.prometheus.scrapeInterval }}
+    evaluation_interval: {{ .Values.prometheus.evaluationInterval }}
+
   alerting:
     alertmanagers:
-    - scheme: http
-      static_configs:
+    - static_configs:
       - targets:
         - '{{ template "prometheus.fullname" . }}-alertmanager:{{ .Values.alertmanager.port }}'
+    {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+      scheme: https
+      tls_config:
+        cert_file: /opt/ibm/monitoring/certs/tls.crt
+        key_file: /opt/ibm/monitoring/certs/tls.key
+        insecure_skip_verify: true
+    {{- else }}
+      scheme: http
+    {{- end }}
 
   rule_files:
     - /etc/alert-rules/*.rules
@@ -260,4 +272,24 @@ prometheus.yml: |-
         - source_labels: [__meta_kubernetes_pod_name]
           action: replace
           target_label: kubernetes_pod_name
+
+  {{- if or (eq .Values.mode "managed") .Values.prometheus.etcdTarget.enabled }}
+    - job_name: etcd
+      scheme: https
+      static_configs:
+      - targets:
+      {{- range .Values.prometheus.etcdTarget.etcdAddress }}
+        - {{ printf "%s:%s" . $.Values.prometheus.etcdTarget.etcdPort | quote }}
+      {{- end }}
+      tls_config:
+      {{- if eq .Values.mode "managed" }}
+        ca_file: /etc/etcd/etcd-ca
+        cert_file: /etc/etcd/etcd-cert
+        key_file: /etc/etcd/etcd-key
+        insecure_skip_verify: true
+      {{- end }}
+      {{- if .Values.prometheus.etcdTarget.tlsConfig }}
+{{ toYaml .Values.prometheus.etcdTarget.tlsConfig | indent 8 }}
+      {{- end }}
+  {{- end }}
 {{- end }}

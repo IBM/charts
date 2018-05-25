@@ -1,0 +1,40 @@
+{{- if or (eq .Values.mode "managed") .Values.alertmanager.ingress.enabled -}}
+
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  labels:
+    app: {{ template "prometheus.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: prometheus
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "prometheus.fullname" . }}-alertmanager-ingress
+{{- if or (eq .Values.mode "managed") .Values.alertmanager.ingress.annotations }}
+  annotations:
+  {{- if eq .Values.mode "managed" }}
+    kubernetes.io/ingress.class: "ibm-icp-management"
+    icp.management.ibm.com/authz-type: "rbac"
+    icp.management.ibm.com/secure-backends: "true"
+    icp.management.ibm.com/secure-client-ca-secret: "{{ template "monitoring.fullname" . }}-client-certs"
+    icp.management.ibm.com/rewrite-target: "/"
+  {{- end }}
+  {{- if .Values.alertmanager.ingress.annotations }}
+{{ toYaml .Values.alertmanager.ingress.annotations | indent 4 }}
+  {{- end }}
+{{- end }}
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /alertmanager
+        backend:
+          serviceName: {{ template "prometheus.fullname" . }}-alertmanager
+          servicePort: {{ .Values.alertmanager.port }}
+
+{{- end -}}

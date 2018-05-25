@@ -20,7 +20,9 @@ grafana.ini: |-
     http_port = 3000
     ;domain = localhost
     ;enforce_domain = false
-    ;root_url = %(protocol)s://%(domain)s:%(http_port)s/
+    {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+    root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana
+    {{- end }}
     ;router_logging = false
     ;static_root_path = public
     ;enable_gzip = false

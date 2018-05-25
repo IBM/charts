@@ -1,0 +1,67 @@
+{{- if or (eq .Values.mode "managed") .Values.tls.enabled -}}
+
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ template "prometheus.fullname" . }}-alertmanager
+    component: alertmanager
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "prometheus.fullname" . }}-alertmanager-router-nginx-config
+data:
+  nginx.conf: |-
+    error_log stderr debug;
+
+    events {
+        worker_connections 1024;
+    }
+
+
+    http {
+        access_log syslog:server=unix:/dev/log;
+
+        include mime.types;
+        default_type application/octet-stream;
+        sendfile on;
+        keepalive_timeout 65;
+
+        # Without this, cosocket-based code in worker
+        # initialization cannot resolve localhost.
+
+        upstream alertmanager {
+            server 127.0.0.1:9093;
+        }
+
+        proxy_cache_path /tmp/nginx-mesos-cache levels=1:2 keys_zone=mesos:1m inactive=10m;
+
+        server {
+            listen 8443 ssl default_server;
+            ssl_certificate server.crt;
+            ssl_certificate_key server.key;
+            ssl_client_certificate /opt/ibm/router/ca-certs/tls.crt;
+            ssl_verify_client on;
+            ssl_protocols TLSv1.2;
+            # Ref: https://github.com/cloudflare/sslconfig/blob/master/conf
+            # Modulo ChaCha20 cipher.
+            ssl_ciphers EECDH+AES128:RSA+AES128:EECDH+AES256:RSA+AES256:!EECDH+3DES:!RSA+3DES:!MD5;
+            ssl_prefer_server_ciphers on;
+
+            server_name dcos.*;
+            root /opt/ibm/router/nginx/html;
+
+            location / {
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header Host $http_host;
+              proxy_pass http://alertmanager/;
+            }
+
+        }
+    }
+{{- end -}}

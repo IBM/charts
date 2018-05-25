@@ -8,7 +8,7 @@ kind: Deployment
 metadata:
   labels:
     app: {{ template "prometheus.fullname" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    chart: {{ .Chart.Name }}
     component: prometheus
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -19,9 +19,21 @@ spec:
     metadata:
       labels:
         app: {{ template "prometheus.fullname" . }}
+        chart: {{ .Chart.Name }}
         component: prometheus
         release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: prometheus
+        productVersion: 2.0.0
+        productID: none
     spec:
+    {{- if eq .Values.mode "managed" }}
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+    {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -31,10 +43,17 @@ spec:
                 operator: In
                 values:
                 - amd64
+                - ppc64le
+            {{- if eq .Values.mode "managed" }}
+              - key: management
+                operator: In
+                values:
+                - "true"
+            {{- end }}
       containers:
         - name: configmap-reload
-          image: {{ .Values.configmapReload.image.name }}:{{ .Values.configmapReload.image.tag }}
-          imagePullPolicy: "IfNotPresent"
+          image: {{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - --volume-dir=/etc/config
             - --volume-dir=/etc/alert-rules
@@ -47,13 +66,19 @@ spec:
               mountPath: /etc/alert-rules
               readOnly: true
         - name: prometheus
-          image: {{ .Values.prometheus.image.name }}:{{ .Values.prometheus.image.tag }}
-          imagePullPolicy: "IfNotPresent"
+          image: {{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            runAsUser: 0
           args:
             - --config.file=/etc/config/prometheus.yml
             - --web.enable-lifecycle
+            - --web.enable-admin-api
             - --storage.tsdb.path=/var/lib/prometheus/data
-            - --storage.tsdb.retention={{ .Values.prometheus.args.retention }}
+            - --storage.tsdb.retention={{ .Values.prometheus.retention }}
+          {{- range $key, $value := .Values.prometheus.args }}
+            - --{{ $key }}={{ $value }}
+          {{- end }}
           ports:
             - containerPort: 9090
           resources:
@@ -65,6 +90,32 @@ spec:
               mountPath: /etc/alert-rules
             - name: storage-volume
               mountPath: /var/lib/prometheus/data
+          {{- if or (eq .Values.mode "managed") .Values.prometheus.etcdTarget.enabled }}
+            - name: etcd-certs
+              mountPath: /etc/etcd
+          {{- end }}
+          {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+            - name: monitoring-client-certs
+              mountPath: /opt/ibm/monitoring/certs
+          {{- end }}
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router
+          image: {{ .Values.router.image.repository }}:{{ .Values.router.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/opt/ibm/router/entry/entrypoint.sh"]
+          ports:
+          - name: router
+            containerPort: 8080
+          volumeMounts:
+            - mountPath: "/opt/ibm/router/conf"
+              name: router-config
+            - mountPath: "/opt/ibm/router/certs"
+              name: monitoring-certs
+            - mountPath: "/opt/ibm/router/ca-certs"
+              name: monitoring-ca-cert
+            - mountPath: "/opt/ibm/router/entry"
+              name: router-entry
+      {{- end }}
       volumes:
         - name: config-volume
           configMap:
@@ -72,6 +123,11 @@ spec:
         - name: rules-volume
           configMap:
             name: {{ template "prometheus.fullname" . }}-alertrules
+      {{- if or (eq .Values.mode "managed") .Values.prometheus.etcdTarget.enabled }}
+        - name: etcd-certs
+          secret:
+            secretName: {{ .Values.prometheus.etcdTarget.secret }}
+      {{- end }}
         - name: storage-volume
         {{- if .Values.prometheus.persistentVolume.enabled }}
           persistentVolumeClaim:
@@ -79,3 +135,21 @@ spec:
         {{- else }}
           emptyDir: {}
         {{- end }}
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router-config
+          configMap:
+            name: {{ template "prometheus.fullname" . }}-router-nginx-config
+        - name: monitoring-certs
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-certs
+        - name: monitoring-ca-cert
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-ca-cert
+        - name: monitoring-client-certs
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-client-certs
+        - name: router-entry
+          configMap:
+            name: {{ template "monitoring.fullname" . }}-router-entry-config
+            defaultMode: 0744
+      {{- end }}

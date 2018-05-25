@@ -7,8 +7,8 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   labels:
-    app: {{ template "prometheus.fullname" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ template "prometheus.fullname" . }}-alertmanager
+    chart: {{ .Chart.Name }}
     component: alertmanager
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -18,10 +18,22 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "prometheus.fullname" . }}
+        app: {{ template "prometheus.fullname" . }}-alertmanager
+        chart: {{ .Chart.Name }}
         component: alertmanager
         release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: alertmanager
+        productVersion: 0.13.0
+        productID: none
     spec:
+    {{- if eq .Values.mode "managed" }}
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+    {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -31,10 +43,17 @@ spec:
                 operator: In
                 values:
                 - amd64
+                - ppc64le
+            {{- if eq .Values.mode "managed" }}
+              - key: management
+                operator: In
+                values:
+                - "true"
+            {{- end }}
       containers:
         - name: configmap-reload
-          image: {{ .Values.configmapReload.image.name }}:{{ .Values.configmapReload.image.tag }}
-          imagePullPolicy: "IfNotPresent"
+          image: {{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - --volume-dir=/etc/config
             - --webhook-url=http://localhost:9093/-/reload
@@ -43,8 +62,8 @@ spec:
               mountPath: /etc/config
               readOnly: true
         - name: alertmanager
-          image: {{ .Values.alertmanager.image.name }}:{{ .Values.alertmanager.image.tag }}
-          imagePullPolicy: "IfNotPresent"
+          image: {{ .Values.alertmanager.image.repository }}:{{ .Values.alertmanager.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - --config.file=/etc/config/alertmanager.yml
             - --storage.path=/var/lib/alertmanager/data
@@ -57,6 +76,24 @@ spec:
               mountPath: /etc/config
             - name: storage-volume
               mountPath: "/var/lib/alertmanager/data"
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router
+          image: {{ .Values.router.image.repository }}:{{ .Values.router.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/opt/ibm/router/entry/entrypoint.sh"]
+          ports:
+          - name: router
+            containerPort: 8080
+          volumeMounts:
+            - mountPath: "/opt/ibm/router/conf"
+              name: router-config
+            - mountPath: "/opt/ibm/router/certs"
+              name: monitoring-certs
+            - mountPath: "/opt/ibm/router/ca-certs"
+              name: monitoring-ca-cert
+            - mountPath: "/opt/ibm/router/entry"
+              name: router-entry
+      {{- end }}
       volumes:
         - name: config-volume
           configMap:
@@ -68,3 +105,18 @@ spec:
         {{- else }}
           emptyDir: {}
         {{- end }}
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router-config
+          configMap:
+            name: {{ template "prometheus.fullname" . }}-alertmanager-router-nginx-config
+        - name: monitoring-certs
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-certs
+        - name: monitoring-ca-cert
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-ca-cert
+        - name: router-entry
+          configMap:
+            name: {{ template "monitoring.fullname" . }}-router-entry-config
+            defaultMode: 0744
+      {{- end }}

@@ -1,0 +1,66 @@
+# istio CA watching all namespaces
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: istio-ca
+  labels:
+    app: {{ template "security.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    istio: istio-ca
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "security.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        istio: istio-ca
+      annotations:
+        sidecar.istio.io/inject: "false"
+        productName: {{ .Chart.Name }}
+        productID: IBMIstioCA_0710_apachev2_00000
+        productVersion: {{ .Chart.Version }}
+    spec:
+      serviceAccountName: {{ template "security.serviceAccountName" . }}
+      containers:
+        - name: {{ template "security.name" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --grpc-port=8060
+            - --grpc-hostname=istio-ca
+            - --self-signed-ca=true
+          livenessProbe:
+            exec:
+              command:
+                - /usr/local/bin/istio_ca
+                - -h
+          readinessProbe:
+            exec:
+              command:
+                - /usr/local/bin/istio_ca
+                - -h
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{- if .Values.management }}
+      nodeSelector:
+        management: 'true'
+      {{- end -}}
+      {{- if or .Values.dedicated .Values.criticalAddonsOnly }}
+      tolerations:
+      {{- if .Values.dedicated }}
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+      {{- end -}}
+      {{- if .Values.criticalAddonsOnly }}
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+      {{- end -}}
+      {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
