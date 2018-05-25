@@ -200,7 +200,7 @@ data:
               <default>
                 <comparator class="hudson.util.CaseInsensitiveComparator"/>
               </default>
-              <int>8</int>
+              <int>9</int>
               <string>BUILD</string>
               <string>{{ .Values.Pipeline.Build }}</string>
               <string>DEPLOY</string>
@@ -209,6 +209,8 @@ data:
               <string>{{ .Values.Pipeline.Test }}</string>
               <string>DEBUG</string>
               <string>{{ .Values.Pipeline.Debug }}</string>
+              <string>HELM_SECRET</string>
+              <string>{{ .Values.global.helm.tlsSecretName }}</string>
               <string>NAMESPACE</string>
               <string>{{ .Values.Pipeline.TargetNamespace }}</string>
               <string>DEFAULT_DEPLOY_BRANCH</string>
@@ -249,6 +251,10 @@ data:
     /usr/bin/curl -o /var/jenkins_home/kubectl -L https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
     chmod +x /var/jenkins_home/kubectl
     tmp=$(/var/jenkins_home/kubectl describe configmap platform-auth-idp --namespace=kube-system | sed -n '/IDENTITY_URL:/{n;n;p}')
+    if [ -z "$tmp" ];
+    then
+      tmp=$(/var/jenkins_home/kubectl describe configmap platform-api --namespace=kube-system | sed -n '/CLUSTER_URL:/{n;n;p}')
+    fi
     if [ -z "$tmp" ];
     then
       sed -e 's/securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm"/!--securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm"/' /var/jenkins_home/config.xml | sed -e 's/securityRealm>/securityRealm--><securityRealm class="hudson.security.LegacySecurityRealm"\/>/' > /var/jenkins_home/config1.xml

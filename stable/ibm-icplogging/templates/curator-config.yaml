@@ -1,9 +1,14 @@
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "elasticsearch.fullname" . }}-curator-config
+  name: "{{ template "elasticsearch.fullname" . }}-curator-config"
   labels:
-    app: {{ template "elasticsearch.fullname" . }}
+    app: "{{ template "elasticsearch.fullname" . }}"
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     heritage: "{{ .Release.Service }}"
     release: "{{ .Release.Name }}"
@@ -28,7 +33,7 @@ data:
         filters:
         - filtertype: pattern
           kind: prefix
-          value: filebeat-
+          value: logstash-
         - filtertype: age
           source: name
           direction: older
@@ -83,19 +88,23 @@ data:
         - {{ .Values.elasticsearch.name }}
       port: {{ .Values.elasticsearch.client.restPort }}
       url_prefix:
-      use_ssl: False
-      certificate:
-      client_cert:
-      client_key:
+{{- if .Values.security.enabled }}
+      use_ssl: True
+      certificate: /curator/tls/ca.crt
+      client_cert: /curator/tls/curator.crt
+      client_key: /curator/tls/curator.key
       ssl_no_validate: False
+{{- else }}
+      use_ssl: False
+      ssl_no_validate: True
+{{- end }}
       http_auth:
       timeout: 30
       master_only: False
-
     logging:
       loglevel: INFO
       logformat: default
       blacklist: ['elasticsearch', 'urllib3']
   cron: |-
-    {{ .Values.curator.schedule }} root /bin/bash /clean-indices.sh
+    {{ .Values.curator.schedule }} /bin/sh /clean-indices.sh
     # An empty line is required at the end of this file for a valid cron file.

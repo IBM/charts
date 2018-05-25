@@ -1,0 +1,77 @@
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ template "elasticsearch.fullname" . }}-entrypoint"
+  labels:
+    app: "{{ template "elasticsearch.fullname" . }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+data:
+  entrypoint.sh: |-
+    #!/bin/bash
+    cd /scripts
+    ./install-plugin.sh
+    ./map-config.sh
+
+    echo "launching elasticsearch"
+    cd /usr/share/elasticsearch
+    bin/es-docker
+  install-plugin.sh: |-
+    #!/bin/bash
+    echo "searching for plugin"
+    plugin_path=/usr/share/elasticsearch/plugin-bundles/searchguard.zip
+    ls -l $plugin_path
+
+    if [ -f $plugin_path ]; then
+      echo "Searchguard plugin found."
+      elasticsearch-plugin install -b file://$plugin_path
+      echo "install done. exit code=$?"
+    else
+      echo "No searchguard plugin found. No need to install"
+    fi
+  logstash-entrypoint.sh: |-
+    #!/bin/sh
+    cd /scripts
+    ./map-config.sh
+
+    echo "Launching Logstash"
+    # to debug: --log.level debug
+    /usr/local/bin/docker-entrypoint
+  kibana-entrypoint.sh: |-
+    #!/bin/sh
+    cd /scripts
+    ./map-config.sh
+
+    echo "Launching Kibana"
+    /usr/local/bin/kibana-docker
+  map-config.sh: |-
+    #!/bin/bash
+    # Configures a symlink from, e.g. /usr/share/elasticsearch-config-[arch] to
+    # /usr/share/elasticsearch/config. The actual paths vary depending on which
+    # product is being configured.
+
+    PPCROOT=${CFG_BASEDIR}-config-ppc
+    X86ROOT=${CFG_BASEDIR}-config-x86
+    TARGET=${CFG_BASEDIR}/config
+    MACTYPE=`uname -m`
+    echo "Machine type: $MACTYPE"
+
+    mkdir -p $TARGET 2>/dev/null
+
+    function link {
+      for i in `ls $1`; do
+        echo "Linking $1/$i to $TARGET/$i"
+        # Link, don't copy, so that changes on K8s side are propagated down to product
+        ln -sf $1/$i $TARGET/$i
+      done
+    }
+
+    [ "$MACTYPE" == "ppc64le" ] && link $PPCROOT && exit
+    # Default to x86
+    link $X86ROOT

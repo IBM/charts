@@ -1,0 +1,822 @@
+image:
+  __metadata:
+    label: "Image"
+  pullPolicy:
+    __metadata:
+      label: "Pull Policy"
+      description: "The policy used by Kubernetes for images."
+      type: "string"
+      required: true
+      default: "IfNotPresent"
+      options:
+      - label: "Never"
+        value: "Never"
+      - label: "IfNotPresent"
+        value: "IfNotPresent"
+      - label: "Always"
+        value: "Always"
+
+security:
+  # Security can be flagged on for any platform, but will only work on x86 nodes.
+  __metadata:
+    label: "Security"
+    description: "Security can be flagged on for any platform, but will only work on x86 nodes."
+  enabled:
+    __metadata:
+      label: "Enable Security"
+      description: "If set to true, configures HTTPS/TLS and mutual certificate-based authentication for all components of the logging service."
+      type: "boolean"
+      required: true
+      default: true
+      # Provider could be marked as hidden?
+  provider:
+    __metadata:
+      label: "Provider"
+      description: "Elastic stack plugin to provide TLS."
+      type: "string"
+      default: "searchguard-tls"
+      options:
+      -
+        label: "Searchguard TLS"
+        value: "searchguard-tls"
+      -
+        label: "Xpack"
+        value: "xpack"
+  ca:
+    keystore:
+      password:
+        __metadata:
+          label: "Keystore Password"
+          description: "Keystore password for the Certificate Authority (CA)."
+          type: "password"
+          required: true
+    truststore:
+      password:
+        __metadata:
+          label: "Truststore Password"
+          description: "Truststore password for the CA."
+          type: "password"
+          required: true
+    # set to `external` to use existing CA stored in Kubernetes secret to generate certs
+    origin:
+      __metadata:
+        label: "Security Origin"
+        description: "Configures the chart to generate a CA automatically (internal) or to use an existing CA stored in a Kubernetes secret (external)."
+        type: "string"
+        required: true
+        default: "internal"
+        options:
+        -
+          label: "Internal"
+          value: "internal"
+        -
+          label: "External"
+          value: "external"
+    external:
+      # the secret need to be in the same namespace as the chart release
+      secretName:
+        __metadata:
+          label: "External Secret Name"
+          description: "Name of Kubernetes secret that stores the external CA. The secret needs to be under the same namespace as the Helm release."
+          type: "string"
+          required: true
+          default: "cluster-ca-cert"
+      certFieldName:
+        __metadata:
+          label: "Certificate Field Name"
+          description: "The Kubernetes field name (key) within the specified secret that stores CA cert."
+          type: "string"
+          required: true
+          default: "tls.crt"
+      keyFieldName:
+        __metadata:
+          label: "Key Field Name"
+          description: "The Kubernetes field name (key) within the specified secret that stores CA private key."
+          type: "string"
+          required: true
+          default: "tls.key"
+  app:
+    keystore:
+      password:
+        __metadata:
+          label: "Application Keystore"
+          description: "Keystore password to use for logging service components (such as Elasticsearch, Kibana)."
+          type: "password"
+          required: true
+
+logstash:
+  __metadata:
+    label: "Logstash"
+    description: "Logstash is an open source, server-side data processing pipeline that ingests data from a multitude of sources simultaneously, transforms it, and then sends it to Elasticsearch." # Description taken from https://www.elastic.co/products/logstash
+  replicas:
+    __metadata:
+      label: "Replicas"
+      description: "The initial pod cluster size."
+      type: "number"
+      required: true
+      default: 1
+  name:
+    __metadata:
+      label: "Name"
+      description: "The internal name of the Logstash cluster."
+      type: "string"
+      required: true
+      default: "logstash"
+  heapSize:
+    __metadata:
+      label: "Heap Size"
+      description: "The JVM heap size to allocate to Logstash. Append the letter 'k' or 'K' to the value to indicate kilobytes, 'm' or 'M' to indicate megabytes, and 'g' or 'G' to indicate gigabytes."
+      type: "string"
+      required: true
+      default: "512m"
+  memoryLimit:
+    __metadata:
+      label: "Memory Limit"
+      description: "The maximum allowable memory for Logstash. This includes both JVM heap and file system cache. You can express memory as a plain integer or as a fixed-point integer using one of these suffixes: E, P, T, G, M, K. You can also use the power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki."
+      type: "string"
+      required: true
+      default: "1280Mi"
+  port:
+    __metadata:
+      label: "Port"
+      description: "The port on which Logstash listens for beats."
+      type: "number"
+      required: true
+      default: 5000
+  image:
+    repository:
+      __metadata:
+        label: "Image Repository"
+        description: "Full repository and path to Logstash image."
+        type: "string"
+        required: true
+        default: "ibmcom/logstash"
+    tag:
+      __metadata:
+        label: "Image Tag"
+        description: "The tag identifying which Logstash image to deploy."
+        type: "string"
+        required: true
+        default: "5.5.1"
+  probe:
+    enabled:
+      __metadata:
+        label: "Probe Enabled"
+        description: "Enables the liveness probe for Logstash. (https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/)"
+        type: "boolean"
+        required: true
+        default: false
+    periodSeconds:
+      __metadata:
+        label: "Probe Period"
+        description: "Interval (in seconds) between liveness probe checks."
+        type: "number"
+        required: false
+        default: 60
+    minEventsPerPeriod:
+      __metadata:
+        label: "Probe Minimum Number of Events Per Period"
+        description: "Logstash instance is considered healthy if number of log events processed is greater than `logstash.probe.minEventsPerPeriod` within `logstash.probe.periodSeconds`."
+        type: "number"
+        required: false
+        default: 1
+    maxUnavailablePeriod:
+      __metadata:
+        label: "Probe Maximum Number of Unavailable Periods"
+        description: "Logstash instance is considered unhealthy after API endpoint is unavailable for `logstash.probe.periodSeconds` * `logstash.probe.maxUnavailablePeriod` seconds."
+        type: "number"
+        required: false
+        default: 5
+    image:
+      repository:
+        __metadata:
+          label: "Probe Image Repository"
+          description: "Full repository and path to image."
+          type: "string"
+          required: false
+          default: "ibmcom/logstash-liveness-probe"
+      tag:
+        __metadata:
+          label: "Probe Image Tag"
+          description: "The tag identifying which Probe image to deploy."
+          type: "string"
+          required: false
+          default: "0.1.8"
+
+kibana:
+  __metadata:
+    label: "Kibana"
+    description: "Kibana lets you visualize your Elasticsearch data and navigate the Elastic Stack." # Taken from https://www.elastic.co/products/kibana
+  install:
+    __metadata:
+      label: "Install Kibana"
+      description: "Would you like Kibana installed?"
+      type: "boolean"
+      required: true
+      default: true
+  replicas:
+    __metadata:
+      label: "Replicas"
+      description: "The initial pod cluster size."
+      type: "number"
+      required: false
+      default: 1
+  name:
+    __metadata:
+      label: "Name"
+      description: "The internal name of the Kibana cluster."
+      type: "string"
+      required: false
+      default: "kibana"
+  internal:
+    __metadata:
+      label: "Internal Port"
+      description: "The port for container-local connections."
+      type: "number"
+      required: false
+      default: 5601
+  external:
+    __metadata:
+      label: "External Port"
+      description: "The port used for service connections."
+      type: "number"
+      required: false
+      default: 31601
+  maxOldSpaceSize:
+    __metadata:
+      label: "Maximum Old Space Size"
+      description: "Maximum old space size (in MB) to allocate to the V8 Javascript engine."
+      type: "string"
+      required: false
+      default: "1024"
+  memoryLimit:
+    __metadata:
+      label: "Memory Limit"
+      description: "You can express memory as a plain integer or as a fixed-point integer using one of these suffixes: E, P, T, G, M, K. You can also use the power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki."
+      type: "string"
+      required: false
+      default: "1280Mi"
+  image:
+    repository:
+      __metadata:
+        label: "Image"
+        description: "Full repository and path to Kibana image."
+        type: "string"
+        required: false
+        default: "ibmcom/kibana"
+    tag:
+      __metadata:
+        label: "Image Tag"
+        description: "The tag identifying which Kibana image to deploy."
+        type: "string"
+        required: false
+        default: "5.5.1"
+  initImage:
+    repository:
+      __metadata:
+        label: "Initializer Image"
+        description: "Full repository and path to the Kibana index initializer image."
+        type: "string"
+        required: false
+        default: "ibmcom/curl"
+    tag:
+      __metadata:
+        label: "Initializer Image Tag"
+        description: "The tag identifying which Kibana index initializer image to deploy."
+        type: "string"
+        required: false
+        default: "3.6"
+  routerImage:
+    repository:
+      __metadata:
+        label: "Proxy Router Image"
+        description: "Full repository and path to the Kibana proxy image."
+        type: "string"
+        required: false
+        default: "ibmcom/icp-router"
+    tag:
+      __metadata:
+        label: "Proxy Router Image Tag"
+        description: "The tag identifying which Kibana proxy image to deploy."
+        type: "string"
+        required: false
+        default: "2.2.0"
+
+filebeat:
+  __metadata:
+    label: "Filebeat"
+    description: "Filebeat monitors the log directories or specific log files, tails the files, and forwards them either to Elasticsearch or Logstash for indexing." # Taken from https://www.elastic.co/guide/en/beats/filebeat/current/filebeat-overview.html
+  name:
+    __metadata:
+      label: "Name"
+      description: "The internal name of the Filebeat pod."
+      type: "string"
+      required: true
+      default: "filebeat-ds"
+  image:
+    repository:
+      __metadata:
+        label: "Image"
+        description: "Full repository and path to Filebeat image."
+        type: "string"
+        required: true
+        default: "ibmcom/filebeat"
+    tag:
+      __metadata:
+        label: "Image Tag"
+        description: "The tag identifying which Filebeat image to deploy."
+        type: "string"
+        required: true
+        default: "5.5.1"
+  scope:
+    nodes:
+      __metadata:
+        label: "Node Selector"
+        description: "One or more label key/value pairs that refine node selection for Filebeat pods. (https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)"
+        type: "string"
+        required: false
+        # How are we parsing this list?
+    namespaces:
+      __metadata:
+        label: "Namespaces"
+        description: "List of log namespaces to monitor upon. Logs from all namespaces will be collected if value is set to empty."
+        type: "string"
+        required: false
+
+elasticsearch:
+  __metadata:
+    label: "Elasticsearch"
+    description: "Elasticsearch is a distributed, RESTful search and analytics engine capable of solving a growing number of use cases." # https://www.elastic.co/products/elasticsearch
+  name:
+    __metadata:
+      label: "Name"
+      description: "A name to uniquely identify this Elasticsearch deployment."
+      type: "string"
+      required: true
+      default: "elasticsearch"
+  internalPort:
+    __metadata:
+      label: "Internal Port"
+      description: "The port Elasticsearch will use for internal cluster communication."
+      type: "number"
+      required: true
+      default: 9300
+  image:
+    repository:
+      __metadata:
+        label: "Image Repository"
+        description: "Full repository and path to the Elasticsearch image."
+        type: "string"
+        required: true
+        default: "ibmcom/elasticsearch"
+    tag:
+      __metadata:
+        label: "Image Tag"
+        description: "The tag identifying which Elasticsearch image to deploy."
+        type: "string"
+        required: true
+        default: "5.5.1"
+  pluginImage:
+    repository:
+      __metadata:
+        label: "Security Provider Image"
+        description: "Full repository and path to the image containing the security provider plugin. For example, when security is enabled and Search Guard is the selected provider, this must point to the image containing the Search Guard binary."
+        type: "string"
+        required: true
+        default: "ibmcom/elasticsearch-plugin-searchguard"
+    tag:
+      __metadata:
+        label: "Security Provider Image Tag"
+        description: "The tag identifying which security provider plugin image to use."
+        type: "string"
+        required: true
+        default: "1.0.0"
+  pluginInitImage:
+    repository:
+      __metadata:
+        label: "Security Provider Install Image"
+        description: "Full repository and path to the image that will install and initialize the security provider plugin."
+        type: "string"
+        required: true
+        default: "ibmcom/searchguard-init"
+    tag:
+      __metadata:
+        label: "Security Provider Install Image Tag"
+        description: "The tag identifying which image to deploy."
+        type: "string"
+        required: true
+        default: "1.0.0"
+  pkiInitImage:
+    repository:
+      __metadata:
+        label: "PKI Initialization Image"
+        description: "Full repository and path to the image that will initialize certificates, signers, and Kubernetes resources for PKI."
+        type: "string"
+        required: true
+        default: "ibmcom/logging-pki-init"
+    tag:
+      __metadata:
+        label: "PKI Initialization Image Tag"
+        description: "The tag identifying which PKI initializing image to deploy."
+        type: "string"
+        required: true
+        default: "1.3.0"
+  initImage:
+    repository:
+      __metadata:
+        label: "System Initialization Image"
+        description: "Full repository and path to the image used to configure system settings for Elasticsearch."
+        type: "string"
+        required: true
+        default: "ibmcom/icp-initcontainer"
+    tag:
+      __metadata:
+        label: "System Initialization Image Tag"
+        description: "The tag identifying which system settings configuration image to deploy."
+        type: "string"
+        required: true
+        default: "1.0.0"
+  client:
+    __metadata:
+      label: "Elasticsearch Client"
+      #description: "The internal name of the client node cluster."
+    name:
+      __metadata:
+        label: "Client - Name"
+        description: "The internal name of the client node cluster."
+        type: "string"
+        required: true
+        default: "client"
+    replicas:
+      __metadata:
+        label: "Client - Replicas"
+        description: "The number of initial pods in the client cluster."
+        type: "number"
+        required: true
+        default: 1
+    heapSize:
+      __metadata:
+        label: "Client - Heap Size"
+        description: "The maximum heap size to allocate for each Elasticsearch client JVM. The value should end in 'M' or 'm' for megabytes, and 'G' or 'g' for gigabytes."
+        type: "string"
+        required: true
+        default: "1024m"
+    memoryLimit:
+      __metadata:
+        label: "Client - Memory Limit"
+        description: "The maximum memory to allocate to each Elasticsearch client pod. This includes both JVM heap and file system cache, and generally should be double the value assigned toheapSize. The value should end in 'M' for megabytes or 'G' for gigabytes. You may also use 'Mi' or 'Gi' to indicate a power-of-two equivalent."
+        type: "string"
+        required: true
+        default: "1536Mi"
+    restPort:
+      __metadata:
+        label: "Client - REST port"
+        description: "The port to which the client node will bind the REST APIs."
+        type: "string"
+        required: true
+        default: 9200
+    antiAffinity:
+      __metadata:
+        label: "Client - Anti-affinity"
+        description: "Whether Kubernetes may (soft) or must not (hard) deploy client pods onto the same node. (https://kubernetes.io/docs/concepts/configuration/assign-pod-node/)"
+        type: "string"
+        required: true
+        default: "soft"
+        options:
+        -
+          label: "Soft" # Labels could be May and Must Not
+          value: "soft"
+        -
+          label: "Hard"
+          value: "hard"
+
+  master:
+    name:
+      __metadata:
+        label: "Master - Name"
+        description: "The internal name of the master node cluster."
+        type: "string"
+        required: true
+        default: "master"
+    replicas:
+      __metadata:
+        label: "Master - Replicas"
+        description: "The number of initial pods in the master cluster."
+        type: "number"
+        required: true
+        default: 1
+    heapSize:
+      __metadata:
+        label: "Master - Heap Size"
+        description: "The maximum memory to allocate to each Elasticsearch master. The value should end in 'm' for megabytes."
+        type: "string"
+        required: true
+        default: "1024m"
+    memoryLimit:
+      __metadata:
+        label: "Master - Memory Limit"
+        description: "The maximum memory to allocate to each Elasticsearch master pod. This includes both JVM heap and file system cache. The value should end in 'M' for megabytes."
+        type: "string"
+        required: true
+        default: "1536Mi"
+    antiAffinity:
+      __metadata:
+        label: "Master - Anti-affinity"
+        description: "Whether Kubernetes may (soft) or must not (hard) deploy master pods onto the same node. (https://kubernetes.io/docs/concepts/configuration/assign-pod-node/)"
+        type: "string"
+        required: true
+        default: "soft"
+        options:
+        -
+          label: "Soft" # Labels could be May and Must Not
+          value: "soft"
+        -
+          label: "Hard"
+          value: "hard"
+
+  data:
+    name:
+      __metadata:
+        label: "Data - Name"
+        description: "The internal name of the data node cluster."
+        type: "string"
+        required: true
+        default: "master"
+    replicas:
+      __metadata:
+        label: "Data - Replicas"
+        description: "The number of initial pods in the data cluster."
+        type: "number"
+        required: true
+        default: 2
+    heapSize:
+      __metadata:
+        label: "Data - Heap Size"
+        description: "The maximum memory to allocate to each Elasticsearch data. The value should end in 'm' for megabytes."
+        type: "string"
+        required: true
+        default: "1024m"
+    memoryLimit:
+      __metadata:
+        label: "Data - Memory Limit"
+        description: "The maximum memory to allocate to each Elasticsearch data pod. This includes both JVM heap and file system cache. The value should end in 'M' for megabytes."
+        type: "string"
+        required: true
+        default: "2048M"
+    antiAffinity:
+      __metadata:
+        label: "Data - Anti-affinity"
+        description: "Whether Kubernetes may (soft) or must not (hard) deploy data pods onto the same node. (https://kubernetes.io/docs/concepts/configuration/assign-pod-node/)"
+        type: "string"
+        required: true
+        default: "hard"
+        options:
+        -
+          label: "Soft" # Labels could be May and Must Not
+          value: "soft"
+        -
+          label: "Hard"
+          value: "hard"
+    storage:
+      persistent:
+        __metadata:
+          label: "Data - Use Storage Persistence"
+          description: "Set to true if you are using GlusterFS or other dynamic provisioner."
+          type: "boolean"
+          required: true
+          default: true
+      useDynamicProvisioning:
+        __metadata:
+          label: "Data - Use Dynamic Provisioning"
+          description: "If not using dynamic provisioning, you can use selectors to refine the binding process."
+          type: "boolean"
+          required: true
+          default: false
+      # These are IGNORED if using dynamic provisioning.
+      selector:
+        label:
+          __metadata:
+            label: "Data - Storage Selectors"
+            description: "One or more storage selectors to use. Input for a single selector is selector1. Input for multiple selectors is [selector1, selector2, selector3,...]."
+            type: "string"
+            required: false
+        value:
+          __metadata:
+            label: "Data - Storage Selector Value"
+            # description: ""
+            type: "string"
+            required: false
+      size:
+        __metadata:
+          label: "Data - Storage Size"
+          description: "The minimum [size of the persistent volume](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/resources.md#resource-quantities). The value may end in 'G' for gigabytes, or 'T' for terabytes. You may also use 'Gi' or 'Ti' for power-of-two equivalents."
+          type: "string"
+          required: true
+          default: "10Gi"
+      storageClass:
+        __metadata:
+          label: "Data - Storage Class"
+          description: "[See official documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#storageclasses)"
+          type: "string"
+          required: false
+
+curator:
+  __metadata:
+    label: "Curator"
+    description: "The curator is a tool to clean out old log indices from Elasticsearch. More information is available through [Elastic's official documentation](https://www.elastic.co/guide/en/elasticsearch/client/curator/5.2/index.html)."
+  name:
+    __metadata:
+      label: "Name"
+      description: "A name to uniquely identify this curator deployment."
+      type: "string"
+      required: true
+      default: "log-curator"
+  image:
+    repository:
+      __metadata:
+        label: "Curator Image Repository"
+        description: "Full repository and path to the curator image."
+        type: "string"
+        required: true
+        default: "ibmcom/indices-cleaner"
+    tag:
+      __metadata:
+        label: "Curator Image Tag"
+        description: "The tag identifying which Curator image to deploy."
+        type: "string"
+        required: true
+        default: "0.2"
+  schedule:
+    __metadata:
+      label: "Schedule"
+      description: "A Linux CRON job, identifying when the curator process should be launched."
+      type: "string"
+      required: true
+      default: "30 23 * * *"
+  app:
+    unit:
+      __metadata:
+        label: "Application Log Retention Unit"
+        description: "The age unit type to retain application logs. (https://www.elastic.co/guide/en/elasticsearch/client/curator/5.2/filtertype_age.html)"
+        type: "string"
+        required: true
+        default: "days"
+        options:
+        -
+          label: "Seconds"
+          value: "seconds"
+        -
+          label: "Minutes"
+          value: "minutes"
+        -
+          label: "Hours"
+          value: "hours"
+        -
+          label: "Days"
+          value: "days"
+        -
+          label: "Weeks"
+          value: "weeks"
+        -
+          label: "Months"
+          value: "months"
+        -
+          label: "Years"
+          value: "years"
+    count:
+      __metadata:
+        label: "Number of Application Log Retention Units"
+        description: "The number of Application Log Retention Units."
+        type: "number"
+        required: true
+        default: 1
+  monitoring:
+    unit:
+      __metadata:
+        label: "Monitoring Log Retention Unit"
+        description: "The age unit type to retain monitoring logs. (https://www.elastic.co/guide/en/elasticsearch/client/curator/5.2/filtertype_age.html)"
+        type: "string"
+        required: true
+        default: "days"
+        options:
+        -
+          label: "Seconds"
+          value: "seconds"
+        -
+          label: "Minutes"
+          value: "minutes"
+        -
+          label: "Hours"
+          value: "hours"
+        -
+          label: "Days"
+          value: "days"
+        -
+          label: "Weeks"
+          value: "weeks"
+        -
+          label: "Months"
+          value: "months"
+        -
+          label: "Years"
+          value: "years"
+    count:
+      __metadata:
+        label: "Number of Monitoring Log Retention Units"
+        description: "The number of Monitoring Log Retention Units."
+        type: "number"
+        required: true
+        default: 1
+  watcher:
+    unit:
+      __metadata:
+        label: "Watcher Log Retention Unit"
+        description: "The age unit type to retain watcher logs.(https://www.elastic.co/guide/en/elasticsearch/client/curator/5.2/filtertype_age.html)"
+        type: "string"
+        required: true
+        default: "days"
+        options:
+        -
+          label: "Seconds"
+          value: "seconds"
+        -
+          label: "Minutes"
+          value: "minutes"
+        -
+          label: "Hours"
+          value: "hours"
+        -
+          label: "Days"
+          value: "days"
+        -
+          label: "Weeks"
+          value: "weeks"
+        -
+          label: "Months"
+          value: "months"
+        -
+          label: "Years"
+          value: "years"
+    count:
+      __metadata:
+        label: "Number of Watcher Log Retention Units"
+        description: "The number of Watcher Log Retention Units to retain watcher logs."
+        type: "number"
+        required: true
+        default: 1
+
+mode:
+  __metadata:
+    label: "Mode"
+    description: "Managed mode should only be used when redeploying the default logging service. For all other deploys use standard."
+    type: "string"
+    default: "standard"
+    options:
+    -
+      label: "Standard"
+      value: "standard"
+    -
+      label: "Managed"
+      value: "managed"
+
+xpack:
+  __metadata:
+    label: "Xpack"
+    description: "XPack is a [separately-licensed feature](https://www.elastic.co/products/x-pack) of Elastic products. Please see official documentation for more information. Without a license the features are only enabled for a trial basis, and by default the XPack features are disabled in this chart.
+
+    _Note: All features&mdash;including security or authentication services&mdash;in XPack are not related to any services offered by IBM Cloud Private._"
+  monitoring:
+    __metadata:
+      label: "Monitoring"
+      description: "[Link to official documentation](https://www.elastic.co/guide/en/kibana/5.5/xpack-monitoring.html)"
+      type: "boolean"
+      required: true
+      default: false
+  graph:
+    __metadata:
+      label: "Graph"
+      description: "[Link to official documentation](https://www.elastic.co/guide/en/kibana/5.5/xpack-graph.html)"
+      type: "boolean"
+      required: true
+      default: false
+  reporting:
+    __metadata:
+      label: "Reporting"
+      description: "[Link to official documentation](https://www.elastic.co/guide/en/kibana/5.5/xpack-reporting.html)"
+      type: "boolean"
+      required: true
+      default: false
+  ml:
+    __metadata:
+      label: "Ml"
+      description: "[Link to official documentation](https://www.elastic.co/guide/en/kibana/5.5/xpack-ml.html)"
+      type: "boolean"
+      required: true
+      default: false
+  watcher:
+    __metadata:
+      label: "Watcher"
+      description: "[Link to official documentation](https://www.elastic.co/guide/en/x-pack/5.5/how-watcher-works.html)"
+      type: "boolean"
+      required: true
+      default: false

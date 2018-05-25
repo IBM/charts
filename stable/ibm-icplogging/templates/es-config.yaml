@@ -1,51 +1,79 @@
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "elasticsearch.fullname" . }}-config
+  name: "{{ template "elasticsearch.fullname" . }}-config"
   labels:
-    app: {{ template "elasticsearch.fullname" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: "{{ .Values.elasticsearch.data.name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
+    app: "{{ template "elasticsearch.fullname" . }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+    component: "{{ .Values.elasticsearch.name }}"
 data:
-  master.yml: |-
-    cluster.name: "{{ .Values.elasticsearch.name }}"
-    network.host: 0.0.0.0
-    discovery.zen.ping.unicast.hosts: {{ .Values.elasticsearch.master.name }}-discovery
-    discovery.zen.minimum_master_nodes: {{ .Values.elasticsearch.master.replicas }}
-    xpack.monitoring.enabled: {{ .Values.xpack.monitoring }}    
-    xpack.security.enabled: {{ .Values.xpack.security }}
-    xpack.ml.enabled: {{ .Values.xpack.ml }}
-    xpack.watcher.enabled: {{ .Values.xpack.watcher }}
+  master.yml-x86: |-
+    # x86-only config. Must include refs to X-Pack.
+{{ include "elasticsearch.config" . | indent 4 }}
+{{ include "elasticsearch.xpack.security" . | indent 4 }}
+{{ include "elasticsearch.searchguard" . | indent 4 }}
     node.master: true
     node.data: false
     http.enabled: false
-    transport.tcp.port: {{ .Values.elasticsearch.internalPort }}
+  master.yml-ppc: |-
+    # ppc64le-only config. Must not include refs to X-Pack.
+{{ include "elasticsearch.config" . | indent 4 }}
+{{ include "elasticsearch.searchguard" . | indent 4 }}
+    node.master: true
+    node.data: false
+    http.enabled: false
 
-  data.yml: |-
-    cluster.name: "{{ .Values.elasticsearch.name }}"
-    network.host: 0.0.0.0
-    discovery.zen.ping.unicast.hosts: {{ .Values.elasticsearch.master.name }}-discovery
-    discovery.zen.minimum_master_nodes: {{ .Values.elasticsearch.master.replicas }}
-    xpack.monitoring.enabled: {{ .Values.xpack.monitoring }}    
-    xpack.security.enabled: {{ .Values.xpack.security }}
-    xpack.watcher.enabled: {{ .Values.xpack.watcher }}
+  data.yml-x86: |-
+    # x86-only config. Must include refs to X-Pack.
+{{ include "elasticsearch.config" . | indent 4 }}
+{{ include "elasticsearch.xpack.security" . | indent 4 }}
+{{ include "elasticsearch.searchguard" . | indent 4 }}
     node.master: false
     node.data: true
     http.enabled: false
-    transport.tcp.port: {{ .Values.elasticsearch.internalPort }}
+  data.yml-ppc: |-
+    # ppc64le-only config. Must not include refs to X-Pack.
+{{ include "elasticsearch.config" . | indent 4 }}
+{{ include "elasticsearch.searchguard" . | indent 4 }}
+    node.master: false
+    node.data: true
+    http.enabled: false
 
-  client.yml: |-
-    cluster.name: "{{ .Values.elasticsearch.name }}"
-    network.host: 0.0.0.0
-    discovery.zen.ping.unicast.hosts: {{ .Values.elasticsearch.master.name }}-discovery
-    discovery.zen.minimum_master_nodes: {{ .Values.elasticsearch.master.replicas }}
-    xpack.monitoring.enabled: {{ .Values.xpack.monitoring }}    
-    xpack.security.enabled: {{ .Values.xpack.security }}
-    xpack.watcher.enabled: {{ .Values.xpack.watcher }}
+  client.yml-x86: |-
+    # x86-only config. Must include refs to X-Pack.
+{{ include "elasticsearch.config" . | indent 4 }}
+{{ include "elasticsearch.xpack.security" . | indent 4 }}
+{{ include "elasticsearch.searchguard" . | indent 4 }}
     node.master: false
     node.data: false
     http.enabled: true
-    transport.tcp.port: {{ .Values.elasticsearch.internalPort }}
     http.port: {{ .Values.elasticsearch.client.restPort }}
+  client.yml-ppc: |-
+    # ppc64le-only config. Must not include refs to X-Pack.
+{{ include "elasticsearch.config" . | indent 4 }}
+{{ include "elasticsearch.searchguard" . | indent 4 }}
+    node.master: false
+    node.data: false
+    http.enabled: true
+    http.port: {{ .Values.elasticsearch.client.restPort }}
+
+  roles.yml: |-
+{{ .Files.Get "xpack/roles.yml" | indent 4 }}
+  role_mapping.yml: |-
+{{ .Files.Get "xpack/role_mapping.yml" | indent 4 }}
+  log4j2.properties: |
+    status = error
+    appender.console.type = Console
+    appender.console.name = console
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n
+
+    rootLogger.level = info
+    rootLogger.appenderRef.console.ref = console

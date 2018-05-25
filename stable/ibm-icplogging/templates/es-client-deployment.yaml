@@ -1,15 +1,28 @@
-apiVersion: extensions/v1beta1
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: {{ template "elasticsearch.fullname" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: "{{ template "elasticsearch.fullname" . }}"
     component: "{{ .Values.elasticsearch.client.name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
+    release: "{{ .Release.Name }}"
+    role: "client"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
   name: {{ template "client.fullname" . }}
 spec:
   replicas: {{ .Values.elasticsearch.client.replicas }}
+  selector:
+    matchLabels:
+      app: "{{ template "elasticsearch.fullname" . }}"
+      component: "{{ .Values.elasticsearch.client.name }}"
+      role: "client"
+      heritage: "{{ .Release.Service }}"
+      release: "{{ .Release.Name }}"
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -19,65 +32,85 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "elasticsearch.fullname" . }}
-        component: {{ .Values.elasticsearch.client.name }}
-        release: {{ .Release.Name }}
-        role: client
+        app: "{{ template "elasticsearch.fullname" . }}"
+        component: "{{ .Values.elasticsearch.client.name }}"
+        role: "client"
+        chart: "{{ .Chart.Name }}"
+        heritage: "{{ .Release.Service }}"
+        release: "{{ .Release.Name }}"
+      annotations:
+        productName: Elasticsearch
+        productVersion: 5.5.1
+        productID: none
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: beta.kubernetes.io/arch
-                operator: In
-                values:
-                - amd64
-      {{- if eq .Values.elasticsearch.client.antiAffinity "hard" }}
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - topologyKey: "kubernetes.io/hostname"
-              labelSelector:
-                matchLabels:
-                  app: "{{ template "elasticsearch.fullname" . }}"
-                  release: "{{ .Release.Name }}"
-                  component: "{{ .Values.elasticsearch.client.name }}"
-      {{- else if eq .Values.elasticsearch.client.antiAffinity "soft" }}
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 1
-            podAffinityTerm:
-              topologyKey: kubernetes.io/hostname
-              labelSelector:
-                matchLabels:
-                  app: "{{ template "elasticsearch.fullname" . }}"
-                  release: "{{ .Release.Name }}"
-                  component: "{{ .Values.elasticsearch.client.name }}"
+      {{- if eq .Values.mode "managed" }}
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
       {{- end }}
+{{ include "elasticsearch.nodeaffinity" . | indent 6 }}
+    {{- if eq .Values.elasticsearch.client.antiAffinity "hard" }}
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+                app: "{{ template "elasticsearch.fullname" . }}"
+                component: "{{ .Values.elasticsearch.client.name }}"
+                role: "client"
+                heritage: "{{ .Release.Service }}"
+                release: "{{ .Release.Name }}"
+    {{- else if eq .Values.elasticsearch.client.antiAffinity "soft" }}
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 1
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app: "{{ template "elasticsearch.fullname" . }}"
+                component: "{{ .Values.elasticsearch.client.name }}"
+                role: "client"
+                heritage: "{{ .Release.Service }}"
+                release: "{{ .Release.Name }}"
+    {{- end }}
       initContainers:
       - name: "sysctl"
         image: "{{ .Values.elasticsearch.initImage.repository }}:{{ .Values.elasticsearch.initImage.tag }}"
-        imagePullPolicy: "IfNotPresent"
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
         command: ["/bin/sh", "-c", "sysctl -w vm.max_map_count=262144 && sed -i '/^vm.max_map_count /d' /etc/sysctl.conf && echo 'vm.max_map_count = 262144' >> /etc/sysctl.conf"]
         securityContext:
           privileged: true
+{{- if and .Values.security.enabled (eq .Values.security.provider "searchguard-tls") }}
+      - name: plugin-bundle
+        image: {{ .Values.elasticsearch.pluginImage.repository }}:{{ .Values.elasticsearch.pluginImage.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: plugin-bundle
+          mountPath: /usr/share/elasticsearch/plugin-bundles
+{{- end }}
       containers:
       - name: indices-cleaner
         image: {{ .Values.curator.image.repository }}:{{ .Values.curator.image.tag }}
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        readinessProbe:
+        livenessProbe:
         volumeMounts:
         - name: actionfile
           mountPath: /action.yml
           subPath: action.yml
-        - name: localtime
-          mountPath: "/etc/localtime"
-          readOnly: true
         - name: curator-config
           mountPath: /etc/curator.yml
           subPath: curator.yml
         - name: cron
-          mountPath: /etc/cron.d/curator-cron
-          subPath: curator-cron
+          mountPath: /etc/crontabs/root
+          subPath: root
+{{- if .Values.security.enabled }}
+        - name: certs
+          mountPath: "/curator/tls"
+          readOnly: true
+{{- end }}
       - name: es-client
         securityContext:
           privileged: false
@@ -86,53 +119,129 @@ spec:
               - IPC_LOCK
         image: {{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/bin/bash", "/scripts/entrypoint.sh"]
         resources:
           limits:
             memory: {{ .Values.elasticsearch.client.memoryLimit }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.elasticsearch.internalPort }}
+          initialDelaySeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.elasticsearch.internalPort }}
+          periodSeconds: 30
         env:
         - name: "ES_JAVA_OPTS"
           value: "-Xms{{ .Values.elasticsearch.client.heapSize }} -Xmx{{ .Values.elasticsearch.client.heapSize }}"
+        - name: CFG_BASEDIR
+          value: /usr/share/elasticsearch
+{{- if .Values.security.enabled }}
+        - name: CA_TRUSTSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "elasticsearch.fullname" . }}-pki-secret
+              key: caTruststorePassword
+        - name: APP_KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "elasticsearch.fullname" . }}-pki-secret
+              key: appKeystorePassword
+{{- end }}
         ports:
         - containerPort: {{ .Values.elasticsearch.client.restPort }}
-          name: http
+          name: rest
           protocol: TCP
         - containerPort: {{ .Values.elasticsearch.internalPort }}
-          name: transport
+          name: internal
           protocol: TCP
         volumeMounts:
         - name: data
           mountPath: /usr/share/elasticsearch/data
-        - name: es-config
-          mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
-          subPath: elasticsearch.yml
+        - name: config-x86
+          mountPath: /usr/share/elasticsearch-config-x86
+        - name: config-ppc
+          mountPath: /usr/share/elasticsearch-config-ppc
+        - name: entrypoint
+          mountPath: /scripts
+{{- if .Values.security.enabled }}
+  {{- if eq .Values.security.provider "xpack" }}
+        - name: es-xpack
+          mountPath: /usr/share/elasticsearch/config/x-pack
+  {{- end }}
+        - name: certs
+          mountPath: "/usr/share/elasticsearch/config/tls"
+          readOnly: true
+{{- end }}
+        - name: plugin-bundle
+          mountPath: /usr/share/elasticsearch/plugin-bundles
       volumes:
-          - emptyDir:
-              medium: ""
-            name: data
-          - name: es-config
-            configMap:
-              name: {{ template "elasticsearch.fullname" . }}-config
-              items:
-                - key: client.yml
-                  path: elasticsearch.yml
-          - name: "actionfile"
-            configMap:
-              name: {{ template "elasticsearch.fullname" . }}-curator-config
-              items:
-                - key: action.yml
-                  path: action.yml
-          - name: "localtime"
-            hostPath:
-              path: /etc/localtime
-          - name: "curator-config"
-            configMap:
-              name: {{ template "elasticsearch.fullname" . }}-curator-config
-              items:
-                - key: config.yml
-                  path: curator.yml
-          - name: "cron"
-            configMap:
-              name: {{ template "elasticsearch.fullname" . }}-curator-config
-              items:
-                - key: cron
-                  path: curator-cron
+        - emptyDir:
+            medium: ""
+          name: data
+        - emptyDir:
+            medium: ""
+          name: plugin-bundle
+        - name: config-x86
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-config
+            items:
+              - key: client.yml-x86
+                path: elasticsearch.yml
+              - key: log4j2.properties
+                path: log4j2.properties
+        - name: config-ppc
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-config
+            items:
+              - key: client.yml-ppc
+                path: elasticsearch.yml
+              - key: log4j2.properties
+                path: log4j2.properties
+{{- if and .Values.security.enabled (eq .Values.security.provider "xpack") }}
+        - name: es-xpack
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-config
+            items:
+              - key: roles.yml
+                path: roles.yml
+              - key: role_mapping.yml
+                path: role_mapping.yml
+{{- end }}
+        - name: entrypoint
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-entrypoint
+            defaultMode: 365
+            items:
+              - key: entrypoint.sh
+                path: entrypoint.sh
+              - key: install-plugin.sh
+                path: install-plugin.sh
+              - key: map-config.sh
+                path: map-config.sh
+        - name: "actionfile"
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-curator-config
+            items:
+              - key: action.yml
+                path: action.yml
+        - name: "localtime"
+          hostPath:
+            path: /etc/localtime
+        - name: "curator-config"
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-curator-config
+            items:
+              - key: config.yml
+                path: curator.yml
+        - name: "cron"
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-curator-config
+            items:
+              - key: cron
+                path: root
+{{- if .Values.security.enabled }}
+        - name: certs
+          secret:
+            secretName: {{ template "fullname" . }}-certs
+{{- end }}

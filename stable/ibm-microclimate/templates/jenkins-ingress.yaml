@@ -1,0 +1,88 @@
+{{- $cn := .Values.jenkins.Master.HostName | default "jenkins.127.0.0.1.nip.io" -}}
+{{- $cert := genSelfSignedCert $cn nil (list $cn) 3650 }}
+
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    app: {{ include "sch.names.fullName" (list .) }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ .Release.Name }}-tls-secret
+type: Opaque
+data:
+  tls.crt: {{ b64enc $cert.Cert }}
+  tls.key: {{ b64enc $cert.Key }}
+
+
+---
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: {{ include "sch.names.fullName" (list .) }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ include "sch.names.fullName" (list .) }}-fixup-jenkins-job
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    spec:
+      containers:
+      - name: fixup-jenkins-ingress
+        image: ibmcom/k8s-kubectl:v1.8.3
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        command: [ "/usr/local/bin/replace_jenkins_ingress.sh" ]
+        volumeMounts:
+        - name: script
+          mountPath: /usr/local/bin/replace_jenkins_ingress.sh
+          subPath: replace_jenkins_ingress.sh
+      volumes:
+      - name: script
+        configMap:
+          name: {{ include "sch.names.fullName" (list .) }}-fixup-jenkins-ingress
+          items:
+          - key: replace_jenkins_ingress.sh
+            path: replace_jenkins_ingress.sh
+            mode: 0777
+      restartPolicy: Never
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ include "sch.names.fullName" (list .) }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ include "sch.names.fullName" (list .) }}-fixup-jenkins-ingress
+  namespace: {{ .Release.Namespace }}
+data:
+  replace_jenkins_ingress.sh: |
+    #!/bin/sh
+    cat <<EOF | kubectl replace -f -
+    apiVersion: extensions/v1beta1
+    kind: Ingress
+    metadata:
+      name: {{ .Release.Name }}-jenkins
+    spec:
+      rules:
+      - host: {{ .Values.jenkins.Master.HostName }}
+        http:
+          paths:
+          - backend:
+              serviceName: {{ .Release.Name }}-jenkins
+              servicePort: 8080
+      tls:
+      - hosts:
+        - {{ .Values.jenkins.Master.HostName }}
+        secretName: {{ .Release.Name }}-tls-secret
+    EOF

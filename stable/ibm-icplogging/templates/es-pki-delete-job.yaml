@@ -1,0 +1,35 @@
+{{- if .Values.security.enabled }}
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ template "elasticsearch.fullname" . }}-pki-delete"
+  labels:
+    app: "{{ template "elasticsearch.fullname" . }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    component: "secret-delete"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "-9"
+spec:
+  template:
+    metadata:
+      labels:
+        app: "{{ template "elasticsearch.fullname" . }}"
+        component: "secret-delete"
+    spec:
+      containers:
+      - image: "{{ .Values.elasticsearch.pkiInitImage.repository }}:{{ .Values.elasticsearch.pkiInitImage.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: kubectl
+        command: ['/bin/sh']
+        args: ['-c', 'kubectl delete secret {{ template "fullname" . }}-certs --ignore-not-found=true']
+      restartPolicy: Never
+{{- end }}

@@ -1,5 +1,26 @@
+{{- if .Values.kibana.install }}
 On first launch, Kibana will take several minutes to complete an optimization phase. During that time you will likely have connection errors.
 
-Once it has finished starting, Kibana can be accessed via the following URL, where <proxy_ip> refers to your IBM Cloud Private proxy server:
+Once it has finished initializing, Kibana can be accessed via the following URL, where <proxy_ip> refers to your IBM Cloud Private proxy server:
 
-    http://<proxy_ip>:{{ .Values.kibana.external }}/app/kibana
+  {{- if eq .Values.mode "managed" }}
+      https://<proxy_ip>:8443/kibana/
+  {{ else }}
+    {{- if .Values.security.enabled }}
+      https://<proxy_ip>:{{ .Values.kibana.external }}/app/kibana
+    {{- else }}
+      http://<proxy_ip>:{{ .Values.kibana.external }}/app/kibana
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+Notes, if any:
+{{- if and (.Values.kibana.install) (eq .Values.mode "managed") (ne .Release.Namespace "kube-system") }}
+* You deployed the helm chart in managed mode, but not to the kube-system namespace. The service will not verify ICP user authentication before accessing Kibana.
+{{- end }}
+{{- if ne .Values.kibana.install true }}
+* You have opted to deploy log collection with Elasticsearch, but not Kibana. You may deploy Kibana later using the ibm-icplogging-kibana helm chart.
+{{- end }}
+{{- if .Values.security.enabled }}
+* You have enabled end-to-end TLS for the Elasticsearch stack. This is only supported on x86 nodes. Please see the chart's release notes for more information.
+{{- end }}

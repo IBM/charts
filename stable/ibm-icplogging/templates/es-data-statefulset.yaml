@@ -1,67 +1,85 @@
-apiVersion: apps/v1beta1
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   labels:
-    app: {{ template "elasticsearch.fullname" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: "{{ template "elasticsearch.fullname" . }}"
     component: "{{ .Values.elasticsearch.data.name }}"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
+    release: "{{ .Release.Name }}"
+    role: "data"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
   name: {{ template "data.fullname" . }}
 spec:
-  serviceName: {{ .Values.elasticsearch.name }}-data
-  replicas: {{ .Values.elasticsearch.data.replicas }}
   selector:
     matchLabels:
-      app: {{ template "elasticsearch.fullname" . }}
+      app: "{{ template "elasticsearch.fullname" . }}"
       component: "{{ .Values.elasticsearch.data.name }}"
-      role: data
+      release: "{{ .Release.Name }}"
+      role: "data"
+      heritage: "{{ .Release.Service }}"
   updateStrategy:
     type: RollingUpdate
   revisionHistoryLimit: 3
+  podManagementPolicy: Parallel
+  serviceName: {{ .Values.elasticsearch.name }}-data
+  replicas: {{ .Values.elasticsearch.data.replicas }}
   template:
     metadata:
       labels:
-        app: {{ template "elasticsearch.fullname" . }}
+        app: "{{ template "elasticsearch.fullname" . }}"
         component: "{{ .Values.elasticsearch.data.name }}"
-        role: data
+        role: "data"
+        release: "{{ .Release.Name }}"
+        chart: "{{ .Chart.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: Elasticsearch
+        productVersion: 5.5.1
+        productID: none
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: beta.kubernetes.io/arch
-                operator: In
-                values:
-                - amd64
-      {{- if eq .Values.elasticsearch.data.antiAffinity "hard" }}
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - topologyKey: "kubernetes.io/hostname"
-              labelSelector:
-                matchLabels:
-                  app: "{{ template "elasticsearch.fullname" . }}"
-                  release: "{{ .Release.Name }}"
-                  component: "{{ .Values.elasticsearch.data.name }}"
-      {{- else if eq .Values.elasticsearch.data.antiAffinity "soft" }}
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 1
-            podAffinityTerm:
-              topologyKey: kubernetes.io/hostname
-              labelSelector:
-                matchLabels:
-                  app: "{{ template "elasticsearch.fullname" . }}"
-                  release: "{{ .Release.Name }}"
-                  component: "{{ .Values.elasticsearch.data.name }}"
+      {{- if eq .Values.mode "managed" }}
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
       {{- end }}
+{{ include "elasticsearch.nodeaffinity" . | indent 6 }}
+    {{- if eq .Values.elasticsearch.data.antiAffinity "hard" }}
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+                app: "{{ template "elasticsearch.fullname" . }}"
+                component: "{{ .Values.elasticsearch.data.name }}"
+                role: "data"
+                release: "{{ .Release.Name }}"
+                heritage: "{{ .Release.Service }}"
+    {{- else if eq .Values.elasticsearch.data.antiAffinity "soft" }}
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 1
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app: "{{ template "elasticsearch.fullname" . }}"
+                component: "{{ .Values.elasticsearch.data.name }}"
+                role: "data"
+                release: "{{ .Release.Name }}"
+                heritage: "{{ .Release.Service }}"
+    {{- end }}
       securityContext:
         fsGroup: 1000
       initContainers:
       - name: "chmod"
         image: "{{ .Values.elasticsearch.initImage.repository }}:{{ .Values.elasticsearch.initImage.tag }}"
-        imagePullPolicy: "IfNotPresent"
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
         command: ["chmod", "777", "/data-dir"]
         securityContext:
           privileged: true
@@ -70,10 +88,18 @@ spec:
           mountPath: /data-dir
       - name: "sysctl"
         image: "{{ .Values.elasticsearch.initImage.repository }}:{{ .Values.elasticsearch.initImage.tag }}"
-        imagePullPolicy: "IfNotPresent"
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
         command: ["/bin/sh", "-c", "sysctl -w vm.max_map_count=262144 && sed -i '/^vm.max_map_count /d' /etc/sysctl.conf && echo 'vm.max_map_count = 262144' >> /etc/sysctl.conf"]
         securityContext:
           privileged: true
+      {{- if and .Values.security.enabled (eq .Values.security.provider "searchguard-tls") }}
+      - name: plugin-bundle
+        image: {{ .Values.elasticsearch.pluginImage.repository }}:{{ .Values.elasticsearch.pluginImage.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: plugin-bundle
+          mountPath: /usr/share/elasticsearch/plugin-bundles
+      {{- end }}
       containers:
       - name: es-data
         securityContext:
@@ -83,12 +109,35 @@ spec:
               - IPC_LOCK
         image: {{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/bin/bash", "/scripts/entrypoint.sh"]
         resources:
           limits:
             memory: {{ .Values.elasticsearch.data.memoryLimit }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.elasticsearch.internalPort }}
+          initialDelaySeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.elasticsearch.internalPort }}
+          periodSeconds: 30
         env:
         - name: "ES_JAVA_OPTS"
           value: "-Xms{{ .Values.elasticsearch.data.heapSize }} -Xmx{{ .Values.elasticsearch.data.heapSize }}"
+        - name: CFG_BASEDIR
+          value: /usr/share/elasticsearch
+        {{- if .Values.security.enabled }}
+        - name: CA_TRUSTSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "elasticsearch.fullname" . }}-pki-secret
+              key: caTruststorePassword
+        - name: APP_KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "elasticsearch.fullname" . }}-pki-secret
+              key: appKeystorePassword
+        {{- end }}
         ports:
         - containerPort: {{ .Values.elasticsearch.internalPort }}
           name: transport
@@ -96,37 +145,99 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /usr/share/elasticsearch/data
-        - name: config
-          mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+        - name: config-x86
+          mountPath: /usr/share/elasticsearch-config-x86/elasticsearch.yml
           subPath: elasticsearch.yml
+        - name: config-ppc
+          mountPath: /usr/share/elasticsearch-config-ppc/elasticsearch.yml
+          subPath: elasticsearch.yml
+        - name: entrypoint
+          mountPath: /scripts
+      {{- if .Values.security.enabled }}
+        {{- if eq .Values.security.provider "xpack" }}
+        - name: config-xpack
+          mountPath: /usr/share/elasticsearch/config/x-pack
+        {{- end }}
+        - name: certs
+          mountPath: "/usr/share/elasticsearch/config/tls"
+          readOnly: true
+      {{- end }}
+        - name: plugin-bundle
+          mountPath: /usr/share/elasticsearch/plugin-bundles
       volumes:
-        - name: config
+        - name: config-x86
           configMap:
             name: {{ template "elasticsearch.fullname" . }}-config
             items:
-              - key: data.yml
+              - key: data.yml-x86
                 path: elasticsearch.yml
+        - name: config-ppc
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-config
+            items:
+              - key: data.yml-ppc
+                path: elasticsearch.yml
+        {{- if and .Values.security.enabled (eq .Values.security.provider "xpack") }}
+        - name: config-xpack
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-config
+            items:
+              - key: roles.yml
+                path: roles.yml
+              - key: role_mapping.yml
+                path: role_mapping.yml
+        {{- end }}
+        - name: entrypoint
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-entrypoint
+            defaultMode: 365
+            items:
+              - key: entrypoint.sh
+                path: entrypoint.sh
+              - key: install-plugin.sh
+                path: install-plugin.sh
+              - key: map-config.sh
+                path: map-config.sh
+        {{- if .Values.security.enabled }}
+        - name: certs
+          secret:
+            secretName: {{ template "fullname" . }}-certs
+        {{- end }}
+        - name: plugin-bundle
+          emptyDir:
+            medium: ""
+        {{- if not .Values.elasticsearch.data.storage.persistent }}
+        - name: data
+          emptyDir:
+            medium: ""
+        {{- end }}
+
+{{- if .Values.elasticsearch.data.storage.persistent }}
   volumeClaimTemplates:
   - metadata:
       name: data
       labels:
         app: {{ template "elasticsearch.fullname" . }}
-        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        chart: "{{ .Chart.Name }}"
         component: "{{ .Values.elasticsearch.data.name }}"
         heritage: "{{ .Release.Service }}"
         release: "{{ .Release.Name }}"
     spec:
+      {{- if .Values.elasticsearch.data.storage.useDynamicProvisioning }}
+      storageClassName: {{ default nil .Values.elasticsearch.data.storage.storageClass | quote }}
+      {{- else }}
+      storageClassName: {{ default "" .Values.elasticsearch.data.storage.storageClass | quote }}
+      {{- end }}
       accessModes:
-    {{- range .Values.elasticsearch.data.storage.accessModes }}
+      {{- range .Values.elasticsearch.data.storage.accessModes }}
         - {{ . | quote }}
-    {{- end }}
+      {{- end }}
+      {{- if .Values.elasticsearch.data.storage.selector.label }}
+      selector:
+        matchExpressions:
+          - {key: {{ .Values.elasticsearch.data.storage.selector.label }}, operator: In, values: [{{ .Values.elasticsearch.data.storage.selector.value }}]}
+      {{- end }}
       resources:
         requests:
           storage: {{ .Values.elasticsearch.data.storage.size | quote }}
-    {{- if not (eq "null" .Values.elasticsearch.data.storage.storageClass) }}
-    {{- if (eq "-" .Values.elasticsearch.data.storage.storageClass) }}
-      storageClassName: ""
-    {{- else }}
-      storageClassName: "{{ .Values.elasticsearch.data.storage.storageClass }}"
-    {{- end }}
-    {{- end }}
+{{- end }}

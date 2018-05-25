@@ -1,13 +1,18 @@
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
   labels:
-    app: {{ template "filebeat.fullname" . }}
+    app: "{{ template "filebeat.fullname" . }}"
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     component: "{{ .Values.filebeat.name }}"
     heritage: "{{ .Release.Service }}"
     release: "{{ .Release.Name }}"
-  name: {{ template "filebeat.fullname" . }}-config
+  name: "{{ template "filebeat.fullname" . }}-config"
 data:
   filebeat.yml: |-
     filebeat.prospectors:
@@ -34,13 +39,16 @@ data:
         pod.ip: ${POD_IP}
       tags:
           - k8s-app
-
     filebeat.config.modules:
       # Set to true to enable config reloading
       reload.enabled: true
-
     output.logstash:
       hosts: {{ .Values.logstash.name }}:{{ .Values.logstash.port }}
       timeout: 15
-
+{{- if .Values.security.enabled }}
+      ssl.certificate_authorities: ["/usr/share/elasticsearch/config/tls/ca.crt"]
+      ssl.certificate: "/usr/share/elasticsearch/config/tls/filebeat.crt"
+      ssl.key: "/usr/share/elasticsearch/config/tls/filebeat.key"
+      ssl.key_passphrase: ${APP_KEYSTORE_PASSWORD}
+{{- end }}
     logging.level: info

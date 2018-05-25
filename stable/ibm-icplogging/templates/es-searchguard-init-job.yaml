@@ -1,0 +1,47 @@
+{{- if and .Values.security.enabled (eq .Values.security.provider "searchguard-tls") }}
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ template "elasticsearch.fullname" . }}-tls-init"
+  labels:
+    app: "{{ template "elasticsearch.fullname" . }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    component: "searchguard-init"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+spec:
+  template:
+    metadata:
+      labels:
+        app: "{{ template "elasticsearch.fullname" . }}"
+        component: "searchguard-init"
+    spec:
+      restartPolicy: "OnFailure"
+      containers:
+      - image: "{{ .Values.elasticsearch.pluginInitImage.repository }}:{{ .Values.elasticsearch.pluginInitImage.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: searchguard-init
+        volumeMounts:
+        - name: "searchguard-config"
+          mountPath: "/usr/share/elasticsearch/config/searchguard"
+        - name: certs
+          mountPath: "/usr/share/elasticsearch/config/tls"
+          readOnly: true
+        env:
+        - name: APP_KEYSTORE_PASSWORD
+          value: "{{ .Values.security.app.keystore.password | b64enc }}"
+        - name: CA_TRUSTSTORE_PASSWORD
+          value: "{{ .Values.security.ca.truststore.password | b64enc }}"
+      volumes:
+        - name: "searchguard-config"
+          configMap:
+            name: "{{ template "elasticsearch.fullname" . }}-searchguard-config"
+        - name: certs
+          secret:
+            secretName: "{{ template "fullname" . }}-certs"
+{{- end }}

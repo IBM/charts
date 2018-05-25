@@ -1,24 +1,40 @@
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "logstash.fullname" . }}-config
+  name: "{{ template "logstash.fullname" . }}-config"
   labels:
-    app: {{ template "logstash.fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: "{{ template "elasticsearch.fullname" . }}"
     component: "{{ .Values.logstash.name }}"
     release: "{{ .Release.Name }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     heritage: "{{ .Release.Service }}"
 data:
-  logstash.yml: |-
-    config.reload.automatic: true
-    http.host: "0.0.0.0"
-    path.config: /usr/share/logstash/pipeline
-    xpack.monitoring.enabled: {{ .Values.xpack.monitoring }}
-    xpack.monitoring.elasticsearch.url: "{{ .Values.elasticsearch.name }}:{{ .Values.elasticsearch.client.restPort }}"
+  logstash.yml-x86: |-
+    # x86-only config. Must include refs to X-Pack.
+{{ include "logstash.config" . | indent 4 }}
+{{ include "logstash.xpack" . | indent 4 }}
+    # end
+  logstash.yml-ppc: |-
+    # ppc64le-only config. Must not include refs to X-Pack.
+{{ include "logstash.config" . | indent 4 }}
+    # end
   k8s.conf: |-
     input {
       beats {
         port => {{ .Values.logstash.port }}
+{{- if .Values.security.enabled }}
+        ssl => true
+        ssl_certificate_authorities => ["/usr/share/elasticsearch/config/tls/ca.crt"]
+        ssl_certificate => "/usr/share/elasticsearch/config/tls/logstash.crt"
+        ssl_key => "/usr/share/elasticsearch/config/tls/logstash.key"
+        ssl_key_passphrase => "${APP_KEYSTORE_PASSWORD}"
+        ssl_verify_mode => "force_peer"
+{{- end }}
       }
     }
 
@@ -60,11 +76,31 @@ data:
       }
     }
 
+    filter {
+      # Drop empty lines
+      if [log] =~ /^\s*$/ {
+        drop { }
+      }
+      # Attempt to parse JSON, but ignore failures and pass entries on as-is
+      json {
+        source => "log"
+        skip_on_invalid_json => true
+      }
+    }
+
     output {
       elasticsearch {
         hosts => "{{ .Values.elasticsearch.name }}:{{ .Values.elasticsearch.client.restPort }}"
-        index => "%{[@metadata][beat]}-%{+YYYY.MM.dd}"
+        index => "logstash-%{+YYYY.MM.dd}"
         document_type => "%{[@metadata][type]}"
+{{- if .Values.security.enabled }}
+        ssl => true
+        ssl_certificate_verification => true
+        keystore => "/usr/share/elasticsearch/config/tls/logstash-elasticsearch-keystore.jks"
+        keystore_password => "${APP_KEYSTORE_PASSWORD}"
+        truststore => "/usr/share/elasticsearch/config/tls/truststore.jks"
+        truststore_password => "${CA_TRUSTSTORE_PASSWORD}"
+{{- end }}
       }
     }
 {{ if .Values.logstash.probe.enabled }}

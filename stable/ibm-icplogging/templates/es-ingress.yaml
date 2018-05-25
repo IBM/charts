@@ -1,0 +1,43 @@
+{{- if eq .Values.mode "managed" -}}
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: "{{ template "elasticsearch.fullname" . }}-ingress"
+  annotations:
+    kubernetes.io/ingress.class: "ibm-icp-management"
+    icp.management.ibm.com/authz-type: "rbac"
+    icp.management.ibm.com/location-modifier: "~"
+    icp.management.ibm.com/configuration-snippet: |
+      if ($request_uri ~* "/_([0-9A-Za-z]*)\?_timestamp=[0-9]*(.*)") {
+                proxy_pass http://$proxy_upstream_name/_$1?$2;
+            }
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /_cat
+        backend:
+          serviceName: {{ .Values.elasticsearch.name }}
+          servicePort: {{ .Values.elasticsearch.client.restPort }}
+      - path: /elasticsearch*
+        backend:
+          serviceName: {{ .Values.elasticsearch.name }}
+          servicePort: {{ .Values.elasticsearch.client.restPort }}
+      - path: /logstash*
+        backend:
+          serviceName: {{ .Values.elasticsearch.name }}
+          servicePort: {{ .Values.elasticsearch.client.restPort }}
+      - path: /filebeat*
+        backend:
+          serviceName: {{ .Values.elasticsearch.name }}
+          servicePort: {{ .Values.elasticsearch.client.restPort }}
+      - path: /heapster*
+        backend:
+          serviceName: {{ .Values.elasticsearch.name }}
+          servicePort: {{ .Values.elasticsearch.client.restPort }}
+{{- end -}}

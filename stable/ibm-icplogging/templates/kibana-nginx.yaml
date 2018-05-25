@@ -1,0 +1,105 @@
+{{- if and (eq .Values.mode "managed") .Values.kibana.install -}}
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: "{{ template "elasticsearch.fullname" . }}"
+    component: "{{ .Values.kibana.name }}"
+    release: "{{ .Release.Name }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+  name: "{{ template "kibana.fullname" . }}-nginx-config"
+data:
+  nginx.conf: |-
+    error_log stderr debug;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include mime.types;
+        default_type application/octet-stream;
+        sendfile on;
+        keepalive_timeout 65;
+
+        upstream kibana {
+            server 127.0.0.1:5602;
+        }
+
+        proxy_cache_path /tmp/nginx-mesos-cache levels=1:2 keys_zone=mesos:1m inactive=10m;
+
+        lua_package_path '$prefix/conf/?.lua;;';
+        lua_shared_dict mesos_state_cache 100m;
+        lua_shared_dict shmlocks 1m;
+
+      {{- if eq .Release.Namespace "kube-system" }}
+        # Loading the auth module in the global Lua VM in the master process is a
+        # requirement, so that code is executed under the user that spawns the
+        # master process instead of 'nobody' (which workers operate under).
+        init_by_lua '
+            common = require "common"
+            local use_auth = os.getenv("ADMINROUTER_ACTIVATE_AUTH_MODULE")
+            if use_auth ~= "true" then
+                ngx.log(
+                    ngx.NOTICE,
+                    "ADMINROUTER_ACTIVATE_AUTH_MODULE not `true`. " ..
+                    "Use dummy module."
+                    )
+                auth = {}
+                auth.validate_access_token_or_exit = function() return end
+            else
+                auth = require "oidc"
+            end
+        ';
+
+        resolver kube-dns;
+      {{- end }}
+
+        server {
+      {{- if .Values.security.enabled }}
+            listen 8443 ssl default_server;
+            ssl_certificate server.crt;
+            ssl_certificate_key server.key;
+            ssl_password_file passphrases;
+
+            ssl_protocols TLSv1.2;
+            # Ref: https://github.com/cloudflare/sslconfig/blob/master/conf
+            # Modulo ChaCha20 cipher.
+            ssl_ciphers EECDH+AES128:RSA+AES128:EECDH+AES256:RSA+AES256:!EECDH+3DES:!RSA+3DES:!MD5;
+            ssl_prefer_server_ciphers on;
+
+            server_name dcos.*;
+            root /opt/ibm/router/nginx/html;
+            location = /kibana {
+              return 302 /kibana/;
+            }
+            location /kibana/ {
+            {{- if eq .Release.Namespace "kube-system" }}
+              access_by_lua 'auth.validate_access_token_or_exit()';
+            {{- end }}
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header Host $http_host;
+              proxy_pass https://kibana/;
+            }
+      {{ else }}
+            listen 8080 default_server;
+            server_name dcos.*;
+            root /opt/ibm/router/nginx/html;
+            location / {
+            {{- if eq .Release.Namespace "kube-system" }}
+              access_by_lua 'auth.validate_access_token_or_exit()';
+            {{- end }}
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header Host $http_host;
+              proxy_pass http://kibana/;
+            }
+      {{- end }}
+        }
+    }
+{{- end }}
