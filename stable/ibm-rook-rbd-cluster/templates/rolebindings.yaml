@@ -1,0 +1,56 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+###############################################################################
+
+---
+# Allow the default serviceAccount to use the priviliged PSP
+{{- include "sch.config.init" (list . "ibm-rook-rbd-cluster.sch.chart.config.values") }}
+{{- $defaultRoleBindingName :=  .sch.chart.components.defaultrolebinding.name }}
+{{- $cephosdRoleBindingName :=  .sch.chart.components.cephosdrolebinding.name }}
+
+{{- $defaultRoleName :=  .sch.chart.components.defaultrole.name }}
+{{- $cephosdRoleName :=  .sch.chart.components.cephosdrole.name }}
+
+{{- $defaultSaName :=  .sch.chart.components.defaultsa.name }}
+{{- $cephosdSaName :=  .sch.chart.components.cephosdsa.name }}
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $defaultRoleBindingName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $defaultRoleBindingName) | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $defaultRoleName }}
+subjects:
+- kind: ServiceAccount
+  name: {{ $defaultSaName }}
+  namespace: {{ .Release.Namespace }}
+
+---
+# Allow the rook-ceph-osd serviceAccount to use the privileged PSP
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $cephosdRoleBindingName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $cephosdRoleBindingName) | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $cephosdRoleName }}
+subjects:
+- kind: ServiceAccount
+  name: {{ $cephosdSaName }}
+  namespace: {{ .Release.Namespace }}
+
+---

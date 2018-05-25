@@ -1,0 +1,85 @@
+# This YAML file contains attacher & csi driver API objects that are necessary
+# to run external CSI attacher for nfs
+
+kind: StatefulSet
+apiVersion: apps/v1beta1
+metadata:
+  name: {{ .Release.Name }}-csi-attacher-nfsplugin
+  labels:
+      app: {{ template "fullname" . }}
+      chart: "{{ .Chart.Name }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+spec:
+  serviceName: "csi-attacher"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-csi-attacher-nfsplugin
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      serviceAccount: {{ .Release.Name }}-csi-attacher
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+        - name: csi-attacher
+          image: "{{ .Values.attacherImage.repository }}:{{ .Values.attacherImage.tag }}"
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          imagePullPolicy: "{{ .Values.attacherImage.pullPolicy }}"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+          readinessProbe:
+            exec:
+              command:
+              - ls
+              - /var/lib/csi/sockets/pluginproxy/csi.sock
+          livenessProbe:
+            exec:
+              command:
+              - ls
+              - /var/lib/csi/sockets/pluginproxy/csi.sock
+        - name: nfs
+          image: "{{ .Values.nfspluginImage.repository }}:{{ .Values.nfspluginImage.tag }}"
+          args :
+            - "--nodeid=$(NODE_ID)"
+            - "--endpoint=$(CSI_ENDPOINT)"
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_ENDPOINT
+              value: unix://plugin/csi.sock
+          imagePullPolicy: "{{ .Values.nfspluginImage.pullPolicy }}"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /plugin
+          readinessProbe:
+            exec:
+              command:
+              - ls
+              - /plugin/csi.sock
+          livenessProbe:
+            exec:
+              command:
+              - ls
+              - /plugin/csi.sock
+      volumes:
+        - name: socket-dir
+          emptyDir: {}

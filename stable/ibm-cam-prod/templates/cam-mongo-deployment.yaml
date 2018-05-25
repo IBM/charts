@@ -9,7 +9,7 @@
 ###############################################################################
 
 {{- if .Values.database.bundled  }}
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cam-mongo
@@ -22,6 +22,9 @@ metadata:
   namespace: {{ .Values.service.namespace }}
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      name: cam-mongo
   template:
     metadata:
       labels:
@@ -67,12 +70,43 @@ spec:
       - name: cam-mongo
         image: "{{ .Values.image.repository }}icam-mongo:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          value: 'root'
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cam-encryption-secret
+              key: password
+        - name: MONGODB_USERNAME
+          value: 'camuser'
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cam-encryption-secret
+              key: password
+        - name: MONGODB_DATABASE
+          value: 'cam'
         ports:
         - name: mongo
           containerPort: 27017
+        livenessProbe:
+          tcpSocket:
+            port: mongo
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        readinessProbe:
+          tcpSocket:
+            port: mongo
+          initialDelaySeconds: 5
+          periodSeconds: 20
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
           - name: "{{ .Values.camMongoPV.name }}"
             mountPath: /data/db
+        lifecycle:
+            postStart:
+                exec:
+                    command: ["bash", "-c", "sleep 20 && /createusers.sh 2>&1 >> /data/db/postStart.log"]
 {{- end }}

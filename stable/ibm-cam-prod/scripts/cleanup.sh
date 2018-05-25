@@ -6,20 +6,6 @@
 #US Government Users Restricted Rights - Use, duplication or
 #disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 #
-
-n="cam"
-if [[ $# -lt 2 ]]; then
-    echo "Usage: cleanup.sh <CAM IP> <namespace>"
-    echo ""
-    echo "       e.g., cleanup.sh 9.5.37.xx services"
-    echo ""
-    exit 1
-fi
-
-if [[ $# -eq 2 ]]; then
-  n=$2
-fi
-
 export tiller_version=$(docker images | grep tiller | head -1 | awk '{print $2}' | sed 's|v||g')
 export tiller_icp=$(echo $tiller_version | awk -F'[.]' '{print $3}' | awk -F'[-]' '{print $2}')
 
@@ -32,12 +18,12 @@ else
 fi
 
 echo "Waiting for Pods to terminate"
-kubectl -n $n get -l release=cam pod
-pods=$(kubectl -n $n get -l release=cam pods | grep -)
+kubectl -n services get -l release=cam pod
+pods=$(kubectl -n services get -l release=cam pods | grep -)
 while [ "${pods}" ]; do
         sleep 2
-        kubectl -n ${n} get -l release=cam pod
-        pods=$(kubectl -n ${n} get -l release=cam pods | grep -)
+        kubectl -n services get -l release=cam pod
+        pods=$(kubectl -n services get -l release=cam pods | grep -)
 done
 echo "All pods terminated"
 

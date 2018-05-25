@@ -1,0 +1,44 @@
+##############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+###############################################################################
+
+{{- include "sch.config.init" (list . "ibm-rook-rbd-cluster.sch.chart.config.values") }}
+{{- $prcJobName :=  .sch.chart.components.prcjob.name }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name:  {{ include "sch.names.fullCompName" (list . $prcJobName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $prcJobName) | indent 4 }}
+  annotations:
+    description: Rook Ceph cluster precheck
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": "hook-succeeded,hook-failed"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    metadata:
+      name: rook-cluster-precheck
+      labels:
+        name: rook-cluster-precheck
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: rook-operator-check
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["sh", "-c", "/usr/local/bin/kubectl get po --all-namespaces | grep rook-operator || exit 1"]
+        - name: rook-dup-release-check
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["sh", "-c", "/usr/local/bin/kubectl get cluster  2>&1 | grep -q \"No resources found\" || exit 1"]
+      containers:
+        - name: rook-cluster-precheck
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          command: ["sh", "-c", "echo Precheck done"] 

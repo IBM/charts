@@ -8,7 +8,7 @@
 #  IBM Corporation - initial API and implementation
 ###############################################################################
 
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cam-broker
@@ -82,13 +82,14 @@ spec:
           httpGet:
             path: /api/v2/health
             port: liveness-port
-          initialDelaySeconds: 15
-          periodSeconds: 15
+          initialDelaySeconds: 300
+          periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /api/v2/health
             port: liveness-port
           initialDelaySeconds: 5
+          periodSeconds: 20
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
@@ -99,10 +100,13 @@ spec:
         - configMapRef:
             name: common-config
         - configMapRef:
-            name: database-config
-        - configMapRef:
             name: redis-config
         env:
+        - name: DB_URL
+          valueFrom:
+            secretKeyRef:
+              name: cam-database-secret
+              key: dburl
         - name: CAM_TOKEN
           valueFrom:
             secretKeyRef:
@@ -118,6 +122,8 @@ spec:
             configMapKeyRef:
               name: oauth-client-map
               key: PROXY_IP
+        - name: SERVICE_DASHBOARD
+          value: https://$(ICP_PROXY_IP):30000/cam
         - name: ORPHEUS_IDENTITY_API_URL
           value: https://$(ICP_MASTER_IP):8443/idprovider
         - name: ORPHEUS_IDENTITY_URL

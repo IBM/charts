@@ -1,0 +1,104 @@
+# This YAML file contains driver-registrar & csi driver nodeplugin API objects
+# that are necessary to run CSI nodeplugin for nfs
+kind: DaemonSet
+apiVersion: apps/v1beta2
+metadata:
+  name: {{ .Release.Name }}-csi-nodeplugin-nfsplugin
+  labels:
+      app: {{ template "fullname" . }}
+      chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-csi-nodeplugin-nfsplugin
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-csi-nodeplugin-nfsplugin
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      serviceAccount: {{ .Release.Name }}-csi-nodeplugin
+      hostNetwork: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+        - name: driver-registrar
+          image: "{{ .Values.registerImage.repository }}:{{ .Values.registerImage.tag }}"
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS
+              value: /plugin/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          imagePullPolicy: "{{ .Values.registerImage.pullPolicy }}"
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /plugin
+          readinessProbe:
+            exec:
+              command:
+              - ls
+              - /plugin/csi.sock
+          livenessProbe:
+            exec:
+              command:
+              - ls
+              - /plugin/csi.sock
+        - name: nfs
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          image: "{{ .Values.nfspluginImage.repository }}:{{ .Values.nfspluginImage.tag }}"
+          args :
+            - "--nodeid=$(NODE_ID)"
+            - "--endpoint=$(CSI_ENDPOINT)"
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_ENDPOINT
+              value: unix://plugin/csi.sock
+          imagePullPolicy: "{{ .Values.nfspluginImage.pullPolicy }}"
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /plugin
+            - name: pods-mount-dir
+              mountPath: /var/lib/kubelet/pods
+              mountPropagation: "Bidirectional"
+          readinessProbe:
+            exec:
+              command:
+              - ls
+              - /plugin/csi.sock
+          livenessProbe:
+            exec:
+              command:
+              - ls
+              - /plugin/csi.sock
+      volumes:
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/csi-nfsplugin
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: Directory

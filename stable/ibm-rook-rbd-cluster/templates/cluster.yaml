@@ -1,0 +1,43 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+###############################################################################
+
+{{- include "sch.config.init" (list . "ibm-rook-rbd-cluster.sch.chart.config.values") }}
+{{- $clusterName :=  .sch.chart.components.cluster.name }}
+
+apiVersion: rook.io/v1alpha1
+kind: Cluster
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $clusterName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $clusterName) | indent 4 }}
+spec:
+  backend: ceph
+  # The path on the host where configuration files will be persisted.
+  dataDirHostPath: {{ .Values.cluster.dataDirHostPath }}
+  # toggle to use hostNetwork
+  hostNetwork: {{ .Values.cluster.hostNetwork }}
+  # set the number of monitoring pods to be started
+  monCount: {{ .Values.cluster.monCount }}
+  {{- if .Values.resources }}
+  resources:
+{{ toYaml .Values.resources | indent 4 }}
+  {{- end }}
+  storage:
+    useAllNodes: false
+    useAllDevices: false
+    deviceFilter:
+    metadataDevice:
+    location:
+    storeConfig:
+      storeType: bluestore
+      databaseSizeMB: 1024 # this value can be removed for environments with normal sized disks (100 GB or larger)
+      journalSizeMB: 1024  # this value can be removed for environments with normal sized disks (20 GB or larger)
+    nodes:
+{{ toYaml .Values.cluster.storageNodes | indent 6 }}
+
