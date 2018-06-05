@@ -108,7 +108,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | arch.s390x                                          | S390x worker node scheduler preference in a hybrid cluster   | 2 - No preference                                       |
 | ingress.enabled                                     | enable ingress to reach the service                          | true                                                    |
 | couchdb.image.repository                            | couchdb image repository                                     | ibmcom/transformation-advisor-db                        |
-| couchdb.image.tag                                   | couchdb image tag                                            | 1.5.0                                                   |
+| couchdb.image.tag                                   | couchdb image tag                                            | 1.5.1                                                   |
 | couchdb.image.pullPolicy                            | couchdb image pull policy                                    | IfNotPresent                                            |
 | couchdb.resources.requests.memory                   | requests memory                                              | 2Gi                                                     |
 | couchdb.resources.requests.cpu                      | requests cpu                                                 | 1000m                                                   |
@@ -121,7 +121,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | couchdb.persistence.existingClaim                   | existing pv claim                                            | ""                                                      |
 | couchdb.persistence.storageClassName                | couchdb storage class name                                   | ""                                                      |
 | transadv.image.repository                           | transadv server image                                        | ibmcom/transformation-advisor-server                    |
-| transadv.image.tag                                  | transadv server image tag                                    | 1.5.0                                                   |
+| transadv.image.tag                                  | transadv server image tag                                    | 1.5.1                                                   |
 | transadv.image.pullPolicy                           | image pull policy                                            | IfNotPresent                                            |
 | transadv.resources.requests.memory                  | requests memory                                              | 2Gi                                                     |
 | transadv.resources.requests.cpu                     | requests cpu                                                 | 1000m                                                   |
@@ -129,7 +129,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadv.resources.limits.cpu                       | limits cpu                                                   | 16000m                                                  |
 | transadv.service.nodePort                           | transadv sevice node port                                    | 30111                                                   |
 | transadvui.image.repository                         | transadv ui image                                            | ibmcom/transformation-advisor-ui                        |
-| transadvui.image.tag                                | transadv ui image tag                                        | 1.5.0                                                   |
+| transadvui.image.tag                                | transadv ui image tag                                        | 1.5.1                                                   |
 | transadvui.image.pullPolicy                         | image pull policy                                            | IfNotPresent                                            |
 | transadvui.resources.requests.memory                | requests memory                                              | 2Gi                                                     |
 | transadvui.resources.requests.cpu                   | requests cpu                                                 | 1000m                                                   |
