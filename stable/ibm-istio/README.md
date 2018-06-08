@@ -225,6 +225,7 @@ The following table lists the configurable parameters of the ibm-istio chart and
 Automatic sidecar injection requires Kubernetes 1.9 or later. Verify that the `kube-apiserver` process has the `admission-control` flag set with the `MutatingAdmissionWebhook` and `ValidatingAdmissionWebhook` admission controllers added and listed in the correct order and the `admissionregistration` API is enabled:
 ```
 $ kubectl api-versions | grep admissionregistration
+admissionregistration.k8s.io/v1alpha1
 admissionregistration.k8s.io/v1beta1
 ```
 
