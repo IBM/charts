@@ -1,0 +1,78 @@
+# © Copyright IBM Corporation 2017, 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      name: {{ template "fullname" . }}
+      labels:
+        app: {{ template "fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}    
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      containers:
+      - name: {{ template "fullname" . }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.service.serverlistenerPort }}
+          name: serverlistener
+        - containerPort: {{ .Values.service.webuiPort }}
+          name: webui
+        env:
+        -
+          name : LICENSE
+          value : {{ .Values.license }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 7600
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 7600
+          initialDelaySeconds: 15
+          timeoutSeconds: 1
+        resources:
+          limits:
+{{ toYaml .Values.resources.limits | indent 14 }}
+          requests:
+{{ toYaml .Values.resources.requests | indent 14 }}
+
