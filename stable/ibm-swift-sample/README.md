@@ -11,7 +11,7 @@ It includes a [health](https://github.com/IBM-Swift/Health) check endpoint acces
 
 ## Prerequisites
 ### Resources Required
-The Swift sample app will run successfully with the default [configuration](#Configuration) values for memory and cpu. These may need to be increased if you use this sample to build your own application.
+The Swift sample app will run successfully with the default [configuration](#configuration) values for memory and cpu. These may need to be increased if you use this sample to build your own application.
 
 ## Installing the chart
 The sample can be installed in the following ways:
@@ -73,3 +73,7 @@ The following table lists the configurable parameters of the ibm-swift-sample ch
 | `service.servicePort`      | TCP Port for this service                       | 8080                                                       |
 | `resources.limits.memory`  | Memory resource limits                          | `128m`                                                     |
 | `resources.limits.cpu`     | CPU resource limits                             | `100m`                                                     |
+
+## Limitations
+
+This sample is for demonstrative purposes only and is not recommended for production use. As such, you will only be able to deploy one instance of the sample per namespace.
