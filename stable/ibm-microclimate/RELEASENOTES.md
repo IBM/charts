@@ -1,25 +1,17 @@
 # Breaking Changes
-* **IMPORTANT** Upgrading to chart version 1.2.0 from previous versions is not supported. See [Prerequisites](#migrating-projects-to-microclimate-v1.2.0) for steps on migrating your projects to a new installation
-* An additional secret must be created to use the Helm tiller in kube-system (see Prerequisites).
+* **IMPORTANT** Upgrading to chart version 1.2.1 is only supported from version v1.2.0. If you are upgrading from previous versions, see [Prerequisites](#migrating-projects-to-microclimate-v1.2.1-from-versions-v1.1.x) for steps on migrating your projects to a new installation
 
-
-# What’s new in Chart Version 1.2.0
-* Security update for GDPR compliance.
-* Microclimate now uses HTTPS over an ingress
-* Theia update to version 0.3.10, which includes a more recent version of the Java language server.
-* Pick up and build changes on package.json and Dockerfile for Node.js applications.
-* Support of using the Helm Tiller in kube-system - Microclimate no longer deploys its own tiller
-* More detailed log on build and run container failures.
-* Performance improvements.
+# What’s new in Chart Version 1.2.1
+* IBM Cloud Private 2.1.0.2 fixes
 
 # Fixes
-* Theia pulled in a number of OS level security fixes.
+* Hostname field now visible in ICP 2.1.0.2 catalog
+* Additional steps added to the README for ICP 2.1.0.2
 
 # Prerequisites
-1. IBM Cloud Private version 2.1.0.3.
-2. An additional secret must be created to use the tiller in kube-system. This can be by created by following the "Create secret to use Tiller over TLS" step in the README.
+1. If upgrading from a version before v1.2.0, additional steps must be carried out to migrate projects to your new installation. See below
 
-## Migrating projects to Microclimate v1.2.0
+## Migrating projects to Microclimate v1.2.1 from versions v1.1.x
 
 To carry existing projects over to Microclimate v1.2.0, your existing Microclimate PersistentVolumes (PVs) will need to be reused in the new Microclimate installation by binding new PersistentVolumeClaims (PVCs) that you will need to create manually. This can be achieved by following the steps below (note: this requires you to have `kubectl` configured to your cluster):
 
@@ -143,7 +135,8 @@ For detailed upgrade instructions go to https://microclimate-dev2ops.github.io/i
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
-| 1.2.0 | Apr 27, 2018 | 1.10.0 | 1805 | Upgrading from previous versions requires additional steps, An additional secret must be created to use the Helm tiller in kube-system |  |
-| 1.1.1 | Apr 27, 2018 | 1.9.1 | 1804 | None |  |
+| 1.2.1 | June 11, 2018 | 1.10.0, 1.9.1 | 1805 | Upgrading from versions v1.1.x requires additional steps for project migration | ICP 2.1.0.2 fixes |
+| 1.2.0 | May 25, 2018 | 1.10.0 | 1805 | Upgrading from versions v1.1.x requires additional steps for project migration, An additional secret must be created to use the Helm tiller in kube-system |  |
+| 1.1.1 | May 1, 2018 | 1.9.1 | 1804 | None |  |
 | 1.1.0 | Apr 27, 2018 | 1.9.1 |  | The docker-registry secret required by microclimate has been changed from microclimate-icp-secret to microclimate-registry-secret |  UI updates, Users can authenticate with Jenkins using their IBM Cloud Private credentials |
 | 1.0.0 | Mar 30, 2018|  1.9.1 |  | None  | New product release. See https://microclimate-dev2ops.github.io/ |

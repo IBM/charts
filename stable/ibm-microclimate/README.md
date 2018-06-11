@@ -18,7 +18,8 @@ This chart will do the following:
 - Create Persistent Volume Claims if they aren't provided, see [configuration](#configuration) for more details
 
 ## Prerequisites
-
+- IBM Cloud Private version 2.1.0.3. (**NOTE** ICP 2.1.0.2 installation may work but is not tested)
+- For **IBM Cloud Private 2.1.0.2**, an additional installation step is required. See the [installation steps](#installing-the-chart) below
 - Ensure [socat](http://www.dest-unreach.org/socat/doc/README) is available on all worker nodes in your cluster. Microclimate uses Helm internally and both the Helm Tiller and client require socat for port forwarding.
 
 
@@ -46,6 +47,7 @@ See [configuration](#configuration) for details on how to configure these values
 3. Create a secret so Microclimate can securely use Helm.
 4. Set the Microclimate and Jenkins hostname values
 5. Ensure Microclimate is configured correctly to use persistent storage, see the [configuration](#configuration) section below for more details.
+6. (ICP 2.1.0.2 only) Set the Jenkins template version and unset the Helm secret value
 
 #### Create Docker registry secret
 
@@ -79,10 +81,11 @@ Note: If there are other secrets that need to be associated to this service acco
 
 
 #### Create a secret to use Tiller over TLS
+**NOTE**: This step can be skipped for ICP 2.1.0.2 installation
 
 Microclimate's pipeline deploys applications using the Tiller at `kube-system`. Secure communication with this Tiller is required and must be configured by creating a Kubernetes secret that contains the required certificate files as detailed below.
 
-To the create the secret, use the following command replacing the values with where you saved your files:
+To create the secret, use the following command replacing the values with where you saved your files:
 
 ```
 kubectl create secret generic microclimate-helm-secret --from-file=cert.pem=.helm/cert.pem --from-file=ca.pem=.helm/ca.pem --from-file=key.pem=.helm/key.pem
@@ -104,6 +107,11 @@ The IP address of your cluster's proxy node can be found by using the following 
 `kubectl get nodes -l proxy=true`
 
 NOTE: Kubernetes allows multiple Ingresses to be created with the same hostname and only one of the ingresses will be accessible via that hostname. When installing multiple instances of Microclimate, different hostname values must be used for each instance to ensure each is accessible.
+
+#### Unset the Helm secret value and set the Jenkins template version
+**NOTE**: This is only required when installing into ICP 2.1.0.2 - do not do this for other versions of ICP
+
+The default value for the `global.helm.tlsSecretName` will not work on 2.1.0.2 and so the chart must be installed with this value being empty. In addition, the version of the Jenkins template must be changed to an older version; set the `jenkins.Template.Version` value to `"18.03"`.
 
 #### Installing from the command line
 
