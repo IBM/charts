@@ -29,14 +29,11 @@ IT infrastructures. More information can be seen here: [IBM Marketplace - IT Ope
 
 - Scope-based Event Grouping automation is installed and enabled, see installation instructions at [IBM Knowledge Center - Installing scope-based event grouping](https://www.ibm.com/support/knowledgecenter/en/SSSHTQ_8.1.0/com.ibm.netcool_OMNIbus.doc_8.1.0/omnibus/wip/install/task/omn_con_ext_installingscopebasedegrp.html)
 
-- Kubernetes 1.8.3.
-
+- Kubernetes 1.9.
+- Tiller 2.7.2
 - Logstash 5.5.1.
-
-- Prometheus 1.7.1 or 2.0.0.
-
-- Prometheus Alert Manager 0.8.0 or 0.13.0.
-
+- Prometheus 2.0.0.
+- Prometheus Alert Manager 0.13.0.
 - Operator role is a minimum to install this chart. Cluster Admin role required to obtain the Node IP using `kubectl get nodes` command and to configure Prometheus Alert Manager and Logstash.
 
 ## Resources Required
