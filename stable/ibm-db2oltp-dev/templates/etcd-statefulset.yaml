@@ -5,7 +5,7 @@ metadata:
   name: {{ template "fullname" . }}-etcd
   labels:
     app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    chart: "{{ .Chart.Name }}"
     component: "etcd"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
@@ -19,29 +19,61 @@ spec:
   clusterIP: None
   selector:
     app: {{ template "fullname" . }}
+    component: "etcd"
 
 ---
+{{- if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+apiVersion: apps/v1beta2
+{{- else }}
 apiVersion: apps/v1beta1
+{{- end }}
 kind: StatefulSet
 metadata:
   name: {{ template "fullname" . }}-etcd
   labels:
     app: {{ template "fullname" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    chart: {{ .Chart.Name }}
     component: "etcd"
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
 spec:
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      component: "etcd"
   serviceName: {{ template "fullname" . }}-etcd
+  podManagementPolicy: "Parallel"
   replicas: 3
+  {{- if and (.Capabilities.KubeVersion.Major | hasPrefix "1") (.Capabilities.KubeVersion.Minor | hasPrefix "7") }}
+  # Set updateStrategy to "RollingUpdate", if we're on Kubernetes 1.7.
+  # It's already the default for apps/v1beta2 (Kubernetes 1.8 onwards)
+  updateStrategy:
+    type: RollingUpdate
+  {{- end }}
   template:
     metadata:
       labels:
         app: {{ template "fullname" . }}
         component: etcd
         release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        heritage: {{ .Release.Service }}
     spec:
       affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.arch }}
+                - {{ .Values.arch }}
+                {{- else }}
+                - {{ template "arch" . }}
+                {{- end }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - topologyKey: "kubernetes.io/hostname"
@@ -58,6 +90,19 @@ spec:
         image: "k8s.gcr.io/etcd-{{ template "arch" . }}:3.0.17"
         {{- end }}
         imagePullPolicy: "Always"
+        livenessProbe:
+          tcpSocket:
+            port: 2379
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          exec:
+            command:
+            - touch
+            - x
+          initialDelaySeconds: 0
+          periodSeconds: 20
+          failureThreshold: 10
         ports:
         - containerPort: 2379
           name: peer

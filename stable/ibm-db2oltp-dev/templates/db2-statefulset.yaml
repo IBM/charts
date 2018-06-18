@@ -1,10 +1,11 @@
+{{- include "sch.config.init" (list . "db2oltp.sch.chart.config.values") -}}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ template "fullname" . }}
   labels:
     app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    chart: "{{ .Chart.Name }}"
     component: "db2"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
@@ -29,30 +30,54 @@ spec:
   clusterIP: None
   selector:
     app: {{ template "fullname" . }}
+    component: "db2"
 ---
 
+{{- if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+apiVersion: apps/v1beta2
+{{- else }}
 apiVersion: apps/v1beta1
+{{- end }}
 kind: StatefulSet
 metadata:
   name: {{ template "fullname" . }}
   labels:
     app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    chart: "{{ .Chart.Name }}"
     component: "db2"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
 spec:
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      component: "db2"
   serviceName: {{ template "fullname" . }}
 {{- if .Values.hadr.enabled }}  
+  podManagementPolicy: "Parallel"
   replicas: 2
 {{- else }}
   replicas: 1
 {{- end }}
+  {{- if and (.Capabilities.KubeVersion.Major | hasPrefix "1") (.Capabilities.KubeVersion.Minor | hasPrefix "7") }}
+  # Set updateStrategy to "RollingUpdate", if we're on Kubernetes 1.7.
+  # It's already the default for apps/v1beta2 (Kubernetes 1.8 onwards)
+  updateStrategy:
+    type: OnDelete
+  {{- end }}
   template:
     metadata:
       name: {{ template "fullname" . }}
       labels:
         app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        component: "db2"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
       affinity:
         nodeAffinity:
@@ -112,16 +137,9 @@ spec:
       - name: {{ template "fullname" . }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-      {{- if .Values.hadr.enabled }}
-        securityContext:
-          privileged: true
-          capabilities:
-            add: ["SYS_RESOURCE", "IPC_OWNER", "SYS_NICE"]
-      {{- else }} 
         securityContext:
           capabilities:
             add: ["SYS_RESOURCE", "IPC_OWNER", "SYS_NICE"]
-      {{- end }}
         ports:
         - containerPort: 50000
         - containerPort: 55000
@@ -158,7 +176,6 @@ spec:
           value: "false"
         - name: HADR_ENABLED
           value: "{{ .Values.hadr.enabled }}"
-      {{- if not .Values.hadr.enabled }}  
         # set liveness probe to determine if container needs to be restarted
         # - command, http, or tcp
         # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
@@ -167,8 +184,12 @@ spec:
             command:
             - sh
             - -c
-            - /database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s
+            - su - $DB2INSTANCE  -c '/database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s'
+        {{- if not .Values.hadr.enabled }}
           initialDelaySeconds: 810
+        {{- else }}
+          initialDelaySeconds: 1620
+        {{- end }}
           periodSeconds: 90
           failureThreshold: 3 
         readinessProbe:
@@ -176,11 +197,14 @@ spec:
             command:
             - sh
             - -c
-            - /database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s
+            - su - $DB2INSTANCE  -c '/database/config/$DB2INSTANCE/sqllib/bin/db2gcf -s'
+        {{- if not .Values.hadr.enabled }}
           initialDelaySeconds: 60
+        {{- else }}
+          initialDelaySeconds: 360
+        {{- end }}
           periodSeconds: 30
-          failureThreshold: 25
-      {{- end }}
+          failureThreshold: 50
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
@@ -223,6 +247,7 @@ spec:
         requests:
           storage: {{ .Values.dataVolume.size | quote }}
   {{- end }}
+
 
 
 

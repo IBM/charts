@@ -119,7 +119,7 @@ helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/rep
 helm search <repo>
 
 #Finally install the respective chart
-$ helm install --name my-release local/ibm-db2oltp-dev:2.0.0
+$ helm install --name my-release local/ibm-db2oltp-dev:3.0.0
 ```
 
 The command deploys ibm-db2oltp-dev on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -127,7 +127,7 @@ The command deploys ibm-db2oltp-dev on the Kubernetes cluster in the default con
 ## Configuration
 
 You may change the default of each parameter using the `--set key=value[,key=value]`.
-I.e `helm install --name my-release --set global.image.secretname=<secretname> local/ibm-db2oltp-dev:2.0.0`
+I.e `helm install --name my-release --set global.image.secretName=<secretname> local/ibm-db2oltp-dev:3.0.0`
 
 > **Tip**: You can configure the default [values.yaml](values.yaml)
 
@@ -139,7 +139,7 @@ The following tables lists the configurable parameters of the ibm-db2oltp-dev ch
 | `global.image.secretName`           | Docker Store registry secret                        | `nil` - Enter a generated secret name as explained above or patch default serviceaccount | 
 | `arch`                              | Worker node architecture                            | `nil` - will try to detect it automatically based on the node deploying the chart. Or user can choose either amd64, s390x, or ppc64le | 
 | `imageRepository`                   | Db2 Developer-C Edition image repository            | `store/ibmcorp/db2_developer_c`                                                 |     
-| `imageTag`                          | Db2 Developer-C Edition image tag                   | `11.1.3.3` - will be suffixed with `-<arch>` once architecture is determined    |
+| `imageTag`                          | Db2 Developer-C Edition image tag                   | `11.1.3.3a` - will be suffixed with `-<arch>` once architecture is determined    |
 | `imagePullPolicy`                   | Image pull policy                                   | `IfNotPresent`                                                                  |
 | `service.name`                      | The name of the Service                             | `ibm-db2oltp-dev`                                                               |
 | `service.port`                      | TCP port                                            | `50000`                                                                         |
@@ -212,7 +212,7 @@ Db2 HADR on a kubernetes cluster is currently supported to be deployed within th
   * Additional configuration options for these volumes are available in the table above - such as size, name, existing claim names, and storage class names.  
 - Once Db2 HADR has been enabled, the install will kick off 2 replicas of the ibm-db2oltp-dev statefulset. Each pod in this set will be configured as a PRIMARY and a STANDBY database. The PRIMARY will be configured on ibm-db2oltp-dev-0 pod and STANDBY on the ibm-db2oltp-dev-1 pod. If takeover happens, the PRIMARY will get switched to the ibm-db2oltp-dev-1 pod and when STANDBY is restarted, it will be set up on the ibm-db2oltp-dev-0. This will get switched as roles change during takeovers. 
 - An automatic client re-route [ACR](https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.1.0/com.ibm.db2.luw.admin.ha.doc/doc/c0011976.html) is set up on each primary and standby pods so that applications can be directed to a standby server if a primary crash occurs. 
-- Refer to the Db2 on ICP recipe for how to connect to your primary database - [here](https://developer.ibm.com/recipes/tutorials/db2-integration-into-ibm-cloud-private/)
+- Refer to the Db2 integration recipe for how to connect to your primary database - [here](https://developer.ibm.com/recipes/tutorials/db2-integration-into-ibm-cloud-private/)
 
 
 ## Architecture
@@ -224,6 +224,13 @@ Db2 HADR on a kubernetes cluster is currently supported to be deployed within th
 
 An `arch` field in values.yaml is recommended in order to guarantee that the chart has chosen the right architecture to deploy to and the right tagged container is pulled. If left blank, the chart will determine the architecture based on the master node architecture. 
 
+## Retrieving the Db2 instance password
+
+The Db2 instance password is either auto-generated to a 10 character random password or user-specified. To retrieve the Db2 instance password, the user can execute the following command, where <SECRET NAME> is the secret for the statefulset as retrieved by `kubectl get secrets`:
+
+`kubectl get secret --namespace default <SECRET NAME> -o jsonpath="{.data.password}" | base64 --decode; echo`
+
+The command will output the decoded secret. 
 
 ## Persistence
 
