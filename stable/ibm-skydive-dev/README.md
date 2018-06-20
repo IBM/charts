@@ -1,6 +1,4 @@
-[![Build Status](https://travis-ci.org/skydive-project/skydive.png)](https://travis-ci.org/skydive-project/skydive)
-[![Go Report Card](https://goreportcard.com/badge/github.com/skydive-project/skydive)](https://goreportcard.com/report/github.com/skydive-project/skydive)
-[![Coverage Status](https://coveralls.io/repos/github/skydive-project/skydive/badge.svg?branch=master)](https://coveralls.io/github/skydive-project/skydive?branch=master)
+# Skydive
 
 ## Introduction
 This is Helm chart for Skydive. Skydive is an open source real-time network topology and protocols analyzer.
@@ -53,7 +51,7 @@ $ helm delete my-release
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
-## <a name="Securityimplications"></a>Security implications 
+## Security implications
 This chart deploys privileged kubernetes daemon-set. The implications are automatically creation of privileged container per kubernetes node capable of monitoring network and system behavior and used to capture Linux OS level information. The daemon-set also uses hostpath feature interacting with Linux OS, capturing info on network components.
 
 ## Configuration
@@ -61,14 +59,16 @@ The following tables lists the configurable parameters of skydive chart and thei
 
 | Parameter                            | Description                                     | Default                                                    |
 | ----------------------------------   | ---------------------------------------------   | ---------------------------------------------------------- |
+| `global.image.secretName`            | Image secret for private repository             | Empty                                                      |
 | `image.repository`                   | Skydive image repository                        | `ibmcom/skydive`                                           |
-| `image.tag`                          | Image tag                                       | `0.17.1`                                                   |
+| `image.tag`                          | Image tag                                       | `0.18`                                                     |
 | `image.imagePullPolicy`              | Image pull policy                               | `IfNotPresent`                                             |
 | `resources`                          | CPU/Memory resource requests/limits             | Memory: `8192Mi`, CPU: `2000m`                             |
 | `service.name`                       | service name                                    | `skydive`                                                  |
 | `service.type`                       | k8s service type (e.g. NodePort, LoadBalancer)  | `NodePort`                                                 |
 | `service.port`                       | TCP port                                        | `8082`                                                     |
 | `analyzer.topology.fabric`           | Fabric connecting k8s nodes                     | `TOR1->*[Type=host]/eth0`                                  |
+| `env`                                | Extended environment variables                  | Empty                                                      |
 | `storage.elasticsearch.host`         | ElasticSearch end-point                         | `127.0.0.1:9200`                                           |
 | `storage.flows.indicesToKeep`        | Number of flow indices to keep in storage       | `10`                                                       |
 | `storage.flows.indexEntriesLimit`    | Number of flow records to keep per index        | `10000`                                                    |
@@ -89,17 +89,26 @@ The chart allows definition of static interfaces and links to be added to skydiv
 Details on this parameter field are available under the analyzer.topology.Fabric section in the following link: 
 [https://github.com/skydive-project/skydive/blob/master/etc/skydive.yml.default](https://github.com/skydive-project/skydive/blob/master/etc/skydive.yml.default)
 
+## Env
+The chart allows definition of extended environment variables to be used by Skydive components. The list of configuration parameters is available on [https://github.com/skydive-project/skydive/blob/master/etc/skydive.yml.default](https://github.com/skydive-project/skydive/blob/master/etc/skydive.yml.default). Use upper-case/underline semantics of a configuration parameter prefixed by `SKYDIVE_` to use as an environment variable. For example, to enable debug add to the deployment .yml file:  
+```
+env:
+  # Enable debug
+  - name: SKYDIVE_LOGGING_LEVEL
+    value: "DEBUG"
+```
+ 
 ## Resources Required
 The chart deploys pods and daemon-set consuming minimum resources as specified in the `resources` configuration parameter (default: Memory: `512Mi`, CPU: `100m`)
 
 ## Limitations
 
-Refer to section [Security implications](#Securityimplications)
+Refer to section [Security implications](#security-implications)
 
 ## Persistence
-Skydive analyzer uses elasticsearch to store data at the `/usr/share/elasticsearch/data` path of the container.
+Skydive analyzer uses elasticsearch to store data at the `/usr/share/elasticsearch/data` path of the Analyzer container.
 
-The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) volume at this location. User need to create a PV before chart deployed, or enable dynamic volume provisioning in chart configuration.
+The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) at this location. User need to create a PV before chart deployed, or enable dynamic volume provisioning in chart configuration.
 
 ## Documentation
 Skydive documentation can be found here:

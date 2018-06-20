@@ -1,11 +1,14 @@
-# What’s new in Chart Version 1.0.1
+# What’s new in Chart Version 1.0.2
 
-With Skydive on IBM Cloud Private 2.1.0.1, the following new
-features are available:
+* Minor fixes to README file
+* App version updated to 0.18 
+
+# What’s new in Chart Version 1.0.1
 
 * Light theme 
 * Persistent storage  
 * Filtered Kubernetes exploration
+* App version updated to 0.17.1 
 
 # Prerequisites
 * IBM Cloud Private version 2.1.0.1
@@ -16,5 +19,6 @@ features are available:
 
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- | 
+| 1.0.2 | Jun 17, 2018| >=2.1.0.1 | ibmcom/skydive:0.18 | None | Chart updates |
 | 1.0.1 | Apr 22, 2018| >=2.1.0.1 | ibmcom/skydive:0.17.1 | None | Chart updates |
 | 1.0.0 | Feb 1, 2018| >=2.1.0.1 | ibmcom/skydive:0.15 | None | |
