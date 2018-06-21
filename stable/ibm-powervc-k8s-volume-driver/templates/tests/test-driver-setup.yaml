@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ibm-powervc-k8s-volume-driver-test
+  labels:
+    app: ibm-powervc-k8s-volume-driver-test
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  nodeSelector:
+    role: master
+  tolerations:
+  - key: dedicated
+    operator: Exists
+    effect: NoSchedule
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - ppc64le
+            - amd64
+  containers:
+  - name: ibm-powervc-k8s-volume-driver-test
+    image: busybox
+    env:
+    - name: TEST_AUTH_URL
+      value: {{ .Values.openstack.authURL | quote }}
+    command: ["sh", "-c", "(ls /flex-mount-dir/ibm~powervc-k8s-volume-flex/powervc-k8s-volume-flex.crt) && (grep $TEST_AUTH_URL /etc/config/authurl.txt)"]
+    volumeMounts:
+    - name: powervc-config
+      mountPath: /etc/config
+    - name: flex-driver-dir
+      mountPath: /flex-mount-dir
+  volumes:
+  - name: powervc-config
+    configMap:
+      name: ibm-powervc-config
+      items:
+      - key: OS_AUTH_URL
+        path: authurl.txt
+  - name: flex-driver-dir
+    hostPath:
+      path: /usr/libexec/kubernetes/kubelet-plugins/volume/exec/
+  restartPolicy: Never

@@ -1,0 +1,81 @@
+apiVersion: apps/v1beta2
+kind: DaemonSet
+metadata:
+  name: ibm-powervc-k8s-volume-flex
+  labels:
+    app: ibm-powervc-k8s-volume-flex
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  selector:
+    matchLabels:
+      app: ibm-powervc-k8s-volume-flex
+  template:
+    metadata:
+      labels:
+        app: ibm-powervc-k8s-volume-flex
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productID: ibm-powervc-k8s-volume-driver
+    spec:
+      tolerations:
+      - key: dedicated
+        operator: Exists
+        effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - ppc64le
+            - matchExpressions:
+              - key: role
+                operator: In
+                values:
+                - master
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+      - name: ibm-powervc-k8s-volume-flex
+        image: "{{ .Values.image.flexVolumeRepo }}:{{ .Values.image.flexVolumeTag }}"
+        imagePullPolicy: {{ .Values.image.flexVolumePull }}
+        args:
+        - "powervc-k8s"
+        envFrom:
+        - configMapRef:
+            name: ibm-powervc-config
+        - secretRef:
+            name: ibm-powervc-credentials
+        {{ if .Values.openstack.certData }}
+        env:
+        - name: OS_CACERT
+          value: /etc/config/openstack.crt
+        {{ end }}
+        volumeMounts:
+        {{ if .Values.openstack.certData }}
+        - name: powervc-config
+          mountPath: /etc/config
+        {{ end }}
+        - name: flex-driver-dir
+          mountPath: /flex-mount-dir
+      terminationGracePeriodSeconds: 1
+      volumes:
+      {{ if .Values.openstack.certData }}
+      - name: powervc-config
+        configMap:
+          name: ibm-powervc-config
+          items:
+          - key: OS_CACERT_DATA
+            path: openstack.crt
+      {{ end }}
+      - name: flex-driver-dir
+        hostPath:
+          path: {{ .Values.driver.flexPluginDir }}
