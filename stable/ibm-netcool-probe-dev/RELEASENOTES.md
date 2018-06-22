@@ -1,9 +1,8 @@
-# What’s new in IBM Netcool Probe for Kubernetes Chart (Limited Use) Version 1.1.0
+# What’s new in IBM Netcool Probe for Kubernetes Chart (Limited Use) Version 1.1.1
 
-With IBM Netcool Probe for Kubernetes Chart (Limited Use) Version 1.1.0, the following new
-features are available:
+With IBM Netcool Probe for Kubernetes Chart (Limited Use) Version 1.1.1, the following fix were included:
 
-* New chart release with latest probe docker image for non-production use. This version is licensed under the IBM International License Agreement for Non-Warranted Programs.
+* Fixed logo icon load issue.
 
 ## Prerequisites
 
@@ -19,8 +18,13 @@ features are available:
 
 | Chart | Date | ICP Required | Image(s) Supported | Details |
 | ----- | ---- | ------------ | ------------------ | ------- |
+| 1.1.1 | June 22, 2018| >=2.1.0.2 | ibmcom/netcool-probe-messagebus:7.0 | Fix icon issue.  |
 | 1.1.0 | June 12, 2018| >=2.1.0.2 | ibmcom/netcool-probe-messagebus:7.0 | Update to use SCH 1.2.1 sub-chart  |
 | 1.0.0 | June 4, 2018| >=2.1.0.2 | ibmcom/netcool-probe-messagebus:7.0 | Initial Version  |
+
+## Changes in Version 1.1.1
+
+* Fixed logo icon load issue.
 
 ## Changes in Version 1.1.0
 

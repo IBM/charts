@@ -14,16 +14,16 @@ This chart will do the following:
 
 ## Prerequisites
 
-- Kubernetes 1.6 or greater, with beta APIs enabled
-- If persistence is enabled (see [configuration](#configuration)), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
+* Kubernetes 1.6 or greater, with beta APIs enabled
+* If persistence is enabled (see [configuration](#configuration)), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
 
 ## Resources Required
 
 This chart uses the following resources by default:
 
-- 0.5 CPU core
-- 0.5 Gi memory
-- 2 Gi persistent volume.
+* 0.5 CPU core
+* 0.5 Gi memory
+* 2 Gi persistent volume.
 
 See the [configuration](#configuration) section for how to configure these values.
 
@@ -47,13 +47,10 @@ You can uninstall/delete the `foo` release as follows:
 helm delete foo
 ```
 
-The command removes all the Kubernetes components associated with the chart, except any Persistent Volume Claims (PVCs).  This is the default behavior of Kubernetes, and ensures that valuable data is not deleted.  In order to delete the Queue Manager's data, you can delete the PVC using the following command:
-
-```sh
-kubectl delete pvc -l release=foo
-```
+The command removes all the Kubernetes components associated with the chart, except any Persistent Volume Claims (PVCs).  This is the default behavior of Kubernetes, and ensures that valuable data is not deleted.
 
 ## Configuration
+
 The following table lists the configurable parameters of the `ibm-mqadvanced-server-dev` chart and their default values.
 
 | Parameter                       | Description                                                     | Default                                    |
@@ -63,6 +60,9 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `image.tag`                     | Image tag                                                       | `9`         |
 | `image.pullPolicy`              | Image pull policy                                               | `IfNotPresent`                             |
 | `image.pullSecret`              | Image pull secret, if you are using a private Docker registry   | `nil`                                      |
+| `arch.amd64`                  | Preference for installation on worker nodes with the `amd64` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler       |
+| `arch.ppc64le`                  | Preference for installation on worker nodes with the `ppc64le` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler       |
+| `arch.s390x`                  | Preference for installation on worker nodes with the `s390x` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler       |
 | `persistence.enabled`           | Use persistent volumes for all defined volumes                  | `true`                                     |
 | `persistence.useDynamicProvisioning` | Use dynamic provisioning (storage classes) for all volumes | `true`                                     |
 | `dataPVC.name`                  | Suffix for the PVC name                                         | `"data"`                                   |
@@ -95,6 +95,7 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
 ## Storage
+
 The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) for the storage of MQ configuration data and messages.  By using a Persistent Volume based on network-attached storage, Kubernetes can re-schedule the MQ server onto a different worker node.  You should not use "hostPath" or "local" volumes, because this will not allow moving between nodes.
 
 Performance requirements will vary widely based on workload, but as a guideline, use a Storage Class which allows for at least 200 IOPS (based on 16 KB block size with a 50/50 read/write mix).
