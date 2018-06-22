@@ -69,6 +69,30 @@ spec:
             - --storage.path=/var/lib/alertmanager/data
           ports:
             - containerPort: 9093
+        {{- if .Values.alertmanager.probe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /api/v1/status
+              port: 9093
+          {{- if .Values.alertmanager.probe.readiness.args }}
+{{ toYaml .Values.alertmanager.probe.readiness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /api/v1/status
+              port: 9093
+          {{- if .Values.alertmanager.probe.liveness.args }}
+{{ toYaml .Values.alertmanager.probe.liveness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+        {{- end }}
           resources:
 {{ toYaml .Values.alertmanager.resources | indent 12 }}
           volumeMounts:
@@ -101,7 +125,11 @@ spec:
         - name: storage-volume
         {{- if .Values.alertmanager.persistentVolume.enabled }}
           persistentVolumeClaim:
+          {{- if .Values.alertmanager.persistentVolume.existingClaimName }}
+            claimName: {{ .Values.alertmanager.persistentVolume.existingClaimName }}
+          {{- else }}
             claimName: {{ template "prometheus.fullname" . }}-alertmanager
+          {{- end }}
         {{- else }}
           emptyDir: {}
         {{- end }}

@@ -69,6 +69,30 @@ spec:
           ports:
           - name: web
             containerPort: 3000
+        {{- if .Values.grafana.probe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+          {{- if .Values.grafana.probe.readiness.args }}
+{{ toYaml .Values.grafana.probe.readiness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+          {{- if .Values.grafana.probe.liveness.args }}
+{{ toYaml .Values.grafana.probe.liveness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+        {{- end }}
           resources:
 {{ toYaml .Values.grafana.resources | indent 12 }}
           volumeMounts:
@@ -113,7 +137,11 @@ spec:
         - name: grafana-storage
       {{- if .Values.grafana.persistentVolume.enabled }}
           persistentVolumeClaim:
+          {{- if .Values.grafana.persistentVolume.existingClaimName }}
+            claimName: {{ .Values.grafana.persistentVolume.existingClaimName }}
+          {{- else }}
             claimName: {{ template "grafana.fullname" . }}
+          {{- end }}
       {{- else }}
           emptyDir: {}
       {{- end }}

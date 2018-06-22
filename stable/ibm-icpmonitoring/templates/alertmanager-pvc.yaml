@@ -1,4 +1,4 @@
-{{- if .Values.alertmanager.persistentVolume.enabled }}
+{{- if and .Values.alertmanager.persistentVolume.enabled (not .Values.alertmanager.persistentVolume.existingClaimName) }}
 # Licensed Materials - Property of IBM
 # 5737-E67
 # @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
@@ -16,15 +16,18 @@ metadata:
   name: {{ template "prometheus.fullname" . }}-alertmanager
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
       storage: "{{ .Values.alertmanager.persistentVolume.size }}"
-{{- if .Values.alertmanager.persistentVolume.storageClass }}
-{{- if (eq "-" .Values.alertmanager.persistentVolume.storageClass) }}
-  storageClassName: ""
+{{- if .Values.alertmanager.persistentVolume.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.alertmanager.persistentVolume.storageClass | quote }}
 {{- else }}
-  storageClassName: "{{ .Values.alertmanager.persistentVolume.storageClass }}"
+  storageClassName: {{ default "" .Values.alertmanager.persistentVolume.storageClass | quote }}
+{{- if .Values.alertmanager.persistentVolume.selector.label }}
+  selector:
+    matchExpressions:
+      - {key: {{ .Values.alertmanager.persistentVolume.selector.label }}, operator: In, values: [{{ .Values.alertmanager.persistentVolume.selector.value }}]}
 {{- end }}
 {{- end }}
 {{- end }}

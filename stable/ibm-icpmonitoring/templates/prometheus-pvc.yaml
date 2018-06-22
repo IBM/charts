@@ -1,4 +1,4 @@
-{{- if .Values.prometheus.persistentVolume.enabled }}
+{{- if and .Values.prometheus.persistentVolume.enabled (not .Values.prometheus.persistentVolume.existingClaimName) }}
 # Licensed Materials - Property of IBM
 # 5737-E67
 # @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
@@ -16,15 +16,18 @@ metadata:
   name: {{ template "prometheus.fullname" . }}
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
-      storage: "{{ .Values.prometheus.persistentVolume.size }}"
-{{- if .Values.prometheus.persistentVolume.storageClass }}
-{{- if (eq "-" .Values.prometheus.persistentVolume.storageClass) }}
-  storageClassName: ""
+      storage: {{ .Values.prometheus.persistentVolume.size | quote }}
+{{- if .Values.prometheus.persistentVolume.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.prometheus.persistentVolume.storageClass | quote }}
 {{- else }}
-  storageClassName: "{{ .Values.prometheus.persistentVolume.storageClass }}"
+  storageClassName: {{ default "" .Values.prometheus.persistentVolume.storageClass | quote }}
+{{- if .Values.prometheus.persistentVolume.selector.label }}
+  selector:
+    matchExpressions:
+      - {key: {{ .Values.prometheus.persistentVolume.selector.label }}, operator: In, values: [{{ .Values.prometheus.persistentVolume.selector.value }}]}
 {{- end }}
 {{- end }}
 {{- end }}

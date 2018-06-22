@@ -1,0 +1,195 @@
+{{- $compName := "couchdb" -}}
+{{- include "sch.config.init" (list . "couchdb.sch.chart.config.values") -}}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
+{{- $configMapName := include "sch.names.fullCompName" (list .) -}}
+{{- $serviceName := include "sch.names.fullCompName" (list .) -}}
+{{- $cdbDataTemplateName := include "sch.names.volumeClaimTemplateName" (list . "data" $statefulSetName) -}}
+{{- $cdbConfigTemplateName := include "sch.names.volumeClaimTemplateName" (list . "config" $statefulSetName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- if .Capabilities.APIVersions.Has "apps/v1beta2" -}}
+apiVersion: apps/v1beta2
+{{- else -}}
+apiVersion: apps/v1beta1
+{{- end }}
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-cem
+spec:
+  serviceName: {{ $serviceName }}
+  replicas: {{ .Values.clusterSize }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      app: {{ include "sch.names.appName" (list .) | quote }}
+      heritage: {{ .Release.Service }}
+      component: {{ $compName | quote }}
+{{- if and (.Capabilities.KubeVersion.Major | hasPrefix "1") (.Capabilities.KubeVersion.Minor | hasPrefix "7") }}
+  updateStrategy:
+    type: RollingUpdate
+{{- end }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        origin: helm-cem
+      annotations:
+        checksum/couchdb-cred-secret: {{ include (print $.Template.BasePath "/secret/couchdb-cred-secret.yaml") . | sha256sum }}
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types,
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms,
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.arch }}
+                  - {{ .Values.arch }}
+                {{- else }}
+                  - {{ template "arch" . }}
+                {{- end }}
+      initContainers:
+      - name: set-volume-permissions
+        image: "{{ .Values.global.image.repository }}/hdm-couchdb:{{ .Values.image.tag }}"
+        command: ["sh", "-c", "chown -R 999:999 /opt/couchdb/data"]
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: {{ $cdbDataTemplateName }}
+          mountPath: /opt/couchdb/data
+        - name: {{ $cdbConfigTemplateName }}
+          mountPath: /opt/couchdb/etc/default.d
+      containers:
+        - name: couchdb
+          image: "{{ .Values.global.image.repository }}/hdm-couchdb:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
+          ports:
+            - name: couchdb
+              containerPort: 5984
+            - name: epmd
+              containerPort: 4369
+            - containerPort: 9100
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: RELEASE_NAME
+              value: {{ template "releasename" . }}
+            - name: COUCHDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  key: username
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  key: password
+            - name: COUCHDB_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  key: secret
+ {{ if .Values.autoClusterConfig.enabled }}
+            - name: ERL_FLAGS
+              value: " -name couchdb@$(POD_NAME).$(RELEASE_NAME)-couchdb.$(NAMESPACE).svc.cluster.local -setcookie monster "
+ {{ else }}
+            - name: ERL_FLAGS
+              value: " -setcookie monster "
+ {{ end }}
+          resources:
+{{ include "couchdb.comp.size.data" (list . "couchdb" "resources") | indent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5984
+            failureThreshold: 3333
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            httpGet:
+              path: /_up
+              port: 5984
+          volumeMounts:
+            - name: {{ $cdbDataTemplateName }}
+              mountPath: /opt/couchdb/data
+            - name: {{ $cdbConfigTemplateName }}
+              mountPath: /opt/couchdb/etc/default.d
+{{ if .Values.autoClusterConfig.enabled }}
+        - name: cluster-config
+          imagePullPolicy: Always
+          image: "{{ .Values.global.image.repository }}/hdm-cem-python-sidecar:{{ .Values.sidecarImage.tag }}"
+          env:
+            - name: AUTO_CLUSTER_CONFIG
+              value: "true"
+            - name: POD_NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: COUCHDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  key: username
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  key: password
+            - name: SERVICE_NAME
+              value: {{ $serviceName }}
+          livenessProbe:
+            exec:
+             command:
+             - cat
+             - /tmp/cluster-configured
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+              - cat
+              - /tmp/cluster-configured
+            initialDelaySeconds: 30
+            periodSeconds: 30
+{{ end }}
+      volumes:
+        - name: {{ $cdbConfigTemplateName }}
+          configMap:
+            name: {{ $configMapName }}
+  {{ if not .Values.global.persistence.enabled }}
+        - name: {{ $cdbDataTemplateName }}
+          emptyDir: {}
+  {{ else }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ $cdbDataTemplateName }}
+        labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 10 }}
+          origin: helm-cem
+      spec:
+        {{ if eq .Values.global.persistence.storageClassOption.couchdbdata "default" }}
+        storageClassName: {{ .Values.global.persistence.storageClassName }}
+        {{ else }}
+        storageClassName: {{ .Values.global.persistence.storageClassOption.couchdbdata }}
+        {{ end }}
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.global.persistence.storageSize.couchdbdata }}
+  {{ end }}

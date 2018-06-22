@@ -52,12 +52,35 @@ spec:
                 - "true"
             {{- end }}
       containers:
-      - image: {{ .Values.elasticsearchExporter.image.repository }}:{{ .Values.elasticsearchExporter.image.tag }}
-        imagePullPolicy: {{ .Values.imagePullPolicy }}
-        name: elk-exporter
-        ports:
-        - containerPort: 9108
-          name: metrics
-        args: [ "-es.uri={{ .Values.elasticsearchExporter.esUri }}" ]
-
+        - image: {{ .Values.elasticsearchExporter.image.repository }}:{{ .Values.elasticsearchExporter.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          name: elk-exporter
+          ports:
+          - containerPort: 9108
+            name: metrics
+          args: [ "-es.uri={{ .Values.elasticsearchExporter.esUri }}" ]
+        {{- if .Values.elasticsearchExporter.probe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9108
+          {{- if .Values.elasticsearchExporter.probe.readiness.args }}
+{{ toYaml .Values.elasticsearchExporter.probe.readiness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9108
+          {{- if .Values.elasticsearchExporter.probe.liveness.args }}
+{{ toYaml .Values.elasticsearchExporter.probe.liveness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+        {{- end }}
 {{- end -}}

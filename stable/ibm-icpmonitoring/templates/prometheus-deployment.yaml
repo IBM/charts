@@ -50,6 +50,14 @@ spec:
                 values:
                 - "true"
             {{- end }}
+      initContainers:
+        - name: init-container
+          image: "{{ .Values.init.image.repository }}:{{ .Values.init.image.tag }}"
+          imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+          command: ["chown", "-R", "nobody:nogroup", "/var/lib/prometheus/data"]
+          volumeMounts:
+            - name: storage-volume
+              mountPath: /var/lib/prometheus/data
       containers:
         - name: configmap-reload
           image: {{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}
@@ -81,6 +89,30 @@ spec:
           {{- end }}
           ports:
             - containerPort: 9090
+        {{- if .Values.prometheus.probe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+          {{- if .Values.prometheus.probe.readiness.args }}
+{{ toYaml .Values.prometheus.probe.readiness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+          {{- if .Values.prometheus.probe.liveness.args }}
+{{ toYaml .Values.prometheus.probe.liveness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+        {{- end }}
           resources:
 {{ toYaml .Values.prometheus.resources | indent 12 }}
           volumeMounts:
@@ -131,7 +163,11 @@ spec:
         - name: storage-volume
         {{- if .Values.prometheus.persistentVolume.enabled }}
           persistentVolumeClaim:
+          {{- if .Values.prometheus.persistentVolume.existingClaimName }}
+            claimName: {{ .Values.prometheus.persistentVolume.existingClaimName }}
+          {{- else }}
             claimName: {{ template "prometheus.fullname" . }}
+          {{- end }}
         {{- else }}
           emptyDir: {}
         {{- end }}

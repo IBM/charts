@@ -1,4 +1,4 @@
-{{- if .Values.grafana.persistentVolume.enabled }}
+{{- if and .Values.grafana.persistentVolume.enabled (not .Values.grafana.persistentVolume.existingClaimName) }}
 # Licensed Materials - Property of IBM
 # 5737-E67
 # @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
@@ -16,15 +16,18 @@ metadata:
   name: {{ template "grafana.fullname" . }}
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
       storage: {{ .Values.grafana.persistentVolume.size | quote }}
-{{- if .Values.grafana.persistentVolume.storageClass }}
-{{- if (eq "-" .Values.grafana.persistentVolume.storageClass) }}
-  storageClassName: ""
+{{- if .Values.grafana.persistentVolume.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.grafana.persistentVolume.storageClass | quote }}
 {{- else }}
-  storageClassName: "{{ .Values.grafana.persistentVolume.storageClass }}"
+  storageClassName: {{ default "" .Values.grafana.persistentVolume.storageClass | quote }}
+{{- if .Values.grafana.persistentVolume.selector.label }}
+  selector:
+    matchExpressions:
+      - {key: {{ .Values.grafana.persistentVolume.selector.label }}, operator: In, values: [{{ .Values.grafana.persistentVolume.selector.value }}]}
 {{- end }}
 {{- end }}
 {{- end }}

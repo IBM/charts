@@ -1,0 +1,58 @@
+{{- include "sch.config.init" (list . "zookeeper.sch.chart.config.values") -}}
+{{- $configMapName := include "sch.names.fullName" (list .) -}}
+{{- $root := . -}}
+kind: ConfigMap
+metadata:
+  name: {{ $configMapName | quote }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+apiVersion: v1
+data:
+  init.sh: |-
+    #!/bin/bash
+    set -x
+    [ -z "$ID_OFFSET" ] && ID_OFFSET=1
+    export ZOOKEEPER_SERVER_ID=$((${HOSTNAME##*-} + $ID_OFFSET))
+    echo "${ZOOKEEPER_SERVER_ID:-1}" | tee /var/lib/zookeeper/data/myid
+    cp -f /opt/zookeeper/conf/zoo.cfg /var/lib/zookeeper/data/zoo.cfg
+    sed -i "s/server\.$ZOOKEEPER_SERVER_ID\=[a-z0-9.-]*/server.$ZOOKEEPER_SERVER_ID=0.0.0.0/" /var/lib/zookeeper/data/zoo.cfg
+  zoo.cfg: |-
+    # The number of milliseconds of each tick
+    tickTime=2000
+    dataDir=/var/lib/zookeeper/data
+    dataLogDir=/var/lib/zookeeper/data
+    clientPort=2181
+    # The number of ticks that the initial
+    # synchronization phase can take
+    initLimit=100
+    # The number of ticks that can pass between
+    # sending a request and getting an acknowledgement
+    syncLimit=5
+    # the maximum number of client connections.
+    # increase this if you need to handle more clients.
+    # default is 60.
+    maxClientCnxns=60
+    #
+    # Be sure to read the maintenance section of the
+    # administrator guide before turning on autopurge.
+    #
+    # http://zookeeper.apache.org/doc/current/zookeeperAdmin.html#sc_maintenance
+    #
+    # The number of snapshots to retain in dataDir
+    autopurge.snapRetainCount=5
+    # Purge task interval in hours
+    # Set to "0" to disable auto purge feature
+    autopurge.purgeInterval=6
+    cnxTimeout=1000
+    {{- range $index := until (.Values.clusterSize | int) }}
+    server.{{add $index 1}}={{ $root.Release.Name }}-zookeeper-{{$index}}.{{ $root.Release.Name }}-zkensemble.{{ $root.Release.Namespace }}.svc:2888:3888:participant
+    {{- end}}
+  log4j.properties: |-
+    log4j.rootLogger=INFO, stdout
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+    log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
+    # Suppress connection log messages, three lines per livenessProbe execution
+    log4j.logger.org.apache.zookeeper.server.NIOServerCnxnFactory=WARN
+    log4j.logger.org.apache.zookeeper.server.NIOServerCnxn=WARN

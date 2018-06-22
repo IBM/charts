@@ -1,0 +1,35 @@
+Chart successfully deployed.
+
+** {{  .Values.productName }} may take a few minutes to become available. Please be patient. **
+
+Configuration:
+
+The following parameters should be set for the cloudeventmanagement chart.
+- The global.masterIP parameter should be set to the IP addresses of the kubernetes master node.
+- If multiple instances of the charts are installed set cemusers.secrets.oidcclientid and cemservicebroker.suffix to unique values.
+- If a non-default storage class is required, update the persistance.storageClassName to the storage class name. Alternatively each 
+individual value under global.persistance.storageClassOption can be set to specific persistent volumes. 
+
+See the product documentation for more details.
+ global.persistance.storageClassOption can be set to specific persistent volumes. See the product documentation for more details.
+
+Post helm installation steps:
+
+1. Wait for all pods to become ready: kubectl get pods -l release={{ .Release.Name }} -n {{ .Release.Namespace }}
+
+2. OIDC registration with ICP is required to be able to login to IBM Cloud Event Management's UI. As an ICP user with the Cluster Administrator role, run the following kubectl command:
+kubectl exec -n {{ .Release.Namespace }} -t `kubectl get pods -l release={{ .Release.Name }} -n {{ .Release.Namespace }} | grep "{{ .Release.Name }}-ibm-cem-cem-users" | grep "Running" | head -n 1 | awk '{print $1}'` bash -- "/etc/oidc/oidc_reg.sh" "`echo $(kubectl get secret platform-oidc-credentials -o yaml -n kube-system | grep OAUTH2_CLIENT_REGISTRATION_SECRET: | awk '{print $2}')`"
+
+Installation verification:
+
+1. To verify the installation run the following kubectl command:
+helm test {{ .Release.Name }} --tls --cleanup
+
+Limitations:
+
+These charts can be deployed multiple times in the same namespace under different release names.
+It is recommended to install one instance per namespace and deploy multiple namespaces for ease of management and separation of resources.
+*NOTE* {{  .Values.productName }} is multi-tenant and a single installation supports multiple users.
+
+
+Version: 1.0.0-20180621220246 , Build information: 20180621T220246Z

@@ -56,9 +56,16 @@ Parameter | Description | Default
 `prometheus.evaluationInterval` | evaluation interval for alert rules | 1m
 `prometheus.retention` | Prometheus storage retention time | 24h
 `prometheus.args` | arguments for prometheus container | {}
-`prometheus.persistentVolume.enabled` | Create a volume to store data | false
-`prometheus.persistentVolume.size` | Size of persistent volume claim | 10Gi
-`prometheus.persistentVolume.storageClass` | storageClass for prometheus PV | -
+`prometheus.persistentVolume.enabled` | create a volume to store data if true| false
+`prometheus.persistentVolume.useDynamicProvisioning` | dynamically provison persistent volume if true | true
+`prometheus.persistentVolume.size` | size of persistent volume claim | 10Gi
+`prometheus.persistentVolume.storageClass` | storageClass for prometheus PV | ""
+`prometheus.persistentVolume.existingClaimName` | to use an existing persistent volume claim | ""
+`prometheus.persistentVolume.selector.label` | field to select the volume | ""
+`prometheus.persistentVolume.selector.value` | value of the field to select the volume | ""
+`prometheus.probe.enabled` | enable health probe for prometheus if true | true
+`prometheus.probe.readiness.args` | args for readiness probe | {}
+`prometheus.probe.liveness.args` | args for liveness probe | {}
 `prometheus.resources.limits.cpu` | prometheus cpu limits | 500m
 `prometheus.resources.limits.memory` | prometheus memory imits | 512Mi
 `prometheus.resources.requests.cpu` | prometheus cpu requests | 100m
@@ -77,9 +84,16 @@ Parameter | Description | Default
 `alertmanager.image.repository` | alertmanager container image name | ibmcom/alertmanager
 `alertmanager.image.tag` | alertmanager container image tag | v0.13.0
 `alertmanager.port` | alertmanager service port | 80
-`alertmanager.persistentVolume.enabled` | Create a volume to store data | false
-`alertmanager.persistentVolume.size` | Size of persistent volume claim | 1Gi
-`alertmanager.persistentVolume.storageClass` | storageClass for alertmanager PV | -
+`alertmanager.persistentVolume.enabled` | create a volume to store data if true | false
+`alertmanager.persistentVolume.useDynamicProvisioning` | dynamically provison persistent volume if true | true
+`alertmanager.persistentVolume.size` | size of persistent volume claim | 1Gi
+`alertmanager.persistentVolume.storageClass` | storageClass for alertmanager PV | ""
+`alertmanager.persistentVolume.existingClaimName` | to use an existing persistent volume claim | ""
+`alertmanager.persistentVolume.selector.label` | field to select the volume | ""
+`alertmanager.persistentVolume.selector.value` | value of the field to select the volume | ""
+`alertmanager.probe.enabled` | enable health probe for alertmanager if true | true
+`alertmanager.probe.readiness.args` | args for readiness probe | {}
+`alertmanager.probe.liveness.args` | args for liveness probe | {}
 `alertmanager.resources.limits.cpu` | alertmanager cpu limits | 200m
 `alertmanager.resources.limits.memory` | alertmanager memory imits | 256Mi
 `alertmanager.resources.requests.cpu` | alertmanager cpu requests | 10m
@@ -92,18 +106,31 @@ Parameter | Description | Default
 `kubeStateMetrics.image.repository` | kube-state-metrics container image name | ibmcom/kube-state-metrics
 `kubeStateMetrics.image.tag` | kube-state-metrics container image tag | v1.2.0
 `kubeStateMetrics.port` | kube-state-metrics service port | 80
+`kubeStateMetrics.probe.enabled` | enable health probe for kubeStateMetrics if true | true
+`kubeStateMetrics.probe.readiness.args` | args for readiness probe | {}
+`kubeStateMetrics.probe.liveness.args` | args for liveness probe | {}
 `nodeExporter.enabled` | install node exporter if true | false
 `nodeExporter.image.repository` | node-exporter container image name | ibmcom/node-exporter
 `nodeExporter.image.tag` | node-exporter container image tag | v0.15.2
 `nodeExporter.port` | node-exporter service port | 9100
+`nodeExporter.probe.enabled` | enable health probe for nodeExporter if true | true
+`nodeExporter.probe.readiness.args` | args for readiness probe | {}
+`nodeExporter.probe.liveness.args` | args for liveness probe | {}
 `grafana.image.repository` | Grafana Docker Image Name | ibmcom/grafana
 `grafana.image.tag` | Grafana Docker Image Tag | 4.6.3
 `grafana.port` | Grafana Container Exposed Port | 3000
 `grafana.user` | Grafana user's name | admin
 `grafana.password` | Grafana user's password | admin
-`grafana.persistentVolume.enabled` | Create a volume to store data | false
+`grafana.persistentVolume.enabled` | Create a volume to store data if true | false
+`grafana.persistentVolume.useDynamicProvisioning` | dynamically provison persistent volume if true | true
 `grafana.persistentVolume.size` | Size of persistent volume claim | 1Gi 
-`grafana.persistentVolume.storageClass` | storageClass for persistent volume | - 
+`grafana.persistentVolume.storageClass` | storageClass for persistent volume | ""
+`grafana.persistentVolume.existingClaimName` | to use an existing persistent volume claim | ""
+`grafana.persistentVolume.selector.label` | field to select the volume | ""
+`grafana.persistentVolume.selector.value` | value of the field to select the volume | ""
+`grafana.probe.enabled` | enable health probe for grafana if true | true
+`grafana.probe.readiness.args` | args for readiness probe | {}
+`grafana.probe.liveness.args` | args for liveness probe | {}
 `grafana.resources.limits.cpu` | grafana cpu limits | 500m
 `grafana.resources.limits.memory` | grafana memory imits | 512Mi
 `grafana.resources.requests.cpu` | grafana cpu requests | 100m
@@ -118,6 +145,9 @@ Parameter | Description | Default
 `collectdExporter.image.tag` | Collectd Exporter Image Tag | 0.3.1 
 `collectdExporter.service.serviceMetricsPort` | Metrics Service Exposed Port | 9103    
 `collectdExporter.service.serviceCollectorPort` | Collector Service Exposed Port | 25826
+`collectdExporter.probe.enabled` | enable health probe for collectdExporter if true | true
+`collectdExporter.probe.readiness.args` | args for readiness probe | {}
+`collectdExporter.probe.liveness.args` | args for liveness probe | {}
 `configmapReload.image.repository` | configmapReload Docker Image Name | ibmcom/configmap-reload
 `configmapReload.image.tag` | configmapReload Docker Image Tag | v0.1
 `router.image.repository` | router Docker Image Name | ibmcom/icp-router
@@ -128,10 +158,15 @@ Parameter | Description | Default
 `elasticsearchExporter.image.tag` | elasticsearchExporter Docker Image Tag | 1.0.2
 `elasticsearchExporter.esUri` | elasticsearch url | http://elasticsearch:9200
 `elasticsearchExporter.port` | elasticsearchExporter exposed port | 9108
+`elasticsearchExporter.probe.enabled` | enable health probe for elasticsearchExporter if true | true
+`elasticsearchExporter.probe.readiness.args` | args for readiness probe | {}
+`elasticsearchExporter.probe.liveness.args` | args for liveness probe | {}
 `curl.image.repository` | curl Docker Image Name | ibmcom/curl
 `curl.image.tag` | curl Docker Image Tag | 3.6
 `certGen.image.repository` | certGen Docker Image Name | ibmcom/icp-cert-gen
 `certGen.image.tag` | certGen Docker Image Tag | 1.0.0
+`init.image.repository` | init Docker Image Name | ibmcom/icp-cert-gen
+`init.image.tag` | init Docker Image Tag | 1.0.0
 
 ### Managed Mode
 

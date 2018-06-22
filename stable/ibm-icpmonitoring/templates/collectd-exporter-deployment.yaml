@@ -52,14 +52,37 @@ spec:
                 - "true"
             {{- end }}
       containers:
-      - image: {{ .Values.collectdExporter.image.repository }}:{{ .Values.collectdExporter.image.tag }}
-        name: collectd-exporter
-        ports:
-        - containerPort: 9103
-          name: metrics
-        - containerPort: 25826
-          name: collector
-          protocol: UDP
-        args: [ "-collectd.listen-address=:25826" ]
-
+        - image: {{ .Values.collectdExporter.image.repository }}:{{ .Values.collectdExporter.image.tag }}
+          name: collectd-exporter
+          ports:
+          - containerPort: 9103
+            name: metrics
+          - containerPort: 25826
+            name: collector
+            protocol: UDP
+          args: [ "-collectd.listen-address=:25826" ]
+        {{- if .Values.collectdExporter.probe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9103
+          {{- if .Values.collectdExporter.probe.readiness.args }}
+{{ toYaml .Values.collectdExporter.probe.readiness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9103
+          {{- if .Values.collectdExporter.probe.liveness.args }}
+{{ toYaml .Values.collectdExporter.probe.liveness.args | indent 12 }}
+          {{- else }}
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 10
+          {{- end }}
+        {{- end }}
 {{- end -}}

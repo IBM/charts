@@ -1,0 +1,41 @@
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: {{ template "grafana.fullname" . }}
+    chart: {{ .Chart.Name }}
+    component: grafana
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "grafana.fullname" . }}-test
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: "{{ template "grafana.fullname" . }}-test"
+      image: {{ .Values.curl.image.repository }}:{{ .Values.curl.image.tag }}
+      imagePullPolicy: {{ .Values.imagePullPolicy }}
+      command: ['curl']
+    {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+      args: ['-k', '--cert', '/opt/ibm/monitoring/certs/tls.crt', '--key', '/opt/ibm/monitoring/certs/tls.key', 'https://{{ template "grafana.fullname" . }}:{{ .Values.grafana.port }}']
+      volumeMounts:
+        - mountPath: "/opt/ibm/monitoring/certs"
+          name: monitoring-client-certs
+        - mountPath: "/opt/ibm/monitoring/ca-certs"
+          name: monitoring-ca-cert
+  volumes:
+    - name: monitoring-client-certs
+      secret:
+        secretName: {{ template "monitoring.fullname" . }}-client-certs
+    - name: monitoring-ca-cert
+      secret:
+        secretName: {{ template "monitoring.fullname" . }}-ca-cert
+    {{- else }}
+      args: ['http://{{ template "grafana.fullname" . }}:{{ .Values.grafana.port }}']
+    {{- end }}
+  restartPolicy: Never

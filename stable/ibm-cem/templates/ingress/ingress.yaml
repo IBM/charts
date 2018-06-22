@@ -1,0 +1,26 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ template "releasename" . }}-cem-ingress
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    {{- if eq .Values.global.ingress.domain "" }}
+    ingress.kubernetes.io/ssl-redirect: "false"
+    {{- end }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+    origin: helm-cem
+spec:
+  rules:
+  - http:
+      paths:
+{{ include "ingress-rules" . | indent 6 }}
+{{- if ne .Values.global.ingress.tlsSecret "" }}  
+    host: {{ .Values.global.ingress.domain | default nil }}
+  tls:
+  - hosts:
+    - {{ .Values.global.ingress.domain }}
+    secretName: {{ .Values.global.ingress.tlsSecret }}
+{{- end }}

@@ -1,0 +1,26 @@
+{{- $compName := "normalizer-service-monitor-test" -}}
+{{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- $testName := include "sch.names.fullCompName" (list . $compName) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $testName }}"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-cem
+spec:
+  containers:
+    - name: "cem-helm-tests"
+      image: "{{ .Values.global.image.repository }}/hdm-cem-helm-tests:{{ .Values.commonimages.cemhelmtests.image.tag }}"
+      env:
+        - name: test_url
+          value: '{{ include "cem.services.normalizer" . }}'
+        - name: test_port
+          value: "443"
+        - name: test_port_local
+          value: "3901"
+      imagePullPolicy: IfNotPresent
+      command: ["sh", "-c", "wget --timeout=10 --no-check-certificate -O - $test_url/servicemonitor"]
+  restartPolicy: Never

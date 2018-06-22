@@ -1,0 +1,25 @@
+{{ if ne .Values.productName "IBM Cloud App Management" }}
+{{- $compName := "rba-as" -}}
+{{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-cem
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 4 }}
+spec:
+  selector:
+    app: {{ include "sch.names.appName" (list .) | quote }}
+    release: {{ .Release.Name }}
+    component: {{ $compName | quote }}
+  ports:
+  - port: 3080
+    protocol: TCP
+{{ end }}
