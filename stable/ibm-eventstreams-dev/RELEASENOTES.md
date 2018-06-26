@@ -16,5 +16,6 @@
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- | 
+| 0.1.2 | June 25, 2018 | >=1.9 |  | None | Tech Preview update |
 | 0.1.1 | May 31, 2018 | >=1.9 |  | None | Tech Preview update |
 | 0.1.0 | May 31, 2018 | >=1.9 | IBM Event Streams consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | None | Tech Preview |

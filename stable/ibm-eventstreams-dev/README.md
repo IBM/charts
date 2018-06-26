@@ -50,7 +50,7 @@ This Helm chart has the following resource requirements:
 | Kafka                 | 3*                 | 1*        | 1*             |
 | ZooKeeper             | 3                  | 0.1*      | 0.25*          |
 | Administration UI     | 1                  | 0.1       | 0.25           |
-| Administration server | 1                  | 1         | 1              |
+| Administration server | 1                  | 1         | 2              |
 | Network proxy         | 1                  | unlimited | unlimited      |
 
 The settings marked with an asterisk (*) can be configured.
@@ -148,7 +148,7 @@ The following tables list the configurable parameters of the `ibm-eventstreams-d
 | `kafka.resources.requests.memory`               | Kubernetes memory request for the Kafka container                                             | `1Gi`                                                      |
 | `kafka.brokers`                                 | Number of brokers in the Kafka cluster                                                        | `3`                                                        |
 | `kafka.offsetsTopicReplicationFactor`           | The replication factor for the offsets topic                                                  | `3`                                                        |
-| `kafka.minInsyncReplicas`                       | Cluster-wide minimum in-sync replica configuration                                            | `2`                                                        |
+| `kafka.minInsyncReplicas`                       | Cluster-wide minimum in-sync replica configuration                                            | `1`                                                        |
 | `kafka.compressionType`                        | Cluster-wide final compression type configuration                                             | `producer`                                                 |
 | `kafka.autoCreateTopicsEnable`               | Enable auto-creation of topics                                                                | `false`                                                    |
 | `kafka.deleteTopicEnable`                     | Enable topic deletion                                                                         | `true`                                                     |
@@ -224,4 +224,3 @@ Find out more about [IBM Event Streams](https://developer.ibm.com/messaging/even
 ## Disclaimer
 
 IBM’s statements regarding its plans, directions, and intent are subject to change or withdrawal without notice at IBM’s sole discretion.   Information regarding potential future products is intended to outline our general product direction and it should not be relied on in making a purchasing decision. The information mentioned regarding potential future products is not a commitment, promise, or legal obligation to deliver any material, code or functionality. Information about potential future products may not be incorporated into any contract. The development, release, and timing of any future features or functionality described for our products remains at our sole discretion.
-

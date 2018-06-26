@@ -8,15 +8,15 @@ To override any of these values, modify the templates/_sch-chart-config.tpl file
 sch:
   names:
     fullCompName:
-      maxLength: 92
-      releaseNameTruncLength: 36
-      appNameTruncLength: 17
-      compNameTruncLength: 39
+      maxLength: 62
+      releaseNameTruncLength: 30
+      appNameTruncLength: 7
+      compNameTruncLength: 25
 
   chart:
     # This override allows all IBM Event Streams subcharts to be labelled
     #  consistently as part of the same overall application
-    appName: "ibm-eventstreams"
+    appName: "ibm-es"
 
     #
     # Names given to the Kubernetes components that make up Event Streams
@@ -155,7 +155,7 @@ sch:
         roleBinding:
           name: "ui-rolebinding"
         oauth2ClientRegistration:
-          name: "ui-oauth2-client-registration"
+          name: "ui-oauth2-client-reg"
         oauthSecret:
           name: "oauth-secret"
 
@@ -180,10 +180,10 @@ sch:
       metricsReporterTag: 2018-05-17-20.03.37-d2917ebc332813573c59e61fab3d708855d172ad
       zookeeperTag: 2018-05-17-20.19.48-0e3629c9a1664a69d250e32ae06221e85e2ce3b2
       proxyTag: 2018-05-21-14.20.25-ffbc3a4b0567a01c539ed159752b31d23888ecdc
-      uiTag: 2018-05-24-14.55.28-fd7603f975ed14ea4755b63281aeb0340082cb53
-      restTag: 2018-05-21-10.34.14-771d576b9bf47a5258fb75445f7c13e2e60b8cfe
+      uiTag: 2018-06-25-09.46.26-7bdce095e70786dd026b27a1fb242a040145aa62
+      restTag: 2018-06-25-09.46.33-c3c00c0a6ebee3d2da638ea0fed8fdca2757e238
       oauthTag: 2018-05-24-14.15.58-ceecba4b212262b7fd6afa1a05ff05c267529e1c
-      codegenTag: 2018-05-23-17.07.37-41f0f7c4d62ecab07a495c6599243f4b79e18d49
+      codegenTag: 2018-06-11-09.25.30-55eb1b9619e5b2d6d0457babed402e2ab4959962
     # DOCKER_IMAGE_TAGS_END
 
 

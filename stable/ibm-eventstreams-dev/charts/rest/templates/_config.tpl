@@ -12,10 +12,10 @@ sch:
       resources:
         limits:
           cpu: 1000m
-          memory: 1Gi
+          memory: 2Gi
         requests:
           cpu: 500m
-          memory: 500Mi
+          memory: 1Gi
 
       # Number of replicas for the REST API server
       replicas: 1
