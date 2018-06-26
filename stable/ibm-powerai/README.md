@@ -7,11 +7,11 @@
 
 # IBM PowerAI Helm Chart
 
-[IBM PoweraAI](https://developer.ibm.com/linuxonpower/deep-learning-powerai/) makes deep learning, machine learning, and AI more accessible and more performant.
+[IBM PowerAI](https://developer.ibm.com/linuxonpower/deep-learning-powerai/) makes deep learning, machine learning, and AI more accessible and more performant.
 
 ## Introduction
 
-This is a chart for IBM PoweraAI. IBM PowerAI incorporates some of the most popular deep learning frameworks along with unique IBM augmentations to improve cluster performance and support larger deep learning models. This chart is intended to be deployed in IBM Cloud Private.
+This is a chart for IBM PowerAI. IBM PowerAI incorporates some of the most popular deep learning frameworks along with unique IBM augmentations to improve cluster performance and support larger deep learning models. This chart is intended to be deployed in IBM Cloud Private.
 
 
 ## Chart Details
