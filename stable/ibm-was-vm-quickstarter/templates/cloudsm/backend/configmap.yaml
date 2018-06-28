@@ -1,0 +1,96 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.cloudsmBackend.name }}
+{{- $cloudsmFrontendName :=  .sch.chart.components.cloudsmFrontend.name }}
+{{- $couchdbCompName :=  .sch.chart.components.couchdb.name }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  server.xml: |-
+    <server description="new server">
+
+        <!-- Enable features -->
+        <featureManager>
+            <feature>localConnector-1.0</feature>
+            <feature>json-1.0</feature>
+            <feature>couchdb-1.0</feature>
+            <feature>jaxrs-1.1</feature>
+            <feature>ejbLite-3.1</feature>
+            <feature>servlet-3.1</feature>
+            <feature>jsp-2.2</feature>
+            <feature>appSecurity-2.0</feature>
+            <feature>jsf-2.0</feature>
+            <feature>websocket-1.0</feature>
+            <feature>ssl-1.0</feature>
+            <feature>passwordUtilities-1.0</feature>
+        </featureManager>
+
+        <applicationMonitor updateTrigger="disabled" dropinsEnabled="false" />
+
+        <httpEndpoint httpsPort="9445" host="*" id="defaultHttpEndpoint" />
+
+        <keyStore id="defaultKeyStore" password="${env.KEYSTORE_PASSWORD}" location="/etc/wlp/config/key.jks" />
+        <keyStore id="defaultTrustStore" password="${env.KEYSTORE_PASSWORD}" location="/etc/wlp/config/trust.jks"/>
+        <ssl id="defaultSSLConfig" sslProtocol="TLSv1.2" keyStoreRef="defaultKeyStore" trustStoreRef="defaultTrustStore" />
+
+        <couchdb id="cloudantNoSQLDB-cloudant-wasaas" jndiName="couchdb/cloudant-wasaas" libraryRef="cloudantNoSQLDB-library"
+                 connectionTimeout="5m" socketTimeout="5m" maxObjectSizeBytes="32768" enableSSL="true" relaxedSSLSettings="true" 
+                 host="{{ include "sch.names.fullCompName" (list . $couchdbCompName) }}" port="{{ .Values.couchdb.service.port }}"
+                 username="{{ .Values.couchdb.adminUsername }}" password="{{ .Values.couchdb.adminPassword }}" 
+                 url="https://{{ .Values.couchdb.adminUsername }}:{{ .Values.couchdb.adminPassword }}@{{ include "sch.names.fullCompName" (list . $couchdbCompName) }}:{{ .Values.couchdb.service.port }}/" />
+                 
+        <library id="cloudantNoSQLDB-library" apiTypeVisibility="spec,ibm-api,api,third-party"> 
+            <fileset dir="${server.config.dir}/lib" id="cloudantNoSQLDB-fileset" includes="*" />
+        </library>
+
+        <basicRegistry id="BasicRealm" realm="BasicRealm">
+            <user name="${env.CLOUDSM_USERNAME}" password="${env.CLOUDSM_PASSWORD}"/>
+        </basicRegistry>
+
+        <webApplication id="cloudsm" location="cloudsm.war"
+            name="cloudsm">
+            <application-bnd>
+                <security-role name="servicerole">
+                    <user name="${env.CLOUDSM_USERNAME}" />
+                </security-role>
+            </application-bnd>
+            <classloader commonLibraryRef="cloudantNoSQLDB-library" apiTypeVisibility="spec,ibm-api,api,third-party"/>
+        </webApplication>
+
+        <transaction totalTranLifetimeTimeout="1200s"/>
+        
+        <httpSession invalidationTimeout="4h" invalidateOnUnauthorizedSessionRequestException="true" cookieSecure="true"/>
+        
+        <webAppSecurity ssoRequiresSSL="true"/> 
+        
+        <ltpa expiration="4h"/>
+    </server>
+  jvm.options: |-
+    -DmockTest=n
+    -DdbHLQ={{ template "databaseName" . }}
+    -DpollFrequency=60
+    -DhostService=back
+    -DalertingOn=false
+    -DqueryFrequency=30
+    #-DtestInstance=testcam3
+    -DencryptionKeyType=computed
+    -DcollectionResourceTimeout=360
+    -DcleanupFrequency=15
+    -DelapsedStoptime=60
+    -DclientCertsEnabled=disabled
+    -DfrontEndWs=wss://{{ include "sch.names.fullCompName" (list . $cloudsmFrontendName) }}:{{ .Values.cloudsm.frontend.service.port }}/cloudsm
+    -DuseWebSocket=y
+    -DcheckReferer=false
+    -Xmx768M

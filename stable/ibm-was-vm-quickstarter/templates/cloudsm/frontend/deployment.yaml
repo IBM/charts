@@ -1,0 +1,124 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $compName := .sch.chart.components.cloudsmFrontend.name }}
+{{- $cloudsmCommon := .sch.chart.components.cloudsmCommon.name }}
+{{- $commonName := .sch.chart.components.common.name }}
+{{- $secretGeneratorName := .sch.chart.components.common.secretGeneratorName }}
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "selector.matchLabels" (list . $compName) | indent 6 }}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        checksum/common_config: {{ include (print $.Template.BasePath "/cloudsm/configmap.yaml") . | sha256sum }}
+        checksum/frontend_config: {{ include (print $.Template.BasePath "/cloudsm/frontend/configmap.yaml") . | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAntiAffinity" . | indent 6 }}
+      containers:
+        - name: {{ $compName | quote }}
+          image: "{{ .Values.cloudsm.image.repository }}:{{ .Values.cloudsm.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          readinessProbe:
+            tcpSocket:
+              port: 9444
+            initialDelaySeconds: 75
+            periodSeconds: 15
+            failureThreshold: 12
+            timeoutSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: "/cloudsm/style.css"
+              port: 9444
+              scheme: HTTPS
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            failureThreshold: 6
+            timeoutSeconds: 30
+          env:
+            - name: WLP_LOGGING_CONSOLE_FORMAT
+              value: "json"
+            - name: WLP_LOGGING_CONSOLE_LOGLEVEL
+              value: "info"
+            - name : WLP_LOGGING_CONSOLE_SOURCE
+              value: "message,trace,accessLog,ffdc"
+            - name: CLOUDSM_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+                  key: cloudsmUsername
+            - name: CLOUDSM_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+                  key: cloudsmPassword
+            - name: KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
+                  key: keystorePassword
+          volumeMounts:
+            - name: {{ include "sch.names.fullCompName" (list . $cloudsmCommon) | quote }}
+              mountPath: /opt/ibm/wlp/usr/servers/defaultServer/cloudsm.properties
+              subPath: cloudsm.properties
+            - name: {{ include "sch.names.fullCompName" (list . $cloudsmCommon) | quote }}
+              mountPath: /opt/ibm/wlp/usr/servers/defaultServer/cloudsm.yaml
+              subPath: cloudsm.yaml
+            - name: {{ include "sch.names.fullCompName" (list . $cloudsmCommon) | quote }}
+              mountPath: /opt/ibm/wlp/usr/servers/defaultServer/shared.key
+              subPath: shared.key
+            - name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+              mountPath: /opt/ibm/wlp/usr/servers/defaultServer/server.xml
+              subPath: server.xml
+            - name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+              mountPath: /opt/ibm/wlp/usr/servers/defaultServer/jvm.options
+              subPath: jvm.options
+            - name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+              mountPath: /opt/ibm/wlp/usr/servers/defaultServer/region.properties
+              subPath: region.properties
+            - name: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
+              mountPath: /etc/wlp/config
+      volumes:
+        - name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+        - name: {{ include "sch.names.fullCompName" (list . $cloudsmCommon) | quote }}
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $cloudsmCommon) | quote }}
+        - name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+        - name: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
+          secret:
+            secretName: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
+            defaultMode: 256
+            items:
+             - key: key.jks
+               path: key.jks
+             - key: trust.jks
+               path: trust.jks
+      {{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secretName | quote }}
+      {{- end }}

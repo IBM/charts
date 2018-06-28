@@ -1,0 +1,13 @@
+{{ include "sch.config.init" (list . "sch.chart.config.values") }}
+{{ $consoleCompName := .sch.chart.components.console.name -}}
+
+# List of all deployed resources
+kubectl get all --namespace {{ .Release.Namespace }} -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }}"
+
+# Accessing DevOps container
+export DEVOPS_POD=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "component=devops,app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl exec -it $DEVOPS_POD bash
+
+# Console address
+export CONSOLE_SERVICE_IP=$(kubectl get ingress --namespace {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . $consoleCompName) }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "WAS VM Quickstarter console: https://$CONSOLE_SERVICE_IP{{ .Values.console.ingress.path }}"
