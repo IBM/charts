@@ -1,0 +1,125 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $glusterfsdsName :=  .sch.chart.components.glusterfsds.name }}
+
+kind: DaemonSet
+apiVersion: apps/v1beta2
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $glusterfsdsName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $glusterfsdsName) | indent 4 }}
+    glusterfs: "daemonset"
+    version: "{{ .Values.gluster.image.tag }}"
+  annotations:
+    description: GlusterFS Daemon Set
+    tags: glusterfs
+spec:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: {{ include "sch.names.appName" (list .) }}
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $glusterfsdsName) }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $glusterfsdsName) | indent 8 }}
+        glusterfs: "pod"
+        glusterfs-node: "daemonset"
+        version: "{{ .Values.gluster.image.tag }}"
+      annotations:
+        productName: "GlusterFS"
+        productID: "GlusterFS_{{ .Values.gluster.image.tag }}_free_00000"
+        productVersion: "{{ .Values.gluster.image.tag }}"
+    spec:
+      hostNetwork: true
+      containers:
+        - image: "{{ .Values.gluster.image.repository }}:{{ .Values.gluster.image.tag }}"
+          imagePullPolicy: "{{ .Values.gluster.image.pullPolicy }}"
+          name: glusterfs
+          volumeMounts:
+            - name: glusterfs-heketi
+              mountPath: "/var/lib/heketi"
+            - name: glusterfs-run
+              mountPath: "/run"
+            - name: glusterfs-lvm
+              mountPath: "/run/lvm"
+            - name: glusterfs-etc
+              mountPath: "/etc/glusterfs"
+            - name: glusterfs-logs
+              mountPath: "/var/log/glusterfs"
+            - name: glusterfs-config
+              mountPath: "/var/lib/glusterd"
+            - name: glusterfs-dev
+              mountPath: "/dev"
+            - name: glusterfs-cgroup
+              mountPath: "/sys/fs/cgroup"
+          securityContext:
+            capabilities: {}
+            privileged: true
+          readinessProbe:
+            timeoutSeconds: 3
+            initialDelaySeconds: 60
+            exec:
+              command:
+                - "/bin/bash"
+                - "-c"
+                - systemctl status glusterd.service
+          livenessProbe:
+            timeoutSeconds: 3
+            initialDelaySeconds: 60
+            exec:
+              command:
+                - "/bin/bash"
+                - "-c"
+                - systemctl status glusterd.service
+          resources:
+{{ toYaml .Values.gluster.resources | indent 12 }}
+      volumes:
+        - name: glusterfs-heketi
+          hostPath:
+            path: "/var/lib/heketi"
+        - name: glusterfs-run
+        - name: glusterfs-lvm
+          hostPath:
+            path: "/run/lvm"
+        - name: glusterfs-etc
+          hostPath:
+            path: "/etc/glusterfs"
+        - name: glusterfs-logs
+          hostPath:
+            path: "/var/log/glusterfs"
+        - name: glusterfs-config
+          hostPath:
+            path: "/var/lib/glusterd"
+        - name: glusterfs-dev
+          hostPath:
+            path: "/dev"
+        - name: glusterfs-cgroup
+          hostPath:
+            path: "/sys/fs/cgroup"
+      nodeSelector:
+        {{ .Values.nodeSelector.key }}: {{ .Values.nodeSelector.value }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      tolerations:
+        - effect: NoExecute
+          operator: Exists
+{{- with .Values.tolerations }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- if .Values.resources }}
+      resources:
+{{ toYaml .Values.resources | indent 8 }}
+{{- end }}
+

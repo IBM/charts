@@ -1,0 +1,55 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $scjobName :=  .sch.chart.components.scjob.name }}
+{{- $sccmName :=  .sch.chart.components.sccm.name }}
+
+{{- if .Values.storageClass.create }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $scjobName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $scjobName) | indent 4 }}
+    glusterfs-sc: "job"
+  annotations:
+    description: Defines how to create glusterfs storage class
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $scjobName) }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $scjobName) | indent 8 }}
+        glusterfs-sc: "pod"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: glusterfs-sc-job
+          image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
+          imagePullPolicy: "{{ .Values.preValidation.image.pullPolicy }}"
+
+          command: ["python", "/sc/storage_class.py"]
+
+          volumeMounts:
+            - name: storage-class
+              mountPath: "/sc"
+
+      volumes:
+        - name: storage-class
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $sccmName) }}
+            defaultMode: 0777
+
+{{- end }}

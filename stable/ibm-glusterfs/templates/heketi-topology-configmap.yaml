@@ -1,0 +1,104 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $heketitopocmName :=  .sch.chart.components.heketitopocm.name }}
+{{- $glusterfsdsName :=  .sch.chart.components.glusterfsds.name }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $heketitopocmName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $heketitopocmName) | indent 4 }}
+    glusterfs: "heketi-topology"
+  annotations:
+    description: Heketi Topology Configmap
+data:
+  heketi-topology.json: |
+    {
+    "clusters": [
+    {
+    "nodes": [
+    {{- range  $index1,$val := .Values.heketiTopology }}
+     {{- if gt $index1 0 -}}
+     ,
+     {{- end -}}
+     {
+      "node": {
+      "hostnames": {
+      "manage": [
+       {{ $val.k8sNodeName | quote }}
+       ],
+       "storage": [
+       {{ $val.k8sNodeIp | quote }}
+       ]
+       },
+       "zone": {{ $val.zone }}
+       },
+       "devices":
+        {{ toJson $val.devices }}
+      }
+      {{- end }}
+       ]
+      }
+      ]
+     }
+
+  heketi-topology-load.sh: |
+    #!/bin/bash
+
+    /usr/bin/heketi-start.sh &
+
+    until curl http://localhost:8080/hello | grep "Hello from Heketi"; do echo "Heketi: Waiting for Heketi to come up"; sleep 1; done
+
+    topology_info=$(heketi-cli topology info)
+    echo "Heketi: Before loading topology. Topology Info: $topology_info | End"
+
+    if [ -z "$topology_info" ] ; then
+
+      while true
+      do
+        echo "Heketi: Loading heketi topology"
+        output_topo="$(heketi-cli topology load --json=/topology/heketi-topology.json 2>&1)"
+
+        if [ $? -ne 0 ] || [[ "$output_topo" = *"Unable to"* ]] ; then
+          echo "Heketi: Unable to load the heketi topology. $output_topo | End"
+        else
+          echo "Heketi: Successfully loaded heketi topology"
+          break
+        fi
+
+        echo "!!! Heketi topology is not loaded yet !!!"
+
+        sleep 2
+
+      done
+    else 
+      echo "Heketi: Heketi topology is already available. Skipping heketi load topology!"
+    fi
+
+  is_gluster_daemon_up.sh: |
+    #!/bin/bash
+    
+    echo "Checking GlusterFS Daemonset's Readiness"
+
+    while true
+    do 
+       output=$(kubectl get ds {{ include "sch.names.fullCompName" (list . $glusterfsdsName) }} -o=custom-columns=A:.status.numberReady,B:.status.desiredNumberScheduled --no-headers=true | tr -s " " | awk '$1 == $2 {print "READY"}')
+
+       if [ "$output" == "READY" ]; then
+         echo "GlusterFS Daemonset is Ready."
+         break
+       fi
+ 
+       echo "GlusterFS Daemonset is not ready yet!"
+
+       sleep 1
+    done

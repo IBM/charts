@@ -1,0 +1,52 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $predeletejobName :=  .sch.chart.components.predeletejob.name }}
+{{- $predeletecmName :=  .sch.chart.components.predeletecm.name }}
+{{- $precheckresultscmName :=  .sch.chart.components.precheckresultscm.name }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $predeletejobName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $predeletejobName) | indent 4 }}
+    glusterfs-predelete: "job"
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $predeletejobName) }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $predeletejobName) | indent 8 }}
+        glusterfs-predelete: "pod"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: glusterfs-predelete-job
+          image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
+          imagePullPolicy: "{{ .Values.preValidation.image.pullPolicy }}"
+
+          command: ["/predelete/predelete_job.sh"]
+
+          volumeMounts:
+            - name: glusterfs-predelete
+              mountPath: "/predelete"
+
+      volumes:
+        - name: glusterfs-predelete
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $predeletecmName) }}
+            defaultMode: 0777

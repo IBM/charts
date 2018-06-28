@@ -1,0 +1,53 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $heketicfgcmName :=  .sch.chart.components.heketicfgcm.name }}
+
+apiVersion: v1
+data:
+  heketi.json: |
+    {
+      "_port_comment": "Heketi Server Port Number",
+      "port" : "8080",
+
+      "_use_auth": "Enable JWT authorization. Please enable for deployment",
+      "use_auth" : false,
+
+      "_backup_db_to_kube_secret": "Backup the heketi database to a Kubernetes secret when running in Kubernetes. Default is off.",
+      "backup_db_to_kube_secret" : true,
+
+      "_jwt" : "Private keys for access",
+      "jwt" : {
+        "_admin" : "Admin has access to all APIs",
+        "admin" : {
+          "key" : "My Secret"
+        },
+        "_user" : "User only has access to /volumes endpoint",
+        "user" : {
+          "key" : "My Secret"
+        }
+      },
+
+      "_glusterfs_comment": "GlusterFS Configuration",
+      "glusterfs" : {
+
+        "_executor_comment": "Execute plugin. Possible choices: mock, ssh",
+        "executor" : "mock",
+
+        "_db_comment": "Database file name",
+        "db" : "/var/lib/heketi/heketi.db"
+      }
+    }
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $heketicfgcmName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $heketicfgcmName) | indent 4 }}
+    glusterfs: "heketi-config"

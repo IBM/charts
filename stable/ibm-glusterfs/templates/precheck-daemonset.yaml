@@ -1,0 +1,79 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $precheckdsName :=  .sch.chart.components.precheckds.name }}
+{{- $precheckcmName :=  .sch.chart.components.precheckcm.name }}
+
+## This manifest deploys a Job which performs validation of
+## glusterfs nodes
+kind: DaemonSet
+apiVersion: apps/v1beta2
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $precheckdsName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $precheckdsName) | indent 4 }}
+    glusterfs-precheck: "daemonset"
+  annotations:
+    description: Defines how to run validations for glusterfs
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "sch.names.appName" (list .) }}
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $precheckdsName) }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $precheckdsName) | indent 8 }}
+        glusterfs-precheck: "pod"
+      annotations:
+        productName: "GlusterFS Precheck HyperKube"
+        productID: "HyperKube_{{ .Values.preValidation.image.tag }}_free_00000"
+        productVersion: "{{ .Values.preValidation.image.tag }}"
+    spec:
+      hostNetwork: true
+      containers:
+        - name: glusterfs-precheck-ds
+          image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
+          imagePullPolicy: "{{ .Values.preValidation.image.pullPolicy }}"
+
+          command: ["/precheck/precheck_daemonset.sh"]
+          env:
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: glusterfs-precheck
+              mountPath: "/precheck"
+            - name: dev-host
+              mountPath: "/dev/disk/"
+      volumes:
+        - name: dev-host
+          hostPath:
+            path: "/dev/disk/"
+        - name: glusterfs-precheck
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $precheckcmName) }}
+            defaultMode: 0777
+      nodeSelector:
+        {{ .Values.nodeSelector.key }}: {{ .Values.nodeSelector.value }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      tolerations:
+        - effect: NoExecute
+          operator: Exists
+{{- with .Values.tolerations }}
+{{ toYaml . | indent 8 }}
+{{- end }}

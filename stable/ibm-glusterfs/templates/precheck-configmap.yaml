@@ -1,0 +1,472 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $precheckresultscmName :=  .sch.chart.components.precheckresultscm.name }}
+{{- $precheckcmName :=  .sch.chart.components.precheckcm.name }}
+{{- $precheckdsName :=  .sch.chart.components.precheckds.name }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $precheckcmName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $precheckcmName) | indent 4 }}
+    glusterfs-precheck: "precheck-cm"
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+data:
+
+  precheck_daemonset.sh: |
+    #!/bin/bash
+
+    python /precheck/precheck_daemonset.py
+    sleep 600
+
+
+  precheck_daemonset.py: |
+
+    import sys
+    import json
+    import os.path
+    import subprocess
+    import socket
+
+    precheck_cm = {{ include "sch.names.fullCompName" (list . $precheckresultscmName) | quote }}
+
+    glusterfs_ports = [2222, 24007, 24008]
+    glusterfs_client_port_start = 49152
+    glusterfs_client_port_end = 49251
+
+
+    def update_configmap(status, err_msg):
+
+      '''
+       data:
+         node1 : { status: s, msg: msg }
+         node2 : { status: s, msg: msg }
+      '''
+
+      key = os.getenv("MY_NODE_NAME")
+      value = "status : %s # msg: %s" %(status, err_msg)
+
+      if status == "success":
+        # Get configmap
+        cm_out = subprocess.check_output(
+          "kubectl get configmap %s -ojson" %(precheck_cm), shell=True)
+
+        json_out = json.loads(cm_out)
+
+        #skip patching when status success is already updated 
+        if "data" in json_out.keys() and key in json_out["data"].keys() and "success" in json_out["data"][key]:
+          return
+
+      patch_var = '{"data": {"%s" : "%s"}}' % (key, value)
+
+      print("Updating the configmap %s with %s" %(precheck_cm, patch_var))
+      subprocess.check_output(
+        "kubectl patch configmap %s --patch='%s'" %(precheck_cm, patch_var), shell=True)
+
+
+    def validate_kernel_modules(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+
+      print("Validating Kernel module dm_thin_pool")
+      lsmod_out = subprocess.check_output("lsmod | awk '{print $1}'", shell=True)
+
+      if "dm_thin_pool" not in lsmod_out:
+        msg = "Kernel module 'dm_thin_pool' does not exist on " + os.getenv("MY_NODE_NAME")
+        return "fail", msg
+
+      return retval, msg
+
+
+    def validate_port(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+
+      print("Validating ports")
+      for port in range(glusterfs_client_port_start, glusterfs_client_port_end + 1):
+        glusterfs_ports.append(port)
+
+
+      open_port_list = []
+      for port_val in glusterfs_ports: 
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex(('',port_val))
+
+        if result == 0:
+          open_port_list.append(port_val)
+
+      if len(open_port_list) != 0:
+        msg = "GlusterFS ports '%s' are open on %s" %(open_port_list, os.getenv("MY_NODE_NAME"))
+        retval = "fail"
+
+      return retval, msg
+
+
+    def validate_vg(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+
+      print("Validating volume groups")
+      if {{ .Values.gluster.installType | quote }} == "Fresh":
+
+        # logical volume check
+        result = subprocess.check_output("vgscan | grep 'vg_'", shell=True)
+        print("vgscan output:", result)
+        if b'Found' in result:
+          msg = "Volume groups present on node %s" %(os.getenv("MY_NODE_NAME"))
+          retval = "fail"
+
+      return retval, msg
+      
+
+    def validate_topology(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+      validate = False
+
+      topology_info = json.loads(config_data["topology"])
+      print("Topology info: ", topology_info)
+
+      failed_path_device_list = []
+      failed_lvm_device_list = []
+      for node in topology_info:
+
+        if node["k8sNodeName"] == os.getenv("MY_NODE_NAME"):
+          validate = True
+          device_list = node["devices"]
+          for device in device_list:
+            print("Device: ", device)
+            # device path check
+            if os.path.islink(device) is False:
+              failed_path_device_list.append(device)
+            else:  
+              if {{ .Values.gluster.installType | quote }} == "Fresh":
+                # logical volume check
+                result = subprocess.check_output("lsblk %s" %device, shell=True)
+                print("lsblk output:", result)
+                if b'lvm' in result:
+                  failed_lvm_device_list.append(device)
+
+      if validate == False:
+        retval = "success"
+        msg = "No heketi topology configured for this node '%s'" % (os.getenv("MY_NODE_NAME"))
+
+      if len(failed_path_device_list) != 0:
+        msg = "GlusterFS storage device paths %s does not exist" % (failed_path_device_list)
+        retval = "fail"
+
+      if len(failed_lvm_device_list) != 0:
+        msg = "Disks %s have logical volumes" % (failed_lvm_device_list)
+        retval = "fail"
+
+      return retval, msg
+
+
+    def main():
+      config_data = {
+        "topology" : {{ toJson .Values.heketiTopology | quote }} ,
+      }
+
+      validation_methods_list = [
+        validate_topology,
+        validate_kernel_modules,
+        validate_port,
+        #validate_vg,
+      ]
+
+      for method in validation_methods_list:
+
+         status, msg = method(config_data)
+         update_configmap(status, msg)
+
+         if status != "success":
+           return "fail"
+
+      return "success"
+
+
+    if __name__ == "__main__":
+      if main() == "fail":
+        exit(1)
+      exit(0)
+
+  
+  precheck_job.py: |
+
+    import subprocess
+    import json
+    import time
+    import re
+
+    precheck_cm = {{ include "sch.names.fullCompName" (list . $precheckresultscmName) | quote }}
+
+    def validate_min_nodes(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+
+      topology_info = json.loads(config_data["topology"])
+
+      if len(topology_info) < 3:
+        msg = "Minimum number of storage nodes in Heketi Topology must be 3"
+        return "fail", msg
+
+      return retval, msg
+
+
+    def validate_kubelet_nodes(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+
+      topology_info = json.loads(config_data["topology"])
+
+      kubelet_nodes = subprocess.check_output("kubectl get nodes -ojson", shell=True)
+
+      kubelet_node_data_json = json.loads(kubelet_nodes)
+      kubelet_node_list = kubelet_node_data_json["items"]
+
+      topo_node_list = []
+      matched_kubelet_node_list = []
+      matched_labeled_node_list = []
+      for topo_node in topology_info:
+        if topo_node["k8sNodeName"] not in topo_node_list:
+          topo_node_list.append(topo_node["k8sNodeName"])
+
+        for kubelet_node in kubelet_node_list:
+
+          if topo_node["k8sNodeName"] == kubelet_node["metadata"]["name"]:
+            print("K8s Node Name '%s' present in kubetlet nodes '%s'" %(topo_node["k8sNodeName"],kubelet_node["metadata"]))
+            matched_kubelet_node_list.append(topo_node["k8sNodeName"])
+
+            if {{ .Values.nodeSelector.key | quote }} in kubelet_node["metadata"]["labels"].keys() and {{ .Values.nodeSelector.value | quote }} in kubelet_node["metadata"]["labels"].values():
+              print("K8s Node Name '%s' present in storage node labels '%s'" %(topo_node["k8sNodeName"],kubelet_node["metadata"]["labels"]))
+              matched_labeled_node_list.append(topo_node["k8sNodeName"])
+
+            break
+
+      if len(matched_kubelet_node_list) != len(topo_node_list) or len(matched_labeled_node_list) != len(topo_node_list):
+        msg = "Some of the Hostnames configured %s are not present in kubelet nodes or not labeled. Matched Kubelet Nodes: %s. Matched Labeled Nodes: %s" %(topo_node_list, matched_kubelet_node_list, matched_labeled_node_list)
+        return "fail", msg
+
+      return retval, msg
+
+
+    def validate_name(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+
+      scname = config_data["scname"]
+      pattern = "[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*"
+      matchObj = re.match(pattern, scname)
+
+      if matchObj == None or matchObj.group(0) != scname:
+        msg = "GlusterFS storage class name %s is invalid. Name must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" %(scname)
+        retval = "fail"
+
+      # db backup secret name validation
+      secret = config_data["secretname"]
+      matchObj = re.match(pattern, secret)
+
+      if matchObj == None or matchObj.group(0) != secret:
+        msg = "Heketi db backup secret name %s is invalid. Name must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" %(secret)
+        retval = "fail"
+
+      # heketi auth secret name validation
+      authsecret = config_data["authsecret"]
+      matchObj = re.match(pattern, authsecret)
+
+      if matchObj == None or matchObj.group(0) != authsecret:
+        msg = "Heketi authentication secret name %s is invalid. Name must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" %(authsecret)
+        retval = "fail"
+
+      return retval, msg
+
+
+    def validate_heketi_db_secret(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+
+      err_msg = ""
+
+      secret = {{ .Values.heketi.backupDbSecret | quote }}
+      install_type = {{ .Values.gluster.installType | quote }}
+
+      try:
+        subprocess.check_output("kubectl get secret %s" %(secret), stderr=subprocess.STDOUT, shell=True)
+        if install_type == "Fresh":
+          msg = "Heketi DB Backup Secret %s is already available for the install type %s. Please remove and proceed the install" %(secret, install_type) 
+          retval = "fail"
+      except subprocess.CalledProcessError as e:
+        err_msg = e.output.decode()
+        if install_type == "Upgrade":
+          if ('secrets "%s" not found' %secret) in err_msg:
+            msg = "Heketi DB Backup Secret %s is not available for the install type %s." %(secret, install_type) 
+            retval = "fail"
+        
+      return retval, msg 
+
+
+    def check_configmap():
+
+      retval = "success"
+
+      while True:
+
+        cm_data = subprocess.check_output("kubectl get configmap %s -ojson" %(precheck_cm), shell=True)
+
+        # ConfigMap JSON Data Parsing
+        # Return success when the ConfigMap status of all nodes is updated and is Success.
+        # Return fail if any one of the nodes status is Fail
+
+        cm_data_json = json.loads(cm_data)
+
+        print("ConfigMap JSON Data: %s" %(cm_data_json))
+
+        if "data" in cm_data_json.keys():
+
+          cm_node_list = cm_data_json["data"]
+
+          print("cm_node_list: %s" %(cm_node_list))
+
+          for node in cm_node_list:
+
+            if "fail" in cm_node_list[node]:
+              print("Validation failed for node: '%s' with error '%s'" %(node, cm_node_list[node]))
+              return "fail"
+
+          topology_info = json.loads({{ toJson .Values.heketiTopology | quote }})
+
+          topo_node_list = []
+          matched_node_list = []
+          # wait for all nodes to get updated with the status
+          if len(cm_node_list) >= len(topology_info):
+
+            for node in topology_info:
+              if node["k8sNodeName"] not in topo_node_list:
+                topo_node_list.append(node["k8sNodeName"])
+
+              if node["k8sNodeName"] in cm_node_list.keys():
+                print("%s in %s" %(node["k8sNodeName"],cm_node_list.keys()))
+                matched_node_list.append(node["k8sNodeName"])
+
+          if len(matched_node_list):
+            print("Topology Node List: %s" %(topo_node_list))
+            print("ConfigMap Updated Node List: %s" %(matched_node_list))
+
+            # matched_node_list is a sublist of topo_node_list
+            if set(matched_node_list) <= set(topo_node_list):
+              msg = "Heketi Topology Validation Success!!"
+              return retval
+
+        time.sleep(2)
+
+
+    def update_configmap(status, err_msg):
+
+      key = "precheckJobStatus"
+      value = "status : %s # msg: %s" %(status, err_msg)
+
+      patch_var = '{"data": {"%s" : "%s"}}' % (key, value)
+
+      print("Updating the configmap %s with %s" %(precheck_cm, patch_var))
+      subprocess.check_output(
+          "kubectl patch configmap %s --patch='%s'" %(precheck_cm, patch_var), shell=True)
+
+
+    def create_heketi_db_backup_secret():
+      
+      secret_data = {
+        "apiVersion": "v1",
+        "type": "Opaque",
+        "kind": "Secret",
+        "metadata": {
+          "name": {{ .Values.heketi.backupDbSecret | quote }}, 
+          "namespace": {{ .Release.Namespace | quote }},
+          "labels": {
+            "glusterfs": "heketi-db-backup-secret",
+            "heketi": "db",
+          }
+        },
+        "data": {
+          "heketi.db": None
+        }
+      }
+
+      secret_json_data = json.dumps(secret_data)
+      print("Heketi DB Backup Secret JSON to be created: %s" % secret_json_data)
+
+      file = open("heketi_db_bkp_secret.json","w")
+      file.write(secret_json_data)
+      file.close()
+
+      subprocess.check_output("kubectl create -f heketi_db_bkp_secret.json --validate=false", shell=True)
+
+
+    def main():
+
+      config_data = {
+        "topology" : {{ toJson .Values.heketiTopology | quote }},
+        "scname" : {{ .Values.storageClass.name | quote }},
+        "secretname" : {{ .Values.heketi.backupDbSecret | quote }},
+        "authsecret" : {{ .Values.heketi.authSecret | quote }}
+      }
+
+      validation_methods_list = [
+        validate_min_nodes,
+        validate_kubelet_nodes,
+        validate_name,
+        validate_heketi_db_secret
+      ]
+
+      for method in validation_methods_list:
+
+        status, msg = method(config_data)
+
+        if status != "success":
+          update_configmap(status, msg)
+          break
+
+      if check_configmap() != "success":
+        return "fail"
+
+      # if installType is "Fresh", create a new secret with empty data
+      if {{ .Values.gluster.installType | quote }} == "Fresh":
+        create_heketi_db_backup_secret()
+
+      return "success"
+
+
+    def cleanup_prehook_resources():
+
+      subprocess.check_output("kubectl delete configmap %s" %({{ include "sch.names.fullCompName" (list . $precheckcmName) | quote }}), shell=True)
+      subprocess.check_output("kubectl delete daemonset %s" %({{ include "sch.names.fullCompName" (list . $precheckdsName) | quote }}), shell=True)
+
+
+    if __name__ == "__main__":
+      if main() == "fail":
+        cleanup_prehook_resources()
+        exit(1)
+
+      # Delete DaemonSet when success
+      subprocess.check_output("kubectl delete daemonset %s" %({{ include "sch.names.fullCompName" (list . $precheckdsName) | quote }}), shell=True)
+      exit(0)

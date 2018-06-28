@@ -1,0 +1,52 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $precheckjobName :=  .sch.chart.components.precheckjob.name }}
+{{- $precheckcmName :=  .sch.chart.components.precheckcm.name }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $precheckjobName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $precheckjobName) | indent 4 }}
+    glusterfs-precheck: "job"
+  annotations:
+    description: GlusterFS precheck
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $precheckjobName) }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $precheckjobName) | indent 8 }}
+        glusterfs-precheck: "pod"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: glusterfs-precheck-job
+          image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
+          imagePullPolicy: "{{ .Values.preValidation.image.pullPolicy }}"
+
+          command: ["python", "/precheck/precheck_job.py"]
+
+          volumeMounts:
+            - name: glusterfs-precheck
+              mountPath: "/precheck"
+
+      volumes:
+        - name: glusterfs-precheck
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $precheckcmName) }}
+            defaultMode: 0777

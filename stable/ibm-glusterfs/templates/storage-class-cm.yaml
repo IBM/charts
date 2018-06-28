@@ -1,0 +1,79 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $sccmName :=  .sch.chart.components.sccm.name }}
+{{- $heketisecretName :=  .sch.chart.components.heketisecret.name }}
+{{- $heketisvcName :=  .sch.chart.components.heketisvc.name }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $sccmName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $sccmName) | indent 4 }}
+    glusterfs-sc: "sc-cm"
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+data:
+
+  storage_class.py: |
+
+    import subprocess
+    import json
+
+    def create_sc():
+
+      heketi_ip_port = subprocess.check_output("kubectl get service %s -o=jsonpath='{.spec.clusterIP}:{.spec.ports[0].port}'" %({{ include "sch.names.fullCompName" (list . $heketisvcName) | quote }}), shell=True)
+
+      add_params = json.loads({{ toJson .Values.storageClass.additionalProvisionerParams | quote }})
+
+      sc_data = {
+        "apiVersion": "storage.k8s.io/v1",
+        "kind": "StorageClass",
+        "metadata": {
+           "name": {{ .Values.storageClass.name | quote }},
+           "annotations": {
+              "storageclass.beta.kubernetes.io/is-default-class": {{ .Values.storageClass.isDefault | quote }}
+           }
+        },
+        "parameters": {
+           "resturl": "http://%s" %(heketi_ip_port),
+           "restuser": "admin",
+           "secretName": {{ include "sch.names.fullCompName" (list . $heketisecretName) | quote }},
+           "secretNamespace": {{ .Release.Namespace | quote }},
+           "volumetype": {{ .Values.storageClass.volumeType | quote }},
+           "volumenameprefix": {{ .Values.storageClass.volumeNamePrefix | quote }}
+        },
+        "provisioner": "kubernetes.io/glusterfs",
+        "reclaimPolicy": {{ .Values.storageClass.reclaimPolicy | quote }},
+        "volumeBindingMode": {{ .Values.storageClass.volumeBindingMode | quote }}
+      }
+
+      sc_data["parameters"].update(add_params)
+
+      sc_json_data = json.dumps(sc_data)
+      print("Storage Class JSON to be created: %s" % sc_json_data)
+
+      file = open("storage_class.json","w")
+      file.write(sc_json_data)
+      file.close()
+
+      subprocess.check_output("kubectl create -f storage_class.json", shell=True)
+
+
+    def main():
+
+      create_sc()
+
+
+    if __name__ == "__main__":
+      main()
