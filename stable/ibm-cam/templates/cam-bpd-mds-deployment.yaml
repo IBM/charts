@@ -1,0 +1,116 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if .Values.camBPDUI.bundled  }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cam-bpd-mds
+  labels:
+    name: cam-bpd-mds
+    app: {{ template "fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  namespace: {{ .Values.service.namespace }}
+spec:
+  replicas: {{ .Values.camBPDMDS.replicaCount }}
+  selector:
+    matchLabels:
+      name: cam-bpd-mds
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  revisionHistoryLimit: 3
+  template:
+    metadata:
+      labels:
+        name: cam-bpd-mds
+        app: {{ template "fullname" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: "Cloud Automation Manager"
+        productID: "{{ .Values.global.id.productID }}"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostname: cam-bpd-mds
+      containers:
+        - name: cam-bpd-mds
+          image: "{{ .Values.image.repository }}icam-bpd-mds:{{ .Values.image.tag }}{{ template "platform" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: liveness-port
+              containerPort: 7578
+          envFrom:
+          - configMapRef:
+              name: common-config
+          env:
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: cam-database-secret
+                  key: dburl
+            - name: LICENSE
+              value: "accept"
+            - name: CAM_ENABLED
+              value: {{ default "false" .Values.camBPDUI.bundled | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          livenessProbe:
+            httpGet:
+              path: /
+              port: liveness-port
+            initialDelaySeconds: 300
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: liveness-port
+            initialDelaySeconds: 300
+            periodSeconds: 20
+          resources:
+{{ toYaml .Values.camBPDMDS.resources | indent 12 }}
+          volumeMounts:
+            - name:  {{ .Values.camLogsPV.name }}
+              mountPath: /var/camlog
+              subPath: cam-bpd-mds
+      volumes:
+        - name:  {{ .Values.camLogsPV.name }}
+        {{- if .Values.camLogsPV.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.camLogsPV.persistence.existingClaimName }}
+            claimName: {{ .Values.camLogsPV.persistence.existingClaimName }}
+          {{- else }}
+            claimName:  {{ .Values.camLogsPV.name }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+       - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+{{- end }}
