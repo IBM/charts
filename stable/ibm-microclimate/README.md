@@ -8,6 +8,8 @@ This chart can be used to install Microclimate into a Kubernetes environment.
 
 Visit the [Microclimate landing page](https://microclimate-dev2ops.github.io/) to learn more, or visit our [Slack channel](https://ibm-cloud-tech.slack.com/messages/C8RS7HBHV/) to ask any Microclimate questions you might have.
 
+For more information about what's new in the latest chart, see [Release notes](https://github.com/IBM/charts/blob/master/stable/ibm-microclimate/RELEASENOTES.md).
+
 ## Chart details
 This chart will do the following:
 - Deploy Microclimate
@@ -44,10 +46,41 @@ See [configuration](#configuration) for details on how to configure these values
 
 1. Create a Docker registry secret for Microclimate.
 2. Patch this secret to a service account.
-3. Create a secret so Microclimate can securely use Helm.
-4. Set the Microclimate and Jenkins hostname values
-5. Ensure Microclimate is configured correctly to use persistent storage, see the [configuration](#configuration) section below for more details.
-6. (ICP 2.1.0.2 only) Set the Jenkins template version and unset the Helm secret value
+3. Ensure that the target namespace for deployments can access the docker image registry.
+4. Create a secret so Microclimate can securely use Helm.
+5. Set the Microclimate and Jenkins hostname values
+6. Ensure Microclimate is configured correctly to use persistent storage, see the [configuration](#configuration) section below for more details.
+7. (ICP 2.1.0.2 only) Set the Jenkins template version
+
+
+## Installing into a non-default namespace
+
+Microclimate can be installed into a non-default namespace by specifying configuration options when installing the Helm chart.
+
+Set `global.rbac.serviceAccountName=<a name>,jenkins.rbac.serviceAccountName=<a name>` when installing the chart.
+
+For example:
+
+`helm install --name microclimate --set global.rbac.serviceAccountName=portal-sa,jenkins.rbac.serviceAccountName=devopsjenkins-sa,jenkins.Pipeline.Registry.Url=mycluster.icp:8500/<a namespace>, hostName=microclimate.${INGRESS_IP}.nip.io, jenkins.Master.HostName=jenkins.${INGRESS_IP}.nip.io --namespace team1 ibm-charts/ibm-microclimate`
+
+The `jenkins.Pipeline.Registry.Url` value should be provided where the namespace corresponds to where your Docker registry's namespace is (which could remain in `default`).
+
+It is up to an administrator to create the service account along with corresponding cluster role bindings and roles that will be used: for a worked example see [the non-default namespace documentation for Microclimate](https://microclimate-dev2ops.github.io/installndnamespace).
+
+Secrets should also be created in the namespace you will be deploying into, for example, you can append `--namespace team1` to create the secret in the `team1` namespace, and the examples below should be modified accordingly.
+
+```
+kubectl create secret docker-registry microclimate-registry-secret \
+  --docker-server mycluster.icp:8500 \
+  --docker-username admin \
+  --docker-email null \
+  --docker-password admin \
+  --namespace team1
+```
+
+The service accounts will need to be patched too and this is also covered at the non-default namespace installation documentation linked to above.
+
+For more information on role-based access control, consult the [IBM Private Cloud RBAC documentation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0/user_management/assign_role.html) and the [official Kubernetes RBAC documentation](https://kubernetes.io/docs/admin/authorization/rbac).
 
 #### Create Docker registry secret
 
@@ -79,6 +112,23 @@ kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "microcl
 
 Note: If there are other secrets that need to be associated to this service account, they should be included in the `imagePullSecrets` array in the command above, for example, `... '{"imagePullSecrets": [{"name": "microclimate-registry-secret"}, {"name": "secret-1"}, ...., {"name": "secret-n"} ]}'`
 
+#### Ensure target namespace for deployments
+
+The chart parameter `jenkins.Pipeline.TargetNamespace` defines the the namespace that the pipeline will deploy to. Its default value is "microclimate-pipeline-deployments". Ensure that the default service account in this namespace has an associated image pull secret that will permit pods in this namespace to pull images from the ICP image registry. For example, you might create another docker-registry secret and patch the service account:
+
+```
+kubectl create secret docker-registry microclimate-registry-secret \
+  --namespace=microclimate-pipeline-deployments
+  --docker-server=mycluster.icp:8500 \
+  --docker-username=admin \
+  --docker-password=admin \
+  --docker-email=null
+
+kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "microclimate-registry-secret"}]}' --namespace microclimate-pipeline-deployments
+```
+
+These steps will currently be performed for you if you use a pipeline in the 'deploy last good commit' mode. The patch happens when the pipeline first runs.
+
 
 #### Create a secret to use Tiller over TLS
 **NOTE**: This step can be skipped for ICP 2.1.0.2 installation
@@ -100,7 +150,7 @@ Note that it is your responsibility to ensure the certificate and the secret rem
 
 #### Set Microclimate and Jenkins hostname values
 
-Access to Microclimate and Jenkins is provided via two Kubernetes Ingresses which are created using the `hostName` and `jenkins.Master.Hostname` parameters respectively. Each of these parameters should consist of a fully-qualified domain name that resolves to the IP address of your cluster's proxy node, with a unique sub-domain that is used to route to the Microclimate and Jenkins user interfaces. For example, if `example.com` resolved to the proxy node, then `microclimate.example.com`and `jenkins.example.com` could be used. When a domain name is not available, the service `nip.io` can be used to provide a resolution based on an IP address. For example, `microclimate.<IP>.nip.io` and `jenkins.<IP>.nip.io` where `<IP>` would be replaced with the IP address of your cluster's proxy node.
+Access to Microclimate and Jenkins is provided via two Kubernetes Ingresses which are created using the `hostName` and `jenkins.Master.Hostname` parameters respectively. Each of these parameters should consist of a fully-qualified domain name that resolves to the IP address of your cluster's proxy node, with a unique sub-domain that is used to route to the Microclimate and Jenkins user interfaces. For example, if `example.com` resolved to the proxy node, then `microclimate.example.com` and `jenkins.example.com` could be used. When a domain name is not available, the service `nip.io` can be used to provide a resolution based on an IP address. For example, `microclimate.<IP>.nip.io` and `jenkins.<IP>.nip.io` where `<IP>` would be replaced with the IP address of your cluster's proxy node.
 
 The IP address of your cluster's proxy node can be found by using the following command:
 
@@ -108,10 +158,10 @@ The IP address of your cluster's proxy node can be found by using the following 
 
 NOTE: Kubernetes allows multiple Ingresses to be created with the same hostname and only one of the ingresses will be accessible via that hostname. When installing multiple instances of Microclimate, different hostname values must be used for each instance to ensure each is accessible.
 
-#### Unset the Helm secret value and set the Jenkins template version
+#### Set the Jenkins template version
 **NOTE**: This is only required when installing into ICP 2.1.0.2 - do not do this for other versions of ICP
 
-The default value for the `global.helm.tlsSecretName` will not work on 2.1.0.2 and so the chart must be installed with this value being empty. In addition, the version of the Jenkins template must be changed to an older version; set the `jenkins.Template.Version` value to `"18.03"`.
+The latest versions of the Jenkins pipeline template do not support ICP 2.1.0.2 and so the version of the Jenkins pipeline template must be changed to an older version; set the `jenkins.Pipeline.Template.Version` value to `"18.03"`.
 
 #### Installing from the command line
 
@@ -128,6 +178,8 @@ See the [Set Microclimate and Jenkins hostname values](#set-microclimate-and-jen
 This command deploys Microclimate on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
 ## Verifying the Chart
+Verify the chart by accessing the Microclimate Portal, using your IBM Cloud Private credentials to log in.
+
 When the Helm install has completed successfully, the Microclimate Portal can be accessed via the Microclimate ingress hostname. This can be found by passing the name of your Microclimate release into the following command:
 
 `kubectl get ingress -l release=<release_name>`
@@ -137,7 +189,6 @@ If you are using Helm to install Microclimate, you can access the Microclimate P
 Use the following command to view all resources created by this chart, replacing `x.y.z` with the version number of the installed chart (e.g. 1.0.0):
 
 `kubectl get all -l chart=ibm-microclimate-x.y.z`
-
 
 
 ## Uninstalling the Chart
@@ -154,13 +205,13 @@ The command removes all the Kubernetes resources that are associated with the ch
 
 #### Persistent Storage
 
-Microclimate requires two persistent volumes to function correctly: one for storing project workspaces and one for the Jenkins pipeline. Persistent storage is enabled by default with a storage size of 2GB for the Microclimate workspace. This size should be configured by using the `persistence.size` option to scale with the number and size of projects expected to be created in Microclimate. As a rough guide, a generated Java project is approximately 128MB, a generated Swift project is approximately 100MB and a generated Node.js project is below 1 MB.
+Microclimate requires two persistent volumes to function correctly: one for storing project workspaces and one for the Jenkins pipeline. The persistent volume used for project workspaces is shared by all users of the Microclimate instance and must be defined with an access mode of RWX - ReadWriteMany. The default size of the persistent volume claim for the project workspaces is 8Gi. This size should be configured by using the `persistence.size` option to scale with the number of users and the number and size of the projects they are expected to create or import into Microclimate. As a rough guide, a generated Java project is approximately 128Mi, a generated Swift project is approximately 100Mi and a generated Node.js project is approximately 1Mi. The default size of 8Gi therefore allows space for approximately 64 Java projects.
 
-Jenkins requires an 8GB persistent volume which currently isn't configurable.
+The Jenkins pipeline requires an 8GB persistent volume which currently isn't configurable.
 
 Both Microclimate and Jenkins can use existing Persistent Volume Claims, which should follow the guidelines above for storage size. These names can be passed into the following chart values: `persistence.existingClaimName` and `jenkins.Persistence.ExistingClaim`. NOTE: If you want to use Dynamic Provisioning or you want Microclimate to create its own `PersistentVolumeClaim`, these values MUST be left blank.
 
-Dynamic Provisioning is enabled by default (`persistence.useDynamicProvisioning`) and uses the default storage class set up in your cluster. A different storage class can be used by editing the `persistence.storageClassName` option in the configuration, see below.
+Dynamic Provisioning is enabled by default (`persistence.useDynamicProvisioning`) and uses the default storage class set up in your cluster. A different storage class can be used by editing the `persistence.storageClassName` option for Microclimate and the `jenkins.Persistence.StorageClass` option for Jenkins in the configuration, see below.
 
 Microclimate attempts to create its own persistent volume claim by using the `persistence.storageClassName` and `persistence.size` options if Dynamic Provisioning isn't enabled and if PVCs aren't provided by name.
 
@@ -181,7 +232,7 @@ Microclimate provides a number of configuration options to customise its install
 
 If you are installing by using the Helm CLI then values can be set by using one or more `--set` arguments when doing `helm install`. For example, to configure persistent storage options, you can use the following:
 
-`helm install --name myMicroclimate --set persistence.useDynamicProvisioning=false --set persistence.size=2Gi --set hostName=<MICROCLIMATE_INGRESS> ibm-charts/ibm-microclimate`
+`helm install --name myMicroclimate --set persistence.useDynamicProvisioning=false --set persistence.size=16Gi --set hostName=<MICROCLIMATE_INGRESS> ibm-charts/ibm-microclimate`
 
 #### Configuration parameters
 
@@ -198,13 +249,14 @@ If you are installing by using the Helm CLI then values can be set by using one 
 | `persistence.enabled`      | Use persistent storage for Microclimate workspace | `true` |
 | `persistence.existingClaimName`        | Name of an existing PVC to be used with Microclimate - Should be left blank if you use Dynamic Provisioning or if you want Microclimate to make it's own PVC     | `""` |
 | `persistence.useDynamicProvisioning`      | Use dynamic provisioning | `true` |
-| `persistence.size`         | Storage size allowed for Microclimate workspace   | `2Gi` |
+| `persistence.size`         | Storage size allowed for Microclimate workspace   | `8Gi` |
 | `persistence.storageClassName`        | Storage class name for Microclimate workspace     | `""` |
 | `jenkins.Master.HostName`      | Host name used for Ingress for the Jenkins | `""` |
+| `jenkins.Persistence.StorageClass`    | Storage class name for Microclimate workspace | `""` |
 | `jenkins.Persistence.ExistingClaim`    | Name of an existing PVC to be used for Jenkins - Should be left blank if you use Dynamic Provisioning or if you want Microclimate to make it's own PVC | `""` |
+| `jenkins.rbac.serviceAccountName`    | Name of an existing service account for Jenkins and the DevOps component to use | `"default"` |
 | `global.helm.tlsSecretName`    | Name of the Kubernetes secret to be used by the Microclimate pipeline: must be provided in order to use Tiller securely | `""` |
-| `gitlab.url`               | Optionally, the URL of a Gitlab instance | `""`
-| `gitlab.apiToken`          | Optionally, an API token for the Gitlab instance specified in `gitlab.url` | `""` |
+| `global.rbac.serviceAccountName`    | Name of an existing service account for Microclimate's Portal and File Watcher components to use | `"default"` |
 
 
 Jenkins also has a number of other configurable options not listed here. These can be viewed in the chart's `values.yaml` file or in your cluster's dashboard page for this chart.
@@ -252,13 +304,7 @@ These commands can be run from any host that has a kubectl client with access to
 
   `kubectl create secret tls microclimate-tls-secret  --key tls.key --cert tls.crt --dry-run  -o yaml | kubectl replace --force -f -`
 
-#### GitLab
-
-The Microclimate chart might optionally be configured with details of a GitLab instance by setting the `gitlab.url` and `github.apiToken` values. Repositories contained in this instance automatically have webhooks created when a pipeline is created on a project associated with the repository.
-
 ## Limitations
-
-- Microclimate must be deployed in to the ```default``` namespace.
 
 - This chart should only use the default image tags provided with the chart. Different image versions might not be compatible with different versions of this chart.
 

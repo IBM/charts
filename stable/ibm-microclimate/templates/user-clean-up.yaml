@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: {{ include "sch.names.fullName" (list .) }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ .Release.Name }}-user-clean-up
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+spec:
+  template:
+    spec:
+      {{- if .Values.global.rbac.serviceAccountName }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      {{- end }}
+      containers:
+      - name: filewatcher-editor-delete
+        image: ibmcom/k8s-kubectl:v1.8.3
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        command: [ "kubectl", "delete", "deploy,svc", "-l", "app={{ include "sch.names.fullName" (list .) }}" ]
+      restartPolicy: Never

@@ -43,6 +43,42 @@ auto-startup.cfg: |
 {{- end }}
 {{- end }}
 
+{{- if .Values.datapower.snmpState }}
+{{- if eq .Values.datapower.snmpState "enabled" }}
+    %if% available "snmp"
+    snmp
+      admin-state {{ .Values.datapower.snmpState }}
+      version 2c
+      ip-address {{ .Values.datapower.snmpLocalAddress }}
+      port {{ .Values.datapower.snmpPort }}
+      community public default read-only 0.0.0.0/0
+      trap-default-subscriptions
+      trap-priority warn
+      trap-code 0x00030002
+      trap-code 0x00230003
+      trap-code 0x00330002
+      trap-code 0x00b30014
+      trap-code 0x00e30001
+      trap-code 0x00e40008
+      trap-code 0x00f30008
+      trap-code 0x01530001
+      trap-code 0x01a2000e
+      trap-code 0x01a40001
+      trap-code 0x01a40005
+      trap-code 0x01a40008
+      trap-code 0x01b10006
+      trap-code 0x01b10009
+      trap-code 0x01b20002
+      trap-code 0x01b20004
+      trap-code 0x01b20008
+      trap-code 0x02220001
+      trap-code 0x02220003
+      trap-code 0x02240002
+    exit
+    %endif%
+{{- end }}
+{{- end }}
+
     domain "{{ .Values.patternName}}"
       base-dir local:
       base-dir {{ .Values.patternName }}:

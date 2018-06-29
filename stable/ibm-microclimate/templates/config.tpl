@@ -200,7 +200,7 @@ data:
               <default>
                 <comparator class="hudson.util.CaseInsensitiveComparator"/>
               </default>
-              <int>9</int>
+              <int>10</int>
               <string>BUILD</string>
               <string>{{ .Values.Pipeline.Build }}</string>
               <string>DEPLOY</string>
@@ -219,6 +219,8 @@ data:
               <string>{{ .Values.Pipeline.Registry.Url }}</string>
               <string>REGISTRY_SECRET</string>
               <string>{{ .Values.Pipeline.Registry.Secret }}</string>
+              <string>SERVICE_ACCOUNT_NAME</string>
+              <string>{{ .Values.rbac.serviceAccountName }}</string>
             </tree-map>
           </envVars>
         </hudson.slaves.EnvironmentVariablesNodeProperty>

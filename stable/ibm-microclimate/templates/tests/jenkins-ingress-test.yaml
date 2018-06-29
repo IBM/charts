@@ -11,7 +11,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ .Release.Name }}-theia-endpoint-test-{{ randAlphaNum 5 | lower }}"
+  name: "{{ .Release.Name }}-jenkins-ingress-test-{{ randAlphaNum 5 | lower }}"
   labels:
     app: {{ include "sch.names.fullName" (list .) }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
@@ -21,8 +21,15 @@ metadata:
     "helm.sh/hook": test-success
 spec:
   restartPolicy: Never
+
   containers:
-    - name: "{{ .Release.Name }}-theia-endpoint-test"
+    - name: "{{ .Release.Name }}-jenkins-ingress-test"
       image: {{ .Values.portal.repository }}:{{ .Values.portal.tag }}
-      command: ["curl"]
-      args:  ['{{ include "sch.names.fullName" (list .) }}:{{ .Values.ports.theia }}']
+
+      # If security isn't enbled, wget will work fine. When security is enabled, we expect to get a 403 Forbidden message back
+    {{- if not .Values.jenkins.Master.UseSecurity }}
+      command: ["wget"]
+      args:  ['https://{{ .Values.jenkins.Master.HostName }}', '--no-check-certificate']
+    {{- else }}
+      command: ['/bin/sh', '-c', 'wget https://{{ .Values.jenkins.Master.HostName }} --no-check-certificate 2>&1 | grep "ERROR 403: Forbidden"; exit $?']
+    {{- end }}

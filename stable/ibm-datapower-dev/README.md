@@ -46,6 +46,7 @@ The helm chart has the following Values that can be overriden using the install 
 | `datapower.image.repository`          | The image to use for this deployment          | ibmcom/datapower    |
 | `datapower.image.tag`                 | The image tag to use for this deployment      | latest              |
 | `datapower.image.pullPolicy`          | Determines when the image should be pulled    | IfNotPresent        |
+| `datapower.image.pullSecrets`         | Range of kubernetes pull secrets              | N/A                 |
 | `datapower.env.workerThreads`         | Number of DataPower worker threads            | 4                   |
 | `datapower.resources.limits.cpu`      | Container CPU limit                           | 8                   |
 | `datapower.resources.limits.memory`   | Container memory limit                        | 64Gi                |
@@ -59,6 +60,9 @@ The helm chart has the following Values that can be overriden using the install 
 | `datapower.restManagementPort`        | REST Management port                          | 5554                |
 | `datapower.xmlManagementState`        | XML Management admin state                    | disabled            |
 | `datapower.xmlManagementPort`         | XML Management port                           | 5550                |
+| `datapower.snmpState`                 | SNMP admin state                              | enabled             |
+| `datapower.snmpPort`                  | SNMP interface port                           | 1161                |
+| `datapower.prometheusMetricsPort`     | Port that is queried for Prometheus metrics   | 9116                |
 | `service.name`                        | Name to add to service                        | datapower           |
 | `patternName`                         | The name of the datapower pattern to load     | RESTProxy           |
 | `RESTProxy.backendURL`                | The backend URL datapower will proxy          | https://www.ibm.com |
