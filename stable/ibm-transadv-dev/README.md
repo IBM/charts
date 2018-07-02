@@ -38,6 +38,14 @@ spec:
     path: "/usr/data"
 ```
 
+In case NFS PV is used one needs to run following commands on NFS server to avoid "permission for changing ownership" error:
+```bash
+mkdir -p /opt/couchdb/data
+```
+```bash
+chomd -R 777 /opt/couchdb/data
+```
+
 - Persistent storage using a predefined PersistentVolumeClaim or PersistentVolume setup prior to the deployment of this chart
   - Set global values to:
     - couchdb.persistence.enabled: true (default)
@@ -84,6 +92,8 @@ helm install --name my-release stable/ibm-transadv-dev
 
 The command deploys `ibm-transadv-dev` on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
+> **Note**: This parameter is required for install `authentication.icp.masterIp`
+
 > **Tip**: List all releases using `helm list`
 
 ## Open Transformation Advisor UI
@@ -107,8 +117,13 @@ The following tables lists the configurable parameters of the Transformation Adv
 | arch.ppc64le                                        | Ppc64le worker node scheduler preference in a hybrid cluster | 2 - No preference                                       |
 | arch.s390x                                          | S390x worker node scheduler preference in a hybrid cluster   | 2 - No preference                                       |
 | ingress.enabled                                     | enable ingress to reach the service                          | true                                                    |
+| authentication.icp.masterIp                         | master node IP                                               | ""                                                      |
+| authentication.icp.endpointPort                     | master node login port                                       | 8443                                                    |
+| authentication.oidc.endpointPort                    | OIDC authentication endpoint port                            | 9443                                                    |
+| authentication.oidc.clientId.clientId               | a OIDC registry will be created with this id                 | ca5282946fac07867fbc937548cb35d3ebbace7e           |
+| authentication.oidc.clientSecret                    | a OIDC registry will be created with this secret             | 94b6cbce793d0606c0df9e8d656a159f0c06631b           |
 | couchdb.image.repository                            | couchdb image repository                                     | ibmcom/transformation-advisor-db                        |
-| couchdb.image.tag                                   | couchdb image tag                                            | 1.5.1                                                   |
+| couchdb.image.tag                                   | couchdb image tag                                            | 1.6.0                                                   |
 | couchdb.image.pullPolicy                            | couchdb image pull policy                                    | IfNotPresent                                            |
 | couchdb.resources.requests.memory                   | requests memory                                              | 2Gi                                                     |
 | couchdb.resources.requests.cpu                      | requests cpu                                                 | 1000m                                                   |
@@ -121,7 +136,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | couchdb.persistence.existingClaim                   | existing pv claim                                            | ""                                                      |
 | couchdb.persistence.storageClassName                | couchdb storage class name                                   | ""                                                      |
 | transadv.image.repository                           | transadv server image                                        | ibmcom/transformation-advisor-server                    |
-| transadv.image.tag                                  | transadv server image tag                                    | 1.5.1                                                   |
+| transadv.image.tag                                  | transadv server image tag                                    | 1.6.0                                                   |
 | transadv.image.pullPolicy                           | image pull policy                                            | IfNotPresent                                            |
 | transadv.resources.requests.memory                  | requests memory                                              | 2Gi                                                     |
 | transadv.resources.requests.cpu                     | requests cpu                                                 | 1000m                                                   |
@@ -129,7 +144,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadv.resources.limits.cpu                       | limits cpu                                                   | 16000m                                                  |
 | transadv.service.nodePort                           | transadv sevice node port                                    | 30111                                                   |
 | transadvui.image.repository                         | transadv ui image                                            | ibmcom/transformation-advisor-ui                        |
-| transadvui.image.tag                                | transadv ui image tag                                        | 1.5.1                                                   |
+| transadvui.image.tag                                | transadv ui image tag                                        | 1.6.0                                                   |
 | transadvui.image.pullPolicy                         | image pull policy                                            | IfNotPresent                                            |
 | transadvui.resources.requests.memory                | requests memory                                              | 2Gi                                                     |
 | transadvui.resources.requests.cpu                   | requests cpu                                                 | 1000m                                                   |
@@ -137,7 +152,6 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadvui.resources.limits.cpu                     | limits cpu                                                   | 16000m                                                  |
 | transadvui.service.nodePort                         | transadv sevice node port                                    | 30222                                                   |
 | transadvui.inmenu                                   | add to Platform menu                                         | true                                                    |
-| transadvui.masternodeurl                            | master node url                                              | ""                                                      |
 
 ## Limitations
 

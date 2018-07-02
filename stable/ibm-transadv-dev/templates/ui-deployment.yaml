@@ -76,16 +76,30 @@ spec:
               value: /{{ .Release.Name }}-ui # forward slash is required
             - name:  TA_UI_HOST # in case of non-ingress in use, Lands Advisor is in the same cluster of UI, assume the Cluster IP is public, like using public Worker(s)
               value: $(TA_LA_CLUSTER_HOST)
-            - name:  TA_UI_PORT # in case of non-ingress in use
+            - name:  TA_UI_PORT # use to determine if an incoming request internally without going through an Ingress proxy
+              value: "{{ .Values.transadvui.internal.port }}"
+            - name: TA_AUTH_UI_DISABLED
               {{ if .Values.ingress.enabled -}}
-              value: ""
+              value: "false"
               {{- else }}
-              value: "{{ .Values.transadvui.service.nodePort }}"
+              value: "true"
               {{- end }}
+            - name: TA_UI_SERVICE_NAME # use to determine if an incoming request internally without going through an Ingress proxy
+              value: {{ template "fullname" . }}-ui
             - name: TA_MASTER_NODE_URL
-              value: "{{ .Values.transadvui.masternodeurl }}"
+              value: "https://{{ .Values.authentication.icp.masterIp }}:{{ .Values.authentication.icp.endpointPort }}"
+            - name: TA_AUTH_ICP_MASTER_IP
+              value: "{{ .Values.authentication.icp.masterIp }}"
+            - name: TA_AUTH_ICP_ENDPOINT_PORT #8443
+              value: "{{ .Values.authentication.icp.endpointPort }}"
+            - name: TA_AUTH_OIDC_ENDPOINT_PORT #9443
+              value: "{{ .Values.authentication.oidc.endpointPort }}"
+            - name: TA_AUTH_OIDC_CLIENT_ID
+              value:  "{{ .Values.authentication.oidc.clientId }}"
+            - name: TA_AUTH_OIDC_CLIENT_SECRET
+              value: "{{ .Values.authentication.oidc.clientSecret }}"
             - name: NODE_TLS_REJECT_UNAUTHORIZED
-              value: "0"  
+              value: "0"
 
           # set liveness probe to determine if container needs to be restarted
           # this test is the same as the readiness probe however this tests for multiple long periods

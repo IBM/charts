@@ -1,0 +1,64 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+# "Restricted Materials of IBM"
+#
+# Copyright IBM Corp. 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#*******************************************************************************
+
+#
+# @Author Huang, Fuguo (a.k.a Ken) at 25.May.2018
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "fullname" . }}-odic-registration
+  namespace: "services"
+  labels:
+    app: {{ template "fullname" . }}-odic-registration
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  template:
+    spec:
+      affinity:
+        {{- include "nodeAffinity" . | indent 6 }}    
+      containers:
+        - name: {{ template "fullname" . }}-odic-registration
+          image: "{{ .Values.couchdb.image.repository }}:{{ .Values.couchdb.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command: ["/scripts/register-client.sh"]
+          volumeMounts:
+            - name: registration-script
+              mountPath: /scripts
+            - name: registration-json
+              mountPath: /jsons
+          env:
+            - name: ICP_MASTER_IP
+              valueFrom:
+                configMapKeyRef:
+                  name: oauth-client-map
+                  key: MASTER_IP
+            - name: ICP_PROXY_IP
+              valueFrom:
+                configMapKeyRef:
+                  name: oauth-client-map
+                  key: PROXY_IP
+            - name: WLP_CLIENT_REGISTRATION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth-client-secret
+                  key: WLP_CLIENT_REGISTRATION_SECRET
+      volumes:
+        - name: registration-script
+          configMap:
+            name: {{ template "fullname" . }}-odic-registration-script
+            defaultMode: 0744
+        - name: registration-json
+          configMap:
+            name: {{ template "fullname" . }}-registration-json
+            defaultMode: 0744
+      restartPolicy: Never
