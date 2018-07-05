@@ -4,11 +4,15 @@ metadata:
   # Pay attention to the redis-role label at runtime. The self-determination logic in the image sets this value accordingly.
   name: {{ template "fullname" . }}-server
   labels:
-    name: "redis-server"
+    name: {{ template "fullname" . }}-server
     redis-node: "true"
 {{ include "labels.standard" . | indent 4 }}
 spec:
   replicas: {{ .Values.replicas.servers }}
+  selector:
+    matchLabels:
+      app: "{{ template "fullname" . }}"
+      name: {{ template "fullname" . }}-server
   template:
     metadata:
       annotations:
@@ -16,7 +20,7 @@ spec:
         productName: Redis HA
         productVersion: 4.0.6-r0
       labels:
-        name: "redis-server"
+        name: {{ template "fullname" . }}-server
         redis-node: "true"
 {{ include "labels.standard" . | indent 8 }}
     spec:
@@ -27,6 +31,30 @@ spec:
       - name: redis
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote  }}
+        {{- if .Values.master.livenessProbe.enabled}}
+        livenessProbe:
+          initialDelaySeconds: {{ .Values.master.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.master.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.master.livenessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.master.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.master.livenessProbe.failureThreshold }}
+          exec:
+            command:
+            - redis-cli
+            - ping
+        {{- end }}
+        {{- if .Values.master.readinessProbe.enabled}}
+        readinessProbe:
+          initialDelaySeconds: {{ .Values.master.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.master.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.master.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.master.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.master.readinessProbe.failureThreshold }}
+          exec:
+            command:
+            - redis-cli
+            - ping
+        {{- end }}
         resources:
 {{ toYaml .Values.resources.server | indent 10 }}
         env:
