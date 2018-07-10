@@ -62,7 +62,6 @@ The helm chart has the following Values that can be overriden using the install 
 | `datapower.xmlManagementPort`         | XML Management port                           | 5550                |
 | `datapower.snmpState`                 | SNMP admin state                              | enabled             |
 | `datapower.snmpPort`                  | SNMP interface port                           | 1161                |
-| `datapower.prometheusMetricsPort`     | Port that is queried for Prometheus metrics   | 9116                |
 | `service.name`                        | Name to add to service                        | datapower           |
 | `patternName`                         | The name of the datapower pattern to load     | RESTProxy           |
 | `RESTProxy.backendURL`                | The backend URL datapower will proxy          | https://www.ibm.com |

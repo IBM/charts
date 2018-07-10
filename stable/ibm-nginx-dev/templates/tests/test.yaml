@@ -8,26 +8,20 @@
 #  IBM Corporation - initial API and implementation
 ###############################################################################
 
-{{- if and .Values.confdPVC.enabled (not .Values.confdPVC.existingClaimName) }}
-kind: PersistentVolumeClaim
 apiVersion: v1
+kind: Pod
 metadata:
-  name: {{ .Release.Name }}-nginx-confd-pvc
+  name: "{{ template "fullname" . }}-test"
   labels:
-    app: {{ template "fullname" . }}
+    app: "{{ template "fullname" . }}-test"
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
+  annotations:
+    "helm.sh/hook": test-success
 spec:
-  resources:
-    requests:
-      storage: 1Mi
-  {{- if .Values.confdPVC.selector.label }}
-  # use selectors in the binding process
-  selector:
-    matchExpressions:
-      - {key: {{ .Values.confdPVC.selector.label }}, operator: In, values: [{{ .Values.confdPVC.selector.value }}]}
-  {{- end }}
-  accessModes:
-    - {{ .Values.confdPVC.accessMode | quote }}
-{{- end }}
+  restartPolicy: Never
+  containers:
+    - name: "{{ template "fullname" . }}-test"
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      command: ["sh", "-c", "wget -T 5 http://{{ template "fullname" . }}:{{ .Values.service.externalPort }}{{ .Values.liveness.path }}"]

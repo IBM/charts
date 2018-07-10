@@ -3,7 +3,8 @@
 [NGINX](https://www.nginx.com/) is a free and open-source web server which can also be used as a reverse proxy, load balancer and HTTP cache.
 
 ## Introduction
-This chart uses NGINX to host simple static content.
+
+This chart creates an [NGINX](https://www.nginx.com/) deployment to host simple static content.
 
 ## Chart Details
 
@@ -17,15 +18,21 @@ This chart will do the following:
 * Optionally, an image that extends the official nginx images that already contains configuration and/or content to host.
 
 ## Prerequisites
-* Kubernetes 1.7+ with Beta APIs enabled
+
+* Kubernetes 1.9 or later
+* Tiller 2.7.2 or later
 * Existing PersistentVolumeClaims or PersistentVolumes if mounting static content or configuration files.
+
+## Resources Required
+
+The chart deploys pods consuming minimum resources as specified in the resources configuration parameter (default: Memory: 256Mi, CPU: 100m)
 
 ## Installing the Chart
 
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release stable/ibm-nginx-dev
+helm install --name my-release stable/ibm-nginx-dev
 ```
 
 The command deploys `ibm-nginx-dev` on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -33,6 +40,7 @@ The command deploys `ibm-nginx-dev` on the Kubernetes cluster in the default con
 > **Tip**: List all releases using `helm list`
 
 ### Verifying the Chart
+
 See NOTES.txt associated with this chart for verification instructions
 
 ### Uninstalling the Chart
@@ -40,20 +48,20 @@ See NOTES.txt associated with this chart for verification instructions
 To uninstall/delete the `my-release` deployment:
 
 ```bash
-$ helm delete --purge my-release
+helm delete --purge my-release
 ```
 
-The command removes all the Kubernetes components associated with the chart and deletes the release.
+The command removes all the Kubernetes components associated with the chart and deletes the release. If Persistent Volumes were used, they may or may not be deleted based upon their reclaim policy.
 
 ## Configuration
 
-The following tables lists the configurable parameters of the <CHARTNAME> chart and their default values.
+The following tables lists the configurable parameters of the ibm-nginx-dev chart and their default values.
 
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
-| `arch.amd64`               | Preference to run on amd64 architecture         | `2 - No preference` |
-| `arch.ppc64le`             | Preference to run on ppc64le architecture       | `2 - No preference` |
-| `arch.s390x`               | Preference to run on s390x architecture         | `2 - No preference` |
+| `arch.amd64`               | Preference to run on amd64 architecture         | `2 - No preference`                                        |
+| `arch.ppc64le`             | Preference to run on ppc64le architecture       | `2 - No preference`                                        |
+| `arch.s390x`               | Preference to run on s390x architecture         | `2 - No preference`                                        |
 | `image.repository`         | Image repository                                | `nginx`                                                    |
 | `image.pullPolicy`         | Image pull policy                               | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
 | `image.tag`                | Image tag                                       | `1.13.9-alpine`                                            |
@@ -84,10 +92,19 @@ The following tables lists the configurable parameters of the <CHARTNAME> chart 
 | `resources.limits.memory`  | Memory resource limits                          | `256Mi`                                                    |
 | `resources.limits.cpu`     | CPU resource limits                             | `100m`                                                     |
 
+Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
-Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
+```bash
+helm install --name my-release \
+  --set replicaCount=2 \
+    stable/ibm-nginx-dev
+```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
+
+```bash
+helm install --name my-release -f values.yaml stable/ibm-nginx-dev
+```
 
 > **Tip**: You can use the default values.yaml
 
@@ -98,14 +115,18 @@ be used by creating your content in a persistent volume and then either creating
 `existingClaimName` parameter or by using the `selector.label` and `selector.value` parameters to have the chart create a volume claim
 to select the volume.
 
+## Limitations
+
+None.
+
 ## Documentation
 
-### Create your own image with content
+### Server content by creating a Docker image with content
 
 To inject content and configuration, you do not have to use the volume configurations. Instead, you can just create your own image by extending the
 `nginx` image. It could easily be down with a `Dockerfile` similar to this:
 
-```
+```Dockerfile
 FROM nginx:1.13.9-alpine
 
 # add all the files in the html directory to the image
@@ -113,4 +134,44 @@ ADD html /usr/share/nginx/html/
 
 # add all the configuration files in the conf.d directory to the image
 ADD conf.d /etc/nginx/conf.d/
+```
+
+### Inject a nginx.conf file with a ConfigMap
+
+To use a Kubernetes ConfigMap to serve as the NGINX configuration, you need to create a file with content similar to:
+
+`my-nginx-configmap.yaml`
+
+```shell
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: my-nginx-configmap
+data:
+  nginx.conf: |-
+    events {
+      worker_connections  1024;
+    }
+
+    http {
+      server {
+          listen 80;
+
+          location = / {
+            return 200 "hello world";
+          }
+      }
+    }
+```
+
+The create the ConfigMap:
+
+```shell
+kubectl create -f my-nginx-configmap.yaml
+```
+
+The set the configMapName of your Helm installation:
+
+```shell
+helm install --name my-release --set configMapName=my-nginx-configmap stable/ibm-nginx-dev
 ```
