@@ -141,40 +141,58 @@ data:
       msg = "Validation Success"
       validate = False
 
-      topology_info = json.loads(config_data["topology"])
-      print("Topology info: ", topology_info)
+      input_val = "{{ .Values.preValidation.skip_disk_validation }}"
+      print("Input value of skip_disk_validation: %s" % (input_val))
 
-      failed_path_device_list = []
-      failed_lvm_device_list = []
-      for node in topology_info:
+      if input_val not in [ "true", "false" ]:
+        skip_disk_validation = False
+      else:
+        if input_val == "true":
+          skip_disk_validation = True
+        else:
+          skip_disk_validation = False
 
-        if node["k8sNodeName"] == os.getenv("MY_NODE_NAME"):
-          validate = True
-          device_list = node["devices"]
-          for device in device_list:
-            print("Device: ", device)
-            # device path check
-            if os.path.islink(device) is False:
-              failed_path_device_list.append(device)
-            else:  
-              if {{ .Values.gluster.installType | quote }} == "Fresh":
-                # logical volume check
-                result = subprocess.check_output("lsblk %s" %device, shell=True)
-                print("lsblk output:", result)
-                if b'lvm' in result:
-                  failed_lvm_device_list.append(device)
+      if skip_disk_validation == False:
 
-      if validate == False:
-        retval = "success"
-        msg = "No heketi topology configured for this node '%s'" % (os.getenv("MY_NODE_NAME"))
+        print("skip_disk_validation is '%s'. Executing disk validation tasks" %(skip_disk_validation))
 
-      if len(failed_path_device_list) != 0:
-        msg = "GlusterFS storage device paths %s does not exist" % (failed_path_device_list)
-        retval = "fail"
+        topology_info = json.loads(config_data["topology"])
+        print("Topology info: ", topology_info)
 
-      if len(failed_lvm_device_list) != 0:
-        msg = "Disks %s have logical volumes" % (failed_lvm_device_list)
-        retval = "fail"
+        failed_path_device_list = []
+        failed_lvm_device_list = []
+        for node in topology_info:
+
+          if node["k8sNodeName"] == os.getenv("MY_NODE_NAME"):
+            validate = True
+            device_list = node["devices"]
+            for device in device_list:
+              print("Device: ", device)
+              # device path check
+              if os.path.islink(device) is False:
+                failed_path_device_list.append(device)
+              else:
+                if {{ .Values.gluster.installType | quote }} == "Fresh":
+                  # logical volume check
+                  result = subprocess.check_output("lsblk %s" %device, shell=True)
+                  print("lsblk output:", result)
+                  if b'lvm' in result:
+                    failed_lvm_device_list.append(device)
+
+        if validate == False:
+          retval = "success"
+          msg = "No heketi topology configured for this node '%s'" % (os.getenv("MY_NODE_NAME"))
+
+        if len(failed_path_device_list) != 0:
+          msg = "GlusterFS storage device paths %s does not exist" % (failed_path_device_list)
+          retval = "fail"
+
+        if len(failed_lvm_device_list) != 0:
+          msg = "Disks %s have logical volumes" % (failed_lvm_device_list)
+          retval = "fail"
+
+      else:
+        print("skip_disk_validation is '%s'. Skipping disk validation tasks" %(skip_disk_validation))
 
       return retval, msg
 

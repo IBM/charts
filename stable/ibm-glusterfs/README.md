@@ -20,7 +20,7 @@ The chart will do the following:
 - Creates the storage class if it is set to true.
 
 ## Limitations
-- The chart supports the installation of only a new storage cluster.
+- The chart supports the installation of only a new storage cluster under kube-system namespace.
 - The chart supports creation of only one GlusterFS Storage cluster in a IBM® Cloud Private cluster.  
 - The chart accepts only three storage nodes as input from the UI. To deploy more storage nodes, you must deploy the chart by using the Helm CLI. Provide the parameters in the values.yaml file.
 
@@ -37,23 +37,28 @@ The chart will do the following:
 -  Install the GlusterFS client and configure the dm_thin_pool kernel module on the nodes in your cluster that might use a GlusterFS volume.
 - Ensure that the GlusterFS client version is the same as GlusterFS server version that is installed.
 - Pre-create a secret with a password for the Heketi user 'admin' and provide the secret name in the field heketi.authSecret.
-    1. Create a namespace to deploy the GlusterFS Storage cluster chart.
-    2. Use the ICP console or kubectl to create the following secret in the same namespace you intend to deploy the GlusterFS Storage cluster chart:
-  ```bash
-  kind: Secret
-  apiVersion: v1
-  metadata:
-    name: heketi-secret
-    labels:
-      glusterfs: "heketi-secret"
-  type: kubernetes.io/glusterfs
-  data:
-    admin_password: YWRtaW4= 
+    1. Encode the new password in base64 and update the admin_password section with the new base64 encoded password.
+       ```bash
+       echo -n "admin" | base64
+
+       YWRtaW4=
+       ```
+    2. Use the ICP console or kubectl to create the secret:
+       ```bash
+       kind: Secret
+       apiVersion: v1
+       metadata:
+         name: heketi-secret
+         labels:
+           glusterfs: "heketi-secret"
+       type: kubernetes.io/glusterfs
+       data:
+         admin_password: YWRtaW4= 
 
   
-  kubectl apply -f secrets.yaml -n <namespace>
-  ```
-> **Note**: The name of the key should be the same as mentioned here: admin_password.
+       kubectl apply -f secrets.yaml -n kube-system
+       ```
+    > **Note**: The name of the key should be the same as mentioned here: `admin_password`.
 
 
 ## Resources Required
@@ -86,7 +91,7 @@ The following table lists the configurable parameters of the `ibm-glusterfs` cha
 | arch.ppc64le                                      | Architecture preference for ppc64le node        | 2 - No preference |
 | arch.s390x                                        | Architecture preference for s390x node          | 0 - Do not use    |
 | preValidation.image.repository                    | Hyperkube image to use for this deployment      | ibmcom/hyperkube  |
-| preValidation.image.tag                           | Hyperkube image tag to use for this deployment  | 5                 |
+| preValidation.image.tag                           | Hyperkube image tag to use for this deployment  | v1.10.0           |
 | preValidation.image.pullPolicy                    | Hyperkube image pull policy                     | IfNotPresent      |
 | gluster.image.repository                          | GlusterFS image to use for this deployment      | ibmcom/gluster    |
 | gluster.image.tag                                 | GlusterFS image tag to use for this deployment  | 3.12.1            |
@@ -100,14 +105,13 @@ The following table lists the configurable parameters of the `ibm-glusterfs` cha
 | heketi.image.tag                                  | Heketi image tag to use for this deployment     | 5                 |
 | heketi.image.pullPolicy                           | Heketi image pull policy                        | IfNotPresent      |
 | heketi.backupDbSecret                             | Heketi database to be backed up to a k8s secret | "heketi-db-backup"|
-| heketi.authSecret                                 | Secret for password of the Heketi user 'admin'  | "heketi-secret"   |
+| heketi.authSecret                                 | Secret for password of the Heketi user 'admin'  |                   |
 | heketi.resources.requests.cpu                     | Describes the minimum amount of CPU required    | Default is 500m   |
 | heketi.resources.requests.memory                  | Describes the minimum amount of memory required | Default is 512Mi  |
 | heketi.resources.limits.cpu                       | Describes the maximum amount of CPU allowed     | Default is 1000m  |
 | heketi.resources.limits.memory                    | Describes the maximum amount of memory allowed  | Default is 1Gi    |
 | heketiTopology.k8sNodeName                        | Name of the kubelet node that runs the Gluster pod|                 |
 | heketiTopology.k8sNodeIp                          | Storage node's network address                  |                   |
-| heketiTopology.zone                               | Zone                                            | 1                 |
 | heketiTopology.devices                            | Raw device list                                 |                   |
 | storageClass.create                               | GlusterFS storage class to be created           | false             |
 | storageClass.name                                 | GlusterFS storage class name                    | glusterfs         |
@@ -200,3 +204,5 @@ To uninstall/delete the `my-release` deployment:
 ```bash
 $ helm delete --purge  my-release --tls
 ```
+
+**Note**: Deletion of helm release will not delete the secret `heketi.backupDbSecret`. 

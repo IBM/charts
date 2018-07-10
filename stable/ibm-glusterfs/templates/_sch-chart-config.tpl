@@ -29,8 +29,6 @@ sch:
         name: "heketi-service"
       heketideploy:
         name: "heketi-deployment"
-      heketisecret:
-        name: "heketi-secret"
       heketitopocm:
         name: "heketi-topology"
       precheckresultscm:
