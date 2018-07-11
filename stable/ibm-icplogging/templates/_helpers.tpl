@@ -207,6 +207,12 @@ xpack.watcher.enabled: {{ .Values.xpack.watcher }}
 Elasticsearch node affinity settings. Only needed when in managed mode or when X-Pack is the TLS provider.
 */}}
 {{- define "elasticsearch.nodeaffinity" -}}
+{{- if eq .Values.mode "managed" }}
+tolerations:
+- key: "dedicated"
+  operator: "Exists"
+  effect: "NoSchedule"
+{{- end }}
 affinity:
   nodeAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:

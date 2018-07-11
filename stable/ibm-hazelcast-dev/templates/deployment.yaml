@@ -1,0 +1,86 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.hazelcast.name -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      release: "{{ .Release.Name }}"
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      {{ if .Values.rbac.install }}
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+      {{ end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{/* Prefer horizontal scaling */}}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ include "sch.names.appName" (list .) }}
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name | quote }}
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 5701
+          livenessProbe:
+            exec:
+              command:
+              - "./liveness.sh"
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+              - "./readiness.sh"
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+          env:
+          - name: HAZELCAST_KUBERNETES_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: HAZELCAST_KUBERNETES_SERVICE_NAME
+            value: {{ include "sch.names.fullCompName" (list . $compName) }}
+          - name: MIN_HEAP_SIZE
+            value: {{ .Values.heap.minHeapSize }}
+          - name: MAX_HEAP_SIZE
+            value: {{ .Values.heap.maxHeapSize }}
+          - name: JAVA_OPTS
+            value: {{ .Values.javaOpts }}
+          - name: HZ_DATA
+            value: /data/hazelcast
+          volumeMounts:
+            - name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+              mountPath: /data/hazelcast
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+      - name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+        configMap:
+          name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+          defaultMode: 0744

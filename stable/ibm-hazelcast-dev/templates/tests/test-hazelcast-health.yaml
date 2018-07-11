@@ -1,0 +1,24 @@
+# Example helm test - verify hazelcast server is running (can pass health check)
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.hazelcast.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "test" -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $fullTestCompName }}"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app: {{ include "sch.names.appName" (list .) }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: {{ $testCompName }}
+spec:
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    image: alpine
+    command: ['wget']
+    args:  ['{{ include "sch.names.fullCompName" (list . $compName) }}:{{ .Values.service.externalPort }}/hazelcast/health']
+  restartPolicy: Never 

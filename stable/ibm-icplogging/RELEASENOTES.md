@@ -1,3 +1,6 @@
+# Fixed in 1.0.1
+* Kubernetes may not be able to schedule the PKI initialization job to any nodes.
+
 # What's new in 1.0.0
 * End-to-end TLS support. When enabled, you can choose either Searchguard (using community-edition features) or XPack (with a license purchased separately from Elastic). Refer to the knowledge center for important information on features and limitations.
 * Automated index initialization in Kibana.
