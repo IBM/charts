@@ -1,5 +1,5 @@
 ###############################################################################
-# Copyright (c) 2017 IBM Corp.
+# Copyright (c) 2018 IBM Corp.
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
+{{ if .Values.logs.persistLogs }}
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ template "fullname" . }}-test"
+  name: "{{ template "fullname" . }}-pv-test"
   labels:
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
@@ -26,12 +27,16 @@ metadata:
     "helm.sh/hook": test-success
 spec:
   containers:
-    - name: "{{ template "fullname" . }}-test"
+    - name: "{{ template "fullname" . }}-pv-test"
       image: alpine
-      {{ if .Values.ssl.enabled }}
-      command: ["sh", "-c", 'apk --no-cache add openssl && wget --no-check-certificate https://{{ template "fullname" . }}:{{ .Values.service.port }}']
-      {{ else }}
-      command: ['wget']
-      args:  ['{{ template "fullname" . }}:{{ .Values.service.port }}']
-      {{ end }}
+      command: ["sh", "-c", 'ls -R /tmp/nfs/ol/ && ls /tmp/nfs/ol/logs/messages.log']
+      volumeMounts:
+      - name: pv-test-volume
+        mountPath: /tmp/nfs/ol
+        readOnly: false
+  volumes:
+  - name: pv-test-volume
+    persistentVolumeClaim:
+      claimName: {{ .Values.persistence.name }}-{{ template "fullname" . }}-0
   restartPolicy: Never
+{{ end }}

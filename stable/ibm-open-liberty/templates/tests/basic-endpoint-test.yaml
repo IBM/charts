@@ -13,22 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
-{{ if .Values.autoscaling.enabled -}}
-apiVersion: autoscaling/v1
-kind: HorizontalPodAutoscaler
+apiVersion: v1
+kind: Pod
 metadata:
-  name: {{ template "fullname" . }}-hpa
+  name: "{{ template "fullname" . }}-basic-test"
   labels:
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    app: {{ template "fullname" . }}
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"    
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ template "name" . }}
+  annotations:
+    "helm.sh/hook": test-success
 spec:
-  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
-  minReplicas: {{ .Values.autoscaling.minReplicas }}
-  scaleTargetRef:
-    apiVersion: extensions/v1beta1
-    kind: Deployment
-    name: {{ template "fullname" . }}
-  targetCPUUtilizationPercentage: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
-{{- end }}
+  containers:
+    - name: "{{ template "fullname" . }}-basic-test"
+      image: alpine
+      {{- if .Values.service.enabled }}
+      {{- if .Values.ssl.enabled }}
+      command: ["sh", "-c", 'apk --no-cache add openssl && wget --no-check-certificate https://{{ template "fullname" . }}:{{ .Values.service.port }}']
+      {{- else }}
+      command: ['wget']
+      args:  ['{{ template "fullname" . }}:{{ .Values.service.port }}']
+      {{- end }}
+      {{- end }}
+  restartPolicy: Never

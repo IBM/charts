@@ -13,27 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
-{{ if .Values.ssl.createClusterSSLConfiguration }}
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: liberty-secret-generator-deploy
-  annotations:
-    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
-  labels:
-    app: {{ template "fullname" . }}  
-    heritage: {{.Release.Service | quote }}
-    release: {{.Release.Name | quote }}
-    chart: "{{.Chart.Name}}-{{.Chart.Version}}"  
-spec:
-  template:
-    metadata:
-      name: liberty-secret-generator-deploy
-      annotations:
-        sidecar.istio.io/inject: "false"
-    spec:
-      containers:
-      - name: liberty-secret-generator-deploy
-        image: ibmcom/mb-tools:2.0.0
-      restartPolicy: Never
-{{ end }}
+{{- /*
+Chart specific config file for SLT (Shared Liberty Templates)
+
+_slt-config.tpl is a config file for the chart to specify additional 
+values and/or override values defined in the slt/_config.tpl file.
+ 
+*/ -}}
+
+{{- /*
+"slt.chart.config.values" contains the chart specific values used to override or provide
+additional configuration values used by the Shared Liberty Templates.
+*/ -}}
+{{- define "slt.chart.config.values" -}}
+slt:
+  paths:
+    wlpInstallDir: "/opt/ol/wlp"
+{{- end -}}
+
