@@ -96,6 +96,7 @@ kubectl create secret docker-registry microclimate-registry-secret \
 For example, to create the secret for an account named 'admin' with the password 'admin':
 ```
 kubectl create secret docker-registry microclimate-registry-secret \
+  --namespace=microclimate-pipeline-deployments \
   --docker-server=mycluster.icp:8500 \
   --docker-username=admin \
   --docker-password=admin \
