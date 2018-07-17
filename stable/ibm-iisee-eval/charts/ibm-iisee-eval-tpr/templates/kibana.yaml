@@ -1,18 +1,26 @@
+{{- include "sch.config.init" (list . "iiseesub.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.kibana.name -}}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-{{ .Chart.Name }}-kibana
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
   labels:
-    app: {{ .Release.Name }}-{{ .Chart.Name }}-kibana
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
+  selector:
+    matchLabels:
+     release: "{{ .Release.Name }}"
+     app: {{ include "sch.names.appName" (list .) | quote }}
+     component: "{{ $compName }}"
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}-{{ .Chart.Name }}-kibana
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
       containers:
       - name: kibana
         image: {{ .Values.kibana.image }}  
@@ -23,3 +31,11 @@ spec:
         ports:
         - containerPort: 5601
           protocol: TCP
+        livenessProbe:
+          tcpSocket:
+            port: 5601
+          initialDelaySeconds: 60
+        readinessProbe:
+          tcpSocket:
+            port: 5601
+          initialDelaySeconds: 30

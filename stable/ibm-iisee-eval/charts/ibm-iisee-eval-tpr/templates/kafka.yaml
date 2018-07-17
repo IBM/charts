@@ -1,23 +1,35 @@
+{{- include "sch.config.init" (list . "iiseesub.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.kafka.name -}}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-{{ .Chart.Name }}-shop4info-kafka
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
   labels:
-    component: {{ .Release.Name }}-{{ .Chart.Name }}-shop4info-kafka
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
+  selector:
+    matchLabels:
+     release: "{{ .Release.Name }}"
+     app: {{ include "sch.names.appName" (list .) | quote }}
+     component: "{{ $compName }}"
   replicas: 1
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}-{{ .Chart.Name }}-shop4info-kafka
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
       containers:
         - name: shop4info-kafka
           image: {{ .Values.kafka.image }} 
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+               memory: "{{ .Values.kafkaResources.requests.memory }}"
+               cpu: "{{ .Values.kafkaResources.requests.cpu }}"
           ports:
             - containerPort: 9092
           env:
@@ -32,6 +44,14 @@ spec:
           volumeMounts:
             - mountPath: /kafka
               name: kafka-pv-volume
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 10
       volumes:
         - name: kafka-pv-volume
           persistentVolumeClaim:

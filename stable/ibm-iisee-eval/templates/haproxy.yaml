@@ -1,18 +1,24 @@
+{{- include "sch.config.init" (list . "iisee.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.haproxy.name -}}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ template "fullname" . }}-haproxy
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
   labels:
-     app: {{ template "fullname" . }}-haproxy
-     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-     release: "{{ .Release.Name }}"
-     heritage: "{{ .Release.Service }}"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
+  selector:
+    matchLabels:
+     release: "{{ .Release.Name }}"
+     component: "{{ $compName }}"
+     app: {{ include "sch.names.appName" (list .) | quote }}
   replicas: 1
   template:
     metadata:
       labels:
-        app: {{ template "fullname" . }}-haproxy
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
@@ -23,7 +29,7 @@ spec:
         command: [ "/bin/bash", "-c", "--" ]
         args: [ "apt-get update; apt-get install -y openssl;
                  openssl req -new -x509 -days 365 -sha1 -newkey rsa:1024 -nodes -keyout /etc/ssl/certs/haproxy-host.key
-                   -out /etc/ssl/certs/haproxy-host.crt -subj \"/C=/ST=/L=/O=/CN=haproxy-host\"; 
+                   -out /etc/ssl/certs/haproxy-host.crt -subj \"/C=US/CN=haproxy-host\"; 
                  cat /etc/ssl/certs/haproxy-host.key /etc/ssl/certs/haproxy-host.crt > /etc/ssl/certs/haproxy-host.pem;
                  /docker-entrypoint.sh haproxy -f /usr/local/etc/haproxy/haproxy.cfg;"
               ]
@@ -35,6 +41,14 @@ spec:
         - name: haproxy-config 
           mountPath: /usr/local/etc/haproxy/haproxy.cfg 
           subPath: haproxy.cfg
+        livenessProbe:
+          tcpSocket:
+            port: 443
+          initialDelaySeconds: 20
+        readinessProbe:
+          tcpSocket:
+            port: 443
+          initialDelaySeconds: 10
       volumes:
       - name: haproxy-config 
         configMap:

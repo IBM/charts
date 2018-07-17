@@ -1,22 +1,24 @@
+{{- include "sch.config.init" (list . "iisee.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.appconfigservice.name -}}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ template "fullname" . }}-gov-app-config-service
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
   labels:
-     app: {{ template "fullname" . }}-gov-app-config-service
-     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-     release: "{{ .Release.Name }}"
-     heritage: "{{ .Release.Service }}" 
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
+  selector:
+    matchLabels:
+     release: "{{ .Release.Name }}"
+     component: "{{ $compName }}"
+     app: {{ include "sch.names.appName" (list .) | quote }}
   replicas: 1
   template:
     metadata:
       labels:
-        app: {{ template "fullname" . }}-gov-app-config-service
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
       annotations:
-        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
-        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
-        productVersion: "11.7"
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
@@ -30,7 +32,11 @@ spec:
       containers:
       - name: gov-app-config-service
         image: {{ .Values.release.image.repository }}/iisee-eval-gov-app-config-service:{{ .Values.release.image.tag }}
-        imagePullPolicy: {{ .Values.release.image.pullPolicy }} 
+        imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+        resources:
+            requests:
+               memory: "{{ .Values.ugResources.requests.memory }}"
+               cpu: "{{ .Values.ugResources.requests.cpu }}" 
         env:
         - name: APP_CONFIG_DB_TYPE
           value: db2
@@ -49,6 +55,16 @@ spec:
         volumeMounts:
         - name: secrets-pv-volume
           mountPath: /config/secrets
+        readinessProbe:
+          httpGet:
+            path: /ibm/iis/api/app_config/v1
+            port: 9083
+          initialDelaySeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /ibm/iis/api/app_config/v1/health
+            port: 9083
+          initialDelaySeconds: 60
       volumes:
       - name: secrets-pv-volume
         persistentVolumeClaim:

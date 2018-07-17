@@ -1,24 +1,37 @@
+{{- include "sch.config.init" (list . "iiseesub.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.cassandra.name -}}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-{{ .Chart.Name }}-cassandra
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
   labels:
-     app: {{ template "fullname" . }}-cassandra
-     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-     release: "{{ .Release.Name }}"
-     heritage: "{{ .Release.Service }}"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
+  selector:
+    matchLabels:
+     release: "{{ .Release.Name }}"
+     app: {{ include "sch.names.appName" (list .) | quote }}
+     component: "{{ $compName }}"
   replicas: 1
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}-{{ .Chart.Name }}-cassandra
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
       containers:
         - name: cassandra
           image: {{ .Values.cassandra.image }} 
           imagePullPolicy: IfNotPresent
-
+          command: ["/bin/bash", "-c", "--"]
+          args: ["cp /jvm.options /etc/cassandra/jvm.options; chown cassandra /etc/cassandra/jvm.options; /docker-entrypoint.sh cassandra -f"]
+          resources:
+            requests:
+               memory: "{{ .Values.cassandraResources.requests.memory }}"
+               cpu: "{{ .Values.cassandraResources.requests.cpu }}"
           ports:
             - containerPort: 7000
             - containerPort: 9042
@@ -31,9 +44,23 @@ spec:
           volumeMounts:
             - mountPath: /var/lib/cassandra
               name: cassandra-pv-volume
-            - mountPath: /etc/cassandra/jvm.options
+            - mountPath: /jvm.options
               name: cassandra-jvm-opts
               subPath: jvm.options
+          readinessProbe:
+            tcpSocket:
+              port: 7000
+            periodSeconds: 10
+            failureThreshold: 6
+            timeoutSeconds: 60
+            initialDelaySeconds: 240
+          livenessProbe:
+            tcpSocket:
+              port: 7000
+            periodSeconds: 10
+            failureThreshold: 6
+            timeoutSeconds: 60
+            initialDelaySeconds: 600
       volumes:
         - name: cassandra-pv-volume
           persistentVolumeClaim:

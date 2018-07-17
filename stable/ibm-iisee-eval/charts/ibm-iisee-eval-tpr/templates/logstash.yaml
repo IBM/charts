@@ -1,18 +1,26 @@
+{{- include "sch.config.init" (list . "iiseesub.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.logstash.name -}}
 kind: Deployment
 apiVersion: extensions/v1beta1
 metadata:
-  name: {{ .Release.Name }}-{{ .Chart.Name }}-logstash
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
   labels:
-    app: {{ .Release.Name }}-{{ .Chart.Name }}-logstash
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
+  selector:
+    matchLabels:
+     release: "{{ .Release.Name }}"
+     component: "{{ $compName }}"
+     app: {{ include "sch.names.appName" (list .) | quote }}
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}-{{ .Chart.Name }}-logstash
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
       hostname: logstash
       securityContext:
         runAsUser: 0
@@ -20,6 +28,10 @@ spec:
         - name: logstash
           image: {{ .Values.logstash.image }}  
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+               memory: "{{ .Values.ugResources.requests.memory }}"
+               cpu: "{{ .Values.ugResources.requests.cpu }}"
           volumeMounts:
             - mountPath: /usr/share/logstash/data
               name: logstash-pv-volume

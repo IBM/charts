@@ -1,29 +1,28 @@
 {{ if eq (.Values.license|lower) "accept" }}
+{{- include "sch.config.init" (list . "iisee.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.iisserver.name -}}
 kind: Deployment 
 apiVersion: extensions/v1beta1
 metadata:
-  name: {{ template "fullname" . }}-iis-server
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
   labels:
-     app: {{ template "fullname" . }}-iis-server 
-     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-     release: "{{ .Release.Name }}"
-     heritage: "{{ .Release.Service }}"   
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
-  replicas: 1
   selector:
-     matchLabels:
-       app: {{ template "fullname" . }}-iis-server  
+    matchLabels:
+     release: "{{ .Release.Name }}"
+     component: "{{ $compName }}"
+     app: {{ include "sch.names.appName" (list .) | quote }}
+  replicas: 1
   template:
     metadata:
       labels:
-        app: {{ template "fullname" . }}-iis-server
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
       annotations:
-        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
-        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
-        productVersion: "11.7"
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
       affinity:
-      {{- include "nodeaffinity" . | indent 6 }}
+     {{- include "nodeaffinity" . | indent 6 }}
       hostname: {{ .Release.Name }}-iisdocker
       hostIPC: true 
       containers:
@@ -84,7 +83,15 @@ spec:
               subPath: iadb-db2-connector-imam-import-params.xml
             - name: config-postscript
               mountPath: /opt/UGDefaultWorkspace.xml
-              subPath: UGDefaultWorkspace.xml   
+              subPath: UGDefaultWorkspace.xml
+          livenessProbe:
+            tcpSocket:
+              port: 9443
+            initialDelaySeconds: 180
+          readinessProbe:
+            tcpSocket:
+              port: 9443
+            initialDelaySeconds: 120 
       volumes:
         - name: test-data
         - name: config-postscript

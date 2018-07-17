@@ -1,21 +1,29 @@
+{{- include "sch.config.init" (list . "iiseesub.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.elasticsearch.name -}}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-{{ .Chart.Name }}-elasticsearch
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
   labels:
-    component: {{ .Release.Name }}-{{ .Chart.Name }}-elasticsearch
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
     role: client
 spec:
+  selector:
+    matchLabels:
+     release: "{{ .Release.Name }}"
+     app: {{ include "sch.names.appName" (list .) | quote }}
+     component: "{{ $compName }}"
   replicas: 1
   template:
     metadata:
       labels:
-        component: {{ .Release.Name }}-{{ .Chart.Name }}-elasticsearch
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
         role: client
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
       hostname: elasticsearch
       containers:
         - name: elasticsearch
@@ -44,6 +52,10 @@ spec:
                 - SYS_RESOURCE
           image: {{ .Values.elasticsearch.image }}  
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+               memory: "{{ .Values.ugResources.requests.memory }}"
+               cpu: "{{ .Values.ugResources.requests.cpu }}"
           env:
           - name: CLUSTER_NAME
             value: "es-cluster"
@@ -68,6 +80,20 @@ spec:
             - name: config-volume
               mountPath: /usr/share/elasticsearch/config/log4j2.properties
               subPath: log4j2.properties
+          readinessProbe:
+            tcpSocket:
+              port: 9200
+            periodSeconds: 40
+            initialDelaySeconds: 20
+            timeoutSeconds: 20
+            failureThreshold: 1
+          livenessProbe:
+            tcpSocket:
+              port: 9200
+            periodSeconds: 60
+            initialDelaySeconds: 40
+            timeoutSeconds: 30
+            failureThreshold: 3
       volumes:
         - name: es-pv-volume
           persistentVolumeClaim:

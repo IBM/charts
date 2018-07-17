@@ -1,29 +1,35 @@
+{{- include "sch.config.init" (list . "iisee.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.s4idemoapp.name -}}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ template "fullname" . }}-shop4info-demoapp
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
   labels:
-     app: {{ template "fullname" . }}-shop4info-demoapp 
-     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-     release: "{{ .Release.Name }}"
-     heritage: "{{ .Release.Service }}" 
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
+  selector:
+    matchLabels:
+     release: "{{ .Release.Name }}"
+     component: "{{ $compName }}"
+     app: {{ include "sch.names.appName" (list .) | quote }}
   replicas: 1
   template:
     metadata:
       labels:
-        app: {{ template "fullname" . }}-shop4info-demoapp
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
       annotations:
-        productName: "IBM InfoSphere Information Server for Evaluation v11.7"
-        productID: "IBMInfoSphereInformationServerForEvaluationv11.7_117_EVALUATION_00000"
-        productVersion: "11.7"
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
       containers:
         - name: shop4info-demoapp
           image: {{ .Values.release.image.repository }}/iisee-eval-shop4info-demoapp:{{ .Values.release.image.tag }}
-          imagePullPolicy: {{ .Values.release.image.pullPolicy }} 
+          imagePullPolicy: {{ .Values.release.image.pullPolicy }}
+          resources:
+            requests:
+               memory: "{{ .Values.ugResources.requests.memory }}"
+               cpu: "{{ .Values.ugResources.requests.cpu }}" 
           ports:
             - containerPort: 80
             - containerPort: 443
@@ -34,3 +40,11 @@ spec:
               value: http://{{ template "fullname" . }}-shop4info-server:9080/shop4info
             - name: SOCIAL_SERVICE_URL
               value: http://{{ template "fullname" . }}-gov-social-service:9080/ibm/iis/api/social
+          livenessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 10
