@@ -1,10 +1,12 @@
-# What’s new in Rook Ceph cluster Version 0.1.0
+# What’s new in  Rook Ceph cluster Version 0.1.1
 
 With Rook Ceph cluster Chart on IBM Cloud Private 2.1.0.3, the following new
 features are available:
 
 * This Helm chart deploys a Rook Ceph cluster that uses block storage.
 * This Helm chart also creates its storage pool and a StorageClass.
+* Bug fix: Fixed tag for ibmcom/hyperkube image.
+* Bug fix: Corrected post installation messages in NOTES.txt.
 
 # Prerequisites
 1. IBM Cloud Private version 2.1.0.3
@@ -17,3 +19,4 @@ features are available:
 | Chart | Date        | ICP Required | Image(s) Supported | Details |
 | ----- | ----------- | ------------ | ------------------ | ------- |
 | 0.1.0 | May 25, 2018| >=2.1.0.3    | ibmcom/hyperkube:v1.10.0-ce | Initial Chart for integrating Ceph block storage using ROOK operator on ICP Cluster |
+| 0.1.1 | July 17, 2018| >=2.1.0.3    | ibmcom/hyperkube:v1.10.0 | Bug fixes |

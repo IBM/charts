@@ -20,6 +20,9 @@ metadata:
 spec:
   serviceName: {{ template "dnsname" . }}
   replicas: {{ default "" .Values.replicas.replicaCount }}
+  selector:
+    matchLabels:
+      app: "{{ template "fullname" . }}"
   template:
     metadata:
       annotations:
@@ -40,7 +43,7 @@ spec:
         image: busybox
         command: [ "sh", "-c", "chown -R 27:27 /var/lib/mysql" ]
         volumeMounts:
-        - name: datadir
+        - name: {{ .Values.dataPVC.name | quote }}
           mountPath: /var/lib/mysql
           subPath: data
 {{- end }}
@@ -86,6 +89,13 @@ spec:
           name: replication
         - containerPort: 4568
           name: ist
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/readiness-probe.sh
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 5
         readinessProbe:
           exec:
             command:

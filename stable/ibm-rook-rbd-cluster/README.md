@@ -13,6 +13,7 @@ This Helm chart deploys a Rook Ceph cluster that uses block storage. Along with 
 ## Limitations
 - Rook is supported on Linux® 64-bit cluster. Currently it is not supported on Linux® on Power® 64-bit LE and IBM® Z clusters.
 - Rook supports multiple Ceph clusters. However, only one cluster per namespace can be set up.
+- Currently installation supported in default and kube-system namespaces only.
 - Rook Ceph cluster is supported on Linux kernel version 3.15 or later.
 
 ## Prerequisites
