@@ -1,32 +1,46 @@
 # Breaking Changes
-Microclimate now has multi-user support which requires the Microclimate PersistentVolume to have an `accessMode` of `ReadWriteMany`. Because this has required a change to the Microclimate PVC, automatic upgrading (e.g. `helm upgrade`) to v1.3.0 from previous chart versions is not supported. To upgrade to v1.3.0, see the instructions in the ['Upgrading Microclimate to v1.3.0'](#upgrading-microclimate-to-v1.3.0) section.
+No breaking changes are present in this release
 
-# What’s new in Chart Version 1.3.0
+# What’s new in Chart Version 1.4.0
 
 ## Microclimate
-* Support for multiple users on the same Microclimate instance via IBM Cloud Private authentication. Each user will now have their own workspace and can log out by closing their web browser.
-* Improved application build status
-* Project validation provided when importing projects
-* Enabling and disabling of automatic builds per project
-* Ability to open and close projects
+* Warning added for if the Microclimate backend disconnects
+* Enhanced remote workspace connection with notifications
+* Updated UI to match latest accessibility compliance spec
+* Newly created projects are now set up to dynamically pull in the latest available JDK service release to pick up patches and security fixes.
+* Shutdown of projects is more efficient when you close or log off Microclimate.
+* A new validation step on project import generates any missing files which means a better experience getting your imported projects working in Microclimate.
+
 
 ## Pipeline
-* Deployment of projects into IBM Cloud Kubernetes Service (IKS)
-* Deployments can now be created from specific builds of a given project
+* *No new changes*
 
 ## Chart
-* Microclimate can now be installed into a non-default namespace. Instructions can be found in the 'Installing the chart' section of the README
+* *No new changes*
 
 # Fixes
-* Removed size restriction on project imports
-* General stability and performance improvements
+* Helm chart names no longer need to match the project name
+* Various minor bug and stability fixes
+
 
 # Prerequisites
 1. IBM Cloud Private version 2.1.0.3. Installing into 2.1.0.2 may work but is not completely tested
 
 
-## Upgrading Microclimate to v1.3.0
+## Upgrading Microclimate to v1.4.0
 
+### ...from version v1.3.0
+
+You can upgrade to the v1.4.0 version of the chart from v1.3.0 using Helm upgrade. You should pass the same values into the Helm upgrade command that you initially installed the chart with to ensure configuration remains the same. It is recommended that you retrieve these values and store them for later use by using the following command with your Microclimate release name:
+
+`helm get values <release-name> > values.yaml`
+
+You can then perform the upgrade with the following command:
+
+`helm upgrade <release-name> <path-to-microclimate-chart> -f values.yaml`
+
+
+### ...from version v1.2.x
 **WARNINGS**:
 - These instructions have been tested using v1.2.x versions of the chart, upgrading to v1.3.0. These instructions may work for previous versions but have not been tested.
 - These instructions have only been tested using GlusterFS. If a different type of PersistentVolume is being used, it is recommended that you back up the contents of the volumes manually.
@@ -131,6 +145,7 @@ For detailed installation instructions go to https://microclimate-dev2ops.github
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.4.0 | July 20, 2018 | 1.10.0, 1.9.1 | 1807 | None | Logout implemented, various small fixes and improvements |
 | 1.3.0 | June 29, 2018 | 1.10.0, 1.9.1 | 1806 | Multi-user support caused changes to the Microclimate PVCs - upgrade will not work  | Various changes and new features |
 | 1.2.1 | June 11, 2018 | 1.10.0, 1.9.1 | 1805 | Upgrading from versions v1.1.x requires additional steps for project migration | ICP 2.1.0.2 fixes |
 | 1.2.0 | May 25, 2018 | 1.10.0 | 1805 | Upgrading from versions v1.1.x requires additional steps for project migration, An additional secret must be created to use the Helm tiller in kube-system |  |

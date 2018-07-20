@@ -14,13 +14,22 @@ metadata:
     "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
 spec:
   template:
+    metadata:
+      labels:
+        app: {{ include "sch.names.fullName" (list .) }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
     spec:
       {{- if .Values.global.rbac.serviceAccountName }}
       serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
       {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 8 }}
       containers:
       - name: filewatcher-editor-delete
         image: ibmcom/k8s-kubectl:v1.8.3
         imagePullPolicy: {{ .Values.imagePullPolicy }}
-        command: [ "kubectl", "delete", "deploy,svc", "-l", "app={{ include "sch.names.fullName" (list .) }}" ]
+        # If the delete fails, echo "Cleanup Failed" and return 0 (from echo) to prevent endless cleanup retries.
+        command: [ "sh", "-c", "kubectl delete deploy,svc -l app={{ include "sch.names.fullName" (list .) }} || echo 'Cleanup Failed'" ]
       restartPolicy: Never
