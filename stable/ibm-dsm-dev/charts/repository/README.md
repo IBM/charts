@@ -12,6 +12,12 @@ This chart consist of IBM Db2 Developer-C Edition and is a persistent relational
 3. Base OS with latest patches
 4. Update to latest iFix002 of Db2 11.1.2.2
 
+## Chart Details
+This chart will do the following:
+
+- Deploy Db2 using a deployment.  
+- Create a Db2 Service configured to connect to the available Db2 instance on the configured client port.
+
 ## Prerequisites
 
 #### Using Docker-registry Secret(Prereq #1)
@@ -112,6 +118,12 @@ The following tables lists the configurable parameters of the ibm-db2oltp-dev ch
 | `tsport`              | Text search port                                   | `55000`                                                                  |
 | `Service Type`                | k8s service type exposing ports, e.g.`ClusterIP`   | `NodePort`                                                               |
 
+## Resources Required
+
+| Parameter                           | Description                                         | Default                                                                         |
+| ----------------------------------- | ----------------------------------------------------| --------------------------------------------------------------------------------|
+| `Resource configuration`            | CPU/Memory resource requests/limits                 | Memory request/limit: `2Gi`/`16Gi`, CPU request/limit: `2000m`/`4000m`          |
+
 ## Architecture
 
 - Three major architectures are now available for Db2 Developer-C Edition on IBM Cloud Private worker nodes:
@@ -186,6 +198,6 @@ Do the following after deleting the chart release to clean up orphaned Persisten
 $ kubectl delete pvc -l release=my-release
 ``` 
 
-
-
-
+## Limitations
+- Only supports storage options that have backends for persistent volume claims.
+- ROLLING UPGRADES FROM PREVIOUS CHART RELEASES ARE NOT SUPPORTED

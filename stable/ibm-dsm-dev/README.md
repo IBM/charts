@@ -5,7 +5,7 @@
 
 ## Introduction
 
-This is a chart for IBM Data Server Manager. IBM Data Server Manager which is a database management tool. This chart is intended to be deployed in IBM Cloud Private.
+This is a chart for IBM Data Server Manager. IBM Data Server Manager which is a database management tool. 
 
 ### New in this release
 
@@ -13,12 +13,18 @@ This is a chart for IBM Data Server Manager. IBM Data Server Manager which is a 
 2. Base OS with latest patches
 3. PostgreSQL and MongoDB beta support
 
+## Chart Details
+This chart will do the following:
+
+- Deploy a deployment. In deployment there are 2 containers-dsm and dsm-sidecar. 
+- Create a service to connect to deployment.
+
 ## Prerequisites
 
 - Kubernetes 1.6 with Beta APIs enabled
 - Helm 2.3.1 and later version
 - Retrieve image pull secret by accepting the terms and conditions here - http://ibm.biz/db2-dsm-license (set in global.image.secret)
-- Two PersistentVolume(s) need to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using the IBM Cloud private UI or via a yaml file as the following example:
+- Two PersistentVolume(s) need to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using a yaml file as the following example:
 
 ```
 apiVersion: v1
@@ -137,9 +143,15 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 
 The volume defaults to mount at a subdirectory of the volume instead of the volume root to avoid the volume's hidden directories from interfering with database creation.
 
+## Resources Required
+
+| Parameter                           | Description                                         | Default                                                                         |
+| ----------------------------------- | ----------------------------------------------------| --------------------------------------------------------------------------------|
+| `Resource configuration`            | CPU/Memory resource requests/limits                 | Memory request/limit: `2Gi`/`16Gi`, CPU request/limit: `1000m`/`4000m`          |
+
 ## Architecture
 
-- Three major architectures are now available for DSM Developer-C Edition on IBM Cloud Private worker nodes:
+- Three major architectures are now available for DSM Developer-C Edition on worker nodes:
   - AMD64 / x86_64
   - s390x
   - ppc64le
@@ -188,4 +200,9 @@ If you have Db2 created in your namespace (no matter created before or after DSM
 A repository DB is created automatically to store your monitor and administration metadata. The minimum resource requied: 1 CPU 2G memory and 8G storage. It may need a long time when DSM deploy, creat repository DB and bind to it. If you delete DSM, its repository DB will also be deleted automatically. 
 
 You can only run one DSM per namespace. If you deploy the second DSM, it will be deleted silently in a while in backend. 
+
+
+## Limitations
+- Need authority to delete helm chart in current namespace.
+- ROLLING UPGRADES FROM PREVIOUS CHART RELEASES ARE NOT SUPPORTED
 
