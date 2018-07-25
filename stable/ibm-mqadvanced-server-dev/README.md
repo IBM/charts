@@ -70,6 +70,7 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `dataPVC.size`                  | Size of volume for main MQ data (under `/var/mqm`)              | `2Gi`                                      |
 | `service.name`                  | Name of the Kubernetes service to create                        | `"qmgr"`                                   |
 | `service.type`                  | Kubernetes service type exposing ports, e.g. `NodePort`         | `ClusterIP`                                |
+| `metrics.enabled`               | Enable Prometheus metrics for the Queue Manager                 | `true`                                     |
 | `resources.limits.cpu`          | Kubernetes CPU limit for the Queue Manager container | `500m`                                                   |
 | `resources.limits.memory`       | Kubernetes memory limit for the Queue Manager container | `512Mi`                                              |
 | `resources.requests.cpu`        | Kubernetes CPU request for the Queue Manager container | `500m`                                                 |
@@ -105,8 +106,6 @@ Performance requirements will vary widely based on workload, but as a guideline,
 It is not generally recommended that you change the number of replicas in the StatefulSet from the default value of 1.  Setting the number of replicas creates multiple Queue Managers.  The recommended way to scale MQ is by deploying this chart multiple times and connecting the Queue Managers together using MQ configuration — see [Architectures based on multiple queue managers](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.0.0/com.ibm.mq.pla.doc/q004720_.htm).  If you choose to set a different number of replicas on the StatefulSet, connections to each Queue Manager will be routed via a single IP address from the Kubernetes Service.  Connections to multiple replicas via a Service are load balanced, typically on a round-robin basis.  If you do this, you need to take great care not to create an affinity between an MQ client and server, because a client might get disconnected, and then re-connect to a different server.  See Chapter 7 of the [IBM MQ as a Service Redpaper](https://www.redbooks.ibm.com/redpapers/pdfs/redp5209.pdf)
 
 It is not recommended to change the number of replicas in the StatefulSet after initial deployment.  This will cause the addition or deletion of Queue Managers, which can result in loss of messages.
-
-Validated to run on IBM Cloud Private.  JSON logging requires IBM Cloud Private V2.1.0.2 or later.
 
 ## Documentation
 

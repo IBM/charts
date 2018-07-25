@@ -1,22 +1,53 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ template "istio.fullname" . }}-test"
+  name: "{{ template "istio.name" . }}-test"
+  namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ template "istio.fullname" . }}-test
+    app: {{ template "istio.name" . }}-test
+    chart: {{ template "istio.chart" . }}
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
   annotations:
-    "helm.sh/hook": test-success
+    sidecar.istio.io/inject: "false"
+    helm.sh/hook: test-success
 spec:
+{{- if .Values.global.priorityClassName }}
+  priorityClassName: "{{ .Values.global.priorityClassName }}"
+{{- end }}
   containers:
-    - name: "{{ template "istio.fullname" . }}-test"
+    - name: "{{ template "istio.name" . }}-test"
       image: "{{ .Values.global.kubectl.repository }}:{{ .Values.global.kubectl.tag }}"
+      imagePullPolicy: "{{ .Values.global.imagePullPolicy }}"
       command:
         - kubectl
         - -n
         - {{ .Release.Namespace }}
         - get
         - pods
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+          weight: 2
+        - preference:
+            matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - ppc64le
+          weight: 2
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+                  - ppc64le
   restartPolicy: Never

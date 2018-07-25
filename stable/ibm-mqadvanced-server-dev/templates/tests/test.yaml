@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2017
+# © Copyright IBM Corporation 2017, 2018
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,29 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This test tries to open port 1414 every second.  It keeps trying until it works,
+# or `livenessProbe.initialDelaySeconds` have passed.
+{{- include "sch.config.init" (list . "ibm-mq.sch.chart.config.values") }}
 apiVersion: v1
 kind: Pod
 metadata:
   name: "{{.Release.Name}}-test"
   labels:
-    app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
   annotations:
     "helm.sh/hook": test-success
 spec:
   containers:
     - name: {{.Release.Name}}-test
+      # Use Alpine Linux, because it includes netcat (`nc`) by default
       image: alpine:latest
-      env:
-        # Host name for the service running an MQ queue manager
-        - name: MQ_HOST
-          value: {{ template "fullname" . }}
-        # Time to try before giving up and failing the test (in seconds)
-        - name: TIMEOUT
-          value: "120" 
-      command: ["sh"]
-      # Check that port 1414 is listening
-      args: ["-xc", "nc -v -z -w$(TIMEOUT) $(MQ_HOST) 1414"]
+      command:
+        - "sh"
+      args:
+        - "-c"
+        - "timeout -t {{ .Values.livenessProbe.initialDelaySeconds }} /bin/sh -c \"until nc -v -w1 -z {{ include "sch.names.fullName" (list .) }} 1414; do sleep 1; done\""
   restartPolicy: Never

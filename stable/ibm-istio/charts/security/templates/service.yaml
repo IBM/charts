@@ -3,22 +3,24 @@ kind: Service
 metadata:
   # we use the normal name here (e.g. 'prometheus')
   # as grafana is configured to use this as a data source
-  name: {{ template "security.fullname" . }}
+  name: istio-citadel
+  namespace: {{ .Release.Namespace }}
   labels:
     app: {{ template "security.name" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    release: {{ .Release.Name }}
+    chart: {{ template "security.chart" . }}
     heritage: {{ .Release.Service }}
-    istio: istio-ca
+    release: {{ .Release.Name }}
+    istio: citadel
 spec:
+{{- if .Values.global.meshExpansionEnabled }}
+  type: LoadBalancer
+{{- end }}
   ports:
-    - port: 8060
+    - name: grpc-citadel
+      port: 8060
       targetPort: 8060
       protocol: TCP
-      name: grpc-istioca
+    - name: http-monitoring
+      port: 9093
   selector:
-    app: {{ template "security.name" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
-    istio: istio-ca
+    istio: citadel

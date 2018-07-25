@@ -1,44 +1,50 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ template "grafana.fullname" . }}
+  name: grafana
+  namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ template "grafana.name" . }}
-    chart: {{ .Chart.Name }}
-    release: {{ .Release.Name }}
+    app: grafana
+    chart: {{ template "grafana.chart" . }}
     heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.replicaCount }}
   template:
     metadata:
       labels:
-        app: {{ template "grafana.name" . }}
-        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        release: {{ .Release.Name }}
+        app: grafana
+        chart: {{ template "grafana.chart" . }}
         heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
       annotations:
         sidecar.istio.io/inject: "false"
-        productName: {{ .Chart.Name }}
-        productID: IBMIstioGrafana_0710_apachev2_00000
-        productVersion: {{ .Chart.Version }}
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
+{{- if .Values.global.priorityClassName }}
+      priorityClassName: "{{ .Values.global.priorityClassName }}"
+{{- end }}
       containers:
-        - name: {{ template "grafana.name" . }}
+        - name: grafana
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
-            - containerPort: {{ .Values.service.internalPort }}
+          - containerPort: 3000
           readinessProbe:
             httpGet:
               path: /login
-              port: {{ .Values.service.internalPort }}
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
           livenessProbe:
             httpGet:
               path: /login
-              port: {{ .Values.service.internalPort }}
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
           env:
           - name: GRAFANA_PORT
-            value: {{ .Values.service.internalPort | quote }}
+            value: "3000"
           - name: GF_AUTH_BASIC_ENABLED
             value: "false"
           - name: GF_AUTH_ANONYMOUS_ENABLED
@@ -52,24 +58,12 @@ spec:
           volumeMounts:
           - name: data
             mountPath: /data/grafana
-      {{- if .Values.management }}
-      nodeSelector:
-        management: 'true'
-      {{- end -}}
-      {{- if or .Values.dedicated .Values.criticalAddonsOnly }}
-      tolerations:
-      {{- if .Values.dedicated }}
-      - key: "dedicated"
-        operator: "Exists"
-        effect: "NoSchedule"
-      {{- end -}}
-      {{- if .Values.criticalAddonsOnly }}
-      - key: "CriticalAddonsOnly"
-        operator: "Exists"
-      {{- end -}}
-      {{- end }}
-      affinity:
-      {{- include "nodeaffinity" . | indent 6 }}
       volumes:
       - name: data
         emptyDir: {}
+      nodeSelector:
+      {{- include "nodeselector" . | indent 6 }}
+      tolerations:
+      {{- include "tolerations" . | indent 6 }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}

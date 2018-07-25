@@ -9,10 +9,26 @@ Expand the name of the chart.
 {{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
 */}}
 {{- define "istio.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "istio.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -28,3 +44,24 @@ Configmap checksum.
 {{- define "istio.configmap.checksum" -}}
 {{- print $.Template.BasePath "/configmap.yaml" | sha256sum -}}
 {{- end -}}
+
+{{- define "nodeselector" }}
+  {{- if .Values.global.management }}
+  management: 'true'
+  {{- end -}}
+  {{- if and .Values.global.extraNodeSelector.key .Values.global.extraNodeSelector.value }}
+  {{ .Values.global.extraNodeSelector.key }}: {{ .Values.global.extraNodeSelector.value }}
+  {{- end -}}
+{{- end }}
+
+{{- define "tolerations" }}
+{{- if .Values.global.dedicated }}
+- key: "dedicated"
+  operator: "Exists"
+  effect: "NoSchedule"
+{{- end -}}
+{{- if .Values.global.criticalAddonsOnly }}
+- key: "CriticalAddonsOnly"
+  operator: "Exists"
+{{- end -}}
+{{- end }}

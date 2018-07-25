@@ -1,5 +1,5 @@
-# Default values for istio-chart.
-# Use with Kubernetes 1.7+
+# Default values for ibm-istio-chart.
+# Use with Kubernetes 1.9+
 # This is a YAML-formatted file.
 # Declare name/value pairs to be passed into your templates.
 # name: value
@@ -8,156 +8,243 @@
 global:
   proxy:
     repository: ibmcom/istio-proxy
-    tag: 0.7.1
-    imagePullPolicy: IfNotPresent
+    tag: 0.8.0
+    enableCoreDump: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 8000m
+        memory: 1024Mi
+    
+    # istio egress capture whitelist
+    # https://istio.io/docs/tasks/traffic-management/egress.html#calling-external-services-directly
+    # example: includeIPRanges: "172.30.0.0/16,172.20.0.0/16"
+    # would only capture egress traffic on those two IP Ranges, all other outbound traffic would
+    # be allowed by the sidecar
+    includeIPRanges: "*"
+    excludeIPRanges: ""
+    
+    # istio ingress capture whitelist
+    # examples:
+    #     Redirect no inbound traffic to Envoy:    --includeInboundPorts=""
+    #     Redirect all inbound traffic to Envoy:   --includeInboundPorts="*"
+    #     Redirect only selected ports:            --includeInboundPorts="80,8080"
+    #includeInboundPorts: "*"
+    excludeInboundPorts: ""
+    policy: enabled
+  
+  # proxyv2 image is the image to use for networking alpha3 and envoy v2
+  proxyv2:
+    repository: ibmcom/istio-proxyv2
+    tag: 0.8.0
   
   proxyInit:
     repository: ibmcom/istio-proxy_init
-    tag: 0.7.1
-    imagePullPolicy: IfNotPresent
-
-  # Not recommended for user to configure this. Kubectl image to use when creating custom resources
-  kubectl:
-    repository: ibmcom/istio-kubectl
-    tag: v1.10.0
-    imagePullPolicy: IfNotPresent
+    tag: 0.8.0
   
-  # Install istio CA.
-  securityEnabled: true
+  # imagePullPolicy is applied to istio control plane components.
+  imagePullPolicy: IfNotPresent
+  
+  # Not recommended for user to configure this. Hyperkube image to use when creating custom resources
+  kubectl:
+    repository: ibmcom/kubectl
+    tag: v1.10.0
+  
+  # Kubernetes >=v1.11.0 will create two PriorityClass, including system-cluster-critical and
+  # system-node-critical, it is better to configure this in order to make sure your Istio pods
+  # will not be killed because of low prioroty class.
+  # Refer to https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+  # for more detail.
+  priorityClassName: ""
   
   # controlPlaneMtls enabled. Will result in delays starting the pods while secrets are
   # propagated, not recommended for tests.
-  controlPlaneSecurityEnabled: true
+  controlPlaneSecurityEnabled: false
   
   # Default mtls policy. If true, mtls between services will be enabled by default.
   mtls:
     # Default setting for service-to-service mtls. Can be set explicitly using
     # destination rules or service annotations.
-    enabled: true
+    enabled: false
   
   # create RBAC resources. Must be set for any cluster configured with rbac.
   rbacEnabled: true
   
+  ## imagePullSecrets for all ServiceAccount. Must be set for any clustser configured with privte docker registry.
   imagePullSecrets:
-    # - myRegistrKeySecretName
-    
+    # - private-registry-key
+  
   # Default is 10 second
   refreshInterval: 10s
+  
+  # Whether to restrict the applications namespace the controller manages;
+  # If not set, controller watches all namespaces
+  oneNamespace: false
+
+  # whether to expose core serviced with load balancer to support mesh expansion
+  meshExpansionEnabled: false
+  
+  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
+  management: true
+  # Specify(true or false) whether to scheduled to dedicated node as addon :
+  dedicated: true
+  criticalAddonsOnly: true
+  # Specify node selector kay and value.
+  # TODO: support object form of nodeSelector
+  extraNodeSelector:
+    key: ""
+    value: ""
+  # Specify architecture (amd64, ppc64le) and weight to be  used for scheduling as follows :
+  #   0 - Do not use
+  #   1 - Least preferred
+  #   2 - No preference
+  #   3 - Most preferred
+  arch:
+    amd64: "2 - No preference"
+    ppc64le: "2 - No preference"
 
 #
 # ingress configuration
 #
 ingress:
   enabled: true
-  serviceAccountName: default
-  autoscaleMin: 2
-  autoscaleMax: 8
+  replicaCount: 1
+  autoscaleMin: 1
+  autoscaleMax: 1
   resources:
     limits:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 4000m
+      memory: 512Mi
     requests:
       cpu: 100m
       memory: 128Mi
   service:
-    nodePort:
-      enabled: false
-      port: 32000
-  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
-  management: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  criticalAddonsOnly: true
-  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
-  #   0 - Do not use
-  #   1 - Least preferred
-  #   2 - No preference
-  #   3 - Most preferred
-  arch:
-    amd64: "2 - No preference"
-    ppc64le: "2 - No preference"
-    s390x: "2 - No preference"
+    loadBalancerIP: ""
+    type: LoadBalancer #change to NodePort, ClusterIP or LoadBalancer if need be
 
 #
-# sidecar-injector configuration
+# ingressgateway configuration
 #
-sidecar-injector:
-  enabled: false
-  serviceAccountName: default # used only if RBAC is not enabled
+ingressgateway:
+  enabled: true
+  serviceAccountName: istio-ingressgateway-service-account
   replicaCount: 1
-  image:
-    repository: ibmcom/istio-sidecar_injector
-    tag: 0.7.1
-    pullPolicy: IfNotPresent
+  autoscaleMin: 1
+  autoscaleMax: 1
   resources:
     limits:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 4000m
+      memory: 512Mi
     requests:
       cpu: 100m
       memory: 128Mi
-  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
-  management: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  criticalAddonsOnly: true
-  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
-  #   0 - Do not use
-  #   1 - Least preferred
-  #   2 - No preference
-  #   3 - Most preferred
-  arch:
-    amd64: "2 - No preference"
-    ppc64le: "2 - No preference"
-    s390x: "2 - No preference"
-  
-  # istio egress capture whitelist
-  # https://istio.io/docs/tasks/traffic-management/egress.html#calling-external-services-directly
-  # example: includeIPRanges: "172.30.0.0/16,172.20.0.0/16"
-  # would only capture egress traffic on those two IP Ranges, all other outbound traffic would
-  # be allowed by the sidecar
-  includeIPRanges: {}
+  service:
+    name: istio-ingressgateway #DNS addressible
+    labels:
+      istio: ingressgateway
+    loadBalancerIP: ""
+    type: LoadBalancer #change to NodePort, ClusterIP or LoadBalancer if need be
+    ports:
+    ## You can add custom gateway ports
+    - port: 80
+      targetPort: 80
+      name: http
+      nodePort: 31380
+    - port: 443
+      name: https
+      nodePort: 31390
+    - port: 31400
+      name: tcp
+      nodePort: 31400
+  deployment:
+    labels:
+      istio: ingressgateway #will be added to pods and service
+    ports:
+    - containerPort: 80
+    - containerPort: 443
+    - containerPort: 31400
+    secretVolumes:
+    - name: ingressgateway-certs
+      secretName: istio-ingressgateway-certs
+      mountPath: /etc/istio/ingressgateway-certs
+
+#
+# egressgateway configuration
+#
+egressgateway:
+  enabled: true
+  serviceAccountName: istio-egressgateway-service-account
+  replicaCount: 1
+  autoscaleMin: 1
+  autoscaleMax: 1
+  resources:
+    limits:
+      cpu: 4000m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  service:
+    name: istio-egressgateway #DNS addressible
+    labels:
+      istio: egressgateway
+    type: ClusterIP #change to NodePort or LoadBalancer if need be
+    ports:
+    ## You can add custom gateway ports
+    - port: 80
+      targetPort: 80
+      name: http
+    - port: 443
+      name: https
+  deployment:
+    labels:
+      istio: egressgateway #will be added to pods and services
+    ports:
+    - containerPort: 80
+    - containerPort: 443
+
+#
+# sidecar-injector webhook configuration
+#
+sidecarinjectorwebhook:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ibmcom/istio-sidecar_injector
+    tag: 0.8.0
+  resources:
+    limits:
+      cpu: 5000m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
 
 #
 # mixer configuration
 #
 mixer:
   enabled: true
-  serviceAccountName: default # used only if RBAC is not enabled
   replicaCount: 1
   image:
     repository: ibmcom/istio-mixer
-    tag: 0.7.1
-    pullPolicy: IfNotPresent
+    tag: 0.8.0
   resources:
     limits:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 8000m
+      memory: 1024Mi
     requests:
       cpu: 100m
       memory: 128Mi
-  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
-  management: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  criticalAddonsOnly: true
-  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
-  #   0 - Do not use
-  #   1 - Least preferred
-  #   2 - No preference
-  #   3 - Most preferred
-  arch:
-    amd64: "2 - No preference"
-    ppc64le: "2 - No preference"
-    s390x: "2 - No preference"
   prometheusStatsdExporter:
     repository: ibmcom/prom-statsd-exporter
     tag: v0.5.0
-    imagePullPolicy: IfNotPresent
     resources:
       limits:
-        cpu: 100m
-        memory: 128Mi
+        cpu: 2000m
+        memory: 256Mi
       requests:
         cpu: 100m
         memory: 128Mi
@@ -167,65 +254,35 @@ mixer:
 #
 pilot:
   enabled: true
-  serviceAccountName: default # used only if RBAC is not enabled
   replicaCount: 1
   image:
     repository: ibmcom/istio-pilot
-    tag: 0.7.1
-    pullPolicy: IfNotPresent
+    tag: 0.8.0
   resources:
     limits:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 8000m
+      memory: 1024Mi
     requests:
       cpu: 100m
       memory: 128Mi
-  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
-  management: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  criticalAddonsOnly: true
-  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
-  #   0 - Do not use
-  #   1 - Least preferred
-  #   2 - No preference
-  #   3 - Most preferred
-  arch:
-    amd64: "2 - No preference"
-    ppc64le: "2 - No preference"
-    s390x: "2 - No preference"
 
 #
 # security configuration
 #
 security:
-  serviceAccountName: default # used only if RBAC is not enabled
+  enabled: true
   replicaCount: 1
   image:
-    repository: ibmcom/istio-ca
-    tag: 0.7.1
-    pullPolicy: IfNotPresent
+    repository: ibmcom/istio-citadel
+    tag: 0.8.0
   resources:
     limits:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 7000m
+      memory: 1024Mi
     requests:
       cpu: 100m
       memory: 128Mi
-  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
-  management: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  criticalAddonsOnly: true
-  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
-  #   0 - Do not use
-  #   1 - Least preferred
-  #   2 - No preference
-  #   3 - Most preferred
-  arch:
-    amd64: "2 - No preference"
-    ppc64le: "2 - No preference"
-    s390x: "2 - No preference"
+  cleanUpOldCA: true
 
 #
 # addons configuration
@@ -235,18 +292,16 @@ grafana:
   replicaCount: 1
   image:
     repository: ibmcom/istio-grafana
-    tag: 0.7.1
-    pullPolicy: IfNotPresent
+    tag: 0.8.0
   service:
     name: http
     type: ClusterIP
     externalPort: 3000
-    internalPort: 3000
   ingress:
     enabled: false
     # Used to create an Ingress record.
     hosts:
-      - grafana.local
+      # - grafana.local
     annotations:
       # kubernetes.io/ingress.class: nginx
       # kubernetes.io/tls-acme: "true"
@@ -255,36 +310,20 @@ grafana:
       # - secretName: grafana-tls
       #   hosts:
       #     - grafana.local
-  
   resources:
     limits:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 1000m
+      memory: 512Mi
     requests:
       cpu: 100m
       memory: 128Mi
-  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
-  management: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  criticalAddonsOnly: true
-  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
-  #   0 - Do not use
-  #   1 - Least preferred
-  #   2 - No preference
-  #   3 - Most preferred
-  arch:
-    amd64: "2 - No preference"
-    ppc64le: "2 - No preference"
-    s390x: "2 - No preference"
 
 prometheus:
-  enabled: false
+  enabled: true
   replicaCount: 1
   image:
     repository: ibmcom/prometheus
     tag: v2.0.0
-    pullPolicy: IfNotPresent
   service:
     nodePort:
       enabled: false
@@ -293,7 +332,7 @@ prometheus:
     enabled: false
     # Used to create an Ingress record.
     hosts:
-      - prometheus.local
+      # - prometheus.local
     annotations:
       # kubernetes.io/ingress.class: nginx
       # kubernetes.io/tls-acme: "true"
@@ -304,43 +343,27 @@ prometheus:
       #     - prometheus.local
   resources:
     limits:
-      cpu: 100m
+      cpu: 5000m
       memory: 1024Mi
     requests:
       cpu: 100m
-      memory: 256Mi
-  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
-  management: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  criticalAddonsOnly: true
-  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
-  #   0 - Do not use
-  #   1 - Least preferred
-  #   2 - No preference
-  #   3 - Most preferred
-  arch:
-    amd64: "2 - No preference"
-    ppc64le: "2 - No preference"
-    s390x: "2 - No preference"
+      memory: 128Mi
 
 servicegraph:
   enabled: false
   replicaCount: 1
   image:
     repository: ibmcom/istio-servicegraph
-    tag: 0.7.1
-    pullPolicy: IfNotPresent
+    tag: 0.8.0
   service:
     name: http
     type: ClusterIP
     externalPort: 8088
-    internalPort: 8088
   ingress:
     enabled: false
     # Used to create an Ingress record.
     hosts:
-      - servicegraph.local
+      # - servicegraph.local
     annotations:
       # kubernetes.io/ingress.class: nginx
       # kubernetes.io/tls-acme: "true"
@@ -351,45 +374,33 @@ servicegraph:
       #     - servicegraph.local
   resources:
     limits:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 200m
+      memory: 256Mi
     requests:
       cpu: 100m
       memory: 128Mi
-  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
-  management: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  criticalAddonsOnly: true
-  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
-  #   0 - Do not use
-  #   1 - Least preferred
-  #   2 - No preference
-  #   3 - Most preferred
-  arch:
-    amd64: "2 - No preference"
-    ppc64le: "2 - No preference"
-    s390x: "2 - No preference"
   # prometheus addres
   prometheusAddr: http://prometheus:9090
 
-zipkin:
+tracing:
   enabled: false
+  jaeger:
+    enabled: false
+    memory:
+      maxTraces: 50000
   replicaCount: 1
   image:
-    repository: ibmcom/zipkin
-    tag: 2.6.0
-    pullPolicy: IfNotPresent
+    repository: ibmcom/jaegertracing-all-in-one
+    tag: 1.5
   service:
     name: http
     type: ClusterIP
     externalPort: 9411
-    internalPort: 9411
   ingress:
     enabled: false
     # Used to create an Ingress record.
     hosts:
-      - zipkin.local
+      # - zipkin.local
     annotations:
       # kubernetes.io/ingress.class: nginx
       # kubernetes.io/tls-acme: "true"
@@ -400,22 +411,8 @@ zipkin:
       #     - zipkin.local
   resources:
     limits:
-      cpu: 4000m
-      memory: 2048Mi
+      cpu: 5000m
+      memory: 1024Mi
     requests:
       cpu: 100m
-      memory: 512Mi
-  # Specify(true or false) whether to scheduled to management node with label: "management"="true" :
-  management: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  criticalAddonsOnly: true
-  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
-  #   0 - Do not use
-  #   1 - Least preferred
-  #   2 - No preference
-  #   3 - Most preferred
-  arch:
-    amd64: "2 - No preference"
-    ppc64le: "2 - No preference"
-    s390x: "2 - No preference"
+      memory: 128Mi

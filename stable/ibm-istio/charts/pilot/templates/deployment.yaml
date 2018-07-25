@@ -1,12 +1,13 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ template "pilot.fullname" . }}
+  name: istio-pilot
+  namespace: {{ .Release.Namespace }}
   labels:
     app: {{ template "pilot.name" . }}
-    chart: {{ .Chart.Name }}
-    release: {{ .Release.Name }}
+    chart: {{ template "pilot.chart" . }}
     heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
     istio: pilot
   annotations:
     checksum/config-volume: {{ template "istio.configmap.checksum" . }}
@@ -16,29 +17,31 @@ spec:
     metadata:
       labels:
         app: {{ template "pilot.name" . }}
-        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        release: {{ .Release.Name }}
+        chart: {{ template "pilot.chart" . }}
         heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
         istio: pilot
       annotations:
         sidecar.istio.io/inject: "false"
-        productName: {{ .Chart.Name }}
-        productID: IBMIstioPilot_0710_apachev2_00000
-        productVersion: {{ .Chart.Version }}
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
-      serviceAccountName: {{ template "pilot.serviceAccountName" . }}
+      serviceAccountName: istio-pilot-service-account
+{{- if .Values.global.priorityClassName }}
+      priorityClassName: "{{ .Values.global.priorityClassName }}"
+{{- end }}
       containers:
-        - name: {{ template "pilot.name" . }}-discovery
+        - name: discovery
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           args:
           - "discovery"
-          - "--admission-service"
-          - "{{ template "pilot.fullname" . }}"
+{{- if .Values.global.oneNamespace }}
+          - "-a"
+          - {{ .Release.Namespace }}
+{{- end }}
           ports:
           - containerPort: 8080
           - containerPort: 15010
-          - containerPort: 443
           readinessProbe:
             httpGet:
               path: /v1/registration
@@ -73,32 +76,62 @@ spec:
           volumeMounts:
           - name: config-volume
             mountPath: /etc/istio/config
-        - name: {{ template "pilot.name" . }}-proxy
-          image: "{{ .Values.global.proxy.repository }}:{{ .Values.global.proxy.tag }}"
-          imagePullPolicy: {{ .Values.global.proxy.imagePullPolicy }}
+          - name: istio-certs
+            mountPath: /etc/certs
+            readOnly: true
+        - name: istio-proxy
+          image: "{{ .Values.global.proxyv2.repository }}:{{ .Values.global.proxyv2.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
           - containerPort: 15003
           - containerPort: 15005
           - containerPort: 15007
+          - containerPort: 15011
+          args:
+          - proxy
+          - --serviceCluster
+          - istio-pilot
+          - --templateFile
+          - /etc/istio/proxy/envoy_pilot.yaml.tmpl
+        {{- if .Values.global.controlPlaneSecurityEnabled}}
+          - --controlPlaneAuthPolicy
+          - MUTUAL_TLS
+        {{- else }}
+          - --controlPlaneAuthPolicy
+          - NONE
+        {{- end }}
+          env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: INSTANCE_IP
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: status.podIP
           livenessProbe:
             exec:
               command:
                 - ls
                 - /etc/certs
+            initialDelaySeconds: 30
+            periodSeconds: 30
           readinessProbe:
             exec:
               command:
                 - ls
                 - /etc/certs
-          args:
-          - proxy
-          - pilot
-          - --discoveryAddress
-          - localhost:8080
-          - --controlPlaneAuthPolicy
-          - NONE #--controlPlaneAuthPolicy
-          - --customConfigFile
-          - /etc/istio/proxy/envoy_pilot.json
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+{{ toYaml .Values.global.proxy.resources | indent 12 }}
           volumeMounts:
           - name: istio-certs
             mountPath: /etc/certs
@@ -109,23 +142,10 @@ spec:
           name: istio
       - name: istio-certs
         secret:
-          secretName: "istio.{{ template "pilot.serviceAccountName" . }}"
-          optional: true
-      {{- if .Values.management }}
+          secretName: istio.istio-pilot-service-account
       nodeSelector:
-        management: 'true'
-      {{- end -}}
-      {{- if or .Values.dedicated .Values.criticalAddonsOnly }}
+      {{- include "nodeselector" . | indent 6 }}
       tolerations:
-      {{- if .Values.dedicated }}
-      - key: "dedicated"
-        operator: "Exists"
-        effect: "NoSchedule"
-      {{- end -}}
-      {{- if .Values.criticalAddonsOnly }}
-      - key: "CriticalAddonsOnly"
-        operator: "Exists"
-      {{- end -}}
-      {{- end }}
+      {{- include "tolerations" . | indent 6 }}
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}

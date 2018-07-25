@@ -2,34 +2,36 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ template "prometheus.fullname" . }}
+  name: prometheus
+  namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ template "prometheus.name" . }}
-    chart: {{ .Chart.Name }}
-    release: {{ .Release.Name }}
+    app: prometheus
+    chart: {{ template "prometheus.chart" . }}
     heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.replicaCount }}
   template:
     metadata:
       labels:
-        app: {{ template "prometheus.name" . }}
-        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        release: {{ .Release.Name }}
+        app: prometheus
+        chart: {{ template "prometheus.chart" . }}
         heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
       annotations:
         sidecar.istio.io/inject: "false"
-        productName: {{ .Chart.Name }}
-        productID: IBMIstioPrometheus_0710_apachev2_00000
-        productVersion: {{ .Chart.Version }}
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
 {{- if .Values.global.rbacEnabled }}
-      serviceAccountName: {{ template "prometheus.serviceAccountName" . }}
+      serviceAccountName: prometheus
+{{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName: "{{ .Values.global.priorityClassName }}"
 {{- end }}
       containers:
         - name: prometheus
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           args:
             - '--storage.tsdb.retention=6h'
             - '--config.file=/etc/prometheus/prometheus.yml'
@@ -47,27 +49,15 @@ spec:
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           volumeMounts:
-            - name: config-volume
-              mountPath: /etc/prometheus
+          - name: config-volume
+            mountPath: /etc/prometheus
       volumes:
-        - name: config-volume
-          configMap:
-            name: {{ template "prometheus.fullname" . }}
-      {{- if .Values.management }}
+      - name: config-volume
+        configMap:
+          name: prometheus
       nodeSelector:
-        management: 'true'
-      {{- end -}}
-      {{- if or .Values.dedicated .Values.criticalAddonsOnly }}
+      {{- include "nodeselector" . | indent 6 }}
       tolerations:
-      {{- if .Values.dedicated }}
-      - key: "dedicated"
-        operator: "Exists"
-        effect: "NoSchedule"
-      {{- end -}}
-      {{- if .Values.criticalAddonsOnly }}
-      - key: "CriticalAddonsOnly"
-        operator: "Exists"
-      {{- end -}}
-      {{- end }}
+      {{- include "tolerations" . | indent 6 }}
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
