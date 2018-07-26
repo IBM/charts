@@ -14,7 +14,7 @@ Skydive is SDN-agnostic but provides SDN drivers in order to enhance the topolog
 * IBM Cloud Private 2.1.0.1 or higher
 * Kubernetes cluster 1.7 or higher
 
-- Persistent Volume is required if persistance is enabled and no dynamic provisioning has been set up. You can create a persistent volume via the IBM Cloud Private interface or through a yaml file. For example:
+- Persistent volume is needed only if you want to "look back in time" with skydive (that is, if you are interested in the monitoring history); if you don't , then it is not required (an elastic search container will not be created). You can create a persistent volume via the IBM Cloud Private interface or through a yaml file. For example:
 
 ```
 apiVersion: v1

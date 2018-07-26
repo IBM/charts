@@ -9,8 +9,14 @@
 
 This chart deploys a single IBM DataPower Gateway node with a default pattern into an IBM Cloud Private or other Kubernetes environment. The default pattern,  the `RESTProxy` pattern, configures the DataPower node to act as a reverse proxy, directing client requests to the appropriate backend server.
 
- ## Installing the Chart
- To install the chart with the release name `my-release` and default pattern (See .Values.patternName below):
+## Prerequisites
+helm and kubectl must be installed and configured on your system.
+
+## Resources Required
+Minimum resources per pod: 2 CPU and 4 GB RAM
+
+## Installing the Chart
+To install the chart with the release name `my-release` and default pattern (See .Values.patternName below):
  ```bash
 $ helm install --name my-release -f <mycrypto.yaml> stable/ibm-datapower-dev
 ```
@@ -21,7 +27,7 @@ Where `<mycrypto.yaml>` is a yaml file that contains the parameters `crypto.fron
 ## Verifying the Chart
 See NOTES.txt associated with this chart for verification instructions
 
- ## Uninstalling the Chart
+## Uninstalling the Chart
 To uninstall/delete the `my-release` deployment:
 
 ```bash
@@ -32,8 +38,12 @@ To completely uninstall/delete the `my-release` deployment:
 ```bash
 $ helm delete --purge my-release
 ```
+## Limitations
+This chart is for developer purposes only. No support is provided. Not eligible for production use.
 
-
+## Chart Details
+Deploys IBM DataPower Gateway Virtual Edition for Developers.
+Only works with DataPower version 7.7.1.1 and above.
 
 ## Configuration
 The helm chart has the following Values that can be overriden using the install `--set` parameter or by providing your own values file. For example:
