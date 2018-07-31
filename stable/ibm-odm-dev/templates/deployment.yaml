@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
   name: {{ template "fullname" . }}
@@ -8,12 +8,19 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      run: {{ template "name" . }}
   template:
     metadata:
       labels:
         run: {{ template "name" . }}
         app: {{ template "name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
       annotations:
         productName: {{ .Chart.Description | quote }}
         productID: "OperationalDecisionManagerForDevelopers"
@@ -43,7 +50,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
-          image: {{ .Values.image.repository}}/odm:{{ .Values.image.tag }}_{{ .Chart.Version }}
+          image: {{ template "odm.repository.name" . }}/odm:{{ .Values.image.tag }}_{{ .Chart.Version }}{{ template "platform" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
           - name: LICENSE
@@ -60,14 +67,17 @@ spec:
             value: "postgresql"
           - name: DB_SERVER_NAME
             value: "{{ .Values.externalDatabase.serverName }}"
+          - name: DB_PORT_NUMBER
+            value: "{{ .Values.externalDatabase.port }}"
           - name: DB_NAME
             value: "{{ .Values.externalDatabase.databaseName }}"
           - name: DB_USER
             value: "{{ .Values.externalDatabase.user }}"
           - name: DB_PASSWORD
-            value: "{{ .Values.externalDatabase.password }}"
-          - name: DB_PORT_NUMBER
-            value: "{{ .Values.externalDatabase.port }}"
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "odm.secret.fullname" . }}
+                key: db-password
           {{- end }}
           - name: DC_PERSISTENCE_LOCALE
             value: "{{ .Values.decisionCenter.persistenceLocale }}"
@@ -78,6 +88,24 @@ spec:
           - name: {{ template "fullname" . }}-volume
             mountPath: /config/dbdata/
           {{- end }}
+          readinessProbe:
+            httpGet:
+              scheme: HTTP
+              # decisioncenter-api start as last
+              path: /decisioncenter-api
+              port: 9060
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              scheme: HTTP
+              # decisioncenter is the most important to check
+              path: /decisioncenter/t
+              port: 9060
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
       {{- if (not (empty .Values.image.pullSecrets )) }}

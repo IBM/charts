@@ -1,42 +1,49 @@
-# What's new in Chart Version 0.8.0
+# What's new in Chart Version 1.0.0
 
-This is a major release for Istio on the road to 1.0. There are a great many new features and architectural improvements in addition to the usual pile of bug fixes and performance improvements.
+We’re proud to release Istio 1.0! Istio has been in development for nearly two years, and the 1.0 release represents a substantial milestone for us. All of our [core features](https://istio.io/about/feature-stages/) are now ready for production use.
+
+These release notes describe what’s different between Istio 0.8 and Istio 1.0. Istio 1.0 only has a few new features relative to 0.8 as most of the effort for this release went into fixing bugs and improving performance.
 
 ## Networking
 
-- **Revamped Traffic Management Model**. We're finally ready to take the wraps off our [new traffic management APIs](https://istio.io/blog/2018/v1alpha3-routing/). We believe this new model is easier to understand while covering more real world deployment [use-cases](https://istio.io/docs/tasks/traffic-management/). For folks upgrading from earlier releases there is a [migration guide](https://istio.io/docs/setup/kubernetes/upgrading-istio/) and a conversion tool built into `istioctl` to help convert your config from the old model.
+- **SNI Routing using Virtual Services.** Newly introduced `TLS` sections in [VirtualService](https://istio.io/docs/reference/config/istio.networking.v1alpha3/#VirtualService) can be used to route TLS traffic based on SNI values. Service ports named as TLS/HTTPS can be used in conjunction with virtual service TLS routes. TLS/HTTPS ports without an accompanying virtual service will be treated as opaque TCP.
+- **Streaming gRPC Restored.** Istio 0.8 caused periodic termination of long running streaming gRPC connections. This has been fixed in 1.0.
+- **Old (v1alpha1) Networking APIs Removed.** Support for the old `v1alpha1` traffic management model has been removed.
+- **Istio Ingress Deprecated.** The old Istio ingress is deprecated and disabled by default. We encourage users to use [gateways](https://istio.io/docs/concepts/traffic-management/#gateways) instead.
 
-- **Streaming Envoy configuration**. By default Pilot now streams configuration to Envoy using its [ADS API](https://github.com/envoyproxy/data-plane-api/blob/master/XDS_PROTOCOL.md). This new approach increases effective scalability, reduces rollout delay and should eliminate spurious 404 errors.
+## Policy and Telemetry
 
-- **Gateway for Ingress/Egress**. We no longer support combining Kubernetes Ingress specs with Istio routing rules as it has led to several bugs and reliability issues. Istio now supports a platform independent [Gateway](https://istio.io/docs/concepts/traffic-management/rules-configuration/#gateways) model for ingress & egress proxies that works across Kubernetes and Cloud Foundry and works seamlessly with routing. The Gateway supports [Server Name Indication](https://en.wikipedia.org/wiki/Server_Name_Indication) based routing,
-as well as serving a certificate based on the server name presented by the client.
+- **Updated Attributes.** The set of [attributes](https://istio.io/docs/reference/config/policy-and-telemetry/attribute-vocabulary/) used to describe the source and destination of traffic have been completely revamped in order to be more precise and comprehensive.
+- **Policy Check Cache.** Mixer now features a large level 2 cache for policy checks, complementing the level 1 cache present in the sidecar proxy. This further reduces the average latency of externally-enforced policy checks.
+- **Telemetry Buffering.** Mixer now buffers report calls before dispatching to adapters, which gives an opportunity for adapters to process telemetry data in bigger chunks, reducing overall computational overhead in Mixer and its adapters.
+- **Out of Process Adapters.** Mixer now includes initial support for out-of-process adapters. This will be the recommended approach moving forward for integrating with Mixer. Initial documentation on how to build an out-of-process adapter is provided by the [Out Of Process gRPC Adapter Dev Guide](https://github.com/istio/istio/wiki/Out-Of-Process-gRPC-Adapter-Dev-Guide) and the [gRPC Adapter Walk-through](https://github.com/istio/istio/wiki/gRPC-Adapter-Walkthrough).
+- **Client-Side Telemetry.** It’s now possible to collect telemetry from the client of an interaction, in addition to the server-side telemetry.
 
-- **Constrained Inbound Ports**. We now restrict the inbound ports in a pod to the ones declared by the apps running inside that pod.
+## Adapters
+
+- **SignalFX.** There is a new [signalfx](https://istio.io/docs/reference/config/policy-and-telemetry/adapters/signalfx/) adapter.
+- **Stackdriver.** The [stackdriver](https://istio.io/docs/reference/config/policy-and-telemetry/adapters/stackdriver/) adapter has been substantially enhanced in this release to add new features and improve performance.
 
 ## Security
 
-- **Introducing Citadel**. We've finally given a name to our security component. What was formerly known as Istio-Auth or Istio-CA is now called Citadel.
+- **Authorization.** We’ve reimplemented our [authorization functionality](https://istio.io/docs/concepts/security/#authorization). RPC-level authorization policies can now be implemented without the need for Mixer and Mixer adapters.
+- **Improved Mutual TLS Authentication Control.** It’s now easier to [control mutual TLS authentication](https://istio.io/docs/concepts/security/#authentication) between services. We provide `PERMISSIVE` mode so that you can [incrementally turn on mutual TLS](https://istio.io/docs/tasks/security/mtls-migration/) for your services. We removed service annotations and have a [unique approach to turn on mutual TLS](https://istio.io/docs/tasks/security/authn-policy/), coupled with client-side [destination rules](https://istio.io/docs/concepts/traffic-management/#destination-rules).
+- **JWT Authentication.** We now support [JWT authentication](https://istio.io/docs/concepts/security/#authentication) which can be configured using [authentication policies](https://istio.io/docs/concepts/security/#authentication-policies).
 
-- **Multicluster Support**. We support per-cluster Citadel in multicluster deployments such that all Citadels share the same root certificate and workloads can authenticate each other across the mesh.
+## `istioctl`
 
-- **Authentication Policy**. We've created a unified API for [authentication policy](https://istio.io/docs/tasks/security/authn-policy/) that controls whether service-to-service communication uses mutual TLS as well as end user authentication. This is now the recommended way to control these behaviors.
-
-## Telemetry
-
-- **Self-Reporting**. Mixer and Pilot now produce telemetry that flows through the normal Istio telemetry pipeline, just like services in the mesh.
-
-## Setup
-
-- **A la Carte Istio**. Istio has a rich set of features, however you don't need to install or consume them all together. By using Helm or `istioctl gen-deploy`, users can install only the features they want. For example, users can install Pilot only and enjoy traffic management functionality without dealing with Mixer or Citadel. Learn more about [customization through Helm](https://istio.io/docs/setup/kubernetes/helm-install/#customization-with-helm)
-and about [`istioctl gen-deploy`](https://istio.io/docs/reference/commands/istioctl/#istioctl%20gen-deploy).
-
-## Mixer adapters
-
-- **CloudWatch**. Mixer can now report metrics to AWS CloudWatch. [Learn more](https://istio.io/docs/reference/config/policy-and-telemetry/adapters/cloudwatch/)
+- Added the [istioctl authn tls-check](https://istio.io/docs/reference/commands/istioctl/#istioctl-authn-tls-check) command.
+- Added the [istioctl proxy-status](https://istio.io/docs/reference/commands/istioctl/#istioctl-proxy-status) command.
+- Added the `istioctl experimental convert-ingress` command.
+- Removed the `istioctl experimental convert-networking-config` command.
+- Enhancements and bug fixes:
+  * Align `kubeconfig` handling with `kubectl`
+  * `istioctl get all` returns all types of networking and authentication configuration.
+  * Added the `--all-namespaces` flag to `istioctl` get to retrieve resources across all namespaces.
 
 # Fixes
 
-This release includes the usual pile of bug fixes that can be checked out here: https://github.com/istio/istio/compare/0.8.0...master 
+This release includes the usual pile of bug fixes that can be checked out here: https://github.com/istio/istio/compare/1.0.0...master 
 
 # Prerequisites
 
@@ -52,5 +59,6 @@ This release includes the usual pile of bug fixes that can be checked out here: 
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | --------------------------- | ------------------ | ---------------- | ------- | 
+| 1.0.0 | July 31, 2018| >= 1.9  | ibmcom/istio-proxyv2:1.0.0 ibmcom/istio-proxy_init:1.0.0 ibmcom/kubectl:v1.10.0 ibmcom/istio-grafana:1.0.0 ibmcom/istio-citadel:1.0.0 ibmcom/istio-galley:1.0.0 ibmcom/istio-mixer:1.0.0 ibmcom/istio-servicegraph:1.0.0 ibmcom/istio-pilot:1.0.0 ibmcom/istio-sidecar_injector:1.0.0 ibmcom/prom-statsd-exporter:v0.6.0 ibmcom/prometheus:v2.3.1 ibmcom/jaegertracing-all-in-one:1.5 ibmcom/kiali:v0.5.0 ibmcom/cert-manager:v0.3.1  | None | new features and architectural improvement |
 | 0.8.0 | June 1, 2018| >= 1.9  | ibmcom/istio-proxy:0.8.0 ibmcom/istio-proxyv2:0.8.0 ibmcom/istio-proxy_init:0.8.0 ibmcom/kubectl:v1.10.0 ibmcom/istio-grafana:0.8.0 ibmcom/istio-citadel:0.8.0 ibmcom/istio-mixer:0.8.0 ibmcom/istio-servicegraph:0.8.0 ibmcom/istio-pilot:0.8.0 ibmcom/istio-sidecar_injector:0.8.0 ibmcom/prom-statsd-exporter:v0.5.0 ibmcom/prometheus:v2.0.0 ibmcom/jaegertracing-all-in-one:1.5 | None | new features and architectural improvement |
 | 0.7.1 | Apr 27, 2018| >=1.7.3 | ibmcom/istio-kubectl:v1.10.0 ibmcom/istio-grafana:0.7.1 ibmcom/istio-ca:0.7.1 ibmcom/istio-mixer:0.7.1 ibmcom/istio-servicegraph:0.7.1 ibmcom/istio-proxy_init:0.7.1 ibmcom/istio-proxy:0.7.1 ibmcom/istio-pilot:0.7.1 ibmcom/istio-sidecar_injector:0.7.1 ibmcom/zipkin:2.6.0 ibmcom/prom-statsd-exporter:v0.5.0 ibmcom/prometheus:v2.0.0 | None | Tech Preview |

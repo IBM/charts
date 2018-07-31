@@ -12,17 +12,20 @@ This chart can install multiple Istio components as subcharts:
 
 | Subchart | Component | Description | Enabled by Default |
 | -------- | --------- | ----------- | ------------------ |
-| ingress | Ingress | An [ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) implementation with [envoy proxy](https://github.com/envoyproxy/envoy) that allows inbound connections to reach the mesh. This deprecated component is used to support combining Kubernetes Ingress specs with Istio routing rules and it will be removed in the next release. | Yes |
-| ingressgateway | Ingress Gateway | A new component used to replace the `ingress` component, supports a platform independent [Gateway](https://istio.io/docs/concepts/traffic-management/rules-configuration/#gateways) model for ingress. | Yes |
-| egressgateway | Egress Gateway | A new component used to replace `ingress`, together with `ingressgateway` supports new [Traffic Management API](https://istio.io/blog/2018/v1alpha3-routing/). | Yes |
-| sidecarinjectorwebhook | Automatic Sidecar Injector | A [mutating webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#admission-webhooks) implementation to automatically inject an envoy sidecar container into application pods. | Yes |
+| ingress | Ingress | An [ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) implementation with [envoy proxy](https://github.com/envoyproxy/envoy) that allows inbound connections to reach the mesh. This deprecated component is used for legacy Kubernetes Ingress resources with Istio routing rules. | No |
+| gateways | Gateways | A platform independent [Gateway](https://istio.io/docs/concepts/traffic-management/#gateways) model for ingress & egress proxies that works across Kubernetes and Cloud Foundry and works seamlessly with routing. | Yes |
+| sidecarinjectorwebhook | Automatic Sidecar Injector | A [mutating webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#admission-webhooks) implementation to automatically inject an envoy sidecar container into application pods. | Yes | 
+| galley | Galley | The top-level config ingestion, processing and distribution component for  Istio, responsible for insulating the rest of the Istio components from the details of obtaining user configuration from the underlying platform. | Yes |
 | mixer | Mixer | A centralized component that is leveraged by the proxies and microservices to enforce policies such as authorization, rate limits, quotas, authentication, request tracing and telemetry collection. | Yes |
 | pilot | Pilot | A component responsible for configuring the proxies at runtime. | Yes |
 | security | Citadel | A centralized component responsible for certificate issuance and rotation. | Yes |
+| telemetrygateway | Telemetry gateway | A gateway for configuring Istio telemetry addons | No |
 | grafana | [Grafana](https://grafana.com/) | A visualization tool for monitoring and metric analytics & dashboards for Istio | No |
 | prometheus | [Prometheus](https://prometheus.io/) | A service monitoring system for Istio that collects metrics from configured targets at given intervals, evaluates rule expressions, displays the results, and can trigger alerts if some condition is observed to be true. | Yes |
 | servicegraph | Service Graph | A small add-on for Istio that generates and visualizes graph representations of service mesh. | No |
 | tracing | [Jaeger](https://www.jaegertracing.io/) | Istio uses Jaeger as a tracing system that is used for monitoring and troubleshooting Istio service mesh. | No |
+| kiali | Kiali | Kiali works with Istio to visualise the service mesh topology, features like circuit breakers or request rates. | No |
+| certmanager | Cert-Manager | An Istio add-on to automate the management and issuance of TLS certificates from various issuing sources. | No |
 
 To enable or disable each component, change the corresponding `enabled` flag.
 
@@ -30,7 +33,6 @@ To enable or disable each component, change the corresponding `enabled` flag.
 
 - A user with `cluster-admin` ClusterRole is required to install the chart.
 - Kubernetes 1.9 or newer cluster with RBAC (Role-Based Access Control) enabled is required.
-- Helm 2.7.2 or newer is required.
 - To enable automatic sidecar injection, Kubernetes 1.9+ with `admissionregistration` API is required, and the `kube-apiserver` process must have the `admission-control` flag set with the `MutatingAdmissionWebhook` and `ValidatingAdmissionWebhook` admission controllers added and listed in the correct order.
 
 ## Resources Required
@@ -39,12 +41,21 @@ The chart deploys pods that consume minimum resources as specified in the resour
 
 ## Installing the Chart
 
-1. Create namespace `istio-system` for the chart:
+1. Install Istio’s [Custom Resource Definitions](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/#customresourcedefinitions) via `kubectl apply`, and wait a few seconds for the CRDs to be committed in the kube-apiserver:
+   ```
+   $ kubectl apply -f ../ibm-istio/templates/crds.yaml
+   ```
+   **Note**: If you are enabling `certmanager`, you also need to install its CRDs and wait a few seconds for the CRDs to be committed in the kube-apiserver:
+   ```
+   $ kubectl apply -f ../ibm-istio/charts/certmanager/templates/crds.yaml
+   ```
+
+2. Create namespace `istio-system` for the chart:
    ```
    $ kubectl create ns istio-system
    ```
 
-2. To install the chart with the release name `istio` in namespace `istio-system`:
+3. To install the chart with the release name `istio` in namespace `istio-system`:
    - With [automatic sidecar injection](https://istio.io/docs/setup/kubernetes/sidecar-injection/#automatic-sidecar-injection) (requires Kubernetes >=1.9.0):
    ```
    $ helm install ../ibm-istio --name istio --namespace istio-system
@@ -66,155 +77,202 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 
 | Parameter | Description | Values | Default |
 | --------- | ----------- | ------ | ------- |
-| `global.proxy.repository` | Specifies the proxy image location | valid image repository | `ibmcom/istio-proxy` |
-| `global.proxy.tag` | Specifies the proxy image version | valid image tag | `0.8.0` |
+| `global.proxy.repository` | Specifies the proxy image location | valid image repository | `ibmcom/istio-proxyv2` |
+| `global.proxy.tag` | Specifies the proxy image version | valid image tag | `1.0.0` |
+| `global.proxy.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | `{requests.cpu: 10m}` |
+| `global.proxy.accessLogFile`| Specifies the access log for each sidecar, an empty string will disable access log for sidecar | valid file path or empty string | `/dev/stdout` |
 | `global.proxy.enableCoreDump` | Specifies whether to enable debug information for envoy sidecar | true/false | `false` |
-| `global.proxy.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
-| `global.proxy.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `1024Mi`, CPU: `8000m` |
 | `global.proxy.includeIPRanges` | Specifies istio egress capture whitelist | example: includeIPRanges: "172.30.0.0/16,172.20.0.0/16" | `*` |
 | `global.proxy.excludeIPRanges` | Specifies istio egress capture blacklist | example: excludeIPRanges: "172.40.0.0/16,172.50.0.0/16" | `""` |
 | `global.proxy.excludeInboundPorts` | Specifies istio egress capture port blacklist | example: excludeInboundPorts: "81:8081" | `""` |
-| `global.proxy.policy` | Specifies whether to enable ingress and egress policy for envoy sidecar | `enabled`/`disabled` | `enabled` |
-| `global.proxyv2.repository` | Specifies the proxy v2 image location | valid image repository | `ibmcom/istio-proxyv2` |
-| `global.proxyv2.tag` | Specifies the proxy v2 image version | valid image tag | `0.8.0` |
+| `global.proxy.autoInject` | Specifies whether to enable ingress and egress policy for envoy sidecar | `enabled`/`disabled` | `enabled` |
+| `global.proxy.envoyStatsd.enabled` | Specifies whether to enable the destination statsd in envoy | true/false | `true` |
+| `global.proxy.envoyStatsd.host` | Specifies host for the destination statsd in envoy | destination statsd host | `istio-statsd-prom-bridge` |
+| `global.proxy.envoyStatsd.port` | Specifies host port for the destination statsd in envoy | destination statsd port | `9125` |
 | `global.proxyInit.repository` | Specifies the proxy init image location | valid image repository | `ibmcom/istio-proxy_init` |
-| `global.proxyInit.tag` | Specifies the proxy init image version | valid image tag | `0.8.0` |
-| `global.imagePullPolicy` | Specifies the image pull policy | valid image pull policy | `IfNotPresent` |
+| `global.proxyInit.tag` | Specifies the proxy init image version | valid image tag | `1.0.0` |
 | `global.kubectl.repository` | Specifies the kubectl image location | valid image repository | `ibmcom/kubectl` |
 | `global.kubectl.tag` | Specifies the kubectl image version | valid image tag | `v1.10.0` |
-| `global.priorityClassName` | Specifies priority class to make sure Istio pods will not be evicted because of low prioroty class | `system-cluster-critical`/`system-node-critical`/`""` | `""` |
+| `global.k8sIngressSelector` | Specifies the gateway used for legacy k9s ingress resources | `ingress` or any defined gateway | `ingress` |
+| `global.k8sIngressHttps` | Specifies whether to use the https for ingress | true/false | `false` |
+| `global.imagePullPolicy` | Specifies the image pull policy | valid image pull policy | `IfNotPresent` |
 | `global.controlPlaneSecurityEnabled` | Specifies whether control plane mTLS is enabled | true/false | `false` |
+| `global.disablePolicyChecks` | Specifies whether to disables mixer policy checks | true/false | `false` |
+| `global.enableTracing` | Specifies whether to enables the Tracing | true/false | `true` |
 | `global.mtls.enabled` | Specifies whether mTLS is enabled by default between services | true/false | `false` |
-| `global.rbacEnabled` | Specifies whether to create Istio RBAC rules or not | true/false | `true` |
-| `global.imagePullSecrets` | Specifies image pull secrets for private docker registry | array consists of imagePullSecret | Empty Array |
-| `global.refreshInterval` | Specifies the mesh discovery refresh interval | integer followed by s | `10s` |
+| `global.imagePullSecrets` | Specifies image pull secrets for private docker registry | array consists of imagePullSecret | [] |
 | `global.oneNamespace` | Specifies whether to restrict the applications namespace the controller manages | true/false | `false` |
-| `global.meshExpansionEnabled` | Specifies whether to support mesh expansion | true/false | `false` |
-| `global.management` | Specifies whether deploy to node with labels `management=true` | true/false | `true` |
-| `global.dedicated` | Specifies whether to deploy to dedicated node with taint `dedicated=:NoSchedule` | true/false | `true` |
-| `global.criticalAddonsOnly` | Specifies whether to deploy istio as a critical addon | true/false | `true` |
-| `global.extraNodeSelector.key` | Specifies extra node selector key | string as key | `""` |
-| `global.extraNodeSelector.value` | Specifies extra node selector value | string as value | `""` |
+| `global.configValidation` | Specifies whether to perform server-side validation of configuration | true/false | `true` |
+| `global.meshExpansion` | Specifies whether to support mesh expansion | true/false | `false` |
+| `global.meshExpansionILB` | Specifies whether to expose the pilot and citadel mtls and the plain text pilot ports on an internal gateway | true/false | `false` |
+| `gobal.defaultResources` | Specifies resources(CPU/Memory) requests & limits applied to all deployments | valid CPU&memory settings | `{requests.cpu: 10m}` |
+| `global.crds` | Specifies whether to include the CRDS when generating the template | true/false | `true` |
+| `global.priorityClassName` | Specifies priority class to make sure Istio pods will not be evicted because of low prioroty class | valid priority class name | `""` |
+| `global.proxyNode` | Specifies whether to deploy to proxy node with labels `proxy=true`(effective only on IBM Cloud Private) | true/false | `true` |
+| `global.dedicated` | Specifies whether to deploy to dedicated node with taint `dedicated=:NoSchedule`(effective only on IBM Cloud Private) | true/false | `true` |
+| `global.extraNodeSelector` | Specifies customized node selector for all components | valid node selector | {} |
 | `global.arch.amd64`| Architecture preference for amd64 node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
-| `global.arch.ppc64le` | Architecture preference for ppc64le node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
-| `ingress.enabled` | Specifies whether Ingress should be installed (deprecated)| true/false | `true` |
+| `ingress.enabled` | Specifies whether Ingress should be installed (deprecated)| true/false | `false` |
 | `ingress.replicaCount` | Specifies number of desired pods for Ingress deployment | number | `1` |
 | `ingress.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
-| `ingress.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `1` |
-| `ingress.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `512Mi`, CPU: `4000m` |
-| `ingress.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
+| `ingress.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `5` |
+| `ingress.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `ingress.service.annotations` | Specifies the annotations for Ingress service | valid service annotations | {} |
 | `ingress.service.loadBalancerIP` | Specifies load balancer IP if its type is LoadBalancer | valid IP address | `""` |
 | `ingress.service.type` | Specifies service type for Ingress | valid service type | `LoadBalancer` |
-| `ingressgateway.enabled` | Specifies whether the Ingress Gateway should be installed | true/false | `true` |
-| `ingressgateway.serviceAccountName` | Specifies service account that used for Ingress Gateway | valid service account name | `istio-ingressgateway-service-account` |
-| `ingressgateway.replicaCount` | Specifies number of desired pods for Ingress Gateway deployment | number | `1` |
-| `ingressgateway.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
-| `ingressgateway.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `1` |
-| `ingressgateway.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `512Mi`, CPU: `4000m` |
-| `ingressgateway.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
-| `ingressgateway.service.name` | Specifyies name for Ingress Gateway service | valid service name | `istio-ingressgateway` |
-| `ingressgateway.service.labels` | Specifyies labels for Ingress Gateway service | valid service labels | `istio: ingressgateway` |
-| `ingressgateway.service.loadBalancerIP` | Specifies load balancer IP for Ingress Gateway service if its type is LoadBalancer | valid IP address | `""` |
-| `ingressgateway.service.type` | Specifies service type for Ingress Gateway | valid service type | `LoadBalancer` |
-| `ingressgateway.service.ports` | Specifies service ports settings for Ingress Gateway | valid service ports settings |  |
-| `ingressgateway.deployment.labels` | Specifyies labels for Ingress Gateway deployment | valid deployment labels | `istio: ingressgateway` |
-| `ingressgateway.deployment.ports` | Specifies deployment ports settings for Ingress Gateway | valid deployment ports |  |
-| `ingressgateway.deployment.secretVolumes` | Specifies deployment certs volume settings for Ingress Gateway | valid deployment volume |  |
-| `egressgateway.enabled` | Specifies whether the Egress Gateway should be installed | true/false | `true` |
-| `egressgateway.serviceAccountName` | Specifies service account that used for Egress Gateway | valid service account name | `istio-egressgateway-service-account` |
-| `egressgateway.replicaCount` | Specifies number of desired pods for Egress Gateway deployment | number | `1` |
-| `egressgateway.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
-| `egressgateway.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `1` |
-| `egressgateway.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `512Mi`, CPU: `4000m` |
-| `egressgateway.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
-| `egressgateway.service.name` | Specifyies name for Egress Gateway service | valid service name | `istio-egressgateway` |
-| `egressgateway.service.labels` | Specifyies labels for Egress Gateway service | valid service labels | `istio: egressgateway` |
-| `egressgateway.service.type` | Specifies service type for Egress Gateway | valid service type | `ClusterIP` |
-| `egressgateway.service.ports` | Specifies service ports settings for Egress Gateway | valid service ports settings |  |
-| `egressgateway.deployment.labels` | Specifyies labels for Egress Gateway deployment | valid deployment labels | `istio: egressgateway` |
-| `egressgateway.deployment.ports` | Specifies deployment ports settings for Egress Gateway | valid deployment ports |  |
+| `ingress.service.ports` | Specifies service ports for Ingress service | valid service ports |  |
+| `gateways.enabled` | Specifies whether the Istio Gateway should be installed | true/false | `true` |
+| `gateways.ingressgateway.enabled` | Specifies whether the Ingress Gateway should be installed | true/false | `true` |
+| `gateways.ingressgateway.labels` | Specifies labels for Ingress Gateway | valid labels | `app: istio-ingressgateway` |
+| `gateways.ingressgateway.replicaCount` | Specifies number of desired pods for Ingress Gateway deployment | number | `1` |
+| `gateways.ingressgateway.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
+| `gateways.ingressgateway.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `5` |
+| `gateways.ingressgateway.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `gateways.ingressgateway.loadBalancerIP` | Specifies load balancer IP if its type is LoadBalancer | valid IP address | `""` |
+| `gateways.ingressgateway.type` | Specifies service type for Ingress Gateway | valid service type | `LoadBalancer` |
+| `gateways.ingressgateway.serviceAnnotations` | Specifies the annotations for Ingress Gateway service | valid service annotations | {} |
+| `gateways.ingressgateway.ports` | Specifies service ports settings for Ingress Gateway | valid service ports settings |  |
+| `gateways.ingressgateway.secretVolumes` | Specifies deployment certs volume settings for Ingress Gateway | valid deployment volume |  |
+| `gateways.egressgateway.enabled` | Specifies whether the Egress Gateway should be installed | true/false | `true` |
+| `gateways.egressgateway.labels` | Specifies labels for Egress Gateway | valid labels | `app: istio-egressgateway` |
+| `gateways.egressgateway.replicaCount` | Specifies number of desired pods for Egress Gateway deployment | number | `1` |
+| `gateways.egressgateway.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
+| `gateways.egressgateway.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `5` |
+| `gateways.egressgateway.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `gateways.egressgateway.serviceAnnotations` | Specifies the annotations for Egress Gateway service | valid service annotations | {} |
+| `gateways.egressgateway.type` | Specifies service type that used for Egress Gateway | valid service type | `ClusterIP` |
+| `gateways.egressgateway.ports` | Specifies service ports settings for Egress Gateway | valid service ports settings |  |
+| `gateways.egressgateway.secretVolumes` | Specifies service secretVolumes settings for Egress Gateway | valid service ports settings |  |
+| `gateways.ilbgateway.enabled` | Specifies whether the Mesh ILB Gateway should be installed | true/false | `false` |
+| `gateways.ilbgateway.labels` | Specifies labels for ILB Gateway | valid labels | `app: istio-ilbgateway` |
+| `gateways.ilbgateway.replicaCount` | Specifies number of desired pods for Mesh ILB Gateway deployment | number | `1` |
+| `gateways.ilbgateway.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
+| `gateways.ilbgateway.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `5` |
+| `gateways.ilbgateway.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | `{requests.cpu: 800m, requests.memory: 512Mi}` |
+| `gateways.ilbgateway.loadBalancerIP` | Specifies load balancer IP if its type is LoadBalancer | valid IP address | `""` |
+| `gateways.ilbgateway.serviceAnnotations` | Specifies the annotations for ILB Gateway service | valid service annotations | {} |
+| `gateways.ilbgateway.type` | Specifies service type for ILB Gateway | valid service type | `LoadBalancer` |
+| `gateways.ilbgateway.ports` | Specifies service ports settings for Mesh ILB Gateway | valid service ports settings |  |
+| `gateways.ilbgateway.secretVolumes` | Specifies service secretVolumes settings for Mesh ILB Gateway | valid service ports settings |  |
 | `sidecarinjectorwebhook.enabled` | Specifies whether the Automatic Sidecar Injector should be installed | true/false | `true` |
 | `sidecarinjectorwebhook.replicaCount` | Specifies number of desired pods for Automatic Sidecar Injector Webhook | number | `1` |
+| `sidecarinjectorwebhook.enableNamespacesByDefault` | Specifies use the default namespaces for Automatic Sidecar Injector Webhook | true/false | `false` |
 | `sidecarinjectorwebhook.image.repository` | Specifies the Automatic Sidecar Injector image location | valid image repository | `ibmcom/istio-sidecar_injector` |
-| `sidecarinjectorwebhook.image.tag` | Specifies the Automatic Sidecar Injector image version | valid image tag | `0.8.0` |
-| `sidecarinjectorwebhook.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `512Mi`, CPU: `5000m` |
-| `sidecarinjectorwebhook.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
+| `sidecarinjectorwebhook.image.tag` | Specifies the Automatic Sidecar Injector image version | valid image tag | `1.0.0` |
+| `sidecarinjectorwebhook.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `galley.enabled` | Specifies whether Galley should be installed | true/false | `true` |
+| `galley.replicaCount` | Specifies number of desired pods for Galley deployment | number | `1` |
+| `galley.image.repository` | Specifies the galley image location | valid image repository | `ibmcom/istio-galley` |
+| `galley.image.tag` | Specifies the galley image version | valid image tag | `1.0.0` |
+| `galley.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `mixer.enabled` | Specifies whether Mixer should be installed | true/false | `true` |
-| `mixer.replicaCount` | Specifies number of desired pods for Mixer | number | `1` |
+| `mixer.replicaCount` | Specifies number of desired pods for Mixer deployment | number | `1` |
 | `mixer.image.repository` | Specifies the Mixer image location | valid image repository | `ibmcom/istio-mixer` |
-| `mixer.image.tag` | Specifies the Mixer image version | valid image tag | `0.8.0` |
-| `mixer.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `1024Mi`, CPU: `8000m` |
-| `mixer.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
+| `mixer.image.tag` | Specifies the Mixer image version | valid image tag | `1.0.0` |
+| `mixer.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `mixer.policy.autoscaleEnabled` | Specifies whether to enable auto scaler for the mixer policy checker | true/false | true |
+| `mixer.policy.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
+| `mixer.policy.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `5` |
+| `mixer.policy.cpu.targetAverageUtilization` | Specifies the average utilization of cpu | number | `80` |
+| `mixer.telemetry.autoscaleEnabled` | Specifies whether to enable auto scaler for the mixer telemetry | true/false | true |
+| `mixer.telemetry.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
+| `mixer.telemetry.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `5` |
+| `mixer.telemetry.cpu.targetAverageUtilization` | Specifies the average utilization of cpu | number | `80` |
 | `mixer.prometheusStatsdExporter.repository` | Specifies the Prometheus Statsd Exporter image location | valid image repository | `ibmcom/prom-statsd-exporter` |
-| `mixer.prometheusStatsdExporter.tag` | Specifies the Prometheus Statsd Exporter image version | valid image tag | `v0.5.0` |
-| `mixer.prometheusStatsdExporter.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `256Mi`, CPU: `2000m` |
-| `mixer.prometheusStatsdExporter.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
+| `mixer.prometheusStatsdExporter.tag` | Specifies the Prometheus Statsd Exporter image version | valid image tag | `v0.6.0` |
+| `mixer.prometheusStatsdExporter.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `pilot.enabled` | Specifies whether Pilot should be installed | true/false | `true` |
-| `pilot.replicaCount` | Specifies number of desired pods for Pilot | number | `1` |
+| `pilot.replicaCount` | Specifies number of desired pods for Pilot deployment | number | `1` |
+| `pilot.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
+| `pilot.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `1` |
 | `pilot.image.repository` | Specifies the Pilot image location | valid image repository | `ibmcom/istio-pilot` |
-| `pilot.image.tag` | Specifies the Pilot image version | valid image tag | `0.8.0` |
-| `pilot.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `1024Mi`, CPU: `8000m` |
-| `pilot.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
-| `security.enabled` | Specifies whether Citadel should be installed | true/false | `true` |
-| `security.replicaCount` | Specifies number of desired pods for Citadel | number | `1` |
+| `pilot.image.tag` | Specifies the Pilot image version | valid image tag | `1.0.0` |
+| `pilot.sidecar` | Specifies whether to enable the envoy sidecar to Pilot | true/false | `true` |
+| `pilot.traceSampling` | Specifies the number of trace sample for Pilot | number | `100.0` |
+| `pilot.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | `{requests.cpu: 500m, requests.memory: 2048Mi}` |
+| `security.replicaCount` | Specifies number of desired pods for Citadel deployment | number | `1` |
+| `security.selfSigned` | Specifies whether self-signed CA is enabled | true/false | `true` |
 | `security.image.repository` | Specifies the Citadel image location | valid image repository | `ibmcom/istio-citadel` |
-| `security.image.tag` | Specifies the Citadel image version | valid image tag | `0.8.0` |
-| `security.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `1024Mi`, CPU: `7000m` |
-| `security.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
-| `security.cleanUpOldCA` | Specify whether to clean old istio-ca resources | true/false | `true` |
-| `grafana.enabled` | Specifies whether Grafana addon should be installed | true/false | `false` |
+| `security.image.tag` | Specifies the Citadel image version | valid image tag | `1.0.0` |
+| `security.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `telemetrygateway.gatewayName` | Specifies name of gateway used for telemetry addons | valid gateway name | `ingressgateway` |
+| `telemetrygateway.grafanaEnabled` | Specifies whether enable the gateway for grafana |  true/false | `false` |
+| `telemetrygateway.prometheusEnabled` | Specifies whether enable gateway for prometheus |  true/false | `false` |
+| `grafana.enabled` | Specifies whether enable Grafana addon should be installed | true/false | `false` |
 | `grafana.replicaCount` | Specifies number of desired pods for Grafana | number | `1` |
 | `grafana.image.repository` | Specifies the Grafana image location | valid image repository | `ibmcom/istio-grafana` |
-| `grafana.image.tag` | Specifies the Grafana image version | valid image tag | `0.8.0` |
+| `grafana.image.tag` | Specifies the Grafana image version | valid image tag | `1.0.0` |
+| `grafana.security.enabled` | Specifies security for the Grafana service | true/false | `false` |
+| `grafana.security.adminUser` | Specifies administrator name for the Grafana service | administrator name | `admin` |
+| `grafana.security.adminPassword` | Specifies administrator password for the Grafana service | administrator password | `admin` |
 | `grafana.service.name` | Specifies name for the Grafana service | valid service name | `http` |
+| `grafana.service.annotations` | Specifies the annotation for the Grafana service | valid service annotation | {} |
 | `grafana.service.type` | Specifies type for the Grafana service | valid service type | `ClusterIP` |
 | `grafana.service.externalPort` | Specifies external port for the Grafana service | valid service port | `3000` |
-| `grafana.ingress.enabled` | Specifies whether ingress for Grafana should be enabled | true/false | `false` |
-| `grafana.ingress.hosts` | Specify the hosts for Grafana ingress | array consists of valid hosts | Empty Array |
-| `grafana.ingress.annotations` | Specify the annotations for Grafana ingress | object consists of valid annotations | Empty Object |
-| `grafana.ingress.tls` | Specify the TLS settigs for Grafana ingress | array consists of valid TLS settings | Empty Array |
-| `grafana.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `512Mi`, CPU: `1000m` |
-| `grafana.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
+| `grafana.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `prometheus.enabled` | Specifies whether Prometheus addon should be installed | true/false | `true` |
 | `prometheus.replicaCount` | Specifies number of desired pods for Prometheus | number | `1` |
 | `prometheus.image.repository` | Specifies the Prometheus image location | valid image repository | `ibmcom/prometheus` |
-| `prometheus.image.tag` | Specifies the Prometheus image version | valid image tag | `v2.0.0` |
+| `prometheus.image.tag` | Specifies the Prometheus image version | valid image tag | `v2.3.1` |
+| `prometheus.service.annotations` | Specifies the annotation for the Prometheus service |  valid service annotations | `{}` |
 | `prometheus.service.nodePort.enabled` | Specifies whether to enable Node Port for Prometheus service |  true/false | `false` |
-| `prometheus.service.nodePort.port` | Specifies Node Port number for Prometheus service | valid service Node Port | `32090` |
-| `prometheus.ingress.enabled` | Specifies whether ingress for Prometheus should be enabled | true/false | `false` |
-| `prometheus.ingress.hosts` | Specify the hosts for Prometheus ingress | array consists of valid hosts | Empty Array |
-| `prometheus.ingress.annotations` | Specify the annotations for Prometheus ingress | object consists of valid annotations | Empty Object |
-| `prometheus.ingress.tls` | Specify the TLS settigs for Prometheus ingress | array consists of valid TLS settings | Empty Array |
-| `prometheus.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `1024Mi`, CPU: `5000m` |
-| `prometheus.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
+| `prometheus.service.nodePort.port` | Specifies Node Port for Prometheus service | valid service Node Port | `32090` |
+| `prometheus.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `servicegraph.enabled` | Specifies whether Servicegraph addon should be installed | true/false | `false` |
-| `servicegraph.replicaCount` | Specifies number of desired pods for Servicegraph | number | `1` |
+| `servicegraph.replicaCount` | Specifies number of desired pods for Servicegraph deployment | number | `1` |
 | `servicegraph.image.repository` | Specifies the Servicegraph image location | valid image repository | `ibmcom/istio-servicegraph` |
-| `servicegraph.image.tag` | Specifies the Servicegraph image version | valid image tag | `0.8.0` |
+| `servicegraph.image.tag` | Specifies the Servicegraph image version | valid image tag | `1.0.0` |
+| `servicegraph.service.annotations` | Specifies the annotation for the Servicegraph service | valid service annotation | {} |
 | `servicegraph.service.name` | Specifies name for the Servicegraph service | valid service name | `http` |
 | `servicegraph.service.type` | Specifies type for the Servicegraph service | valid service type | `ClusterIP` |
 | `servicegraph.service.externalPort` | Specifies external port for the Servicegraph service | valid service port | `8088` |
 | `servicegraph.ingress.enabled` | Specifies whether ingress for Servicegraph should be enabled | true/false | `false` |
-| `servicegraph.ingress.hosts` | Specify the hosts for Servicegraph ingress | array consists of valid hosts | Empty Array |
-| `servicegraph.ingress.annotations` | Specify the annotations for Servicegraph ingress | object consists of valid annotations | Empty Object |
-| `servicegraph.ingress.tls` | Specify the TLS settigs for Servicegraph ingress | array consists of valid TLS settings | Empty Array |
-| `servicegraph.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `256Mi`, CPU: `200m` |
-| `servicegraph.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
-| `tracing.enabled` | Specifies whether Tracing(jaeger) addon should be installed | true/false | `false` |
-| `tracing.jaeger.enabled` | Specifies whether core Jaeger services should be installed | true/false | `false` |
+| `servicegraph.ingress.hosts` | Specify the hosts for Servicegraph ingress | array consists of valid hosts | [] |
+| `servicegraph.ingress.annotations` | Specify the annotations for Servicegraph ingress | object consists of valid annotations | {} |
+| `servicegraph.ingress.tls` | Specify the TLS settigs for Servicegraph ingress | array consists of valid TLS settings | [] |
+| `servicegraph.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `servicegraph.prometheusAddr` | Specify the prometheus address on Servicegraph | valid address | `http://prometheus:9090` |
+| `tracing.enabled` | Specifies whether Tracing addon should be installed | true/false | `false` |
+| `tracing.provider` | Specifies which the provider for tracing service | valid tracing provider | `jaeger` |
+| `tracing.jaeger.image.repository` | Specifies the jaeger image location | valid image repository | `ibmcom/jaegertracing-all-in-one` |
+| `tracing.jaeger.image.tag` | Specifies the jaeger image version | valid image tag | `1.5` |
 | `tracing.jaeger.memory.maxTraces` | Specifies max traces limits for Jaeger | valid number | `50000` |
-| `tracing.replicaCount` | Specifies number of desired pods for Tracing(jaeger) | number | `1` |
-| `tracing.image.repository` | Specifies the Tracing(jaeger) image location | valid image repository | `ibmcom/jaegertracing-all-in-one` |
-| `tracing.image.tag` | Specifies the Tracing(jaeger) image version | valid image tag | `1.5` |
-| `tracing.service.name` | Specifies name for the Tracing(jaeger) service | valid service name | `http` |
-| `tracing.service.type` | Specifies type for the Tracing(jaeger) service | valid service type | `ClusterIP` |
-| `tracing.service.externalPort` | Specifies external port for the Tracing(jaeger) service | valid service port | `9411` |
-| `tracing.ingress.enabled` | Specifies whether ingress for Tracing(jaeger) should be enabled | true/false | `false` |
-| `tracing.ingress.hosts` | Specify the hosts for Tracing(jaeger) ingress | array consists of valid hosts | Empty Array |
-| `tracing.ingress.annotations` | Specify the annotations for Tracing(jaeger) ingress | object consists of valid annotations | Empty Object |
-| `tracing.ingress.tls` | Specify the TLS settigs for Tracing(jaeger) ingress | array consists of valid TLS settings | Empty Array |
-| `tracing.resources.limits` | CPU/Memory for resource limits | valid CPU&memory settings | Memory: `1024Mi`, CPU: `5000m` |
-| `tracing.resources.requests` | CPU/Memory for resource requests | valid CPU&memory settings | Memory: `128Mi`, CPU: `100m` |
+| `tracing.jaeger.ingress.enabled` | Specifies whether Jaeger ingress should be enabled | true/false | `false` |
+| `tracing.jaeger.ingress.hosts` | Specify the hosts for jaeger ingress | array consists of valid hosts | [] |
+| `tracing.jaeger.ingress.annotations` | Specify the annotations for jaeger ingress | object consists of valid annotations | {} |
+| `tracing.jaeger.ingress.tls` | Specify the TLS settigs for jaeger ingress | array consists of valid TLS settings | [] |
+| `tracing.replicaCount` | Specifies number of desired pods for Tracing deployment | number | `1` |
+| `tracing.service.annotations` | Specifies annotations for the Tracing service | valid service annotations | `{}` |
+| `tracing.service.name` | Specifies name for the Tracing service | valid service name | `http` |
+| `tracing.service.type` | Specifies type for the Tracing service | valid service type | `ClusterIP` |
+| `tracing.service.externalPort` | Specifies external port for the Tracing service | valid service port | `9411` |
+| `tracing.ingress.enabled` | Specifies whether ingress for Tracing should be enabled | true/false | `false` |
+| `tracing.ingress.hosts` | Specify the hosts for Tracing ingress | array consists of valid hosts | [] |
+| `tracing.ingress.annotations` | Specify the annotations for Tracing ingress | object consists of valid annotations | {} |
+| `tracing.ingress.tls` | Specify the TLS settigs for Tracing ingress | array consists of valid TLS settings | [] |
+| `tracing.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `kiali.enabled` | Specifies whether kiali addon should be installed | true/false | `false` |
+| `kiali.replicaCount` | Specifies number of desired pods for kiali | number | `1` |
+| `kiali.image.repository` | Specifies the kiali image location | valid image repository | `ibmcom/kiali` |
+| `kiali.image.tag` | Specifies the kiali image version | valid image tag | `istio-release-1.0` |
+| `kiali.ingress.enabled` | Specifies whether the kiali ingress enabled | true/false | `false` |
+| `kiali.ingress.hosts` | Specify the hosts for Kiali ingress | array consists of valid hosts | [] |
+| `kiali.ingress.annotations` | Specify the annotations for Kiali ingress | object consists of valid annotations | {} |
+| `kiali.ingress.tls` | Specify the TLS settigs for Kiali ingress | array consists of valid TLS settings | [] |
+| `kiali.dashboard.username` | Specifies the username for kiali dashboard | valid username | `admin`|
+| `kiali.dashboard.passphrase` | Specifies the passphrase for kiali dashboard | valid passphrase | `admin` |
+| `kiali.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `certmanager.enabled` | Specifies whether the Cert Manager addon should be installed | true/false | `false` |
+| `certmanager.replicaCount` | Specifies number of desired pods for Cert Manager deployment | number | `1` |
+| `certmanager.image.repository` | Specifies the Cert Manager image location | valid image repository | `ibmcom/cert-manager` |
+| `certmanager.image.tag` | Specifies the Cert Manager image version | valid image tag | `v0.3.1` |
+| `certmanager.extraArgs` | Specifies the extra argument for Cert Manager | valid arguments | [] |
+| `certmanager.podAnnotations` | Specifies the annotations for Cert Manager pod | valid annotation | {} |
+| `certmanager.podLabels` | Specifies the labels for Cert Manager pod | valid label | {} |
+| `certmanager.podDnsPolicy` | Specifies the pod DNS policy | valid DNS policy | `ClusterFirst` |
+| `certmanager.podDnsConfig` | Specifies the pod DNS configuration | valid Configuration | {} |
+| `certmanager.email` | Specifies the email for certmanager | valid email | `""` |
+| `certmanager.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 
 **Note**: If you install the Istio helm chart in another Kubernetes distribution other than IBM Cloud Private (eg. IBM Cloud Kubernetes Services), please make sure to set parameter `--set global.management=false` if there isn't any node with label `management=true`, or else you can add label `management=true` to the node that you want to run Istio via `kubectl label node <node> management=true`.
 
@@ -231,14 +289,20 @@ To uninstall/delete the `istio` release completely and make its name free for la
 $ helm delete istio --purge
 ```
 
+And then remove the CRDs by running the command:
+```
+$ kubectl delete -f ../ibm-istio/templates/crds.yaml
+```
+
+If you have enabled `certmanager`, you also need to remove its CRDs:
+```
+$ kubectl delete -f ../ibm-istio/charts/certmanager/templates/crds.yaml
+```
+
 ## Limitations
 
-- A gateway with virtual services pointing to a headless service won't work ([Issue #5005](https://github.com/istio/istio/issues/5005)).
+- In a [multicluster deployment](https://istio.io/docs/setup/kubernetes/multicluster-install) the mixer-telemetry and mixer-policy components do not connect to the Kubernetes API endpoints of any of the remote clusters. This results in a loss of telemetry fidelity as some of the metadata associated with workloads on remote clusters is incomplete.
 
-- There is a [problem with Google Kubernetes Engine 1.10.2](https://github.com/istio/istio/issues/5723). The workaround is to use Kubernetes 1.9 or switch the node image to Ubuntu. A fix is expected in GKE 1.10.4.
+- There is a [helm upgrade issue](https://github.com/kubernetes/helm/issues/1193) which will cause upgrading Istio from old version to 1.0.0 to fail. Currently if you want to upgrade Istio from old version to 1.0.0, you need to manually delete old version and then re-install 1.0.0.
 
-- There is a known namespace issue with the `istioctl experimental convert-networking-config` tool where the desired namespace may be changed to the `istio-system namespace`, please manually adjust to use the desired namespace after running the conversation tool. [Learn more](https://github.com/istio/istio/issues/5817)
-
-- There is a [helm upgrade issue](https://github.com/kubernetes/helm/issues/1193) which will cause upgrading Istio from 0.7.1 to 0.8.0 to fail. Currently if you want to upgrade from 0.7.1 to 0.8.0, you need to manually delete 0.7.1 and then re-install 0.8.0.
-
-- Currently ICP Catalog UI doesn't support input type of `array` and `object`, any customization for field `global.imagePullSecrets`, `grafana.ingress`, `prometheus.ingress`, `servicegraph.ingress` and `tracing.ingress` should be done via helm command-line instead of ICP Catalog UI.
+- Currently ICP Catalog UI doesn't support input type of `array` and `object`, any customization for field of these two types should be done via helm command-line instead of ICP Catalog UI.

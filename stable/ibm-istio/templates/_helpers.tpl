@@ -46,22 +46,18 @@ Configmap checksum.
 {{- end -}}
 
 {{- define "nodeselector" }}
-  {{- if .Values.global.management }}
-  management: 'true'
+  {{- if and (.Values.global.proxyNode) (contains "icp" .Capabilities.KubeVersion.GitVersion) }}
+  proxy: 'true'
   {{- end -}}
-  {{- if and .Values.global.extraNodeSelector.key .Values.global.extraNodeSelector.value }}
-  {{ .Values.global.extraNodeSelector.key }}: {{ .Values.global.extraNodeSelector.value }}
+  {{- if .Values.global.extraNodeSelector }}
+  {{ toYaml .Values.global.extraNodeSelector }}
   {{- end -}}
 {{- end }}
 
 {{- define "tolerations" }}
-{{- if .Values.global.dedicated }}
+{{- if and (.Values.global.dedicated) (contains "icp" .Capabilities.KubeVersion.GitVersion) }}
 - key: "dedicated"
   operator: "Exists"
   effect: "NoSchedule"
-{{- end -}}
-{{- if .Values.global.criticalAddonsOnly }}
-- key: "CriticalAddonsOnly"
-  operator: "Exists"
 {{- end -}}
 {{- end }}

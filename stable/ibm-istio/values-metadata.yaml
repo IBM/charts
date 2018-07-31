@@ -10,7 +10,7 @@ global:
         label: "Proxy Image Repository"
         description: "Docker registry to pull proxy image from."
         type: "string"
-        default: "ibmcom/istio-proxy"
+        default: "ibmcom/istio-proxyv2"
         immutable: false
         required: false
     tag:
@@ -18,7 +18,32 @@ global:
         label: "Proxy Image Tag"
         description: "Proxy image version."
         type: "string"
-        default: "0.8.0"
+        default: "1.0.0"
+        immutable: false
+        required: false
+    resources:
+      __metadata:
+        label: "Istio Proxy Resources"
+        description: "Specify the resource(CPU/Memory) requests & limits for Istio sidecar."
+        type: "object"
+      requests:
+        __metadata:
+          label: "Resources Requests"
+          description: "Specify the resource(CPU/Memory) requests for Istio sidecar."
+          type: object
+        cpu:
+          __metadata:
+            type: "string"
+            description: "Specify the minimum requested CPU."
+            default: "10m"
+            immutable: false
+            required: false
+    accessLogFile:
+      __metadata:
+        label: "Configures the access log for each sidecar"
+        description: "Configures the access log for each sidecar. Setting it to an empty string will disable access log for sidecar."
+        type: "string"
+        default: "/dev/stdout"
         immutable: false
         required: false
     enableCoreDump:
@@ -29,47 +54,6 @@ global:
         default: false
         immutable: false
         required: false
-    resources:
-      __metadata:
-        label: "Istio Proxy Resources"
-      requests:
-        __metadata:
-          label: "Istio Proxy Resources Requests"
-        cpu:
-          __metadata:
-            label: "CPU request"
-            description: "Specify the minimum requested CPU."
-            type: "string"
-            default: "100m"
-            immutable: false
-            required: false
-        memory:
-          __metadata:
-            label: "Memory request"
-            description: "Specify the minimum requested memory."
-            type: "string"
-            default: "128Mi"
-            immutable: false
-            required: false
-      limits:
-        __metadata:
-          label: "Istio Proxy Resources Limits"
-        cpu:
-          __metadata:
-            label: "CPU limit"
-            description: "Specify the maximum CPU limit."
-            type: "string"
-            default: "8000m"
-            immutable: false
-            required: false
-        memory:
-          __metadata:
-            label: "Memory limit"
-            description: "Specify the maximum memory limit."
-            type: "string"
-            default: "1024Mi"
-            immutable: false
-            required: false
     includeIPRanges:
       __metadata:
         label: "Include IP Ranges"
@@ -91,33 +75,41 @@ global:
         type: "string"
         immutable: false
         required: false
-    policy:
+    autoInject:
       __metadata:
-        label: "Enable Ingress and Egress Policy"
-        description: "Specify whether to enable ingress and egress policy for envoy sidecar."
+        label: "Enable Sidecar Auto Inject"
+        description: "Specify whether auto-injection policy is enabled."
         type: "string"
+        immutable: false
+        required: false
         default: "enabled"
-        immutable: false
-        required: false
-  proxyv2:
-    __metadata:
-      label: "Proxyv2 Configuration"
-    repository:
+    envoyStatsd:
       __metadata:
-        label: "Proxyv2 Image Repository"
-        description: "Docker registry to pull proxyv2 image from."
-        type: "string"
-        default: "ibmcom/istio-proxyv2"
-        immutable: false
-        required: false
-    tag:
-      __metadata:
-        label: "Proxyv2 Image Tag"
-        description: "Proxyv2 image version."
-        type: "string"
-        default: "0.8.0"
-        immutable: false
-        required: false
+        lable: "Envoy Statsd Configuration"
+      enabled:
+        __metadata:
+          label: "Enable The Destination Enovy Statsd"
+          description: "Enable the destination statsd in Enovy."
+          type: "boolean"
+          default: true
+          immutable: false
+          required: false
+      host:
+        __metadata:
+          label: "Statsd Address"
+          description: "The address for statsd prometheus bridge."
+          type: "string"
+          default: "istio-statsd-prom-bridge"
+          immutable: false
+          required: false
+      port:
+        __metadata:
+          label: "Statsd Port"
+          description: "The port for statsd prometheus bridge."
+          type: "number"
+          default: 9125
+          immutable: false
+          required: false
   proxyInit:
     __metadata:
       label: "Proxy_init Configuration"
@@ -134,24 +126,9 @@ global:
         label: "Proxy_init Image Tag"
         description: "Proxy_init image version"
         type: "string"
-        default: "0.8.0"
+        default: "1.0.0"
         immutable: false
         required: false
-  imagePullPolicy:
-    __metadata:
-      label: "Image Pull Policy"
-      description: "Image pull policy for all istio components, the value can be 'Always', 'Never', or 'IfNotPresent'. Defaults to 'IfNotPresent'."
-      type: "string"
-      default: "IfNotPresent"
-      immutable: false
-      required: false
-      options:
-      - label: "Always"
-        value: "Always"
-      - label: "Never"
-        value: "Never"
-      - label: "IfNotPresent"
-        value: "IfNotPresent"
   kubectl:
     __metadata:
       label: "Kubectl Image"
@@ -171,20 +148,59 @@ global:
         default: "v1.10.0"
         immutable: false
         required: false
-  priorityClassName:
+  k8sIngressSelector:
     __metadata:
-      label: "Priority Class Name"
-      description: "Specify priority class, it can be 'system-cluster-critical' or 'system-node-critical'. Configure this to make sure Istio pods will not be evicted because of low prioroty class."
+      label: "k8s Ingress Selector"
+      description: "Gateway used for legacy k8s Ingress resources. By default it is using 'istio:ingress', to match 0.8 config. It requires that ingress.enabled is set to true. You can also set it to ingressgateway, or any other gateway you define in the 'gateway' section."
       type: "string"
-      default: ""
+      default: "ingress"
       immutable: false
       required: false
+  k8sIngressHttps:
+    __metadata:
+      label: "Enable k8s Ingress HTTPs"
+      description: "k8sIngressHttps will add port 443 on the ingress and ingressgateway. It REQUIRES that the certificates are installed  in the expected secrets - enabling this option without certificates will result in LDS rejection and the ingress will not work."
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
+  imagePullPolicy:
+    __metadata:
+      label: "Image Pull Policy"
+      description: "Image pull policy for all istio components, the value can be 'Always', 'Never', or 'IfNotPresent'. Defaults to 'IfNotPresent'."
+      type: "string"
+      default: "IfNotPresent"
+      immutable: false
+      required: false
+      options:
+      - label: "Always"
+        value: "Always"
+      - label: "Never"
+        value: "Never"
+      - label: "IfNotPresent"
+        value: "IfNotPresent"
   controlPlaneSecurityEnabled:
     __metadata:
       label: "Enable Control Plane Security"
       description: "Specify whether to enable mutual TLS for istio control plane. Setting this field to 'true' will result in delays starting the pods while secrets are propagated, not recommended for tests."
       type: "boolean"
       default: false
+      immutable: false
+      required: false
+  disablePolicyChecks:
+    __metadata:
+      label: "Disable Policy Checks"
+      description: "Disables mixer policy checks. Will set the value with same name in istio config map - pilot needs to be restarted to take effect."
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
+  enableTracing:
+    __metadata:
+      label: "Enable Tracing"
+      description: "Sets the value with same name in istio config map, requires pilot restart to take effect."
+      type: "boolean"
+      default: true
       immutable: false
       required: false
   mtls:
@@ -196,30 +212,15 @@ global:
         default: false
         immutable: false
         required: false
-  rbacEnabled:
-    __metadata:
-      label: "enable RBAC"
-      description: "Control whether to create RBAC resources, defalts to 'true'."
-      type: "boolean"
-      default: true
-      immutable: false
-      required: false
   imagePullSecrets:
     __metadata:
       label: "Image Pull Secrets"
       description: "Add 'imagePullSecrets' if images are pulled from a private docker registry."
       type: "array"
-      default: ""
       immutable: false
       required: false
-  refreshInterval:
-    __metadata:
-      label: "Refresh Interval"
-      description: "This field determines how frequently should Envoy fetch and update its internal configuration from istio Pilot. Lower refresh delay results in higher CPU utilization and potential performance loss in exchange for faster convergence."
-      type: "string"
-      default: "10s"
-      immutable: false
-      required: false
+      items:
+        type: "string"
   oneNamespace:
     __metadata:
       label: "Restrict to one namespace"
@@ -228,18 +229,67 @@ global:
       default: false
       immutable: false
       required: false
-  meshExpansionEnabled:
+  configValidation:
     __metadata:
-      label: "Enable Mesh Expansion"
-      description: "This field determines whether to expose core services with load balancer to support mesh expansion."
+      label: "Enable Server-side Validation"
+      description: "Specify whether to perform server-side validation of configuration."
+      type: "boolean"
+      default: true
+      immutable: false
+      required: false
+  meshExpansion:
+    __metadata:
+      label: "Mesh Expansion"
+      description: "If set to true, the pilot and citadel mtls will be exposed on the ingress gateway."
       type: "boolean"
       default: false
       immutable: false
       required: false
-  management:
+  meshExpansionILB:
     __metadata:
-      label: "Deploy to Management Node"
-      description: "The field controls whether to deploy istio to management node with label 'management=true', defaults to 'true'."
+      label: "Mesh Expansion ILB"
+      description: "If set to true, the pilot and citadel mtls and the plain text pilot ports will be exposed on an internal gateway."
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
+  crds:
+    __metadata:
+      label: "Enable CRDs"
+      description: "Include the crd definition when generating the template."
+      type: "boolean"
+      default: true
+      immutable: false
+      required: false
+  defaultResources:
+    __metadata:
+      label: "Default Resources Settings"
+      description: "Specify the basic resources settings to applied to all deployments."
+      type: "object"
+    requests:
+      __metadata:
+        label: "Resources Requests"
+        description: "Specify the resource(CPU/Memory) requests for all deployments."
+        type: object
+      cpu:
+        __metadata:
+          type: "string"
+          description: "Specify the minimum requested CPU."
+          default: "10m"
+          immutable: false
+          required: false
+  priorityClassName:
+    __metadata:
+      label: "Priority Class Name"
+      description: "Specify priority class, it can be 'system-cluster-critical' or 'system-node-critical'. Configure this to make sure Istio pods will not be evicted because of low prioroty class."
+      type: "string"
+      default: ""
+      immutable: false
+      required: false
+  proxyNode:
+    __metadata:
+      label: "Proxy Node"
+      description: "Specify(true or false) whether to scheduled to proxy node with label: \"proxy\"=\"true\""
       type: "boolean"
       default: true
       immutable: false
@@ -252,31 +302,14 @@ global:
       default: true
       immutable: false
       required: false
-  criticalAddonsOnly:
+  extraNodeSelector:
     __metadata:
-      label: "Critical Addon"
-      description: "The field control whether to deploy istio as a critical addon, defaults to 'true'."
-      type: "boolean"
-      default: true
+      label: "Extra Node Selector"
+      description: "Specify the extra node selector for all deployments."
+      type: "object"
+      minProperties: 0
       immutable: false
       required: false
-  extraNodeSelector:
-    key:
-      __metadata:
-        label: "Node Selector Key"
-        description: "Specify node selector key."
-        type: "string"
-        default: ""
-        immutable: false
-        required: false
-    value:
-      __metadata:
-        label: "Node Selector Value"
-        description: "Specify node selector value."
-        type: "string"
-        default: ""
-        immutable: false
-        required: false
   arch:
     __metadata:
       label: "Architecture scheduling preferences"
@@ -298,32 +331,14 @@ global:
             value: "2 - No preference"
           - label: "3 - Most preferred"
             value: "3 - Most preferred"
-    ppc64le:
-      __metadata:
-        name: "ppc64le"
-        label: "PPC64LE scheduling preference"
-        description: "Architecture preference for target worker node."
-        type: "string"
-        default: "2 - No preference"
-        immutable: false
-        required: false
-        options:
-          - label: "0 - Do not use"
-            value: "0 - Do not use"
-          - label: "1 - Least preferred"
-            value: "1 - Least preferred"
-          - label: "2 - No preference"
-            value: "2 - No preference"
-          - label: "3 - Most preferred"
-            value: "3 - Most preferred"
 
 ingress:
   enabled:
     __metadata:
       label: "Enable Ingress"
-      description: "Specify whether to enable ingress. This components support combining Kubernetes Ingress specs with Istio routing rules and it will be remove in next release."
+      description: "Specify whether to enable Ingress. This deprecated components support combining Kubernetes Ingress specs with Istio routing rules."
       type: "boolean"
-      default: true
+      default: false
       immutable: false
       required: false
   replicaCount:
@@ -347,53 +362,25 @@ ingress:
       label: "Max Replicas"
       description: "Upper limit for the number of pods that can be set by the autoscaler, cannot be smaller than MinReplicas."
       type: "number"
-      default: 1
+      default: 5
       immutable: false
       required: false
   resources:
     __metadata:
-      label: "Ingress Resources"
-    limits:
-      __metadata:
-        label: "Ingress Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "4000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "512Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Ingress Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
+      label: "Istio Ingress Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Ingress."
+      type: "object"
+      default: {}
   service:
     __metadata:
       label: "Ingress Service Configuration"
+    annotations:
+      __metadata:
+        label: "Ingress Service Annotations"
+        description: "Specify the annotations for Ingress Service."
+        type: "object"
+        immutable: false
+        required: false
     loadBalancerIP:
       __metadata:
         label: "Service Load Balancer IP"
@@ -410,468 +397,756 @@ ingress:
         default: "LoadBalancer"
         immutable: false
         required: false
+    ports:
+      -
+        port:
+          __metadata:
+            label: "Ingress Service Port"
+            description: "Specify http port for Ingress service."
+            type: "number"
+            default: 80
+            immutable: false
+            required: false
+        nodePort:
+          __metadata:
+            label: "Ingress Service Node Port"
+            description: "Specify Node Port for Ingress service."
+            type: "number"
+            default: 32000
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingress Service Ports Name"
+            description: "Specify name for Ingress service http port."
+            type: "string"
+            default: "http"
+            immutable: false
+            required: false
+      - 
+        port:
+          __metadata:
+            label: "Ingress Service Port"
+            description: "Specify https port for Ingress service."
+            type: "number"
+            default: 443
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingress Service Ports Name"
+            description: "Specify name for Ingress service https port."
+            type: "string"
+            default: "https"
+            immutable: false
+            required: false
 
-ingressgateway:
+gateways:
   enabled:
     __metadata:
-      label: "Enable Ingressgateway"
-      description: "Specify whether to enable ingressgateway that supports a platform independent Gateway model for ingress."
+      label: "Enable Gateways"
+      description: "Specify whether to enable Gateway(Ingress and Egress)."
       type: "boolean"
       default: true
       immutable: false
       required: false
-  serviceAccountName:
-    __metadata:
-      label: "Service Account"
-      description: "Specify service account that used for ingressgateway."
-      type: "string"
-      default: "istio-ingressgateway-service-account"
-      immutable: false
-      required: false
-  replicaCount:
-    __metadata:
-      label: "Replica Count"
-      description: "Specify number of desired pods for ingress gateway deployment."
-      type: "number"
-      default: 1
-      immutable: false
-      required: false
-  autoscaleMin:
-    __metadata:
-      label: "Min Replicas"
-      description: "Lower limit for the number of pods that can be set by the autoscaler, default 1."
-      type: "number"
-      default: 1
-      immutable: false
-      required: false
-  autoscaleMax:
-    __metadata:
-      label: "Max Replicas"
-      description: "Upper limit for the number of pods that can be set by the autoscaler, cannot be smaller than MinReplicas."
-      type: "number"
-      default: 1
-      immutable: false
-      required: false
-  resources:
-    __metadata:
-      label: "Ingressgateway Resources"
-    limits:
+  ingressgateway:
+    enabled:
       __metadata:
-        label: "Ingressgateway Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "4000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "512Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Ingressgateway Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
-  service:
-    __metadata:
-      label: "Ingressgateway Service Configuration"
-    name:
-      __metadata:
-        label: "Ingressgateway Service Name"
-        description: "Specify name for ingressgateway service."
-        type: "string"
-        default: "istio-ingressgateway"
+        label: "Enable Ingressgateway"
+        description: "Specify whether to enable ingressgateway that supports a platform independent Gateway model for ingress."
+        type: "boolean"
+        default: true
         immutable: false
         required: false
     labels:
       __metadata:
-        label: "Ingressgateway Service Labels"
+        label: "Ingressgateway Labels"
+        type: "object"
+      app:
+        __metadata:
+          label: "Ingressgateway app label"
+          type: "string"
+          default: "istio-ingressgateway"
+          immutable: false
+          required: false
       istio:
         __metadata:
-          label: "Value for 'istio' label"
-          description: "Specify value for label 'istio', this need to be consistent with the labels for ingressateway deployment."
+          label: "Ingressgateway istio label"
           type: "string"
           default: "ingressgateway"
           immutable: false
           required: false
+    replicaCount:
+      __metadata:
+        label: "Replica Count"
+        description: "Specify number of desired pods for ingress gateway deployment."
+        type: "number"
+        default: 1
+        immutable: false
+        required: false
+    autoscaleMin:
+      __metadata:
+        label: "Min Replicas"
+        description: "Lower limit for the number of pods that can be set by the autoscaler."
+        type: "number"
+        default: 1
+        immutable: false
+        required: false
+    autoscaleMax:
+      __metadata:
+        label: "Max Replicas"
+        description: "Upper limit for the number of pods that can be set by the autoscaler, cannot be smaller than MinReplicas."
+        type: "number"
+        default: 5
+        immutable: false
+        required: false
+    resources:
+      __metadata:
+        label: "Istio Ingressgateway Resources"
+        description: "Specify the resource(CPU/Memory) requests & limits for Istio Ingressgateway."
+        type: "object"
+        default: {}
     loadBalancerIP:
       __metadata:
-        label: "Ingressgateway Service Load Balancer IP"
-        description: "Specify load balancer IP for ingressgateway service if its type is LoadBalancer."
+        label: "Load Balancer IP"
+        description: "Specify the load balancer IP for ingressgateway."
         type: "string"
         default: ""
         immutable: false
         required: false
+    serviceAnnotations:
+      __metadata:
+        label: "Ingressgateway Service Annotations"
+        description: "Specify the annotations for Ingressgateway Service."
+        type: "object"
+        immutable: false
+        required: false
     type:
       __metadata:
-        label: "Ingressgateway Service Type"
-        description: "Specify service type for ingressgateway."
+        label: "Ingressgateway Type"
+        description: "Change to NodePort, ClusterIP or LoadBalancer if need be."
         type: "string"
         default: "LoadBalancer"
         immutable: false
         required: false
     ports:
       -
-       port:
-        __metadata:
-          label: "Ingressgateway Service Port"
-          description: "Specify port for ingressgateway service."
-          type: "number"
-          default: 80
-          immutable: false
-          required: false
-       targetPort:
-        __metadata:
-          label: "Ingressgateway Service Target Port"
-          description: "Specify target port for ingressgateway service."
-          type: "number"
-          default: 80
-          immutable: false
-          required: false
-       name:
-        __metadata:
-          label: "Ingressgateway Service Name"
-          description: "Specify name for ingressgateway service."
-          type: "string"
-          default: "http"
-          immutable: false
-          required: false
-       nodePort:
-        __metadata:
-          label: "Ingressgateway Service NodePort"
-          description: "Specify node port for ingressgateway service."
-          type: "number"
-          default: 31380
-          immutable: false
-          required: false
+        port:
+          __metadata:
+            label: "Ingressgateway Service Port"
+            description: "Specify http port for ingressgateway service."
+            type: "number"
+            default: 80
+            immutable: false
+            required: false
+        targetPort:
+          __metadata:
+            label: "Ingressgateway Service Target Port"
+            description: "Specify http target port for ingressgateway service."
+            type: "number"
+            default: 80
+            immutable: false
+            required: false
+        nodePort:
+          __metadata:
+            label: "Ingressgateway Service NodePort"
+            description: "Specify http node port for ingressgateway service."
+            type: "number"
+            default: 31380
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingressgateway Service Ports Name"
+            description: "Specify name for ingressgateway service http port."
+            type: "string"
+            default: "http2"
+            immutable: false
+            required: false
       -
-       port:
-        __metadata:
-          label: "Ingressgateway Service Port"
-          description: "Specify port for ingressgateway service."
-          type: "number"
-          default: 443
-          immutable: false
-          required: false
-       name:
-        __metadata:
-          label: "Ingressgateway Service Name"
-          description: "Specify name for ingressgateway service."
-          type: "string"
-          default: "https"
-          immutable: false
-          required: false
-       nodePort:
-        __metadata:
-          label: "Ingressgateway Service NodePort"
-          description: "Specify node port for ingressgateway service."
-          type: "number"
-          default: 31390
-          immutable: false
-          required: false
+        port:
+          __metadata:
+            label: "Ingressgateway HTTPs Service Port"
+            description: "Specify port for ingressgateway HTTPs service."
+            type: "number"
+            default: 443
+            immutable: false
+            required: false
+        nodePort:
+          __metadata:
+            label: "Ingressgateway HTTPs Service NodePort"
+            description: "Specify NodePort for ingressgateway HTTPs service."
+            type: "number"
+            default: 31390
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingressgateway HTTPs Service Ports Name"
+            description: "Specify name for ingressgateway HTTPs service ports."
+            type: "string"
+            default: "https"
+            immutable: false
+            required: false
       -
-       port:
-        __metadata:
-          label: "Ingressgateway Service Port"
-          description: "Specify port for ingressgateway service."
-          type: "number"
-          default: 31400
-          immutable: false
-          required: false
-       name:
-        __metadata:
-          label: "Ingressgateway Service Name"
-          description: "Specify name for ingressgateway service."
-          type: "string"
-          default: "tcp"
-          immutable: false
-          required: false
-       nodePort:
-        __metadata:
-          label: "Ingressgateway Service NodePort"
-          description: "Specify node port for ingressgateway service."
-          type: "number"
-          default: 31400
-          immutable: false
-          required: false
-  deployment:
-    __metadata:
-      label: "Ingressgateway Deployment Configuration"
-    labels:
-      __metadata:
-        label: "Ingressgateway Deployment Labels"
-      istio:
-        __metadata:
-          label: "Value for 'istio' label"
-          description: "Specify value for label 'istio', this need to be consistent with the labels for ingressateway pod and services."
-          type: "string"
-          default: "ingressgateway"
-          immutable: false
-          required: false
-    ports:
+        port:
+          __metadata:
+            label: "Ingressgateway Service Port"
+            description: "Specify TCP port for ingressgateway service."
+            type: "number"
+            default: 31400
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingressgateway Service Name"
+            description: "Specify name for ingressgateway service TCP port."
+            type: "string"
+            default: "tcp"
+            immutable: false
+            required: false
+        nodePort:
+          __metadata:
+            label: "Ingressgateway Service NodePort"
+            description: "Specify TCP node port for ingressgateway service."
+            type: "number"
+            default: 31400
+            immutable: false
+            required: false
       -
-       containerPort:
-        __metadata:
-          label: "Ingressgateway Deployment Container Port"
-          description: "Specify container port for ingressgateway deployment."
-          type: "number"
-          default: 80
-          immutable: false
-          required: false
+        port:
+          __metadata:
+            label: "Ingressgateway Pilot Port"
+            description: "Specify port for ingressgateway pilot."
+            type: "number"
+            default: 15011
+            immutable: false
+            required: false
+        targetPort:
+          __metadata:
+            label: "Ingressgateway Pilot TargetPort"
+            description: "Specify TargetPort for ingressgateway pilot."
+            type: "number"
+            default: 15011
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingressgateway Pilot Ports Name"
+            description: "Specify ports name for ingressgateway pilot."
+            type: "string"
+            default: "tcp-pilot-grpc-tls"
+            immutable: false
+            required: false
       -
-       containerPort:
-        __metadata:
-          label: "Ingressgateway Deployment Container Port"
-          description: "Specify container port for ingressgateway deployment."
-          type: "number"
-          default: 443
-          immutable: false
-          required: false
+        port:
+          __metadata:
+            label: "Ingressgateway Citadel MTLS Port"
+            description: "Specify port for ingressgateway citadel MTLS."
+            type: "number"
+            default: 8060
+            immutable: false
+            required: false
+        targetPort:
+          __metadata:
+            label: "Ingressgateway Citadel MTLS TargetPort"
+            description: "Specify TargetPort for ingressgateway citadel MTLS."
+            type: "number"
+            default: 8060
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingressgateway Citadel MTLS Ports Name"
+            description: "Specify ports name for ingressgateway citadel MTLS."
+            type: "string"
+            default: "tcp-citadel-grpc-tls"
+            immutable: false
+            required: false
       -
-       containerPort:
-        __metadata:
-          label: "Ingressgateway Deployment Container Port"
-          description: "Specify container port for ingressgateway deployment."
-          type: "number"
-          default: 31400
-          immutable: false
-          required: false
+        port:
+          __metadata:
+            label: "Ingressgateway Prometheus Port"
+            description: "Specify port for ingressgateway prometheus."
+            type: "number"
+            default: 15030
+            immutable: false
+            required: false
+        targetPort:
+          __metadata:
+            label: "Ingressgateway Prometheus TargetPort"
+            description: "Specify target port for ingressgateway prometheus."
+            type: "number"
+            default: 15030
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingressgateway Prometheus Port Name"
+            description: "Specify name for ingressgateway prometheus port."
+            type: "string"
+            default: "http2-prometheus"
+            immutable: false
+            required: false
+      -
+        port:
+          __metadata:
+            label: "Ingressgateway Grafana Port"
+            description: "Specify port for ingressgateway grafana."
+            type: "number"
+            default: 15031
+            immutable: false
+            required: false
+        targetPort:
+          __metadata:
+            label: "Ingressgateway Grafana TargetPort"
+            description: "Specify TargetPort for ingressgateway grafana."
+            type: "number"
+            default: 15031
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingressgateway Grafana ports Name"
+            description: "Specify ports name for ingressgateway grafana."
+            type: "string"
+            default: "http2-grafana"
+            immutable: false
+            required: false
     secretVolumes:
       -
-       name:
-        __metadata:
-          label: "Ingressgateway Deployment Volume Name"
-          description: "Specify volume name for ingressgateway deployment."
-          type: "string"
-          default: "ingressgateway-certs"
-          immutable: false
-          required: false
-       secretName:
-        __metadata:
-          label: "Ingressgateway Deployment Volume Secret Name"
-          description: "Specify secret name ingressgateway deployment volume."
-          type: "string"
-          default: "istio-ingressgateway-certs"
-          immutable: false
-          required: false
-       mountPath:
-        __metadata:
-          label: "Ingressgateway Deployment Volume Mount Path"
-          description: "Specify mount path for ingressgateway deployment volume."
-          type: "string"
-          default: "/etc/istio/ingressgateway-certs"
-          immutable: false
-          required: false
-
-egressgateway:
-  enabled:
-    __metadata:
-      label: "Enable Egressgateway"
-      description: "Specify whether to enable egressgateway that supports a platform independent traffic management model for ingress."
-      type: "boolean"
-      default: true
-      immutable: false
-      required: false
-  serviceAccountName:
-    __metadata:
-      label: "Service Account"
-      description: "Specify service account that used for egressgateway."
-      type: "string"
-      default: "istio-egressgateway-service-account"
-      immutable: false
-      required: false 
-  replicaCount:
-    __metadata:
-      label: "Replica Count"
-      description: "Specify number of desired pods for egress gateway deployment."
-      type: "number"
-      default: 1
-      immutable: false
-      required: false
-  autoscaleMin:
-    __metadata:
-      label: "Min Replicas"
-      description: "Lower limit for the number of pods that can be set by the autoscaler, default 1."
-      type: "number"
-      default: 1
-      immutable: false
-      required: false
-  autoscaleMax:
-    __metadata:
-      label: "Max Replicas"
-      description: "Upper limit for the number of pods that can be set by the autoscaler, cannot be smaller than MinReplicas."
-      type: "number"
-      default: 1
-      immutable: false
-      required: false
-  resources:
-    __metadata:
-      label: "Egressgateway Resources"
-    limits:
+        name:
+          __metadata:
+            label: "Ingressgateway Certs Volume Name"
+            description: "Specify name for ingressgateway certs volume."
+            type: "string"
+            default: "ingressgateway-certs"
+            immutable: false
+            required: false
+        secretName:
+          __metadata:
+            label: "Ingressgateway Certs Volume Secret Name"
+            description: "Specify secret name for ingressgateway certs volume."
+            type: "string"
+            default: "istio-ingressgateway-certs"
+            immutable: false
+            required: false
+        mountPath:
+          __metadata:
+            label: "Ingressgateway Certs Volume Mount Path"
+            description: "Specify mount path for ingressgateway certs volume."
+            type: "string"
+            default: "/etc/istio/ingressgateway-certs"
+            immutable: false
+            required: false
+      -
+        name:
+          __metadata:
+            label: "Ingressgateway CA Certs Volume Name"
+            description: "Specify name for ingressgateway CA certs volume."
+            type: "string"
+            default: "ingressgateway-ca-certs"
+            immutable: false
+            required: false
+        secretName:
+          __metadata:
+            label: "Ingressgateway CA Certs Volume Secret Name"
+            description: "Specify secret name for ingressgateway CA certs volume."
+            type: "string"
+            default: "istio-ingressgateway-ca-certs"
+            immutable: false
+            required: false
+        mountPath:
+          __metadata:
+            label: "Ingressgateway CA Certs Volume Mount Path"
+            description: "Specify mount path for ingressgateway CA certs volume."
+            type: "string"
+            default: "/etc/istio/ingressgateway-ca-certs"
+            immutable: false
+            required: false
+  egressgateway:
+    enabled:
       __metadata:
-        label: "Egressgateway Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "4000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "512Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Egressgateway Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
-  service:
-    __metadata:
-      label: "Egressgateway Service Configuration"
-    name:
-      __metadata:
-        label: "Egressgateway Service Name"
-        description: "Specify name for egressgateway service."
-        type: "string"
-        default: "istio-egressgateway"
+        label: "Enable Egressgateway"
+        description: "Specify whether to enable egressgateway that supports a platform independent traffic management model for ingress."
+        type: "boolean"
+        default: true
         immutable: false
         required: false
     labels:
       __metadata:
-        label: "Egressgateway Service Labels"
-      istio:
+        label: "Egressgateway Labels"
+        type: "object"
+      app:
         __metadata:
-          label: "Value for 'istio' label"
-          description: "Specify value for label 'istio', this need to be consistent with the labels for egressateway deployment."
+          label: "Egressgateway app label"
           type: "string"
-          default: "egressgateway"
+          default: "istio-ingressgateway"
           immutable: false
           required: false
+      istio:
+        __metadata:
+          label: "Egressgateway istio label"
+          type: "string"
+          default: "ingressgateway"
+          immutable: false
+          required: false
+    replicaCount:
+      __metadata:
+        label: "Replica Count"
+        description: "Specify number of desired pods for egress gateway deployment."
+        type: "number"
+        default: 1
+        immutable: false
+        required: false
+    autoscaleMin:
+      __metadata:
+        label: "Min Replicas"
+        description: "Lower limit for the number of pods that can be set by the autoscaler, default 1."
+        type: "number"
+        default: 1
+        immutable: false
+        required: false
+    autoscaleMax:
+      __metadata:
+        label: "Max Replicas"
+        description: "Upper limit for the number of pods that can be set by the autoscaler, cannot be smaller than MinReplicas."
+        type: "number"
+        default: 5
+        immutable: false
+        required: false
+    resources:
+      __metadata:
+        label: "Istio Egressgateway Resources"
+        description: "Specify the resource(CPU/Memory) requests & limits for Istio Egressgateway."
+        type: "object"
+        default: {}
+    serviceAnnotations:
+      __metadata:
+        label: "Egressgateway Service Annotations"
+        description: "Specify the annotations for Egressgateway service."
+        type: "object"
+        immutable: false
+        required: false
     type:
       __metadata:
-        label: "Egressgateway Service Type"
-        description: "Specify type for egressgateway service."
+        label: "Egressgateway Type"
+        description: "Change to NodePort or LoadBalancer if need be."
         type: "string"
         default: "ClusterIP"
         immutable: false
         required: false
     ports:
       -
-       port:
-        __metadata:
-          label: "Egressgateway Service Port"
-          description: "Specify port for egressgateway service."
-          type: "number"
-          default: 80
-          immutable: false
-          required: false
-       targetPort:
-        __metadata:
-          label: "Egressgateway Service Target Port"
-          description: "specify target port for egressgateway service."
-          type: "number"
-          default: 80
-          immutable: false
-          required: false
-       name:
-        __metadata:
-          label: "Egressgateway Service Name"
-          description: "Specify name for egressgateway service."
-          type: "string"
-          default: "http"
-          immutable: false
-          required: false
+        port:
+          __metadata:
+            label: "Egressgateway Service Port"
+            description: "Specify http port for Egressgateway service."
+            type: "number"
+            default: 80
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingressgateway Port Name"
+            description: "Specify port name for egressgateway service http port."
+            type: "string"
+            default: "http2"
+            immutable: false
+            required: false
       -
-       port:
-        __metadata:
-          label: "Egressgateway Service Port"
-          description: "Specify port for egressgateway service."
-          type: "number"
-          default: 443
-          immutable: false
-          required: false
-       name:
-        __metadata:
-          label: "Egressgateway Service Name"
-          description: "Specify name for egressgateway service."
-          type: "string"
-          default: "https"
-          immutable: false
-          required: false
-  deployment:
-    __metadata:
-      label: "Egressgateway Deployment Configuration"
+        port:
+          __metadata:
+            label: "Egressgateway Service HTTPs Port"
+            description: "Specify HTTPs port for egressgateway service."
+            type: "number"
+            default: 433
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Ingressgateway HTTPs Port Name"
+            description: "Specify HTTPs port name for egressgateway service."
+            type: "string"
+            default: "https"
+            immutable: false
+            required: false
+    secretVolumes:
+      -
+        name:
+          __metadata:
+            label: "Egressgateway Certs Volume Name"
+            description: "Specify certs volume name for egressgateway."
+            type: "string"
+            default: "egressgateway-certs"
+            immutable: false
+            required: false
+        secretName:
+          __metadata:
+            label: "Egressgateway Certs Volume Secret Name"
+            description: "Specify secret name for egressgateway certs volume."
+            type: "string"
+            default: "istio-egressgateway-certs"
+            immutable: false
+            required: false
+        mountPath:
+          __metadata:
+            label: "Egressgateway Certs Volume Mount Path"
+            description: "Specify mount path for egressgateway certs volume."
+            type: "string"
+            default: "/etc/istio/egressgateway-certs"
+            immutable: false
+            required: false
+      -
+        name:
+          __metadata:
+            label: "Egressgateway CA Certs Volume Name"
+            description: "Specify CA Certs volume name for egressgateway."
+            type: "string"
+            default: "egressgateway-ca-certs"
+            immutable: false
+            required: false
+        secretName:
+          __metadata:
+            label: "Egressgateway CA Certs Volume Secret Name"
+            description: "Specify secret name for egressgateway CA secret volume."
+            type: "string"
+            default: "istio-egressgateway-ca-certs"
+            immutable: false
+            required: false
+        mountPath:
+          __metadata:
+            label: "Egressgateway CA Certs Volume Mount Path"
+            description: "Specify mount path for egressgateway CA certs volume."
+            type: "string"
+            default: "/etc/istio/egressgateway-ca-certs"
+            immutable: false
+            required: false
+  ilbgateway:
+    enabled:
+      __metadata:
+        label: "Enable ILB Gateway"
+        description: "Specify whether to enable Ingressgateway that creates a gateway of type InternalLoadBalancer."
+        type: "boolean"
+        default: false
+        immutable: false
+        required: false
     labels:
       __metadata:
-        label: "Egressgateway Deployment Labels"
+        label: "ILB Gateway Labels"
+      app:
+        __metadata:
+          label: "ILB Gateway app label"
+          type: "string"
+          default: "istio-ilbgateway"
+          immutable: false
+          required: false
       istio:
         __metadata:
-          label: "Value for 'istio' label"
-          description: "Specify value for label 'istio', this need to be consistent with the labels for egressateway pod and services."
+          label: "ILB Gateway istio label"
           type: "string"
-          default: "egressgateway"
+          default: "ilbgateway"
           immutable: false
           required: false
+    replicaCount:
+      __metadata:
+        label: "Replica Count"
+        description: "Specify number of desired pods for ILB Gateway deployment."
+        type: "number"
+        default: 1
+        immutable: false
+        required: false
+    autoscaleMin:
+      __metadata:
+        label: "Min Replicas"
+        description: "Lower limit for the number of pods that can be set by the autoscaler, default 1."
+        type: "number"
+        default: 1
+        immutable: false
+        required: false
+    autoscaleMax:
+      __metadata:
+        label: "Max Replicas"
+        description: "Upper limit for the number of pods that can be set by the autoscaler, cannot be smaller than MinReplicas."
+        type: "number"
+        default: 5
+        immutable: false
+        required: false
+    resources:
+      __metadata:
+        label: "Istio ILB Gateway Resources"
+        description: "Specify the resource(CPU/Memory) requests & limits for Istio ILB Gateway."
+        type: "object"
+      requests:
+        __metadata:
+          label: "Resources Requests"
+          description: "Specify the resource(CPU/Memory) requests for Istio ILB Gateway."
+          type: object
+        cpu:
+          __metadata:
+            type: "string"
+            description: "Specify the minimum requested CPU."
+            default: "800m"
+            immutable: false
+            required: false
+        memory:
+          __metadata:
+            type: "string"
+            description: "Specify the minimum requested memory."
+            default: "512Mi"
+            immutable: false
+            required: false
+    loadBalancerIP:
+      __metadata:
+        label: "Load Balancer IP"
+        description: "Specify the load balancer IP for ILB Gateway."
+        type: "string"
+        default: ""
+        immutable: false
+        required: false
+    serviceAnnotations:
+      __metadata:
+        label: "ILB Gateway Service Annotations"
+        description: "Specify the annotations for ILB Gateway Service."
+        type: "object"
+        immutable: false
+        required: false
+    type:
+      __metadata:
+        label: "ILB Gateway Type"
+        type: "string"
+        default: "LoadBalancer"
+        immutable: false
+        required: false
     ports:
       -
-       containerPort:
-        __metadata:
-          label: "Egressgateway Deployment Container Port"
-          description: "Specify container port for egressgateway deployment."
-          type: "number"
-          default: 80
-          immutable: false
-          required: false
+        port:
+          __metadata:
+            label: "ILB Gateway Service Port"
+            description: "Specify port for ILB Gateway service."
+            type: "number"
+            default: 15011
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "ILB Gateway Service Port Name"
+            description: "Specify name for ILB Gateway service port."
+            type: "string"
+            default: "grpc-pilot-mtls"
+            immutable: false
+            required: false
       -
-       containerPort:
-        __metadata:
-          label: "Egressgateway Deployment Container Port"
-          description: "Specify container port for egressgateway deployment."
-          type: "number"
-          default: 443
-          immutable: false
-          required: false
+        port:
+          __metadata:
+            label: "ILB Gateway Service Insecure Port"
+            description: "Specify insecure port for ILB Gateway service."
+            type: "number"
+            default: 15010
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "ILB Gateway Service Name"
+            description: "Specify name for ILB Gateway service insecure port."
+            type: "string"
+            default: "grpc-pilot"
+            immutable: false
+            required: false
+      -
+        port:
+          __metadata:
+            label: "Mesh ILB Gateway Citadel TLS Port"
+            description: "Specify port for Mesh ILB Gateway Citadel TLS."
+            type: "number"
+            default: 8060
+            immutable: false
+            required: false
+        targetPort:
+          __metadata:
+            label: "Mesh ILB Gateway Citadel TLS TargetPort"
+            description: "Specify target port for Mesh ILB Gateway Citadel TLS."
+            type: "number"
+            default: 8060
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Mesh ILB Gateway Citadel TLS Port Name"
+            description: "Specify name for Mesh ILB Gateway Citadel TLS."
+            type: "string"
+            default: "tcp-citadel-grpc-tls"
+            immutable: false
+            required: false
+      -
+        port:
+          __metadata:
+            label: "Mesh ILB Gateway kube-dns Forward Port"
+            description: "Specify port for Mesh ILB Gateway that is forwarded to kube-dns."
+            type: "number"
+            default: 5353
+            immutable: false
+            required: false
+        name:
+          __metadata:
+            label: "Mesh ILB Gateway kube-dns Forward Port Name"
+            description: "Specify ports name for Mesh ILB Gateway kube-dns forward port."
+            type: "string"
+            default: "tcp-dns"
+            immutable: false
+            required: false
+    secretVolumes:
+      -
+        name:
+          __metadata:
+            label: "Mesh ILB Gateway Certs Volume Name"
+            description: "Specify name for Mesh ILB Gateway certs volume."
+            type: "string"
+            default: "ilbgateway-certs"
+            immutable: false
+            required: false
+        secretName:
+          __metadata:
+            label: "Mesh ILB Gateway Certs Volume Secret Name"
+            description: "Specify secret name for Mesh ILB Gateway certs volume."
+            type: "string"
+            default: "istio-ilbgateway-certs"
+            immutable: false
+            required: false
+        mountPath:
+          __metadata:
+            label: "Mesh ILB Gateway Certs Volume Mount Path"
+            description: "Specify mount path for Mesh ILB Gateway certs volume."
+            type: "string"
+            default: "/etc/istio/ilbgateway-certs"
+            immutable: false
+            required: false
+      -
+        name:
+          __metadata:
+            label: "Mesh ILB Gateway CA Certs Volume Name"
+            description: "Specify name for Mesh ILB Gateway CA certs volume."
+            type: "string"
+            default: "ilbgateway-ca-certs"
+            immutable: false
+            required: false
+        secretName:
+          __metadata:
+            label: "Mesh ILB Gateway CA Certs Volume Secret Name"
+            description: "Specify secret name for Mesh ILB Gateway CA certs volume."
+            type: "string"
+            default: "istio-ilbgateway-ca-certs"
+            immutable: false
+            required: false
+        mountPath:
+          __metadata:
+            label: "Mesh ILB Gateway CA Certs Volume Mount Path"
+            description: "Specify mount path for Mesh ILB Gateway CA certs volume."
+            type: "string"
+            default: "/etc/istio/ilbgateway-ca-certs"
+            immutable: false
+            required: false
 
 sidecarinjectorwebhook:
   enabled:
@@ -890,6 +1165,14 @@ sidecarinjectorwebhook:
       default: 1
       immutable: false
       required: false
+  enableNamespacesByDefault:
+    __metadata:
+      label: "Enable Namespaces By Default"
+      description: "Specify whether to enable Namespaces for sidercar by default"
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
   image:
     __metadata:
       label: "Sidecar Injector Image"
@@ -906,56 +1189,21 @@ sidecarinjectorwebhook:
         label: "Sidecar Injector Image Tag"
         description: "Sidecar Injector image version"
         type: "string"
-        default: "0.8.0"
+        default: "1.0.0"
         immutable: false
         required: false
   resources:
     __metadata:
-      label: "Sidecar Injector Resources"
-    limits:
-      __metadata:
-        label: "Sidecar Injector Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "5000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "512Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Sidecar Injector Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
+      label: "Istio Sidecar Injector Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Sidecar Injector."
+      type: "object"
+      default: {}
 
-mixer:
+galley:
   enabled:
     __metadata:
-      label: "Enable Mixer"
-      description: "Specify whether to enable mixer."
+      label: "Enable Galley"
+      description: "Specify whether to enabel Galley."
       type: "boolean"
       default: true
       immutable: false
@@ -963,7 +1211,50 @@ mixer:
   replicaCount:
     __metadata:
       label: "Replica Count"
-      description: "Specify number of desired pods for mixer deployment."
+      description: "Specify number of desired pods for galley deployment."
+      type: "number"
+      default: 1
+      immutable: false
+      required: false
+  image:
+    __metadata:
+      label: "Galley Image"
+    repository:
+      __metadata:
+        label: "Galley Injector Image Repository"
+        description: "Docker registry to pull galley image from."
+        type: "string"
+        default: "ibmcom/istio-galley"
+        immutable: false
+        required: false
+    tag:
+      __metadata:
+        label: "Galley Image Tag"
+        description: "Galley image version."
+        type: "string"
+        default: "1.0.0"
+        immutable: false
+        required: false
+  resources:
+    __metadata:
+      label: "Istio Galley Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Galley."
+      type: "object"
+      default: {}
+
+mixer:
+  enabled:
+    __metadata:
+      label: "Enable Mixer"
+      description: "Specify whether to enable Mixer."
+      type: "boolean"
+      default: true
+      immutable: false
+      required: false
+  replicaCount:
+    __metadata:
+      label: "Replica Count"
+      description: "Specify number of desired pods for Mixer deployment."
       type: "number"
       default: 1
       immutable: false
@@ -982,50 +1273,91 @@ mixer:
     tag:
       __metadata:
         label: "Mixer Image Tag"
-        description: "Mixer image version"
+        description: "Mixer image version."
         type: "string"
-        default: "0.8.0"
+        default: "1.0.0"
         immutable: false
         required: false
   resources:
     __metadata:
-      label: "Mixer Resources"
-    limits:
+      label: "Istio Mixer Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Mixer."
+      type: "object"
+      default: {}
+  policy:
+    __metadata:
+      label: "Mixer Policy Configuration"
+    autoscaleEnabled:
       __metadata:
-        label: "Mixer Resources Limits"
-      cpu:
+        label: "Enable Policy Auto Scaler"
+        description: "Specify whether to enable auto scaler for Mixer policy checker."
+        type: "boolean"
+        default: true
+        immutable: false
+        required: false
+    autoscaleMin:
+      __metadata:
+        label: "Min Replicas"
+        description: "Lower limit for the number of pods that can be set by the autoscaler, default 1."
+        type: "number"
+        default: 1
+        immutable: false
+        required: false
+    autoscaleMax:
+      __metadata:
+        label: "Max Replicas"
+        description: "Upper limit for the number of pods that can be set by the autoscaler, cannot be smaller than MinReplicas."
+        type: "number"
+        default: 5
+        immutable: false
+        required: false
+    cpu:
+      __metadata:
+        label: "CPU"
+      targetAverageUtilization:
         __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "8000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit"
-          type: "string"
-          default: "1024Mi"
+          label: "Target Average Utilization"
+          description: "Specify CPU target average utilization."
+          type: "number"
+          default: 80
           immutable: false
           required: false
-    requests:
+  telemetry:
+    __metadata:
+      label: "Mixer Telemetry Configuration"
+    autoscaleEnabled:
       __metadata:
-        label: "Mixer Resources Requests"
-      cpu:
+        label: "Enable Telemetry Auto Scaler"
+        description: "Specify whether to enable auto scaler for Mixer telemetry."
+        type: "boolean"
+        default: true
+        immutable: false
+        required: false
+    autoscaleMin:
+      __metadata:
+        label: "Min Replicas"
+        description: "Lower limit for the number of pods that can be set by the autoscaler, default 1."
+        type: "number"
+        default: 1
+        immutable: false
+        required: false
+    autoscaleMax:
+      __metadata:
+        label: "Max Replicas"
+        description: "Upper limit for the number of pods that can be set by the autoscaler, cannot be smaller than MinReplicas."
+        type: "number"
+        default: 5
+        immutable: false
+        required: false
+    cpu:
+      __metadata:
+        label: "CPU"
+      targetAverageUtilization:
         __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU"
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
+          label: "Target Average Utilization"
+          description: "Specify CPU target average utilization."
+          type: "number"
+          default: 80
           immutable: false
           required: false
   prometheusStatsdExporter:
@@ -1044,56 +1376,21 @@ mixer:
         label: "Prometheus Statsd Image Tag"
         description: "Prometheus statsd image version."
         type: "string"
-        default: "v0.5.0"
+        default: "v0.6.0"
         immutable: false
         required: false
     resources:
       __metadata:
-        label: "Prometheus Statsd Exporter Resources"
-      limits:
-        __metadata:
-          label: "Prometheus Statsd Exporter Resources Limits"
-        cpu:
-          __metadata:
-            label: "Prometheus Statsd CPU limit"
-            description: "Specify the maximum CPU limit."
-            type: "string"
-            default: "2000m"
-            immutable: false
-            required: false 
-        memory:
-          __metadata:
-            label: "Prometheus Statsd Memory limit"
-            description: "Specify the maximum memory limit."
-            type: "string"
-            default: "256Mi"
-            immutable: false
-            required: false
-      requests:
-        __metadata:
-          label: "Prometheus Statsd Exporter Resources Requests"
-        cpu:
-          __metadata:
-            label: "Prometheus Statsd CPU request"
-            description: "Specify the minimum requested CPU."
-            type: "string"
-            default: "100m"
-            immutable: false
-            required: false
-        memory:
-          __metadata:
-            label: "Prometheus Statsd Memory request"
-            description: "Specify the minimum requested memory."
-            type: "string"
-            default: "128Mi"
-            immutable: false
-            required: false
+        label: "Istio Prometheus Statsd Exporter Resources"
+        description: "Specify the resource(CPU/Memory) requests & limits for Istio Prometheus Statsd Exporter."
+        type: "object"
+        default: {}
 
 pilot:
   enabled:
     __metadata:
       label: "Enable Pilot"
-      description: "Specify whether to enable pilot."
+      description: "Specify whether to enable Pilot."
       type: "boolean"
       default: true
       immutable: false
@@ -1101,7 +1398,23 @@ pilot:
   replicaCount:
     __metadata:
       label: "Replica Count"
-      description: "Specify number of desired pods for pilot deployment."
+      description: "Specify number of desired pods for Pilot deployment."
+      type: "number"
+      default: 1
+      immutable: false
+      required: false
+  autoscaleMin:
+    __metadata:
+      label: "Min Replicas"
+      description: "Lower limit for the number of pods that can be set by the autoscaler, default 1."
+      type: "number"
+      default: 1
+      immutable: false
+      required: false
+  autoscaleMax:
+    __metadata:
+      label: "Max Replicas"
+      description: "Upper limit for the number of pods that can be set by the autoscaler, cannot be smaller than MinReplicas."
       type: "number"
       default: 1
       immutable: false
@@ -1120,68 +1433,67 @@ pilot:
     tag:
       __metadata:
         label: "Pilot Image Tag"
-        description: "Pilot image version"
+        description: "Pilot image version."
         type: "string"
-        default: "0.8.0"
+        default: "1.0.0"
         immutable: false
         required: false
-  resources:
+  sidecar:
     __metadata:
-      label: "Pilot Resources"
-    limits:
-      __metadata:
-        label: "Pilot Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "8000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "1024Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Pilot Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
-
-security:
-  enabled:
-    __metadata:
-      label: "Enable Citadel"
-      description: "Specify whether to enable security component(citade), responsible for certificate issuance and rotation."
+      label: "Enable sidecar"
+      description: "Specify whether to enable envoy sidecar in Pilot."
       type: "boolean"
       default: true
       immutable: false
       required: false
+  traceSampling:
+    __metadata:
+      label: "Trace Sampling"
+      description: "Specify trace sampling number for Pilot."
+      type: "number"
+      default: 100.0
+      immutable: false
+      required: false
+  resources:
+    __metadata:
+      label: "Istio Pilot Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Pilot."
+      type: "object"
+    requests:
+      __metadata:
+        label: "Resources Requests"
+        description: "Specify the resource(CPU/Memory) requests for Istio Pilot."
+        type: object
+      cpu:
+        __metadata:
+          type: "string"
+          description: "Specify the minimum requested CPU."
+          default: "500m"
+          immutable: false
+          required: false
+      memory:
+        __metadata:
+          type: "string"
+          description: "Specify the minimum requested memory."
+          default: "2048Mi"
+          immutable: false
+          required: false
+
+security:
   replicaCount:
     __metadata:
       label: "Replica Count"
-      description: "Specify number of desired pods for citadel deployment."
+      description: "Specify number of desired pods for Citadel deployment."
       type: "number"
       default: 1
+      immutable: false
+      required: false
+  selfSigned:
+    __metadata:
+      label: "Self Signed"
+      description: "Indicate if self-signed CA is used."
+      type: "boolean"
+      default: true
       immutable: false
       required: false
   image:
@@ -1192,7 +1504,7 @@ security:
         label: "Citadel Image Repository"
         description: "Docker registry to pull citadel image from."
         type: "string"
-        default: "ibmcom/ibmcom/istio-citadel"
+        default: "ibmcom/istio-citadel"
         immutable: false
         required: false
     tag:
@@ -1200,56 +1512,39 @@ security:
         label: "Citadel Image Tag"
         description: "Citadel image version."
         type: "string"
-        default: "0.8.0"
+        default: "1.0.0"
         immutable: false
         required: false
   resources:
     __metadata:
-      label: "Citadel Resources"
-    limits:
-      __metadata:
-        label: "Citadel Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "7000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "1024Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Citadel Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
-  cleanUpOldCA:
+      label: "Istio Citadel Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Citadel."
+      type: "object"
+      default: {}
+
+telemetrygateway:
+  gatewayName:
     __metadata:
-      label: "Clean Old Istio-Ca Resources"
-      description: "Specify whether to clean old istio-ca resources."
+      label: "Telemetry Gateway Name"
+      description: "Specify name for telemetry Gateway."
+      type: "string"
+      default: ingressgateway
+      immutable: false
+      required: false
+  grafanaEnabled:
+    __metadata:
+      label: "Enable Grafana"
+      description: "Specify whether to enable Grafana for telemetry Gateway."
       type: "boolean"
-      default: true
+      default: false
+      immutable: false
+      required: false
+  prometheusEnabled:
+    __metadata:
+      label: "Enable Prometheus"
+      description: "Specify whether to enable Prometheus for telemetry Gateway"
+      type: "boolean"
+      default: false
       immutable: false
       required: false
 
@@ -1286,16 +1581,50 @@ grafana:
         label: "Grafana Image Tag"
         description: "Grafana image version."
         type: "string"
-        default: "0.8.0"
+        default: "1.0.0"
+        immutable: false
+        required: false
+  security:
+    __metadata:
+      label: "Grafana Security Configuration"
+    enabled:
+      __metadata:
+        label: "Enable Grafana Security"
+        description: "Specify whether authentication is needed to access Grafana dashboard."
+        type: "boolean"
+        default: false
+        immutable: false
+        required: false
+    adminUser:
+      __metadata:
+        label: "Grafana Admin User"
+        description: "Specify username to access Grafana dashboard."
+        type: "boolean"
+        default: admin
+        immutable: false
+        required: false
+    adminPassword:
+      __metadata:
+        label: "Enable Admin Password"
+        description: "Specify password to access Grafana dashboard."
+        type: "boolean"
+        default: admin
         immutable: false
         required: false
   service:
     __metadata:
       label: "Grafana Service Configuration"
+    annotations:
+      __metadata:
+        label: "Grafana Service Annotation"
+        description: "Specify the annotations for Grafana sevice."
+        type: "object"
+        immutable: false
+        required: false
     name:
       __metadata:
         label: "Grafana Service Name"
-        description: "Specify name for the grafana service."
+        description: "Specify name for the Grafana service."
         type: "string"
         default: "http"
         immutable: false
@@ -1303,7 +1632,7 @@ grafana:
     type:
       __metadata:
         label: "Grafana Service Type"
-        description: "Specify type for the grafana service."
+        description: "Specify type for the Grafana service."
         type: "string"
         default: "ClusterIP"
         immutable: false
@@ -1311,94 +1640,23 @@ grafana:
     externalPort:
       __metadata:
         label: "Grafana Service External Port"
-        description: "Specify external port for the grafana service."
+        description: "Specify external port for the Grafana service."
         type: "number"
         default: 3000
         immutable: false
         required: false
-  ingress:
-    __metadata:
-      label: "Grafana Ingress Configuration"
-    enabled:
-      __metadata:
-        label: "Enable Grafana Ingress"
-        description: "Specify whether to enable grafana ingress."
-        type: "boolean"
-        default: false
-        immutable: false
-        required: false
-    hosts:
-      __metadata:
-        label: "Grafana Ingress hosts"
-        description: "Specify the hosts for grafana ingress."
-        type: "array"
-        minItems: 1,
-        maxItems: 3,
-        items:
-          type: "string"
-        immutable: false
-        required: false
-    annotations:
-      __metadata:
-        label: "Grafana Ingress Annotation"
-        description: "Specify the annotations for grafana ingress."
-        type: "object"
-        immutable: false
-        required: false
-    tls:
-      __metadata:
-        label: "Grafana Ingress TLS"
-        description: "Specify tls for grafana ingress."
-        type: "array"
-        immutable: false
-        required: false
   resources:
     __metadata:
-      label: "Grafana Resources"
-    limits:
-      __metadata:
-        label: "Grafana Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "1000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "512Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Grafana Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
+      label: "Istio Grafana Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Grafana."
+      type: "object"
+      default: {}
 
 prometheus:
   enabled:
     __metadata:
       label: "Enable Prometheus"
-      description: "Specify whether to enable prometheus, monitoring system for istio."
+      description: "Specify whether to enable Prometheus, monitoring system for Istio."
       type: "boolean"
       default: true
       immutable: false
@@ -1406,7 +1664,7 @@ prometheus:
   replicaCount:
     __metadata:
       label: "Replica Count"
-      description: "Specify number of desired pods for prometheus deployment."
+      description: "Specify number of desired pods for Prometheus deployment."
       type: "number"
       default: 1
       immutable: false
@@ -1417,7 +1675,7 @@ prometheus:
     repository:
       __metadata:
         label: "Prometheus Image Repository"
-        description: "Docker registry to pull prometheus image from."
+        description: "Docker registry to pull Prometheus image from."
         type: "string"
         default: "ibmcom/prometheus"
         immutable: false
@@ -1427,17 +1685,24 @@ prometheus:
         label: "Prometheus Image Tag"
         description: "Prometheus image version."
         type: "string"
-        default: "v2.0.0"
+        default: "v2.3.1"
         immutable: false
         required: false
   service:
     __metadata:
       label: "Prometheus Service Configuration"
+    annotations:
+      __metadata:
+        label: "Prometheus Service Annotation"
+        description: "Specify the annotations for Prometheus sevice."
+        type: "object"
+        immutable: false
+        required: false
     nodePort:
       enabled:
         __metadata:
           label: "Enable Service NodePort"
-          description: "Specify whether to enable nodePort for prometheus service."
+          description: "Specify whether to enable nodePort for Prometheus service."
           type: "boolean"
           default: false
           immutable: false
@@ -1445,92 +1710,23 @@ prometheus:
       port:
         __metadata:
           label: "Service NodePort"
-          description: "Specify nodePort for prometheus service."
+          description: "Specify nodePort for Prometheus service."
           type: "number"
           default: 32090
           immutable: false
           required: false    
-  ingress:
-    enabled:
-      __metadata:
-        label: "Enable Prometheus Ingress"
-        description: "Specify whether to enable prometheus ingress."
-        type: "boolean"
-        default: false
-        immutable: false
-        required: false
-    hosts:
-      __metadata:
-        label: "Prometheus Ingress hosts"
-        description: "Specify the hosts for prometheus ingress."
-        type: "array"
-        minItems: 1,
-        maxItems: 3,
-        items:
-          type: "string"
-        immutable: false
-        required: false
-    annotations:
-      __metadata:
-        label: "Prometheus Ingress Annotation"
-        description: "Specify the annotations for prometheus ingress."
-        type: "object"
-        immutable: false
-        required: false
-    tls:
-      __metadata:
-        label: "Prometheus Ingress TLS"
-        description: "Specify tls for prometheus ingress."
-        type: "array"
-        immutable: false
-        required: false
   resources:
     __metadata:
       label: "Prometheus Resources"
-    limits:
-      __metadata:
-        label: "Prometheus Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "5000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "1024Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Prometheus Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
+      description: "Specify the resource(CPU/Memory) requests & limits for Prometheus."
+      type: "object"
+      default: {}
 
 servicegraph:
   enabled:
     __metadata:
       label: "Enable Servicegraph"
-      description: "Specify whether to enable servicegraph, addon for istio that generates and visualizes graph representations of service mesh."
+      description: "Specify whether to enable Servicegraph, addon for istio that generates and visualizes graph representations of service mesh."
       type: "boolean"
       default: false
       immutable: false
@@ -1538,7 +1734,7 @@ servicegraph:
   replicaCount:
     __metadata:
       label: "Replica Count"
-      description: "Specify number of desired pods for servicegraph deployment."
+      description: "Specify number of desired pods for Servicegraph deployment."
       type: "number"
       default: 1
       immutable: false
@@ -1548,7 +1744,7 @@ servicegraph:
       label: "Servicegraph Image"
     repository:
       __metadata:
-        label: "Docker registry to pull servicegraph image from."
+        label: "Docker registry to pull Servicegraph image from."
         description: "image location"
         type: "string"
         default: "ibmcom/istio-servicegraph"
@@ -1559,16 +1755,23 @@ servicegraph:
         label: "Servicegraph Image Tag"
         description: "Servicegraph image version."
         type: "string"
-        default: "0.8.0"
+        default: "1.0.0"
         immutable: false
         required: false
   service:
     __metadata:
       label: "Servicegraph Service Configuration"
+    annotations:
+      __metadata:
+        label: "Servicegraph Service Annotation"
+        description: "Specify the annotations for Servicegraph sevice."
+        type: "object"
+        immutable: false
+        required: false
     name:
       __metadata:
         label: "Servicegraph Service Name"
-        description: "Specify name for servicegraph service."
+        description: "Specify name for Servicegraph service."
         type: "string"
         default: "http"
         immutable: false
@@ -1576,7 +1779,7 @@ servicegraph:
     type:
       __metadata:
         label: "Servicegraph Service Type"
-        description: "Specify typr for servicegraph service."
+        description: "Specify typr for Servicegraph service."
         type: "string"
         default: "ClusterIP"
         immutable: false
@@ -1584,7 +1787,7 @@ servicegraph:
     externalPort:
       __metadata:
         label: "Servicegraph Service External Port"
-        description: "Specify external port for servicegraph service."
+        description: "Specify external port for Servicegraph service."
         type: "number"
         default: 8088
         immutable: false
@@ -1595,7 +1798,7 @@ servicegraph:
     enabled:
       __metadata:
         label: "Enable Servicegraph Ingress"
-        description: "Specify whether to enable ingress for servicegraph."
+        description: "Specify whether to enable ingress for Servicegraph."
         type: "boolean"
         default: false
         immutable: false
@@ -1603,7 +1806,7 @@ servicegraph:
     hosts:
       __metadata:
         label: "Servicegraph Ingress hosts"
-        description: "Specify the hosts for servicegraph ingress."
+        description: "Specify the hosts for Servicegraph ingress."
         type: "array"
         minItems: 1,
         maxItems: 3,
@@ -1614,58 +1817,23 @@ servicegraph:
     annotations:
       __metadata:
         label: "Servicegraph Ingress Annotation"
-        description: "Specify the annotations for servicegraph ingress."
+        description: "Specify the annotations for Servicegraph ingress."
         type: "object"
         immutable: false
         required: false
     tls:
       __metadata:
         label: "Servicegraph Ingress TLS"
-        description: "Specify the tls for servicegraph ingress."
+        description: "Specify the tls for Servicegraph ingress."
         type: "array"
         immutable: false
         required: false
   resources:
     __metadata:
-      label: "Servicegraph Resources"
-    limits:
-      __metadata:
-        label: "Servicegraph Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "200m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "256Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Servicegraph Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
+      label: "Istio Servicegraph Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Servicegraph."
+      type: "object"
+      default: {}
   prometheusAddr:
     __metadata:
       label: "Prometheus Address"
@@ -1684,15 +1852,34 @@ tracing:
       default: false
       immutable: false
       required: false
+  provider:
+    __metadata:
+      label: "Tracing Provider"
+      description: "Specify the provider for tracing service."
+      type: "string"
+      default: "jaeger"
+      immutable: false
+      required: false
   jaeger:
-    enabled:
+    image:
       __metadata:
-        label: "Enable Jaeger"
-        description: "Specify whether to enable core jaeger services."
-        type: "boolean"
-        default: false
-        immutable: false
-        required: false
+        label: "Jaeger Image"
+      repository:
+        __metadata:
+          label: "Jaeger Image Repository"
+          description: "Docker registry to pull jaeger image from."
+          type: "string"
+          default: "ibmcom/jaegertracing-all-in-one"
+          immutable: false
+          required: false
+      tag:
+        __metadata:
+          label: "Jaeger Image Tag"
+          description: "Jaeger image version."
+          type: "string"
+          default: "1.5"
+          immutable: false
+          required: false
     memory:
       maxTraces:
         __metadata:
@@ -1700,6 +1887,38 @@ tracing:
           description: "Spectify max traces limits for jaeger."
           type: "number"
           default: 50000
+          immutable: false
+          required: false
+    ingress:
+      enabled:
+        __metadata:
+          label: "Enable Jaeger Ingress"
+          description: "Specify whether to enable ingress for Jaeger service."
+          type: "boolean"
+          default: false
+          immutable: false
+          required: false
+      hosts:
+        __metadata:
+          label: "Jaeger Ingress hosts"
+          description: "Specify the hosts for Jaeger ingress."
+          type: "array"
+          items:
+            type: "string"
+          immutable: false
+          required: false
+      annotations:
+        __metadata:
+          label: "Jaeger Ingress Annotation"
+          description: "Specify the annotations for Jaeger ingress."
+          type: "object"
+          immutable: false
+          required: false
+      tls:
+        __metadata:
+          label: "Jaeger Ingress TLS"
+          description: "Specify the TLS settings for Jaeger ingress."
+          type: "array"
           immutable: false
           required: false
   replicaCount:
@@ -1710,28 +1929,16 @@ tracing:
       default: 1
       immutable: false
       required: false
-  image:
-    __metadata:
-      label: "Tracing Image"
-    repository:
-      __metadata:
-        label: "Tracing Image Repository"
-        description: "Docker registry to pull tracing image from."
-        type: "string"
-        default: "ibmcom/jaegertracing-all-in-one"
-        immutable: false
-        required: false
-    tag:
-      __metadata:
-        label: "Tracing Image Tag"
-        description: "Tracing image version"
-        type: "string"
-        default: "1.5"
-        immutable: false
-        required: false
   service:
     __metadata:
       label: "Tracing Service Configuration"
+    annotations:
+      __metadata:
+        label: "Tracing Service Annotation"
+        description: "Specify the annotations for tracing service."
+        type: "object"
+        immutable: false
+        required: false
     name:
       __metadata:
         label: "Tracing Service Name"
@@ -1770,8 +1977,6 @@ tracing:
         label: "Tracing Ingress hosts"
         description: "Specify the hosts for tracing ingress."
         type: "array"
-        minItems: 1,
-        maxItems: 3,
         items:
           type: "string"
         immutable: false
@@ -1786,48 +1991,211 @@ tracing:
     tls:
       __metadata:
         label: "Tracing Ingress TLS"
-        description: "Specify the tls for tracing ingress."
+        description: "Specify the TLS settings for tracing ingress."
         type: "array"
         immutable: false
         required: false
   resources:
     __metadata:
-      label: "Tracing Resources"
-    limits:
+      label: "Istio Tracing Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Tracing."
+      type: "object"
+      default: {}
+
+kiali:
+  enabled:
+    __metadata:
+      label: "Enable Kiali"
+      description: "Specify whether to enable Kiali for Istio."
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
+  replicaCount:
+    __metadata:
+      label: "Replica Count"
+      description: "Specify number of desired pods for Kiali deployment."
+      type: "number"
+      default: 1
+      immutable: false
+      required: false
+  image:
+    __metadata:
+      label: "Kiali Image"
+    repository:
       __metadata:
-        label: "Tracing Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "5000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memory limit."
-          type: "string"
-          default: "1024Mi"
-          immutable: false
-          required: false
-    requests:
+        label: "Kiali Image Repository"
+        description: "Docker registry to pull Kiali image from."
+        type: "string"
+        default: "ibmcom/kiali"
+        immutable: false
+        required: false
+    tag:
       __metadata:
-        label: "Tracing Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
+        label: "Kiali Image Tag"
+        description: "Kiali image version."
+        type: "string"
+        default: "v0.5.0"
+        immutable: false
+        required: false
+  ingress:
+    enabled:
+      __metadata:
+        label: "Enable Kiali Ingress"
+        description: "Specify whether to enable ingress for Kiali service."
+        type: "boolean"
+        default: false
+        immutable: false
+        required: false
+    hosts:
+      __metadata:
+        label: "Kiali Ingress hosts"
+        description: "Specify the hosts for Kiali ingress."
+        type: "array"
+        items:
           type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
+        immutable: false
+        required: false
+    annotations:
+      __metadata:
+        label: "Kiali Ingress Annotation"
+        description: "Specify the annotations for Kiali ingress."
+        type: "object"
+        immutable: false
+        required: false
+    tls:
+      __metadata:
+        label: "Kiali Ingress TLS"
+        description: "Specify the TLS settings for Kiali ingress."
+        type: "array"
+        immutable: false
+        required: false
+  dashboard:
+    username:
+      __metadata:
+        label: "Kiali Dashboard Username"
+        description: "Specify username to access Kiali dashboard."
+        type: "string"
+        default: "admin"
+        immutable: false
+        required: false
+    passphrase:
+      __metadata:
+        label: "Kiali Dashboard Passphrase"
+        description: "Specify passphrase to access Kiali dashboard."
+        type: "string"
+        default: "admin"
+        immutable: false
+        required: false
+    grafanaURL:
+      __metadata:
+        label: "Grafana URL"
+        description: "Specify the Grafana URL for Kiali dashboard."
+        type: "string"
+        default: ""
+        immutable: false
+        required: false
+    jaegerURL:
+      __metadata:
+        label: "Jaeger URL"
+        description: "Specify the Jaeger URL for Kiali dashboard."
+        type: "string"
+        default: ""
+        immutable: false
+        required: false
+  resources:
+    __metadata:
+      label: "Kiali Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Kiali."
+      type: "object"
+      default: {}
+
+certmanager:
+  enabled:
+    __metadata:
+      label: "Enable Cert Manager"
+      description: "Specify whether to enable Cert Manager for Istio."
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
+  replicaCount:
+    __metadata:
+      label: "Replica Count"
+      description: "Specify number of desired pods for Cert Manager deployment."
+      type: "number"
+      default: 1
+      immutable: false
+      required: false
+  image:
+    __metadata:
+      label: "Cert Manager Image"
+    repository:
+      __metadata:
+        label: "Cert Manager Image Repository"
+        description: "Docker registry to pull Cert Manager image from."
+        type: "string"
+        default: "ibmcom/cert-manager"
+        immutable: false
+        required: false
+    tag:
+      __metadata:
+        label: "Cert Manager Image Tag"
+        description: "Cert Manager image version."
+        type: "string"
+        default: "v0.3.1"
+        immutable: false
+        required: false
+  extraArgs:
+    __metadata:
+      label: "Cert Manager Extra Args"
+      description: "Specify the extra arguments for the Cert Manager."
+      type: "array"
+      default: []
+      items:
+        type: "string"
+      immutable: false
+      required: false
+  podAnnotations:
+    __metadata:
+      label: "Cert Manager Pod Annotations"
+      description: "Specify the pod annotations for the Cert Manager."
+      type: "object"
+      immutable: false
+      required: false
+  podLabels:
+    __metadata:
+      label: "Cert Manager Pod Labels"
+      description: "Specify the pod labels for the Cert Manager."
+      type: "object"
+      immutable: false
+      required: false
+  podDnsPolicy:
+    __metadata:
+      label: "Cert Manager Pod DNS Policy"
+      description: "Specify the pod DNS policy for the Cert Manager."
+      type: "string"
+      default: "ClusterFirst"
+      immutable: false
+      required: false
+  podDnsConfig:
+    __metadata:
+      label: "Cert Manager Pod DNS Configuration"
+      description: "Specify the pod DNS configuration for the Cert Manager."
+      type: "object"
+      immutable: false
+      required: false
+  email:
+    __metadata:
+      label: "Email"
+      description: "Specify the email address for the issuer."
+      type: "string"
+      default: ""
+      immutable: false
+      required: false
+  resources:
+    __metadata:
+      label: "Cert Manager Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Cert Manager."
+      type: "object"
+      default: {} 
