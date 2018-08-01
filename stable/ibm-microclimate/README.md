@@ -141,8 +141,7 @@ To create the secret, use the following command replacing the values with where 
 kubectl create secret generic microclimate-helm-secret --from-file=cert.pem=.helm/cert.pem --from-file=ca.pem=.helm/ca.pem --from-file=key.pem=.helm/key.pem
 ```
 
-For example, you can download the IBM Cloud Private CLI from an IBM Cloud Private instance you've authenticated with, and then use the `bx pr login` command providing your login details and the cluster's master IP address. For more information, see the [IBM Cloud Private CLI documentation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0/manage_cluster/cli_commands.html#pr_login
-) where you are also provided with the certificate files with which you are required to create the secret.
+For example, you can download the IBM Cloud Private CLI from an IBM Cloud Private instance you've authenticated with. Then, use the `bx pr login` command by providing your login details and the master IP address of the cluster. The `bx pr` plug-in is not installed by default with the `bx` command, and it is not included in the `bx pr` plug-in repository. Download the plug-in from IBM Cloud Private. For more information, see [Installing the IBM Cloud Private CLI](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0.3/manage_cluster/install_cli.html), which lists instructions for how to install the `bx pr` plug-in, and see the [IBM Cloud Private CLI documentation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0/manage_cluster/cli_commands.html), which provides the certificate files that you can use to create the secret.
 
 The name of the secret you've created will be printed by the Microclimate pipeline when running a Jenkins job against your project: with this secret present your deployed applications will appear as a Helm release alongside any others that were deployed from `kube-system`.
 
