@@ -1,7 +1,10 @@
 # WebSphere Liberty Helm Chart
+
+## Introduction 
+
 WebSphere Liberty is a fast, dynamic, and easy-to-use Java EE application server. Ideal for developers, but also ready for production, Liberty is a combination of IBM technology and open source software, with fast startup times (<2 seconds), and a simple XML configuration. All in a package that's <70 MB to download. You can be developing applications in no time. With a flexible, modular runtime, you can download additional features from the Liberty Repository or strip it back to the essentials for deployment into production environments. Everything in Liberty is designed to help you get your job done how you want to do it.
 
-## Requirements
+## Resources Required
 
 A persistent volume is required, if you plan on using the transaction service within Liberty. The `server.xml` Liberty configuration file must be configured to place the transaction log on this volume so that it persists, if the server fails and restarts.
 
@@ -10,16 +13,24 @@ A persistent volume is required, if you plan on using the transaction service wi
 
 From a browser, use http://*external-ip*:*nodeport* to access the application.
 
-## Configuration
+## Chart Details
 
-### Parameters
+### Prerequisites
+
+None
+
+### Limitations
+
+See RELEASENOTES.md
+
+### Installing the Chart
 
 The Helm chart has the following values that can be overridden by using `--set name=value`. For example:
 
 *    `helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable/`
 *    `helm install --name liberty2 --set resources.constraints.enabled=true --set autoscaling.enabled=true --set autoscaling.minReplicas=2 ibm-charts/ibm-websphere-liberty --debug`
 
-#### Common Parameters
+### Configuration
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
@@ -251,9 +262,6 @@ The helm chart augments the Liberty container with the following environmental v
 | `MB_KEYSTORE_PASSWORD` | Namespace scope JKS keystore password. |
 | `MB_TRUSTSTORE_PASSWORD` | Namespace scope JKS truststore password. |
 
-###### Limitation
-
-Helm upgrade from version `1.0.0` to any other chart version is not supported. If you need to upgrade from a version `1.0.0` chart, first delete your Helm release, and then re-install, using the intended chart version.
 
 ## More information
 See the [Liberty documentation](https://www.ibm.com/support/knowledgecenter/en/SSAW57_liberty/as_ditamaps/was900_welcome_liberty_ndmp.html) for configuration options for deploying the Liberty server.

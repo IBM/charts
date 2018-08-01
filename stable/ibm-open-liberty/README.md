@@ -1,8 +1,10 @@
 # Open Liberty Helm Chart
 
+## Introduction 
+
 Open Liberty provides developers with proven Java EE 7 technology and the latest Eclipse MicroProfile™ capabilities for building microservices. Building cloud-native apps and microservices has never been more efficient, since you only have to run what you need. Our goal is to give you just enough to get the job done without getting in your way.
 
-## Requirements
+## Resources Required
 
 A persistent volume is required, if you plan on using the transaction service within Liberty. The `server.xml` Liberty configuration file must be configured to place the transaction log on this volume so that it persists, if the server fails and restarts.
 
@@ -10,16 +12,24 @@ A persistent volume is required, if you plan on using the transaction service wi
 
 From a browser, use http://*external-ip*:*nodeport* to access the application.
 
-## Configuration
+## Chart Details
 
-### Parameters
+## Prerequisites
+
+None
+
+## Limitations
+
+See RELEASENOTES.md.
+
+### Installing the Chart
 
 The Helm chart has the following values that can be overridden by using `--set name=value`. For example:
 
 *    `helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable/`
 *    `helm install --name open-liberty --set resources.constraints.enabled=true --set autoscaling.enabled=true --set autoscaling.minReplicas=2 ibm-charts/ibm-open-liberty --debug`
 
-#### Common Parameters
+### Configuration 
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
@@ -226,7 +236,6 @@ The helm chart augments the Liberty container with the following environmental v
 | `KEYSTORE_REQUIRED` | Determines whether keystore is generated. |
 | `MB_KEYSTORE_PASSWORD` | Namespace scope JKS keystore password. |
 | `MB_TRUSTSTORE_PASSWORD` | Namespace scope JKS truststore password. |
-
 
 ## More information
 

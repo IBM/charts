@@ -1,4 +1,6 @@
-# What’s New in Chart Version 1.5.0
+# What’s new... 
+
+## Latest: Chart Version 1.5.0
 
 1. RELEASENOTES.md
 1. Hazelcast session caching 
@@ -38,6 +40,7 @@ Initial release.  Includes updates for JSON logging.
 1. If your deployment enables IIOP and/or JMS endpoints, they will be erroneously displayed in the Launch button dropdown on the Helm Releases page of the ICP console. The Launch button only works with HTTP/S endpoints, so launching IIOP or JMS endpoints obviously will result in errors. 
 1. If you enable ingress during deployment _and_ specify a host value, the Launch button will return error 404. 
 1. If deploying to the IBM Kubernetes Service on the IBM Public Cloud, you can only create one ingress resource per host. 
+1. The createClusterSSLConfiguration option is not supported on z/Linux. To use the useClusterSSLConfiguration option for a deployment targeting z/Linux, you must first do a deployment on a non-z/Linux node in the same cluster, specifying the createClusterSSLConfiguration option in order to establish the cluster-scope SSL configuration.
 
 ## Version History
 
