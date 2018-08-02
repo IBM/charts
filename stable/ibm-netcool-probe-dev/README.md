@@ -1,7 +1,7 @@
 # IBM Tivoli Netcool/OMNIbus Integration - Probe for monitoring Kubernetes (Limited Use)
 
-This is a helm package for deploying a cluster of Probes for Message Bus
-onto Kubernetes. These probes process events and alerts from
+This Helm chart deploys IBM Netcool/OMNIbus Probe for Message Bus
+onto Kubernetes. This probe processes events and alerts from
 Logstash HTTP output and Prometheus Alertmanager to a Netcool Operations Insight operational dashboard.
 
 A commercial version of this chart is available on [IBM PASSPORT ADVANTAGE](https://www-01.ibm.com/software/passportadvantage/). More info is available here: [IBM Tivoli Netcool/OMNIbus Probe for Kubernetes Helm Chart](https://www.ibm.com/support/knowledgecenter/en/SSSHTQ/omnibus/helms/kubernetes/wip/concept/kub_intro.html)
@@ -21,7 +21,6 @@ IT infrastructures. More information can be seen here: [IBM Marketplace - IT Ope
 - Each probe deployment is fronted by a service.
 
 - This chart can be deployed more than once on the same namespace.
-
 
 ## Prerequisites
 
@@ -43,19 +42,19 @@ IT infrastructures. More information can be seen here: [IBM Marketplace - IT Ope
 
 ## Installing the Chart
 
-To install the chart with the release name `my-probe`:
+1. To install using the command line, customize the `values.yaml` and save it as `my_values.yaml`. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
-```bash
-$ helm install --name my-probe stable/ibm-netcool-probe
-```
-The command deploys on the Kubernetes cluster in the default configuration. The configuration section lists the parameters that can be configured during installation.
+2. The command below shows how to install the chart with the release name `my-probe` using the configuration specified in the customized `values.yaml`. Helm searches the `ibm-netcool-probe-dev` chart in the helm repository called `IBM-charts`.
+ 
+  ```sh
+  helm install --name my-probe -f my_values.yaml IBM-charts/ibm-netcool-probe-dev
+  ```
 
-> **Tip**: List all releases using `helm list`
+> **Tip**: List all releases using `helm list` or search for a chart using `helm search`.
 
 ## Verifying the Chart
 
 See NOTES.txt associated with this chart for verification instructions
-
 
 ## Uninstalling the Chart
 
@@ -79,20 +78,22 @@ The following table lists the configurable parameters of this chart and their de
 
 | Parameter                                          | Description                                                                                                                                                                                                        | Default                           |
 |----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------|
-| `image.repository`                                 | Probe image repository. Update this repository name to pull from a private image repository.                                                                                                                                                                                             | `netcool-probe-messagebus` |
-| `image.pullPolicy`                                 | Image pull policy                                                                                                                                                                                                  | `IfNotPresent`                    |
-| `global.image.secretName`                                 | Name of the Secret containing the Docker Config to pull image from a private repository. Leave blank if the probe image already exists in the local image repository or the Service Account has a been assigned with a Image Pull Secret.                                                      |  `nil`                                 |
 | `license`                                    | The license state of the image being deployed. Enter `accept` to install and use the image.                                                                                                                        | `not accepted`                    |
-| `image.tag`                                        | Image tag                                                                                                                                                                                                          | `7.0`                          |
-| `netcool.primaryServer`                            | The primary Netcool/OMNIbus server to connect to                                                                                                                                                                   | `NCOMS`                           |
-| `netcool.primaryHost`                              | The host of primary the Netcool/OMNIbus server                                                                                                                                                                     | `omnibus.service.netcool`         |
-| `netcool.primaryPort`                              | The port of the primary Netcool/OMNIbus server                                                                                                                                                                     | `4100`                            |
+| `global.image.secretName`                                 | Name of the Secret containing the Docker Config to pull image from a private repository. Leave blank if the probe image already exists in the local image repository or the Service Account has been assigned with an Image Pull Secret.                                                      |  `nil`                                 |
+| `image.repository`         | Probe image repository. Update this repository name to pull from a private image repository. See default value as example. The value will be appended with the image name (`netcool-probe-messagebus`). | `ibmcom`|
+| `image.name`         | Probe image name. This value is fixed to `netcool-probe-messagebus`. | `netcool-probe-messagebus`|
+| `image.tag`                                        | Image tag                                                                                                                                                                                                          | `8.0`                          |
+| `image.testRepository`         | Test image (`busybox:1.28.4`) repository. Update this repository name to pull from a private image repository. The value will be appended with the test image name (`busybox:1.28.4`). | `library`|
+| `image.pullPolicy`                                 | Image pull policy                                                                                                                                                                                                 | `IfNotPresent`                    |
+| `netcool.primaryServer`    | The primary Netcool/OMNIbus server the probe should connect to (required). | `nil`  |
+| `netcool.primaryHost`      | The host of the primary Netcool/OMNIbus server (required).   | `nil`         |
+| `netcool.primaryPort`      | The port number of the primary Netcool/OMNIbus server (required).    | `nil`      |
 | `netcool.backupServer`                             | The backup Netcool/OMNIbus server to connect to. If the backupServer, backupHost and backupPort parameters are defined, the probe will be configured to connect to a virtual object server pair called `AGG_P`.    | `nil`                                  |
-| `netcool.backupHost`                               | The host of backup the Netcool/OMNIbus server                                                                                                                                                                      | `nil`                                  |
+| `netcool.backupHost`                               | The host of the backup Netcool/OMNIbus server                                                                                                                                                                      | `nil`                                  |
 | `netcool.backupPort`                               | The port of the backup Netcool/OMNIbus server                                                                                                                                                                      | `nil`                                  |
 | `logstashProbe.enabled`                       | Set to `true` to enable a probe for Logstash.                                                      | `true`                               |
 | `logstashProbe.replicaCount`                       | Number of deployment replicas of the Logstash Probe.Ignored if `logstashProbe.autoscaling.enabled=true` and will use the `minReplicas` as the `replicaCount`.                                                      | `5`                               |
-| `logstashProbe.service.type`                       | Logstash probe service type. Options are `NodePort` or `ClusterIP`.                                                                                                                                                | `NodePort`                        |
+| `logstashProbe.service.type`                       | Logstash probe service type. Options are `NodePort` or `ClusterIP`.                                                                                                                                                | `ClusterIP`                        |
 | `logstashProbe.service.externalPort`               | Logstash probe external port that probe is running on                                                                                                                                                              | `80`                              |
 | `logstashProbe.ingress.enabled`                    | Set to `true` to enable ingress. Use to create Ingress record (should used with service.type: ClusterIP) for Logstash probe.                                                                                       | `false`                           |
 | `logstashProbe.ingress.hosts`                      | Sets the virtual host names for the same IP address. Use command line installation to specify multiple hosts.                                                                                                      | `netcool-probe-logstash.local`    |
@@ -100,11 +101,11 @@ The following table lists the configurable parameters of this chart and their de
 | `logstashProbe.autoscaling.minReplicas`            | Minimum number of probe replicas                                                                                                                                                                                   | `2`                               |
 | `logstashProbe.autoscaling.maxReplicas`            | Maximum number of probe replicas                                                                                                                                                                                   | `6`                               |
 | `logstashProbe.autoscaling.cpuUtil`                | The target CPU utilization                                                                                                                                                                                         | 60%                               |
-| `logstashProbe.poddisruptionbudget.enabled`        | Set to `false` to disable Pod Disruption Budget to maintain high availablity during a node maintenance.                                                                                                            | `true`                            |
+| `logstashProbe.poddisruptionbudget.enabled`        | Set to `false` to disable Pod Disruption Budget to maintain high availability during a node maintenance.                                                                                                            | `true`                            |
 | `logstashProbe.poddisruptionbudget.minAvailable`   | The number of minimum available number of pods during node drain. Can be set to a number or percentage, eg: 1 or 10%. Caution: Setting to 100% or equal to the number of replicas) may block node drains entirely. | `1`                                  |
 | `prometheusProbe.enabled`                       | Set to `true` to enable a probe for Prometheus.                                                      | `true`                               |
 | `prometheusProbe.replicaCount`                     | Number of deployment replicas of the Prometheus Probe. Ignored if `prometheusProbe.autoscaling.enabled=true` and will use the `minReplicas` as the `replicaCount`.                                                 | `1`                               |
-| `prometheusProbe.service.type`                     | Prometheus probe service type. Options are `NodePort` or `ClusterIP`.                                                                                                                                              | `NodePort`                        |
+| `prometheusProbe.service.type`                     | Prometheus probe service type. Options are `NodePort` or `ClusterIP`.                                                                                                                                              | `ClusterIP`                        |
 | `prometheusProbe.service.externalPort`             | Prometheus probe external port that probe is running on                                                                                                                                                            | `80`                              |
 | `prometheusProbe.ingress.enabled`                  | Set to `true` to enable ingress. Use to create Ingress record (should used with service.type: ClusterIP) for Prometheus probe.                                                                                     | `false`                           |
 | `prometheusProbe.ingress.hosts`                    | Sets the virtual host names for the same IP address.Use command line installation to specify multiple hosts.                                                                                                       | `netcool-probe-prometheus.local`  |
@@ -112,8 +113,8 @@ The following table lists the configurable parameters of this chart and their de
 | `prometheusProbe.autoscaling.minReplicas`          | Minimum number of probe replicas                                                                                                                                                                                   | `1`                               |
 | `prometheusProbe.autoscaling.maxReplicas`          | Maximum number of probe replicas                                                                                                                                                                                   | `3`                               |
 | `prometheusProbe.autoscaling.cpuUtil`              | The target CPU utilization                                                                                                                                                                                         | 60%                               |
-| `prometheusProbe.poddisruptionbudget.enabled`      | Set to `false` to disable Pod Disruption Budget to maintain high availablity during a node maintenance.                                                                                                            | `true`                            |
-| `prometheusProbe.poddisruptionbudget.minAvailable` | The number of minimum available number of pods during node drain. Can be set to a number or percentage, eg: 1 or 10%. Caution: Setting to 100% or equal to the number of replicas) may block node drains entirely. | `1`                                  |
+| `prometheusProbe.poddisruptionbudget.enabled`      | Set to `false` to disable Pod Disruption Budget to maintain high availability during a node maintenance.                                                                                                            | `true`                            |
+| `prometheusProbe.poddisruptionbudget.minAvailable` | The minimum number of available pods during node drain. Can be set to a number or percentage, eg: 1 or 10%. Caution: Setting to 100% or equal to the number of replicas may block node drains entirely. | `1`                                  |
 | `probe.messageLevel`                               | Probe log message level.                                                                                                                                                                                           | `warn`                         |
 | `resources.limits.cpu`                             | Container CPU limit                                                                                                                                                                                                | 500m                              |
 | `resources.limits.memory`                          | Container memory limit                                                                                                                                                                                             | 512Mi                             |
@@ -121,13 +122,12 @@ The following table lists the configurable parameters of this chart and their de
 | `resources.requests.memory`                        | Container Memory requested                                                                                                                                                                                         | 128Mi                             |
 | `arch`                                             | Worker node architecture. Fixed to `amd64`.                                                                                                                                                                        | `amd64`                           |
 
-
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-probe -f my_values.yaml stable/ibm-netcool-probe
+$ helm install --name my-probe -f my_values.yaml IBM-charts/ibm-netcool-probe-dev
 ```
 
 ## Integrating Prometheus Alert Manager with Netcool Operations Insight
@@ -136,13 +136,15 @@ $ helm install --name my-probe -f my_values.yaml stable/ibm-netcool-probe
 
 This procedure modifies the default Prometheus configuration.
 
-1. Deploy the `ibm-netcool-probe` chart.
+1. Deploy the `ibm-netcool-probe-dev` chart.
 
-2. On a successful deployment, get the probe's Endpoint Host and Port from the Workloads > Deployments page. The full webhook URL should look like  `http://<Ingress IP>:<NodePort>/probe/webhook/prometheus`.
+2. On a successful deployment, get the probe's Endpoint Host and Port from the Workloads > Deployments page.
+   - If the `prometheusProbe.service.type` is set to `ClusterIP`, the full webhook URL should look like  `http://<service name>.<namespace>:<externalPort>/probe/webhook/prometheus`. To obtain the service name, namespace and port using `kubectl` command line, follow the steps in the Notes section of the release.
+   - If the `prometheusProbe.service.type` is set to `NodePort`, the full webhook URL should look like  `http://<Ingress IP>:<Node Port>/probe/webhook/prometheus`. To obtain the NodePort number using `kubectl` command line, follow the steps in the Notes section of the release.
 
 3. Determine the Prometheus Alert Manager and Alert Rules config maps in the same namespace. In this procedure, the config maps in the `kube-system` namespace are `monitoring-prometheus-alertmanager` and `alert-rules` respectively.
 
-4. Edit the Prometheus Alert Manager config map to add a new receiver in the receivers section. If a seperate Prometheus is deployed, determine the Alert Manager configmap and add the new receiver. To do this via the command line, configure `kubectl` client and follow the steps below.
+4. Edit the Prometheus Alert Manager config map to add a new receiver in the receivers section. If a separate Prometheus is deployed, determine the Alert Manager configmap and add the new receiver. To do this via the command line, configure `kubectl` client and follow the steps below.
 
 5. Load the configmap into a file.
 
@@ -150,7 +152,7 @@ This procedure modifies the default Prometheus configuration.
 kubectl get configmaps monitoring-prometheus-alertmanager --namespace=kube-system -o yaml > alertmanager.yaml
 ```
 
-6. Edit the `alertmanager.yaml` file and add a new webhook receiver configuration. Sample configmap configuration is shown below.
+6. Edit the `alertmanager.yaml` file and add a new webhook receiver configuration. Sample configmap configuration is shown below. Use the full webhook URL from step 2 above in the `url` parameter.
 
 ```bash
 $ cat alertmanager.yaml 
@@ -161,7 +163,7 @@ data:
     receivers:
     - name: 'netcool_probe'
       webhook_configs:
-      - url: 'http://<kube-proxy-ip>:<node_port>/probe/webhook/prometheus'
+      - url: 'http://<ip_address>:<port>/probe/webhook/prometheus'
         send_resolved: true
 
     route:
@@ -420,48 +422,45 @@ configmap "alert-rules" replaced
 This procedure modifies the Logstash configuration:
 
 1. Deploy the `ibm-netcool-probe` chart.
-2. After a successful deployment, get the probe's Endpoint Host and Port from the Workloads > Deployments page. The full webhook URL will be `http://<Ingress IP>:<NodePort>/probe/webhook/logstash`.
-
-3. Determine the Logstash Pipeline config map in the same namespace. In this procedure, the config map in the `kube-system` namespace is `logstash-pipeline`. If a seperate Logstash is deployed, determine the pipeline configmap and add a new `http output`.
-
+2. After a successful deployment, get the probe's Endpoint Host and Port from the Workloads > Deployments page. 
+   - If the `logstashProbe.service.type` is set to `ClusterIP`, the full webhook URL should look like  `http://<service name>.<namespace>:<externalPort>/probe/webhook/logstash`. To obtain the service name, namespace and port using `kubectl` command line, follow the steps in the Notes section of the release.
+   - If the `logstashProbe.service.type` is set to `NodePort`, the full webhook URL should look like  `http://<Ingress IP>:<Node Port>/probe/webhook/logstash`. To obtain the NodePort number using `kubectl` command line, follow the steps in the Notes section of the release.
+3. Determine the Logstash Pipeline config map in the same namespace. In this procedure, the config map in the `kube-system` namespace is `logstash-pipeline`. If a separate Logstash is deployed, determine the pipeline configmap and add a new `http output`.
 4. Edit the Logstash pipeline config map to add a new `http output`.  To do this via the command line, configure `kubectl` client and follow the steps below:
-
 5. Load the configmap into a file.
 
-```bash
-kubectl get configmaps logstash-pipeline --namespace=kube-system -o yaml > logstash-pipeline.yaml
-```
+  ```bash
+  kubectl get configmaps logstash-pipeline --namespace=kube-system -o yaml > logstash-pipeline.yaml
+  ```
 
-6. Edit the `logstash-pipeline.yaml` and add the configuration - modify the output object to add a new `http output` object as shown below.
+6. Edit the `logstash-pipeline.yaml` and add the configuration - modify the output object to add a new `http output` object as shown below. Use the full webhook URL as shown in step 1 above in the `http.url` parameter.
 
-```json
-    output {
-      elasticsearch {
-        index => "logstash-%{+YYYY.MM.dd}"
-        hosts => "elasticsearch:9200"
+  ```json
+      output {
+        elasticsearch {
+          index => "logstash-%{+YYYY.MM.dd}"
+          hosts => "elasticsearch:9200"
+        }
+        http {
+          url => "http://<ip_address>:<port>/probe/webhook/logstash"
+          format => "json"
+          http_method => "post"
+          pool_max_per_route => "5"
+        }
       }
-       http {
-         url => "http://<kube-proxy-ip>:<node-port>/probe/webhook/logstash"
-         format => "json"
-         http_method => "post"
-         pool_max_per_route => "5"
-       }
-    }
-```
-  where 'kube-proxy-ip' is the IP address of the proxy server for the Kubernetes cluster. The 'node-port' is port number that the probe is receiving on, or the probe service external port, e.g. 31000.
+  ```
 
   > **Note**: (Optional) The pool_max_per_route is set to limit concurrent connection to the probe to 5 so that Logstash does not flood the probe which may cause event loss.
 
 7. Save the changes in the file and replace the config map.
 
-```bash
-kubectl --namespace kube-system replace -f logstash-pipeline.yaml
+  ```bash
+  kubectl --namespace kube-system replace -f logstash-pipeline.yaml
 
-configmap "logstash-pipeline" replaced
-```
+  configmap "logstash-pipeline" replaced
+  ```
 
-8. Logstash takes a minute or so to reload the new confugration. Check the logs to make sure there are no errors sending HTTP POST notifications to the probe.
-
+8. Logstash takes a minute or so to reload the new configuration. Check the logs to make sure there are no errors sending HTTP POST notifications to the probe.
 
 ## Limitations
 
@@ -472,11 +471,11 @@ configmap "logstash-pipeline" replaced
 ## Documentation
 
 - IBM Tivoli Netcool/OMNIBus Probe for Kubernetes Helm Chart Knowledge Center [page](https://www.ibm.com/support/knowledgecenter/en/SSSHTQ/omnibus/helms/kubernetes/wip/concept/kub_intro.html)
-- Obtaining the IBM Tivoli Netcool/OMNIBus Probe for Kubernetes Helm Chart (Commercial Edition) [Part Number](https://www.ibm.com/support/knowledgecenter/en/SSSHTQ/omnibus/helms/common/topicref/hlm_obtaining_ppa_package.html)
+- Obtaining the IBM Tivoli Netcool/OMNIBus Probe for Kubernetes Helm Chart (Commercial Edition) [page](https://www.ibm.com/support/knowledgecenter/en/SSSHTQ/omnibus/helms/common/topicref/hlm_obtaining_ppa_package.html)
 
 ## Troubleshooting
 
-Desribes the issues and steps to resolve an issue when deploying the probe chart.
+Describes issues and steps to resolve an issue when deploying the probe chart.
 
 | Problem                                                                                                                                         | Cause                                                                                                        | Resolution                                                                          |
 |-------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|

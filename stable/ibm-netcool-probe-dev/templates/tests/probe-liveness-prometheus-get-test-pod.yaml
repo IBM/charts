@@ -3,6 +3,7 @@
 {{- $compName :=  .sch.chart.components.prometheus.name -}}
 {{ $testCompName :=  printf "%s-%s" $compName "gettest" -}}
 {{ $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) -}}
+{{ $repository := trimSuffix "/" .Values.image.testRepository -}}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -10,7 +11,6 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
   labels:
-    #app: {{ include "sch.names.appName" (list .) }}
     app: {{ $fullTestCompName }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     release: {{ .Release.Name }}
@@ -23,7 +23,10 @@ spec:
 {{- end }}
   containers:
   - name: {{ .Release.Name }}-get-test
-    image: radial/busyboxplus:curl
-    command: ["sh", "-c", "curl -X GET -H 'cache-control: no-cache' -H 'content-type: application/x-www-form-urlencoded' http://{{ include "sch.names.fullCompName" (list .  $compName) }}/probe/webhook/prometheus?liveness=probe-check"]
+    image: "{{ $repository }}/busybox:1.28.4"
+    command:
+      - "/bin/sh"
+    args:
+      ["-c","wget -T 20 --header \'cache-control: no-cache\' --header \'content-type: application/x-www-form-urlencoded\' -O- http://{{ include "sch.names.fullCompName" (list .  $compName) }}/probe/webhook/prometheus?liveness=probe-check"]
   restartPolicy: Never
 {{- end }}

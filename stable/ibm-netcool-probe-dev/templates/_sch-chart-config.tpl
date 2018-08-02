@@ -36,6 +36,6 @@ sch:
     metering:
       productName: "IBM Netcool/OMNIbus Probe for Message Bus"
       productID: "2150A086BAF34CE8959EC9B9182036E4"
-      productVersion: '7.0'
+      productVersion: '8.0'
 {{- end -}}
 

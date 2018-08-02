@@ -28,26 +28,36 @@ If release name contains chart name it will be used as a full name.
 Create chart name and version as used by the chart label.
 */}}
 {{- define "istio-remote.chart" -}}
-{{- .Chart.Name | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Create a fully qualified configmap name.
+*/}}
+{{- define "istio-remote.configmap.fullname" -}}
+{{- printf "%s-%s" .Release.Name "istio-mesh-config" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Configmap checksum.
+*/}}
+{{- define "istio-remote.configmap.checksum" -}}
+{{- print $.Template.BasePath "/configmap.yaml" | sha256sum -}}
 {{- end -}}
 
 {{- define "nodeselector" }}
-  {{- if .Values.global.management }}
-  management: 'true'
+  {{- if and (.Values.global.proxyNode) (contains "icp" .Capabilities.KubeVersion.GitVersion) }}
+  proxy: 'true'
   {{- end -}}
-  {{- if and .Values.global.extraNodeSelector.key .Values.global.extraNodeSelector.value }}
-  {{ .Values.global.extraNodeSelector.key }}: {{ .Values.global.extraNodeSelector.value }}
+  {{- if .Values.global.extraNodeSelector }}
+  {{ toYaml .Values.global.extraNodeSelector }}
   {{- end -}}
 {{- end }}
 
 {{- define "tolerations" }}
-{{- if .Values.global.dedicated }}
+{{- if and (.Values.global.dedicated) (contains "icp" .Capabilities.KubeVersion.GitVersion) }}
 - key: "dedicated"
   operator: "Exists"
   effect: "NoSchedule"
-{{- end -}}
-{{- if .Values.global.criticalAddonsOnly }}
-- key: "CriticalAddonsOnly"
-  operator: "Exists"
 {{- end -}}
 {{- end }}

@@ -1,6 +1,7 @@
 {{ if .Values.logstashProbe.enabled }}
 {{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
 {{- $compName :=  .sch.chart.components.logstash.name -}}
+{{ $repository := trimSuffix "/" .Values.image.repository -}}
 
 {{/* Probe config ConfigMap Name*/}}
 {{- $configName :=  .sch.chart.components.logstash.configmap.config.name -}}
@@ -25,12 +26,15 @@ spec:
   {{- else -}}
   replicas: {{ .Values.logstashProbe.replicaCount }}
   {{- end }}
+  minReadySeconds: 30
   template:
     metadata:
       labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        checksum/config.configmap: {{ include (print $.Template.BasePath "/probe-logstash-configmap-config.yaml") . | sha256sum }}
+        checksum/rules.configmap: {{ include (print $.Template.BasePath "/probe-logstash-configmap-rules.yaml") . | sha256sum }}
     spec:
       #https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
       affinity:
@@ -95,7 +99,7 @@ spec:
               path: webhookTransport.properties
       containers:
         - name: messagebus-probe-logstash
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ $repository }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
           - name: LICENSE

@@ -4,8 +4,9 @@
 {{- $serviceNameLogstash := include "sch.names.fullCompName" (list .  $compNameLogstash) -}}
 {{- $serviceNamePrometheus := include "sch.names.fullCompName" (list .  $compNamePrometheus) -}}
 {{- if .Values.logstashProbe.enabled }}
-Get the Logstash Webhook URL by running the commands below. Note that a user with Cluster Admin role is required for the "kubectl get nodes" command.
+Get the Logstash Webhook URL by running the commands below.
 {{- if contains "NodePort" .Values.logstashProbe.service.type }}
+Note that a user with Cluster Admin role is required for the "kubectl get nodes" command.
   export NODE_PORT_LOGSTASH=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ $serviceNameLogstash }})
   export NODE_IP_LOGSTASH=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
   echo http://$NODE_IP_LOGSTASH:$NODE_PORT_LOGSTASH/probe/webhook/logstash
@@ -15,15 +16,23 @@ Get the Logstash Webhook URL by running the commands below. Note that a user wit
   export SERVICE_IP_LOGSTASH=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ $serviceNameLogstash }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
   echo http://$SERVICE_IP_LOGSTASH:{{ .Values.logstashProbe.service.externalPort }}/probe/webhook/logstash
 {{- else if contains "ClusterIP" .Values.logstashProbe.service.type }}
+  export SVC_NAME=$(kubectl get svc -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }},component={{ $compNameLogstash }}" -o jsonpath="{.items[0].metadata.name}")
+  export SVC_NAMESPACE=$(kubectl get svc -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }},component={{ $compNameLogstash }}" -o jsonpath="{.items[0].metadata.namespace}")
+  export SVC_PORT=$(kubectl get svc -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }},component={{ $compNameLogstash }}" -o jsonpath="{.items[0].spec.ports[0].port}")
+  echo "Applications within the cluster can reach the probe via http://$SVC_NAME.$SVC_NAMESPACE:$SVC_PORT/probe/webhook/logstash"
+
+To send a test event from your hosts via kubectl port-forward, use the commands below:
   export POD_NAME_LOGSTASH=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }},component={{ $compNameLogstash }}" -o jsonpath="{.items[0].metadata.name}")
   kubectl port-forward $POD_NAME_LOGSTASH 8080:{{ .Values.logstashProbe.service.externalPort }}
   echo "Send HTTP GET or POST to http://127.0.0.1:8080/probe/webhook/logstash"
-{{- end }}
+{{ end }}
 {{- end }}
 
 {{- if .Values.prometheusProbe.enabled }}
-Get the Prometheus Webhook URL by running the commands below. Note that a user with Cluster Admin role is required for the "kubectl get nodes" command.
+-----------------------------------------
+Get the Prometheus Webhook URL by running the commands below.
 {{- if contains "NodePort" .Values.prometheusProbe.service.type }}
+Note that a user with Cluster Admin role is required for the "kubectl get nodes" command.
   export NODE_PORT_PROMETHEUS=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ $serviceNamePrometheus }})
   export NODE_IP_PROMETHEUS=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
   echo http://$NODE_IP_PROMETHEUS:$NODE_PORT_PROMETHEUS/probe/webhook/prometheus
@@ -33,8 +42,15 @@ Get the Prometheus Webhook URL by running the commands below. Note that a user w
   export SERVICE_IP_PROMETHEUS=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ $serviceNamePrometheus }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
   echo http://$SERVICE_IP_PROMETHEUS:{{ .Values.prometheusProbe.service.externalPort }}/probe/webhook/promethues
 {{- else if contains "ClusterIP" .Values.prometheusProbe.service.type }}
-  export POD_NAME_PROMETHEUS=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }},component={{ $compNameLogstash }}" -o jsonpath="{.items[0].metadata.name}")
+  export SVC_NAME=$(kubectl get svc -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }},component={{ $compNamePrometheus }}" -o jsonpath="{.items[0].metadata.name}")
+  export SVC_NAMESPACE=$(kubectl get svc -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }},component={{ $compNamePrometheus }}" -o jsonpath="{.items[0].metadata.namespace}")
+  export SVC_PORT=$(kubectl get svc -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }},component={{ $compNamePrometheus }}" -o jsonpath="{.items[0].spec.ports[0].port}")
+  echo "Applications within the cluster can reach the probe via http://$SVC_NAME.$SVC_NAMESPACE:$SVC_PORT/probe/webhook/prometheus"
+
+To send a test event from your hosts via kubectl port-forward, use the commands below:
+  export POD_NAME_PROMETHEUS=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }},component={{ $compNamePrometheus }}" -o jsonpath="{.items[0].metadata.name}")
   kubectl port-forward $POD_NAME_PROMETHEUS 8081:{{ .Values.prometheusProbe.service.externalPort }}
   echo "Send HTTP GET or POST to http://127.0.0.1:8081/probe/webhook/prometheus"
+
 {{- end }}
 {{- end -}}

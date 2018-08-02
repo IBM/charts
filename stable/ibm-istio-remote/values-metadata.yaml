@@ -2,42 +2,144 @@
 ## This metadata is used to augment the value.yaml to drive ICP UI for configuration of the Helm chart installation
 
 global:
-  pilotEndpoint:
+  proxy:
     __metadata:
-      label: "Pilot EndPoint"
-      description: "Pilot endpoint for istio control plane."
-      type: "string"
-      default: "istio-pilot.istio-system"
-      immutable: false
-      required: true
-  policyEndpoint:
+      label: "Proxy Configuration"
+    repository:
+      __metadata:
+        label: "Proxy Image Repository"
+        description: "Docker registry to pull proxy image from."
+        type: "string"
+        default: "ibmcom/istio-proxyv2"
+        immutable: false
+        required: false
+    tag:
+      __metadata:
+        label: "Proxy Image Tag"
+        description: "Proxy image version."
+        type: "string"
+        default: "1.0.0"
+        immutable: false
+        required: false
+    resources:
+      __metadata:
+        label: "Istio Proxy Resources"
+        description: "Specify the resource(CPU/Memory) requests & limits for Istio sidecar."
+        type: "object"
+      requests:
+        __metadata:
+          label: "Resources Requests"
+          description: "Specify the resource(CPU/Memory) requests for Istio sidecar."
+          type: object
+        cpu:
+          __metadata:
+            type: "string"
+            description: "Specify the minimum requested CPU."
+            default: "100m"
+            immutable: false
+            required: false
+        memory:
+          __metadata:
+            type: "string"
+            description: "Specify the minimum requested memory."
+            default: "128Mi"
+            immutable: false
+            required: false
+    accessLogFile:
+      __metadata:
+        label: "Configures the access log for each sidecar"
+        description: "Configures the access log for each sidecar. Setting it to an empty string will disable access log for sidecar."
+        type: "string"
+        default: "/dev/stdout"
+        immutable: false
+        required: false
+    enableCoreDump:
+      __metadata:
+        label: "Enable Core Dump"
+        description: "Specify whether to enable debug information for envoy sidecar."
+        type: "boolean"
+        default: false
+        immutable: false
+        required: false
+    includeIPRanges:
+      __metadata:
+        label: "Include IP Ranges"
+        description: "Specify istio egress capture whitelist. For example: includeIPRanges: '172.30.0.0/16,172.20.0.0/16'."
+        type: "string"
+        immutable: false
+        required: false
+    excludeIPRanges:
+      __metadata:
+        label: "Exclude IP Ranges"
+        description: "Specify istio egress capture blacklist. For example: excludeIPRanges: '172.40.0.0/16,172.50.0.0/16'."
+        type: "string"
+        immutable: false
+        required: false
+    excludeInboundPorts:
+      __metadata:
+        label: "Exclude Port List"
+        description: "Specify istio egress capture port blacklist. For example: excludeInboundPorts: '81:8081'."
+        type: "string"
+        immutable: false
+        required: false
+    autoInject:
+      __metadata:
+        label: "Enable Sidecar Auto Inject"
+        description: "Specify whether auto-injection policy is enabled."
+        type: "string"
+        immutable: false
+        required: false
+        default: "enabled"
+    envoyStatsd:
+      __metadata:
+        lable: "Envoy Statsd Configuration"
+      enabled:
+        __metadata:
+          label: "Enable The Destination Enovy Statsd"
+          description: "Enable the destination statsd in Enovy."
+          type: "boolean"
+          default: false
+          immutable: false
+          required: false
+      host:
+        __metadata:
+          label: "Remote Statsd Prometheus Bridge Address"
+          description: "Specifies the statsd prometheus bridge Pod IP address for the Istio control plane."
+          type: "string"
+          default: ""
+          immutable: false
+          required: true
+      port:
+        __metadata:
+          label: "Statsd Port"
+          description: "The port for statsd prometheus bridge."
+          type: "number"
+          default: 9125
+          immutable: false
+          required: false
+  proxyInit:
     __metadata:
-      label: "Policy EndPoint"
-      description: "Policy endpoint for istio control plane."
-      type: "string"
-      default: "istio-policy.istio-system"
-      immutable: false
-      required: true
-  statsdEndpoint:
-    __metadata:
-      label: "Statsd Prometheus  Bridge EndPoint"
-      description: "Statsd prometheus bridge endpoint for istio control plane."
-      type: "string"
-      default: "istio-statsd-prom-bridge.istio-system"
-      immutable: false
-      required: true
-  zipkinEndpoint:
-    __metadata:
-      label: "Zipkin EndPoint"
-      description: "Tracing endpoint for istio control plane."
-      type: "string"
-      default: "zipkin.istio-system"
-      immutable: false
-      required: true
+      label: "Proxy_init Configuration"
+    repository:
+      __metadata:
+        label: "Proxy_init Image Repository"
+        description: "Docker registry to pull proxy_init image from."
+        type: "string"
+        default: "ibmcom/istio-proxy_init"
+        immutable: false
+        required: false
+    tag:
+      __metadata:
+        label: "Proxy_init Image Tag"
+        description: "Proxy_init image version"
+        type: "string"
+        default: "1.0.0"
+        immutable: false
+        required: false
   imagePullPolicy:
     __metadata:
       label: "Image Pull Policy"
-      description: "Image pull policy, the value can be 'Always', 'Never', or 'IfNotPresent'. Defaults to 'IfNotPresent'."
+      description: "Image pull policy for all istio components, the value can be 'Always', 'Never', or 'IfNotPresent'. Defaults to 'IfNotPresent'."
       type: "string"
       default: "IfNotPresent"
       immutable: false
@@ -50,6 +152,8 @@ global:
       - label: "IfNotPresent"
         value: "IfNotPresent"
   kubectl:
+    __metadata:
+      label: "Kubectl Image"
     repository:
       __metadata:
         label: "Kubectl Image Repository"
@@ -66,20 +170,111 @@ global:
         default: "v1.10.0"
         immutable: false
         required: false
-  rbacEnabled:
+  controlPlaneSecurityEnabled:
     __metadata:
-      label: "enable RBAC"
-      description: "Control whether to create RBAC resources, defalts to 'true'."
+      label: "Enable Control Plane Security"
+      description: "Specify whether to enable mutual TLS for istio control plane. Setting this field to 'true' will result in delays starting the pods while secrets are propagated, not recommended for tests."
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
+  disablePolicyChecks:
+    __metadata:
+      label: "Disable Policy Checks"
+      description: "Disables mixer policy checks. Will set the value with same name in istio config map - pilot needs to be restarted to take effect."
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
+  enableTracing:
+    __metadata:
+      label: "Enable Tracing"
+      description: "Sets the value with same name in istio config map, requires pilot restart to take effect."
       type: "boolean"
       default: true
       immutable: false
       required: false
+  mtls:
+    enabled:
+      __metadata:
+        label: "Mutual TLS Authentication Enabled"
+        description: "Specify whether to enable mutual TLS authentication for services, defaultls to 'false'."
+        type: "boolean"
+        default: false
+        immutable: false
+        required: false
   imagePullSecrets:
     __metadata:
       label: "Image Pull Secrets"
       description: "Add 'imagePullSecrets' if images are pulled from a private docker registry."
       type: "array"
+      immutable: false
+      required: false
+      items:
+        type: "string"
+  remotePilotCreateSvcEndpoint:
+    __metadata:
+      label: "Create Remote Pilot Service and Endpoint"
+      description: "Specifies whether to create a headless service and endpoint for `istio-pilot` with the `remotePilotAddress`."
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
+  remotePilotAddress:
+    __metadata:
+      label: "Remote Pilot EndPoint"
+      description: "Specifies the pilot Pod IP address for the Istio control plane."
+      type: "string"
       default: ""
+      immutable: false
+      required: true
+  remotePolicyAddress:
+    __metadata:
+      label: "Remote Policy EndPoint"
+      description: "Specifies the mixer policy Pod IP address for the Istio control plane."
+      type: "string"
+      default: ""
+      immutable: false
+      required: true
+  remoteTelemetryAddress:
+    __metadata:
+      label: "Remote Telemetry EndPoint"
+      description: "Specifies the mixer telemetry Pod IP address for the Istio control plane."
+      type: "string"
+      default: ""
+      immutable: false
+      required: true
+  remoteZipkinAddress:
+    __metadata:
+      label: "Remote Tracing EndPoint"
+      description: "Specifies the tracing Pod IP address for the Istio control plane."
+      type: "string"
+      default: ""
+      immutable: false
+      required: true
+  defaultResources:
+    __metadata:
+      label: "Default Resources Settings"
+      description: "Specify the basic resources settings to applied to all deployments."
+      type: "object"
+    requests:
+      __metadata:
+        label: "Resources Requests"
+        description: "Specify the resource(CPU/Memory) requests for all deployments."
+        type: object
+      cpu:
+        __metadata:
+          type: "string"
+          description: "Specify the minimum requested CPU."
+          default: "10m"
+          immutable: false
+          required: false
+  omitSidecarInjectorConfigMap:
+    __metadata:
+      label: "Omit Sidecar Injector ConfigMap"
+      description: "Specify whether to omit the istio-sidecar-injector configmap when generate a standalone gateway."
+      type: "boolean"
+      default: false
       immutable: false
       required: false
   priorityClassName:
@@ -90,10 +285,10 @@ global:
       default: ""
       immutable: false
       required: false
-  management:
+  proxyNode:
     __metadata:
-      label: "Deploy to Management Node"
-      description: "The field controls whether to deploy istio to management node with label 'management=true', defaults to 'true'."
+      label: "Proxy Node"
+      description: "Specify(true or false) whether to scheduled to proxy node with label: \"proxy\"=\"true\""
       type: "boolean"
       default: true
       immutable: false
@@ -106,31 +301,14 @@ global:
       default: true
       immutable: false
       required: false
-  criticalAddonsOnly:
+  extraNodeSelector:
     __metadata:
-      label: "Critical Addon"
-      description: "The field control whether to deploy istio as a critical addon, defaults to 'true'."
-      type: "boolean"
-      default: true
+      label: "Extra Node Selector"
+      description: "Specify the extra node selector for all deployments."
+      type: "object"
+      minProperties: 0
       immutable: false
       required: false
-  extraNodeSelector:
-    key:
-      __metadata:
-        label: "Node Selector Key"
-        description: "Specify node selector key."
-        type: "string"
-        default: ""
-        immutable: false
-        required: false
-    value:
-      __metadata:
-        label: "Node Selector Value"
-        description: "Specify node selector value."
-        type: "string"
-        default: ""
-        immutable: false
-        required: false
   arch:
     __metadata:
       label: "Architecture scheduling preferences"
@@ -152,35 +330,76 @@ global:
             value: "2 - No preference"
           - label: "3 - Most preferred"
             value: "3 - Most preferred"
-    ppc64le:
-      __metadata:
-        name: "ppc64le"
-        label: "PPC64LE scheduling preference"
-        description: "Architecture preference for target worker node."
-        type: "string"
-        default: "2 - No preference"
-        immutable: false
-        required: false
-        options:
-          - label: "0 - Do not use"
-            value: "0 - Do not use"
-          - label: "1 - Least preferred"
-            value: "1 - Least preferred"
-          - label: "2 - No preference"
-            value: "2 - No preference"
-          - label: "3 - Most preferred"
-            value: "3 - Most preferred"
-
-security:
+sidecarinjectorwebhook:
+  enabled:
+    __metadata:
+      label: "Enable Sidecar Injector Webhook"
+      description: "Specify whether to enable sidecar injector webhook to support automatical sidecar injection."
+      type: "boolean"
+      default: true
+      immutable: false
+      required: false
   replicaCount:
     __metadata:
       label: "Replica Count"
-      description: "Specify number of desired pods for security(citadel) deployment."
+      description: "Specify number of desired pods for sidecar injector webhook deployment."
       type: "number"
       default: 1
       immutable: false
       required: false
+  enableNamespacesByDefault:
+    __metadata:
+      label: "Enable Namespaces By Default"
+      description: "Specify whether to enable Namespaces for sidercar by default"
+      type: "boolean"
+      default: false
+      immutable: false
+      required: false
   image:
+    __metadata:
+      label: "Sidecar Injector Image"
+    repository:
+      __metadata:
+        label: "Sidecar Injector Image Repository"
+        description: "Docker registry to pull sidecar injector image from."
+        type: "string"
+        default: "ibmcom/istio-sidecar_injector"
+        immutable: false
+        required: false
+    tag:
+      __metadata:
+        label: "Sidecar Injector Image Tag"
+        description: "Sidecar Injector image version"
+        type: "string"
+        default: "1.0.0"
+        immutable: false
+        required: false
+  resources:
+    __metadata:
+      label: "Istio Sidecar Injector Resources"
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Sidecar Injector."
+      type: "object"
+      default: {}
+security:
+  replicaCount:
+    __metadata:
+      label: "Replica Count"
+      description: "Specify number of desired pods for Citadel deployment."
+      type: "number"
+      default: 1
+      immutable: false
+      required: false
+  selfSigned:
+    __metadata:
+      label: "Self Signed"
+      description: "Indicate if self-signed CA is used."
+      type: "boolean"
+      default: true
+      immutable: false
+      required: false
+  image:
+    __metadata:
+      label: "Citadel Image"
     repository:
       __metadata:
         label: "Citadel Image Repository"
@@ -194,47 +413,12 @@ security:
         label: "Citadel Image Tag"
         description: "Citadel image version."
         type: "string"
-        default: "0.8.0"
+        default: "1.0.0"
         immutable: false
         required: false
   resources:
     __metadata:
       label: "Istio Citadel Resources"
-    limits:
-      __metadata:
-        label: "Istio Citadel Resources Limits"
-      cpu:
-        __metadata:
-          label: "CPU limit"
-          description: "Specify the maximum CPU limit."
-          type: "string"
-          default: "7000m"
-          immutable: false
-          required: false 
-      memory:
-        __metadata:
-          label: "Memory limit"
-          description: "Specify the maximum memeory limit."
-          type: "string"
-          default: "1024Mi"
-          immutable: false
-          required: false
-    requests:
-      __metadata:
-        label: "Istio Citadel Resources Requests"
-      cpu:
-        __metadata:
-          label: "CPU request"
-          description: "Specify the minimum requested CPU."
-          type: "string"
-          default: "100m"
-          immutable: false
-          required: false
-      memory:
-        __metadata:
-          label: "Memory request"
-          description: "Specify the minimum requested memory."
-          type: "string"
-          default: "128Mi"
-          immutable: false
-          required: false
+      description: "Specify the resource(CPU/Memory) requests & limits for Istio Citadel."
+      type: "object"
+      default: {}
