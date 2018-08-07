@@ -107,6 +107,8 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `global.meshExpansionILB` | Specifies whether to expose the pilot and citadel mtls and the plain text pilot ports on an internal gateway | true/false | `false` |
 | `gobal.defaultResources` | Specifies resources(CPU/Memory) requests & limits applied to all deployments | valid CPU&memory settings | `{requests.cpu: 10m}` |
 | `global.crds` | Specifies whether to include the CRDS when generating the template | true/false | `true` |
+| `global.istioNamespace` | Specifies Istio installation namespace when generate a standalone gateway | valid namespace | `""` |
+| `global.omitSidecarInjectorConfigMap` | Specifies whether to omit the istio-sidecar-injector configmap when generate a standalone gateway | true/false | `false` |
 | `global.priorityClassName` | Specifies priority class to make sure Istio pods will not be evicted because of low prioroty class | valid priority class name | `""` |
 | `global.proxyNode` | Specifies whether to deploy to proxy node with labels `proxy=true`(effective only on IBM Cloud Private) | true/false | `true` |
 | `global.dedicated` | Specifies whether to deploy to dedicated node with taint `dedicated=:NoSchedule`(effective only on IBM Cloud Private) | true/false | `true` |
@@ -190,6 +192,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `pilot.sidecar` | Specifies whether to enable the envoy sidecar to Pilot | true/false | `true` |
 | `pilot.traceSampling` | Specifies the number of trace sample for Pilot | number | `100.0` |
 | `pilot.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | `{requests.cpu: 500m, requests.memory: 2048Mi}` |
+| `security.enabled` | Specifies whether Citadel should be installed | true/false | `true` |
 | `security.replicaCount` | Specifies number of desired pods for Citadel deployment | number | `1` |
 | `security.selfSigned` | Specifies whether self-signed CA is enabled | true/false | `true` |
 | `security.image.repository` | Specifies the Citadel image location | valid image repository | `ibmcom/istio-citadel` |
@@ -273,8 +276,6 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `certmanager.podDnsConfig` | Specifies the pod DNS configuration | valid Configuration | {} |
 | `certmanager.email` | Specifies the email for certmanager | valid email | `""` |
 | `certmanager.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
-
-**Note**: If you install the Istio helm chart in another Kubernetes distribution other than IBM Cloud Private (eg. IBM Cloud Kubernetes Services), please make sure to set parameter `--set global.management=false` if there isn't any node with label `management=true`, or else you can add label `management=true` to the node that you want to run Istio via `kubectl label node <node> management=true`.
 
 ## Uninstalling the Chart
 

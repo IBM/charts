@@ -1,0 +1,29 @@
+{{- range $key, $spec := .Values }}
+{{- if and (ne $key "global") (ne $key "enabled") }}
+{{- if and $spec.enabled $spec.autoscaleMin }}
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: istio-{{ $key }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app: {{ template "gateway.name" $ }}
+    chart: {{ template "gateway.chart" $ }}
+    heritage: {{ $.Release.Service }}
+    release: {{ $.Release.Name }}
+spec:
+  maxReplicas: {{ $spec.autoscaleMax }}
+  minReplicas: {{ $spec.autoscaleMin }}
+  scaleTargetRef:
+    apiVersion: apps/v1beta1
+    kind: Deployment
+    name: istio-{{ $key }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      targetAverageUtilization: 60
+---
+{{- end }}
+{{- end }}
+{{- end }}
