@@ -51,6 +51,7 @@ Initial release. Supports auto-scaling, ingress and persistence logs.
 ## Known Issues
 
 1. Upgrade from all versions except v1.0.0 is supported. 
+1. Upgrade from 1.4.0 to 1.5.0 is supported. However, rollback from 1.5.0 to 1.4.0 is not. 
 1. If upgrading from earlier chart releases, you must re-specify all custom configuration values you specified in the previous deployment.  Otherwise only default values are applied to the upgrade. 
 1. If your application uses IIOP, you must remove the iiopEndpoint configuration from your server.xml before building the Docker image you intend to deploy via this Helm chart. Failure to do so will prevent port values you specify through this Helm chart from overriding those specified in your server.xml. 
 1. If your deployment enables IIOP and/or JMS endpoints, they will be erroneously displayed in the Launch button dropdown on the Helm Releases page of the ICP console. The Launch button only works with HTTP/S endpoints, so launching IIOP or JMS endpoints obviously will result in errors. 

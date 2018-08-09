@@ -4,25 +4,17 @@
 - If you used DNS SRV records to locate the correct MQ port, then you need to use the name `qmgr` instead of `qmgr-server`.
 - The chart value `service.name` has been removed, as it wasn't used correctly.
 
-# What’s new in the MQ Advanced for Developers Chart, Version 2.0.1
+# What’s new in the MQ Advanced Chart, Version 2.0.2
 
-- Reverted statefulset to apps/v1beta2 to prevent deletion failures
+- Bug Fixes
 
-# Version History
+# Fixes
 
-| Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
-| ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
-| 2.0.1 | July 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Reverted statefulset to apps/v1beta2 to prevent deletion failures |
-| 2.0.0 | July 2018    | >= 1.9 | = MQ 9.1.0.0  | New Kubernetes resource names and labels | Added metrics service |
-| 1.3.0 | May 2018     | >= 1.6 | = MQ 9.0.5.0  | None | Added POWER and z/Linux support |
-| 1.2.1 | Apr 30, 2018 | >= 1.6 | >= MQ 9.0.4.0 | None | README fixes |
-| 1.2.0 | Apr 3, 2018  | >= 1.6 | >= MQ 9.0.4.0 | None | Added liveness and readiness probes; Optional JSON logging; New README format |
-| 1.0.2 | Nov 6, 2017  | >= 1.6 | >= MQ 9.0.3.0 | None | Updates for MQ 9.0.4.0 |
-| 1.0.1 | Oct 25, 2017 | >= 1.6 | MQ 9.0.3.0    | None | Initial version |
+- Fixed error in service selector for helm tests.
 
-# Upgrading to Version 2.0.1
+# Prerequisites
 
-Note: if you have already attempted to upgrade to Version 2.0.0 or 2.0.1 (without following these instructions), then you will need to perform additional steps to complete a successful upgrade.
+Note: if you have already attempted to upgrade to Version 2.0.0, 2.0.1 or 2.0.2 (without following these instructions), then you will need to perform additional steps to complete a successful upgrade.
 
 - If your attempted upgrade failed, then you can follow the upgrade instructions to upgrade your release.
 
@@ -33,7 +25,9 @@ Note: if you have already attempted to upgrade to Version 2.0.0 or 2.0.1 (withou
     kubectl delete pvc $NEW_PVC_NAME
     ```
 
-## Upgrade Instructions
+# Documentation
+
+## Upgrading to Version 2.0.2
 
 To perform these instructions you will need to have permissions to modify the PersistentVolume (PV) for your release. This is required to update the “Reclaim Policy” and "Claim Reference" in steps 2, 7 and 12.
 
@@ -127,13 +121,13 @@ Note: You may experience upgrade issues if you have a long release name (25+ cha
   kubectl create -f pvc-new.yaml
   ```
 
-10. Install the Version 2.0.1 Chart
+10. Install the Version 2.0.2 Chart
 
   ```sh
   helm install --name $RELEASE -f user-supplied-values.yaml [CHART]
   ```
 
-  > Where [CHART] is the Version 2.0.1 chart in your Helm repository.
+  > Where [CHART] is the Version 2.0.2 chart in your Helm repository.
 
 11. Validate upgrade
 
@@ -144,3 +138,16 @@ Note: You may experience upgrade issues if you have a long release name (25+ cha
   ```sh
   kubectl patch pv $PV_NAME -p '{"spec":{"persistentVolumeReclaimPolicy":"'$PV_POLICY'"}}'
   ```
+
+# Version History
+
+| Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
+| ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 2.0.2 | August 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Fixed error in service selector for helm tests |
+| 2.0.1 | July 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Reverted statefulset to apps/v1beta2 to prevent deletion failures |
+| 2.0.0 | July 2018    | >= 1.9 | = MQ 9.1.0.0  | New Kubernetes resource names and labels | Added metrics service |
+| 1.3.0 | May 2018     | >= 1.6 | = MQ 9.0.5.0  | None | Added POWER and z/Linux support |
+| 1.2.1 | Apr 30, 2018 | >= 1.6 | >= MQ 9.0.4.0 | None | README fixes |
+| 1.2.0 | Apr 3, 2018  | >= 1.6 | >= MQ 9.0.4.0 | None | Added liveness and readiness probes; Optional JSON logging; New README format |
+| 1.0.2 | Nov 6, 2017  | >= 1.6 | >= MQ 9.0.3.0 | None | Updates for MQ 9.0.4.0 |
+| 1.0.1 | Oct 25, 2017 | >= 1.6 | MQ 9.0.3.0    | None | Initial version |
