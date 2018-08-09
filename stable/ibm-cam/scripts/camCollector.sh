@@ -75,7 +75,7 @@ collectDiagnosticsData() {
     echo "**********************************************************"
     echo -e "\n"
 
-    getDeployedCAMChartsResult=$(helm list --short --tls | grep -i cam)
+    getDeployedCAMChartsResult=$(helm list --tls | grep ibm-cam | awk '{ print $1 }')
     echo "Getting status for the following deployed CAM HELM charts"
     echo "-----------------------------------------------------------"
     echo "${getDeployedCAMChartsResult}"
@@ -117,7 +117,7 @@ collectDiagnosticsData() {
     echo "**********************************************************"
     echo -e "\n"
 
-    getPersistentVolumeClaimsResult=$(kubectl get persistentvolumeclaims --namespace=$services_ns --output=name | sed s/"persistentvolumeclaims\/"/""/)
+    getPersistentVolumeClaimsResult=$(kubectl get persistentvolumeclaims --namespace=$services_ns -o custom-columns=NAME:.metadata.name --no-headers)
     echo "Running DESCRIBE for the following Persistent Volume Claims"
     echo "-----------------------------------------------------------"
     echo "${getPersistentVolumeClaimsResult}"
@@ -153,7 +153,7 @@ collectDiagnosticsData() {
     echo "**********************************************************"
     echo -e "\n"
 
-    getCAMPodsResult=$(kubectl get pods --namespace=$services_ns --output=name | sed s/"pods\/"/""/)
+    getCAMPodsResult=$(kubectl get pods --namespace=$services_ns -o custom-columns=NAME:.metadata.name --no-headers)
     echo "Running DESCRIBE for the following pods"
     echo "---------------------------------------"
     echo "${getCAMPodsResult}"
@@ -174,7 +174,7 @@ collectDiagnosticsData() {
         echo "Downloading logs from pod ${camPodName}"
         if [[ $camPodName = *"mongo"* ]] || [[ $camPodName = *"redis"* ]]; then
             kubectl cp ${camPodName}:/var/log/ ${cam_diagnostic_data_folder}/${camPodName} --namespace=$services_ns 2>&1
-        else
+        elif [[ $camPodName = "cam-"* ]]; then
             kubectl cp ${camPodName}:/var/camlog/${camPodName} ${cam_diagnostic_data_folder}/${camPodName} --namespace=$services_ns 2>&1
         fi        
         echo "Successfully downloaded logs from pod ${camPodName}"
@@ -192,7 +192,7 @@ collectDiagnosticsData() {
     echo "**********************************************************"
     echo -e "\n"
     
-    getPodsResult=$(kubectl get pods --namespace=$kubesystem_ns --output=name | sed s/"pods\/"/""/)
+    getPodsResult=$(kubectl get pods --namespace=$kubesystem_ns -o custom-columns=NAME:.metadata.name --no-headers)
     echo "Running DESCRIBE for the following pods"
     echo "---------------------------------------"
     echo "${getPodsResult}"
