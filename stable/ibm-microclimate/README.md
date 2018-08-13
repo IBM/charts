@@ -118,7 +118,7 @@ The chart parameter `jenkins.Pipeline.TargetNamespace` defines the the namespace
 
 ```
 kubectl create secret docker-registry microclimate-registry-secret \
-  --namespace=microclimate-pipeline-deployments
+  --namespace=microclimate-pipeline-deployments \
   --docker-server=mycluster.icp:8500 \
   --docker-username=admin \
   --docker-password=admin \
