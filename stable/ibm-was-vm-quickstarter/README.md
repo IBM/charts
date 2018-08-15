@@ -49,6 +49,7 @@ All WebSphere virtual machines are pooled at the small size. When a user provisi
    * To migrate existing applications to WAS VM Quickstarter, additional configuration is needed. For more information, see [Migrating applications to WAS VM Quickstarter](http://ibm.biz/WASQuickstarterMigration).
 1. [Set up the Cloud Automation Manager Content Runtime VM](http://ibm.biz/WASQuickstarterContentRuntime).
 1. [Register the WAS VM Quickstarter console](http://ibm.biz/WASQuickstarterOperations#registering-the-was-vm-quickstarter-console-with-iam) with the Identity and Access Management (IAM) component.
+1. [Initialize resource pools](http://ibm.biz/WASQuickstarterOperations#initializing-resource-pools).
 1. Test your setup by running the provided [installation verification test script](http://ibm.biz/WASQuickstarterOperations#ivtsh). If the script runs successfully, your WAS VM Quickstarter setup is complete!
 
 After you set up the WAS VM Quickstarter service, your WebSphere developers can begin creating WAS service instances from the service management console. To find the URL to the console, in the IBM Cloud Private user interface, go to **Workloads > Helm Releases** and select the deployment. Under the **Notes** section, copy the commands under _Console address_ and paste them into a command window.
@@ -78,7 +79,7 @@ The Helm chart deploys the following components:
 * Ingresses for the `wasaas-console` and `wasaas-broker` pods.
 
 
-## Chart Prerequisites
+## Prerequisites
 The following prerequisites apply only to deploying the Helm chart. For a detailed list of system installation prerequisites, see [WAS VM Quickstarter Prerequisites](http://ibm.biz/WASQuickstarterPrerequisites).
 
 ### Persistent Volumes
@@ -128,6 +129,10 @@ Setting up the migration volume requires additional steps. For more information,
 
 For information about creating persistent volumes by using the user interface, see [Creating a PersistentVolume](https://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0.3/manage_cluster/create_volume.html) in the IBM Cloud Private documentation. Use the corresponding values from the YAML example
 
+## Resources Required
+
+For a detailed list of required system resources such as CPU, memory, and disk space, see [WAS VM Quickstarter Prerequisites](http://ibm.biz/WASQuickstarterPrerequisites#operational-prerequisites).
+
 ## Installing the Chart
 
 To install the chart with the release name `my-release`:
@@ -165,7 +170,6 @@ The following tables lists the configurable parameters of the `ibm-was-vm-quicks
 | -----------------------    | ---------------------------------------------   | ------------------------------------- |
 | `broker.image.repository`       | WAS VM Quickstarter broker Docker image repository. | `ibmcom/wasaas-wasdevaas`  |
 | `broker.image.tag`              | WAS VM Quickstarter broker Docker image tag.  |  `1.0` |
-| `broker.service.port`           | WAS VM Quickstarter broker service port.  |  `4444` |
 | `broker.ingress.path`           | WAS VM Quickstarter broker ingress path.  | `/wasaas-broker/`  |
 | `broker.username`               | Functional user name for WAS VM Quickstarter broker application.  | `wasaasbroker`  |
 | `broker.password`               | Password for the functional user name for WAS VM Quickstarter broker application.  | `""`  |
@@ -184,16 +188,13 @@ The following tables lists the configurable parameters of the `ibm-was-vm-quicks
 | `cloudsm.capacity`              | Resource capacity in [service blocks](#resource-management). | `10` |
 | `cloudsm.image.repository`      | WAS VM Quickstarter service management Docker image repository. | `ibmcom/wasaas-cloudsm`  |
 | `cloudsm.image.tag`             | WAS VM Quickstarter service management Docker image tag.  |  `1.0` |
-| `cloudsm.frontend.service.port` | WAS VM Quickstarter service management service port  |  `4443` |
 | `cloudsm.username`              | Functional user name for WAS VM Quickstarter service management applications.  | `wasaasservice`  |
 | `cloudsm.password`              | Password for the functional user name for WAS VM Quickstarter service management applications.  | `""`  |
 | `console.image.repository`      | WAS VM Quickstarter Console Docker image repository. | `ibmcom/wasaas-console`  |
 | `console.image.tag`             | WAS VM Quickstarter console Docker image tag.  |  `1.0` |
-| `console.service.port`          | WAS VM Quickstarter console service port  |  `4445` |
 | `console.ingress.path`          | WAS VM Quickstarter console ingress path  | `/wasaas-console/`  |
 | `couchdb.image.repository`      | WAS VM Quickstarter CouchDB Docker image repository. | `couchdb`  |
 | `couchdb.image.tag`             | WAS VM Quickstarter CouchDB Docker image tag.  |  `2.2.1` |
-| `couchdb.service.port`          | WAS VM Quickstarter CouchDB service port.  |  `6984` |
 | `couchdb.adminUsername`         | WAS VM Quickstarter CouchDB administrator user name.  | `admin`  |
 | `couchdb.adminPassword`         | WAS VM Quickstarter CouchDB administrator password.  | `""`  |
 | `couchdb.persistentVolume.useDynamicProvisioning` | Indicates whether to use dynamic provisioning.  |  `false` |
@@ -234,9 +235,8 @@ To prepare for General Data Protection Regulation (GDPR) readiness, review the i
 
 ## Limitations
 - You can deploy the Helm chart multiple times by using different Helm releases.  If you target the same Cloud Automation Manager and vSphere environments, care must be given to set the capacity and IP addresses to not collide with other instances of the WAS VM Quickstarter service.
-
 - The WAS VM Quickstarter Helm chart must be installed in the `default` namespace.
-
+- The migration feature supports only Red Hat Enterprise Linux (RHEL) target guest VMs. Ubuntu VMs are not supported.
 
 ## Documentation
 

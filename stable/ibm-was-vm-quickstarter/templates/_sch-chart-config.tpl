@@ -19,16 +19,20 @@ sch:
         name: "devops"
       broker:
         name: "broker"
+        servicePort: "4444"
       cloudsmBackend:
         name: "cloudsm-backend"
       cloudsmFrontend:
         name: "cloudsm-frontend"
+        servicePort: "4443"
       cloudsmCommon:
         name: "cloudsm-common"
       console:
         name: "console"
+        servicePort: "4445"
       couchdb:
         name: "couchdb"
+        servicePort: "6984"
       common:
         name: "common"
         registryName: "registry"

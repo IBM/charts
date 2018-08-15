@@ -43,9 +43,19 @@ The chart deploys pods that consume minimum resources as specified in the resour
 
 1. Install Istio’s [Custom Resource Definitions](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/#customresourcedefinitions) via `kubectl apply`, and wait a few seconds for the CRDs to be committed in the kube-apiserver:
    ```
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/templates/crds.yaml
+   ```
+   
+   or if you have downloaded the chart locally:
+   ```
    $ kubectl apply -f ../ibm-istio/templates/crds.yaml
    ```
    **Note**: If you are enabling `certmanager`, you also need to install its CRDs and wait a few seconds for the CRDs to be committed in the kube-apiserver:
+   ```
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/charts/certmanager/templates/crds.yaml
+   ```
+   
+   or if you have downloaded the chart locally:
    ```
    $ kubectl apply -f ../ibm-istio/charts/certmanager/templates/crds.yaml
    ```

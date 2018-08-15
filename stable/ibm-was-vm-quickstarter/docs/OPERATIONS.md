@@ -5,6 +5,7 @@ To administer the WAS VM Quickstarter service, a number of scripts are provided 
 | Script Name |  Function |  Location  |
 | ------------- | --------- | --------- |
 | [collect_logs.sh](#collect_logssh) | This script gathers logs from WAS VM Quickstarter pods and other components.| `/wasaas/bin/` |
+| [get_db_docs.py](#get_db_docspy) | This script dumps resources from the WAS VM Quickstarter CouchDB database. | `/wasaas/bin/` |
 | [idauth.py](#idauthpy) | This script helps create, read, or delete client IDs that are used to enable OAuth. | `/wasaas/bin/` |
 | [ivt.sh](#ivtsh) | This script runs a basic test against WAS VM Quickstarter REST APIs to validate the service is behaving properly. | `/wasaas/test/` |
 | [provision.py](https://ibm.biz/WASQuickstarterContentRuntime#provisionpy) | This script provisions a Cloud Automation Manager Content Runtime VM. See [Setting Up the Content Runtime](https://ibm.biz/WASQuickstarterContentRuntime).| `/wasaas/content-runtime/` |
@@ -34,6 +35,18 @@ To register the WAS VM Quickstarter console with IAM, perform the following step
   1. [Access the `wasaas-devops` container](#accessing-the-scripts-in-the-wasaas-devops-container).
   1. Run the `/wasaas/bin/register_console.sh` command.
 
+
+### Initializing Resource Pools
+
+As part of the initial WAS VM Quickstarter installation, you will also need to initialize the resource pools. Resource pools are used to pool VM instances in order to provide a quick provisioning experience for the service users.
+
+To initialize the resource pools, perform the following steps:
+
+  1. [Access the `wasaas-devops` container](#accessing-the-scripts-in-the-wasaas-devops-container).
+  1. Run the `/wasaas/bin/wasaas.py init-pools` command.
+  1. Verify that pools are initialized by running the `/wasaas/bin/wasaas.py get-pools` command. The output should show 12 pools and their initial status.
+
+
 ### Collecting Troubleshooting Data
 
 To collect troubleshooting data for problem determination, complete the following steps:
@@ -54,7 +67,7 @@ To collect troubleshooting data for problem determination, complete the followin
 
 _Description_: Gathers WAS VM Quickstarter logs
 
-_Instructions_: Run using the command `./collect_logs.sh`
+_Instructions_: Run using the command `collect_logs.sh`
 
 _Environment Variables_:
 
@@ -63,6 +76,35 @@ _Environment Variables_:
 _Behavior_: This script gathers the logs from various WAS VM Quickstarter components.
 
 Individual logs are stored in the `/wassaas/logs/<timestamp>` directory, and the script creates a `/wassaas/logs/<timestamp>.zip` file that contains all the log files. The _<timestamp\>_ value corresponds to the date and time when the script was run.
+
+### get_db_docs.py
+
+_Description_: Gather and dump individual or all resources from the WAS VM Quickstarter CouchDB database.
+
+_Instructions_: Run using the command `get_db_docs.py <command> <options>` from any location within the `wasaas-devops` container.
+
+_Available commands_:
+
+**list**
+
+Summary: Prints all CouchDB database resource names.
+
+Usage: `get_db_docs.py list`
+
+**dump**
+
+Summary: Dumps CouchDB database resources to a file or standard output.
+
+Usage: `get_db_docs.py dump [options] [resource_name]`
+
+Where `[options]` are:
++ `-o`, `--output <file>` Write contents to the specified file instead of `couchdb-dump.json`. If `-` is used as `<file/>`, the contents will be printed to standard output.
+
+Examples:
+  * Dump all resources to the `couchdb-dump.json` file: `get_db_docs.py dump`
+  * Dump all resources to the `couchdb.json` file: `get_db_docs.py dump -o couchdb.json`
+  * Dump a single resource to standard output: `get_db_docs.py dump -o - resource:00d01dc0-125e-4375-aafc-3bedfb7c6a24`
+
 
 ### idauth.py
 
@@ -79,13 +121,13 @@ _Available commands_:
 
 Summary: List all registered client IDs
 
-Usage: `./idauth.py list`
+Usage: `idauth.py list`
 
 **create**
 
 Summary: Create a client ID and secret
 
-Usage: `./idauth.py create <clientID> <clientSecret> <redirectUrl1> [redirectUrlN]`
+Usage: `idauth.py create <clientID> <clientSecret> <redirectUrl1> [redirectUrlN]`
  * `clientID` is `wasaas-broker`
  * `clientSecret` is the secret for the given clientID
  * `redirectUrlN` is a list of redirect URIs. For example, `https://<proxy_ip>:/wasaas-console/iamcallback`
@@ -94,15 +136,16 @@ Usage: `./idauth.py create <clientID> <clientSecret> <redirectUrl1> [redirectUrl
 
 Summary: Get a client ID
 
-Usage: `./idauth.py get <clientID>`
+Usage: `idauth.py get <clientID>`
   * `clientID` is the name of the client ID you want to get
 
 **delete**
 
 Summary: Delete a client ID
 
-Usage: `./idauth.py delete <clientID>`
+Usage: `idauth.py delete <clientID>`
   * `clientID` is the name of the client ID you want to delete
+
 
 ### ivt.sh
 
@@ -119,6 +162,7 @@ _Description_:  Registers the WAS VM Quickstarter console with the IBM Private C
 
 _Instructions_: See [Registering the WAS VM Quickstarter Console with IAM](#registering-the-was-vm-quickstarter-console-with-iam).
 
+
 ### wasaas.py
 
 _Description_: This script includes a set of commands to use and administer the WAS VM Quickstarter service.
@@ -131,13 +175,18 @@ _Available commands_:
 
 Summary: Creates a WebSphere Application Server service instance of the desired configuration.
 
-Usage: `wasaas.py create Name <LibertyCollective|LibertyCore|LibertyNDServer|WASBase|WASCell|WASNDServer> [options]`
+Usage: `wasaas.py create [options] Name <LibertyCollective|LibertyCore|LibertyNDServer|WASBase|WASCell|WASNDServer>`
 
 Where `[options]` are:
 + `-v` Product level (`9.0.0`, `8.5.5`, `18.0.0.1`)
 + `-a` Application server VM size (`S`, `M`, `L`, `XL`, `XXL`), defaults to `S`
 + `-n` Number of application server nodes (only for `LibertyCollective` & `WASCell`)
 + `-c` Control server VM size (`S`, `M`, `L`, `XL`, `XXL`)
+
+Examples:
+
+  * Create a single Liberty Core instance: `wasaas.py create myLiberty LibertyCore`
+  * Create WebSphere v9 cell: `wasaas.py create -c S -n 1 myCell WASCell`
 
 **get**
 
@@ -149,7 +198,10 @@ Usage: `wasaas.py get ServiceInstanceID`
 
 Summary: Release a service instance by service instance ID.
 
-Usage: `wasaas.py delete ServiceInstanceID`
+Usage: `wasaas.py delete [options] ServiceInstanceID [ServiceInstanceID_N]`
+
+Where `[options]` are:
++ `-f` Force deletion without confirmation
 
 **list**
 
@@ -169,11 +221,32 @@ Summary: Enable or disable a feature for the current environment.
 
 Usage: `wasaas.py set-feature FeatureName <public|private|disabled>`
 
+**clean-pools**
+
+Summary: Delete pooled resources.
+
+Usage: `wasaas.py clean-pools [options]`
+
+Where `[options]` are:
++ `-a` Delete all pooled resources
++ `-f` Force deletion without confirmation
+
+Examples:
+
+  * Delete all failed resources in pools: `wasaas.py clean-resources`
+  * Delete all resources in pools: `wasaas.py clean-resources -a`
+
 **get-pools**
 
 Summary: Get information about the resource pools.
 
 Usage: `wasaas.py get-pools`
+
+**init-pools**
+
+Summary: Initialize resource pools.
+
+Usage: `wasaas.py init-pools`
 
 **set-pools**
 
@@ -208,4 +281,7 @@ Examples:
 
 Summary: Delete a resource by resource ID
 
-Usage: `wasaas.py delete-resource ResourceID`
+Usage: `wasaas.py delete-resource [options] ResourceID [ResourceId_N]`
+
+Where `[options]` are:
++ `-f` Force deletion without confirmation
