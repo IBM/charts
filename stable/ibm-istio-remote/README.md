@@ -82,6 +82,7 @@ The `istio-remote` helm chart requires the four specific variables to be configu
 | `global.dedicated` | Specifies whether to deploy to dedicated node with taint `dedicated=:NoSchedule`(effective only on IBM Cloud Private) | true/false | `true` |
 | `global.extraNodeSelector` | Specifies customized node selector for all components | valid node selector | {} |
 | `global.arch.amd64`| Architecture preference for amd64 node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
+| `global.arch.ppc64le` | Architecture preference for ppc64le node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
 | `sidecarinjectorwebhook.enabled` | Specifies whether the Automatic Sidecar Injector should be installed | true/false | `true` |
 | `sidecarinjectorwebhook.replicaCount` | Specifies number of desired pods for Automatic Sidecar Injector Webhook | number | `1` |
 | `sidecarinjectorwebhook.enableNamespacesByDefault` | Specifies use the default namespaces for Automatic Sidecar Injector Webhook | true/false | `false` |

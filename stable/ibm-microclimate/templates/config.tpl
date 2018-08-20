@@ -171,7 +171,7 @@ data:
           <namespace>{{ .Release.Namespace }}</namespace>
           <jenkinsUrl>http://{{ template "jenkins.fullname" . }}:{{.Values.Master.ServicePort}}{{ default "" .Values.Master.JenkinsUriPrefix }}</jenkinsUrl>
           <jenkinsTunnel>{{ template "jenkins.fullname" . }}-agent:50000</jenkinsTunnel>
-          <containerCap>10</containerCap>
+          <containerCap>50</containerCap>
           <retentionTimeout>5</retentionTimeout>
           <connectTimeout>0</connectTimeout>
           <readTimeout>0</readTimeout>
@@ -200,7 +200,7 @@ data:
               <default>
                 <comparator class="hudson.util.CaseInsensitiveComparator"/>
               </default>
-              <int>10</int>
+              <int>11</int>
               <string>BUILD</string>
               <string>{{ .Values.Pipeline.Build }}</string>
               <string>DEPLOY</string>
@@ -221,6 +221,8 @@ data:
               <string>{{ .Values.Pipeline.Registry.Secret }}</string>
               <string>SERVICE_ACCOUNT_NAME</string>
               <string>{{ .Values.rbac.serviceAccountName }}</string>
+              <string>RELEASE_NAME</string>
+              <string>{{ .Release.Name | replace "-" "_" }}</string>
             </tree-map>
           </envVars>
         </hudson.slaves.EnvironmentVariablesNodeProperty>
@@ -271,10 +273,10 @@ data:
     mkdir -p /var/jenkins_home/users/admin;
     cp -n /var/jenkins_config/user_config.xml /var/jenkins_home/users/admin/config.xml;
 {{- end }}
-    cp  /var/plugins/* /usr/share/jenkins/ref/plugins
+    cp  /var/plugins/* /var/jenkins_plugins
 {{- if .Values.Master.InstallPlugins }}
     cp /var/jenkins_config/plugins.txt /var/jenkins_home;
-    rm -rf /usr/share/jenkins/ref/plugins/*.lock
+    rm -rf /var/jenkins_plugins/*.lock
     /usr/local/bin/install-plugins.sh `echo $(cat /var/jenkins_home/plugins.txt)`;
 {{- end }}
 {{- if .Values.Master.ScriptApproval }}

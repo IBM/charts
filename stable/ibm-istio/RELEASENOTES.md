@@ -1,4 +1,4 @@
-# What's new in Chart Version 1.0.1
+# What's new in Chart Version 1.0.2
 
 We’re proud to release Istio 1.0! Istio has been in development for nearly two years, and the 1.0 release represents a substantial milestone for us. All of our [core features](https://istio.io/about/feature-stages/) are now ready for production use.
 
@@ -47,9 +47,9 @@ These release notes describe what’s different between Istio 0.8 and Istio 1.0.
 ```
 $ helm install ../ibm-istio --name istio-gateways --namespace istio-system -f ./additionalFiles/values-istio-gateways.yaml
 ```
-
 **Note**: You can customize the values in `gateways` section of the file, but make sure the values you specified should not conflict with the ones for existing gateways.
 
+- Add support for ppc64le architecture. Now you can run Istio control plane and data plane on nodes with power platform.
 
 # Prerequisites
 
@@ -64,7 +64,8 @@ $ helm install ../ibm-istio --name istio-gateways --namespace istio-system -f ./
 # Version History
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
-| ----- | ---- | --------------------------- | ------------------ | ---------------- | ------- | 
+| ----- | ---- | --------------------------- | ------------------ | ---------------- | ------- |
+| 1.0.2 | Aug 13, 2018| >= 1.9  | ibmcom/istio-proxyv2:1.0.0 ibmcom/istio-proxy_init:1.0.0 ibmcom/kubectl:v1.10.0 ibmcom/istio-grafana:1.0.0 ibmcom/istio-citadel:1.0.0 ibmcom/istio-galley:1.0.0 ibmcom/istio-mixer:1.0.0 ibmcom/istio-servicegraph:1.0.0 ibmcom/istio-pilot:1.0.0 ibmcom/istio-sidecar_injector:1.0.0 ibmcom/prom-statsd-exporter:v0.6.0 ibmcom/prometheus:v2.3.1 ibmcom/jaegertracing-all-in-one:1.5 ibmcom/kiali:v0.5.0 ibmcom/cert-manager:v0.3.1  | None | new architectural support |
 | 1.0.1 | Aug 3, 2018| >= 1.9  | ibmcom/istio-proxyv2:1.0.0 ibmcom/istio-proxy_init:1.0.0 ibmcom/kubectl:v1.10.0 ibmcom/istio-grafana:1.0.0 ibmcom/istio-citadel:1.0.0 ibmcom/istio-galley:1.0.0 ibmcom/istio-mixer:1.0.0 ibmcom/istio-servicegraph:1.0.0 ibmcom/istio-pilot:1.0.0 ibmcom/istio-sidecar_injector:1.0.0 ibmcom/prom-statsd-exporter:v0.6.0 ibmcom/prometheus:v2.3.1 ibmcom/jaegertracing-all-in-one:1.5 ibmcom/kiali:v0.5.0 ibmcom/cert-manager:v0.3.1  | None | new features and architectural improvement |
 | 1.0.0 | July 31, 2018| >= 1.9  | ibmcom/istio-proxyv2:1.0.0 ibmcom/istio-proxy_init:1.0.0 ibmcom/kubectl:v1.10.0 ibmcom/istio-grafana:1.0.0 ibmcom/istio-citadel:1.0.0 ibmcom/istio-galley:1.0.0 ibmcom/istio-mixer:1.0.0 ibmcom/istio-servicegraph:1.0.0 ibmcom/istio-pilot:1.0.0 ibmcom/istio-sidecar_injector:1.0.0 ibmcom/prom-statsd-exporter:v0.6.0 ibmcom/prometheus:v2.3.1 ibmcom/jaegertracing-all-in-one:1.5 ibmcom/kiali:v0.5.0 ibmcom/cert-manager:v0.3.1  | None | new features and architectural improvement |
 | 0.8.0 | June 1, 2018| >= 1.9  | ibmcom/istio-proxy:0.8.0 ibmcom/istio-proxyv2:0.8.0 ibmcom/istio-proxy_init:0.8.0 ibmcom/kubectl:v1.10.0 ibmcom/istio-grafana:0.8.0 ibmcom/istio-citadel:0.8.0 ibmcom/istio-mixer:0.8.0 ibmcom/istio-servicegraph:0.8.0 ibmcom/istio-pilot:0.8.0 ibmcom/istio-sidecar_injector:0.8.0 ibmcom/prom-statsd-exporter:v0.5.0 ibmcom/prometheus:v2.0.0 ibmcom/jaegertracing-all-in-one:1.5 | None | new features and architectural improvement |

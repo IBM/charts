@@ -26,6 +26,14 @@ This chart will do the following:
 - Already have `calico` provisioned and running in your Kubernetes cluster
 - Already have the `BIG-IP device` added as a Calico BGP Global Peer to the Calico Node Mesh
 
+## Resources Required
+
+The k8s-bigip-ctlr container has the following default resource requests and limits:
+
+| Container                  | Memory Request        | Memory Limit          | CPU Request           | CPU Limit             |
+| -----------------------    | ------------------    | ------------------    | ------------------    | ------------------    |
+| k8s-bigip-ctlr             | 128Mi                 | 256Mi                 | 100m                  | 200m                  |
+
 ## Installing the Chart
 
 You should create a new partition on your BIG-IP system. The BIG-IP Controller can not manage objects in the `/Common` partition.
@@ -80,7 +88,7 @@ The following table lists the configurable parameters of the F5 BIG-IP Controlle
 | `bigIp.nodeLabelSelector`    | Tells the k8s-bigip-ctlr to watch only nodes with this label | `nil`			|
 | `bigIp.extraArgs`            | Rest of the k8s-bigip-ctlr options. Provide a map in the form of {"key":"val", ...}	| {}	|
 | `image.repository`           | `k8s-bigip-ctlr` image repository  		    | `f5networks/k8s-bigip-ctlr`                         |
-| `image.tag`                  | `k8s-bigip-ctlr` image tag  		    | `1.4.2`                                    |
+| `image.tag`                  | `k8s-bigip-ctlr` image tag  		    | `1.6.0`                                    |
 | `image.pullPolicy`           | Image pull policy                          | `IfNotPresent`                              |
 | `nodeSelector`       	       | Constrain the controller to only be able to run on particular node| `{}`                              |
 | `tolerations`                | Schedule controller onto a node with matching taints| `[]`                                      |

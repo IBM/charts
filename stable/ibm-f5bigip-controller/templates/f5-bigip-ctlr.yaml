@@ -12,7 +12,7 @@
 {{- $saName :=  .sch.chart.components.sa.name }}
 {{- $secretName :=  .sch.chart.components.secret.name }}
 {{- $ctlrName :=  .sch.chart.components.ctlr.name }}
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "sch.names.fullCompName" (list . $ctlrName) }}
@@ -29,6 +29,10 @@ spec:
       name: {{ include "sch.names.fullCompName" (list . $ctlrName) }}
       labels:
 {{ include "sch.metadata.labels.standard" (list . $ctlrName) | indent 8 }}
+      annotations:
+        productName: "F5-BIG-IP-Controller"
+        productID: "F5-BIG-IP-Controller_{{ .Values.image.tag }}_free_00000"
+        productVersion: "{{ .Values.image.tag }}"
     spec:
       serviceAccountName: {{ include "sch.names.fullCompName" (list . $saName) }}
 {{- with .Values.nodeSelector }}
@@ -51,11 +55,21 @@ spec:
       tolerations:
 {{ toYaml . | indent 8 }}
 {{- end }}
+      # Run as 'ctlr' user whose uid is 1000
+      securityContext:
+        runAsUser: 1000
       containers:
         - name: k8s-bigip-ctlr
           # Specify the path to your image here
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            limits:
+              memory: {{ .Values.resources.limits.memory }}
+              cpu: {{ .Values.resources.limits.cpu }}
+            requests:
+              memory: {{ .Values.resources.requests.memory }}
+              cpu: {{ .Values.resources.requests.cpu }}
           env:
             # Get sensitive values from the bigip-credentials secret
             - name: BIGIP_USERNAME

@@ -124,6 +124,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `global.dedicated` | Specifies whether to deploy to dedicated node with taint `dedicated=:NoSchedule`(effective only on IBM Cloud Private) | true/false | `true` |
 | `global.extraNodeSelector` | Specifies customized node selector for all components | valid node selector | {} |
 | `global.arch.amd64`| Architecture preference for amd64 node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
+| `global.arch.ppc64le` | Architecture preference for ppc64le node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
 | `ingress.enabled` | Specifies whether Ingress should be installed (deprecated)| true/false | `false` |
 | `ingress.replicaCount` | Specifies number of desired pods for Ingress deployment | number | `1` |
 | `ingress.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |

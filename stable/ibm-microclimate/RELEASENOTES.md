@@ -1,37 +1,43 @@
 # Breaking Changes
 No breaking changes are present in this release
 
-# What’s new in Chart Version 1.4.0
+# What’s new in Chart Version 1.5.0
 
 ## Microclimate
-* Warning added for if the Microclimate backend disconnects
-* Enhanced remote workspace connection with notifications
-* Updated UI to match latest accessibility compliance spec
-* Newly created projects are now set up to dynamically pull in the latest available JDK service release to pick up patches and security fixes.
-* Shutdown of projects is more efficient when you close or log off Microclimate.
-* A new validation step on project import generates any missing files which means a better experience getting your imported projects working in Microclimate.
-
+* Improved support when you import projects that don't already have a Dockerfile.
+* Additional error feedback for Microprofile projects to help diagnose problems with project setup.
+* Improved application status detection in ICP.
+* Updated Theia version to 0.3.13. Includes a new minibrowser for displaying HTML files, and previewer for markdown files.
 
 ## Pipeline
-* *No new changes*
+* Added ability to select from a list of branches during pipeline deployment creation.
+* Enabled user supplied overrides.
+* Added ability to set release name on deployments.
 
 ## Chart
-* *No new changes*
+* Exposed configuration values for microclimate-beacon.
 
 # Fixes
-* Helm chart names no longer need to match the project name
-* Various minor bug and stability fixes
+* Allow a user to delete projects that failed to validate.
+* Deleting the deployment for the last successful build on a branch now also deletes the corresponding Helm release.
+* Fix for bug that prevented retrieving application ports in ICP.
+* Various minor bug and stability fixes.
+* Jenkins job now deletes itself upon completion
 
 
 # Prerequisites
-1. IBM Cloud Private version 2.1.0.3. Installing into 2.1.0.2 may work but is not completely tested
+1. IBM Cloud Private version 2.1.0.3. Installing into 2.1.0.2 may work but is not completely tested.
 
 
-## Upgrading Microclimate to v1.4.0
+## Upgrading Microclimate to v1.5.0
 
-### ...from version v1.3.0
+### ...from version v1.4.0 and v1.3.0
 
-You can upgrade to the v1.4.0 version of the chart from v1.3.0 using Helm upgrade. You should pass the same values into the Helm upgrade command that you initially installed the chart with to ensure configuration remains the same. It is recommended that you retrieve these values and store them for later use by using the following command with your Microclimate release name:
+You can upgrade to the v1.5.0 version of the chart from V1.4.0 or v1.3.0 using Helm upgrade. 
+
+Before doing this, it is possible that completed Microclimate jobs have been left behind on your cluster which may affect the upgrade. These jobs should be deleted before upgrading. To delete any lingering jobs, use `kubectl delete jobs -n services -l release=<releaseName>` where `<releaseName>` is the name of your Microclimate Helm release.
+
+You should pass the same values into the Helm upgrade command that you initially installed the chart with to ensure configuration remains the same. It is recommended that you retrieve these values and store them for the upgrade by using the following command with your Microclimate release name:
 
 `helm get values <release-name> > values.yaml`
 
@@ -145,6 +151,7 @@ For detailed installation instructions go to https://microclimate-dev2ops.github
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.5.0 | Aug 20, 2018 | 1.10.0, 1.9.1 | 1808 | None | Various fixes and improvements |
 | 1.4.0 | July 20, 2018 | 1.10.0, 1.9.1 | 1807 | None | Logout implemented, various small fixes and improvements |
 | 1.3.0 | June 29, 2018 | 1.10.0, 1.9.1 | 1806 | Multi-user support caused changes to the Microclimate PVCs - upgrade will not work  | Various changes and new features |
 | 1.2.1 | June 11, 2018 | 1.10.0, 1.9.1 | 1805 | Upgrading from versions v1.1.x requires additional steps for project migration | ICP 2.1.0.2 fixes |
