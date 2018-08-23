@@ -1,0 +1,78 @@
+{{- if .Values.client.enabled }}
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-client
+  labels:
+    app: {{ template "name" . }}
+    release: {{ .Release.Name }}
+    role: client
+    chart: "{{ .Chart.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "name" . }}
+      release: {{ .Release.Name }}
+      role: client
+      chart: "{{ .Chart.Name }}"
+      heritage: "{{ .Release.Service }}"
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}
+        release: "{{ .Release.Name }}"
+        chart: "{{ .Chart.Name }}"
+        heritage: "{{ .Release.Service }}"
+        role: client
+      annotations:
+        productName: "IBM Spectrum Symphony CE"
+        productID: "IBMSpectrumSymphony_5725G86_CE"
+        productVersion: {{ .Values.cluster.productVersion }}
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          tty: true
+          resources:
+{{ toYaml .Values.client.resources | indent 12 }}
+          env:
+            - name: LICENSE
+              value: "accept"
+            - name: HOST_ROLE
+              value: "CLIENT"
+            {{- if .Values.cluster.generateClusterAdminPassword }}
+            - name: GENERATE_PASSWORD
+              value: "Y"
+            {{- end }}
+          securityContext:
+            capabilities:
+              add:
+                - SYS_NICE
+                - NET_BIND_SERVICE
+          volumeMounts:
+            - mountPath: /shared
+              name: persistdir
+          livenessProbe:
+            exec:
+              command:
+              - /bin/true
+          readinessProbe:
+            exec:
+              command:
+              - /bin/true
+      volumes:
+        - name: persistdir
+          persistentVolumeClaim:
+          {{- if .Values.cluster.pvc.existingClaimName }}
+            claimName: {{ .Values.cluster.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}
+          {{- end }}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+{{- end }}

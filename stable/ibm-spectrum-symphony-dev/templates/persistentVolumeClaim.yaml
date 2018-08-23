@@ -1,0 +1,32 @@
+{{- if (not .Values.cluster.pvc.existingClaimName) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "name" . }}
+    release: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  {{- if .Values.cluster.pvc.useDynamicProvisioning }}
+  # if present, use the storageClassName from the values.yaml, else use the
+  # default storageClass setup by kubernetes Administrator
+  # setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.cluster.pvc.storageClassName | quote }}
+  {{- else }}
+  # bind to an existing pv.
+  # setting storageClassName to "" disables dynamic provisioning
+  storageClassName: {{ default "" .Values.cluster.pvc.storageClassName | quote }}
+  {{- if .Values.cluster.pvc.selector.label }}
+  selector:
+    matchExpressions:
+      - {key: {{ .Values.cluster.pvc.selector.label }}, operator: In, values: [{{ .Values.cluster.pvc.selector.value }}]}
+  {{- end }}
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ .Values.cluster.pvc.size | quote }}
+{{- end }}

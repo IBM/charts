@@ -23,5 +23,9 @@ additional configuration values used by the Shared Liberty Templates.
 slt:
   paths:
     wlpInstallDir: "/opt/ibm/wlp"
+  product:
+    id: "IBMWebSphereLiberty_5724J08_18002_151_00000"
+    name: "IBM WebSphere Application Server Liberty"
+    version: "18.0.0.2"
 {{- end -}}
 

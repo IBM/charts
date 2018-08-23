@@ -1,0 +1,234 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+# "Restricted Materials of IBM"
+#
+# Copyright IBM Corp. 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#*******************************************************************************
+
+#
+# @Author Huang, Fuguo (a.k.a Ken) at 29.June.2018
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "fullname" . }}-env-var-script
+  annotations:
+    "helm.sh/hook-weight": "-116" # -110 to -119 env-var weight, lowest weight get run first
+  labels:
+    app: {{ template "fullname" . }}-env-var-script # must be no more than 63 characters
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+data:
+  create-env-var-script.sh: |
+    #!/bin/bash
+
+    max_retry=20
+
+    # ------ create RSA key ------
+    rm -rf api_key_rsa*
+
+    ssh-keygen -q -f ./api_key_rsa -P kenpass -t rsa -b 2048
+
+    API_KEY_RSA_FINGER_PRINT=`ssh-keygen -l -f ./api_key_rsa | awk '{print $2}' | base64 | awk '{$1=$1;print}'`
+
+    echo "RSA finger print created."
+
+    retry=1
+    # if the character-wise length of the API_KEY_RSA_FINGER_PRINT is not 47
+    while [ ! ${#API_KEY_RSA_FINGER_PRINT} -gt 40 ] && [ $retry -le $max_retry ]
+    do
+      sleep 2s
+      echo "retry to re-creating RSA fingerprint $retry ..."
+
+      # delete the old files
+      rm -rf api_key_rsa*
+
+      ssh-keygen -q -f ./api_key_rsa -P kenpass -t rsa
+
+      API_KEY_RSA_FINGER_PRINT=`ssh-keygen -l -f ./api_key_rsa | awk '{print $2}' | base64 | awk '{$1=$1;print}'`
+
+      # if non empty
+      if [ ${#API_KEY_RSA_FINGER_PRINT} -gt 40 ]
+      then
+        echo "re-creation completed."
+        break;
+      fi
+
+      retry=$(($retry + 1))
+    done
+
+    # ------ replace new secret with RSA fingerprint ------
+
+    TA_ENVIRONMENT_SECRETE_NAME={{ template "fullname" . }}-env-var-secret
+
+    HAS_SECRET=`kubectl get secrets | grep $TA_ENVIRONMENT_SECRETE_NAME | awk '{print $1}'`
+
+    retry=1
+
+    # if non empty
+    if [ ! -z "${HAS_SECRET// }" ]
+    then
+      echo -e "\e[32mFound secret: $HAS_SECRET. \e[0m"
+    else
+      # if empty
+      while [ -z "${HAS_SECRET// }" ] && [ $retry -le $max_retry ]
+      do
+        sleep 2s
+        echo "retry waiting for secret $TA_ENVIRONMENT_SECRETE_NAME to be created $retry ..."
+
+        # validate secret
+        HAS_SECRET=`kubectl get secrets | grep $TA_ENVIRONMENT_SECRETE_NAME | awk '{print $1}'`
+
+        # if non empty
+        if [ ! -z "${HAS_SECRET// }" ]
+        then
+          echo -e "\e[32mFound secret: $HAS_SECRET. \e[0m"
+          break;
+        fi
+
+        retry=$(($retry + 1))
+      done
+      # Error exit
+      if [ $retry -ge $max_retry ]
+      then
+        echo -e "\e[31mError Reached max retry. Failed to find the secret.\e[0m"
+        exit 1
+      fi
+    fi
+
+    {
+      echo 'apiVersion: v1'
+      echo 'kind: Secret'
+      echo 'metadata:'
+      echo "  name: $TA_ENVIRONMENT_SECRETE_NAME"
+      echo "  annotations:"
+      echo '    "helm.sh/hook-weight": "-114"'
+      echo '  labels:'
+      echo "    app: $TA_ENVIRONMENT_SECRETE_NAME"
+      #echo '    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
+      #echo '    release: {{ .Release.Name }}'
+      #echo '    heritage: {{ .Release.Service }}'
+      echo 'data:'
+      echo "  API_KEY_RSA_FINGER_PRINT: $API_KEY_RSA_FINGER_PRINT"
+    } > temp-secret.yaml
+
+    echo "The secret object in configuration will be replaced"
+
+    # replace secret
+    REPLACE_SECRET=`kubectl replace -f ./temp-secret.yaml`
+
+    # validate secret
+    HAS_REPLACE_SECRET=`kubectl get secret $TA_ENVIRONMENT_SECRETE_NAME -o yaml | grep $API_KEY_RSA_FINGER_PRINT`
+
+    # if non empty
+    if [ ! -z "${HAS_REPLACE_SECRET// }" ]
+    then
+      echo -e "\e[32mThe secret object has been replaced. \e[0m"
+    else
+      retry=1
+      # if empty
+      while [ -z "${HAS_REPLACE_SECRET// }" ] && [ $retry -le $max_retry ]
+      do
+        sleep 2s
+        echo "retry to replace the secret $TA_ENVIRONMENT_SECRETE_NAME $retry ..."
+
+        # replace secret
+        REPLACE_SECRET=`kubectl replace -f ./temp-secret.yaml`
+
+        # validate secret
+        HAS_REPLACE_SECRET=`kubectl get secret $TA_ENVIRONMENT_SECRETE_NAME -o yaml | grep $API_KEY_RSA_FINGER_PRINT`
+
+        # if non empty
+        if [ ! -z "${HAS_REPLACE_SECRET// }" ]
+        then
+          echo -e "\e[32mThe secret has been replaced. \e[0m"
+          break;
+        fi
+
+        retry=$(($retry + 1))
+      done
+      # Error exit
+      if [ $retry -ge $max_retry ]
+      then
+        echo -e "\e[31mError Reached max retry. Failed to replace the secret.\e[0m"
+        exit 1
+      fi
+    fi
+
+    # ------ restart Liberty and UI pod ------
+
+    POD_LABELS=({{ template "fullname" . }}-server {{ template "fullname" . }}-ui)
+
+    # for loop over an array
+    for podLabel in "${POD_LABELS[@]}"
+    do
+      # grep pod with the label app=, and no Terminating in it.
+      HAS_POD_CREATED=`kubectl get pod -l app=$podLabel | grep $podLabel | grep -v Terminating | awk '{print $1}'`
+
+      # $HAS_POD_CREATED may return an array of pod names
+      for podName in $HAS_POD_CREATED
+      do
+        _podName="${podName// }"
+
+        # non-empty
+        if [ ! -z $_podName ]
+        then
+
+          echo "Restarting pod $_podName ."
+
+          # delete the pod. example output: pod "ken-server-6c64d9f9c6-zblgm" deleted
+          HAS_POD_DELETE=`kubectl delete pod $_podName --timeout=10s | grep $_podName | awk '{print $3}'`
+
+          sleep 5s
+
+          # verify the pod
+          HAS_POD_CREATED=`kubectl get pod -l app=$podLabel | grep $podLabel | awk '{print $3}' | grep Running | head -n 1`
+
+          # check if image ok
+          HAS_IMAGE=`kubectl get pod -l app=$podLabel | grep $podLabel | awk '{print $3}' | grep ImagePullBackOff | head -n 1`
+
+          if [ ! -z "${HAS_IMAGE// }" ]
+          then
+            echo "ImagePullBackOff error for pod: $_podName."
+            continue
+          fi
+
+          retry=1
+          # if there is response from the delete command, but the third column of the response is not deleted
+          while [ "${HAS_POD_CREATED// }" != "Running" ] && [ "${HAS_POD_DELETE// }" != "deleted" ] && [ $retry -le $max_retry ]
+          do
+            sleep 5s
+            echo "retry to restart the pod $podLabel $retry ..."
+
+            # verify the pod
+            HAS_POD_CREATED=`kubectl get pod -l app=$podLabel | grep $podLabel | awk '{print $3}' | grep -i Running | head -n 1`
+
+            # if non empty
+            if [ ! -z "${HAS_POD_CREATED// }" ] || [ "${HAS_POD_DELETE// }" == "deleted" ]
+            then
+              break;
+            else
+              # delete the pod
+              HAS_POD_DELETE=`kubectl delete pod $_podName --timeout=10s | grep $_podName | awk '{print $3}'`
+            fi
+            retry=$(($retry + 1))
+          done
+
+          # Error exit
+          if [ $retry -ge $max_retry ]
+          then
+            echo -e "\e[31mError Reached max retry. Failed to restart the pod with label $podLabel.\e[0m"
+            exit 1
+          fi
+
+          HAS_POD_CREATED=`kubectl get pod -l app=$podLabel | grep $podLabel | grep -i Running | awk '{print $1}' | head -n 1`
+
+          echo -e "\e[32mAPI Key with length of ${#API_KEY_RSA_FINGER_PRINT} are now reloaded into the environment in pod $HAS_POD_CREATED. \e[0m"
+        fi
+      done
+    done
+

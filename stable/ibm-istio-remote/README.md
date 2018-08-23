@@ -64,7 +64,7 @@ The `istio-remote` helm chart requires the four specific variables to be configu
 | `global.proxyInit.tag` | Specifies the proxy init image version | valid image tag | `1.0.0` |
 | `global.imagePullPolicy` | Specifies the image pull policy | valid image pull policy | `IfNotPresent` |
 | `global.kubectl.repository` | Specifies the kubectl image location | valid image repository | `ibmcom/kubectl` |
-| `global.kubectl.tag` | Specifies the kubectl image version | valid image tag | `v1.10.0` |
+| `global.kubectl.tag` | Specifies the kubectl image version | valid image tag | `v1.11.1` |
 | `global.controlPlaneSecurityEnabled` | Specifies whether control plane mTLS is enabled | true/false | `false` |
 | `global.disablePolicyChecks` | Specifies whether to disables mixer policy checks | true/false | `false` |
 | `global.enableTracing` | Specifies whether to enables the Tracing | true/false | `true` |

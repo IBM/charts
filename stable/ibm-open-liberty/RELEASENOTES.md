@@ -1,14 +1,18 @@
 # What’s new... 
 
-## Latest: Chart Version 1.5.0
+## Latest: Chart Version 1.5.1
+
+Added metering annotations. 
+
+## Older Releases 
+
+### v1.5.0
 
 1. RELEASENOTES.md
 1. Hazelcast session caching 
 1. Host support for Ingress configuration
 1. Protocol support for IIOP and JMS 
 1. Multi-architecture support 
-
-## Older Releases 
 
 ### v1.3.0, v1.4.0
 
@@ -51,3 +55,4 @@ Initial release.  Includes updates for JSON logging.
 | 1.3.0 | N/A          | N/A                         | Skipped this release         |
 | 1.4.0 | N/A          | N/A                         | Skipped this release         |
 | 1.5.0 | Jul 11, 2018 | >=2.1.0.2                   | None                         |
+| 1.5.1 | Aug 22, 2018 | >=2.1.0.2                   | None                         |

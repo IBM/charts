@@ -46,6 +46,11 @@ spec:
     spec:
       affinity:
         {{- include "nodeAffinity" . | indent 6 }}
+      volumes:
+        - name: create-env-var-script
+          configMap:
+            name: {{ template "fullname" . }}-env-var-script
+            defaultMode: 0744
       containers:
         - name: {{ .Chart.Name }}-server
           image: "{{ .Values.transadv.image.repository }}:{{ .Values.transadv.image.tag }}"
@@ -55,7 +60,12 @@ spec:
           ports:
             - containerPort: 9080
               name: server
+          volumeMounts:
+            - name: create-env-var-script
+              mountPath: /scripts
           env:
+            - name: TA_ON_ICP
+              value: "true"
             - name: TA_DB_HOST
               value: http://{{ template "fullname" . }}-couchdb
             - name: TA_DB_PORT
@@ -92,8 +102,13 @@ spec:
               {{- else }}
               value: "true"
               {{- end }}
+            - name: TA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-env-var-secret
+                  key: API_KEY_RSA_FINGER_PRINT
             - name: TA_AUTH_ICP_MASTER_IP
-              value: "{{ .Values.authentication.icp.masterIp }}"
+              value: "{{ .Values.authentication.icp.edgeIp }}"
             - name: TA_AUTH_ICP_ENDPOINT_PORT #8443
               value: "{{ .Values.authentication.icp.endpointPort }}"
             - name: TA_AUTH_OIDC_ENDPOINT_PORT #9443

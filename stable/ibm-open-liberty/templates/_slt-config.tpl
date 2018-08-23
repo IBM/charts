@@ -29,5 +29,9 @@ additional configuration values used by the Shared Liberty Templates.
 slt:
   paths:
     wlpInstallDir: "/opt/ol/wlp"
+  product:
+    id: "OpenLiberty_67365423789_18002_151_00000"
+    name: "Open Liberty"
+    version: "18.0.0.2"
 {{- end -}}
 

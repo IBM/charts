@@ -65,7 +65,63 @@ The chart deploys pods that consume minimum resources as specified in the resour
    $ kubectl create ns istio-system
    ```
 
-3. To install the chart with the release name `istio` in namespace `istio-system`:
+3. If you are using security mode for Grafana, create the secret first as follows:
+   Encode username, you can change the username to the name as you want:
+   ```
+   $ echo -n 'admin' | base64
+   YWRtaW4=
+   ```
+   
+   Encode passphrase, you can change the passphrase to the passphrase as you want:
+   ```
+   $ echo -n '1f2d1e2e67df' | base64
+   MWYyZDFlMmU2N2Rm
+   ```
+   
+   Set the namespace where Istio was installed:
+   ```
+   $ NAMESPACE=istio-system
+   ```
+   
+   Create secret for Grafana:
+   ```
+   $ cat <<EOF | kubectl apply -f -
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: grafana
+     namespace: $NAMESPACE
+     labels:
+       app: grafana
+   type: Opaque
+   data:
+     username: YWRtaW4=
+     passphrase: MWYyZDFlMmU2N2Rm
+   EOF
+   ```
+4. If you are enabling `kiali`, you also need to create the secret that contains the username and passphrase for `kiali` dashboard:
+   ```
+   $ echo -n 'admin' | base64
+   YWRtaW4=
+   $ echo -n '1f2d1e2e67df' | base64
+   MWYyZDFlMmU2N2Rm
+   $ NAMESPACE=istio-system
+   $ cat <<EOF | kubectl apply -f -
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: kiali
+     namespace: $NAMESPACE
+     labels:
+       app: kiali
+   type: Opaque
+   data:
+     username: YWRtaW4=
+     passphrase: MWYyZDFlMmU2N2Rm
+   EOF
+   ```
+
+5. To install the chart with the release name `istio` in namespace `istio-system`:
    - With [automatic sidecar injection](https://istio.io/docs/setup/kubernetes/sidecar-injection/#automatic-sidecar-injection) (requires Kubernetes >=1.9.0):
    ```
    $ helm install ../ibm-istio --name istio --namespace istio-system
@@ -102,7 +158,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `global.proxyInit.repository` | Specifies the proxy init image location | valid image repository | `ibmcom/istio-proxy_init` |
 | `global.proxyInit.tag` | Specifies the proxy init image version | valid image tag | `1.0.0` |
 | `global.kubectl.repository` | Specifies the kubectl image location | valid image repository | `ibmcom/kubectl` |
-| `global.kubectl.tag` | Specifies the kubectl image version | valid image tag | `v1.10.0` |
+| `global.kubectl.tag` | Specifies the kubectl image version | valid image tag | `v1.11.1` |
 | `global.k8sIngressSelector` | Specifies the gateway used for legacy k9s ingress resources | `ingress` or any defined gateway | `ingress` |
 | `global.k8sIngressHttps` | Specifies whether to use the https for ingress | true/false | `false` |
 | `global.imagePullPolicy` | Specifies the image pull policy | valid image pull policy | `IfNotPresent` |
@@ -217,8 +273,9 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `grafana.image.repository` | Specifies the Grafana image location | valid image repository | `ibmcom/istio-grafana` |
 | `grafana.image.tag` | Specifies the Grafana image version | valid image tag | `1.0.0` |
 | `grafana.security.enabled` | Specifies security for the Grafana service | true/false | `false` |
-| `grafana.security.adminUser` | Specifies administrator name for the Grafana service | administrator name | `admin` |
-| `grafana.security.adminPassword` | Specifies administrator password for the Grafana service | administrator password | `admin` |
+| `grafana.security.secretName` | Specifies secret name that contains username and passphrase for the Grafana dashboard | valid secret name | `grafana` |
+| `grafana.security.usernameKey` | Specifies the username key for the secret that contains username for the Grafana dashboard | valid secret key string | `username` |
+| `grafana.security.passphraseKey` | Specifies the passphrase key for the secret that contains passphrase for the Grafana dashboard | valid secret key string | `passphrase` |
 | `grafana.service.name` | Specifies name for the Grafana service | valid service name | `http` |
 | `grafana.service.annotations` | Specifies the annotation for the Grafana service | valid service annotation | {} |
 | `grafana.service.type` | Specifies type for the Grafana service | valid service type | `ClusterIP` |
@@ -273,8 +330,9 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `kiali.ingress.hosts` | Specify the hosts for Kiali ingress | array consists of valid hosts | [] |
 | `kiali.ingress.annotations` | Specify the annotations for Kiali ingress | object consists of valid annotations | {} |
 | `kiali.ingress.tls` | Specify the TLS settigs for Kiali ingress | array consists of valid TLS settings | [] |
-| `kiali.dashboard.username` | Specifies the username for kiali dashboard | valid username | `admin`|
-| `kiali.dashboard.passphrase` | Specifies the passphrase for kiali dashboard | valid passphrase | `admin` |
+| `kiali.dashboard.secretName` | Specifies secret name that contains username and passphrase for the Kiali dashboard | valid secret name | `kiali` |
+| `kiali.dashboard.usernameKey` | Specifies the username key for the secret that contains username for the Kiali dashboard | valid secret key string | `username` |
+| `kiali.dashboard.passphraseKey` | Specifies the passphrase key for the secret that contains passphrase for the Kiali dashboard | valid secret key string | `passphrase` |
 | `kiali.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `certmanager.enabled` | Specifies whether the Cert Manager addon should be installed | true/false | `false` |
 | `certmanager.replicaCount` | Specifies number of desired pods for Cert Manager deployment | number | `1` |

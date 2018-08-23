@@ -1,0 +1,97 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-master
+  labels:
+    app: {{ template "name" . }}
+    release: {{ .Release.Name }}
+    role: master
+    chart: "{{ .Chart.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.master.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "name" . }}
+      release: {{ .Release.Name }}
+      role: master
+      chart: "{{ .Chart.Name }}"
+      heritage: "{{ .Release.Service }}"
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}
+        release: "{{ .Release.Name }}"
+        chart: "{{ .Chart.Name }}"
+        heritage: "{{ .Release.Service }}"
+        role: master
+      annotations:
+        productName: "IBM Spectrum Symphony CE"
+        productID: "IBMSpectrumSymphony_5725G86_CE"
+        productVersion: {{ .Values.cluster.productVersion }}
+    spec:
+     affinity:
+     {{- include "nodeaffinity" . | indent 6 }}
+     containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          tty: true
+          resources:
+{{ toYaml .Values.master.resources | indent 12 }}
+          env:
+            - name: LICENSE
+              value: "accept"
+            {{- if .Values.master.logsOnShared }}
+            - name: LOGS_ON_SHARED
+              value: "Y"
+            {{- end }}
+            - name: CLUSTER_NAME
+              value: "{{ .Values.cluster.clusterName }}"
+            {{- if .Values.master.regenSSLCert }}
+            - name: GENERATE_SSL_CERT
+              value: "Y"
+            {{- end }}
+            {{- if .Values.cluster.enableSSHD }}
+            - name: START_SSHD
+              value: "Y"
+            {{- if .Values.cluster.generateClusterAdminPassword }}
+            - name: GENERATE_PASSWORD
+              value: "Y"
+            {{- end }}
+            {{- end }}
+          securityContext:
+            capabilities:
+              add:
+                - LEASE
+                - NET_ADMIN
+                - NET_BIND_SERVICE
+                - NET_BROADCAST
+                - SETGID
+                - SETUID
+                - SYS_ADMIN
+                - SYS_CHROOT
+                - SYS_NICE
+                - SYS_RESOURCE
+                - SYS_TIME
+          volumeMounts:
+            - name: persistdir
+              mountPath: /shared
+          livenessProbe:
+            exec:
+              command:
+              - /bin/true
+          readinessProbe:
+            exec:
+              command:
+              - /bin/true
+     volumes:
+       - name: persistdir
+         persistentVolumeClaim:
+         {{- if .Values.cluster.pvc.existingClaimName }}
+           claimName: {{ .Values.cluster.pvc.existingClaimName }}
+         {{- else }}
+           claimName: {{ template "fullname" . }}
+         {{- end }}
+     restartPolicy: Always
+     terminationGracePeriodSeconds: 30

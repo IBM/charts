@@ -1,3 +1,9 @@
+THIS CHART IS NOW DEPRECATED
+=============================
+As of September 1, 2018, the ibm-spectrum-symphony Helm chart for IBM Spectrum Symphony Community Edition will no longer be supported. This chart will be removed from the IBM public Helm repository on github.com and will no longer show in the Catalog. Existing deployments of the Helm chart, however, will not be affected. To deploy IBM Spectrum Symphony Community Edition afresh, use the ibm-spectrum-symphony-dev replacement chart.
+
+
+
 [![IBM Spectrum Symphony](https://developer.ibm.com/storage/wp-content/uploads/sites/91/2016/08/SpectrumSymphonyIcon-1.jpg)](https://www.ibm.com/developerworks/community/groups/service/html/communitystart?communityUuid=46ecec34-bd69-43f7-a627-7c469c1eddf8).
 
 IBM Spectrum Symphony is an enterprise-class workload manager for compute- and data-intensive applications on a scalable, shared grid. It accelerates dozens of distributed parallel applications for faster results and better utilization of all available resources.
