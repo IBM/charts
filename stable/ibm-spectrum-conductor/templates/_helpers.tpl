@@ -17,20 +17,24 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{- define "conductorVersion" -}}
-{{- printf "2.2.1" -}}
+{{- printf "2.3.0" -}}
 {{- end -}}
 
 {{- define "dliVersion" -}}
-{{- printf "1.1.0" -}}
+{{- printf "1.2.0" -}}
+{{- end -}}
+
+{{- define "getserviceslots" -}}
+{{- printf "8" -}}
 {{- end -}}
 
 {{- define "getmaxslots" -}}
-{{- if .Values.sig.maxCpu|hasSuffix "m" }}
-{{- $maxcpu := default 6 .Values.sig.maxCpu|trimSuffix "m"|int -}}
+{{- if .Values.sig.cpu|hasSuffix "m" }}
+{{- $maxcpu := default 6 .Values.sig.cpu|trimSuffix "m"|int -}}
 {{- $maxslot := div $maxcpu 1000 -}}
 {{- printf "%d" $maxslot -}}
 {{- else }}
-{{- $maxslot := default 6 .Values.sig.maxCpu|int -}}
+{{- $maxslot := default 6 .Values.sig.cpu|int -}}
 {{- printf "%d" $maxslot -}}
 {{- end }}
 {{- end -}}
@@ -51,16 +55,28 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 {{- printf "http://cwsetcd.default:2379/v2/keys/cwsnodemap" -}}
 {{- end -}}
 
+{{- define "etcdInstanceCreation" -}}
+{{- printf "http://cwsetcd.default:2379/v2/keys/cwsinstancecreated" -}}
+{{- end -}}
+
+{{- define "etcdInstanceDeletion" -}}
+{{- printf "http://cwsetcd.default:2379/v2/keys/cwsinstancedeleted" -}}
+{{- end -}}
+
 {{- define "cwsImage" -}}
 {{- if .Values.dli.enabled }}
-{{- default "ibmcom/spectrum-dli:1.1.0" .Values.master.imageName -}}
+{{- default "ibmcom/spectrum-dli:1.2.0" .Values.master.imageName -}}
 {{- else }}
-{{- default "ibmcom/spectrum-conductor:2.2.1" .Values.master.imageName -}}
+{{- default "ibmcom/spectrum-conductor:2.3.0" .Values.master.imageName -}}
 {{- end }}
 {{- end -}}
 
 {{- define "cwsImageWithoutRegistryTag" -}}
 {{- printf "default/conductor-spark" -}}
+{{- end -}}
+
+{{- define "verifyHelmCredential" -}}
+{{- default "true" .Values.helm.verifyCredential -}}
 {{- end -}}
 
 {{- define "cwsProxyService" -}}
@@ -71,8 +87,16 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 {{- printf "ibmcom/spectrum-conductor:proxy" -}}
 {{- end -}}
 
+{{- define "imageCleaner" -}}
+{{- printf "cwsimagecleaner" -}}
+{{- end -}}
+
+{{- define "imageNamespace" -}}
+{{- printf "default" -}}
+{{- end -}}
+
 {{- define "cwsImagePullSecret" -}}
-{{- if eq .Values.master.imageName "ibmcom/spectrum-conductor:2.2.1" -}}
+{{- if eq .Values.master.imageName "ibmcom/spectrum-conductor:2.3.0" -}}
 {{- printf "{\"auths\": {\"%s\": {\"auth\": \"%s\"}}}" "https://index.docker.io/v1/" (printf "spectrumuser:spectrumuser" | b64enc) | b64enc -}}
 {{- else -}}
 {{- printf "{\"auths\": {\"%s\": {\"auth\": \"%s\"}}}" .Values.master.registry (printf "%s:%s" .Values.master.registryUser .Values.master.registryPasswd | b64enc) | b64enc -}}
@@ -88,20 +112,55 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{- define "kubectlImage" -}}
-{{- $imagetag := .Capabilities.KubeVersion.GitVersion | trunc 6 -}}
+{{- if eq (.Capabilities.KubeVersion.GitVersion | trunc 7) "v1.10.0" -}}
+{{- $imagetag := .Capabilities.KubeVersion.GitVersion | trunc 7 -}}
+{{- $imagename := "hyperkube" -}}
 {{- if eq .Capabilities.KubeVersion.Platform "linux/amd64" -}}
-{{- printf "\"ibmcom/kubernetes:%s\"" $imagetag -}}
+{{- printf "\"ibmcom/%s:%s\"" $imagename $imagetag -}}
 {{- else if eq .Capabilities.KubeVersion.Platform "linux/ppc64le" -}}
-{{- printf "\"ibmcom/kubernetes-ppc64le:%s\"" $imagetag -}}
+{{- printf "\"ibmcom/%s-ppc64le:%s\"" $imagename $imagetag -}}
+{{- end -}}
+{{- else -}}
+{{- $imagetag := .Capabilities.KubeVersion.GitVersion | trunc 6 -}}
+{{- $imagename := "kubernetes" -}}
+{{- if eq .Capabilities.KubeVersion.Platform "linux/amd64" -}}
+{{- printf "\"ibmcom/%s:%s\"" $imagename $imagetag -}}
+{{- else if eq .Capabilities.KubeVersion.Platform "linux/ppc64le" -}}
+{{- printf "\"ibmcom/%s-ppc64le:%s\"" $imagename $imagetag -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 
+{{- define "securedHelm" -}}
+    {{- if eq (.Capabilities.KubeVersion.GitVersion | trunc 7) "v1.10.0" -}}
+        {{- printf "true" -}}
+    {{- else -}}
+        {{- printf "false" -}}
+    {{- end -}}
+{{- end -}}
+
+{{- define "helmHome" -}}
+{{- printf "/var/tmp/helm" -}}
+{{- end -}}
+
+{{- define "helmFlag" -}}
+    {{- if eq (include "securedHelm" .) "true" -}}
+        {{- printf "--tls" -}}
+    {{- else -}}
+        {{- printf "" -}}
+    {{- end -}}
+{{- end -}}
+
 {{- define "helmImage" -}}
+{{- if eq (.Capabilities.KubeVersion.GitVersion | trunc 7) "v1.10.0" -}}
+{{- printf "ibmcom/icp-helm-api:1.0.0" -}}
+{{- else -}}
 {{- $imagetag := "v2.6.0" -}}
 {{- if eq .Capabilities.KubeVersion.Platform "linux/amd64" -}}
 {{- printf "\"ibmcom/helm:%s\"" $imagetag -}}
 {{- else if eq .Capabilities.KubeVersion.Platform "linux/ppc64le" -}}
 {{- printf "\"ibmcom/helm-ppc64le:%s\"" $imagetag -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 

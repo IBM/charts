@@ -25,6 +25,16 @@ spec:
         release: {{.Release.Name | quote }}
         chart: "{{.Chart.Name}}"
         app: {{ template "master-fullname" . }}
+      annotations:
+        {{- if .Values.dli.enabled }}
+        productName: "IBM Spectrum Conductor Deep Learning Impact"
+        productVersion: "1.2"
+        productID: "IBMSpectrumDLI-Eval"
+        {{- else }}
+        productName: "IBM Spectrum conductor"
+        productVersion: "2.3"
+        productID: "IBMSpectrumConductor-Eval"
+        {{- end }}
     spec:
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
@@ -35,13 +45,41 @@ spec:
       initContainers:
       - name: helmget
         image: {{ template "helmImage" . }}
+        resources:
+          requests:
+            cpu: 0.5
+            memory: 512Mi
+          limits:
+            cpu: 0.5
+            memory: 512Mi
         command:
-        - /bin/cp 
+        - /bin/cp
+        {{- if eq (.Capabilities.KubeVersion.GitVersion | trunc 7) "v1.10.0" }}
+        - -r
+        - "/usr/src/app/public/cli"
+        {{- else }}
         - "/helm"
-        - "/helmdir/helm"
+        {{- end }}
+        - "/helmdir/"
         volumeMounts:
         - name: helmdir
-          mountPath: "/helmdir"        
+          mountPath: "/helmdir"
+      - name: kubectlget
+        image: {{ template "kubectlImage" . }}
+        resources:
+          requests:
+            cpu: 0.5
+            memory: 256Mi
+          limits:
+            cpu: 0.5
+            memory: 256Mi
+        command:
+        - /bin/cp
+        - "/kubectl"
+        - "/kubedir"
+        volumeMounts:
+        - name: kubedir
+          mountPath: "/kubedir"
       containers:
         - args:
           - /kubectl
@@ -49,9 +87,30 @@ spec:
           - -p
           - "8001"
           image: {{ template "kubectlImage" . }}
+          resources:
+            requests:
+              cpu: 0.5
+              memory: 256Mi
+            limits:
+              cpu: 0.5
+              memory: 256Mi
           imagePullPolicy: IfNotPresent
           name: kubectlproxy
-        {{- if eq .Values.cluster.proxyOption "IngressProxy" }}  
+          readinessProbe:
+            exec:
+              command:
+                - ls
+                - /kubectl
+            initialDelaySeconds: 30
+            periodSeconds: 100
+          livenessProbe:
+            exec:
+              command:
+                - ls
+                - /kubectl
+            initialDelaySeconds: 300
+            periodSeconds: 100
+        {{- if eq .Values.cluster.proxyOption "IngressProxy" }}
         - image: {{ template "dnsmasqImage" . }}
           name: {{ template "master-fullname" . }}-dnsmasq
           command: ["/bin/sh","-c"]
@@ -59,10 +118,38 @@ spec:
           volumeMounts:
            - mountPath: /var/tmp/cfc
              name: license
-        - image: nginx:1.13.8
+          resources:
+            requests:
+              cpu: 0.5
+              memory: 256Mi
+            limits:
+              cpu: 0.5
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command:
+                - ls
+                - /var/tmp/cfc/startDnsmasq.sh
+            initialDelaySeconds: 30
+            periodSeconds: 100
+          livenessProbe:
+            exec:
+              command:
+                - ls
+                - /var/tmp/cfc/startDnsmasq.sh
+            initialDelaySeconds: 300
+            periodSeconds: 100
+        - image: ibmcom/icp-management-ingress:2.2.0
           name: {{ template "master-fullname" . }}-proxy
           ports:
            - containerPort: {{ template "proxyHttpsPort" . }}
+          resources:
+            requests:
+              cpu: 1
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 512Mi
           command: ["/bin/sh", "-c"]
           args: ["$(sh /nginx/startnginx.sh)"]
           volumeMounts:
@@ -70,7 +157,21 @@ spec:
              name: license
            - mountPath: /var/share
              name: sharedir
-        {{- end }}     
+          readinessProbe:
+            exec:
+              command:
+                - ls
+                - /nginx/startnginx.sh
+            initialDelaySeconds: 30
+            periodSeconds: 100
+          livenessProbe:
+            exec:
+              command:
+                - ls
+                - /nginx/startnginx.sh
+            initialDelaySeconds: 300
+            periodSeconds: 100
+        {{- end }}
         - name: {{ template "master-fullname" . }}
           image: {{ template "cwsImage" . }}
           command: ["/bin/bash","-c"]
@@ -93,20 +194,23 @@ spec:
           securityContext:
             capabilities:
               add:
-                - SETGID 
+                - SETGID
                 - SETUID
-                - SYS_CHROOT 
-                - SYS_ADMIN 
-                - SYS_NICE 
-                - SYS_RESOURCE 
-                - SYS_TIME 
-                - NET_BROADCAST 
+                - SYS_CHROOT
+                - SYS_ADMIN
+                - SYS_NICE
+                - SYS_RESOURCE
+                - SYS_TIME
+                - NET_BROADCAST
                 - NET_ADMIN
                 - LEASE
           resources:
             requests:
               cpu: "{{.Values.master.cpu}}"
               memory: "{{.Values.master.memory}}"
+            limits:
+              cpu: "16000m"
+              memory: "16000Mi"
           env:
               - name: HELM_HOST
                 value: {{ template "helmHost" . }}
@@ -114,6 +218,18 @@ spec:
                 value: {{.Values.cluster.ldapServerIp}}
               - name: BASE_DN
                 value: {{.Values.cluster.ldapBaseDn}}
+              {{- if and (eq (include "securedHelm" .) "true") (eq .Values.helm.credentialType "UsernamePassword") }}
+              - name: ADMIN_USERNAME
+                valueFrom:
+                  secretKeyRef:
+                    name: admin-secret-{{ .Release.Name }}
+                    key: username
+              - name: ADMIN_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: admin-secret-{{ .Release.Name }}
+                    key: password
+              {{- end }}
           volumeMounts:
               {{- if .Values.dli.enabled }}
               - mountPath: /opt/DL
@@ -128,13 +244,22 @@ spec:
               - mountPath: /var/tmp/prerequisite
                 name: prerequisite
               - mountPath: /var/run/docker.sock
-                name: docker-sock                    
-              {{- if eq .Values.cluster.proxyOption "IngressProxy" }}  
+                name: docker-sock
+              {{- if eq .Values.cluster.proxyOption "IngressProxy" }}
               - mountPath: /var/share
                 name: sharedir
-              {{- end }}  
+              {{- end }}
               - name: helmdir
                 mountPath: /tmp/helmdir
+              - name: kubedir
+                mountPath: /tmp/kubedir
+              - name: host-tiemzone
+                mountPath: /etc/localtime
+                readOnly: true
+              {{- if and (eq (include "securedHelm" .) "true") (and (eq .Values.helm.credentialType "Secret") .Values.helm.credentialName) }}
+              - name: helm-tls
+                mountPath: /var/tmp/helm
+              {{- end }}
       volumes:
         {{- if .Values.dli.enabled }}
         - name: dldir
@@ -155,11 +280,29 @@ spec:
             name: {{ .Release.Name }}-prerequisite
         - name: docker-sock
           hostPath:
-            path: /var/run/docker.sock             
-        {{- if eq .Values.cluster.proxyOption "IngressProxy" }}    
+            path: /var/run/docker.sock
+        {{- if eq .Values.cluster.proxyOption "IngressProxy" }}
         - name: sharedir
           emptyDir: {}
-        {{- end }}  
+        {{- end }}
         - name: helmdir
-          emptyDir: {}        
-      terminationGracePeriodSeconds: 30   
+          emptyDir: {}
+        - name: kubedir
+          emptyDir: {}
+        - name: host-tiemzone
+          hostPath:
+            path: /etc/localtime
+        {{- if and (eq (include "securedHelm" .) "true") (and (eq .Values.helm.credentialType "Secret") .Values.helm.credentialName) }}
+        - name: helm-tls
+          secret:
+            secretName: {{ .Values.helm.credentialName }}
+            defaultMode: 0644
+            items:
+              - key: cert.pem
+                path: cert.pem
+              - key: ca.pem
+                path: ca.pem
+              - key: key.pem
+                path: key.pem
+        {{- end }}
+      terminationGracePeriodSeconds: 30

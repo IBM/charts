@@ -15,12 +15,11 @@ data:
     home: https://www.ibm.com/support/knowledgecenter/SSZU2E/product_welcome_conductorspark.html
     icon: https://www.ibm.com/developerworks/community/groups/service/html/image?communityUuid=281605c9-7369-46dc-ad03-70d9ad377480&lastMod=1464891144123&showDefaultForNoPermissions=true
     sources:
-    - http://192.168.0.1/TBD  
+    - http://192.168.0.1/TBD
     keywords:
     - etcd
     maintainers:
-    - email: liuhoug@cn.ibm.com
-      name: HouGang Liu
+    - name: IBM Spectrum Conductor Team
   etcd-template: |-
     apiVersion: v1
     kind: PersistentVolumeClaim
@@ -33,8 +32,10 @@ data:
         chart: "{{.Chart.Name}}"
         app: conductor-etcd-data
     spec:
-      {{- if .Values.cluster.etcdSharedStorageClassName }}
-      storageClassName: {{ .Values.cluster.etcdSharedStorageClassName }}
+      {{- if .Values.cluster.useDynamicProvisioning }}
+      storageClassName: {{ default nil .Values.cluster.etcdSharedStorageClassName | quote }}
+      {{ else }}
+      storageClassName: ""
       {{- end }}
       accessModes:
         - ReadWriteMany
@@ -80,6 +81,13 @@ data:
                 - containerPort: {{template "etcdServicePort" .}}
                   name: client
                   protocol: TCP
+              resources:
+                requests:
+                  cpu: 1
+                  memory: 1Gi
+                limits:
+                  cpu: 1
+                  memory: 1Gi
               command:
               - /usr/local/bin/etcd
               - --name
@@ -123,21 +131,20 @@ data:
   cws-proxy-Chart: |-
     name: conductor-proxy
     version: {{.Chart.Version}}
-    description: Proxy for Conductor with Spark
+    description: Http Proxy for Conductor
     home: https://www.ibm.com/support/knowledgecenter/SSZU2E/product_welcome_conductorspark.html
     icon: https://www.ibm.com/developerworks/community/groups/service/html/image?communityUuid=281605c9-7369-46dc-ad03-70d9ad377480&lastMod=1464891144123&showDefaultForNoPermissions=true
     sources:
-    - http://192.168.0.1/TBD  
+    - http://192.168.0.1/TBD
     keywords:
     - conductor-spark-proxy
     maintainers:
-    - email: hma@ca.ibm.com
-      name: Haohai Ma
+    - name: IBM Spectrum Conductor Team
   cws-proxy-template: |-
     apiVersion: v1
     kind: ConfigMap
     metadata:
-      name: conductor-proxy-bootstrap 
+      name: conductor-proxy-bootstrap
       namespace: default
       labels:
         heritage: {{.Release.Service | quote }}
@@ -145,16 +152,16 @@ data:
         chart: "{{.Chart.Name}}"
         app: conductor-proxy-bootstrap
     data:
-      appendEtcHost.sh: |- 
+      appendEtcHost.sh: |-
           set -x
-          sh /var/tmp/cfc/appendEtcHostfromShare.sh & 
+          sh /var/tmp/cfc/appendEtcHostfromShare.sh &
           #polipo proxyAddress=0.0.0.0 dnsUseGethostbyname=true
           privoxy --no-daemon --user privoxy /etc/privoxy/config
-      appendEtcHostfromShare.sh: |- 
+      appendEtcHostfromShare.sh: |-
           set -x
           curl --silent -X PUT {{ template "etcdHostDir" .}} -d dir=true
           cp /etc/hosts /hosts.original
-          while [ true ] 
+          while [ true ]
           do
             sleep 10
             curl --silent {{ template "etcdHostDir" .}} | python -c 'import json,sys;obj=json.load(sys.stdin); print "\n".join([":".join([x["value"], x["key"]]) for x in obj["node"]["nodes"]])' | sed "s/\/cwsnodemap\///" > /hostlist.yaml
@@ -166,18 +173,18 @@ data:
             do
               ip=$(echo $line | cut -f 1 -d':' | xargs)
               host=$(echo $line | cut -f 2 -d':' | xargs)
-              if [ ! -z "$host" ]; then 
+              if [ ! -z "$host" ]; then
                 ifit=$(grep "$ip  ${host}$" /hosts.tmp)
                 if [ -z "$ifit" ]; then
                    #sed -i does not work in containers
-                   #sed -i "/${host}/d" /etc/hosts 
+                   #sed -i "/${host}/d" /etc/hosts
                    echo "get new host line - $line"
                    echo "$ip  $host"  >> /hosts.tmp
                 fi
               fi
             done < /hostlist.yaml
             cat /hosts.tmp > /etc/hosts
-          done   
+          done
     ---
     apiVersion: v1
     kind: Secret
@@ -247,6 +254,13 @@ data:
             - name: {{template "cwsProxyService" . }}
               image: {{template "cwsProxyImage" .}}
               imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: 0.5
+                  memory: 512Mi
+                limits:
+                  cpu: 0.5
+                  memory: 512Mi
               ports:
                 - containerPort: 8118
               resources:
@@ -268,3 +282,195 @@ data:
               configMap:
                 name: "conductor-proxy-bootstrap"
 {{- end }}
+  cws-imagecleaner-Chart: |-
+    name: conductor-imagecleaner
+    version: {{.Chart.Version}}
+    description: Instance Group Image Cleaner for Conductor
+    home: https://www.ibm.com/support/knowledgecenter/SSZU2E/product_welcome_conductorspark.html
+    icon: https://www.ibm.com/developerworks/community/groups/service/html/image?communityUuid=281605c9-7369-46dc-ad03-70d9ad377480&lastMod=1464891144123&showDefaultForNoPermissions=true
+    sources:
+    - http://192.168.0.1/TBD
+    keywords:
+    - conductor-image-cleaner
+    maintainers:
+    - name: IBM Spectrum Conductor Team
+  cws-imagecleaner-template: |-
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: image-cleaner-bootstrap
+      namespace: {{template "imageNamespace" . }}
+      labels:
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{template "imageCleaner" . }}
+    data:
+      watchSigs.sh: |-
+        #!/bin/bash
+        set -x
+        createAction()
+        {
+          echo "Pulling an instance group image: $1"
+          docker login -u {{.Values.sig.registryUser}} -p {{.Values.sig.registryPasswd}} {{.Values.sig.registry}}
+          docker pull $1
+        }
+        deleteAction()
+        {
+          echo "Deleting an instance group image: $1"
+          docker rmi -f $1
+          #Call Image server to delete the image
+          imageKey=$(basename $1 | cut -d ":" -f 1)
+          #Not working yet because the permission issue not solved.
+          if [ -e /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
+            token=`cat /var/run/secrets/kubernetes.io/serviceaccount/token`
+            curl -k -X DELETE -H "Authorization: Bearer $token" https://image-manager.kube-system:8600/image-manager/api/v1/repositories/{{template "imageNamespace" . }}/$imageKey
+          fi
+          #clean up if dangling
+          docker images purge
+        }
+        tackleSigImages()
+        {
+          event=""
+          while [ -z $event ]
+          do
+            event=$(curl -s "$1?wait=true&recursive=true")
+          done
+          while :
+          do
+            if echo $event|grep "action"; then
+              if [ "$2" = "cwsinstancecreated" ]; then
+                read -r image eventIndex action <<< $(echo $event | python -c 'import json,sys;obj=json.load(sys.stdin); print ":".join([obj["node"]["key"], obj["node"]["value"]]).replace("@@", "/").replace("/cwsinstancecreated/",""); print obj["node"]["modifiedIndex"]; print obj["action"]')
+              else
+                read -r image eventIndex action <<< $(echo $event | python -c 'import json,sys;obj=json.load(sys.stdin); print ":".join([obj["node"]["key"], obj["node"]["value"]]).replace("@@", "/").replace("/cwsinstancedeleted/",""); print obj["node"]["modifiedIndex"]; print obj["action"]')
+              fi
+              nextEventIndex=$((eventIndex+1))
+              if [[ "$action" == "set" ]]; then
+                 $($3 $image)
+              fi
+              event=""
+            elif echo $event|grep "index is outdated and cleared"; then
+              read -r eventIndex <<< $(echo $event | python -c 'import json,sys;obj=json.load(sys.stdin); print obj["index"]')
+              nextEventIndex=$((eventIndex+1))
+              event=""
+            fi
+            while [ -z $event ]
+            do
+              event=$(curl -s "$1?wait=true&recursive=true&waitIndex=${nextEventIndex}")
+            done
+          done
+        }
+        tackleSigImages  "{{ template "etcdInstanceCreation" .}}" "cwsinstancecreated" createAction &
+        tackleSigImages  "{{ template "etcdInstanceDeletion" .}}" "cwsinstancedeleted" deleteAction &
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1beta1
+    kind: ClusterRole
+    metadata:
+      name: image-cleaner-role
+      labels:
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{template "imageCleaner" . }}
+    rules:
+      - apiGroups: ["icp.ibm.com"]
+        resources: ["images"]
+        verbs: ["delete", "deletecollection", "get","list","watch"]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1beta1
+    kind: ClusterRoleBinding
+    metadata:
+      name: image-cleaner-rolebinding
+      labels:
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{template "imageCleaner" . }}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: image-cleaner-role
+    subjects:
+      - kind: ServiceAccount
+        name: image-cleaner-serviceaccount
+        namespace: {{template "imageNamespace" . }}
+    ---
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: image-cleaner-serviceaccount
+      namespace: {{template "imageNamespace" . }}
+      labels:
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{template "imageCleaner" . }}
+    ---
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: imagecleaneregistrykey-{{ .Release.Name }}
+      namespace: default
+      labels:
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{template "imageCleaner" . }}
+    data:
+      .dockerconfigjson: {{ template "cwsImagePullSecret" . }}
+    type: kubernetes.io/dockerconfigjson
+    ---
+    apiVersion: apps/v1beta2
+    kind: DaemonSet
+    metadata:
+      name: {{template "imageCleaner" . }}
+      namespace: {{template "imageNamespace" . }}
+      labels:
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{template "imageCleaner" . }}
+    spec:
+      selector:
+        matchLabels:
+          heritage: {{.Release.Service | quote }}
+          release: {{.Release.Name | quote }}
+          chart: "{{.Chart.Name}}"
+          app: {{template "imageCleaner" . }}
+      template:
+        metadata:
+          labels:
+            heritage: {{.Release.Service | quote }}
+            release: {{.Release.Name | quote }}
+            chart: "{{.Chart.Name}}"
+            app: {{template "imageCleaner" . }}
+        spec:
+          serviceAccountName: image-cleaner-serviceaccount
+          imagePullSecrets:
+            - name: imagecleaneregistrykey-{{ .Release.Name }}
+          containers:
+          - name: {{template "imageCleaner" . }}
+            image: {{ template "cwsImage" . }}
+            imagePullPolicy: {{.Values.master.imagePullPolicy}}
+            command: ["/bin/bash","-c"]
+            args: ["$(bash /var/tmp/cfc/watchSigs.sh)"]
+            resources:
+              limits:
+                memory: 200Mi
+                cpu: 100m
+              requests:
+                cpu: 100m
+                memory: 200Mi
+            volumeMounts:
+              - name: image-cleaner-bootstrap
+                mountPath: /var/tmp/cfc
+              - mountPath: /var/run/docker.sock
+                name: docker-sock
+          volumes:
+            - name: image-cleaner-bootstrap
+              configMap:
+                name: "image-cleaner-bootstrap"
+            - name: docker-sock
+              hostPath:
+                 path: /var/run/docker.sock
+          terminationGracePeriodSeconds: 30
