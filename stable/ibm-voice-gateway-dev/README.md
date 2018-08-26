@@ -14,11 +14,11 @@ This chart will deploy IBM Voice Gateway (Developer Trial).
 
 ### Required
 - Create the following Watson services on IBM Cloud.
-  - [Watson Speech to Text](https://www.ibm.com/watson/services/speech-to-text/)
-  - [Watson Text to Speech](https://www.ibm.com/watson/services/text-to-speech/) (self-service only)
-  - [Watson Conversation](https://www.ibm.com/watson/services/conversation/) or [Watson Virtual Agent](https://www.ibm.com/us-en/marketplace/cognitive-customer-engagement) (self-service only)
+  - [Watson Speech to Text](https://console.bluemix.net/catalog/services/speech-to-text/)
+  - [Watson Text to Speech](https://console.bluemix.net/catalog/services/text-to-speech/) (self-service only)
+  - [Watson Assistant (formerly Conversation)](https://console.bluemix.net/catalog/services/watson-assistant-formerly-conversation/) (self-service only)
   
-    **Important:** For the Conversation service, you'll need to add a workspace with a dialog. You can quickly get started by importing the [sample-conversation-en.json](https://github.com/WASdev/sample.voice.gateway/tree/master/conversation) file from your cloned sample.voice.gateway GitHub repository. To learn more about importing JSON files, see [Creating workspaces](https://console.bluemix.net/docs/services/conversation/configure-workspace.html#creating-workspaces) in the Conversation documentation. If you build your own dialog instead of using the sample, ensure that your dialog includes a node with the *conversation_start* condition and node with a default response.
+    **Important:** For the Watson Assistant service, you'll need to add a workspace with a dialog. You can quickly get started by importing the [sample-conversation-en.json](https://github.com/WASdev/sample.voice.gateway/tree/master/conversation) file from your cloned sample.voice.gateway GitHub repository. To learn more about importing JSON files, see [Creating workspaces](https://console.bluemix.net/docs/services/conversation/configure-workspace.html#creating-workspaces) in the Conversation documentation. If you build your own dialog instead of using the sample, ensure that your dialog includes a node with the *conversation_start* condition and node with a default response.
   
 ## Resources Required
 
@@ -104,7 +104,7 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `image.sipOrchestrator.containerName`           | Sip Orchestrator container name             | `vgw-sip-orchestrator`                                                      |
 | `image.mediaRelay.image`           | Media Relay Docker image             | `ibmcom/voice-gateway-mr`                                                      |
 | `image.mediaRelay.containerName`           | Media Relay container name             | `vgw-media-relay`                                                      |
-| `image.tag`           | Docker image tag             | `1.0.0.5`                                                      |
+| `image.tag`           | Docker image tag             | `1.0.0.6b`                                                      |
 | `image.pullPolicy`           | Docker image pull policy             | `Always`                                                      |
 | `persistence.useDynamicProvisioning`           | Dynamic provisioning setup             | `false`                                                      |
 | `recordingsVolume.name`           | Name of the persistent volume claim             | `recordings`                                                      |
@@ -173,10 +173,6 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `sipOrchestratorEnvVariables.watsonConversationApiVersion`           | Watson Conversation Api Version             | `2017-05-26`                                                      |
 | `sipOrchestratorEnvVariables.watsonConversationReadTimeout`           | Watson Conversation Read Timeout             | `5`                                                      |
 | `sipOrchestratorEnvVariables.watsonConversationConnectTimeout`           | Watson Conversation Connect Timeout             | `10`                                                      |
-| `sipOrchestratorEnvVariables.watsonVaUrl`           | Watson VA URL             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.watsonVaBotId`           | Watson VA Bot ID             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.watsonVaClientId`           | Watson VA Client ID             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.watsonVaClientSecret`           | Watson VA Client Secret             | `n/a`                                                      |
 
 
 

@@ -1,3 +1,6 @@
+# What’s new in Chart Version 1.0.2
+ * Minor bug fix in node labeling job
+ 
 # What’s new in Chart Version 1.0.1
  * UI improvements
  * Bug fixes
@@ -22,5 +25,6 @@ For detailed documentation instructions go to https://www.ibm.com/support/knowle
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.0.2 | August, 2018 | 1.9.1 |  |  | Minor bug fix in node labeling job  |
 | 1.0.1 | May, 2018 | 1.9.1 |  |  | Bug fixes and UI improvements  |
 | 1.0.0 | April, 2018 | 1.9.1 |  |  | IBM Db2 Event Store Dev. Edition. Initial Catalog Entry  |
