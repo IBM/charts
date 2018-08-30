@@ -28,6 +28,8 @@ This chart deploys IBM Spectrum Symphony Community Edition with the following st
   - Set 'cluster.pvc.useDynamicProvisioning' to false.
   - Specify the 'cluster.pvc.existingClaimName' per volume or leave the value empty and let the Kubernetes binding process select a pre-existing volume based on accessMode and size. 
   - Use 'cluster.pvc.selector.label' to refine the binding process.
+  
+  Docker container processes for IBM Spectrum Symphony run as internal user egoadmin with ID 1000. When you use pre-existing volumes, ensure that the required permissions for user ID 1000 are set for the mounted volume. 
 
 - Review other requirements, such as supported browsers. For more information, refer to the [supported system configurations](https://www.ibm.com/support/knowledgecenter/SSZUMP_7.2.1/sym_kc/sym_kc_system_configurations.html) in the online IBM Knowledge Center.
 
