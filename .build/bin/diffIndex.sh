@@ -151,7 +151,7 @@ function commitchange()
 	git checkout travis
 	git fetch
 	git stage repo/$repodir/
-	git commit -m"Do Not Trigger - Master branch update with index" && git push origin travis || info "No changes to push" # TODO, no changes will also appear if push fails, need to fix
+	git commit -m"[skip ci] - Master branch update with index" && git push origin travis || info "No changes to push" # TODO, no changes will also appear if push fails, need to fix
 	end
 }
 
