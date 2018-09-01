@@ -133,6 +133,7 @@ function setup()
 {
 	begin "create directory structure"
 	# this will create the process
+	[[ ! -d "`dirname $1`" ]] && { echo "There is no directory to build against: `dirname $1`" ; exit ; } 
 	rm -rf `dirname $2` 2>/dev/null || true
 	mkdir -p `dirname $2` 
 	cp `dirname $1`/* `dirname $2`
