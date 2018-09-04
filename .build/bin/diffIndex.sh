@@ -17,7 +17,6 @@ set -o pipefail
 [[ -z "${1:-}" ]] && repodir=community || repodir=$1
 : "${MASTER_BRANCH:=`git branch | grep -v master | egrep "^\*" | tr -s ' '| cut -f2 -d' '`}"
 : "${PAT:=""}"
-echo $repodir $MASTER_BRANCH
 
 [[ -z "${MASTER_BRANCH}" ]] && { echo "[ERROR] unable to set branch, you may be on master" ; exit 1 ; }
 
@@ -52,6 +51,7 @@ function buildtable()
 	sort -o $indexout $indexout # sort for latest usage, this is alpha by chart name
 	end
 }
+
 function findnew() {
 	# Use the generated table to get a list of new files which have appear
  	# if this is a new file, we will leave it as part of the directory
@@ -75,6 +75,7 @@ function findnew() {
 	popd
 	end
 }
+
 function finddeleted() {
 	begin "Find charts which have been deleted"
         local old=$1.digest
@@ -99,6 +100,7 @@ function finddeleted() {
 	done
 	end
 }
+
 function removechart()
 {
 	begin "Remove deleted chart from index"
@@ -126,16 +128,6 @@ function helmpackage()
 	# cp $1/* $2/ || true
 	end
 }
-function begin() { trace begin ${FUNCNAME[1]} $@ ; }
-function end() { trace end ${FUNCNAME[1]} $@ ; }
-function error() { trace ERROR ${FUNCNAME[1]} $@ ; }
-function info() { trace INFO  ${FUNCNAME[1]} $@ ; }
-function trace()
-{
-	local type=$1 ; shift ; 
-	local function=$1 ; shift
-	echo -e "[ `tr '[:lower:]' '[:upper:]' <<< $type` $function ]\t $@"
-}
 
 function setup()
 {
@@ -150,10 +142,11 @@ function setup()
 	info "Build a helm repo to see if there are changes"
 	helm repo index . --url $URL 
 	popd
-	cp $1 $1.master
+	cp $1 $1.master # save a copy of the master index for later comparison
 	end
 
 }
+
 function commitchange()
 {
 	begin "Commit the changes"
@@ -162,8 +155,23 @@ function commitchange()
 	git checkout $MASTER_BRANCH 
 	git fetch
 	git stage repo/$repodir/
-	git commit -m"[skip ci] - Master branch update with index"  # && git push origin $MASTER_BRANCH || info "No changes to push" # TODO, no changes will also appear if push fails, need to fix
+	git commit -m"[skip ci] - Master branch update with index" && git push origin $MASTER_BRANCH || info "No changes to push" # TODO, no changes will also appear if push fails, need to fix
 	end
+}
+
+function begin() { trace begin ${FUNCNAME[1]} $@ ; }
+
+function end() { trace end ${FUNCNAME[1]} $@ ; }
+
+function error() { trace ERROR ${FUNCNAME[1]} $@ ; }
+
+function info() { trace INFO  ${FUNCNAME[1]} $@ ; }
+
+function trace()
+{
+        local type=$1 ; shift ;
+        local function=$1 ; shift
+        echo -e "[ `tr '[:lower:]' '[:upper:]' <<< $type` $function ]\t $@"
 }
 
 begin "#################### Rebuild helm repo ################################"
