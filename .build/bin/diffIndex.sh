@@ -7,14 +7,20 @@
 # The list of changed sha/digests will found
 # The old files will be removed, and new tgz merges with the old
 #
-# set -x
+#set -x
 set -o errexit
 set -o nounset
 set -o pipefail
 
 # This is the link to the repo, if there is more that on build, then we would use
 # a variable to describte the link, but for now this works.
-repodir=community
+[[ -z "${1:-}" ]] && repodir=community || repodir=$1
+: "${MASTER_BRANCH:=`git branch | grep -v master | egrep "^\*" | tr -s ' '| cut -f2 -d' '`}"
+: "${PAT:=""}"
+echo $repodir $MASTER_BRANCH
+
+[[ -z "${MASTER_BRANCH}" ]] && { echo "[ERROR] unable to set branch, you may be on master" ; exit 1 ; }
+
 URL="https://raw.githubusercontent.com/IBM/charts/master/repo/$repodir/" # TODO Update
 
 R='\033[0;31m'
@@ -88,7 +94,7 @@ function finddeleted() {
 		removechart $basechart $index
 		# There may be some charts which are not deleted
 		info "cp `dirname $index`/${basechart}-[0-9]*.[0-9]*.[0-9].tgz `dirname $new`/"
-		cp `dirname $index`/${basechart}-[0-9]*.[0-9]*.[0-9].tgz `dirname $new`/
+		cp `dirname $index`/${basechart}-[0-9]*.[0-9]*.[0-9].tgz `dirname $new`/ || true 
 		shift
 	done
 	end
@@ -99,7 +105,7 @@ function removechart()
 	local chartname=$1
 	local index=$2
 	info "Remove chart : $chartname"
-	range=`egrep -n "^  [[:alnum:]]" $index | egrep -A1 ":  $chartname:" | cut -f1 -d':' | xargs echo`
+	range=`egrep -n "^  [[:alnum:]]" $index | egrep -A1 ":  $chartname:" | cut -f1 -d':' | xargs echo` || return 0 # We may have removed the chart already
 	start=`cut -f1 -d' ' <<< $range`
 	let end=`cut -f2 -d' ' <<< $range`-1
 	sed -i "${start},${end}d" $index
@@ -113,9 +119,9 @@ function helmpackage()
 	info "helm repo index $1 --merge $2/../index.yaml --url $URL"
 	mv $2/index.yaml $2/../
 	helm repo index $1 --merge $2/../index.yaml --url $URL	
-	rm $1/index.yaml.* rm $2/index.yaml.* || true
 
-	diff -q -I "^generated:" $1/index.yaml $2/../index.yaml && { info "Index not changed" ; mv $2/../index.yaml $2/index.yaml ; }   || { info "Index has been updated" ; cp $1/index.yaml $2 ; }
+	diff -q -I "^generated:" $2/index.yaml.master $2/../index.yaml && { info "Index not changed" ; mv $2/../index.yaml $2/index.yaml ; }   || { info "Index has been updated" ; cp $1/index.yaml $2 ; }
+	rm $1/index.yaml.* rm $2/index.yaml.* || true
 
 	# cp $1/* $2/ || true
 	end
@@ -144,20 +150,19 @@ function setup()
 	info "Build a helm repo to see if there are changes"
 	helm repo index . --url $URL 
 	popd
+	cp $1 $1.master
 	end
 
 }
 function commitchange()
 {
 	begin "Commit the changes"
-cat .git/config
 	sed -i "s#https://github.com/IBM/charts#https://$PAT@github.com/IBM/charts#g" .git/config
-cat .git/config
 	git branch
 	git checkout $MASTER_BRANCH 
 	git fetch
 	git stage repo/$repodir/
-	git commit -m"[skip ci] - Master branch update with index" && git push origin $MASTER_BRANCH || info "No changes to push" # TODO, no changes will also appear if push fails, need to fix
+	git commit -m"[skip ci] - Master branch update with index"  # && git push origin $MASTER_BRANCH || info "No changes to push" # TODO, no changes will also appear if push fails, need to fix
 	end
 }
 
