@@ -61,7 +61,7 @@ function findnew() {
 	local list="GUARD"
 	local chartlist=`grep -v -f $old $new | cut -f1 -d':'`
 	
-	[[ -z "$chartlist" ]] && { pushd `dirname $new`;  ls -1 | egrep tgz | xargs -i rm {} ; popd ; end "No charts NEW found" ;  return 0 ; } # there were no charts found
+	[[ -z "$chartlist" ]] && { pushd `dirname $new`;  ls -1 | egrep tgz | xargs -I {} rm {} ; popd ; end "No charts NEW found" ;  return 0 ; } # there were no charts found
 	set $chartlist # These are the new files
 	while test $# -gt 0
 	do
@@ -71,7 +71,7 @@ function findnew() {
 	done
 	# we have a list of new charts, now remove all the other chart
 	pushd `dirname $new`
-	ls -1 | egrep tgz | egrep -v "$list" | xargs -i -r rm {} || true
+	ls -1 | egrep tgz | egrep -v "$list" | xargs -I {} -r rm {} || true
 	popd
 	end
 }
@@ -110,7 +110,7 @@ function removechart()
 	range=`egrep -n "^  [[:alnum:]]" $index | egrep -A1 ":  $chartname:" | cut -f1 -d':' | xargs echo` || return 0 # We may have removed the chart already
 	start=`cut -f1 -d' ' <<< $range`
 	let end=`cut -f2 -d' ' <<< $range`-1
-	sed -i "${start},${end}d" $index
+	sed -i.bak "${start},${end}d" $index
 	end
 }
 
@@ -142,7 +142,7 @@ function setup()
 	info "Build a helm repo to see if there are changes"
 	helm repo index . --url $URL 
 	popd
-	cp $1 $1.master # save a copy of the master index for later comparison
+	cp $1 $1.master || touch $1.master # save a copy of the master index for later comparison
 	end
 
 }
@@ -150,11 +150,11 @@ function setup()
 function commitchange()
 {
 	begin "Commit the changes"
-	sed -i "s#https://github.com/IBM/charts#https://$PAT@github.com/IBM/charts#g" .git/config
+	sed -i.bak "s#https://github.com/IBM/charts#https://$PAT@github.com/IBM/charts#g" .git/config
 	git branch
 	git checkout $MASTER_BRANCH 
 	git fetch
-	git stage repo/$repodir/
+	git stage -f repo/$repodir/index.yaml
 	git commit -m"[skip ci] - Master branch update with index" && git push origin $MASTER_BRANCH || info "No changes to push" # TODO, no changes will also appear if push fails, need to fix
 	end
 }
@@ -185,4 +185,3 @@ finddeleted $oldindex $newindex
 helmpackage `dirname $newindex` `dirname $oldindex`
 commitchange
 end "#########################################################################"
-
