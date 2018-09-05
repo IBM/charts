@@ -184,4 +184,4 @@ findnew $oldindex $newindex
 finddeleted $oldindex $newindex
 helmpackage `dirname $newindex` `dirname $oldindex`
 commitchange
-end "#########################################################################
+end "#########################################################################"
