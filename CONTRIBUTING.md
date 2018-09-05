@@ -4,7 +4,7 @@ This repository hosts helm charts intended for use with IBM(R) Cloud Private.
 The `stable` directory is used only for charts distributed by IBM.
 All contributions should be made to the `community` directory.
 
-The helm repositories in the `repo/stable` and `repo/community` directories are helm repositories, and their index.yaml file is built automatically based on the `MASTER` branch. The `repo/stable` repository is part of the default configuration of IBM Cloud Private, and as such, all charts in that repository will be displayed by default in the IBM Cloud Private catalog. The `repo/community` repository can be easily added to the IBM Cloud Private user interface by navigating to *Manage > Helm Reposities* adding https://github.com/ibm/charts/tree/master/repo/community to the list of Helm repositories. (It may be added by default in future releases of IBM Cloud Private.)
+The helm repositories in the `repo/stable` and `repo/community` directories are helm repositories, and their index.yaml file is built automatically based on the `MASTER` branch. The `repo/stable` repository is part of the default configuration of IBM Cloud Private, and as such, all charts in that repository will be displayed by default in the IBM Cloud Private catalog. The `repo/community` repository can be easily added to the IBM Cloud Private user interface by navigating to **Manage > Helm Repositories** adding https://github.com/ibm/charts/tree/master/repo/community to the list of Helm repositories. (It may be added by default in future releases of IBM Cloud Private.)
 
 
 ## License
@@ -14,7 +14,7 @@ can be found in the LICENSE file or online at
   http://www.apache.org/licenses/LICENSE-2.0
   
 ## Chart Standards and Guidelines
-To enable a consistent user experience, contributed charts must conform to the set of standards documented in [GUIDELINES.md]. In addition to required standards, this document also offers guidance on additional ways that charts can be enhanced to improve the user experience on IBM Cloud Private, but are not required for inclusion in this repository.
+To enable a consistent user experience, contributed charts must conform to the set of standards documented in [GUIDELINES.md](https://github.com/IBM/charts/blob/master/GUIDELINES.md). In addition to required standards, this document also offers guidance on additional ways that charts can be enhanced to improve the user experience on IBM Cloud Private, but are not required for inclusion in this repository.
 
 ## Certficate of Origin
 
