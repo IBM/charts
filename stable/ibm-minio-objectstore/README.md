@@ -95,44 +95,45 @@ The command removes all the Kubernetes components associated with the chart and 
 
 The following table lists the configurable parameters of the Minio chart and their default values.
 
-| Parameter                  | Description                         | Default                                                 |
-|----------------------------|-------------------------------------|---------------------------------------------------------|
-| `image.repository`         | Image repository                    | `minio/minio`                                           |
-| `image.tag`                | Minio image tag. Possible values listed [here](https://hub.docker.com/r/minio/minio/tags/).| `RELEASE.2018-06-09T03-43-35Z`|
-| `image.pullPolicy`         | Image pull policy                   | `IfNotPresent`                                          |
-| `mcImage.repository`       | Client image repository             | `minio/mc`                                              |
-| `mcImage.tag`              | mc image tag. Possible values listed [here](https://hub.docker.com/r/minio/mc/tags/).| `RELEASE.2018-06-09T02-18-09Z`|
-| `mcImage.pullPolicy`       | mc Image pull policy                | `IfNotPresent`                                          |
-| `ingress.enabled`          | Enables Ingress                     | `false`                                                 |
-| `ingress.annotations`      | Ingress annotations, e.g. {kubernetes.io/ingress.class: nginx, kubernetes.io/tls-acme: "true"}                 | `nil`                                                    |
-| `ingress.hosts`            | Ingress accepted hostnames, e.g. ["chart-example1.local", "chart-example2.local"]          | `nil`                                                    |
-| `ingress.tls`              | Ingress TLS configuration, e.g. [{"secretName": "chart-example-tls", "hosts": ["chart-example.local", "chart-example.local"]}]           | `nil`                                                    |
-| `mode`                     | Minio server mode (`standalone`, `shared` or `distributed`)| `standalone`                     |
-| `replicas`                 | Number of nodes (applicable only for Minio distributed mode). Should be 4 <= x <= 32 | `4`    |
-| `minioAccessSercret`       | This manually created secret contains accesskey and secretkey to access Minio Object Server. Users need to create this in same namespace as chart being deployed and specify name of secret here. | `nil`                              |
-| `configPath`               | Default config file location        | `~/.minio`                                              |
-| `mountPath`                | Default mount location for persistent drive| `/export`                                        |
-| `service.type`             | Kubernetes service type             | `ClusterIP`                                             |
-| `service.port`             | Kubernetes port where service is exposed| `9000`                                              |
-| `service.annotations`      | Service annotations, e.g. { "prometheus.io/scrape": "true","prometheus.io/path":   "/minio/prometheus/metrics", "prometheus.io/port":   "9000"}                 | `nil`                                                    |
-| `persistence.enabled`      | Use persistent volume to store data | `true`                                                  |
-| `persistence.size`         | Size of persistent volume claim     | `10Gi`                                                  |
-| `persistence.existingClaim`| Use an existing PVC to persist data | `nil`                                                   |
+| Parameter                           | Description                         | Default                                                 |
+|-------------------------------------|-------------------------------------|---------------------------------------------------------|
+| `image.repository`                  | Image repository                    | `minio/minio`                                           |
+| `image.tag`                         | Minio image tag. Possible values listed [here](https://hub.docker.com/r/minio/minio/tags/).| `RELEASE.2018-06-09T03-43-35Z`|
+| `image.pullPolicy`                  | Image pull policy                   | `IfNotPresent`                                          |
+| `mcImage.repository`                | Client image repository             | `minio/mc`                                              |
+| `mcImage.tag`                       | mc image tag. Possible values listed [here](https://hub.docker.com/r/minio/mc/tags/).| `RELEASE.2018-06-09T02-18-09Z`|
+| `mcImage.pullPolicy`                | mc Image pull policy                | `IfNotPresent`                                          |
+| `ingress.enabled`                   | Enables Ingress                     | `false`                                                 |
+| `ingress.annotations`               | Ingress annotations, e.g. {kubernetes.io/ingress.class: nginx, kubernetes.io/tls-acme: "true"}                 | `nil`                                                    |
+| `ingress.hosts`                     | Ingress accepted hostnames, e.g. ["chart-example1.local", "chart-example2.local"]          | `nil`                                                    |
+| `ingress.tls`                       | Ingress TLS configuration, e.g. [{"secretName": "chart-example-tls", "hosts": ["chart-example.local", "chart-example.local"]}]           | `nil`                                                    |
+| `mode`                              | Minio server mode (`standalone`, `shared` or `distributed`)| `standalone`                     |
+| `replicas`                          | Number of nodes (applicable only for Minio distributed mode). Should be 4 <= x <= 32 | `4`    |
+| `minioAccessSercret`                | This manually created secret contains accesskey and secretkey to access Minio Object Server. Users need to create this in same namespace as chart being deployed and specify name of secret here. | `nil`                              |
+| `minioAccessSecretTemplateName`     | This is name of the helm template that dynamically generates the name of the secret minioAccessSercret. It is used only if minioAccessSercret field is empty. Usefull only if the ibm-minio-objectstore is a subchart. | `nil`                              |
+| `configPath`                        | Default config file location        | `~/.minio`                                              |
+| `mountPath`                         | Default mount location for persistent drive| `/export`                                        |
+| `service.type`                      | Kubernetes service type             | `ClusterIP`                                             |
+| `service.port`                      | Kubernetes port where service is exposed| `9000`                                              |
+| `service.annotations`               | Service annotations, e.g. { "prometheus.io/scrape": "true","prometheus.io/path":   "/minio/prometheus/metrics", "prometheus.io/port":   "9000"}                 | `nil`                                                    |
+| `persistence.enabled`               | Use persistent volume to store data | `true`                                                  |
+| `persistence.size`                  | Size of persistent volume claim     | `10Gi`                                                  |
+| `persistence.existingClaim`         | Use an existing PVC to persist data | `nil`                                                   |
 | `persistence.useDynamicProvisioning`| The persistent volume claim will use the storageClassName to bind the volume | `true`|
-| `persistence.storageClass` | Type of persistent volume claim     | `generic`                                               |
-| `persistence.accessMode`   | ReadWriteOnce or ReadOnly           | `ReadWriteOnce`                                         |
-| `persistence.subPath`      | Mount a sub directory of the persistent volume if set | `""`                                  |
-| `resources`                | CPU/Memory resource requests/limits | Memory: `256Mi`, CPU: `100m`                            |
-| `nodeSelector`             | Node labels for pod assignment, e.g. {"key":"value"}      | `nil`                                                    |
-| `tolerations`              | Toleration labels for pod assignment [{"key": "key", "operator":"Equal", "value": "value", "effect":"NoSchedule"}] | `nil`                                                   |
-| `defaultBucket.enabled`    | If set to true, a bucket will be created after minio install | `false`                        |
-| `defaultBucket.name`       | Bucket name                         | `bucket`                                                |
-| `defaultBucket.policy`     | Bucket policy                       | `none`                                                  |
-| `defaultBucket.purge`      | Purge the bucket if already exists  | `false`                                                 |
-| `azuregateway.enabled`     | Use minio as an [azure gateway](https://docs.minio.io/docs/minio-gateway-for-azure)| `false`  |
-| `gcsgateway.enabled`       | Use minio as a [Google Cloud Storage gateway](https://docs.minio.io/docs/minio-gateway-for-gcs)| `false` |
-| `gcsgateway.gcsKeyJson`    | credential json file of service account key | `""` |
-| `gcsgateway.projectId`     | Google cloud project id             | `""` |
+| `persistence.storageClass`          | Type of persistent volume claim     | `generic`                                               |
+| `persistence.accessMode`            | ReadWriteOnce or ReadOnly           | `ReadWriteOnce`                                         |
+| `persistence.subPath`               | Mount a sub directory of the persistent volume if set | `""`                                  |
+| `resources`                         | CPU/Memory resource requests/limits | Memory: `256Mi`, CPU: `100m`                            |
+| `nodeSelector`                      | Node labels for pod assignment, e.g. {"key":"value"}      | `nil`                                                    |
+| `tolerations`                       | Toleration labels for pod assignment [{"key": "key", "operator":"Equal", "value": "value", "effect":"NoSchedule"}] | `nil`                                                   |
+| `defaultBucket.enabled`             | If set to true, a bucket will be created after minio install | `false`                        |
+| `defaultBucket.name`                | Bucket name                         | `bucket`                                                |
+| `defaultBucket.policy`              | Bucket policy                       | `none`                                                  |
+| `defaultBucket.purge`               | Purge the bucket if already exists  | `false`                                                 |
+| `azuregateway.enabled`              | Use minio as an [azure gateway](https://docs.minio.io/docs/minio-gateway-for-azure)| `false`  |
+| `gcsgateway.enabled`                | Use minio as a [Google Cloud Storage gateway](https://docs.minio.io/docs/minio-gateway-for-gcs)| `false` |
+| `gcsgateway.gcsKeyJson`             | credential json file of service account key | `""` |
+| `gcsgateway.projectId`              | Google cloud project id             | `""` |
 
 Some of the parameters above map to the env variables defined in the [Minio DockerHub image](https://hub.docker.com/r/minio/minio/).
 
