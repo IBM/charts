@@ -1,0 +1,198 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    networkid: {{ .Values.env.networkid }}
+    orgname: {{ .Values.env.orgMSP }}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        productName: IBM Blockchain Platform Remote Peer
+        productID: IBPRemotePeer_Beta1_temporary_201808
+        productVersion: 0.9.0
+      labels:
+        app: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        networkid: {{ .Values.env.networkid }}
+        orgname: {{ .Values.env.orgMSP }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.app.arch }}
+        podAntiAffinity:  
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: networkid
+                  operator: In
+                  values:
+                  - {{ .Values.env.networkid }}
+                - key: orgname
+                  operator: In
+                  values:
+                  - {{ .Values.env.orgMSP }}
+              topologyKey: kubernetes.io/hostname                  
+      containers:
+      - name: {{ .Release.Name }}
+        {{- if eq .Values.app.arch "amd64" }}
+        image: "{{ .Values.app.image }}-x86_64:1.1.0-remotepeer-beta"
+        {{- else }}
+        image: "{{ .Values.app.image }}-{{ .Values.app.arch }}:1.1.0-remotepeer-beta"
+        {{- end }}
+        command: ["/remote-peer.sh"]
+        env:
+        #- name: URL
+        #  value: {{ .Values.env.url }}
+        - name: LICENSE
+          value: accept
+        - name: NETWORKID
+          value: {{ .Values.env.networkid }}
+        #- name: APIKEY
+        #  value: {{ .Values.env.key }}
+        #- name: APISECRET
+        #  value: "{{ .Values.env.secret }}"
+        - name: CAPEER_USER
+          value: {{ .Values.peeridentity.peerUser }}
+        - name: CAPEER_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secret
+              key: peerpassword 
+        - name: STATE_DB
+          value: {{ .Values.peerinfo.stateDb }}
+        - name: ADD_CERT_NAME
+          value: {{ .Release.Name }}
+        - name: USERNAME
+          value: root
+        - name: ORGMSP
+          value: {{ .Values.env.orgMSP }}
+        - name: CA_TLS_CACERT
+          value: {{ .Values.env.caTLSCACERT }}
+        - name: CA_NAME
+          value: {{ .Values.env.caName }}
+        - name: CA_PROTOCOL_URL
+          value: {{ .Values.env.caURL }}
+        - name: COUCH_USER
+          value: admin
+        - name: COUCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secret
+              key: password
+        ports:
+        - containerPort: 7051
+        - containerPort: 7052
+        - containerPort: 7053
+        livenessProbe:
+          tcpSocket:
+            port: 7051
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          tcpSocket:
+            port: 7051
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.peerResources | indent 10 }}           
+        volumeMounts:
+        - mountPath: /mnt
+          name: fabric-peer-0
+        - mountPath: /host/var/run/
+          name: fabric-peer-1
+    {{- if eq .Values.peerinfo.stateDb "couchdb" }}
+      - name: "couchdb"
+        {{- if eq .Values.app.arch "amd64" }}
+        image: "{{ .Values.peerinfo.couchdbImage }}-x86_64:0.4.6"
+        {{- else }}
+        image: "{{ .Values.peerinfo.couchdbImage }}-{{ .Values.app.arch }}:0.4.6"
+        {{- end }}
+        env:
+        - name: COUCHDB_USER
+          value: admin
+        - name: COUCHDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secret
+              key: password
+        ports:
+        - containerPort: 5984
+        livenessProbe:
+          tcpSocket:
+            port: 5984
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          tcpSocket:
+            port: 5984
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.couchdbResources | indent 10 }}           
+        volumeMounts:
+        - mountPath: /opt/couchdb/data
+          name: db-data
+    {{- else }}
+        - mountPath: /mnt/data/peer/ledgersData/stateLeveldb
+          name: db-data   
+    {{- end }}
+      volumes:
+      - name: fabric-peer-1
+        hostPath:
+          path: /var/run
+      - name: fabric-peer-0
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          {{- if .Values.dataPVC.existingClaimName }}
+          claimName: {{ .Values.dataPVC.existingClaimName }}
+          {{- else }}
+          claimName: {{ .Release.Name }}-{{ .Values.dataPVC.name }}
+          {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: db-data
+      {{- if .Values.persistenceDb.enabled }}
+        persistentVolumeClaim:
+          {{- if .Values.statedbPVC.existingClaimName }}
+          claimName: {{ .Values.statedbPVC.existingClaimName }}
+          {{- else }}
+          claimName: "{{ .Release.Name }}-{{ .Values.statedbPVC.name }}"
+          {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
