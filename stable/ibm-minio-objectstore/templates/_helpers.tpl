@@ -41,3 +41,16 @@ Return the appropriate apiVersion for networkpolicy.
 {{- print "networking.k8s.io/v1" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+  Define a secret name to be used to gather accessKey and secretKey
+*/}}
+{{- define "minio.accessSecretName" -}}
+{{- if .Values.minioAccessSercret -}}
+  {{- printf "%s" .Values.minioAccessSercret -}}
+{{- else if .Values.minioAccessSecretTemplateName -}}
+  {{- include .Values.minioAccessSecretTemplateName . -}}
+{{- else -}}
+{{ required "Specify non empty minioAccessSercret (or minioAccessSecretTemplateName) value. This value specifies (generates) the name of the secret with access and secret keys." "" }}
+{{- end -}}
+{{- end -}}
