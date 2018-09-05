@@ -7,14 +7,19 @@
 # The list of changed sha/digests will found
 # The old files will be removed, and new tgz merges with the old
 #
-# set -x
+#set -x
 set -o errexit
 set -o nounset
 set -o pipefail
 
 # This is the link to the repo, if there is more that on build, then we would use
 # a variable to describte the link, but for now this works.
-repodir=community
+[[ -z "${1:-}" ]] && repodir=community || repodir=$1
+: "${MASTER_BRANCH:=`git branch | grep -v master | egrep "^\*" | tr -s ' '| cut -f2 -d' '`}"
+: "${PAT:=""}"
+
+[[ -z "${MASTER_BRANCH}" ]] && { echo "[ERROR] unable to set branch, you may be on master" ; exit 1 ; }
+
 URL="https://raw.githubusercontent.com/IBM/charts/master/repo/$repodir/" # TODO Update
 
 R='\033[0;31m'
@@ -46,6 +51,7 @@ function buildtable()
 	sort -o $indexout $indexout # sort for latest usage, this is alpha by chart name
 	end
 }
+
 function findnew() {
 	# Use the generated table to get a list of new files which have appear
  	# if this is a new file, we will leave it as part of the directory
@@ -55,7 +61,7 @@ function findnew() {
 	local list="GUARD"
 	local chartlist=`grep -v -f $old $new | cut -f1 -d':'`
 	
-	[[ -z "$chartlist" ]] && { pushd `dirname $new`;  ls -1 | egrep tgz | xargs -i rm {} ; popd ; end "No charts NEW found" ;  return 0 ; } # there were no charts found
+	[[ -z "$chartlist" ]] && { pushd `dirname $new`;  ls -1 | egrep tgz | xargs -I {} rm {} ; popd ; end "No charts NEW found" ;  return 0 ; } # there were no charts found
 	set $chartlist # These are the new files
 	while test $# -gt 0
 	do
@@ -65,10 +71,11 @@ function findnew() {
 	done
 	# we have a list of new charts, now remove all the other chart
 	pushd `dirname $new`
-	ls -1 | egrep tgz | egrep -v "$list" | xargs -i -r rm {} || true
+	ls -1 | egrep tgz | egrep -v "$list" | xargs -I {} -r rm {} || true
 	popd
 	end
 }
+
 function finddeleted() {
 	begin "Find charts which have been deleted"
         local old=$1.digest
@@ -88,21 +95,22 @@ function finddeleted() {
 		removechart $basechart $index
 		# There may be some charts which are not deleted
 		info "cp `dirname $index`/${basechart}-[0-9]*.[0-9]*.[0-9].tgz `dirname $new`/"
-		cp `dirname $index`/${basechart}-[0-9]*.[0-9]*.[0-9].tgz `dirname $new`/
+		cp `dirname $index`/${basechart}-[0-9]*.[0-9]*.[0-9].tgz `dirname $new`/ || true 
 		shift
 	done
 	end
 }
+
 function removechart()
 {
 	begin "Remove deleted chart from index"
 	local chartname=$1
 	local index=$2
 	info "Remove chart : $chartname"
-	range=`egrep -n "^  [[:alnum:]]" $index | egrep -A1 ":  $chartname:" | cut -f1 -d':' | xargs echo`
+	range=`egrep -n "^  [[:alnum:]]" $index | egrep -A1 ":  $chartname:" | cut -f1 -d':' | xargs echo` || return 0 # We may have removed the chart already
 	start=`cut -f1 -d' ' <<< $range`
 	let end=`cut -f2 -d' ' <<< $range`-1
-	sed -i "${start},${end}d" $index
+	sed -i.bak "${start},${end}d" $index
 	end
 }
 
@@ -113,22 +121,12 @@ function helmpackage()
 	info "helm repo index $1 --merge $2/../index.yaml --url $URL"
 	mv $2/index.yaml $2/../
 	helm repo index $1 --merge $2/../index.yaml --url $URL	
-	rm $1/index.yaml.* rm $2/index.yaml.* || true
 
-	diff -q -I "^generated:" $1/index.yaml $2/../index.yaml && { info "Index not changed" ; mv $2/../index.yaml $2/index.yaml ; }   || { info "Index has been updated" ; cp $1/index.yaml $2 ; }
+	diff -q -I "^generated:" $2/index.yaml.master $2/../index.yaml && { info "Index not changed" ; mv $2/../index.yaml $2/index.yaml ; }   || { info "Index has been updated" ; cp $1/index.yaml $2 ; }
+	rm $1/index.yaml.* rm $2/index.yaml.* || true
 
 	# cp $1/* $2/ || true
 	end
-}
-function begin() { trace begin ${FUNCNAME[1]} $@ ; }
-function end() { trace end ${FUNCNAME[1]} $@ ; }
-function error() { trace ERROR ${FUNCNAME[1]} $@ ; }
-function info() { trace INFO  ${FUNCNAME[1]} $@ ; }
-function trace()
-{
-	local type=$1 ; shift ; 
-	local function=$1 ; shift
-	echo -e "[ `tr '[:lower:]' '[:upper:]' <<< $type` $function ]\t $@"
 }
 
 function setup()
@@ -144,21 +142,36 @@ function setup()
 	info "Build a helm repo to see if there are changes"
 	helm repo index . --url $URL 
 	popd
+	cp $1 $1.master || touch $1.master # save a copy of the master index for later comparison
 	end
 
 }
+
 function commitchange()
 {
 	begin "Commit the changes"
-cat .git/config
-	sed -i "s#https://github.com/IBM/charts#https://$PAT@github.com/IBM/charts#g" .git/config
-cat .git/config
+	sed -i.bak "s#https://github.com/IBM/charts#https://$PAT@github.com/IBM/charts#g" .git/config
 	git branch
 	git checkout $MASTER_BRANCH 
 	git fetch
-	git stage repo/$repodir/
+	git stage -f repo/$repodir/index.yaml
 	git commit -m"[skip ci] - Master branch update with index" && git push origin $MASTER_BRANCH || info "No changes to push" # TODO, no changes will also appear if push fails, need to fix
 	end
+}
+
+function begin() { trace begin ${FUNCNAME[1]} $@ ; }
+
+function end() { trace end ${FUNCNAME[1]} $@ ; }
+
+function error() { trace ERROR ${FUNCNAME[1]} $@ ; }
+
+function info() { trace INFO  ${FUNCNAME[1]} $@ ; }
+
+function trace()
+{
+        local type=$1 ; shift ;
+        local function=$1 ; shift
+        echo -e "[ `tr '[:lower:]' '[:upper:]' <<< $type` $function ]\t $@"
 }
 
 begin "#################### Rebuild helm repo ################################"
@@ -172,4 +185,3 @@ finddeleted $oldindex $newindex
 helmpackage `dirname $newindex` `dirname $oldindex`
 commitchange
 end "#########################################################################"
-
