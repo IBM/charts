@@ -71,7 +71,7 @@ function findnew() {
 	done
 	# we have a list of new charts, now remove all the other chart
 	pushd `dirname $new`
-	ls -1 | egrep tgz | egrep -v "$list" | xargs -I {} -r rm {} || true
+	ls -1 | egrep tgz | egrep -v "$list" | xargs -I {} rm {} || true
 	popd
 	end
 }
@@ -83,8 +83,8 @@ function finddeleted() {
         local new=$2.digest
 	local basechart=""
 
-	cat $new | cut -f1 -d':' > $new.delete
-	local chartlist=`grep -v -f $new.delete $old | cut -f1 -d':'`
+	cat $new | cut -f1 -d':' | xargs -I {} echo "^{}:.*" > $new.delete
+	local chartlist=`grep -w -v -f $new.delete $old | cut -f1 -d':'`
 	[[ -z "$chartlist" ]] && { end "No Deleted charts" ; return 0 ; } # there were no charts found
         set $chartlist # These are the deleted files.
 	while test $# -gt 0
@@ -107,7 +107,7 @@ function removechart()
 	local chartname=$1
 	local index=$2
 	info "Remove chart : $chartname"
-	range=`egrep -n "^  [[:alnum:]]" $index | egrep -A1 ":  $chartname:" | cut -f1 -d':' | xargs echo` || return 0 # We may have removed the chart already
+	range=`egrep -n "^  [[:alnum:]]|^generated: " $index | egrep -A1 ":  $chartname:" | cut -f1 -d':' | xargs echo` || return 0 # We may have removed the chart already
 	start=`cut -f1 -d' ' <<< $range`
 	let end=`cut -f2 -d' ' <<< $range`-1
 	sed -i.bak "${start},${end}d" $index
@@ -184,4 +184,4 @@ findnew $oldindex $newindex
 finddeleted $oldindex $newindex
 helmpackage `dirname $newindex` `dirname $oldindex`
 commitchange
-end "#########################################################################"
+end "#########################################################################
