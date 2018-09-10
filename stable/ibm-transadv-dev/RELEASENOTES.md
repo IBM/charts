@@ -1,10 +1,9 @@
 
-# What’s new in Chart Version 1.7.1
-With Transformation Advisor on IBM Cloud Private 2.1.0.1+, the following new features are available:
-### Automated Migration
- - Integration with MicroClimate v1.5.0
+# What’s new in Chart Version 1.7.2
 
 # Fixes
+### Complexity Fix
+ - Applications with Incompatible Technologies were showing as Moderate, when they should have been showing as Complex
 
 # Prerequisites
 * IBM Cloud Private version 2.1.0.1+
@@ -12,6 +11,7 @@ With Transformation Advisor on IBM Cloud Private 2.1.0.1+, the following new fea
 # Version History
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- | 
+| 1.7.2 | Sep 04, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.7.2 ibmcom/transformation-advisor-server:1.7.2 ibmcom/transformation-advisor-ui:1.7.2 | None | Complexity Fix|
 | 1.7.1 | Aug 24, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.7.1 ibmcom/transformation-advisor-server:1.7.1 ibmcom/transformation-advisor-ui:1.7.1 | None | Patch for new Micro Climate|
 | 1.7.0 | Aug 22, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.7.0 ibmcom/transformation-advisor-server:1.7.0 ibmcom/transformation-advisor-ui:1.7.0 | None | Migrate JBoss and WebLogic |
 | 1.6.0 | Jul 02, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.6.0 ibmcom/transformation-advisor-server:1.6.0 ibmcom/transformation-advisor-ui:1.6.0 | None | Add authentication         |
