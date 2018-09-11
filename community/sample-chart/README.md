@@ -57,11 +57,11 @@ To uninstall/delete the `my-release` deployment:
 $ helm delete my-release --purge
 ```
 
-The command removes all the Kubernetes components associated with the chart and deletes the release.  If a delete can result in orphaned components include instructions with additional commands required for clean-up.  
+The command removes all the Kubernetes components associated with the chart and deletes the release.  If a delete can result in orphaned components include instructions with additional commands required for clean-up.
 
 For example :
 
-When deleting a release with stateful sets the associated persistent volume will need to be deleted.  
+When deleting a release with stateful sets the associated persistent volume will need to be deleted.
 Do the following after deleting the chart release to clean up orphaned Persistent Volumes.
 
 ```console
