@@ -1,0 +1,108 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+# "Restricted Materials of IBM"
+#
+# Copyright IBM Corp. 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#*******************************************************************************
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: {{ include "sch.names.fullName" (list .) }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ include "sch.names.fullName" (list .) }}-create-secret-job
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed,before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ include "sch.names.fullName" (list .) }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      {{- if .Values.jenkins.rbac.serviceAccountName }}
+      serviceAccountName: {{ .Values.jenkins.rbac.serviceAccountName }}
+      {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 8 }}
+      containers:
+      - name: create-mc-ingress-cert
+        image: "{{ .Values.utils.repository }}:{{ .Values.utils.tag }}"
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        command: [ "/usr/local/bin/create_mc_ingress_cert.sh" ]
+        volumeMounts:
+        - name: script
+          mountPath: /usr/local/bin/create_mc_ingress_cert.sh
+          subPath: create_mc_ingress_cert.sh
+      volumes:
+      - name: script
+        configMap:
+          name: {{ include "sch.names.fullName" (list .) }}-create-mc-secret
+          items:
+          - key: create_mc_ingress_cert.sh
+            path: create_mc_ingress_cert.sh
+            mode: 0777
+      restartPolicy: Never
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ include "sch.names.fullName" (list .) }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ include "sch.names.fullName" (list .) }}-create-mc-secret
+  namespace: {{ .Release.Namespace }}
+data:
+  create_mc_ingress_cert.sh: |
+    #!/bin/bash
+    mcn={{ .Values.hostName }}
+    mkdir $mcn.ssl
+    cd $mcn.ssl
+    csr=$(pwd)/$mcn.csr
+    key=$(pwd)/$mcn.key
+    crt=$(pwd)/$mcn.crt
+    openssl genrsa -out $key 2048
+    openssl req -new -sha256 -key $key -out $csr -subj "/C=US/ST=NC/O=IBM Inc./CN=$mcn" \
+        -reqexts SAN \
+        -config <(cat /etc/ssl/openssl.cnf <(printf "[SAN]\nsubjectAltName=DNS:${mcn},DNS:microclimate.127.0.0.1.nip.io"))
+    cd ..
+    (cat <<EOF
+    apiVersion: certificates.k8s.io/v1beta1
+    kind: CertificateSigningRequest
+    metadata:
+      name: ${mcn}
+    spec:
+      groups:
+      - system:authenticated
+      request: $(cat $csr | base64 | tr -d '\n')
+      usages:
+      - digital signature
+      - key encipherment
+      - server auth
+    EOF
+    ) | kubectl create -f - 2>output.txt
+    cat output.txt
+    var=$(grep "error" output.txt)
+    if [[ !  -z  "$var"  ]]
+    then
+     openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.crt -subj "/CN={{ .Values.hostName }}"
+     kubectl create secret tls {{ .Release.Name }}-mc-tls-secret  --key tls.key --cert tls.crt
+    else
+     kubectl certificate approve ${mcn}
+     kubectl get csr ${mcn} -o jsonpath='{.status.certificate}' | base64 -d > $crt
+     kubectl create secret tls {{ .Release.Name }}-mc-tls-secret  --key $key --cert $crt
+    fi
