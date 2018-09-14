@@ -20,8 +20,8 @@ prometheus.yml: |-
     {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
       scheme: https
       tls_config:
-        cert_file: /opt/ibm/monitoring/certs/tls.crt
-        key_file: /opt/ibm/monitoring/certs/tls.key
+        cert_file: /opt/ibm/monitoring/certs/{{ .Values.tls.client.certFieldName }}
+        key_file: /opt/ibm/monitoring/certs/{{ .Values.tls.client.keyFieldName }}
         insecure_skip_verify: true
     {{- else }}
       scheme: http
@@ -35,7 +35,7 @@ prometheus.yml: |-
     - job_name: prometheus
       static_configs:
         - targets:
-          - localhost:9090
+          - 127.0.0.1:9090
 
     # A scrape configuration for running Prometheus on a Kubernetes cluster.
     # This uses separate scrape configs for cluster components (i.e. API server, node)
@@ -164,6 +164,11 @@ prometheus.yml: |-
         target_label: __metrics_path__
         replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
 
+      metric_relabel_configs:
+      - source_labels: ['namespace']
+        regex: (.*)
+        target_label: kubernetes_namespace
+
     # Scrape config for service endpoints.
     #
     # The relabeling allows the actual service scrape endpoint to be configured
@@ -185,6 +190,9 @@ prometheus.yml: |-
           action: keep
           regex: true
         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: drop
+          regex: https
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
           action: replace
           target_label: __scheme__
           regex: (https?)
@@ -195,7 +203,7 @@ prometheus.yml: |-
         - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
           action: replace
           target_label: __address__
-          regex: (.+)(?::\d+);(\d+)
+          regex: ([^:]+)(?::\d+)?;(\d+)
           replacement: $1:$2
         - action: labelmap
           regex: __meta_kubernetes_service_label_(.+)
@@ -205,6 +213,106 @@ prometheus.yml: |-
         - source_labels: [__meta_kubernetes_service_name]
           action: replace
           target_label: kubernetes_name
+
+    # Scrape config for service endpoints with tls enabled.
+    #
+    # The relabeling allows the actual service scrape endpoint to be configured
+    # via the following annotations:
+    #
+    # * `prometheus.io/scrape`: Only scrape services that have a value of `true`
+    # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+    # to set this to `https` & most likely set the `tls_config` of the scrape config.
+    # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+    # * `prometheus.io/port`: If the metrics are exposed on a different port to the
+    # service then set this appropriately.
+    - job_name: 'kubernetes-service-endpoints-with-tls'
+
+      kubernetes_sd_configs:
+        - role: endpoints
+
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_skip_verify]
+          action: drop
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: keep
+          regex: https
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_namespace]
+          action: replace
+          target_label: __address__
+          regex: (\d+).(\d+).(\d+).(\d+):(\d+);(.+)
+          replacement: $1-$2-$3-$4.$6.pod.cluster.local:$5
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: kubernetes_name
+
+      scheme: https
+
+      tls_config:
+        ca_file: /opt/ibm/monitoring/caCerts/{{ .Values.tls.ca.certFieldName }}
+        cert_file: /opt/ibm/monitoring/certs/{{ .Values.tls.client.certFieldName }}
+        key_file: /opt/ibm/monitoring/certs/{{ .Values.tls.client.keyFieldName }}
+        insecure_skip_verify: false
+
+  {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+    - job_name: 'node-exporter-endpoints-with-tls'
+
+      kubernetes_sd_configs:
+        - role: endpoints
+
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_skip_verify]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: keep
+          regex: https
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: kubernetes_name
+
+      scheme: https
+
+      tls_config:
+        ca_file: /opt/ibm/monitoring/caCerts/{{ .Values.tls.ca.certFieldName }}
+        cert_file: /opt/ibm/monitoring/certs/{{ .Values.tls.client.certFieldName }}
+        key_file: /opt/ibm/monitoring/certs/{{ .Values.tls.client.keyFieldName }}
+        insecure_skip_verify: true
+  {{- end }}
 
     # Example scrape config for probing services via the Blackbox Exporter.
     #
@@ -261,7 +369,7 @@ prometheus.yml: |-
           regex: (.+)
         - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
           action: replace
-          regex: (.+):(?:\d+);(\d+)
+          regex: ([^:]+)(?::\d+)?;(\d+)
           replacement: ${1}:${2}
           target_label: __address__
         - action: labelmap
@@ -272,8 +380,16 @@ prometheus.yml: |-
         - source_labels: [__meta_kubernetes_pod_name]
           action: replace
           target_label: kubernetes_pod_name
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_target]
+          action: replace
+          target_label: __param_target
+          regex: (.*)
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_module]
+          action: replace
+          target_label: __param_module
+          regex: (.*)
 
-  {{- if or (eq .Values.mode "managed") .Values.prometheus.etcdTarget.enabled }}
+  {{- if .Values.prometheus.etcdTarget.enabled }}
     - job_name: etcd
       scheme: https
       static_configs:

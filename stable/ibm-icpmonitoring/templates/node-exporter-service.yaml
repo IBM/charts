@@ -9,6 +9,10 @@ kind: Service
 metadata:
   annotations:
     prometheus.io/scrape: 'true'
+    {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+    prometheus.io/scheme: 'https'
+    {{- end }}
+    skip.verify: 'true'
   labels:
     app: {{ template "prometheus.fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
@@ -21,7 +25,11 @@ spec:
     - name: metrics
       port: {{ .Values.nodeExporter.port }}
       protocol: TCP
+    {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+      targetPort: {{ .Values.nodeExporter.port }}
+    {{- else }}
       targetPort: 9100
+    {{- end }}
   selector:
     app: {{ template "prometheus.fullname" . }}
     component: nodeexporter
