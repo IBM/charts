@@ -3,15 +3,33 @@
 [Portworx](https://portworx.com/) is a software defined persistent storage solution designed and purpose built for applications deployed as containers, via container orchestrators such as Kubernetes, Marathon and Swarm. It is a clustered block storage solution and provides a Cloud-Native layer from which containerized stateful applications programmatically consume block, file and object storage services directly through the scheduler.
 
 ## Pre-requisites
-The helm chart (portworx-helm) deploys Portworx and STork(https://docs.portworx.com/scheduler/kubernetes/stork.html) on your Kubernetes cluster. The minimum requirements for deploying the helm chart are as follows:
 
-- Helm has been installed on the client machine from where you would install the chart. (https://docs.helm.sh/using_helm/#installing-helm)
+This helm chart deploys [Portworx](https://portworx.com/) and [Stork](https://docs.portworx.com/scheduler/kubernetes/stork.html) on your Kubernetes cluster. The minimum requirements for deploying the helm chart are as follows:
+
 - Tiller v2.9.0 and above is running on the Kubernetes cluster where you wish to deploy Portworx.
-- Tiller has been provided with the right RBAC permissions for the chart to be deployed correctly.
-- Kubernetes 1.7+
 - All [Pre-requisites](https://docs.portworx.com/#minimum-requirements). for Portworx fulfilled.
 
-## Installing the Chart
+## Limitations
+* The portworx helm chart can only be deployed in the kube-system namespace. Hence use "kube-system" in the "Target namespace" during configuration.
+* You can only deploy one portworx helm chart per Kubernetes cluster.
+
+## Uninstalling the Chart
+
+To uninstall/delete the `my-release` deployment:
+
+> **Tip** > The Portworx configuration files under `/etc/pwx/` directory are preserved, and will not be deleted.
+
+```
+helm delete my-release
+```
+The command removes all the Kubernetes components associated with the chart and deletes the release.
+
+
+## Documentation
+* [Portworx docs site](https://docs.portworx.com/scheduler/kubernetes/)
+* [Portworx interactive tutorials](https://docs.portworx.com/scheduler/kubernetes/px-k8s-interactive.html)
+
+## Installing the Chart using the CLI
 
 To install the chart with the release name `my-release` run the following commands substituting relevant values for your setup:
 
@@ -27,76 +45,9 @@ Example of using the helm CLI to install the chart:
 helm install --debug --name my-release --set etcdEndPoint=etcd:http://192.168.70.90:2379,clusterName=$(uuid) ./helm/charts/portworx/
 ```
 
-## Configuration
-
-The following tables lists the configurable parameters of the Portworx chart and their default values.
-
-|             Parameter       |            Description             |                    Default                |
-|-----------------------------|------------------------------------|-------------------------------------------|
-| `etcdEndPoint`          | (REQUIRED) ETCD endpoint for PX to function properly in the form "etcd:http://<your-etcd-endpoint>". Multiple Urls should be semi-colon seperated example: etcd:http://<your-etcd-endpoint1>;etcd:http://<your-etcd-endpoint2>  | `etcd:http://<your-etcd-endpoint>`                    |
-| `imageVersion`              | The image tag to pull              | `1.5.0`                                  |
-| `openshiftInstall`               | Installing on Openshift? | `false`                               |
-| `pksInstall`               | Installing on Pivotal Container service? | `false`                               |
-| `AKSorEKSInstall`               | Installing on AKS(Azure Kubernetes service) or EKS (Amazon Elastic Container service) | `false`                               |
-| `clusterName`           | Portworx Cluster Name  | `mycluster`                                     |
-| `usefileSystemDrive`      | Should Portworx use an unmounted drive even with a filesystem ? | `false`                |
-| `usedrivesAndPartitions`  | Should Portworx use the drives as well as partitions on the disk ? | `false`             |
-| `secretType`      | Secrets store to be used can be AWS/KVDB/Vault          | `none`                                    |
-| `drives` | Semi-colon seperated list of drives to be used for storage (example: "/dev/sda;/dev/sdb")           | `none`                                   |
-| `dataInterface`   | Name of the interface <ethX>             | `none`                                   |
-| `managementInterface`   | Name of the interface <ethX>             | `none`                                   |
-| `envVars`  | semi-colon-separated list of environment variables that will be exported to portworx. (example: API_SERVER=http://lighthouse-new.portworx.com;MYENV1=val1;MYENV2=val2) | `none`                                    |
-| `stork`    | [Storage Orchestration for Hyperconvergence](https://github.com/libopenstorage/stork).     | `true`       |
-| `storkVersion`    | The version of stork     | `1.1.1`       |
-| `customRegistryURL`    | Custom Docker registry     | `none`       |
-| `registrySecret`   | Registry secret  | `none` |
-| `journalDevice`    | Journal device for Portworx metadata     | `none`       |
-| `csi`              | Enable CSI (Tech Preview only)           | `false`      |
-| `internalKVDB`              | Internal KVDB store           | `false`      |
-| `etcd.credentials`  | Username and password for ETCD authentication in the form user:password | `none:none`                                    |
-| `etcd.certPath`  | Base path where the certificates are placed. (example: if the certificates ca,.crt and the .key are in /etc/pwx/etcdcerts the value should be provided as /etc/pwx/etcdcerts Refer: https://docs.portworx.com/scheduler/kubernetes/etcd-certs-using-secrets.html) | `none`                                    |
-| `etcd.ca`  | Location of CA file for ETCD authentication. Should be /path/to/server.ca | `none`                                    |
-| `etcd.cert`  | Location of certificate for ETCD authentication. Should be /path/to/server.crt | `none`                                    |
-| `etcd.key`  | Location of certificate key for ETCD authentication Should be /path/to/servery.key | `none`                                    |
-| `consul.acl`  | ACL token value used for Consul authentication. (example: 398073a8-5091-4d9c-871a-bbbeb030d1f6) | `none`                                    |
-
-
-Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
-
-> **Tip**: In this case the chart is located at `./helm/charts/px`, do change it as per your setup.
-```
-helm install --name my-release --set deploymentType=docker,imageVersion=1.2.12.0,etcdEndPoint=etcd:http://192.168.70.90:2379 ./helm/charts/px/
-```
-
-Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
-```
-helm install --name my-release -f ./helm/charts/px/values.yaml ./helm/charts/px
-```
-> **Tip**: You can use the default [values.yaml](values.yaml) and make changes as per your requirement
-
-## Uninstalling the Chart
-
-To uninstall/delete the `my-release` deployment:
-The chart would follow the process as outlined here. (https://docs.portworx.com/scheduler/kubernetes/install.html#uninstall)
-
-> **Tip** > The Portworx configuration files under `/etc/pwx/` directory are preserved, and will not be deleted.
-
-```
-helm delete my-release
-```
-The command removes all the Kubernetes components associated with the chart and deletes the release.
-
-## Limitations
-* The portworx helm chart can only be deployed in the kube-system namespace.
-* You can only deploy one portworx helm chart per Kubernetes cluster.
-
-## Documentation
-* [Portworx docs site](https://docs.portworx.com/scheduler/kubernetes/)
-* [Portworx interactive tutorials](https://docs.portworx.com/scheduler/kubernetes/px-k8s-interactive.html)
-
 ## Basic troubleshooting
 
-#### Helm install errors with `no available release name found`
+#### Helm install errors with "no available release name found"
 
 ```
 helm install --dry-run --debug --set etcdEndPoint=etcd:http://192.168.70.90:2379,clusterName=$(uuid) ./helm/charts/px/
@@ -116,7 +67,7 @@ You can verify the tiller logs
 [tiller] 2018/02/07 06:00:13 failed install prepare step: no available release name found
 ```
 
-#### Helm install errors with  `Job failed: BackoffLimitExceeded`
+#### Helm install errors with  "Job failed: BackoffLimitExceeded"
 
 ```
 helm install --debug --set dataInterface=eth1,managementInterface=eth1,etcdEndPoint=etcd:http://192.168.70.179:2379,clusterName=$(uuid) ./helm/charts/px/
@@ -143,12 +94,10 @@ Response Code: 000
 Incorrect ETCD URL provided. It is either not reachable or is incorrect...
 
 ```
+
 Ensure the correct etcd URL is set as a parameter to the `helm install` command.
-```
 
-```
-
-#### Helm install errors with `Job failed: Deadline exceeded`
+#### Helm install errors with "Job failed: Deadline exceeded"
 
 ```
 helm install --debug --set dataInterface=eth1,managementInterface=eth1,etcdEndPoint=etcd:http://192.168.20.290:2379,clusterName=$(uuid) ./charts/px/
