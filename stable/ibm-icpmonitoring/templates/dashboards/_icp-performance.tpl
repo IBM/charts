@@ -6,6 +6,7 @@
 */}}
 
 {{/* ICP Performance Monitoring Dashboard File */}}
+{{/* origin: https://github.com/ibm-cloud-architecture/CSMO-ICP/tree/master/grafana/csmodashboards */}}
 {{- define "ICPPerformanceMonitoring" }}
 ICP2.1-Performance.json: |-
     {
@@ -152,7 +153,7 @@ ICP2.1-Performance.json: |-
               "tableColumn": "",
               "targets": [
                 {
-                  "expr": "time() - max(node_boot_time{instance=~\".*\"})",
+                  "expr": "time() - max(node_boot_time_seconds{instance=~\".*\"})",
                   "format": "time_series",
                   "hide": false,
                   "interval": "15m",
@@ -235,7 +236,7 @@ ICP2.1-Performance.json: |-
               "tableColumn": "",
               "targets": [
                 {
-                  "expr": "sum(node_memory_MemTotal)",
+                  "expr": "sum(node_memory_MemTotal_bytes)",
                   "format": "time_series",
                   "hide": false,
                   "interval": "10s",
@@ -318,7 +319,7 @@ ICP2.1-Performance.json: |-
               "tableColumn": "",
               "targets": [
                 {
-                  "expr": "sum(node_memory_MemAvailable)",
+                  "expr": "sum(node_memory_MemAvailable_bytes)",
                   "format": "time_series",
                   "hide": false,
                   "interval": "10s",
@@ -396,7 +397,7 @@ ICP2.1-Performance.json: |-
               "tableColumn": "",
               "targets": [
                 {
-                  "expr": " sum(node_memory_MemAvailable) / sum(node_memory_MemTotal) * 100",
+                  "expr": " sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes) * 100",
                   "format": "time_series",
                   "hide": false,
                   "intervalFactor": 2,
@@ -668,7 +669,7 @@ ICP2.1-Performance.json: |-
               "tableColumn": "",
               "targets": [
                 {
-                  "expr": "time() - min(node_boot_time{instance=~\".*\"})",
+                  "expr": "time() - min(node_boot_time_seconds{instance=~\".*\"})",
                   "format": "time_series",
                   "hide": false,
                   "interval": "15m",
@@ -751,7 +752,7 @@ ICP2.1-Performance.json: |-
               "tableColumn": "",
               "targets": [
                 {
-                  "expr": "sum(node_filesystem_size)",
+                  "expr": "sum(node_filesystem_size_bytes)",
                   "format": "time_series",
                   "hide": false,
                   "interval": "10s",
@@ -835,7 +836,7 @@ ICP2.1-Performance.json: |-
               "tableColumn": "",
               "targets": [
                 {
-                  "expr": "sum(node_filesystem_free)",
+                  "expr": "sum(node_filesystem_free_bytes)",
                   "format": "time_series",
                   "hide": false,
                   "interval": "10s",
@@ -918,7 +919,7 @@ ICP2.1-Performance.json: |-
               "tableColumn": "",
               "targets": [
                 {
-                  "expr": "min((node_filesystem_size{fstype=~\"xfs|ext4\"} - node_filesystem_free{fstype=~\"xfs|ext4\"} )/ node_filesystem_size{fstype=~\"xfs|ext4\"})",
+                  "expr": "min((node_filesystem_size_bytes{fstype=~\"xfs|ext4\"} - node_filesystem_free_bytes{fstype=~\"xfs|ext4\"} )/ node_filesystem_size_bytes{fstype=~\"xfs|ext4\"})",
                   "format": "time_series",
                   "hide": false,
                   "interval": "15m",
@@ -1337,7 +1338,7 @@ ICP2.1-Performance.json: |-
               ],
               "targets": [
                 {
-                  "expr": "((node_memory_MemTotal - node_memory_MemAvailable) / node_memory_MemTotal) * 100",
+                  "expr": "((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes) * 100",
                   "format": "table",
                   "hide": false,
                   "interval": "1s",
@@ -2148,7 +2149,7 @@ ICP2.1-Performance.json: |-
         ]
       },
       "timezone": "browser",
-      "title": "ICP 2.1 Performance IBM Provided 2.5",
+      "title": "ICP Performance IBM Provided 2.5",
       "version": 6
     }
 {{- end }}

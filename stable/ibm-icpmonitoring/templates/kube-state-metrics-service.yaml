@@ -9,6 +9,9 @@ kind: Service
 metadata:
   annotations:
     prometheus.io/scrape: 'true'
+    {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+    prometheus.io/scheme: 'https'
+    {{- end }}
   labels:
     app: {{ template "prometheus.fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
@@ -18,10 +21,14 @@ metadata:
   name: {{ template "prometheus.fullname" . }}-kubestatemetrics
 spec:
   ports:
-    - name: http
-      port: {{ .Values.kubeStateMetrics.port }}
-      protocol: TCP
-      targetPort: 8080
+  - name: metrics
+  {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+    targetPort: 8443
+  {{- else }}
+    targetPort: 8080
+  {{- end }}
+    port: {{ .Values.kubeStateMetrics.port }}
+    protocol: TCP
   selector:
     app: {{ template "prometheus.fullname" . }}
     component: kubestatemetrics

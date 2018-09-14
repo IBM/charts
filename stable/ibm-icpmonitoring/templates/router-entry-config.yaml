@@ -1,5 +1,3 @@
-{{- if or (eq .Values.mode "managed") .Values.tls.enabled -}}
-
 # Licensed Materials - Property of IBM
 # 5737-E67
 # @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
@@ -17,11 +15,27 @@ metadata:
 data:
   entrypoint.sh: |
     #!/bin/sh
-    cp -f /opt/ibm/router/certs/tls.crt /opt/ibm/router/nginx/conf/server.crt
-    cp -f /opt/ibm/router/certs/tls.key /opt/ibm/router/nginx/conf/server.key
+    if [ -e /opt/ibm/router/certs/{{ .Values.tls.server.certFieldName }} ]; then
+      cp -f /opt/ibm/router/certs/{{ .Values.tls.server.certFieldName }} /opt/ibm/router/nginx/conf/server.crt
+      cp -f /opt/ibm/router/certs/{{ .Values.tls.server.keyFieldName }} /opt/ibm/router/nginx/conf/server.key
+    elif [ -e /opt/ibm/router/certs/{{ .Values.tls.exporter.certFieldName }} ]; then
+      cp -f /opt/ibm/router/certs/{{ .Values.tls.exporter.certFieldName }} /opt/ibm/router/nginx/conf/server.crt
+      cp -f /opt/ibm/router/certs/{{ .Values.tls.exporter.keyFieldName }} /opt/ibm/router/nginx/conf/server.key
+    fi
+
     cp -f /opt/ibm/router/conf/nginx.conf /opt/ibm/router/nginx/conf/nginx.conf
+    
     export GRAFANA_CRED_STR=$(echo -n "${GF_SECURITY_ADMIN_USER}:${GF_SECURITY_ADMIN_PASSWORD}" | base64)
     sed -i "s/{GRAFANA_CRED}/${GRAFANA_CRED_STR}/g" /opt/ibm/router/nginx/conf/nginx.conf
-    nginx -g 'daemon off;'
 
-{{- end -}}
+    sed -i "s/{NODE_NAME}/${NODE_NAME}/g" /opt/ibm/router/nginx/conf/nginx.conf
+  
+  {{- if eq .Values.environment "openshift" }}
+    export OPENSHIFT_RESOLVER=$(cat /etc/resolv.conf |grep nameserver|awk '{split($0, a, " "); print a[2]}')
+    sed -i "s/{OPENSHIFT_RESOLVER}/${OPENSHIFT_RESOLVER}/g" /opt/ibm/router/nginx/conf/nginx.conf
+  {{- end }}
+
+  {{- if eq .Values.mode "managed" }}
+    cp -f /opt/ibm/router/rbac/rbac.lua /opt/ibm/router/nginx/conf/rbac.lua
+  {{- end }}
+    nginx -c /opt/ibm/router/nginx/conf/nginx.conf -g 'daemon off;'
