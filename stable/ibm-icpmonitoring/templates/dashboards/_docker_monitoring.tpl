@@ -6,6 +6,7 @@
 */}}
 
 {{/* Docker Monitoring Dashboard File */}}
+{{/* origin: https://grafana.com/dashboards/3681 */}}
 {{- define "dockerMonitoring" }}
 docker-host-container-monitoring.json: |-
     {
@@ -416,7 +417,7 @@ docker-host-container-monitoring.json: |-
               "steppedLine": false,
               "targets": [
                 {
-                  "expr": "node_filesystem_free{fstype=\"aufs\"}",
+                  "expr": "node_filesystem_free_bytes{fstype=\"aufs\"}",
                   "hide": false,
                   "intervalFactor": 2,
                   "legendFormat": "Free Disk Space",
@@ -424,7 +425,7 @@ docker-host-container-monitoring.json: |-
                   "step": 4
                 },
                 {
-                  "expr": "node_filesystem_size{fstype=\"aufs\"} - node_filesystem_free{fstype=\"aufs\"}",
+                  "expr": "node_filesystem_size_bytes{fstype=\"aufs\"} - node_filesystem_free_bytes{fstype=\"aufs\"}",
                   "hide": false,
                   "intervalFactor": 2,
                   "legendFormat": "Used Disk Space",
@@ -545,15 +546,15 @@ docker-host-container-monitoring.json: |-
                   "step": 30
                 },
                 {
-                  "expr": "node_memory_Buffers",
+                  "expr": "node_memory_Buffers_bytes",
                   "hide": true,
                   "intervalFactor": 2,
-                  "legendFormat": "node_memory_Dirty",
+                  "legendFormat": "node_memory_Dirty_bytes",
                   "refId": "N",
                   "step": 30
                 },
                 {
-                  "expr": "node_memory_MemFree",
+                  "expr": "node_memory_MemFree_bytes",
                   "hide": true,
                   "intervalFactor": 2,
                   "legendFormat": "{{ "{{" }}__name__}}",
@@ -561,7 +562,7 @@ docker-host-container-monitoring.json: |-
                   "step": 30
                 },
                 {
-                  "expr": "node_memory_MemAvailable",
+                  "expr": "node_memory_MemAvailable_bytes",
                   "hide": false,
                   "intervalFactor": 2,
                   "legendFormat": "Available Memory",
@@ -569,7 +570,7 @@ docker-host-container-monitoring.json: |-
                   "step": 4
                 },
                 {
-                  "expr": "node_memory_MemTotal - node_memory_MemAvailable",
+                  "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
                   "hide": false,
                   "intervalFactor": 2,
                   "legendFormat": "Unavailable Memory",
@@ -577,7 +578,7 @@ docker-host-container-monitoring.json: |-
                   "step": 4
                 },
                 {
-                  "expr": "node_memory_Inactive",
+                  "expr": "node_memory_Inactive_bytes",
                   "hide": true,
                   "intervalFactor": 2,
                   "legendFormat": "{{ "{{" }}__name__}}",
@@ -585,7 +586,7 @@ docker-host-container-monitoring.json: |-
                   "step": 30
                 },
                 {
-                  "expr": "node_memory_KernelStack",
+                  "expr": "node_memory_KernelStack_bytes",
                   "hide": true,
                   "intervalFactor": 2,
                   "legendFormat": "{{ "{{" }}__name__}}",
@@ -593,7 +594,7 @@ docker-host-container-monitoring.json: |-
                   "step": 30
                 },
                 {
-                  "expr": "node_memory_Active",
+                  "expr": "node_memory_Active_bytes",
                   "hide": true,
                   "intervalFactor": 2,
                   "legendFormat": "{{ "{{" }}__name__}}",
@@ -601,7 +602,7 @@ docker-host-container-monitoring.json: |-
                   "step": 30
                 },
                 {
-                  "expr": "node_memory_MemTotal - (node_memory_Active + node_memory_MemFree + node_memory_Inactive)",
+                  "expr": "node_memory_MemTotal_bytes - (node_memory_Active_bytes + node_memory_MemFree_bytes + node_memory_Inactive_bytes)",
                   "hide": true,
                   "intervalFactor": 2,
                   "legendFormat": "Unknown",
@@ -609,7 +610,7 @@ docker-host-container-monitoring.json: |-
                   "step": 40
                 },
                 {
-                  "expr": "node_memory_MemFree + node_memory_Inactive ",
+                  "expr": "node_memory_MemFree_bytes + node_memory_Inactive_bytes ",
                   "hide": true,
                   "intervalFactor": 2,
                   "legendFormat": "{{ "{{" }}__name__}}",
@@ -625,7 +626,7 @@ docker-host-container-monitoring.json: |-
                   "step": 30
                 },
                 {
-                  "expr": "node_memory_Inactive + node_memory_MemFree + node_memory_MemAvailable",
+                  "expr": "node_memory_Inactive_bytes + node_memory_MemFree_bytes + node_memory_MemAvailable_bytes",
                   "hide": true,
                   "intervalFactor": 2,
                   "legendFormat": "",
@@ -703,15 +704,15 @@ docker-host-container-monitoring.json: |-
               "steppedLine": false,
               "targets": [
                 {
-                  "expr": "sum(rate(node_disk_bytes_read[$interval])) by (device)",
+                  "expr": "sum(rate(node_disk_read_bytes_total[$interval])) by (device)",
                   "intervalFactor": 2,
                   "legendFormat": "OUT on /{{ "{{" }}device}}",
-                  "metric": "node_disk_bytes_read",
+                  "metric": "node_disk_read_bytes_total",
                   "refId": "A",
                   "step": 4
                 },
                 {
-                  "expr": "sum(rate(node_disk_bytes_written[$interval])) by (device)",
+                  "expr": "sum(rate(node_disk_written_bytes_total[$interval])) by (device)",
                   "intervalFactor": 2,
                   "legendFormat": "IN on /{{ "{{" }}device}}",
                   "metric": "",

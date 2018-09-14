@@ -13,24 +13,35 @@ metadata:
     component: nodeexporter
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
+    role: "nodeexporter"
   name: {{ template "prometheus.fullname" . }}-nodeexporter
 spec:
+  updateStrategy:
+    type: RollingUpdate
+  minReadySeconds: 5
   template:
     metadata:
       labels:
         app: {{ template "prometheus.fullname" . }}
+        chart: {{ .Chart.Name }}
         component: nodeexporter
         release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        role: "nodeexporter"
       annotations:
         productName: node-exporter
-        productVersion: v0.15.2
+        productVersion: v0.16.0
         productID: none
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
-    {{- if eq .Values.mode "managed" }}
+      serviceAccount: {{ .Values.nodeExporter.serviceAccount.name }}
       tolerations:
       - key: "dedicated"
         operator: "Exists"
         effect: "NoSchedule"
+    {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
     {{- end }}
       containers:
         - name: nodeexporter
@@ -39,9 +50,6 @@ spec:
           args:
             - --path.procfs=/host/proc
             - --path.sysfs=/host/sys
-          ports:
-            - name: metrics
-              containerPort: 9100
         {{- if .Values.nodeExporter.probe.enabled }}
           readinessProbe:
             httpGet:
@@ -74,6 +82,26 @@ spec:
             - name: sys
               mountPath: /host/sys
               readOnly: true
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router
+          image: {{ .Values.router.image.repository }}:{{ .Values.router.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/opt/ibm/router/entry/entrypoint.sh"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - mountPath: "/opt/ibm/router/conf"
+              name: router-config
+            - mountPath: "/opt/ibm/router/entry"
+              name: router-entry
+            - mountPath: "/opt/ibm/router/caCerts"
+              name: monitoring-ca-certs
+            - mountPath: "/opt/ibm/router/certs"
+              name: monitoring-certs
+      {{- end }}
       hostNetwork: true
       hostPID: true
       volumes:
@@ -83,5 +111,26 @@ spec:
         - name: sys
           hostPath:
             path: /sys
-
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router-config
+          configMap:
+            name: {{ template "prometheus.fullname" . }}-exporter-router-nginx-config
+            items:
+              - key: nodeexporter.nginx.conf
+                path: nginx.conf
+        - name: router-entry
+          configMap:
+            name: {{ template "monitoring.fullname" . }}-router-entry-config
+            defaultMode: 0744
+        - name: monitoring-ca-certs
+          secret:
+          {{- if .Values.tls.exporter.existingSecretName }}
+            secretName: {{ .Values.tls.exporter.existingSecretName }}
+          {{- else }}
+            secretName: {{ template "monitoring.fullname" . }}-exporter-certs
+          {{- end }}
+        - name: monitoring-certs
+          secret:
+            secretName: {{ template "monitoring.fullname" . }}-exporter-certs
+      {{- end }}
 {{- end -}}

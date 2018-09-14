@@ -8,26 +8,27 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   labels:
-    app: {{ template "collectdexporter.fullname" . }}
+    app: {{ template "prometheus.fullname" . }}
     chart: {{ .Chart.Name }}
     component: collectdexporter
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
-  name: {{ template "collectdexporter.fullname" . }}
+  name: {{ template "prometheus.fullname" . }}-collectdexporter
 spec:
   template:
     metadata:
       labels:
-        app: {{ template "collectdexporter.fullname" . }}
+        app: {{ template "prometheus.fullname" . }}
         chart: {{ .Chart.Name }}
         component: collectdexporter
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
-      name: {{ template "collectdexporter.fullname" . }}
+      name: {{ template "prometheus.fullname" . }}-collectdexporter
       annotations:
         productName: collectd-exporter
-        productVersion: 0.3.1
+        productVersion: v0.4.0
         productID: none
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
     {{- if eq .Values.mode "managed" }}
       tolerations:
@@ -51,16 +52,14 @@ spec:
                 values:
                 - "true"
             {{- end }}
+    {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+    {{- end }}
       containers:
         - image: {{ .Values.collectdExporter.image.repository }}:{{ .Values.collectdExporter.image.tag }}
           name: collectd-exporter
-          ports:
-          - containerPort: 9103
-            name: metrics
-          - containerPort: 25826
-            name: collector
-            protocol: UDP
-          args: [ "-collectd.listen-address=:25826" ]
+          args: [ "--collectd.listen-address=:25826" ]
         {{- if .Values.collectdExporter.probe.enabled }}
           readinessProbe:
             httpGet:
@@ -85,4 +84,45 @@ spec:
             periodSeconds: 10
           {{- end }}
         {{- end }}
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router
+          image: {{ .Values.router.image.repository }}:{{ .Values.router.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/opt/ibm/router/entry/entrypoint.sh"]
+#          ports:
+#          - name: router
+#            containerPort: 8080
+          volumeMounts:
+            - mountPath: "/opt/ibm/router/conf"
+              name: router-config
+            - mountPath: "/opt/ibm/router/caCerts"
+              name: monitoring-ca-certs
+            - mountPath: "/opt/ibm/router/certs"
+              name: monitoring-certs
+            - mountPath: "/opt/ibm/router/entry"
+              name: router-entry
+      {{- end }}
+      volumes:
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router-config
+          configMap:
+            name: {{ template "prometheus.fullname" . }}-exporter-router-nginx-config
+            items:
+              - key: collectdexporter.nginx.conf
+                path: nginx.conf
+        - name: monitoring-ca-certs
+          secret:
+            secretName: {{ .Values.tls.ca.secretName }}
+        - name: monitoring-certs
+          secret:
+          {{- if .Values.tls.exporter.existingSecretName }}
+            secretName: {{ .Values.tls.exporter.existingSecretName }}
+          {{- else }}
+            secretName: {{ template "monitoring.fullname" . }}-exporter-certs
+          {{- end }}
+        - name: router-entry
+          configMap:
+            name: {{ template "monitoring.fullname" . }}-router-entry-config
+            defaultMode: 0744
+      {{- end }}
 {{- end -}}
