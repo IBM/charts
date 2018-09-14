@@ -46,9 +46,28 @@ The following tables lists the configurable parameters of the Prometheus chart a
 
 Parameter | Description | Default
 --------- | ----------- | -------
-`mode` | deploy mode, options include managed|standard | standard
+`environment` | Target environment of deployment, options include openshift and non-openshift | non-openshift
+`mode` | deploy mode, options include managed and standard | standard
 `tls.enabled` | Enabled security for the Chart | false
+`tls.issuer` | Name of the issuer | icp-ca-issuer
+`tls.issuerKind` | Kind of the issuer, options include Issuer and ClusterIssuer | ClusterIssuer
+`tls.ca.secretName` | secret for ca cert | cluster-ca-cert
+`tls.ca.certFieldName` | field name for ca cert in secret | tls.crt
+`tls.server.existingSecretName` | existing secret for server cert | ""
+`tls.server.certFieldName` | field name for server cert in secret | tls.crt
+`tls.server.keyFieldName` | field name for server key in secret | tls.key
+`tls.exporter.existingSecretName` | existing secret for exporter cert | ""
+`tls.exporter.certFieldName` | field name for exporter cert in secret | tls.crt
+`tls.exporter.keyFieldName` | field name for exporter key in secret | tls.key
+`tls.client.existingSecretName` | existing secret for client cert | ""
+`tls.client.certFieldName` | field name for client cert in secret | tls.crt
+`tls.client.keyFieldName` | field name for client key in secret | tls.key
 `imagePullPolicy` | pull policy for deployed images | IfNotPresent
+`imagePullSecrets` | Image secret to pull images from private repo | ""
+`clusterAddress` | Cluster access address, IP or DNS | 127.0.0.1
+`clusterPort` | Cluster access port | 8443
+`clusterDomain` | Cluster domain name | cluster.local
+`clusterName` | Name of the target cluster. | mycluster
 `prometheus.image.repository` | Prometheus server container image name | ibmcom/prometheus
 `prometheus.image.tag` | Prometheus server container image tag | v2.0.0
 `prometheus.port` | Prometheus server service port | 80
@@ -119,8 +138,8 @@ Parameter | Description | Default
 `grafana.image.repository` | Grafana Docker Image Name | ibmcom/grafana
 `grafana.image.tag` | Grafana Docker Image Tag | 4.6.3
 `grafana.port` | Grafana Container Exposed Port | 3000
-`grafana.user` | Grafana user's name | admin
-`grafana.password` | Grafana user's password | admin
+`grafana.user` | Grafana user's name | "admin"
+`grafana.password` | Grafana user's password | ""
 `grafana.persistentVolume.enabled` | Create a volume to store data if true | false
 `grafana.persistentVolume.useDynamicProvisioning` | dynamically provison persistent volume if true | true
 `grafana.persistentVolume.size` | Size of persistent volume claim | 1Gi 
@@ -156,15 +175,21 @@ Parameter | Description | Default
 `elasticsearchExporter.enabled` | install elasticsearch exporter if true | false
 `elasticsearchExporter.image.repository` | elasticsearchExporter Docker Image Name | ibmcom/lasticsearch_exporter
 `elasticsearchExporter.image.tag` | elasticsearchExporter Docker Image Tag | 1.0.2
-`elasticsearchExporter.esUri` | elasticsearch url | http://elasticsearch:9200
+`elasticsearchExporter.esUri` | elasticsearch url | https://elasticsearch:9200
+`elasticsearchExporter.tls.enabled` | enable tls for exporter to request elasticsearch endpoint | true
+`elasticsearchExporter.tls.ca.secretName` | secret for ca cert | cluster-ca-cert
+`elasticsearchExporter.tls.ca.certFieldName` | field name for ca cert in secret | tls.crt
+`elasticsearchExporter.tls.client.existingSecretName` | existing secret for client cert | ""
+`elasticsearchExporter.tls.client.certFieldName` | field name for client cert in secret | tls.crt
+`elasticsearchExporter.tls.client.keyFieldName` | field name for client key in secret | tls.key
 `elasticsearchExporter.port` | elasticsearchExporter exposed port | 9108
 `elasticsearchExporter.probe.enabled` | enable health probe for elasticsearchExporter if true | true
 `elasticsearchExporter.probe.readiness.args` | args for readiness probe | {}
 `elasticsearchExporter.probe.liveness.args` | args for liveness probe | {}
 `curl.image.repository` | curl Docker Image Name | ibmcom/curl
-`curl.image.tag` | curl Docker Image Tag | 3.6
-`certGen.image.repository` | certGen Docker Image Name | ibmcom/icp-cert-gen
-`certGen.image.tag` | certGen Docker Image Tag | 1.0.0
+`curl.image.tag` | curl Docker Image Tag | 4.0.0
+`certGen.image.repository` | Certificate genertaion Docker Image Name | ibmcom/icp-cert-gen
+`certGen.image.tag` | Certificate genertaion Docker Image Tag | 1.0.0
 `init.image.repository` | init Docker Image Name | ibmcom/icp-cert-gen
 `init.image.tag` | init Docker Image Tag | 1.0.0
 
@@ -259,9 +284,10 @@ These are dependent on the configuration of the helm chart.  If the storage requ
 
 ## TLS support
 
-During installation, if set "tls.enabled" as true, TLS will be enabled when accessing endpoints of prometheus, alert manager and grafana. When users try to install the chart, the certificates will be generated in pre-install hook and saved as kubenetes Secret resources:
-- CA certificates: stored in Secret which named as {ReleaseName}-monitoring-ca-cert. If the chart is deployed to kube-system namespace, the cluster CA certificates cluster-ca-cert will be reused, else new CA certificates will be generated.
+During installation, if set "tls.enabled" as true, TLS will be enabled when accessing endpoints of prometheus, alertmanager, grafana and all exporters. When users try to install the chart, the certificates will be generated by cert manager and saved as kubenetes Secret resources:
+- CA certificates: User need to specify CA secret and related Issuer before installation.
 - Server certificates: stored in Secret which named as {ReleaseName}-monitoring-certs
+- Exporters certificates: stored in Secret which named as {ReleaseName}-monitoring-exporter-certs
 - Client certificates: stored in Secret which named as {ReleaseName}-monitoring-client-certs
 
 If set tls.enabled as true, prometheus/alert manager/grafana will block the incoming requests unless the requests contain the correct client certificates. In order to access the consoles successfully, need to enable the ingress and set the certificates correctly. e.g. in ICP environment, users can enable ingress for those services with following annotations:

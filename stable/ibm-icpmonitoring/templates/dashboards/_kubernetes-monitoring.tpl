@@ -6,6 +6,7 @@
 */}}
 
 {{/* Kubernetes Monitoring Dashboard File */}}
+{{/* origin: https://grafana.com/dashboards/1621 */}}
 {{- define "kubernetesMonitoring" }}
 kubernetes-cluster-monitoring.json: |-
     {

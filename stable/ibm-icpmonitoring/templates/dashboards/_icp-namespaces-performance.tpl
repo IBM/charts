@@ -6,6 +6,7 @@
 */}}
 
 {{/* ICP Namespaces Performance Monitoring Dashboard File */}}
+{{/* origin: https://github.com/ibm-cloud-architecture/CSMO-ICP/tree/master/grafana/csmodashboards */}}
 {{- define "ICPNamespacesPerformanceMonitoring" }}
 ICP2.1-Namespaces-Performance.json: |-
     {
@@ -597,7 +598,7 @@ ICP2.1-Namespaces-Performance.json: |-
         ]
       },
       "timezone": "browser",
-      "title": "ICP 2.1 Namespaces Performance IBM Provided 2.5",
+      "title": "ICP Namespaces Performance IBM Provided 2.5",
       "version": 3
     }
 {{- end }}

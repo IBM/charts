@@ -25,8 +25,9 @@ spec:
         heritage: {{ .Release.Service }}
       annotations:
         productName: grafana
-        productVersion: 4.6.3
+        productVersion: 5.2.0
         productID: none
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
     {{- if eq .Values.mode "managed" }}
       tolerations:
@@ -50,11 +51,27 @@ spec:
                 values:
                 - "true"
             {{- end }}
+    {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+    {{- end }}
+    {{- if eq .Values.environment "openshift" }}
+      securityContext:
+        fsGroup: 472    
+    {{- else }}
+      initContainers:
+        - name: init-container
+          image: "{{ .Values.init.image.repository }}:{{ .Values.init.image.tag }}"
+          imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+          command: ["chown", "-R", "472:472", "/var/lib/grafana"]
+          volumeMounts:
+            - name: grafana-storage
+              mountPath: "/var/lib/grafana"
+    {{- end }}
       containers:
         - name: grafana
           image: {{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
-          command: ["/opt/entry/entrypoint.sh"]
           env:
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
@@ -99,11 +116,14 @@ spec:
             - name: grafana-storage
               mountPath: "/var/lib/grafana"
             - name: config-volume
-              mountPath: "/tmp/grafana/config"
+              mountPath: "/etc/grafana/grafana.ini"
+              subPath: grafana.ini
             - name: dashboard-volume
-              mountPath: "/tmp/grafana/dashboards"
-            - mountPath: "/opt/entry"
-              name: grafana-entry
+              mountPath: "/etc/grafana/dashboards"
+            - name: datasource-config
+              mountPath: "/etc/grafana/provisioning/datasources"
+            - name: dashboard-config
+              mountPath: "/etc/grafana/provisioning/dashboards"
       {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
         - name: router
           image: {{ .Values.router.image.repository }}:{{ .Values.router.image.tag }}
@@ -126,10 +146,10 @@ spec:
           volumeMounts:
             - mountPath: "/opt/ibm/router/conf"
               name: router-config
+            - mountPath: "/opt/ibm/router/caCerts"
+              name: monitoring-ca-certs
             - mountPath: "/opt/ibm/router/certs"
               name: monitoring-certs
-            - mountPath: "/opt/ibm/router/ca-certs"
-              name: monitoring-ca-cert
             - mountPath: "/opt/ibm/router/entry"
               name: router-entry
       {{- end }}
@@ -151,20 +171,26 @@ spec:
         - name: dashboard-volume
           configMap:
             name: {{ template "grafana.fullname" . }}-dashboards
-        - name: grafana-entry
+        - name: datasource-config
           configMap:
-            name: {{ template "grafana.fullname" . }}-entry-config
-            defaultMode: 0744
+            name: {{ template "grafana.fullname" . }}-datasource-config
+        - name: dashboard-config
+          configMap:
+            name: {{ template "grafana.fullname" . }}-dashboard-config
       {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
         - name: router-config
           configMap:
             name: {{ template "grafana.fullname" . }}-router-nginx-config
+        - name: monitoring-ca-certs
+          secret:
+            secretName: {{ .Values.tls.ca.secretName }}
         - name: monitoring-certs
           secret:
+          {{- if .Values.tls.server.existingSecretName }}
+            secretName: {{ .Values.tls.server.existingSecretName }}
+          {{- else }}
             secretName: {{ template "monitoring.fullname" . }}-certs
-        - name: monitoring-ca-cert
-          secret:
-            secretName: {{ template "monitoring.fullname" . }}-ca-cert
+          {{- end }}
         - name: router-entry
           configMap:
             name: {{ template "monitoring.fullname" . }}-router-entry-config

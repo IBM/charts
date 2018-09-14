@@ -28,6 +28,7 @@ spec:
         productName: elasticsearch-exporter
         productVersion: 1.0.2
         productID: none
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
     {{- if eq .Values.mode "managed" }}
       tolerations:
@@ -51,14 +52,33 @@ spec:
                 values:
                 - "true"
             {{- end }}
+    {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+    {{- end }}
       containers:
         - image: {{ .Values.elasticsearchExporter.image.repository }}:{{ .Values.elasticsearchExporter.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
-          name: elk-exporter
+          name: elasticsearchexporter
           ports:
+        {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+          - containerPort: 8443
+        {{- else }}
           - containerPort: 9108
+        {{- end }}
             name: metrics
-          args: [ "-es.uri={{ .Values.elasticsearchExporter.esUri }}" ]
+          args: 
+            - -es.uri={{ .Values.elasticsearchExporter.esUri }}
+        {{- if or (eq .Values.mode "managed") .Values.elasticsearchExporter.tls.enabled }}
+            - -es.ca=/opt/ibm/monitoring/ca/{{ .Values.elasticsearchExporter.tls.ca.certFieldName }}
+            - -es.client-cert=/opt/ibm/monitoring/clientCert/{{ .Values.elasticsearchExporter.tls.client.certFieldName}}
+            - -es.client-private-key=/opt/ibm/monitoring/clientCert/{{ .Values.elasticsearchExporter.tls.client.keyFieldName }}
+          volumeMounts:
+            - mountPath: "/opt/ibm/monitoring/ca"
+              name: ca-cert
+            - mountPath: "/opt/ibm/monitoring/clientCert"
+              name: client-cert
+        {{- end }}
         {{- if .Values.elasticsearchExporter.probe.enabled }}
           readinessProbe:
             httpGet:
@@ -83,4 +103,57 @@ spec:
             periodSeconds: 10
           {{- end }}
         {{- end }}
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router
+          image: {{ .Values.router.image.repository }}:{{ .Values.router.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/opt/ibm/router/entry/entrypoint.sh"]
+#          ports:
+#          - name: router
+#            containerPort: 8080
+          volumeMounts:
+            - mountPath: "/opt/ibm/router/conf"
+              name: router-config
+            - mountPath: "/opt/ibm/router/caCerts"
+              name: monitoring-ca-certs
+            - mountPath: "/opt/ibm/router/certs"
+              name: monitoring-certs
+            - mountPath: "/opt/ibm/router/entry"
+              name: router-entry
+      {{- end }}
+      volumes:
+      {{- if or (eq .Values.mode "managed") .Values.elasticsearchExporter.tls.enabled }}
+        - name: ca-cert
+          secret:
+            secretName: {{ .Values.elasticsearchExporter.tls.ca.secretName }}
+        - name: client-cert
+          secret:
+          {{- if .Values.elasticsearchExporter.tls.client.existingSecretName }}
+            secretName: {{ .Values.elasticsearchExporter.tls.client.existingSecretName }}
+          {{- else }}
+            secretName: {{ template "monitoring.fullname" . }}-elasticsearch-exporter-client-certs
+          {{- end }}
+      {{- end }}
+      {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+        - name: router-config
+          configMap:
+            name: {{ template "prometheus.fullname" . }}-exporter-router-nginx-config
+            items:
+              - key: elasticsearchexporter.nginx.conf
+                path: nginx.conf
+        - name: monitoring-ca-certs
+          secret:
+            secretName: {{ .Values.tls.ca.secretName }}
+        - name: monitoring-certs
+          secret:
+          {{- if .Values.tls.exporter.existingSecretName }}
+            secretName: {{ .Values.tls.exporter.existingSecretName }}
+          {{- else }}
+            secretName: {{ template "monitoring.fullname" . }}-exporter-certs
+          {{- end }}
+        - name: router-entry
+          configMap:
+            name: {{ template "monitoring.fullname" . }}-router-entry-config
+            defaultMode: 0744
+      {{- end }}
 {{- end -}}
