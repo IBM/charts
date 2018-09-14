@@ -6,6 +6,7 @@
 */}}
 
 {{/* Elasticsearch Monitoring Dashboard File */}}
+{{/* origin: https://grafana.com/dashboards/2322 */}}
 {{- define "elasticsearchMonitoring" }}
 elasticsearch-metrics.json: |-
     {
