@@ -25,8 +25,9 @@ spec:
         heritage: {{ .Release.Service }}
       annotations:
         productName: prometheus
-        productVersion: 2.0.0
+        productVersion: v2.3.1
         productID: none
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
     {{- if eq .Values.mode "managed" }}
       tolerations:
@@ -50,6 +51,14 @@ spec:
                 values:
                 - "true"
             {{- end }}
+    {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+    {{- end }}
+    {{- if eq .Values.environment "openshift" }}
+      securityContext:
+        fsGroup: 65534    
+    {{- else }}
       initContainers:
         - name: init-container
           image: "{{ .Values.init.image.repository }}:{{ .Values.init.image.tag }}"
@@ -58,26 +67,31 @@ spec:
           volumeMounts:
             - name: storage-volume
               mountPath: /var/lib/prometheus/data
+    {{- end }}
       containers:
-        - name: configmap-reload
+        - name: configmap-reload-prometheus
           image: {{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - --volume-dir=/etc/config
-            - --volume-dir=/etc/alert-rules
-            - --webhook-url=http://localhost:9090/-/reload
+            - --webhook-url=http://127.0.0.1:9090/-/reload
           volumeMounts:
             - name: config-volume
               mountPath: /etc/config
               readOnly: true
+        - name: configmap-reload-alertrules
+          image: {{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --volume-dir=/etc/alert-rules
+            - --webhook-url=http://127.0.0.1:9090/-/reload
+          volumeMounts:
             - name: rules-volume
               mountPath: /etc/alert-rules
               readOnly: true
         - name: prometheus
           image: {{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
-          securityContext:
-            runAsUser: 0
           args:
             - --config.file=/etc/config/prometheus.yml
             - --web.enable-lifecycle
@@ -122,11 +136,15 @@ spec:
               mountPath: /etc/alert-rules
             - name: storage-volume
               mountPath: /var/lib/prometheus/data
-          {{- if or (eq .Values.mode "managed") .Values.prometheus.etcdTarget.enabled }}
+          {{- if (eq .Release.Namespace "kube-system") }}
+            {{- if or (eq .Values.mode "managed") .Values.prometheus.etcdTarget.enabled }}
             - name: etcd-certs
               mountPath: /etc/etcd
+            {{- end }}
           {{- end }}
           {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+            - name: monitoring-ca-certs
+              mountPath: /opt/ibm/monitoring/caCerts
             - name: monitoring-client-certs
               mountPath: /opt/ibm/monitoring/certs
           {{- end }}
@@ -141,12 +159,16 @@ spec:
           volumeMounts:
             - mountPath: "/opt/ibm/router/conf"
               name: router-config
+            - mountPath: "/opt/ibm/router/caCerts"
+              name: monitoring-ca-certs
             - mountPath: "/opt/ibm/router/certs"
               name: monitoring-certs
-            - mountPath: "/opt/ibm/router/ca-certs"
-              name: monitoring-ca-cert
             - mountPath: "/opt/ibm/router/entry"
               name: router-entry
+          {{- if eq .Values.mode "managed" }}
+            - mountPath: "/opt/ibm/router/rbac"
+              name: rbac-config
+          {{- end }}
       {{- end }}
       volumes:
         - name: config-volume
@@ -155,10 +177,12 @@ spec:
         - name: rules-volume
           configMap:
             name: {{ template "prometheus.fullname" . }}-alertrules
-      {{- if or (eq .Values.mode "managed") .Values.prometheus.etcdTarget.enabled }}
+      {{- if (eq .Release.Namespace "kube-system") }}
+        {{- if or (eq .Values.mode "managed") .Values.prometheus.etcdTarget.enabled }}
         - name: etcd-certs
           secret:
             secretName: {{ .Values.prometheus.etcdTarget.secret }}
+        {{- end }}
       {{- end }}
         - name: storage-volume
         {{- if .Values.prometheus.persistentVolume.enabled }}
@@ -175,17 +199,30 @@ spec:
         - name: router-config
           configMap:
             name: {{ template "prometheus.fullname" . }}-router-nginx-config
+        - name: monitoring-ca-certs
+          secret:
+            secretName: {{ .Values.tls.ca.secretName }}
         - name: monitoring-certs
           secret:
+          {{- if .Values.tls.server.existingSecretName }}
+            secretName: {{ .Values.tls.server.existingSecretName }}
+          {{- else }}
             secretName: {{ template "monitoring.fullname" . }}-certs
-        - name: monitoring-ca-cert
-          secret:
-            secretName: {{ template "monitoring.fullname" . }}-ca-cert
+          {{- end }}
         - name: monitoring-client-certs
           secret:
+          {{- if .Values.tls.client.existingSecretName }}
+            secretName: {{ .Values.tls.client.existingSecretName }}
+          {{- else }}
             secretName: {{ template "monitoring.fullname" . }}-client-certs
+          {{- end }}
         - name: router-entry
           configMap:
             name: {{ template "monitoring.fullname" . }}-router-entry-config
             defaultMode: 0744
+      {{- end }}
+      {{- if eq .Values.mode "managed" }}
+        - name: rbac-config
+          configMap:
+            name: {{ template "prometheus.fullname" . }}-rbac-config      
       {{- end }}

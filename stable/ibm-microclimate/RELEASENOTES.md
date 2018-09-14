@@ -1,57 +1,56 @@
 # Breaking Changes
-No breaking changes are present in this release
+The chart for Version 1.6.0 works only with IBM Cloud Private Version 3.1.0. IBM Cloud Private Version 2.1.0.3 and 2.1.0.2 are not supported.
 
-# What’s new in Chart Version 1.5.0
+# What’s new in Chart Version 1.6.0
 
 ## Microclimate
-* Improved support when you import projects that don't already have a Dockerfile.
-* Additional error feedback for Microprofile projects to help diagnose problems with project setup.
-* Improved application status detection in ICP.
-* Updated Theia version to 0.3.13. Includes a new minibrowser for displaying HTML files, and previewer for markdown files.
+* Added support for IBM Cloud Private Version 3.1.0.
+* Improved the iterative development model for Spring projects. Also made code updates are faster.
+* Secured internal communications with HTTPS.
+* Modified project deletion to be asynchronous. As a result, the loading screen does not stall while Microclimate deletes a project.
+* Limited the number of concurrent builds to prevent performance degradation when too many builds start at once. The default limit is three.
+* Added flexible language support. Also Microclimate can import, build, and deploy generic Docker type projects. The additional languages show up when you create a new project. 
+* Added the **Validate** page to the **Overview** page. The **Validate** page can be viewed during project development.
+* Added support for logging out of IBM Cloud Private installations of Microclimate.
+* The Acme Air sample application runs in Microclimate with the Java Liberty runtime.
 
 ## Pipeline
-* Added ability to select from a list of branches during pipeline deployment creation.
-* Enabled user supplied overrides.
-* Added ability to set release name on deployments.
+* Added support for creating more than one pipeline that automatically deploys the last good build to a specified environment.
+* Added support for specifying a namespace for a deployment to the local cluster.
+* Added ability to override the name that is provided to the Helm release that is associated with a deployment.
+* Added ability to deploy different branches to different namespaces. A selectable list of branches, as found in the target Git repository, is provided.
+* Deleting a deployment now also deletes the deployed application.
+
 
 ## Chart
-* Exposed configuration values for microclimate-beacon.
+* Updates to support IBM Cloud Private Version 3.1.0.
+* Changed certificate for Jenkins and Portal ingress to a certificate signed by ICP.
+* Added create of Jenkins target namespace if it doesn't already exist.
+* Added check to see if target namespace exists.
+* Improved appearance of metadata values in catalog configure page.
+* Simplified installation into a non-default namespace. ClusterRole and ClusterRole bindings are now created automatically.
+* Added support for including additional imagePullSecrets via the IBM Cloud Private catalog.
+
 
 # Fixes
-* Allow a user to delete projects that failed to validate.
-* Deleting the deployment for the last successful build on a branch now also deletes the corresponding Helm release.
-* Fix for bug that prevented retrieving application ports in ICP.
 * Various minor bug and stability fixes.
-* Jenkins job now deletes itself upon completion
 
 
 # Prerequisites
-1. IBM Cloud Private version 2.1.0.3. Installing into 2.1.0.2 may work but is not completely tested.
+- IBM Cloud Private Version 3.1.0. Older versions of IBM Cloud Private are supported only by chart versions v1.5.0 and earlier. Version support information can be found in the release notes of each chart release.
+- Ensure [socat](http://www.dest-unreach.org/socat/doc/README) is available on all worker nodes in your cluster. Microclimate uses Helm internally, and both the Helm Tiller and client require socat for port forwarding.
+- Download the IBM Cloud Private CLI, `cloudctl`, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
 
 
-## Upgrading Microclimate to v1.5.0
+## Upgrading Microclimate to v1.6.0
 
-### ...from version v1.4.0 and v1.3.0
+To upgrade to Microclimate v1.6.0:
+1. Obtain information about current persistent volumes so that they can be retained in the new installation.
+1. Uninstall Microclimate.
+1. Upgrade IBM Cloud Private to Version 3.1.0.
+1. Install Micrcolimate with the persitent volumes.
 
-You can upgrade to the v1.5.0 version of the chart from V1.4.0 or v1.3.0 using Helm upgrade. 
-
-Before doing this, it is possible that completed Microclimate jobs have been left behind on your cluster which may affect the upgrade. These jobs should be deleted before upgrading. To delete any lingering jobs, use `kubectl delete jobs -n services -l release=<releaseName>` where `<releaseName>` is the name of your Microclimate Helm release.
-
-You should pass the same values into the Helm upgrade command that you initially installed the chart with to ensure configuration remains the same. It is recommended that you retrieve these values and store them for the upgrade by using the following command with your Microclimate release name:
-
-`helm get values <release-name> > values.yaml`
-
-You can then perform the upgrade with the following command:
-
-`helm upgrade <release-name> <path-to-microclimate-chart> -f values.yaml`
-
-
-### ...from version v1.2.x
-**WARNINGS**:
-- These instructions have been tested using v1.2.x versions of the chart, upgrading to v1.3.0. These instructions may work for previous versions but have not been tested.
-- These instructions have only been tested using GlusterFS. If a different type of PersistentVolume is being used, it is recommended that you back up the contents of the volumes manually.
-
-To carry existing projects over to Microclimate v1.3.0, your existing Microclimate PersistentVolumes (PVs) will need to be reused in the new Microclimate installation by binding new PersistentVolumeClaims (PVCs) that you will need to create manually. This can be achieved by following the steps below (note: this requires you to have `kubectl` configured to your cluster):
+More details are provided in the following sections:
 
 ### Identify which PersistentVolumes the existing Microclimate deployment is currently using
 Microclimate will be using two PersistentVolumes: one for the main Microclimate deployment and one for the  Jenkins deployment. These can be found by using `kubectl describe deploy <deploymentName> | grep "ClaimName"` on each of the  deployments to find the name of the PersistentVolumeClaim being used; followed by using `kubectl describe pvc <pvcName> | grep "Volume"` to find the name of the PersistentVolume that the claim is bound to. Repeat this step for both the Microclimate and Jenkins deployments.
@@ -79,14 +78,6 @@ Use this to find the capacity of both the Microclimate and Jenkins PVCs
 
 Uninstall Microclimate using Helm using the release name you installed Microclimate with: `helm delete --purge <releaseName>`. This will remove all of the Microclimate components including the PersistentVolumeClaims and should leave behind the PersistentVolumes in a `Released` state. To confirm this, do `kubectl get pv` and you should see both of the Microclimate PersistentVolumes left behind with their status set to `Released` and still have a `Claim` associated to them.
 
-
-### Set the Microclimate PersistentVolume Access Mode to ReadWriteMany
-
-As of version 1.3.0, Microclimate now requires a PersistentVolume with a ReadWriteMany access mode and so you will need to edit your PersistentVolume. This can be achieved using the following command:
-
-`kubectl patch pv <microclimate-pv-name> -p '{"spec":{"accessModes":["ReadWriteMany"]}}'`
-
-
 ### Removing existing claim references from the PersistentVolumes
 
 Your PVs may still contain references to the old PVCs that were bound to them previously which are stored in a section of each PV spec called `claimRef`. You will need to delete this from each PV to allow the new Microclimate PVCs to bind to them.
@@ -111,36 +102,17 @@ claimRef:
 
 4. Verify that the PV is now available. Using `kubectl get pv <pv-name>` should show the PV with an `Available` status and with an empty claim field.
 
-### Install Microclimate
+### Reinstall Microclimate after upgrading to IBM Cloud Private Verion 3.1.0
 
-Finally, install Microclimate setting the `persistence.size` value to the value of the Microclimate PVC you recorded in the earlier step along with the required Microclimate values and any other values you want to set.
+After you upgrade your cluster, you follow the installation steps in the README file. These steps have been updated specifically for Version 3.1.0. In addition to these installation steps, you need to set the persistence.size value to the value of the Microclimate PVC you recorded in the earlier steps to ensure a new PVC gets created, which binds to your previous Microclimate PV." 
 
 For example, you `helm install` command may look like this:
 
 `helm install --name microclimate --set persistence.size=<pvcCapacity> --set hostName=<MICROCLIMATE_INGRESS> --set jenkins.Master.HostName=<JENKINS_INGRESS> --set <any-other-values> ibm-charts/ibm-microclimate`
 
-For more information on setting installation values, read the 'Configuring Microclimate' section of the README.
+If Microclimate doesn't bind to the correct PV, you might need to manually create a PVC to bind to the PV and reinstall Microclimate and provide the PVC name in the `persistence.existingClaimName` value.
 
-### Run the project migration node application
-
-Because of the new multi-user support in this version of Microclimate, projects from previous Microclimate installations won't be compatible when re-installing. To solve this, you can use our project migration script to make old projects compatible with a Microclimate v1.3.0 installation. **NOTE** This has only been tested with Microclimate v1.2.x projects and may not work with projects from previous Microclimate installations
-
-
-1. Ensure you Microclimate installation is running using the release you used to install Microclimate with: `kubectl get pods -l release=<releaseName>`. You should see all pods ready.
-
-2. Identify the main Microclimate pod. Using the command in the previous step, you should see 3 pods running with the names `<releaseName>-ibm-microclimate-...`, `<releaseName>-ibm-microclimate-devops...` and `<releaseName>-jenkins-...`. The main Microclimate pod is the one named `<releaseName>-ibm-microclimate-...`.
-
-3. Open bash in the Microclimate pod using the following command: `kubectl exec -it <microclimate-pod-name> bash`.
-
-**NOTE**: Before continuing, it is recommended to make a backup of your `microclimate-workspace` directory.
-
-4. In the pod bash terminal, download the project migration program from the Microclimate landing page: `curl -o migrateProjects.js -L https://microclimate-dev2ops.github.io/utils/migrateProjects.js`
-
-5. Run the project migration program using: `node migrateProjects.js`
-
-6. Restart the Microclimate pod using `kubectl delete pod <microclimate-pod-name>`. This will kill the pod and will create a fresh instance.
-
-6. Open your Microclimate instance and navigate to the projects window. You should see your old projects here. If these projects have no build status, open each project individually and press the `Build` button. You projects should now be usable as normal.
+For more information on setting installation values, read the **Configuring Microclimate** section of the README.
 
 
 
@@ -151,6 +123,7 @@ For detailed installation instructions go to https://microclimate-dev2ops.github
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.6.0 | September 14, 2018 | 1.11.0  | 1809 | Support only for ICP 3.1.0 | Various fixes and improvements |
 | 1.5.0 | Aug 20, 2018 | 1.10.0, 1.9.1 | 1808 | None | Various fixes and improvements |
 | 1.4.0 | July 20, 2018 | 1.10.0, 1.9.1 | 1807 | None | Logout implemented, various small fixes and improvements |
 | 1.3.0 | June 29, 2018 | 1.10.0, 1.9.1 | 1806 | Multi-user support caused changes to the Microclimate PVCs - upgrade will not work  | Various changes and new features |
