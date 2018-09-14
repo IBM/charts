@@ -1,0 +1,219 @@
+{{- if eq .Values.mode "managed" -}}
+
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ template "prometheus.fullname" . }}
+    component: prometheus
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "prometheus.fullname" . }}-rbac-config
+data:
+  rbac.lua: |-
+    local cjson = require "cjson"
+    local cookiejar = require "resty.cookie"
+    local jwt = require "resty.jwt"
+    local http = require "lib.resty.http"
+
+    local function exit_401()
+        ngx.status = ngx.HTTP_UNAUTHORIZED
+        ngx.header["Content-Type"] = "text/html; charset=UTF-8"
+        ngx.header["WWW-Authenticate"] = "oauthjwt"
+        ngx.say(BODY_401_ERROR_RESPONSE)
+        return ngx.exit(ngx.HTTP_UNAUTHORIZED)
+    end
+
+    local function get_auth_token()
+        local auth_header = ngx.var.http_Authorization
+
+        local token = nil
+        if auth_header ~= nil then
+            ngx.log(ngx.DEBUG, "Authorization header found. Attempt to extract token.")
+            _, _, token = string.find(auth_header, "Bearer%s+(.+)")
+        else
+            ngx.log(ngx.DEBUG, "Authorization header not found.")
+            -- Presence of Authorization header overrides cookie method entirely.
+            -- Read cookie. Note: ngx.var.cookie_* cannot access a cookie with a
+            -- dash in its name.
+            local cookie, err = cookiejar:new()
+            token = cookie:get("cfc-access-token-cookie")
+            if token == nil then
+                ngx.log(ngx.ERR, "cfc-access-token-cookie not found.")
+            else
+                ngx.log(
+                    ngx.NOTICE, "Use token from cfc-access-token-cookie, " ..
+                    "set corresponding Authorization header for upstream."
+                    )
+            end
+        end
+
+        if token == nil then
+            ngx.log(ngx.ERR, "No auth token in request.")
+            return nil, exit_401()
+        end
+
+        ngx.log(ngx.DEBUG, "Received OIDC token =",token)
+        return token
+    end
+
+    local function get_user_id(token)
+        local user_id = ""
+        local httpc = http.new()
+        ngx.req.set_header('Authorization', 'Bearer '.. token)
+        local res, err = httpc:request_uri("http://platform-identity-provider.kube-system.svc.{{ .Values.clusterDomain }}:4300/v1/auth/userInfo", {
+            method = "POST",
+            body = "access_token=" .. token,
+            headers = {
+              ["Content-Type"] = "application/x-www-form-urlencoded"
+            }
+        })
+
+        if not res then
+            ngx.log(ngx.ERR, "Failed to request userinfo due to ",err)
+            return nil, exit_401()
+        end
+        if (res.body == "" or res.body == nil) then
+            ngx.log(ngx.ERR, "Empty response body")
+            return nil, exit_401()
+        end
+        local x = tostring(res.body)
+        ngx.log(ngx.DEBUG, "response is ",x)
+        local uid = cjson.decode(x).sub
+        ngx.log(ngx.DEBUG, "UID is ",uid)
+        return uid
+    end
+
+    local function get_user_role(token, uid)
+        local httpc = http.new()
+        local res, err = httpc:request_uri("http://platform-identity-management.kube-system.svc.{{ .Values.clusterDomain }}:4500/identity/api/v1/users/" .. uid .. "/getHighestRoleForCRN", {
+            method = "GET",
+            headers = {
+              ["Content-Type"] = "application/json",
+              ["Authorization"] = "Bearer ".. token
+            },
+            query = {
+                ["crn"] = "crn:v1:icp:private:k8:{{ .Values.clusterName }}:n/{{ .Release.Namespace }}:::"
+            },
+            ssl_verify = false
+        })
+        if not res then
+            ngx.log(ngx.ERR, "Failed to request user role due to ",err)
+            return nil, exit_401()
+        end
+        if (res.body == "" or res.body == nil) then
+            ngx.log(ngx.ERR, "Empty response body")
+            return nil, exit_401()
+        end
+        local role_id = tostring(res.body)
+        ngx.log(ngx.DEBUG, "user role ", role_id)
+        return role_id
+    end
+
+    local function get_user_namespaces(token, uid)
+        local httpc = http.new()
+        res, err = httpc:request_uri("http://platform-identity-management.kube-system.svc.{{ .Values.clusterDomain }}:4500/identity/api/v1/users/" .. uid .. "/getTeamResources", {
+            method = "GET",
+            headers = {
+              ["Content-Type"] = "application/json",
+              ["Authorization"] = "Bearer ".. token
+            },
+            query = {
+                ["resourceType"] = "namespace"
+            },
+            ssl_verify = false
+        })
+        if not res then
+            ngx.log(ngx.ERR, "Failed to request user's authorized namespaces due to ",err)
+            return nil, exit_401()
+        end
+        if (res.body == "" or res.body == nil) then
+            ngx.log(ngx.ERR, "Empty response body")
+            return nil, exit_401()
+        end
+        local x = tostring(res.body)
+        ngx.log(ngx.DEBUG, "namespaces ",x)
+        local namespaces = cjson.decode(x)
+        return namespaces
+    end
+
+    local function inject_query(namespaces, query)
+        local query_string = 'kubernetes_namespace=~"'
+        for i, entry in ipairs(namespaces) do
+          x = tostring(entry)
+          query_string = query_string .. entry.namespaceId
+          query_string = query_string .. "|"
+        end
+        if query_string == 'kubernetes_namespace=~"' then
+            return nil, exit_401()
+        end
+        --- remove the last |
+        query_string = string.sub(query_string, 1, -2)
+        query_string = query_string .. '"'
+        ngx.log(ngx.DEBUG, "query_string ", query_string)
+        
+        ngx.log(ngx.DEBUG, "original query " .. query)
+        --- assume metric's name format is A_B_C
+        --- first step is to retrieve all metric names in query string
+        --- remove 4 exceptions: 1. by (A_B_C) 2. {A_B_C=""} 3. [A_B_C] 4. A_B_C()
+        local metrics_str = query:gsub("by %([^%(%)]+%)", "---")
+        metrics_str = metrics_str:gsub("{[^%}]+}", "---")
+        metrics_str = metrics_str:gsub("%[[^%]]+%]", "---")
+        metrics_str = metrics_str:gsub("([_%w]+_[_%w]+)%(", "---")
+
+        --- To inject query string
+        --- if there is already label filter append the query string to existing ones
+        --- if no label filter add it
+        for metric in string.gmatch(metrics_str, "([_%w]+_[_%w]+)") do
+            if string.find(query, metric .."{") then
+                query = query:gsub(metric .."{([^%}]*)}", metric .. "{%1," .. query_string .. "}")
+            else
+                query = query:gsub(metric, metric .. "{" .. query_string .. "}")
+            end
+        end
+        ngx.log(ngx.DEBUG, "updated query " .. query)
+        return query
+    end
+
+    local function rewrite_rbac_query()
+        local args = ngx.req.get_uri_args()
+        if args["query"] ~= nil then
+            local token, err = get_auth_token()
+            if err ~= nil then
+                return err
+            end
+            local uid, err = get_user_id(token)
+            if err ~= nil then
+                return err
+            end
+            local role_id, err = get_user_role(token, uid)
+            if err ~= nil then
+                return err
+            end
+            if (role_id ~= '"ClusterAdministrator"' ) then
+                local namespaces, err = get_user_namespaces(token, uid)
+                if err ~= nil then
+                    return err
+                end
+                local updated_query, err = inject_query(namespaces, args["query"])
+                if err ~= nil then
+                    return err
+                end
+                args["query"] = updated_query
+                ngx.req.set_uri_args(args)
+            end
+        end
+    end
+
+    -- Expose interface.
+    local _M = {}
+    _M.rewrite_rbac_query = rewrite_rbac_query
+
+    return _M
+{{- end -}}

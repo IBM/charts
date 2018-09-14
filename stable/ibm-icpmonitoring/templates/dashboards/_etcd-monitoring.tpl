@@ -6,6 +6,7 @@
 */}}
 
 {{/* Etcd Monitoring Dashboard File */}}
+{{/* origin: https://grafana.com/dashboards/3070 */}}
 {{- define "etcdMonitoring" }}
 etcd-monitoring.json: |-
     {

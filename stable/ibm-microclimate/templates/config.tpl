@@ -53,16 +53,24 @@ data:
         </hudson.search.UserSearchProperty>
       </properties>
     </user>
+  jenkins.CLI.xml: |-
+    <?xml version='1.1' encoding='UTF-8'?>
+    <jenkins.CLI>
+      <enabled>false</enabled>
+    </jenkins.CLI>
   jenkins.model.JenkinsLocationConfiguration.xml: |-
     <?xml version='1.1' encoding='UTF-8'?>
     <jenkins.model.JenkinsLocationConfiguration>
       <adminAddress>address not configured yet &lt;nobody@nowhere&gt;</adminAddress>
-      <jenkinsUrl>http://{{ .Values.Master.HostName }}/</jenkinsUrl>
+      <jenkinsUrl>https://{{ .Values.Master.HostName }}/</jenkinsUrl>
     </jenkins.model.JenkinsLocationConfiguration>
   config.xml: |-
     <?xml version='1.0' encoding='UTF-8'?>
     <hudson>
-      <disabledAdministrativeMonitors/>
+      <disabledAdministrativeMonitors>
+        <string>hudson.model.UpdateCenter$CoreUpdateMonitor</string>
+        <string>jenkins.security.UpdateSiteWarningsMonitor</string>
+      </disabledAdministrativeMonitors>
       <version>{{ .Values.Master.ImageTag }}</version>
       <numExecutors>0</numExecutors>
       <mode>NORMAL</mode>
@@ -216,7 +224,7 @@ data:
               <string>DEFAULT_DEPLOY_BRANCH</string>
               <string>{{ .Values.Pipeline.DeployBranch }}</string>
               <string>REGISTRY</string>
-              <string>{{ .Values.Pipeline.Registry.Url }}</string>
+              <string>{{ .Values.Pipeline.Registry.Url }}/{{ .Release.Namespace }}</string>
               <string>REGISTRY_SECRET</string>
               <string>{{ .Values.Pipeline.Registry.Secret }}</string>
               <string>SERVICE_ACCOUNT_NAME</string>
@@ -249,38 +257,41 @@ data:
   apply_config.sh: |-
     mkdir -p /usr/share/jenkins/ref/secrets/;
     echo "false" > /usr/share/jenkins/ref/secrets/slave-to-master-security-kill-switch;
-    cp -n /var/jenkins_config/config.xml /var/jenkins_home;
-    cp -n /var/jenkins_config/org.jenkinsci.plugins.workflow.libs.GlobalLibraries.xml /var/jenkins_home;
+    cp /var/jenkins_config/config.xml /var/jenkins_home;
+    cp /var/jenkins_config/org.jenkinsci.plugins.workflow.libs.GlobalLibraries.xml /var/jenkins_home;
 {{- if .Values.Master.LoginOpenIdConnect }}
     /usr/bin/curl -o /var/jenkins_home/kubectl -L https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
     chmod +x /var/jenkins_home/kubectl
-    tmp=$(/var/jenkins_home/kubectl describe configmap platform-auth-idp --namespace=kube-system | sed -n '/IDENTITY_URL:/{n;n;p}')
-    if [ -z "$tmp" ];
-    then
-      tmp=$(/var/jenkins_home/kubectl describe configmap platform-api --namespace=kube-system | sed -n '/CLUSTER_URL:/{n;n;p}')
-    fi
+    tmp=$(/var/jenkins_home/kubectl get configmap oauth-client-map -n services -o=jsonpath='{.data.MASTER_IP}')
     if [ -z "$tmp" ];
     then
       sed -e 's/securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm"/!--securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm"/' /var/jenkins_home/config.xml | sed -e 's/securityRealm>/securityRealm--><securityRealm class="hudson.security.LegacySecurityRealm"\/>/' > /var/jenkins_home/config1.xml
     else
+      tmp="https://"$tmp":8443"
       master=$(echo $tmp | sed -e 's/\//\\\//g')
       sed -e "s/(IDENTITY_URL)/${master}/" /var/jenkins_home/config.xml > /var/jenkins_home/config1.xml
     fi
     cp /var/jenkins_home/config1.xml /var/jenkins_home/config.xml
 {{- end }}
-    cp -n /var/jenkins_config/jenkins.model.JenkinsLocationConfiguration.xml /var/jenkins_home;
+
+    cp /var/jenkins_config/jenkins.CLI.xml /var/jenkins_home;
+    cp  /var/jenkins_config/jenkins.model.JenkinsLocationConfiguration.xml /var/jenkins_home;
+    /var/jenkins_home/kubectl get secret {{ .Release.Name }}-ibm-microclimate -o yaml | sed  -e '/admin-api-updated-token/d' > /var/jenkins_home/secret.yaml
+    /var/jenkins_home/kubectl delete secret {{ .Release.Name }}-ibm-microclimate
+    /var/jenkins_home/kubectl create -f /var/jenkins_home/secret.yaml
 {{- if .Values.Master.UseSecurity }}
     mkdir -p /var/jenkins_home/users/admin;
-    cp -n /var/jenkins_config/user_config.xml /var/jenkins_home/users/admin/config.xml;
+    cp  /var/jenkins_config/user_config.xml /var/jenkins_home/users/admin/config.xml;
 {{- end }}
     cp  /var/plugins/* /var/jenkins_plugins
 {{- if .Values.Master.InstallPlugins }}
     cp /var/jenkins_config/plugins.txt /var/jenkins_home;
     rm -rf /var/jenkins_plugins/*.lock
     /usr/local/bin/install-plugins.sh `echo $(cat /var/jenkins_home/plugins.txt)`;
+    cp /usr/share/jenkins/ref/plugins/*  /var/jenkins_plugins
 {{- end }}
 {{- if .Values.Master.ScriptApproval }}
-    cp -n /var/jenkins_config/scriptapproval.xml /var/jenkins_home/scriptApproval.xml;
+    cp  /var/jenkins_config/scriptapproval.xml /var/jenkins_home/scriptApproval.xml;
 {{- end }}
 {{- if .Values.Master.InitScripts }}
     mkdir -p /var/jenkins_home/init.groovy.d/;
