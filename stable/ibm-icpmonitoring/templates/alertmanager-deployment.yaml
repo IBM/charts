@@ -25,8 +25,9 @@ spec:
         heritage: {{ .Release.Service }}
       annotations:
         productName: alertmanager
-        productVersion: 0.13.0
+        productVersion: v0.15.0
         productID: none
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
     {{- if eq .Values.mode "managed" }}
       tolerations:
@@ -50,13 +51,21 @@ spec:
                 values:
                 - "true"
             {{- end }}
+    {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+    {{- end }}
+    {{- if eq .Values.environment "openshift" }}
+      securityContext:
+        fsGroup: 65534  
+    {{- end }}
       containers:
         - name: configmap-reload
           image: {{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - --volume-dir=/etc/config
-            - --webhook-url=http://localhost:9093/-/reload
+            - --webhook-url=http://127.0.0.1:9093/-/reload
           volumeMounts:
             - name: config-volume
               mountPath: /etc/config
@@ -67,6 +76,12 @@ spec:
           args:
             - --config.file=/etc/config/alertmanager.yml
             - --storage.path=/var/lib/alertmanager/data
+            - --cluster.listen-address=$(POD_IP):9094
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
           ports:
             - containerPort: 9093
         {{- if .Values.alertmanager.probe.enabled }}
@@ -111,10 +126,10 @@ spec:
           volumeMounts:
             - mountPath: "/opt/ibm/router/conf"
               name: router-config
+            - mountPath: "/opt/ibm/router/caCerts"
+              name: monitoring-ca-certs
             - mountPath: "/opt/ibm/router/certs"
               name: monitoring-certs
-            - mountPath: "/opt/ibm/router/ca-certs"
-              name: monitoring-ca-cert
             - mountPath: "/opt/ibm/router/entry"
               name: router-entry
       {{- end }}
@@ -137,12 +152,16 @@ spec:
         - name: router-config
           configMap:
             name: {{ template "prometheus.fullname" . }}-alertmanager-router-nginx-config
+        - name: monitoring-ca-certs
+          secret:
+            secretName: {{ .Values.tls.ca.secretName }}
         - name: monitoring-certs
           secret:
+          {{- if .Values.tls.server.existingSecretName }}
+            secretName: {{ .Values.tls.server.existingSecretName }}
+          {{- else }}
             secretName: {{ template "monitoring.fullname" . }}-certs
-        - name: monitoring-ca-cert
-          secret:
-            secretName: {{ template "monitoring.fullname" . }}-ca-cert
+          {{- end }}
         - name: router-entry
           configMap:
             name: {{ template "monitoring.fullname" . }}-router-entry-config
