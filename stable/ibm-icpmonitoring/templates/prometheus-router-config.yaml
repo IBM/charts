@@ -17,15 +17,14 @@ metadata:
   name: {{ template "prometheus.fullname" . }}-router-nginx-config
 data:
   nginx.conf: |-
-    error_log stderr warn;
+    error_log stderr notice;
 
     events {
         worker_connections 1024;
     }
 
-
     http {
-        access_log syslog:server=unix:/dev/log;
+        access_log off;
 
         include mime.types;
         default_type application/octet-stream;
@@ -41,11 +40,31 @@ data:
 
         proxy_cache_path /tmp/nginx-mesos-cache levels=1:2 keys_zone=mesos:1m inactive=10m;
 
+    {{- if eq .Values.mode "managed" -}}
+        lua_package_path '$prefix/conf/?.lua;;';
+        lua_shared_dict mesos_state_cache 100m;
+        lua_shared_dict shmlocks 1m;
+
+        init_worker_by_lua '
+            local statecache = require "mesosstatecache"
+            statecache.periodically_poll_mesos_state()
+        ';
+
+        init_by_lua '
+            rbac = require "rbac"
+        ';
+      {{- if eq .Values.environment "openshift" -}}
+        resolver {OPENSHIFT_RESOLVER};
+      {{- else -}}  
+        resolver kube-dns;
+      {{- end -}}
+    {{- end }}
+
         server {
             listen 8443 ssl default_server;
             ssl_certificate server.crt;
             ssl_certificate_key server.key;
-            ssl_client_certificate /opt/ibm/router/ca-certs/tls.crt;
+            ssl_client_certificate /opt/ibm/router/caCerts/{{ .Values.tls.ca.certFieldName }};
             ssl_verify_client on;
             ssl_protocols TLSv1.2;
             # Ref: https://github.com/cloudflare/sslconfig/blob/master/conf
@@ -59,6 +78,11 @@ data:
             location / {
               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
               proxy_set_header Host $http_host;
+              
+            {{- if eq .Values.mode "managed" -}}
+              rewrite_by_lua 'rbac.rewrite_rbac_query()';
+            {{- end }}
+
               proxy_pass http://prometheus/;
             }
 
