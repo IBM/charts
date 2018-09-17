@@ -1,0 +1,142 @@
+{{- if required "You must select whether to install the server" .Values.enabled -}}
+{{- include "sch.config.init" (list . "server.sch.chart.config.values") -}}
+{{- $pvcName := "pvc" -}}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
+{{- $volumeClaimTemplateName := include "sch.names.volumeClaimTemplateName" (list . $pvcName $statefulSetName) -}}
+{{- $volumeName := include "sch.names.persistentVolumeClaimName" (list . $pvcName) -}}
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "sch.names.fullName" (list .) }}-svc
+  selector:
+    matchLabels:
+      app: {{ include "sch.names.appName" (list .) }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 8 }}
+        messagesight: server
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
+      terminationGracePeriodSeconds: 300
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+              - key: messagesight
+                operator: In
+                values:
+                - webui
+            topologyKey: kubernetes.io/hostname
+{{ if .Values.privilegedInstall }}
+      serviceAccount: {{ default "messagesight-priv-sa" .Values.serviceAccount }}
+      securityContext:
+        runAsUser: 0
+{{- else }}
+      serviceAccount: {{ default "messagesight-sa" .Values.serviceAccount }}
+{{- end }}
+      volumes:
+        - name: admin-secrets
+          secret:
+            secretName: {{ .Release.Name }}-messagesight-admin
+{{ if and .Values.dataPVC.existingClaimName .Values.persistence.enabled }}
+        - name: {{ $volumeName }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataPVC.existingClaimName }}
+{{ end }}
+{{ if not .Values.persistence.enabled }}
+        - name: {{ $volumeName }}
+          emptyDir: {}
+{{ end }}
+      containers:
+      - name: {{ include "sch.names.appName" (list .) }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy }}
+        env:
+        - name: LICENSE
+          value: {{ .Values.global.license | default "not accepted" }}
+        ports:
+        - containerPort: {{ .Values.adminPort }}
+          hostPort: {{ .Values.adminPort }}
+          name: adminport
+{{ if .Values.messagingPorts }}
+{{ if contains "," .Values.messagingPorts }}
+  {{- range  (.Values.messagingPorts | split "," ) }}
+        - containerPort: {{ . | trim }}
+          hostPort: {{ . | trim }}
+          name: messaging-{{ . | trim }}
+  {{- end }}
+{{ else }}
+        - containerPort: {{.Values.messagingPorts | trim }}
+          hostPort: {{.Values.messagingPorts | trim }}
+          name: messaging-{{.Values.messagingPorts | trim }}
+{{ end }}
+{{ end }}
+        livenessProbe:
+          exec:
+            command:
+            - /opt/ibm/imaserver/bin/liveness.sh
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+            - /opt/ibm/imaserver/bin/readiness.sh
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        resources:
+          limits:
+            memory: {{ .Values.resources.limits.memory }}
+            cpu: {{ .Values.resources.limits.cpu }}
+          requests:
+            memory: {{ .Values.resources.requests.memory }}
+            cpu: {{ .Values.resources.requests.cpu }}
+        volumeMounts:
+            - mountPath: /secrets/admin
+              name: admin-secrets
+              readOnly: true
+            - mountPath: /var/messagesight
+{{ if not .Values.persistence.enabled }}
+              name: {{ $volumeName }}
+{{  else }}
+{{ if .Values.dataPVC.existingClaimName }}
+              name: {{ $volumeName }}
+{{ else }}
+              name: {{ $volumeClaimTemplateName }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ $volumeClaimTemplateName }}
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      persistentVolumeReclaimPolicy: Retain
+      resources:
+        requests:
+          storage: {{ .Values.dataPVC.size }}
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kube Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+      {{- else }}
+      storageClassName: {{ default "" .Values.dataPVC.storageClassName | quote }}
+      {{- if .Values.dataPVC.selector.label }}
+      # use selectors in the binding process
+      selector:
+        matchExpressions:
+          - {key: {{ .Values.dataPVC.selector.label }}, operator: In, values: [{{ .Values.dataPVC.selector.value }}]}
+      {{- end }}
+      {{- end }}
+{{  end }}
+{{  end }}
+{{- end -}}

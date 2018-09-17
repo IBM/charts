@@ -1,0 +1,28 @@
+{{- include "sch.config.init" (list . "webui.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-svc
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: webuiport-https
+      port: {{ .Values.webuiPort }}
+      targetPort: {{ .Values.webuiPort }}
+      protocol: TCP
+  selector:
+    app: {{ include "sch.names.appName" (list .) }}
+    release: {{ .Release.Name }}
+
+  externalIPs:
+{{ if required "At least one IP address must be provided for global.virtualIP!" .Values.global.virtualIP }}
+{{ if contains "," .Values.global.virtualIP | quote }}
+  {{- range  (.Values.global.virtualIP | split "," ) }}
+    - {{ . | trim }}
+  {{- end }}
+{{ else }}
+    - {{ .Values.global.virtualIP | trim }}
+{{ end }}
+{{ end }}
