@@ -409,6 +409,6 @@ To expose your prometheus endpoint to the IBM Cloud Private monitoring service, 
       type: ClusterIP
 ```
 
-Individual metric names should be prefixed with the name of the workload, (e.g., `ibmmq`).
+Individual metric names should be prefixed with the name of the workload, (e.g., `ibmmq_object_mqput_bytes`).
 
 
