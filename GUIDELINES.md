@@ -82,13 +82,15 @@ The tables below should be use as a readiness guide for anyone preparing to deli
 | Resources | Charts should be clear about the resources they will consume, documented in the chart's `README.md` |
 | Metering | Charts should include metering annotations so that users can meter usage with the IBM Cloud Private metering service. |
 | Logging | Workload containers should write logs to stdout and stderr, so they can be automatically consumed by the IBM Cloud Private logging service (Elasticsearch/Logstash/Kibana.) Workloads are also encouraged to include provide links to relevant Kibana dashboards in README.md, so that users can download them and import them to Kibana. |
-| Monitoring | Workloads should integrate with the default IBM Cloud Private monitoring service (Prometheus/Gafana), by exposing prometheus metrics through a Kubernetes `Service` and annotatning that endpoint so that it will be automatically consumed by the IBM Cloud Private monitoring service |
+| Monitoring | Workloads should integrate with the default IBM Cloud Private monitoring service (Prometheus/Gafana), by exposing prometheus metrics through a Kubernetes `Service` and annotatning that endpoint so that it will be automatically consumed by the IBM Cloud Private monitoring service. |
 
 
 
 
 
 # Detailed guidance
+
+-------------------------------------
 
 # Chart requirements
 
@@ -98,7 +100,7 @@ This section contains a list of standards that must be followed by all charts co
 
 Chart source should be added to the charts/community directory. Chart archives, packaged as a .tgz file using helm package should be added to the charts/repo/community directory, which is a helm repository.
 
-**Do not update index.yaml with your contribution. index.yaml is automatically updated by a build process when pull requests are processed.**
+**Do not update** `charts/repo/community/index.yaml` **with your contribution.** `index.yaml` **is automatically updated by a build process when pull requests are processed.**
 
 ## Chart name
 
@@ -350,12 +352,63 @@ Charts should clearly document the minimum CPU, memory, and storage resources th
 
 ## Metering integration
 
-Chart source
+The IBM Cloud Private metering service collects usage information for containers running on IBM Cloud Private based on virtual processor cores available, capped, and/or utilized by the containerized components that make up the running workload.
+
+Virtual core information is automatically collected by a metering daemon running in the IBM Cloud Private cluster. Workloads should identify themselves to this daemon so that the appropriate metrics can be gathered and attributed to the running offering.
+
+The metadata is used to associate metrics gathered for metering purposes with the offering deployed. The metering service simply measures metrics for the running offering, and provides historical usage data to the user through the UI and as downloadable CSV-formatted data.
+
+Workloads should specify their product ID, product name and product version for the meter reader using  metadata annotations on the pods. This is defined in the spec template section of the helm chart for a specific deployment.
+
+ - A Product Name (`productName`) is the human readable name for the offering
+ - A Product Identifier (`productID`) uniquely identifies the offering (please namespace with your company or organization name to ensure uniqueness)
+ - A Product version identifier (`productVersion`) specifies the version of the offering
+
+
+```
+    kind: Deployment
+    spec:
+      template:
+         metadata:
+           annotations:
+              productName: IBM Sample Chart
+              productID: com.ibm.chartscommunity.samplechart.0.1.2
+              productVersion: 0.1.2
+```
+
 
 ## Logging integration
 
-Chart source
+IBM Cloud Private nodes are instrumented to automatically gather log data written to the stdout and stderr streams and forward it to the integrated logging service (Elasticsearch/Logstash/Kibana.)
+
+Workload containers should write log data to stdout and stderr, rather than discrete log files, so they can be automatically consumed by the IBM Cloud Private logging service.  Workloads are also encouraged to include provide links to relevant Kibana dashboards in README.md, so that users can download them and import them to Kibana.
 
 ## Monitoring integration
 
-Chart source
+Workloads should integrate with the default IBM Cloud Private monitoring service (Prometheus/Gafana), by exposing prometheus metrics through a Kubernetes `Service` and annotatning that endpoint so that it will be automatically consumed by the IBM Cloud Private monitoring service. IBM recommends integrating with the platform's monitoring service, rather than packaging your own instances of prometheus or grafana. This enables users to get all data from a central instance, and reduces overhead.
+
+To expose your prometheus endpoint to the IBM Cloud Private monitoring service, use the annotation `prometheus.io/scrape: 'true'` as shown in the example below.
+
+```
+    apiVersion: v1
+    kind: Service
+    metadata:
+      annotations:
+        prometheus.io/scrape: 'true'
+      labels:
+        app: {{ template "fullname" . }}
+      name: {{ template "fullname" . }}-metrics
+    spec:
+      ports:
+      - name: {{ .Values.service.name }}-metrics
+        targetPort: 9157
+        port: 9157
+        protocol: TCP
+      selector:
+        app: {{ template "fullname" . }}
+      type: ClusterIP
+```
+
+Individual metric names should be prefixed with the name of the workload, (e.g., `ibmmq`).
+
+
