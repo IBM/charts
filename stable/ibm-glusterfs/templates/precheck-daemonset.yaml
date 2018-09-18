@@ -24,23 +24,33 @@ metadata:
     description: Defines how to run validations for glusterfs
     "helm.sh/hook": pre-install
     "helm.sh/hook-weight": "-3"
-    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed, before-hook-creation
 spec:
   selector:
     matchLabels:
       app: {{ include "sch.names.appName" (list .) }}
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+      glusterfs-precheck: "pod"
   template:
     metadata:
       name: {{ include "sch.names.fullCompName" (list . $precheckdsName) }}
       labels:
-{{ include "sch.metadata.labels.standard" (list . $precheckdsName) | indent 8 }}
+        app: {{ include "sch.names.appName" (list .) }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        chart: "{{ .Chart.Name }}"
         glusterfs-precheck: "pod"
       annotations:
         productName: "GlusterFS Precheck HyperKube"
         productID: "HyperKube_{{ .Values.preValidation.image.tag }}_free_00000"
         productVersion: "{{ .Values.preValidation.image.tag }}"
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
       hostNetwork: true
+      {{- if .Values.podPriorityClass }}
+      priorityClassName: "{{ .Values.podPriorityClass }}"
+      {{- end }}
       containers:
         - name: glusterfs-precheck-ds
           image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
@@ -52,6 +62,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: MY_NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
           securityContext:
             privileged: true
           volumeMounts:
@@ -72,7 +86,9 @@ spec:
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
       tolerations:
-        - effect: NoExecute
+        - key: dedicated
+          operator: Exists
+        - key: CriticalAddonsOnly
           operator: Exists
 {{- with .Values.tolerations }}
 {{ toYaml . | indent 8 }}

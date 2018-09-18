@@ -22,7 +22,7 @@ metadata:
     description: GlusterFS precheck
     "helm.sh/hook": pre-install
     "helm.sh/hook-weight": "-1"
-    "helm.sh/hook-delete-policy": "hook-succeeded"
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 600
@@ -32,8 +32,13 @@ spec:
       labels:
 {{ include "sch.metadata.labels.standard" (list . $precheckjobName) | indent 8 }}
         glusterfs-precheck: "pod"
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
       restartPolicy: Never
+      {{- if .Values.podPriorityClass }}
+      priorityClassName: "{{ .Values.podPriorityClass }}"
+      {{- end }}
       containers:
         - name: glusterfs-precheck-job
           image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
@@ -50,3 +55,10 @@ spec:
           configMap:
             name: {{ include "sch.names.fullCompName" (list . $precheckcmName) }}
             defaultMode: 0777
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      tolerations:
+        - key: dedicated
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists

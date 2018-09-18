@@ -29,11 +29,19 @@ spec:
   selector:
     matchLabels:
       app: {{ include "sch.names.appName" (list .) }}
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+      glusterfs: "pod"
+      glusterfs-node: "daemonset"
+      version: "{{ .Values.gluster.image.tag }}"
   template:
     metadata:
       name: {{ include "sch.names.fullCompName" (list . $glusterfsdsName) }}
       labels:
-{{ include "sch.metadata.labels.standard" (list . $glusterfsdsName) | indent 8 }}
+        app: {{ include "sch.names.appName" (list .) }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        chart: "{{ .Chart.Name }}"
         glusterfs: "pod"
         glusterfs-node: "daemonset"
         version: "{{ .Values.gluster.image.tag }}"
@@ -41,8 +49,13 @@ spec:
         productName: "GlusterFS"
         productID: "GlusterFS_{{ .Values.gluster.image.tag }}_free_00000"
         productVersion: "{{ .Values.gluster.image.tag }}"
+
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
       hostNetwork: true
+      {{- if .Values.podPriorityClass }}
+      priorityClassName: "{{ .Values.podPriorityClass }}"
+      {{- end }}
       containers:
         - image: "{{ .Values.gluster.image.repository }}:{{ .Values.gluster.image.tag }}"
           imagePullPolicy: "{{ .Values.gluster.image.pullPolicy }}"
@@ -113,7 +126,9 @@ spec:
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
       tolerations:
-        - effect: NoExecute
+        - key: dedicated
+          operator: Exists
+        - key: CriticalAddonsOnly
           operator: Exists
 {{- with .Values.tolerations }}
 {{ toYaml . | indent 8 }}

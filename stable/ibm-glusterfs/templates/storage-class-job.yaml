@@ -23,7 +23,7 @@ metadata:
     description: Defines how to create glusterfs storage class
     "helm.sh/hook": post-install
     "helm.sh/hook-weight": "-1"
-    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed, before-hook-creation
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 300
@@ -33,14 +33,19 @@ spec:
       labels:
 {{ include "sch.metadata.labels.standard" (list . $scjobName) | indent 8 }}
         glusterfs-sc: "pod"
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
       restartPolicy: Never
+      {{- if .Values.podPriorityClass }}
+      priorityClassName: "{{ .Values.podPriorityClass }}"
+      {{- end }}
       containers:
         - name: glusterfs-sc-job
           image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
           imagePullPolicy: "{{ .Values.preValidation.image.pullPolicy }}"
 
-          command: ["python", "/sc/storage_class.py"]
+          command: ["/sc/storage_class.sh"]
 
           volumeMounts:
             - name: storage-class
@@ -51,5 +56,11 @@ spec:
           configMap:
             name: {{ include "sch.names.fullCompName" (list . $sccmName) }}
             defaultMode: 0777
-
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      tolerations:
+        - key: dedicated
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
 {{- end }}

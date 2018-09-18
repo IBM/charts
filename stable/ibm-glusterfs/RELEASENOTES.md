@@ -1,4 +1,4 @@
-# What’s new in GlusterFS Storage cluster Version 1.0.0
+# What’s new in GlusterFS Storage cluster Version 1.1.0
 
 With GlusterFS Storage cluster chart, the following new
 features are available:
@@ -7,6 +7,13 @@ features are available:
 * Creates a Heketi deployment to manage GlusterFS Storage cluster.
 * Creates its storage class.
 * Heketi DB is backed up as a kubernetes secret.
+
+# Fixes
+* GlusterFS and Heketi Image upgrades
+* Volume expansion capability
+* Prometheus Monitoring Support
+* Added pod priority
+* GlusterFS deployment on dedicated nodes
 
 # Prerequisites
 1. You must use at least three nodes to configure GlusterFS Storage cluster.
@@ -20,8 +27,16 @@ features are available:
 
 # Version History
 
-| Chart | Date        | ICP Required |     Image(s) Supported   | Details       |
-| ----- | ----------- | ------------ | ------------------------ | ------------- |
-| 1.0.0 | June 2018   | >=2.1.0.3    | ibmcom/gluster:3.12.1    | Initial Chart |
-|       |             |              | ibmcom/heketi:5          |               |
-|       |             |              | ibmcom/hyperkube:v1.10.0 |               | 
+| Chart | Date           | ICP Required |        Image(s) Supported       | Details       |
+| ----- | -------------- | ------------ | ------------------------------- | ------------- |
+| 1.1.0 | September 2018 | =3.1.0       | ibmcom/gluster:v4.0.2           | New Images    |
+|       |                |              | ibmcom/heketi:v7.0.0            | New Features  |
+|       |                |              | ibmcom/icp-storage-util:3.1.0   |               |
+|       |                |              |                                 |               |
+| 1.0.1 | July 2018      | >=2.1.0.3    | ibmcom/gluster:3.12.1           | Bug Fixes     |
+|       |                |              | ibmcom/heketi:5                 |               |
+|       |                |              | ibmcom/hyperkube:v1.10.0        |               |
+|       |                |              |                                 |               |
+| 1.0.0 | June 2018      | >=2.1.0.3    | ibmcom/gluster:3.12.1           | Initial Chart |
+|       |                |              | ibmcom/heketi:5                 |               |
+|       |                |              | ibmcom/hyperkube:v1.10.0        |               |

@@ -22,7 +22,7 @@ sch:
     appName: "glusterfs"
     components:
       glusterfsds:
-        name: "glusterfs-daemonset"
+        name: "daemonset"
       heketicfgcm:
         name: "heketi-config"
       heketisvc:
@@ -32,19 +32,19 @@ sch:
       heketitopocm:
         name: "heketi-topology"
       precheckresultscm:
-        name: "glusterfs-precheck-results-cm"
+        name: "precheck-results-cm"
       precheckcm:
-        name: "glusterfs-precheck-cm"
+        name: "precheck-cm"
       precheckds:
-        name: "glusterfs-precheck-daemonset"
+        name: "precheck-daemonset"
       precheckjob:
-        name: "glusterfs-precheck-job"
+        name: "precheck-job"
       predeletejob:
-        name: "glusterfs-predelete-job"
+        name: "predelete-job"
       predeletecm:
-        name: "glusterfs-predelete-cm"
+        name: "predelete-cm"
       scjob:
-        name: "glusterfs-sc-job"
+        name: "storageclass-job"
       sccm:
-        name: "glusterfs-sc-cm"
+        name: "storageclass-cm"
 {{- end -}}
