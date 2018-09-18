@@ -22,7 +22,7 @@ metadata:
   annotations:
     "helm.sh/hook": pre-install
     "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed, before-hook-creation
 data:
 
   precheck_daemonset.sh: |
@@ -65,7 +65,7 @@ data:
 
         json_out = json.loads(cm_out)
 
-        #skip patching when status success is already updated 
+        #skip patching when status success is already updated
         if "data" in json_out.keys() and key in json_out["data"].keys() and "success" in json_out["data"][key]:
           return
 
@@ -102,7 +102,7 @@ data:
 
 
       open_port_list = []
-      for port_val in glusterfs_ports: 
+      for port_val in glusterfs_ports:
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         result = sock.connect_ex(('',port_val))
@@ -113,6 +113,30 @@ data:
       if len(open_port_list) != 0:
         msg = "GlusterFS ports '%s' are open on %s" %(open_port_list, os.getenv("MY_NODE_NAME"))
         retval = "fail"
+
+      return retval, msg
+
+
+    def validate_storage_ips(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+      validate = False
+
+      print("Validating Storage IP Addresses")
+
+      topology_info = json.loads(config_data["topology"])
+      print("Topology info: ", topology_info)
+
+      for node in topology_info:
+
+        if node["k8sNodeIp"] == os.getenv("MY_NODE_IP"):
+          validate = True
+          break
+
+      if validate == False:
+        retval = "fail"
+        msg = "Storage IP configured for this node %s is not valid" %(os.getenv("MY_NODE_NAME"))
 
       return retval, msg
 
@@ -133,7 +157,7 @@ data:
           retval = "fail"
 
       return retval, msg
-      
+
 
     def validate_topology(config_data):
 
@@ -141,8 +165,10 @@ data:
       msg = "Validation Success"
       validate = False
 
-      input_val = "{{ .Values.preValidation.skip_disk_validation }}"
-      print("Input value of skip_disk_validation: %s" % (input_val))
+      install_type = config_data["installtype"]
+
+      input_val = "{{ .Values.preValidation.skipDiskValidation }}"
+      print("Input value of skipDiskValidation: %s" % (input_val))
 
       if input_val not in [ "true", "false" ]:
         skip_disk_validation = False
@@ -172,12 +198,14 @@ data:
               if os.path.islink(device) is False:
                 failed_path_device_list.append(device)
               else:
-                if {{ .Values.gluster.installType | quote }} == "Fresh":
+                if install_type == "Fresh":
                   # logical volume check
                   result = subprocess.check_output("lsblk %s" %device, shell=True)
                   print("lsblk output:", result)
                   if b'lvm' in result:
                     failed_lvm_device_list.append(device)
+                  else:
+                    subprocess.check_output("wipefs --all --force %s" %device, shell=True)
 
         if validate == False:
           retval = "success"
@@ -200,12 +228,14 @@ data:
     def main():
       config_data = {
         "topology" : {{ toJson .Values.heketiTopology | quote }} ,
+        "installtype" : {{ .Values.gluster.installType | quote }},
       }
 
       validation_methods_list = [
-        validate_topology,
+        validate_storage_ips,
         validate_kernel_modules,
         validate_port,
+        validate_topology,
         #validate_vg,
       ]
 
@@ -225,7 +255,7 @@ data:
         exit(1)
       exit(0)
 
-  
+
   precheck_job.py: |
 
     import subprocess
@@ -241,6 +271,10 @@ data:
       msg = "Validation Success"
 
       topology_info = json.loads(config_data["topology"])
+
+      if topology_info is None:
+        msg = "Please configure Heketi Topology nodes before proceeding install"
+        return "fail", msg
 
       if len(topology_info) < 3:
         msg = "Minimum number of storage nodes in Heketi Topology must be 3"
@@ -290,22 +324,22 @@ data:
     def validate_name(config_data):
 
       retval = "success"
-      msg = "Validation Success"
+      msg = ""
 
       scname = config_data["scname"]
       pattern = "[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*"
       matchObj = re.match(pattern, scname)
 
       if matchObj == None or matchObj.group(0) != scname:
-        msg = "GlusterFS storage class name %s is invalid. Name must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" %(scname)
+        msg = msg + "GlusterFS storage class name %s is invalid. Name must consist of lower case alphanumeric characters, - or ., and must start and end with an alphanumeric character. " %(scname)
         retval = "fail"
 
       # db backup secret name validation
-      secret = config_data["secretname"]
-      matchObj = re.match(pattern, secret)
+      backupdbsecret = config_data["backupdbsecret"]
+      matchObj = re.match(pattern, backupdbsecret)
 
-      if matchObj == None or matchObj.group(0) != secret:
-        msg = "Heketi db backup secret name %s is invalid. Name must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" %(secret)
+      if matchObj == None or matchObj.group(0) != backupdbsecret:
+        msg = msg + "Heketi db backup secret name %s is invalid. Name must consist of lower case alphanumeric characters, - or ., and must start and end with an alphanumeric character. " %(backupdbsecret)
         retval = "fail"
 
       # heketi auth secret name validation
@@ -313,7 +347,7 @@ data:
       matchObj = re.match(pattern, authsecret)
 
       if matchObj == None or matchObj.group(0) != authsecret:
-        msg = "Heketi authentication secret name %s is invalid. Name must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" %(authsecret)
+        msg = msg + "Heketi authentication secret name %s is invalid. Name must consist of lower case alphanumeric characters, - or ., and must start and end with an alphanumeric character." %(authsecret)
         retval = "fail"
 
       return retval, msg
@@ -326,22 +360,43 @@ data:
 
       err_msg = ""
 
-      secret = {{ .Values.heketi.backupDbSecret | quote }}
-      install_type = {{ .Values.gluster.installType | quote }}
+      secret = config_data["backupdbsecret"]
+      install_type = config_data["installtype"]
 
       try:
         subprocess.check_output("kubectl get secret %s" %(secret), stderr=subprocess.STDOUT, shell=True)
         if install_type == "Fresh":
-          msg = "Heketi DB Backup Secret %s is already available for the install type %s. Please remove and proceed the install" %(secret, install_type) 
+          msg = "Heketi DB Backup Secret %s is already available for the install type %s. Please remove and proceed the install" %(secret, install_type)
           retval = "fail"
       except subprocess.CalledProcessError as e:
         err_msg = e.output.decode()
         if install_type == "Upgrade":
           if ('secrets "%s" not found' %secret) in err_msg:
-            msg = "Heketi DB Backup Secret %s is not available for the install type %s." %(secret, install_type) 
+            msg = "Heketi DB Backup Secret %s is not available for the install type %s." %(secret, install_type)
             retval = "fail"
-        
-      return retval, msg 
+
+      return retval, msg
+
+
+    def validate_heketi_auth_secret(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+
+      secret = config_data["authsecret"]
+
+      err_msg = ""
+
+      try:
+        subprocess.check_output("kubectl get secret %s" %(secret), stderr=subprocess.STDOUT, shell=True)
+
+      except subprocess.CalledProcessError as e:
+        err_msg = e.output.decode()
+        if ('secrets "%s" not found' %secret) in err_msg:
+          msg = "Heketi authentication secret %s is not available. Please create the secret" %(secret)
+          retval = "fail"
+
+      return retval, msg
 
 
     def check_configmap():
@@ -412,13 +467,13 @@ data:
 
 
     def create_heketi_db_backup_secret():
-      
+
       secret_data = {
         "apiVersion": "v1",
         "type": "Opaque",
         "kind": "Secret",
         "metadata": {
-          "name": {{ .Values.heketi.backupDbSecret | quote }}, 
+          "name": {{ .Values.heketi.backupDbSecret | quote }},
           "namespace": {{ .Release.Namespace | quote }},
           "labels": {
             "glusterfs": "heketi-db-backup-secret",
@@ -445,14 +500,16 @@ data:
       config_data = {
         "topology" : {{ toJson .Values.heketiTopology | quote }},
         "scname" : {{ .Values.storageClass.name | quote }},
-        "secretname" : {{ .Values.heketi.backupDbSecret | quote }},
-        "authsecret" : {{ .Values.heketi.authSecret | quote }}
+        "backupdbsecret" : {{ .Values.heketi.backupDbSecret | quote }},
+        "authsecret" : {{ .Values.heketi.authSecret | quote }},
+        "installtype" : {{ .Values.gluster.installType | quote }}
       }
 
       validation_methods_list = [
         validate_min_nodes,
         validate_kubelet_nodes,
         validate_name,
+        validate_heketi_auth_secret,
         validate_heketi_db_secret
       ]
 

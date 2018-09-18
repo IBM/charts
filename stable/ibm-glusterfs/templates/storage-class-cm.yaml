@@ -21,58 +21,34 @@ metadata:
   annotations:
     "helm.sh/hook": post-install
     "helm.sh/hook-weight": "-3"
-    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed, before-hook-creation
 data:
 
-  storage_class.py: |
+  storage_class.sh: |
+    #!/bin/bash
 
-    import subprocess
-    import json
+    heketi_ip_port=$(kubectl get service {{ include "sch.names.fullCompName" (list . $heketisvcName) | quote }} -o=jsonpath='{.spec.clusterIP}:{.spec.ports[0].port}')
 
-    def create_sc():
+    cat <<EOF | kubectl create -f -
 
-      heketi_ip_port = subprocess.check_output("kubectl get service %s -o=jsonpath='{.spec.clusterIP}:{.spec.ports[0].port}'" %({{ include "sch.names.fullCompName" (list . $heketisvcName) | quote }}), shell=True)
-
-      add_params = json.loads({{ toJson .Values.storageClass.additionalProvisionerParams | quote }})
-
-      sc_data = {
-        "apiVersion": "storage.k8s.io/v1",
-        "kind": "StorageClass",
-        "metadata": {
-           "name": {{ .Values.storageClass.name | quote }},
-           "annotations": {
-              "storageclass.beta.kubernetes.io/is-default-class": {{ .Values.storageClass.isDefault | quote }}
-           }
-        },
-        "parameters": {
-           "resturl": "http://%s" %(heketi_ip_port),
-           "restuser": "admin",
-           "secretName": {{ .Values.heketi.authSecret | quote }},
-           "secretNamespace": {{ .Release.Namespace | quote }},
-           "volumetype": {{ .Values.storageClass.volumeType | quote }},
-           "volumenameprefix": {{ .Values.storageClass.volumeNamePrefix | quote }}
-        },
-        "provisioner": "kubernetes.io/glusterfs",
-        "reclaimPolicy": {{ .Values.storageClass.reclaimPolicy | quote }},
-        "volumeBindingMode": {{ .Values.storageClass.volumeBindingMode | quote }}
-      }
-
-      sc_data["parameters"].update(add_params)
-
-      sc_json_data = json.dumps(sc_data)
-      print("Storage Class JSON to be created: %s" % sc_json_data)
-
-      file = open("storage_class.json","w")
-      file.write(sc_json_data)
-      file.close()
-
-      subprocess.check_output("kubectl create -f storage_class.json", shell=True)
-
-
-    def main():
-
-      create_sc()
-
-
-    if __name__ == "__main__":
-      main()
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+         name: {{ .Values.storageClass.name }}
+         annotations:
+            storageclass.beta.kubernetes.io/is-default-class: {{ .Values.storageClass.isDefault | quote }}
+      parameters:
+        resturl: "http://${heketi_ip_port}"
+        restuser: admin
+        secretName: {{ .Values.heketi.authSecret }}
+        secretNamespace: {{ .Release.Namespace }}
+        volumetype: {{ .Values.storageClass.volumeType }}
+        volumenameprefix: {{ .Values.storageClass.volumeNamePrefix }}
+{{- with .Values.storageClass.additionalProvisionerParams }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+      provisioner: kubernetes.io/glusterfs
+      reclaimPolicy: {{ .Values.storageClass.reclaimPolicy }}
+      volumeBindingMode: {{ .Values.storageClass.volumeBindingMode }}
+      allowVolumeExpansion: {{ .Values.storageClass.allowVolumeExpansion }}
+    EOF

@@ -22,7 +22,7 @@ metadata:
   annotations:
     "helm.sh/hook": pre-delete
     "helm.sh/hook-weight": "-1"
-    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed
+    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed, before-hook-creation
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 300
@@ -32,8 +32,13 @@ spec:
       labels:
 {{ include "sch.metadata.labels.standard" (list . $predeletejobName) | indent 8 }}
         glusterfs-predelete: "pod"
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
       restartPolicy: Never
+      {{- if .Values.podPriorityClass }}
+      priorityClassName: "{{ .Values.podPriorityClass }}"
+      {{- end }}
       containers:
         - name: glusterfs-predelete-job
           image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
@@ -50,3 +55,10 @@ spec:
           configMap:
             name: {{ include "sch.names.fullCompName" (list . $predeletecmName) }}
             defaultMode: 0777
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      tolerations:
+        - key: dedicated
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
