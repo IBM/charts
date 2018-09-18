@@ -27,19 +27,35 @@ spec:
   selector:
     matchLabels:
       app: {{ include "sch.names.appName" (list .) }}
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+      glusterfs: "heketi-pod"
+      version: "{{ .Values.heketi.image.tag }}"
   template:
     metadata:
       name: {{ include "sch.names.fullCompName" (list . $heketideployName) }}
       labels:
-{{ include "sch.metadata.labels.standard" (list . $heketideployName) | indent 8 }}
+        app: {{ include "sch.names.appName" (list .) }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        chart: "{{ .Chart.Name }}"
         glusterfs: "heketi-pod"
         version: "{{ .Values.heketi.image.tag }}"
       annotations:
         productName: "Heketi"
         productID: "Heketi_{{ .Values.heketi.image.tag }}_free_00000"
         productVersion: "{{ .Values.heketi.image.tag }}"
+
+        prometheus.io/scrape: "{{ .Values.prometheus.enabled }}"
+        prometheus.io/path: "{{ .Values.prometheus.path }}"
+        prometheus.io/port: "{{ .Values.prometheus.port }}"
+
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
       #serviceAccountName: default
+      {{- if .Values.podPriorityClass }}
+      priorityClassName: "{{ .Values.podPriorityClass }}"
+      {{- end }}
       initContainers:
         - image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
           imagePullPolicy: "{{ .Values.preValidation.image.pullPolicy }}"
@@ -90,6 +106,8 @@ spec:
               value: '14'
             - name: HEKETI_KUBE_GLUSTER_DAEMONSET
               value: "y"
+            - name: HEKETI_IGNORE_STALE_OPERATIONS
+              value: "true"
             - name: HEKETI_ADMIN_KEY
               valueFrom:
                 secretKeyRef:
@@ -101,7 +119,8 @@ spec:
             - containerPort: 8080
           volumeMounts:
             - name: "heketi-db-secret"
-              mountPath: "/backupdb"
+              mountPath: "/backupdb/heketi.db.gz"
+              subPath: heketi.db.gz
             - name: config
               mountPath: "/etc/heketi"
           readinessProbe:
@@ -140,7 +159,9 @@ spec:
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
       tolerations:
-        - effect: NoExecute
+        - key: dedicated
+          operator: Exists
+        - key: CriticalAddonsOnly
           operator: Exists
 {{- with .Values.tolerations }}
 {{ toYaml . | indent 8 }}
