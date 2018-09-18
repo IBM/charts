@@ -33,9 +33,11 @@ Additionally, the contribution guidelines specify that all contributed Helm char
 
 # Standards and Guidelines for chart contributions
 
-The tables below should be use as a readiness guide for anyone preparing to deliver a helm chart to the `https://github.com/ibm/charts/community` directory. These guidelines are intended to augment the [Helm best practices](https://docs.helm.sh/chart_best_practices/) and not intended to replace those. If there is no guidance listed below, then it is best to refer to the Helm community best practices.
+The tables below should be use as a readiness guide for anyone preparing to deliver a helm chart to the `https://github.com/ibm/charts/community` directory. **Table 1** contains a short list of required standards for all charts contributed to the IBM Connunity charts repository. **Table 2** contains a guidance on how to build charts that further integrate with the platform, and provide a high-quality, consistent user experience on IBM Cloud Private. The guidelines in Table 2 are recommended, but not required. Each item in the chart provides a link to more details on implementation, farther down this page.
 
-### Required for all charts contributed to https://github.com/ibm/charts
+These guidelines are intended to augment the [Helm best practices](https://docs.helm.sh/chart_best_practices/) and not intended to replace those. If there is no guidance listed below, then it is best to refer to the Helm community best practices.
+
+### Table 1: Required for all charts contributed to https://github.com/ibm/charts
 
 | **Requirement** | **Description** |
 | --- | --- |
@@ -56,7 +58,7 @@ The tables below should be use as a readiness guide for anyone preparing to deli
 
 &nbsp;
 
-### Recommendations for an improved user experience on IBM Cloud Private
+### Table 2: Recommendations for an improved user experience on IBM Cloud Private
 
 The following table contains guidance from IBM on how to build workloads that provide a full-featured and consistent user experience on IBM Cloud Private. Unlike the standards above, charts in the IBM Community charts repository are not required to implement these items. Chart developers should consider the items below best practices, and use them as appropriate to provide deeper integration with IBM Cloud Private and enhance the user experience. Some recommendations may not be applicable to all workload types.
 
@@ -72,7 +74,7 @@ The following table contains guidance from IBM on how to build workloads that pr
 | [Storage (presistent volumes / claims)](#storage-persistent-volumes-claims) | Do not create persistent volumes in a chart, as allocation is environment-specific and may require permissions the chart deployer doesn&#39;t have. A chart should contain a Persistent Volume Claim if persistent storage is required. |
 | [Parameter grouping and naming](#parameter-grouping-and-naming) | Use common naming conventions (outlined in the onboarding guide)  to provide consistent parameters and user experience across charts. |
 | [Values metadata](#values-metadata) | Define metadata for fields containing passwords, allowed values, etc. to provide a rich deployment experience in the ICP UI. Metadata format is described in the onboarding guide. |
-| [Labels and annotations](#labels-and-annotations) | Use labels for all Kubernetes resources. |
+| [Labels and annotations](#labels-and-annotations) | IBM recommends that all charts to use the standard labels of "heritage, release, chart and app" on all Kubernetes resources. |
 | [Liveness and Readiness probes](#liveness-and-readiness-probes) | Workloads should enable monitoring of monitoring their own health using livenessProbes and readinessProbes. |
 | [Kind](#kind) | All helm templates that define resources must have a `Kind`. Helm defaults to a pod however we avoid this practice. Helm best practice is to not define multiple resources in a single template file. |
 | [Container security privileges](#container-security-privileges) | Workloads should avoid using escalated security privileges for containers whenever possible. When escalated privileges are required, charts must request the minimum level of privileges needed to achieve the desired functionality. |
@@ -197,9 +199,9 @@ Image url should be a parameterized reference to values.yaml, and the version of
 
 IBM Cloud Private supports x86-64, ppc64le, and z (s390) hardware architectures. Workloads can reach the largest possible audience by providing images for all three platforms and using a fat manifest.
 
-For guidance on developing images for the ppc64le platform refer to  ____________
+For more information on developing images for the ppc64le platform refer to the [IBM Cloud Private on Power](https://developer.ibm.com/linuxonpower/ibm-cloud-private-on-power/) and [Docker on IBM Power Systems](https://developer.ibm.com/linuxonpower/docker-on-power/) sites on [developer.ibm.com](https://developer.ibm.com)
 
-For guidance on developing images for the z platform refer to  ____________
+For more information on developing images for the z platform refer to  [the IBM Knowledge Center for Linux on IBM Systems](https://www.ibm.com/support/knowledgecenter/en/linuxonibm/com.ibm.linux.z.ldvd/ldvd_c_docker_image.html)
 
 ## Fat manifests
 
@@ -308,7 +310,7 @@ IBM Cloud Private supports defining metadata for fields containing passwords, hi
 
 Helm defines a set of best practices regarding the creation of [labels and annotations](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/labels.md). Concepts covered in this document focus on metadata that can identify resources and provide queryable labels for tools like Operators. Therefore, the labels on a resource collectively should be unique.  In addition, the Best Practices link descibes the set of common labels that Helm charts use.
 
-IBM recommends that all charts to use the standards labels of "heritage, release, chart and app" on all Kubernetes resources defined in your charts.
+IBM recommends that all charts to use the standard labels of "heritage, release, chart and app" on all Kubernetes resources defined in your charts.
 
 
 ## Liveness and readiness probes
