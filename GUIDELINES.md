@@ -33,7 +33,7 @@ Additionally, the contribution guidelines specify that all contributed Helm char
 
 # Standards and Guidelines for chart contributions
 
-The tables below should be use as a readiness guide for anyone preparing to deliver a helm chart to the `https://github.com/ibm/charts/community` directory. **Table 1** contains a short list of required standards for all charts contributed to the IBM Connunity charts repository. **Table 2** contains a guidance on how to build charts that further integrate with the platform, and provide a high-quality, consistent user experience on IBM Cloud Private. The guidelines in Table 2 are recommended, but not required. Each item in the chart provides a link to more details on implementation, farther down this page.
+The tables below should be use as a readiness guide for anyone preparing to deliver a helm chart to the `https://github.com/ibm/charts/community` directory. [**Table 1**](#table-1-required-for-all-charts-contributed-to-httpsgithubcomibmcharts) contains a short list of required standards for all charts contributed to the IBM Connunity charts repository. [**Table 2**](#table-2-recommendations-for-an-improved-user-experience-on-ibm-cloud-private) contains a guidance on how to build charts that further integrate with the platform, and provide a high-quality, consistent user experience on IBM Cloud Private. The guidelines in Table 2 are recommended, but not required. Each item in the chart provides a link to more details on implementation, farther down this page.
 
 These guidelines are intended to augment the [Helm best practices](https://docs.helm.sh/chart_best_practices/) and not intended to replace those. If there is no guidance listed below, then it is best to refer to the Helm community best practices.
 
