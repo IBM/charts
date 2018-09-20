@@ -9,6 +9,16 @@ This helm chart deploys [Portworx](https://portworx.com/) and [Stork](https://do
 - Tiller v2.9.0 and above is running on the Kubernetes cluster where you wish to deploy Portworx.
 - All [Pre-requisites](https://docs.portworx.com/#minimum-requirements). for Portworx fulfilled.
 
+### Trusted registries
+
+Container Image Security is enabled by default in ICP 3.1 and above. Hence add the following to the trusted registries so they can be pulled.
+* docker.io/portworx/*
+* docker.io/openstorage/*
+* gcr.io/google-containers/*
+* docker.io/lachlanevenson/*
+* docker.io/hrishi/*
+* quay.io/k8scsi/*
+
 ## Limitations
 * The portworx helm chart can only be deployed in the kube-system namespace. Hence use "kube-system" in the "Target namespace" during configuration.
 * You can only deploy one portworx helm chart per Kubernetes cluster.
