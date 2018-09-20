@@ -2,12 +2,12 @@
 
 The IBM Community charts repository is both a Helm repository and a repository for Helm chart source code, intended to host community-developed Helm charts meant for use with IBM Cloud Private. It is hosted in GitHub at the following location:
 
-- Chart source: [https://github.com/ibm/charts/community](https://github.com/ibm/charts/community)
-- Helm repository: [https://github.com/ibm/charts/repo/community](https://github.com/ibm/charts/repo/community)
+- Chart source: [https://github.com/IBM/charts/tree/master/community/](hhttps://github.com/IBM/charts/tree/master/community/)
+- Helm repository: [https://github.com/IBM/charts/tree/master/repo/community](https://github.com/IBM/charts/tree/master/repo/community)
 
-IBM Cloud Private&#39;s catalog view displays a set of Helm charts that are available to be deployed by polling a list of Helm repositories. By default, these repositories include the Helm repository that is hosted locally inside the IBM Cloud Private cluster itself, and IBM&#39;s chart repository for IBM-developed charts, at [https://github.com/ibm/charts/repo/stable](https://github.com/ibm/charts/repo/stable).
+IBM Cloud Private&#39;s catalog view displays a set of Helm charts that are available to be deployed by polling a list of Helm repositories. By default, these repositories include the Helm repository that is hosted locally inside the IBM Cloud Private cluster itself, and IBM&#39;s chart repository for IBM-developed charts, at [https://raw.githubusercontent.com/IBM/charts/master/repo/stable/](https://raw.githubusercontent.com/IBM/charts/master/repo/stable/).
 
-As of IBM Cloud Private 2.1.0.3, the IBM Community charts repository is not displayed in the catalog by default, though it will likely be added to the list of default repositories in the future. Users can add the repository to their catalog view by navigating to **Manage &gt; Helm Repositories** in the IBM Cloud Private user interface, and adding [https://github.com/ibm/charts/repo/community](https://github.com/ibm/charts/repo/community) to the list.
+As of IBM Cloud Private 2.1.0.3, the IBM Community charts repository is not displayed in the catalog by default, though it will likely be added to the list of default repositories in the future. Users can add the repository to their catalog view by navigating to **Manage &gt; Helm Repositories** in the IBM Cloud Private user interface, and adding [https://raw.githubusercontent.com/IBM/charts/master/repo/community/](https://raw.githubusercontent.com/IBM/charts/master/repo/community/) to the list.
 
 &nbsp;
 
@@ -23,7 +23,7 @@ The guidance in this document is meant to help you build charts that meet the st
 
 # Contributing to the IBM Community charts repository
 
-Rules for contributing to the IBM Community charts repository are covered in [CONTRIBUTING.md](https://github.com/morstad/charts/blob/contribdocs/CONTRIBUTING.md), which is hosted in the GitHub repository itself.
+Rules for contributing to the IBM Community charts repository are covered in [CONTRIBUTING.md](https://github.com/IBM/charts/blob/master/CONTRIBUTING.md), which is hosted in the GitHub repository itself.
 
 All contributions must include both chart source and a packaged Helm chart. Chart source must be added to the `charts/community` directory, and packaged chart `.tgz` files must be added to the Helm repository directory, `charts/repo/community`
 
@@ -33,7 +33,7 @@ Additionally, the contribution guidelines specify that all contributed Helm char
 
 # Standards and Guidelines for chart contributions
 
-The tables below should be use as a readiness guide for anyone preparing to deliver a helm chart to the `https://github.com/ibm/charts/community` directory. [**Table 1**](#table-1-required-for-all-charts-contributed-to-httpsgithubcomibmcharts) contains a short list of required standards for all charts contributed to the IBM Connunity charts repository. [**Table 2**](#table-2-recommendations-for-an-improved-user-experience-on-ibm-cloud-private) contains a guidance on how to build charts that further integrate with the platform, and provide a high-quality, consistent user experience on IBM Cloud Private. The guidelines in Table 2 are recommended, but not required. Each item in the chart provides a link to more details on implementation, farther down this page.
+The tables below should be use as a readiness guide for anyone preparing to deliver a helm chart to the `https://github.com/ibm/charts/community` directory. [**Table 1**](#table-1-required-for-all-charts-contributed-to-httpsgithubcomibmcharts) contains a short list of required standards for all charts contributed to the IBM Community charts repository. [**Table 2**](#table-2-recommendations-for-an-improved-user-experience-on-ibm-cloud-private) contains a guidance on how to build charts that further integrate with the platform, and provide a high-quality, consistent user experience on IBM Cloud Private. The guidelines in Table 2 are recommended, but not required. Each item in the chart provides a link to more details on implementation, farther down this page.
 
 These guidelines are intended to augment the [Helm best practices](https://docs.helm.sh/chart_best_practices/) and not intended to replace those. If there is no guidance listed below, then it is best to refer to the Helm community best practices.
 
