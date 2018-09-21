@@ -121,11 +121,8 @@ function helmpackage()
 	info "helm repo index $1 --merge $2/../index.yaml --url $URL"
 	mv $2/index.yaml $2/../
 	helm repo index $1 --merge $2/../index.yaml --url $URL	
-
-	diff -q -I "^generated:" $2/index.yaml.master $2/../index.yaml && { info "Index not changed" ; mv $2/../index.yaml $2/index.yaml ; }   || { info "Index has been updated" ; cp $1/index.yaml $2 ; }
-	rm $1/index.yaml.* rm $2/index.yaml.* || true
-
-	# cp $1/* $2/ || true
+	diff -q -I "^generated:" $2/index.yaml.master $1/index.yaml && { info "Index not changed" ; mv $2/../index.yaml $2/index.yaml ; }   || { info "Index has been updated" ; cp $1/index.yaml $2 ; }
+	rm $1/index.yaml.* rm $2/index.yaml.* 2>/dev/null || true
 	end
 }
 
@@ -144,7 +141,6 @@ function setup()
 	popd
 	cp $1 $1.master || touch $1.master # save a copy of the master index for later comparison
 	end
-
 }
 
 function commitchange()
