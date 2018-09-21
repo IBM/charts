@@ -41,3 +41,41 @@ Create the name of the service account to use
     {{ default "default" .Values.serviceAccount.name }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Check if tag contains specific platform suffix and if not set based on kube platform
+*/}}
+{{- define "platform" -}}
+{{- if not .Values.image.arch }}
+  {{- if (eq "linux/amd64" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "-%s" "x86_64" }}
+  {{- end -}}
+  {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "-%s" "ppc64le" }}
+  {{- end -}}
+  {{- if (eq "linux/s390x" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "-%s" "s390x" }}
+  {{- end -}}
+{{- else -}}
+  {{- if eq .Values.image.arch "amd64" }}
+    {{- printf "-%s" "x86_64" }}
+  {{- else -}}
+    {{- printf "-%s" .Values.image.arch }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return arch based on kube platform
+*/}}
+{{- define "arch" -}}
+  {{- if (eq "linux/amd64" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "%s" "amd64" }}
+  {{- end -}}
+  {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "%s" "ppc64le" }}
+  {{- end -}}
+  {{- if (eq "linux/s390x" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "%s" "s390x" }}
+  {{- end -}}
+{{- end -}}
