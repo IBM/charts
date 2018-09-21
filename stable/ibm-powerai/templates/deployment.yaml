@@ -7,8 +7,18 @@
 # Contributors:
 #  IBM Corporation - initial API and implementation
 ###############################################################################
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
 apiVersion: apps/v1beta2
+{{- else }}	
+apiVersion: apps/v1beta1	
+{{- end }}
+{{- if .Values.ddl.enabled }}
+kind: StatefulSet
+{{- else }}
 kind: Deployment
+{{- end }}
 metadata:
   name: {{ template "fullname" . }}
   labels:
@@ -17,6 +27,11 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
+  {{- if .Values.ddl.enabled }}
+  serviceName: {{ template "fullname" . }}
+  podManagementPolicy: Parallel
+  {{- end }}
+  replicas: {{ template "workerCount" . }}
   selector:
     matchLabels:
       app: {{ template "fullname" . }}
@@ -28,12 +43,12 @@ spec:
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
-      
+
       annotations:
         productName: "PowerAI"
         productID: "5765-PAI"
         productVersion: "{{ .Chart.Version }}"
-    
+
     spec:
       affinity:
         nodeAffinity:
@@ -44,6 +59,21 @@ spec:
                 operator: In
                 values:
                 - "ppc64le"
+        {{- if and .Values.ddl.enabled }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "fullname" . }}
+            topologyKey: "kubernetes.io/hostname"
+        {{- end }}
+      {{- if .Values.resources.gputype }}
+      nodeSelector:
+        gputype: {{ .Values.resources.gputype }}
+      {{- end }}     
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -53,20 +83,40 @@ spec:
         - name: {{ .Values.global.image.secretName }}
         {{- end }}
         command: [ "/bin/bash", "-c" ]
-        {{- if (eq .Values.command "") }}
-        args: [ "tail -f /dev/null;" ]
-        {{- else }}
-        args: [ "{{ .Values.command }}; tail -f /dev/null;" ]
+        {{- define "makeArgs" }}
+        {{- if .Values.ddl.enabled }}
+        {{- print "sudo -E bash /powerai/config/setup_ssh.sh;" }}
         {{- end }}
-        {{- if .Values.service.port }}            
+        {{- if (ne .Values.command "") }}
+        {{- printf "host=$(hostname);[ ${host: -2} = '-0' ] && %s;" .Values.command }}
+        {{- end }}
+        {{- end }}
+        args: [ "{{ template "makeArgs" . }}tail -f /dev/null;" ]
+        {{- if .Values.ddl.useInfiniBand }}
+        securityContext:
+          capabilities:
+            add: ["IPC_LOCK", "SYS_PTRACE", "SYS_RESOURCE"]
+        {{- end }}
         ports:
+        {{- if .Values.service.port }}
         - name: service
           containerPort: {{ .Values.service.port }}
-        {{- end }}         
+        {{- end }}
+        {{- if .Values.ddl.enabled }}
+        - containerPort: {{ .Values.ddl.sshPort }}
+        {{- end }}
         env:
         {{- if (eq .Values.license "accept") }}
         - name: LICENSE
           value: "yes"
+        {{- end }}
+        {{- if .Values.ddl.enabled }}
+        - name: SSH_PORT
+          value: "{{ .Values.ddl.sshPort }}"
+        {{- end }}
+        {{- if .Values.ddl.useInfiniBand }}
+        - name: INFINIBAND
+          value: "1"
         {{- end }}
         {{- if .Values.resources.gpu }}
         livenessProbe:
@@ -76,7 +126,7 @@ spec:
             - -c
             - nvidia-smi
           initialDelaySeconds: 30
-          periodSeconds: 60          
+          periodSeconds: 60
         readinessProbe:
           exec:
             command:
@@ -88,11 +138,43 @@ spec:
         {{- end }}
         resources:
           limits:
-            alpha.kubernetes.io/nvidia-gpu: {{ .Values.resources.gpu }}
+          {{- if .Values.ddl.useInfiniBand }}
+            tencent.com/rdma: 1 # requesting 1 RDMA device
+          {{- end }}
+          {{- if .Values.ddl.enabled }}
+            {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) }}             
+              alpha.kubernetes.io/nvidia-gpu: {{ .Values.ddl.gpuPerHost }}
+            {{- else }}
+              nvidia.com/gpu: {{ .Values.ddl.gpuPerHost }}
+            {{- end }}
+          {{- else }}
+            {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) }}                       
+              alpha.kubernetes.io/nvidia-gpu: {{ .Values.resources.gpu }}
+            {{- else }}
+              nvidia.com/gpu: {{ .Values.resources.gpu }}
+            {{- end }} 
+                                 
+          {{- end }}
         volumeMounts:
+        {{- if .Values.ddl.useInfiniBand }}
+        - mountPath: /dev/shm
+          name: dshm
+        {{- end }}
         - name: "{{ template "fullname" . }}-{{ .Values.poweraiPVC.name }}"
-          mountPath: /powerai/data        
+          mountPath: /powerai/data
+        {{- if .Values.ddl.enabled }}
+        - name: ssh-volume
+          readOnly: true
+          mountPath: "/powerai/sshkeys"
+        - name: cfgmap-volume
+          mountPath: "/powerai/config"
+        {{- end }}
       volumes:
+      {{- if .Values.ddl.useInfiniBand }}
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      {{- end }}
       - name: "{{ template "fullname" . }}-{{ .Values.poweraiPVC.name }}"
       {{- if .Values.persistence.enabled }}
         persistentVolumeClaim:
@@ -104,5 +186,21 @@ spec:
       {{- else }}
         emptyDir: {}
       {{- end }}
-
-      
+      {{- if .Values.ddl.enabled }}
+      - name: ssh-volume
+        secret:
+          secretName: {{ .Values.ddl.sshKeySecret }}
+      - name: cfgmap-volume
+        configMap:
+          name: {{ template "fullname" . }}
+      dnsConfig:
+        searches:
+          - {{ template "fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+      {{- end }}
+      {{- if .Values.ddl.useInfiniBand }}
+      hostPID: true
+      {{- end }}
+      {{- if .Values.ddl.useHostNetwork }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}

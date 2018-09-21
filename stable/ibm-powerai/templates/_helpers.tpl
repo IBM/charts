@@ -33,3 +33,14 @@ Return arch based on kube platform
     {{- printf "%s" "ppc64le" }}
   {{- end -}}
 {{- end -}}
+
+{{/*
+Return number of replicas based on .Values.resources.gpu and .Values.ddl.gpuPerHost values.
+*/}}
+{{- define "workerCount" -}}
+  {{- if and .Values.ddl.enabled (ne (int .Values.resources.gpu) 0)  (ne (int .Values.ddl.gpuPerHost) 0)}}
+  {{- print (div (add .Values.resources.gpu .Values.ddl.gpuPerHost -1)  .Values.ddl.gpuPerHost) }}
+  {{- else }}
+  {{- print "1" }}
+  {{- end }}
+{{- end -}}
