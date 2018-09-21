@@ -1,4 +1,4 @@
-{{- if eq .Values.mode "standalone" "shared" }}
+{{- if eq .Values.mode "standalone" }}
 apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
@@ -9,8 +9,8 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
-  {{- if eq .Values.mode "shared" }}
-  replicas: {{ .Values.replicas }}
+  {{- if .Values.nasgateway.enabled }}
+  replicas: {{ .Values.nasgateway.replicas }}
   {{- end }}
   selector:
     matchLabels:
@@ -28,25 +28,48 @@ spec:
         productName: "Minio"
         productID: "Minio_{{ .Values.image.tag }}_free_00000"
         productVersion: "{{ .Values.image.tag }}"
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
+  {{- if .Values.priorityClassName }}
+  {{- if and ( eq .Values.priorityClassName "system-cluster-critical" ) ( not ( ( eq  .Release.Namespace "kube-system"))) }}
+     {{ fail "Configuration error: system-cluster-critical is available only in kube-system namespace."}}
+  {{  end }}
+      priorityClassName: "{{ .Values.priorityClassName }}"
+  {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- if .Values.azuregateway.enabled }}
-          args: ["gateway", "azure"]
+          command: [ "/bin/sh", 
+          "-ce", 
+          "cp /tmp/config.json {{ .Values.configPath }} && 
+          /usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} gateway azure"]
           {{- else }}
           {{- if .Values.gcsgateway.enabled }}
-          args: ["gateway", "gcs", "{{ .Values.gcsgateway.projectId }}"]
+          command: [ "/bin/sh", 
+          "-ce", 
+          "cp /tmp/config.json {{ .Values.configPath }} && 
+          /usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} gateway gcs {{ .Values.gcsgateway.projectId }}"]
           {{- else }}
-          {{- if .Values.configPath }}
-          args: ["-C", "{{ .Values.configPath }}", "server", "{{ .Values.mountPath }}"]
+          {{- if .Values.nasgateway.enabled }}
+          command: [ "/bin/sh", 
+          "-ce", 
+          "cp /tmp/config.json {{ .Values.configPath }} && 
+          /usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} gateway nas {{ .Values.mountPath }}"]
           {{- else }}
-          args: ["server", "{{ .Values.mountPath }}"]
+          command: [ "/bin/sh", 
+          "-ce", 
+          "cp /tmp/config.json {{ .Values.configPath }} && 
+          /usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} server {{ .Values.mountPath }}" ]
           {{- end }}
           {{- end }}
           {{- end }}
           volumeMounts:
+{{- if .Values.tls.enabled }}
+            - name: secret-volume
+              mountPath: {{ .Values.configPath }}/certs
+{{- end }}
             - name: export
               mountPath: {{ .Values.mountPath }}
               {{- if and .Values.persistence.enabled .Values.persistence.subPath }}
@@ -57,6 +80,11 @@ spec:
               mountPath: "/etc/credentials"
               readOnly: true
             {{- end }}
+            - name: minio-server-config
+              mountPath: "/tmp/config.json"
+              subPath: config.json
+            - name: minio-config-dir
+              mountPath: {{ .Values.configPath }}
           ports:
             - name: service
               containerPort: 9000
@@ -78,6 +106,11 @@ spec:
           livenessProbe:
             tcpSocket:
               port: 9000
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          readinessProbe:
+            tcpSocket:
+              port: 9000
             timeoutSeconds: 1
           resources:
 {{ toYaml .Values.resources | indent 12 }}
@@ -87,11 +120,36 @@ spec:
 {{- end }}
       affinity:
 {{- include "nodeaffinity" . | indent 8 }}
-{{- with .Values.tolerations }}
       tolerations:
+        - key: dedicated
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+{{- with .Values.tolerations }}
 {{ toYaml . | indent 8 }}
 {{- end }}
       volumes:
+{{- if .Values.tls.enabled }}
+        - name: secret-volume
+          secret:
+{{- if eq .Values.tls.type  "selfsigned" }}
+            secretName: {{ template "minio.fullname" . }}
+{{- end }}
+{{- if eq .Values.tls.type  "provided" }}
+{{- if empty .Values.tls.minioTlsSercret }}
+{{ fail "Configuration error: Please enter name of secret containing  TLS certificate and key." }}
+{{- end }}
+            secretName: {{ .Values.tls.minioTlsSercret }}
+{{- end }}
+            defaultMode: 420
+            items:
+            - key: public.crt
+              path: public.crt
+            - key: private.key
+              path: private.key
+            - key: ca.crt
+              path: CAs/ca.crt
+{{- end }}
         - name: export
         {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
@@ -99,7 +157,12 @@ spec:
         {{- else }}
           emptyDir: {}
         {{- end }}
+        - name: minio-server-config
+          configMap:
+            name: {{ template "minio.fullname" . }}
         - name: minio-user
           secret:
             secretName: {{ .Values.minioAccessSercret }}
+        - name: minio-config-dir
+          emptyDir: {}
 {{- end }}
