@@ -22,31 +22,57 @@ spec:
       labels:
         app: {{ template "minio.name" . }}
         release: {{ .Release.Name }}
+        chart: {{ template "minio.chart" . }}
+        heritage: {{ .Release.Service }}
       annotations:
         productName: "Minio"
         productID: "Minio_{{ .Values.image.tag }}_free_00000"
         productVersion: "{{ .Values.image.tag }}"
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
+      {{- if .Values.priorityClassName }}
+      {{- if and ( eq .Values.priorityClassName "system-cluster-critical" ) ( not ( ( eq  .Release.Namespace "kube-system"))) }}
+        {{ fail "Configuration error: system-cluster-critical is available only in kube-system namespace."}}
+      {{  end }}
+      priorityClassName: "{{ .Values.priorityClassName }}"
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if .Values.configPath }}
-          args:
-            - -C {{ .Values.configPath }} server
-          {{- else }}
-          args:
-            - server
-            {{- range $i := until $nodeCount }}
-            - http://{{ template "minio.fullname" $ }}-{{ $i }}.{{ template "minio.fullname" $ }}.{{ $.Release.Namespace }}.svc.cluster.local{{ $.Values.mountPath }}
-            {{- end }}
-            {{- end }}
+{{- if .Values.tls.enabled }}
+          command: [ "/bin/sh", 
+          "-ce", 
+          "cp /tmp/config.json {{ .Values.configPath }} &&
+          /usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} server
+          {{- range $i := until $nodeCount }}
+          https://{{ template `minio.fullname` $ }}-{{ $i }}.{{ template `minio.fullname` $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.tls.clusterDomain }}{{ $.Values.mountPath }}
+          {{- end }}" ]
+{{ else }}
+          command: [ "/bin/sh",
+          "-ce",
+          "cp /tmp/config.json {{ .Values.configPath }} &&
+          /usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} server
+          {{- range $i := until $nodeCount }}
+          http://{{ template `minio.fullname` $ }}-{{ $i }}.{{ template `minio.fullname` $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.tls.clusterDomain }}{{ $.Values.mountPath }}
+          {{- end }}" ]
+
+{{- end }}
           volumeMounts:
+{{- if .Values.tls.enabled }}
+            - name: secret-volume
+              mountPath: {{ .Values.configPath }}/certs
+{{- end }}
             - name: export
               mountPath: {{ .Values.mountPath }}
               {{- if and .Values.persistence.enabled .Values.persistence.subPath }}
               subPath: "{{ .Values.persistence.subPath }}"
               {{- end }}
+            - name: minio-server-config
+              mountPath: "/tmp/config.json"
+              subPath: config.json
+            - name: minio-config-dir
+              mountPath: {{ .Values.configPath }}
           ports:
             - name: service
               containerPort: 9000
@@ -69,14 +95,44 @@ spec:
     {{- end }}
       affinity:
 {{- include "nodeaffinity" . | indent 8 }}
-    {{- with .Values.tolerations }}
       tolerations:
+        - key: dedicated
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+{{- with .Values.tolerations }}
 {{ toYaml . | indent 8 }}
     {{- end }}
       volumes:
+{{- if .Values.tls.enabled }}
+        - name: secret-volume
+          secret:
+{{- if eq .Values.tls.type  "selfsigned" }}
+            secretName: {{ template "minio.fullname" . }}
+{{- end }}
+{{- if eq .Values.tls.type  "provided" }}
+{{- if empty .Values.tls.minioTlsSercret }}
+{{ fail "Configuration error: Please enter name of secret containing  TLS certificate and key." }}
+{{- end }}
+            secretName: {{ .Values.tls.minioTlsSercret }}
+{{- end }}
+            defaultMode: 420
+            items:
+            - key: public.crt
+              path: public.crt
+            - key: private.key
+              path: private.key
+            - key: ca.crt
+              path: CAs/public.crt
+{{- end }}
         - name: minio-user
           secret:
             secretName: {{ .Values.minioAccessSercret }}
+        - name: minio-server-config
+          configMap:
+            name: {{ template "minio.fullname" . }}
+        - name: minio-config-dir
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: export
