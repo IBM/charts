@@ -10,20 +10,12 @@ This chart bootstraps a [OpenEBS](https://github.com/openebs/openebs) deployment
 
 ## Prerequisites
 
-- Kubernetes 1.9.7+ with RBAC enabled
-- iSCSI PV support in the underlying infrastructure
-- Helm is installed and the tiller has admin privileges. To assign admin
-  to tiller, login as admin and use the following instructions:
-
-  ```shell
-  kubectl -n kube-system create sa tiller
-  kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
-  kubectl -n kube-system patch deploy/tiller-deploy -p '{"spec": {"template": {"spec": {"serviceAccountName": "tiller"}}}}'
-  kubectl -n kube-system patch deployment tiller-deploy -p '{"spec": {"template": {"spec": {"automountServiceAccountToken": true}}}}'
-  ```
-
+- Kubernetes 1.9.7+ with RBAC enabled.
+- iSCSI PV support in the underlying infrastructure.
+- User deploying the chart needs to have the clusterAdmin role.
 - A namespace called "openebs" is created in the Cluster for running the
-  below instructions: `kubectl create namespace openebs`
+  below instructions: `kubectl create namespace openebs`.
+- If [Container Image Security](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html) is enabled then Docker hub container registry must be added to the list of trusted registries by following the instructions described under the section [Customizing your policy (post installation)](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html).
 
 ## Installing the Chart
 

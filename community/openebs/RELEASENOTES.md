@@ -17,15 +17,15 @@ features are available:
 
 # Prerequisites
 
-1. IBM Cloud Private version 2.1.0.1+
+1. IBM Cloud Private version 2.1.0.3+
 2. Kubernetes 1.9.7+
 3. iSCSI Initiator installed on the Kubernetes nodes.
 4. NDM helps in discovering the devices attached to Kubernetes nodes, which can be used to create storage pools. If you like to exclude some of the disks from getting discovered, update the filters on NDM to exclude paths before installing OpenEBS.
-
+5. If [Container Image Security](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html) is enabled then Docker hub Container Registry must be added to the list of trusted registries by following the instructions described under the section [Customizing your policy (post installation)](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html).
 
 
 # Version History
 
 | Chart | Date        | ICP Required | Image(s) Supported | Details |
 | ----- | ----------- | ------------ | ------------------ | ------- |
-| 0.7.0 | Sep 08, 2018| >=2.1.0.1    | openebs/m-apiserver, openebs/openebs-k8s-provisioner, openebs/snapshot-controller, openebs/snapshot-provisioner, openebs/node-disk-manager-amd64, openebs/jiva, openebs/cstor-pool, openebs/cstor-pool-mgmt, openebs/cstor-istgt, openebs/cstor-volume-mgmt, openebs/m-exporter | Initial Chart for installing OpenEBS storage on ICP |
+| 0.7.0 | Sep 08, 2018| >=2.1.0.3    | openebs/m-apiserver, openebs/openebs-k8s-provisioner, openebs/snapshot-controller, openebs/snapshot-provisioner, openebs/node-disk-manager-amd64, openebs/jiva, openebs/cstor-pool, openebs/cstor-pool-mgmt, openebs/cstor-istgt, openebs/cstor-volume-mgmt, openebs/m-exporter | Initial Chart for installing OpenEBS storage on ICP |
