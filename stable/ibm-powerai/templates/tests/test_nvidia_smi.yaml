@@ -8,16 +8,17 @@
 #  IBM Corporation - initial API and implementation
 ###############################################################################
 apiVersion: v1
+
 kind: Pod
 metadata:
   name: "{{ .Release.Name }}-test-nvidia-smi"
   annotations:
     "helm.sh/hook": test-success
   labels:
-    app: {{ template "fullname" . }}
-    heritage: "{{ .Release.Service }}"
-    release: "{{ .Release.Name }}"
+    app: "{{ .Release.Name }}-test"
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
 spec:
   containers:
   - name: "{{ .Release.Name }}-test-nvidia-smi"
@@ -30,5 +31,13 @@ spec:
     {{- end }}
     resources:
       limits:
-        alpha.kubernetes.io/nvidia-gpu: {{ .Values.resources.gpu }}
+        {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) }}        
+          alpha.kubernetes.io/nvidia-gpu: {{ .Values.resources.gpu }}
+        {{- else }}
+          nvidia.com/gpu: {{ .Values.resources.gpu }}
+        {{- end }}   
+  {{- if .Values.resources.gputype }}
+  nodeSelector:
+    gputype: {{ .Values.resources.gputype }}
+  {{- end }} 
   restartPolicy: Never
