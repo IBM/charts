@@ -358,7 +358,7 @@ These commands can be run from any host that has a kubectl client with access to
 
 - An IBM Cloud Private Administrator role is required to install into a non-default namespace. This is because two service accounts will be created if you specify the global.rbac.serviceAccountName and jenkins.rbac.serviceAccountName properties when installing the chart, which are used to allow Microclimate pods to function correctly in a non-default namespace.
 
-See the [product documentation](https://microclimate-dev2ops.github.io/knownissues) for other known issues and limitations.
+See the [product documentation](https://microclimate-dev2ops.github.io/troubleshooting#doc) for other known issues and limitations.
 
 ## Documentation
 
