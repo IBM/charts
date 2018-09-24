@@ -15,7 +15,7 @@ This chart bootstraps a [OpenEBS](https://github.com/openebs/openebs) deployment
 - User deploying the chart needs to have the clusterAdmin role.
 - A namespace called "openebs" is created in the Cluster for running the
   below instructions: `kubectl create namespace openebs`.
-- If [Container Image Security](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html) is enabled then Docker hub container registry must be added to the list of trusted registries by following the instructions described under the section [Customizing your policy (post installation)](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html).
+- If [Container Image Security](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html) is enabled then OpenEBS location on Docker hub container registry `docker.io/openebs/*` must be added to the list of trusted registries by following the instructions described under the section [Customizing your policy (post installation)](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html).
 
 ## Installing the Chart
 
