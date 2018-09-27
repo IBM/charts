@@ -23,6 +23,7 @@ Installing the chart will:
 - Create service accounts, roles, and bindings if service account names are specified (advised for installations into a non-default namespace)
 
 ## Prerequisites
+- An Ubuntu 16.04 operating system.
 - IBM Cloud Private version 3.1. Older versions of IBM Cloud Private are supported by chart versions v1.5.0 and earlier only. Version support information can be found in the release notes of each chart release.
 - Ensure [socat](http://www.dest-unreach.org/socat/doc/README) is available on all worker nodes in your cluster. Microclimate uses Helm internally and both the Helm Tiller and client require socat for port forwarding.
 - Download the IBM Cloud Private CLI, cloudctl, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
