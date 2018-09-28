@@ -71,8 +71,9 @@ The Helm chart has the following values that can be overridden by using `--set n
 |             | `persistTransactionLogs` | When `true`, the transaction logs will be persisted to the volume bound according to the persistence parameters. | `false` (default) or `true` |
 |             | `consoleFormat`          | _[18.0.0.1+]_ Specifies container log output format. | `json` (default) or `basic` |
 |             | `consoleLogLevel`        | _[18.0.0.1+]_ Controls the granularity of messages that go to the container log. | `info` (default), `audit`, `warning`, `error` or off | 
-|             | `consoleSource`          | _[18.0.0.1+]_ Specifies the sources that are written to the container log. Use a comma separated list for multiple sources. This property only applies when `consoleFormat` is set to `json`.  | `message`, `trace`, `accessLog`, `ffdc` (default) |
-| `microprofile` | `health.enabled` | Specifies whether to use the [MicroProfile Health](https://microprofile.io/project/eclipse/microprofile-health) endpoint (`/health`) for readiness probe of the container. | `false` (default) or `true` |
+|             | `consoleSource`          | _[18.0.0.1+]_ Specifies the sources that are written to the container log. Use a comma separated list for multiple sources. This property only applies when `consoleFormat` is set to `json`.  | Sources can be one or more of `message`, `trace`, `accessLog`, `ffdc`. Default value is `message,trace,accessLog,ffdc` |
+| `microprofile` | `health.enabled` | Specifies whether to use the [MicroProfile Health](https://microprofile.io/project/eclipse/microprofile-health) endpoint (`/health`) for readiness probe of the container. Requires HTTP service to be enabled. | `false` (default) or `true` |
+| `monitoring` | `enabled` | _[18.0.0.3+]_ Specifies whether to use Liberty features `monitor-1.0` and `mpMetrics-1.1` to monitor the server runtime environment and application metrics. Requires HTTP service to be enabled. | `false` (default) or `true` |
 | `replicaCount` |     |  Describes the number of desired replica pods running at the same time. | Default is `1`.  See [Replica Sets](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset) |
 | `autoscaling` | `enabled`                        | Specifies whether a horizontal pod autoscaler (HPA) is deployed. Note that enabling this field disables the `replicaCount` field. | `false` (default) or `true` |
 |             | `minReplicas`                    | Lower limit for the number of pods that can be set by the autoscaler.   |  Positive integer (default to `1`)  |
@@ -117,12 +118,12 @@ The Helm release ConfigMap contains Liberty server configuration that is driven 
 
 
 #### Transaction logs
+
 If the server fails and restarts, then to persist the transaction logs (preserve them through server restarts) you must set `logs.persistTransactionLogs` to `true` and configure persistence in the Helm chart. You must also add the following to your `server.xml` in your Docker image.
 
 ```xml
 <transaction recoverOnStartup="true" waitForRecovery="true" />
 ```
-
 
 #### Persisting logs
 
@@ -159,7 +160,8 @@ You can also create a PV from IBM Cloud Private dashboard by following these ste
 3. Click **Create**.
 
 #### Analyzing Liberty messages
-Logging in JSON format is enabled by default. Log events are forwarded to Elasticsearch automatically. Use Kibana to monitor and analyze the log events. Sample Kibana dashboards are provided at the Helm chart's [additionalFiles](https://github.com/IBM/charts/tree/master/stable/ibm-open-liberty/additionalFiles/) folder.
+
+Logging in JSON format is enabled by default. Log events are forwarded to Elasticsearch automatically. Use Kibana to monitor and analyze the log events. Sample Kibana dashboards are provided at the Helm chart's [dashboards](https://github.com/IBM/charts/tree/master/stable/ibm-open-liberty/ibm_cloud_pak/pak_extensions/dashboards/) folder.
 
 #### SSL configuration
 
@@ -189,7 +191,17 @@ If the chart is deployed into IBM Cloud Kubernetes Service:
 
 #### Session Caching
 
+When installing the default Hazelcast Docker image, ensure that an image policy exists that allows pulling from the registry `docker.io/hazelcast/hazelcast:*`.
+
 Session caching is disabled by default. To use session caching, the Liberty feature sessionCache-1.0 must be installed. The session caching feature builds on top of an existing technology called JCache (JSR 107), which provides an API for distributed in-memory caching. There are several providers of JCache implementations. One example is Hazelcast In-Memory Data Grid. Enabling Hazelcast session caching automatically retrieves the Hazelcast client libraries from the hazelcast-kubernetes image, and configures the Hazelcast client and Liberty server feature sessionCache-1.0. The configuration is held in the ConfigMap associated with the helm release. By default, the Hazelcast client will auto-discover the Hazelcast server cluster within the same namespace. 
+
+#### Monitoring
+
+Monitoring is disabled by default. To use monitoring, the HTTP service must be enabled. When Monitoring is enabled, Liberty features `mpMetrics-1.1` and `monitor-1.0` will be used to monitor the server runtime and application metrics. 
+
+Metrics endpoint `/metrics` is configured without authentication using HTTP port. When SSL is enabled, an additional service (ClusterIP type) is created using port 9080 to provide metrics data to prometheus. This also means the applications and other endpoints can also be accessed within the cluster on port 9080. When SSL is not enabled, the user-specified port of the HTTP service is used. If the service is exposed outside of the cluster then the unauthenticated metrics endpoint `/metrics` will be exposed as well.
+
+Metrics are collected by Prometheus automatically. Use Grafana to monitor and analyze the metrics.
 
 #### Resource Reference
 

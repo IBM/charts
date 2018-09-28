@@ -17,7 +17,16 @@ From a browser, use http://*external-ip*:*nodeport* to access the application.
 
 ### Prerequisites
 
-None
+#### Security Policies
+
+The WebSphere Liberty container runs as root and has been tested with a security policy that allowed the following capabilities:
+chown, dac_override,fowner, fsetid, kill, setgid, setuid, setpcap, net_bind_service, net_raw, sys_chroot, mknod, audit_write, setfcap+eip
+
+We are targeting to reduce the list above in future releases of this helm chart.  
+
+Please see the following documentation pages for more information on how to set these policies:
+-    https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+-    https://kubernetes.io/docs/concepts/policy/pod-security-policy/
 
 ### Limitations
 
@@ -73,8 +82,9 @@ The Helm chart has the following values that can be overridden by using `--set n
 |             | `persistTransactionLogs` | When `true`, the transaction logs will be persisted to the volume bound according to the persistence parameters. | `false` (default) or `true` |         
 |             | `consoleFormat`          | _[18.0.0.1+]_ Specifies container log output format | `json` (default) or `basic` |
 |             | `consoleLogLevel`        | _[18.0.0.1+]_ Controls the granularity of messages that go to the container log | `info` (default), `audit`, `warning`, `error` or `off` | 
-|             | `consoleSource`          | _[18.0.0.1+]_ Specifies the sources that are written to the container log. Use a comma separated list for multiple sources. This property only applies when consoleFormat is set to `json`.  | `message`,`trace`,`accessLog`,`ffdc` (default) |
-| `microprofile` | `health.enabled` | Specifies whether to use the [MicroProfile Health](https://microprofile.io/project/eclipse/microprofile-health) endpoint (`/health`) for readiness probe of the container. | `false` (default) or `true` |
+|             | `consoleSource`          | _[18.0.0.1+]_ Specifies the sources that are written to the container log. Use a comma separated list for multiple sources. This property only applies when consoleFormat is set to `json`.  | Sources can be one or more of `message`, `trace`, `accessLog`, `ffdc`, `audit`. Default value is `message,trace,accessLog,ffdc`  |
+| `microprofile` | `health.enabled` | Specifies whether to use the [MicroProfile Health](https://microprofile.io/project/eclipse/microprofile-health) endpoint (`/health`) for readiness probe of the container. Requires HTTP service to be enabled. | `false` (default) or `true` |
+| `monitoring` | `enabled` | _[18.0.0.3+]_ Specifies whether to use Liberty features `monitor-1.0` and `mpMetrics-1.1` to monitor the server runtime environment and application metrics. Requires HTTP service to be enabled. | `false` (default) or `true` |
 | `replicaCount` |     |  Describes the number of desired replica pods running at the same time. | Default is `1`.  See [Replica Sets](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset) |
 | `autoscaling` | `enabled`                        | Specifies whether a horizontal pod autoscaler (HPA) is deployed.  Note that enabling this field disables the `replicaCount` field. | `false` (default) or `true` |
 |             | `minReplicas`                    | Lower limit for the number of pods that can be set by the autoscaler.   |  `Positive integer` (default to `1`)  |
@@ -95,9 +105,9 @@ The Helm chart has the following values that can be overridden by using `--set n
 |              | `hazelcast.image.pullPolicy` | Image Pull Policy | `IfNotPresent` |
 | `rbac`      | `install`             | Install RBAC. Set to `true` if using a namespace with RBAC. | `true` |
 
-##### Configuring Liberty
+### Configuring Liberty
 
-###### Liberty Docker image requirements
+#### Liberty Docker image requirements
 
 The Helm chart requires the Docker image to have certain directories linked. The `websphere-liberty` image from Docker Hub will already have the expected links. If you are not using this image, you must add the following to your Dockerfile:
 ```shell
@@ -113,7 +123,15 @@ RUN mkdir /logs \
 The Helm release ConfigMap contains Liberty server configuration that is driven by the configuration choices of the chart deployer, using associated environmental variables. The Liberty container receives automatic updates to files from this ConfigMap.
 
 
-##### Applying a license
+#### Applying a production license
+
+##### 18.0.0.3+
+
+If your application container is using WebSphere Liberty 18.0.0.3 binary and newer version you no longer have to apply a production license - you only need to have entitlement to use WebSphere Liberty in production (either via ICP or other sales channels).
+
+##### 18.0.0.2-
+
+For WebSphere Liberty 18.0.0.2 binaries and older versions, please see the steps below to obtain production support:
 
 To apply a license when building the Liberty Docker image
 1. Copy the [base|core|nd] license jar to the directory the Dockerfile resides
@@ -135,7 +153,8 @@ Alternatively, to apply the license at deployment time
   - `helm install --tls --set image.license="nd" ibm-charts/ibm-websphere-liberty`
 
 
-###### Transaction logs
+#### Transaction logs
+
 If the server fails and restarts, then to persist the transaction logs (preserve them through server restarts) you must set logs.persistTransactionLogs to true and configure persistence in the helm chart. You must also add the following to your server.xml in your docker image.
 
 ```xml
@@ -145,6 +164,7 @@ If the server fails and restarts, then to persist the transaction logs (preserve
 ```
 
 For more information about the transaction element and its attributes, see [transaction - Transaction Manager](https://www.ibm.com/support/knowledgecenter/en/SSAW57_liberty/com.ibm.websphere.liberty.autogen.nd.doc/ae/rwlp_config_transaction.html) in the Liberty documentation.
+
 
 #### Persisting logs
 
@@ -177,12 +197,16 @@ You can also create a PV from IBM Cloud Private dashboard by following these ste
 3.  Click Create.
 
 #### Analyzing Liberty messages
-Logging in JSON format is enabled by default.  Log events are forwarded to Elasticsearch automatically.  Use Kibana to monitor and analyze the log events.  Sample Kibana dashboards are provided at the Helm chart's [additionalFiles](https://github.com/IBM/charts/tree/master/stable/ibm-websphere-liberty/additionalFiles/) folder.
+
+Logging in JSON format is enabled by default. Log events are forwarded to Elasticsearch automatically. In 18.0.0.3+, audit events can also be forwarded to Elasticsearch. Audit events may contain sensitive data. Make sure you have enabled security in the logging stack if you are deploying your chart into IBM Cloud Private.
+
+Use Kibana to monitor and analyze the log events. Sample Kibana dashboards are provided in the Helm chart's [dashboards](https://github.com/IBM/charts/tree/master/stable/ibm-websphere-liberty/ibm_cloud_pak/pak_extensions/dashboards) directory.
 
 For more information, see [Analyzing Liberty messages in IBM Cloud Private](https://www.ibm.com/support/knowledgecenter/en/SSEQTP_liberty/com.ibm.websphere.wlp.doc/ae/twlp_icp_json_logging.html) in the Knowledge Center.
 
 
 #### SSL Configuration
+
 SSL is enabled by default. The chart automatically adds the `ssl-1.0` feature to your application server. When SSL is enabled, only secure ports are exposed. These ports are `9443` (HTTPS), `9402` (IIOPS), and `7286` (JMS). Only the ports you enable are exposed. When SSL is enabled, the application must be accessed accordingly, e.g. `https://`.
 
 Note that due to requirements of the IIOP protocol, when you enable both IIOP and SSL, a secure and non-secure IIOP are configured, with the default port values of `9402` (secure) and `2809` (non-secure).
@@ -207,7 +231,10 @@ If the chart is deployed into IBM Cloud Kubernetes Service:
 * `ingress.host` must be provided and set to the IBM-provided Ingress _subdomain_ or your custom domain. See [Select an app domain and TLS termination](https://console.bluemix.net/docs/containers/cs_ingress.html#public_inside_2) for more info on how to get this value in IBM Cloud Kubernetes Service.
 * `ingress.secretName` must be provided. If you are using the IBM-provided Ingress domain, set this parameter to the name of the IBM-provided Ingress secret. However, if you are using a custom domain, set this parameter to the secret that you created earlier that holds your custom TLS certificate and key. See [IBM Cloud Kubernetes Service documentation](https://console.bluemix.net/docs/containers/cs_ingress.html#public_inside_2) for more info on how to get these value in an IBM Cloud Kubernetes Service cluster.
 
-###### Session Caching
+#### Session Caching
+
+When installing the default Hazelcast Docker image, ensure that an image policy exists that allows pulling from the registry `docker.io/hazelcast/hazelcast:*`.
+
 Session caching is disabled by default. To use session caching, the Liberty feature sessionCache-1.0 must be installed. Add the following to the websphere-liberty Dockerfile to install the sessionCache-1.0 feature, if it is not already present:
 ```
 #For minified websphere-liberty Docker images, add this line to the websphere-liberty Dockerfile. Tolerate rc 22, feature is already installed.
@@ -215,8 +242,15 @@ RUN installUtility install --acceptLicense sessionCache-1.0 || if [ $? -ne 22 ];
 ```
 The session caching feature builds on top of an existing technology called JCache (JSR 107), which provides an API for distributed in-memory caching.  There are several providers of JCache implementations.  One example is Hazelcast In-Memory Data Grid. Enabling Hazelcast session caching automatically retrieves the Hazelcast client libraries from the hazelcast-kubernetes image, and configures the Hazelcast client and Liberty server feature sessionCache-1.0. The configuration is held in the ConfigMap associated with the helm release. By default, the Hazelcast client will auto-discover the Hazelcast server cluster within the same namespace.
 
+#### Monitoring
 
-###### Resource Reference
+Monitoring is disabled by default. To use monitoring, the HTTP service must be enabled. When Monitoring is enabled, Liberty features `mpMetrics-1.1` and `monitor-1.0` will be used to monitor the server runtime and application metrics. 
+
+Metrics endpoint `/metrics` is configured without authentication using HTTP port. When SSL is enabled, an additional service (ClusterIP type) is created using port 9080 to provide metrics data to prometheus. This also means the applications and other endpoints can also be accessed within the cluster on port 9080. When SSL is not enabled, the user-specified port of the HTTP service is used. If the service is exposed outside of the cluster then the unauthenticated metrics endpoint `/metrics` will be exposed as well.
+
+Metrics are collected by Prometheus automatically. Use Grafana to monitor and analyze the metrics.
+
+#### Resource Reference
 
 The helm chart creates the following Kubernetes resources that drive the configuration of the Liberty container. The configuration is used to ensure consistency of protocol, port and security configuration between the helm deployed Kubernetes objects and Liberty.
 
