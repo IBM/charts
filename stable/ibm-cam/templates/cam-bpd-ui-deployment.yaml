@@ -99,13 +99,21 @@ spec:
           - name: DB_USER
             valueFrom:
              secretKeyRef:
-              name: cam-bpd-mariadb-secret
-              key: username
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mariaDbUsername
           - name: DB_PASSWORD
             valueFrom:
              secretKeyRef:
-              name: cam-bpd-mariadb-secret
-              key: password
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mariaDbPassword             
           - name: DB_TCP_PORT
             value: "3306"
           - name: DB_TCP_URL
@@ -120,8 +128,6 @@ spec:
               configMapKeyRef:
                 name: oauth-client-map
                 key: PROXY_IP
-          - name: UCDP_PORT
-            value: "30000"
           - name: DISCOVERY_SERVER_URL
             value: http://cam-bpd-cds:7575
           - name: MODULE_SERVICE_URL
@@ -157,9 +163,65 @@ spec:
                 name: oauth-client-map
                 key: PROXY_IP
           - name: wlpCallbackUrl
-            value: https://$(ICP_PROXY_IP):30000/auth/liberty/callback
+            value: /cam/auth/liberty/callback
           - name: bpdCallbackUrl
-            value: https://$(ICP_PROXY_IP):30000/landscaper/oauth/callback
+            value: /landscaper/oauth/callback
+{{- if .Values.proxy.useProxy }}
+          - name: HTTPS_PROXY
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secureValues.secretName }}
+                name: {{ .Values.secureValues.secretName }}
+                {{- else }}
+                name: cam-secure-values-secret
+                {{- end }}
+                key: httpsProxy          
+          - name: https_proxy
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secureValues.secretName }}
+                name: {{ .Values.secureValues.secretName }}
+                {{- else }}
+                name: cam-secure-values-secret
+                {{- end }}
+                key: httpsProxy  
+          - name: HTTP_PROXY
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secureValues.secretName }}
+                name: {{ .Values.secureValues.secretName }}
+                {{- else }}
+                name: cam-secure-values-secret
+                {{- end }}
+                key: httpProxy  
+          - name: http_proxy
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secureValues.secretName }}
+                name: {{ .Values.secureValues.secretName }}
+                {{- else }}
+                name: cam-secure-values-secret
+                {{- end }}
+                key: httpProxy  
+          - name: NO_PROXY
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secureValues.secretName }}
+                name: {{ .Values.secureValues.secretName }}
+                {{- else }}
+                name: cam-secure-values-secret
+                {{- end }}
+                key: noProxy  
+          - name: no_proxy
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secureValues.secretName }}
+                name: {{ .Values.secureValues.secretName }}
+                {{- else }}
+                name: cam-secure-values-secret
+                {{- end }}
+                key: noProxy  
+{{- end }}
         volumeMounts:
           {{- if not .Values.camBPDDatabase.bundled }}
           - name: ext-lib
@@ -211,3 +273,15 @@ spec:
         emptyDir: {}
       {{- end }}
 {{- end }}
+      initContainers:
+      - name: cam-bpd-ui-init
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy:  {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh", "-c"]
+        args:
+          - mkdir -p /var/camlog/cam-bpd-ui && chown -R 1000:1000 /var/camlog/cam-bpd-ui;
+        volumeMounts:
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog
