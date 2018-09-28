@@ -1,0 +1,102 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Admin REST service network access policy
+# Ingress : allow from any on port
+# Egress : kafka brokers on advertised listener ports, index manager, and
+#            admin REST deployments in other Event Streams instances
+###############################################################################
+{{ $compName := .sch.chart.components.rest.compName -}}
+{{ $compNameKafka := .sch.chart.components.kafka.compName -}}
+{{ $compNameIndexMgr := .sch.chart.components.indexmgr.compName -}}
+# Only add the replicator ingress if enabled
+{{- $features := fromYaml (include "features" . ) -}}
+{{- $replicatorEnabled := index $features "replicator" "enabled" -}}
+{{ $compNameReplicator := .sch.chart.components.replicator.compName -}}
+{{ $compNameZookeeper := .sch.chart.components.zookeeper.compName -}}
+{{ $compNameSecurity := .sch.chart.components.security.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $namePrefix := .sch.chart.components.rest.networkPolicy -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) }}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      component: {{ $compName | quote }}
+      release: {{ .Release.Name }}
+  policyTypes:
+  - Egress
+  - Ingress
+  ingress:
+  # allow connections from anywhere as we don't know the ports they are connecting from
+  - {}
+  egress:
+  # allow kubernetes API access
+  - to:
+    ports:
+    - port: {{ $ports.kubernetes.api }}
+      protocol: TCP
+  # connections to kafka brokers
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameKafka | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.kafka.internalEventStreamsSecureIntercept }}
+  # connection to index manager
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameIndexMgr | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.indexmgr.api }}
+  {{- if $replicatorEnabled }}
+  # connections to the replicator
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameReplicator | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.replicator.api }}
+  {{- end }}
+  # connections to zookeeper
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameZookeeper | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.zookeeper.client }}
+  # connections to accessController
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameSecurity | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.accessController }}
+  # allow communication to admin REST in other ES instances
+  - to:
+    ports:
+      - protocol: TCP
+      - protocol: UDP
+        port: {{ $ports.wellknown.dns }}

@@ -17,22 +17,28 @@
 {{ $compName := .sch.chart.components.kafka.compName -}}
 {{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
 {{ $kafkaStatefulset := .sch.chart.components.kafka.statefulSet.name -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
 spec:
+  publishNotReadyAddresses: true
   ports:
     # Ports that are opened by the Kafka broker container
-    - port: 9092
-      name: client-port
-    - port: 9093
-      name: external-port
+    - port: {{ $ports.kafka.internalKafka }}
+      name: "kafka"
+    - port: {{ $ports.kafka.externalProxySecure }}
+      name: "ext-secure"
+    - port: {{ $ports.kafka.internalEventStreamsSecure }}
+      name: "es-secure"
     # Port opened by the kafka-metrics-reporter container
-    - port: 8080
+    - port: {{ $ports.kafka.metrics }}
       name: metrics-port
   clusterIP: None
   selector:

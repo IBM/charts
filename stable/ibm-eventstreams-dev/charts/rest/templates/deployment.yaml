@@ -12,30 +12,62 @@
 ###############################################################################
 {{ $namePrefix := .sch.chart.components.rest.deployment.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
-{{ $id := (include "asDnsLabel" .Release.Name) -}}
 # Component is 'rest' as this makes up part of implementing the Admin REST API
 {{ $compName := .sch.chart.components.rest.compName -}}
 {{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
 # Service allowing access to the Kafka cluster
 {{ $kafkaHeadlessService := .sch.chart.components.kafka.headless.name -}}
 {{ $kafkaHeadlessServiceName := include "sch.names.fullCompName" (list . $kafkaHeadlessService) -}}
-# Service Account to grant Kubernetes access for the proxy
-{{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
+# Service allowing access to the ZooKeeper cluster
+{{ $zookeeperHeadlessService := .sch.chart.components.zookeeper.headless.name -}}
+{{ $zookeeperHeadlessServiceName := include "sch.names.fullCompName" (list . $zookeeperHeadlessService) -}}
+# Service allowing access to the replicator cluster
+{{ $replicatorService := .sch.chart.components.replicator.service.name -}}
+{{ $replicatorServiceName := include "sch.names.fullCompName" (list . $replicatorService) -}}
+# Service allowing access to the index manager
+{{ $indexmgrService := .sch.chart.components.indexmgr.service.name -}}
+{{ $indexmgrServiceName := include "sch.names.fullCompName" (list . $indexmgrService) -}}
+# Service Account to grant Kubernetes access
+{{ $serviceAccount := .sch.chart.components.rest.serviceAccount.name -}}
 {{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
 # Secret and config map used by the proxy container
 {{ $secret := .sch.chart.components.proxy.secret.name -}}
 {{ $secretName := include "sch.names.fullCompName" (list . $secret) | quote -}}
-{{ $configMap := .sch.chart.components.restproxy.configMap.name -}}
-{{ $configMapName := include "sch.names.fullCompName" (list . $configMap) | quote -}}
-apiVersion: apps/v1beta1
+{{ $stsNamePrefix := .sch.chart.components.kafka.statefulSet.name -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $stsNamePrefix) -}}
+# Check if geo-replication is enabled
+{{- $features := fromYaml (include "features" . ) -}}
+{{- $replicatorEnabled := index $features "replicator" "enabled" -}}
+# Secret containing Kafka consumer credentials and destination cluster details used by the geo-replicators
+{{ $replicatorSecretNamePrefix := .sch.chart.components.replicator.credentialsSecret.name -}}
+{{ $replicatorSecretName := include "sch.names.fullCompName" (list . $replicatorSecretNamePrefix) -}}
+# Kafka proxy config map used to allow geo-replicators access to this cluster
+{{ $kafkaProxyConfigMap := .sch.chart.components.proxy.configMap.name -}}
+{{ $kafkaProxyConfigMapName := include "sch.names.fullCompName" (list . $kafkaProxyConfigMap) | quote -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+# Oauth secret name which is used to get the cluster name
+{{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
+{{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) | quote -}}
+{{- $securityConfig := include "sch.config.init" (list . "security.sch.chart.config.values") -}}
+# IAM URL is the internal IAM Token service endpoint.
+{{ $iamURL := .sch.config.security.accesscontroller.iamUrl -}}
+# PAP URL is the internal IAM PAP endpoint.
+{{ $papURL := .sch.config.security.accesscontroller.papUrl -}}
+# Get accessController service name
+{{ $accessControllerService := .sch.chart.components.security.accesscontroller.service.name -}}
+{{ $accessControllerServiceName := include "sch.names.fullCompName" (list . $accessControllerService) -}}
+# Proxy secret name which is used to get the cluster ca cert
+{{ $proxySecret := .sch.chart.components.proxy.secret.name -}}
+{{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecret) | quote -}}
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
-  annotations:
-    helm.sh/created: {{ .Release.Time.Seconds | quote }}
 spec:
   replicas: {{ .sch.config.rest.replicas }}
   selector:
@@ -44,90 +76,218 @@ spec:
       serviceSelector: {{ $namePrefix | quote }}
   template:
     metadata:
-      namespace: {{ .Release.Namespace | quote }}
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
       labels:
 {{ $labels | indent 8 }}
       annotations:
-      {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{ include "metering" (list . ) | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
       {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      securityContext:
+        fsGroup: 1000
       volumes:
       {{- include "license.accept.ref" . | indent 6 }}
+      {{- if $replicatorEnabled }}
+        - name: replicator-secret-volume
+          secret:
+            secretName: {{ $replicatorSecretName }}
+            items:
+            - key: georeplicationdestinationclusters
+              path: georeplicationdestinationclusters
+      {{- end }}
+        - name: proxy-config-volume
+          projected:
+            sources:
+            - configMap:
+                name: {{ $kafkaProxyConfigMapName }}
+                items:
+                  - key: routes
+                    path: routes
+                  - key: bootstrapServers
+                    path: bootstrapServers
+            - secret:
+                name: {{ $secretName }}
+                items:
+                  - key: externalHostOrIP
+                    path: externalHostOrIP
       affinity:
       {{- include "customNodeaffinity" . | indent 6 }}
+      initContainers:
+        - name: "wait-for-kafka-headless"
+          image: {{ include "eventstreams.image" (list . "busybox" .Values.global.image.imageTags.busyboxTag "false") | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
+          command: ['sh', '-c', 'until nslookup {{ $kafkaHeadlessServiceName }}; do echo "Waiting for {{ $kafkaHeadlessServiceName }}"; sleep 10; done;']
       containers:
         - name: "rest"
-          image: "{{ .Values.global.image.repository }}/eventstreams-rest:{{ .sch.chart.images.restTag }}"
+          image: {{ include "eventstreams.image" (list . "eventstreams-rest" .Values.global.image.imageTags.restTag "true") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
           resources:
             limits:
 {{ toYaml .sch.config.rest.resources.limits | indent 14 }}
             requests:
 {{ toYaml .sch.config.rest.resources.requests | indent 14 }}
-          livenessProbe:
+          readinessProbe:
             httpGet:
               path: /status
-              port: {{ .sch.config.rest.ports.port }}
+              port: {{ $ports.rest.server }}
               httpHeaders:
                 - name: Accept
                   value: '*/*'
             initialDelaySeconds: 60
-            periodSeconds: 20
+            periodSeconds: 10
             timeoutSeconds: 10
             successThreshold: 1
-            failureThreshold: 10
-          readinessProbe:
+            failureThreshold: 3
+          livenessProbe:
             httpGet:
               path: /status
-              port: {{ .sch.config.rest.ports.port }}
+              port: {{ $ports.rest.server }}
               httpHeaders:
                 - name: Accept
                   value: '*/*'
-            initialDelaySeconds: 180
-            periodSeconds: 10
+            initialDelaySeconds: 90
+            periodSeconds: 20
             timeoutSeconds: 10
             successThreshold: 1
             failureThreshold: 3
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
-            - name: ID
-              value: {{ $id }}
-            - name: "KAFKA_BOOTSTRAP_URL"
-              value: "{{ $kafkaHeadlessServiceName }}:9092"
+            - name: KAFKA_STS_NAME
+              value: {{ $statefulSetName | quote }}
+            - name: RELEASE
+              value: {{ .Release.Name | quote }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: "CLUSTER_NAME"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterName"
+            - name: "CLUSTER_CERT"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "tls.cert"
+            - name: "CLUSTER_CACERT"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "tls.cluster"
+            - name: KAFKA_BOOTSTRAP_URL
+              value: "{{ $kafkaHeadlessServiceName }}.{{ .Release.Namespace }}:{{ $ports.kafka.internalEventStreamsSecureIntercept }}"
+            - name: ZOOKEEPER_CONNECT
+              value: "{{ $zookeeperHeadlessServiceName }}.{{ .Release.Namespace }}:{{ $ports.zookeeper.client }}"
+            - name: INDEX_MANAGER_URL
+              value: "{{ $indexmgrServiceName }}.{{ .Release.Namespace }}:{{ $ports.indexmgr.api }}"
+            - name: IAM_TOKEN_URL
+              value: "{{ $iamURL }}:{{$ports.security.iamTokenGeneration}}"
+            - name: PAP_URL
+              value: "{{ $papURL }}:{{$ports.security.iamPolicyAdministration}}"
+            - name: ACCESS_CONTROLLER_SERVICE_NAME
+              value: {{ $accessControllerServiceName | quote}}
+            - name: ACCESS_CONTROLLER_SERVICE_PORT
+              value: {{ $ports.security.accessController | quote}}
+            - name: PROMETHEUS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $kafkaProxyConfigMapName }}
+                  key: "externalHostOrIP"
+            - name: PROMETHEUS_PORT
+              value: "8443"
+            # - name: BOOTSTRAP_SERVERS
+            #   valueFrom:
+            #    configMapKeyRef:
+            #      name: {{ $kafkaProxyConfigMapName }}
+            #      key: "bootstrapServers"
+            - name: TRACE_SPEC
+              value: "*=info"
+          {{- if $replicatorEnabled }}
+            - name: GEOREPLICATION_ENABLED
+              value: "true"
+            - name: REPLICATOR_SVC_URL
+              value: "http://{{ $replicatorServiceName }}.{{ .Release.Namespace }}:{{ $ports.replicator.api }}"
+            - name: KAFKA_HEADLESS_SVC_NAME
+              value: {{ $kafkaHeadlessServiceName | quote }}
+            - name: ZK_HEADLESS_SVC_NAME
+              value: {{ $zookeeperHeadlessServiceName | quote }}
+            - name: REPLICATORKEYS_SECRET_NAME
+              value: {{ $replicatorSecretName | quote }}
+          {{- end }}
+          volumeMounts:
+            - name: proxy-config-volume
+              mountPath: /etc/proxy-configmap
+          {{- if $replicatorEnabled }}
+            - name: replicator-secret-volume
+              mountPath: /etc/georeplication
+              readOnly: true
+          {{- end }}
         - name: "codegen"
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
-          image: "{{ .Values.global.image.repository }}/eventstreams-codegen:{{ .sch.chart.images.codegenTag }}"
+          image: {{ include "eventstreams.image" (list . "eventstreams-codegen"  .Values.global.image.imageTags.codegenTag "true") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - all
           resources:
             limits:
 {{ toYaml .sch.config.codegen.resources.limits | indent 14 }}
             requests:
 {{ toYaml .sch.config.codegen.resources.requests | indent 14 }}
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: {{ .sch.config.codegen.port }}
-            initialDelaySeconds: 30
-            periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: {{ .sch.config.codegen.port }}
+              port: {{ $ports.codegen.server }}
             initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ $ports.codegen.server }}
+            initialDelaySeconds: 90
             periodSeconds: 10
         # Proxy server container
         - name: "proxy"
-          image: "{{ .Values.global.image.repository }}/eventstreams-proxy:{{ .sch.chart.images.proxyTag }}"
+          image: {{ include "eventstreams.image" (list . "eventstreams-proxy"  .Values.global.image.imageTags.proxyTag "true") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
-            - name: CONFIG_MAP_NAME
-              value: {{ $configMapName }}
             - name: TLS_CERT
               valueFrom:
                 secretKeyRef:
@@ -138,18 +298,27 @@ spec:
                 secretKeyRef:
                   name: {{ $secretName }}
                   key: "tls.key"
+            - name: ES_PROXY_CONFIG
+              value: |-
+                {
+                  "routes": "[{\"port\":{{ $ports.rest.proxy }}, \"service\": \"localhost:{{ $ports.rest.server }}\"}]",
+                  "tlsEnabled": "true",
+                  "connectionTimeoutMs": "3600000",
+                  "traceLevel": "0",
+                  "logFormat": "json"
+                }
           ports:
             - name: restendpoint
-              containerPort: 32000
+              containerPort: {{ $ports.rest.proxy }}
           readinessProbe:
             httpGet:
               path: "/ready"
-              port: 8080
+              port: {{ $ports.proxy.health }}
             initialDelaySeconds: 1
             periodSeconds: 5
           livenessProbe:
             httpGet:
               path: "/live"
-              port: 8080
+              port: {{ $ports.proxy.health }}
             initialDelaySeconds: 15
             periodSeconds: 15

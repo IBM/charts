@@ -19,6 +19,9 @@
 # Component is 'kafka' as this makes up part of implementing the Kafka cluster
 {{ $compName := .sch.chart.components.kafka.compName -}}
 {{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
 # number of Kafka brokers in the cluster
 {{ $rep := int .Values.kafka.brokers -}}
 {{ range $index, $e := until $rep -}}
@@ -30,11 +33,17 @@ metadata:
   labels:
 {{ $labels | indent 4 }}
 spec:
+  publishNotReadyAddresses: true
   ports:
-    - port: 9092
-      name: client-port
-    - port: 9093
-      name: external-port
+    - port: {{ $ports.kafka.internalKafka }}
+      name: "kafka"
+    - port: {{ $ports.kafka.externalProxySecure }}
+      name: "ext-secure"
+    - port: {{ $ports.kafka.internalEventStreamsSecure }}
+      name: "es-secure"
+    # Port opened by the kafka-healthcheck container
+    - port: {{ $ports.kafka.healthcheck }}
+      name: healthcheck
   clusterIP: None
   selector:
     release: {{ $.Release.Name | quote }}

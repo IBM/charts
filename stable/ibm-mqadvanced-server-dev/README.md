@@ -14,8 +14,30 @@ This chart will do the following:
 
 ## Prerequisites
 
-* Kubernetes 1.6 or greater, with beta APIs enabled
+* Kubernetes 1.9 or greater, with beta APIs enabled
 * If persistence is enabled (see [configuration](#configuration)), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
+* If you have [pod security policy control](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#enabling-pod-security-policies) enabled, you must have a [PodSecurityPolicy](https://kubernetes.io/docs/concepts/policy/pod-security-policy/) that supports the following [securityContext](https://kubernetes.io/docs/concepts/policy/security-context/) settings:
+  * capabilities:
+    * CHOWN
+    * DAC_OVERRIDE
+    * FSETID
+    * FOWNER
+    * NET_RAW
+    * SETGID
+    * SETUID
+    * SETFCAP
+    * SETPCAP
+    * NET_BIND_SERVICE
+    * SYS_CHROOT
+    * KILL
+    * AUDIT_WRITE
+  * allowPrivilegeEscalation: true
+  * readOnlyRootFilesystem: false
+  * runAsNonRoot: false
+  * runAsUser: 0
+  * privileged: false
+> **Note**: If you are deploying to an IBM Cloud Private environment that does not support these security settings by default. Follow these [instructions](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/app_center/nd_helm.html) to enable your deployment.
+* If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191)
 
 ## Resources Required
 
@@ -57,7 +79,7 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | ------------------------------- | --------------------------------------------------------------- | ------------------------------------------ |
 | `license`                       | Set to `accept` to accept the terms of the IBM license          | `"not accepted"`                           |
 | `image.repository`              | Image full name including repository                            | `ibmcom/mq`                |
-| `image.tag`                     | Image tag                                                       | `9`         |
+| `image.tag`                     | Image tag                                                       | `9.1.0.0`         |
 | `image.pullPolicy`              | Image pull policy                                               | `IfNotPresent`                             |
 | `image.pullSecret`              | Image pull secret, if you are using a private Docker registry   | `nil`                                      |
 | `arch.amd64`                  | Preference for installation on worker nodes with the `amd64` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler       |
@@ -68,13 +90,13 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `dataPVC.name`                  | Suffix for the PVC name                                         | `"data"`                                   |
 | `dataPVC.storageClassName`      | Storage class of volume for main MQ data (under `/var/mqm`)     | `""`                                       |
 | `dataPVC.size`                  | Size of volume for main MQ data (under `/var/mqm`)              | `2Gi`                                      |
-| `service.name`                  | Name of the Kubernetes service to create                        | `"qmgr"`                                   |
 | `service.type`                  | Kubernetes service type exposing ports, e.g. `NodePort`         | `ClusterIP`                                |
 | `metrics.enabled`               | Enable Prometheus metrics for the Queue Manager                 | `true`                                     |
 | `resources.limits.cpu`          | Kubernetes CPU limit for the Queue Manager container | `500m`                                                   |
 | `resources.limits.memory`       | Kubernetes memory limit for the Queue Manager container | `512Mi`                                              |
 | `resources.requests.cpu`        | Kubernetes CPU request for the Queue Manager container | `500m`                                                 |
 | `resources.requests.memory`     | Kubernetes memory request for the Queue Manager container | `512Mi`                                            |
+| `security.serviceAccountName`   | Name of the service account to use                              | `default`                                  |
 | `queueManager.name`              | MQ Queue Manager name                           | Helm release name                                          |
 | `queueManager.dev.adminPassword` | Developer defaults - administrator password     | Random generated string.  See the notes that appear when you install for how to retrieve this.                            |
 | `queueManager.dev.appPassword`   | Developer defaults - app password   | `nil` (no password required to connect an MQ client)                  |
@@ -94,6 +116,15 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
+
+## Offline "air gap" installation
+
+If you have performed an offline "air gap" installation, then you will need to specify the following configurable parameters:
+
+- **Image tag** must be set to `9.1.0.0-x86_64`, `9.1.0.0-ppc64le` or `9.1.0.0-s390x`
+- The **architecture scheduling preferences** must be set appropriately; such that the target worker node has the same architecture as the image
+
+> **Warning**: If you have performed an offline "air gap" installation and use the default image tag `9.1.0.0`, then your deployment will fail
 
 ## Storage
 

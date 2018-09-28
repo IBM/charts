@@ -11,6 +11,7 @@
 # Defines the service that exposes the proxy which enables external access to Kafka
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
+{{ $kafkaconfig:= include "sch.config.init" (list . "kafka.listeners.sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.proxy.service.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
 # Component is 'proxy' as this makes up part of implementing the external access proxy
@@ -21,11 +22,17 @@
 # Starting number for the ports that will be created
 {{ $nodePort := int 30000 -}}
 {{ $deploymentName := .sch.chart.components.proxy.controller.name -}}
+# Get the list of Kafka Listener Ports. We'll need to create node ports for each of these. 
+{{ $listenerPorts := .sch.config.kafka.protocols -}}
+{{ $listeners := $listenerPorts | splitList "," }}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
 spec:
@@ -33,21 +40,20 @@ spec:
   selector:
     release: {{ .Release.Name | quote }}
     serviceSelector: {{ $deploymentName | quote }}
-  {{ if .Values.proxy.externalAccessEnabled -}}
   ports:
     - name: bootstrap
       protocol: TCP
       port: {{ $nodePort }}
-    {{- range $i, $e := until $rep }}
-    - name: "broker-{{ $i }}"
+    {{- range $brokerIndex, $broker := until $rep }}
+    {{- range $listenerIndex, $listenerType := $listeners -}}
+    {{ $portType := split ":" $listenerType -}}
+    {{ if hasPrefix "INTERNAL" $portType._0 -}}
+    {{ else }}
+    - name: "brk{{ $brokerIndex }}-{{ $portType._0 | lower }}"
       protocol: TCP
-      port: {{ add $nodePort $i 1 }}
+      {{- $portNum := mul $brokerIndex 50 | add $listenerIndex}}
+      port: {{ add $nodePort $portNum }}
     {{- end }}
-  {{ else -}}
-  ports:
-  # This is a placeholder service, since a service requires at least 1 port.
-    - name: placeholder
-      protocol: TCP
-      port: 80
-  {{ end -}}
+    {{- end }}
+    {{- end }}
 {{ end -}}

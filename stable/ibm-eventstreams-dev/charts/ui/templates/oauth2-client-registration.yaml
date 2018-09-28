@@ -19,7 +19,7 @@
 #  Secret name and UI service name which are used while creating oauth secret.
 {{- $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
 {{- $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
-{{- $uiProxyServiceName :=  .sch.chart.components.uiproxy.service.name -}}
+{{- $uiProxyServiceName :=  .sch.chart.components.ui.service.name -}}
 {{- $uiProxySvcName := include "sch.names.fullCompName" (list . $uiProxyServiceName) -}}
 # Job needs to run in the kube-system namespace as this is registering with the
 #  existing oauth handler
@@ -34,28 +34,35 @@ metadata:
   namespace: {{ $namespace | quote }}
   labels:
 {{ $labels | indent 4 }}
-  annotations:
-    helm.sh/created: {{ .Release.Time.Seconds | quote }}
 spec:
   template:
     metadata:
       namespace: {{ $namespace | quote }}
       labels:
 {{ $labels | indent 8 }}
-      annotations:
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
-      {{ if .Values.global.image.pullSecret }}
+      {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
         - name: {{ $imagePullSecretName | quote }}
       {{- end }}
+      securityContext:
+        fsGroup: 1001
       affinity:
 {{- include "customNodeaffinity" . | indent 6 }}
       restartPolicy: Never
       containers:
-        - name: {{ $name }}
-          image: "{{ .Values.global.image.repository }}/eventstreams-oauth-registration:{{ .sch.chart.images.oauthTag }}"
+        - name: "oauth2-client-reg"
+          image: {{ include "eventstreams.image" (list . "eventstreams-oauth-registration" .Values.global.image.imageTags.oauthTag "true") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - all
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
             - name: "ES_NAMESPACE"
@@ -66,11 +73,6 @@ spec:
               value: {{ $oauthSecretName }}
             - name: "UI_PROXY_SVC_NAME"
               value: {{ $uiProxySvcName }}
-            - name: "BASE_OIDC_URL"
-              valueFrom:
-                configMapKeyRef:
-                  name: "platform-auth-idp"
-                  key: "BASE_OIDC_URL"
             - name: "OAUTH2_CLIENT_REGISTRATION_SECRET"
               valueFrom:
                 secretKeyRef:
@@ -81,3 +83,8 @@ spec:
                 configMapKeyRef:
                   name: "platform-auth-idp"
                   key: "MASTER_HOST"
+            - name: "CLUSTER_NAME"
+              valueFrom:
+                configMapKeyRef:
+                  name: "platform-auth-idp"
+                  key: "CLUSTER_NAME"

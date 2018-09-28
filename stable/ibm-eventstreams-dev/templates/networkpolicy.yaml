@@ -1,0 +1,129 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Kafka network access policy
+# Ingress : Proxy, REST on ports defined in advertised listeners, except the INTERNAL one
+# Egress : zookeeper:2181
+#
+# Kafka brokers can connect to each other on 9092
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $namePrefix := .sch.chart.components.kafka.networkPolicy -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) }}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+{{ $compName := .sch.chart.components.kafka.compName -}}
+{{ $compNameZookeeper := .sch.chart.components.zookeeper.compName -}}
+{{ $compNameProxy := .sch.chart.components.proxy.compName -}}
+{{ $compNameRest := .sch.chart.components.rest.compName -}}
+# Only set up network policy for replicator if enabled
+{{- $features := fromYaml (include "features" . ) -}}
+{{- $replicatorEnabled := index $features "replicator" "enabled" -}}
+{{ $compNameReplicator := .sch.chart.components.replicator.compName -}}
+{{ $compNameIndexMgr := .sch.chart.components.indexmgr.compName -}}
+{{ $compNameSecurity := .sch.chart.components.security.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) }}
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      component: {{ $compName | quote }}
+      release: {{ .Release.Name }}
+  policyTypes:
+  - Egress
+  - Ingress
+  ingress:
+  # connections from the proxy/rest/replicator to the broker
+  # there will be a number of these equal to the number of brokers
+  - from:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameRest | quote }}
+    {{- if $replicatorEnabled }}
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameReplicator | quote }}
+    {{- end }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.kafka.internalEventStreamsSecureIntercept }}
+  - from:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameProxy | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.kafka.externalProxySecure }}
+  # internal broker communication
+  - from:
+    - podSelector:
+        matchLabels:
+          component: {{ $compName | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.kafka.internalKafka }}
+  # prometheus connections 
+  - from:
+    ports:
+      - protocol: TCP
+        port: {{ $ports.prometheus.collectorKafka }}
+  egress:
+  # allow kubernetes API access, used to label pod correctly at startup
+  - to:
+    ports:
+    - port: {{ $ports.kubernetes.api }}
+      protocol: TCP
+  # connections to zookeeper
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameZookeeper | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.zookeeper.client }}
+  # kafka internal communication with other brokers
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compName | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.kafka.internalKafka }}
+  # metrics proxy logging results with the index manager
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameIndexMgr | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.indexmgr.metrics }}
+  # security role mapping registration (to be removed when access controller is delivered)
+  - to:
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.iamTokenGeneration }}
+      - protocol: TCP
+        port: {{ $ports.security.iamPolicyDecision }}
+  # to access-controller
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameSecurity | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.accessController }}
+{{ end -}}

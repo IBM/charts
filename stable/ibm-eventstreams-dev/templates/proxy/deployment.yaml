@@ -11,6 +11,7 @@
 # Defines the Kubernetes pods that make up the proxy for external access to Kafka
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
+{{ $kafkaconfig := include "sch.config.init" (list . "kafka.listeners.sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.proxy.controller.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 # Component is 'proxy' as this makes up part of implementing the external access proxy
@@ -25,19 +26,30 @@
 {{ $secretName := include "sch.names.fullCompName" (list . $secret) | quote -}}
 {{ $configMap := .sch.chart.components.proxy.configMap.name -}}
 {{ $configMapName := include "sch.names.fullCompName" (list . $configMap) | quote -}}
+# IAM Secret name containing the API Key
+{{ $iamSecret := .sch.chart.components.security.iamSecret.name -}}
+{{ $iamSecretName := include "sch.names.fullCompName" (list . $iamSecret ) -}}
+# Eventstreams IAM Service Name
+{{ $iamServiceName := .sch.chart.components.security.serviceName -}}
 # Service Account to grant Kubernetes access
-{{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
+{{ $serviceAccount := .sch.chart.components.proxy.serviceAccount.name -}}
 {{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
-apiVersion: apps/v1beta1
+# Get the list of Kafka Listener Ports. We'll need to create node ports for each of these.
+{{ $listenerPorts := .sch.config.kafka.listeners -}}
+{{ $listeners := $listenerPorts | splitList "," }}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
 spec:
   # Number of instances of the external access proxy to run
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       release: {{ .Release.Name | quote }}
@@ -47,22 +59,30 @@ spec:
       labels:
 {{ $labels | indent 8 }}
       annotations:
-        helm.sh/created: {{ .Release.Time.Seconds | quote }}
-        prometheus.io/port: '10254'
-        prometheus.io/scrape: 'true'
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{ include "metering" (list . ) | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
       {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      securityContext:
+        fsGroup: 1000
       affinity:
 {{- include "customNodeaffinity" . | indent 6 }}
       containers:
         - name: "proxy"
-          image: "{{ .Values.global.image.repository }}/eventstreams-proxy:{{ .sch.chart.images.proxyTag }}"
+          image: {{ include "eventstreams.image" (list . "eventstreams-kafka-proxy" .Values.global.image.imageTags.kafkaProxyTag "true") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
             - name: CONFIG_MAP_NAME
@@ -79,25 +99,40 @@ spec:
                 secretKeyRef:
                   name: {{ $secretName }}
                   key: "tls.key"
-          {{- if  .Values.proxy.externalAccessEnabled }}
+            - name: ES_EXTERNAL_IP_OR_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: "externalHostOrIP"
+            - name: "ES_API_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ $iamSecretName }}"
+                  key: "{{ $iamServiceName }}-{{ $.Release.Name }}-api-key"
           ports:
             - name: bootstrap
               containerPort: {{ $nodePort }}
-            {{- range $i, $e := until $rep }}
-            - name: broker-{{ $i }}
-              containerPort: {{ add $nodePort 1 $i }}
+            {{- range $brokerIndex, $broker := until $rep }}
+            {{- range $listenerIndex, $listenerType := $listeners -}}
+            {{ $portType := $listenerType | split ":" -}}
+            {{ if hasPrefix "INTERNAL" $portType._0 -}}
+            {{ else }}
+            - name: "brk{{ $brokerIndex }}-{{ $portType._0 | lower}}"
+              {{- $portNum := mul $brokerIndex 50 | add $listenerIndex}}
+              containerPort: {{ add $nodePort $portNum }}
+          {{- end }}
           {{- end }}
           {{- end }}
           readinessProbe:
             httpGet:
               path: "/ready"
-              port: 8080
+              port: {{ $ports.proxy.health }}
             initialDelaySeconds: 1
             periodSeconds: 5
           livenessProbe:
             httpGet:
               path: "/live"
-              port: 8080
+              port: {{ $ports.proxy.health }}
             initialDelaySeconds: 15
             periodSeconds: 15
 {{ end -}}
