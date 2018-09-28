@@ -1,4 +1,15 @@
-{{ if ne .Values.productName "IBM Cloud App Management" }}
+{{/*********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* "Restricted Materials of IBM"
+*
+*  5737-H89, 5737-H64
+*
+* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+*
+* US Government Users Restricted Rights - Use, duplication, or
+* disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+********************************************************* {COPYRIGHT-END} ****/}}
 {{- $compName := "rba-rbs" -}}
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
 {{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
@@ -26,7 +37,6 @@ spec:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
         origin: helm-cem
       annotations:
-        checksum/cemusers-cred-secret: {{ include (print $.Template.BasePath "/secrets/cemusers-cred-secret.yaml") . | sha256sum }}
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
 {{ include "ingress-host-alias" . | indent 6 }}
@@ -54,24 +64,30 @@ spec:
       - name: waitforcouchdb
         image: "{{ .Values.global.image.repository }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ template "releasename" . }}-couchdb.{{ .Release.Namespace }}.svc; do echo waiting for couchdb $i;i=$((i+1)); sleep 2; done;"]
+      - name: waitforkafka
+        image: "{{ .Values.global.image.repository }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
+        command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
       containers:
       - name: rba-rbs
         image: "{{ .Values.global.image.repository }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
         imagePullPolicy: IfNotPresent
+        args:
+        - npm
+        - start
         ports:
         - containerPort: 3005
           protocol: TCP
         livenessProbe:
           tcpSocket:
             port: 3005
-          initialDelaySeconds: 240
-          periodSeconds: 60
+          initialDelaySeconds: 120
+          periodSeconds: 30
           successThreshold: 1
         readinessProbe:
           tcpSocket:
             port: 3005
-          initialDelaySeconds: 240
-          periodSeconds: 60
+          initialDelaySeconds: 20
+          periodSeconds: 30
         resources:
 {{ include "ibmcemprod.comp.size.data" (list . "rbs" "resources") | indent 10 }}
         env:
@@ -101,7 +117,7 @@ spec:
               name: '{{ template "releasename" . }}-cem-email-cred-secret'
               key: smtppassword
         - name: RBA_RBS_MAIL_NOTIFICATION_FROM
-          value: '{{ .Values.email.from }}'
+          value: '{{ .Values.email.mail }}'
 {{ end }}
         - name: RBA_RBS_KAFKA_BROKERS
           value: '{{ include "cem.services.kafkabrokers" . }}'
@@ -122,9 +138,9 @@ spec:
         - name: RBA_DEPLOYMODE
           value:  'icp-cem'
         - name: RBA_RUNBOOKSERVICE_EXTERNAL_HOST
-          value: {{ template "releasename" . }}-rba-rbs.{{ .Release.Namespace }}.svc.cluster.local
+          value: {{ include "cem.service.host" (list . "cem.services.rba") }}
         - name: RBA_RUNBOOKSERVICE_EXTERNAL_PROTOCOL
-          value: http
+          value: {{ include "cem.service.protocol" (list . "cem.services.rba") }}
         - name: RBA_RUNBOOKSERVICE_INTERNAL_PROTOCOL
           value: http
         - name: RBA_DATABASE_CLUSTER_ENABLED
@@ -187,6 +203,7 @@ spec:
         - name: INGRESS_PREFIX
           value: '{{ .Values.global.ingress.prefix }}'
         - name: INGRESS_DOMAIN
-          value: '{{ .Values.global.ingress.domain | default .Values.global.proxyIP }}'
+          value: '{{ .Values.global.ingress.domain }}'
       restartPolicy: Always
-{{ end }}
+      securityContext:
+        runAsUser: 1000

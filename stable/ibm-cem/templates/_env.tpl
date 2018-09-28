@@ -51,10 +51,10 @@
   value: 5591084c-086a-48b9-817b-fb51532cecf3
 - name: CEMSERVICEBROKER_MONITORINGPLANID
   value: fd9349be-e7e3-4ff7-90ff-45f75465f444
+- name: CEMSERVICEBROKER_MONITORINGADVPLANID
+  value: 99b23e24-a751-4217-bb64-edc00b87e672
 - name: CEMSERVICEBROKER_EVENTMANAGEMENTPLANID
   value: 3e0c0fc1-bce1-4d81-9885-ae3f0d218d28
-- name: CEMSERVICEBROKER_MONITORINGEVENTMANAGEMENTPLANID
-  value: a854a2ac-3c09-4fa8-a697-1daf745f5476
 - name: CEMSERVICEBROKER_LOCATIONNAME
   value: ICP
 - name: CEMSERVICEBROKER_MEDIA
@@ -87,6 +87,8 @@
   value: 'https://cem-bm-broker.mybluemix.net'
 - name: SSMENDPOINT_FQDN
   value: cem-brokers-us-south.prodssmopsmgmt.bluemix.net
+- name: SSMENDPOINT_PARTS
+  value: '[{"id":"D00T4ZX","type":"base","events":1000,"messages":200,"runbooks":200},{"id":"D00CMZX","type":"base","events":20000,"messages":1000,"runbooks":1000},{"id":"D00T3ZX","type":"base","events":300000,"messages":10000,"runbooks":10000},{"id":"D00T5ZX","type":"base","unlimited":true},{"id":"D00CQZX","type":"addon","events":20000,"messages":1000,"runbooks":1000,"allowOverage":true}]'
 - name: SSMENDPOINT_OTCDBNAME
   value: otc_omaas_broker
 - name: COUCHDB_URL
@@ -372,8 +374,6 @@
   value: '30000'
 - name: AUTH_PROVIDER_MODE
   value: icp
-- name: AUTH_LEGACY_MODE
-  value: 'false'
 - name: AUTH_REDIRECT_URIS
   value: 'https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}cemui,{{ include "cem.services.rba" . }},{{ include "cem.services.uiserver" . }},{{ include "cem.services.apm" . }},https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}apmui/auth/cemusers/redirect'
 - name: BLUEMIX_API_URL
@@ -569,16 +569,36 @@
   value: '{{ include "cem.services.notificationprocessor" . }}'
 - name: SCHEDULINGUI_URL
   value: '{{ include "cem.services.schedulingui" . }}'
+- name: MODEL_KEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyname
+- name: MODEL_KEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyvalue
+- name: MODEL_HKEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyname
+- name: MODEL_HKEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyvalue
 - name: GCM_APIKEY
   value: none
 - name: EMAIL_MAIL
-  value: '{{ .Values.email.from }}'
+  value: '{{.Values.email.mail}}'
 - name: EMAIL_TYPE
-  value: '{{ .Values.email.type }}'
+  value: '{{.Values.email.type}}'
 - name: EMAIL_SMTPHOST
-  value: '{{ .Values.email.smtphost }}'
+  value: '{{.Values.email.smtphost}}'
 - name: EMAIL_SMTPPORT
-  value: '{{ .Values.email.smtpport }}'
+  value: '{{.Values.email.smtpport}}'
 - name: EMAIL_SMTPUSER
   valueFrom:
     secretKeyRef:
@@ -605,25 +625,55 @@
 - name: APN_FBINTERVAL
   value: '3600'
 - name: NEXMO_KEY
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-nexmo-cred-secret'
+      key: key
 - name: NEXMO_SECRET
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-nexmo-cred-secret'
+      key: secret
 - name: NEXMO_SMS
-  value: '15555555555'
+  value: '{{.Values.nexmo.sms}}'
 - name: NEXMO_VOICE
-  value: '15555555555'
+  value: '{{.Values.nexmo.voice}}'
 - name: NEXMO_ENABLED
-  value: 'true'
+  value: '{{.Values.nexmo.enabled}}'
 - name: NEXMO_NUMBER
-  value: '{}'
+  value: '{{.Values.nexmo.numbers}}'
 - name: NEXMO_RESTURL
   value: 'https://rest.nexmo.com'
 - name: NEXMO_APIURL
   value: 'https://api.nexmo.com'
 - name: NEXMO_COUNTRYBLACKLIST
+  value: '{{.Values.nexmo.countryblacklist}}'
+- name: REDIS_SSH_USERNAME
+  value: none
+- name: REDIS_PASSWORD
+  value: none
+- name: REDIS_SSH_HOSTS
+  value: '[]'
+- name: REDIS_DST_HOST
+  value: '{{ include "cem.services.redishost" . }}'
+- name: REDIS_DST_PORT
+  value: '6379'
+- name: REDIS_LOCAL_HOST
+  value: 127.0.0.1
+- name: REDIS_LOCAL_PORT
+  value: '6780'
+- name: REDIS_INDEX
+  value: '0'
+- name: REDIS_KEEP_ALIVE
+  value: 'true'
+- name: REDIS_SSH_KEY
   value: ''
+- name: SSH_READY_TIMEOUT
+  value: '30000'
 - name: SLACK_USERNAME
   value: alertnotification
+- name: CHANNELSERVICES_BLACKLIST
+  value: '12154033633,12154033634'
 - name: CHANNELSERVICES_URL
   value: '{{ include "cem.services.channelservices" . }}/api/send/v1'
 - name: CHANNELSERVICES_USERNAME
@@ -759,6 +809,26 @@
   value: (AUTOTEST-).*
 - name: MAINTENANCE_CHANGES_MAX_DAYS
   value: '30'
+- name: MODEL_KEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyname
+- name: MODEL_KEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyvalue
+- name: MODEL_HKEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyname
+- name: MODEL_HKEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyvalue
 - name: SYSLOG_TARGETS
   value: '[]'
 - name: UAG_URL
@@ -1018,6 +1088,26 @@
   value: '1'
 - name: MAINTENANCE_CHANGES_MAX_DAYS
   value: '30'
+- name: MODEL_KEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyname
+- name: MODEL_KEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyvalue
+- name: MODEL_HKEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyname
+- name: MODEL_HKEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyvalue
 - name: REDIS_SSH_USERNAME
   value: none
 - name: REDIS_PASSWORD
@@ -1097,6 +1187,18 @@
   value: '{{ include "cem.services.notificationprocessor" . }}'
 - name: SCHEDULINGUI_URL
   value: '{{ include "cem.services.schedulingui" . }}'
+- name: CHANNELSERVICES_URL
+  value: '{{ include "cem.services.channelservices" . }}/api/send/v1'
+- name: CHANNELSERVICES_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      key: username
+- name: CHANNELSERVICES_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      key: password
 - name: KAFKA_ENABLED
   value: 'true'
 - name: KAFKA_BROKERS_SASL_BROKERS
@@ -1182,8 +1284,6 @@
     secretKeyRef:
       name: '{{ template "releasename" . }}-cem-event-analytics-ui-session-secret'
       key: session
-- name: AUTH_LEGACY_MODE
-  value: 'false'
 - name: BLUEMIX_API_URL
   value: 'https://api.REGION.bluemix.net'
 - name: BLUEMIX_MCCP_URL
@@ -1243,13 +1343,11 @@
 - name: CIRCUITBREAKER_RESET_TIME
   value: '1'
 - name: SEGMENT_KEY
-  value: 5o2EsyHJVW1f2SWnzlANEgDWLoss7CWQ
+  value: ''
 - name: SEGMENT_ENABLED
-  value: 'true'
+  value: 'false'
 - name: CEMSERVICEBROKER_APIURL
   value: '{{ include "cem.services.cemapi" . }}'
-- name: CEMSERVICEBROKER_APIREFERENCEURL
-  value: '919'
 - name: SYSLOG_TARGETS
   value: '[]'
 {{- end -}}
@@ -1401,6 +1499,26 @@
   value: '1000000'
 - name: CIRCUITBREAKER_RESET_TIME
   value: '1'
+- name: MODEL_KEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyname
+- name: MODEL_KEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyvalue
+- name: MODEL_HKEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyname
+- name: MODEL_HKEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyvalue
 - name: REDIS_SSH_USERNAME
   value: none
 - name: REDIS_PASSWORD
@@ -1673,6 +1791,10 @@
   value: '{{ include "cem.services.notificationprocessor" . }}'
 - name: SCHEDULINGUI_URL
   value: '{{ include "cem.services.schedulingui" . }}'
+- name: CEMSLACK_CLIENTID
+  value: none
+- name: CEMSLACK_CLIENTSECRET
+  value: none
 - name: UAG_URL
   value: '{{ include "cem.services.cemusers" . }}'
 - name: UAG_USERNAME
@@ -1695,6 +1817,28 @@
     secretKeyRef:
       name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
+- name: REDIS_SSH_USERNAME
+  value: none
+- name: REDIS_PASSWORD
+  value: none
+- name: REDIS_SSH_HOSTS
+  value: '[]'
+- name: REDIS_DST_HOST
+  value: '{{ include "cem.services.redishost" . }}'
+- name: REDIS_DST_PORT
+  value: '6379'
+- name: REDIS_LOCAL_HOST
+  value: 127.0.0.1
+- name: REDIS_LOCAL_PORT
+  value: '6780'
+- name: REDIS_INDEX
+  value: '0'
+- name: REDIS_KEEP_ALIVE
+  value: 'true'
+- name: REDIS_SSH_KEY
+  value: ''
+- name: SSH_READY_TIMEOUT
+  value: '30000'
 - name: OBJSTORE_URL
   value: 'https://identity.open.softlayer.com'
 - name: OBJSTORE_PROJECT
@@ -1763,6 +1907,12 @@
   value: '1'
 - name: SYSLOG_TARGETS
   value: '[]'
+- name: WATSONWORKSPACE_APPID
+  value: '{{.Values.watsonworkspace.appid}}'
+- name: WATSONWORKSPACE_APPSECRET
+  value: '{{.Values.watsonworkspace.appsecret}}'
+- name: WATSONWORKSPACE_SHARETOKEN
+  value: '{{.Values.watsonworkspace.sharetoken}}'
 {{- end -}}
 
 {{- define "cloudeventmanagement.schedulingui.env" -}}

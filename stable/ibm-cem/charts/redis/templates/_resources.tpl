@@ -3,18 +3,6 @@ Chart specific kubernetes resource requests and limits
 This file defines the various sizes which may be included in a container's spec
 */ -}}
 
-{{- /*
-`$chart.resources` will supply a resources definition based on the provided yaml
-in the ibmcemprod.sizeData definition. Specify resources in the format:
-service:
-  size0|1:
-      resources:
-__Usage:__
-resources:
-{{ include "redis.comp.size.data" (list . "component" "resources") | indent 10 }}
-```
-  */ -}}
-
 {{- define "redis.sizeData" -}}
 server:
   size0:

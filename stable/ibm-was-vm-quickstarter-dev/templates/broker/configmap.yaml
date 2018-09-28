@@ -1,0 +1,125 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.broker.name }}
+{{- $cloudsmFrontendName := .sch.chart.components.cloudsmFrontend.name }}
+{{- $cloudsmFrontendServicePort := .sch.chart.components.cloudsmFrontend.servicePort }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  server.xml: |-
+    <server description="new server">
+        <featureManager>
+            <feature>localConnector-1.0</feature>
+            <feature>json-1.0</feature>
+            <feature>jaxrs-1.1</feature>
+            <feature>ejbLite-3.1</feature>
+            <feature>servlet-3.1</feature>
+            <feature>jsp-2.2</feature>
+            <feature>appSecurity-2.0</feature>
+            <feature>jsf-2.0</feature>
+            <feature>websocket-1.0</feature>
+            <feature>concurrent-1.0</feature>
+            <feature>ssl-1.0</feature>
+            <feature>passwordUtilities-1.0</feature>
+        </featureManager>
+
+        <httpEndpoint httpsPort="9443" host="*" id="defaultHttpEndpoint" />
+
+        <keyStore id="defaultKeyStore" password="${env.KEYSTORE_PASSWORD}" location="/etc/wlp/config/key.jks" />
+        <keyStore id="defaultTrustStore" password="${env.KEYSTORE_PASSWORD}" location="/etc/wlp/config/trust.jks"/>
+        <ssl id="defaultSSLConfig" sslProtocol="TLSv1.2" keyStoreRef="defaultKeyStore" trustStoreRef="defaultTrustStore" />
+
+        <applicationMonitor updateTrigger="mbean"/>
+
+        <basicRegistry id="BasicRealm" realm="BasicRealm">
+            <user name="${env.PROVIDER_USERNAME}" password="${env.PROVIDER_PASSWORD}"/>
+            <user name="${env.BROKER_USERNAME}" password="${env.BROKER_PASSWORD}"/>
+            <user name="${env.CLOUDSM_USERNAME}" password="${env.CLOUDSM_PASSWORD}"/>
+        </basicRegistry>
+
+        <webApplication id="wasdevaas" location="wasdevaas.war" name="wasdevaas" type="war" context-root="wasaas-broker">
+            <application-bnd>
+                <security-role name="offering">
+                    <special-subject type="ALL_AUTHENTICATED_USERS"/>
+                </security-role>
+                <security-role name="consumer">
+                    <special-subject type="ALL_AUTHENTICATED_USERS"/>
+                </security-role>
+                <security-role name="provider">
+                    <user name="${env.PROVIDER_USERNAME}"/>
+                </security-role>
+                <security-role name="servicerole">
+                    <run-as userid="${env.CLOUDSM_USERNAME}"/>
+                </security-role>
+            </application-bnd>
+            <classloader apiTypeVisibility="spec,ibm-api,api,third-party"/>
+        </webApplication>
+
+        <httpDispatcher enableWelcomePage='false'/>
+
+        <httpSession invalidationTimeout="4h" invalidateOnUnauthorizedSessionRequestException="true" cookieSecure="true"/>
+
+        <webAppSecurity ssoRequiresSSL="true"/>
+
+        <ltpa expiration="4h"/>
+    </server>
+
+  wasaas.properties: |-
+    brokerUserId=${env.BROKER_USERNAME}
+    brokerPassword=${env.BROKER_PASSWORD}
+    cloudsmUserId=${env.CLOUDSM_USERNAME}
+    cloudsmPassword=${env.CLOUDSM_PASSWORD}
+    clientId=wasaas-broker
+    clientSecret=XXX
+    bootStrapAdaptorName=TVMAdaptor_0001
+
+  jvm.options: |-
+    -DmockTest=n
+    -DpollFrequency=60
+    -DhostService=front
+    -DalertingOn=false
+    -DencryptionKeyType=computed
+    -DmaxIBMerAppNodes=10
+    -DmaxCustomerAppNodes=10
+    -DmaxIBMerBlocks=50
+    -Dclient.encoding.override=UTF-8
+    -DpublicIpEnabled=enabled
+    -DclientCertsEnabled=enabled
+    -DbssReportFrequency=120
+    -DreportToBluemixBss=false
+    -DreservedBssReportFrequency=60
+    -DreservedDswBssReportFrequency=210
+    -DreportReservedUsageToDsw=false
+    -DuseWebSocket=y
+    -DcheckReferer=false
+    -DisMockBluemix=true
+    -DfrontEndWs=wss://{{ include "sch.names.fullCompName" (list . $cloudsmFrontendName) }}:{{ $cloudsmFrontendServicePort }}/cloudsm
+    -Xmx768M
+
+  catalog.properties: |-
+    serviceUUID=b88bd1ac-520b-11e8-9f14-e3e6ee3fa2ae
+    libertyCorePlanUUID=ba503794-520b-11e8-bd21-73ade5e3d943
+    wasBasePlanUUID=bb468e0a-520b-11e8-a862-c7348433f622
+    wasNDPlanUUID=bc09c21c-520b-11e8-adca-57e5e6e8ca26
+
+  mockGroups.json: |-
+    {
+        "resourceGroups": [
+          {
+            "name": "Default",
+            "id": "8d5c763ef7b6711555e1df5114b44ba5"
+          }
+        ]
+    }

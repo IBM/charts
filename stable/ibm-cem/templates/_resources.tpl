@@ -1,4 +1,17 @@
 {{- /*
+********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* "Restricted Materials of IBM"
+*
+*  5737-H89, 5737-H64
+*
+* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+*
+* US Government Users Restricted Rights - Use, duplication, or
+* disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+********************************************************* {COPYRIGHT-END} ****
+
 Chart specific kubernetes resource requests and limits
 This file defines the various sizes which may be included in a container's spec
 */ -}}
@@ -18,6 +31,7 @@ resources:
 {{- define "ibmcemprod.sizeData" -}}
 normalizer:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 300Mi
@@ -26,6 +40,7 @@ normalizer:
         memory: 200Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 450Mi
@@ -35,6 +50,7 @@ normalizer:
         cpu: 500m
 brokers:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 200Mi
@@ -43,6 +59,7 @@ brokers:
         memory: 100Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 300Mi
@@ -52,6 +69,7 @@ brokers:
         cpu: 500m
 cemusers:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 450Mi
@@ -60,6 +78,7 @@ cemusers:
         memory: 350Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 800Mi
@@ -69,6 +88,7 @@ cemusers:
         cpu: 500m
 channelservices:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 300Mi
@@ -77,6 +97,7 @@ channelservices:
         memory: 200Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 450Mi
@@ -96,13 +117,14 @@ datalayer:
   size1:
     resources:
       limits:
-        memory: 800Mi
-        cpu: 1000m
+        memory: 2000Mi
+        cpu: 2000m
       requests:
         memory: 600Mi
         cpu: 500m
 eventanalyticsui:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 300Mi
@@ -111,6 +133,7 @@ eventanalyticsui:
         memory: 200Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 450Mi
@@ -120,6 +143,7 @@ eventanalyticsui:
         cpu: 500m
 eventpreprocessor:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 300Mi
@@ -128,6 +152,7 @@ eventpreprocessor:
         memory: 200Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 450Mi
@@ -137,6 +162,7 @@ eventpreprocessor:
         cpu: 500m
 incidentprocessor:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 300Mi
@@ -145,6 +171,7 @@ incidentprocessor:
         memory: 200Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 450Mi
@@ -154,6 +181,7 @@ incidentprocessor:
         cpu: 500m
 integrationcontroller:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 300Mi
@@ -162,6 +190,7 @@ integrationcontroller:
         memory: 200Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
         limits:
           memory: 450Mi
@@ -171,6 +200,7 @@ integrationcontroller:
           cpu: 500m
 schedulingui:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 300Mi
@@ -179,6 +209,7 @@ schedulingui:
         memory: 200Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 450Mi
@@ -188,6 +219,7 @@ schedulingui:
         cpu: 500m
 notificationprocessor:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 300Mi
@@ -196,6 +228,7 @@ notificationprocessor:
         memory: 200Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 450Mi
@@ -205,6 +238,7 @@ notificationprocessor:
         cpu: 500m
 rbs:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 1024Mi
@@ -213,6 +247,7 @@ rbs:
         memory: 100Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 1024Mi
@@ -222,6 +257,7 @@ rbs:
         cpu: 500m
 as:
   size0:
+    enableHPA: false
     resources:
       limits:
         memory: 1024Mi
@@ -230,6 +266,7 @@ as:
         memory: 100Mi
         cpu: 100m
   size1:
+    enableHPA: true
     resources:
       limits:
         memory: 1024Mi
@@ -247,5 +284,15 @@ as:
 {{- $resData := index $sizeData $resName -}}
 {{- $resSizeData := index $resData $root.Values.global.environmentSize -}}
 {{- $result := index $resSizeData $keyName -}}
+{{- toYaml $result | trimSuffix "\n" -}}
+{{- end -}}
+
+{{- define "ibmcemprod.comp.hpa" -}}
+{{- $root := (index . 0) -}}
+{{- $resName := (index . 1) -}}
+{{- $sizeData := fromYaml (include "ibmcemprod.sizeData" .) -}}
+{{- $resData := index $sizeData $resName -}}
+{{- $resSizeData := index $resData $root.Values.global.environmentSize -}}
+{{- $result := index $resSizeData "enableHPA" -}}
 {{- toYaml $result | trimSuffix "\n" -}}
 {{- end -}}
