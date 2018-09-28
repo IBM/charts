@@ -28,8 +28,8 @@ couchdb:
   size1:
     resources:
       limits:
-        memory: 1400Mi
-        cpu: 2000m
+        memory: 2800Mi
+        cpu: 8000m
       requests:
         memory: 1200Mi
         cpu: 1000m

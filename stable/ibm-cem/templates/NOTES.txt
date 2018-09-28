@@ -1,35 +1,36 @@
 Chart successfully deployed.
-
+  
 ** {{  .Values.productName }} may take a few minutes to become available. Please be patient. **
 
-Configuration:
-
-The following parameters should be set for the cloudeventmanagement chart.
-- The global.masterIP parameter should be set to the IP addresses of the kubernetes master node.
-- If multiple instances of the charts are installed set cemusers.secrets.oidcclientid and cemservicebroker.suffix to unique values.
-- If a non-default storage class is required, update the persistance.storageClassName to the storage class name. Alternatively each 
-individual value under global.persistance.storageClassOption can be set to specific persistent volumes. 
-
 See the product documentation for more details.
- global.persistance.storageClassOption can be set to specific persistent volumes. See the product documentation for more details.
+https://www.ibm.com/support/knowledgecenter/en/SSURRN/com.ibm.cem.doc/index.html
 
 Post helm installation steps:
 
-1. Wait for all pods to become ready: kubectl get pods -l release={{ .Release.Name }} -n {{ .Release.Namespace }}
+1. Wait for all pods to become ready. You can keep track of the pods either through the dashboard or through the command line interface: kubectl get pods -l release={{ .Release.Name }} -n {{ .Release.Namespace }}
 
-2. OIDC registration with ICP is required to be able to login to IBM Cloud Event Management's UI. As an ICP user with the Cluster Administrator role, run the following kubectl command:
+2. (Optional) Validate health of pods by running helm tests: helm test {{ .Release.Name }} --tls --cleanup
+
+3. {{ if .Release.IsUpgrade }}(Optional) {{ end }}OIDC registration with IBM Cloud Private is required to be able to login to IBM Cloud Event Management's UI. As an IBM Cloud Private user with the Cluster Administrator role, run the following kubectl command:
 kubectl exec -n {{ .Release.Namespace }} -t `kubectl get pods -l release={{ .Release.Name }} -n {{ .Release.Namespace }} | grep "{{ .Release.Name }}-ibm-cem-cem-users" | grep "Running" | head -n 1 | awk '{print $1}'` bash -- "/etc/oidc/oidc_reg.sh" "`echo $(kubectl get secret platform-oidc-credentials -o yaml -n kube-system | grep OAUTH2_CLIENT_REGISTRATION_SECRET: | awk '{print $2}')`"
 
-Installation verification:
+4. Service instances
+{{  .Values.productName }} is a multi-tenant product and a single installation supports multiple service instances (subscriptions).
 
-1. To verify the installation run the following kubectl command:
-helm test {{ .Release.Name }} --tls --cleanup
+{{- if .Release.IsUpgrade -}}
+If upgrading the product to enterprise from the community edition version, the existing service instances and their plans will need to be updated. In IBM Cloud Private 2.1.0.3, service plans can only be updated via the command line interface: kubectl edit serviceinstance <name>.  Change the plan names from 'experimental' to 'standard' and save the service instance.
+{{- end }}
 
-Limitations:
+Follow the instructions below to create new service instances:
+-  From the dashboard catalog, search and select ibm-cloud-evtmgmt-{{ .Release.Name }}.
+-  Under plans, select the {{ if .Values.productName }}{{ if eq .Values.productName "IBM Cloud Event Management" }}standard{{ else }}experimental{{ end }}{{ end }} option, and Configure
+-  Provide an instance name, ensuring it does not start with a number or capital letter.
+-  From the drop down list select a namespace, and select Deploy.
 
-These charts can be deployed multiple times in the same namespace under different release names.
-It is recommended to install one instance per namespace and deploy multiple namespaces for ease of management and separation of resources.
-*NOTE* {{  .Values.productName }} is multi-tenant and a single installation supports multiple users.
+5. Follow the instructions below to access your service instances:
+-  From the dashboard, select menu -> Workloads -> Brokered Service.
+-  Select on the instance name.
+-  If the service instance was provisioned successfully, select the Launch button.
 
 
-Version: 1.0.0-20180621220246 , Build information: 20180621T220246Z
+Version: 2.0.0-20180918214842 , Build information: 20180918T214842Z

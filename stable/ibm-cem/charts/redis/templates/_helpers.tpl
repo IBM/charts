@@ -17,6 +17,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "releasename" -}}
+{{- printf "%s" .Release.Name  | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{/*
 Create a hostname of the default fully qualified app name.
 We truncate at 24 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
@@ -27,9 +31,9 @@ We truncate at 24 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{- define "helmPullSecrets" -}}
-{{- if eq .Values.global.image.repository "" -}}
+{{- if eq .Values.global.image.pullSecret "" -}}
 imagePullSecrets:
-  - name: hyc-hdm-staging-docker-virtual
+  - name: {{ .Values.global.image.pullSecret }}
 {{- end -}}
 {{- end -}}
 

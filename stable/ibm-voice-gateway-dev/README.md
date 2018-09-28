@@ -12,6 +12,93 @@ This chart will deploy IBM Voice Gateway (Developer Trial).
 
 ## Prerequisites
 
+- IBM Cloud Private 3.1
+- A user with Cluster administrator role is required to install the chart.
+- IBM Cloud Private has RBAC enabled, so it requires that you add certain RBAC objects before you deploy the Voice Gateway Helm Chart in a non-default namespace.
+
+### Configure RBAC 
+Following RBAC objects must be created before deploying the Voice Gateway Helm Chart in a non-default namespace:
+
+#### PodSecurityPolicy
+  ```yaml
+  apiVersion: extensions/v1beta1
+  kind: PodSecurityPolicy
+  metadata:
+    name: voice-gateway-psp
+  spec:
+    privileged: false
+    hostNetwork: true
+    hostPorts:
+    - min: 0
+      max: 65535
+    allowPrivilegeEscalation: false
+    runAsUser:
+      rule: MustRunAsNonRoot
+    seLinux:
+      rule: RunAsAny
+    supplementalGroups:
+      rule: 'MustRunAs'
+      ranges:
+        - min: 1
+          max: 65535
+    fsGroup:
+      rule: 'MustRunAs'
+      ranges:
+        - min: 1
+          max: 65535
+    volumes:
+    - 'configMap'
+    - 'downwardAPI'
+    - 'emptyDir'
+    - 'persistentVolumeClaim'
+    - 'secret'
+    - 'projected'
+  ```
+
+#### ServiceAccount
+*Note: You need to change namespace value to the namespace where you are installing the Voice Gateway Helm Chart.*
+  ```yaml
+  apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: voice-gateway-serviceaccount
+    namespace: <voice-gateway-deployment-namespace>
+  ```
+
+#### ClusterRole
+  ```yaml
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: voice-gateway-clusterrole
+  rules:
+  - apiGroups:
+    - extensions
+    resources:
+    - podsecuritypolicies
+    resourceNames:
+    - voice-gateway-psp
+    verbs:
+    - use  
+  ```
+  
+#### ClusterRoleBinding
+*Note: You need to change namespace value to the namespace where you are installing the Voice Gateway Helm Chart.*
+  ```yaml
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: voice-gateway-clusterrolebinding
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: voice-gateway-clusterrole
+  subjects:
+  - kind: ServiceAccount
+    name: voice-gateway-serviceaccount
+    namespace: <voice-gateway-deployment-namespace>
+  ```
+
 ### Required
 - Create the following Watson services on IBM Cloud.
   - [Watson Speech to Text](https://console.bluemix.net/catalog/services/speech-to-text/)
@@ -20,67 +107,85 @@ This chart will deploy IBM Voice Gateway (Developer Trial).
   
     **Important:** For the Watson Assistant service, you'll need to add a workspace with a dialog. You can quickly get started by importing the [sample-conversation-en.json](https://github.com/WASdev/sample.voice.gateway/tree/master/conversation) file from your cloned sample.voice.gateway GitHub repository. To learn more about importing JSON files, see [Creating workspaces](https://console.bluemix.net/docs/services/conversation/configure-workspace.html#creating-workspaces) in the Conversation documentation. If you build your own dialog instead of using the sample, ensure that your dialog includes a node with the *conversation_start* condition and node with a default response.
   
+- Create a tenantConfig.json with the tenant credentials and any additional parameters. A sample tenantConfig.json can be found in the [tenantConfig.json](https://github.com/WASdev/sample.voice.gateway/blob/master/kubernetes/multi-tenant/tenantConfig.json) file.
+- Visit [Advanced JSON configuration](https://www.ibm.com/support/knowledgecenter/SS4U29/json_config_props.html) for more information.
+
+- Complete the steps mentioned on [IBM® Cloud Private metering service](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_metrics/metering_service.html#track_usage) page to create the Metering API Key.
+- Retrieve the Metering API Key:
+    - After you have created the API Key, return to the IBM Cloud Private Management Console, open the menu and click **Platform > Metering**.
+    - On the *Metering dashboard*, select **Manage API Keys**. Use this form to retrieve the metering API key that you created.
+
 ## Resources Required
 
 - The chart makes use of hostNetwork mode.
 - To enable recording you will have to configure a PersistentVolume or must have dynamic provisioning set up.
 - System requirements:
-    ```
-    RAM         8 gigabytes (GB)
-    vCPUs       2 vCPU with x86-64 architecture at 2.4 GHz clock speed
-                    Note: Varies based on expected number of concurrent calls and other factors
-    Storage     50 gigabytes (GB)
-                    Note: Call recording and log storage settings significantly affect storage requirements
-    OS          Ubuntu 16.04 LTS, Red Hat Enterprise Linux (RHEL) 7.3 and 7.4
-    ```
+  ```
+  RAM         8 gigabytes (GB)
+  vCPUs       2 vCPU with x86-64 architecture at 2.4 GHz clock speed
+                  Note: Varies based on expected number of concurrent calls and other factors
+  Storage     50 gigabytes (GB)
+                  Note: Call recording and log storage settings significantly affect storage requirements
+  OS          Ubuntu 16.04 LTS, Red Hat Enterprise Linux (RHEL) 7.3 and 7.4
+  ```
 
 ## Installing the chart
 
 To install the chart with the release name `my-release`:
 
-Use the `--set` option on the command line to specify each parameter for the Watson service credentials.
+When installing the chart using CLI, you need to create a secret `vgw-tenantconfig-secret` from the tenantConfig.json file before deployment using the following command:
+  ```bash
+  kubectl create secret generic vgw-tenantconfig-secret --from-file=tenantConfig.json
+  ```
 
-    For example:
-    ```bash
-    helm install ibm-charts/ibm-voice-gateway --name my-release \
-    --set serviceCredentials.watsonSttUsername="9h7f54cb-f28f-4a64-91e1-a0657e1dd3f4" \
-    --set serviceCredentials.watsonSttPassword="IAB5jfxls0Zt" \
-    --set serviceCredentials.watsonTtsUsername="9h7f54cb-8b0f-4766-8b15-eaa8f7c3fae7" \
-    --set serviceCredentials.watsonTtsPassword="HcmzFp1kec1P" \
-    --set serviceCredentials.watsonConversationWorkspaceId="a23de67h-e527-40d5-a867-5c0ce9e72d0d" \
-    --set serviceCredentials.watsonConversationUsername="9h7f54cb-d9ed-46b3-8492-e9a9bf555021" \
-    --set serviceCredentials.watsonConversationPassword="InWtiUpYhF1Z" \
-    --set sipOrchestratorEnvVariables.whitelistToUri="2345556789"
-    ```
+Create file `metering.yaml` with the following parameters configured:
+  ```yaml
+  metering:
+      meteringApiKey: ""
+  ```
+    
+Use the `--set` option on the command line to specify parameters.
+For example:
+  ```bash
+  helm install ibm-charts/ibm-voice-gateway-dev --name my-release \
+  --set tenantConfigSecretName=vgw-tenantconfig-secret \
+  -f metering.yaml
+  ```
+    
+> The above command contains mandatory parameters for a successful deployment of the Voice Gateway Helm Chart.
+
+To add any extra parameters, you can create a values.yaml files with the parameters and specify it in the command using `-f values.yaml`
 
 ## Verifying the chart
 
-To verify the chart, you need a system with kubectl and Helm installed. 
+To verify the chart, you need a system with kubectl and helm installed and configured.
 
-1. Configure kubectl CLI and helm CLI and check for deployment information by issuing the following commands:
-```bash
-helm list
-helm status my-release
-```
-2. Copy the name of the pod that was deployed with ibm-voice-gateway-dev by issuing the following command:
-```bash
-kubectl get pod
-```
-3. Using the pod name, check under Events to see whether the image was successfully pulled and the container was created and started. Issue the following command:
-```bash
-kubectl describe pod <pod name>
-```
+1. Check for chart deployment information by issuing the following commands:
+  ```bash
+  helm list
+  helm status my-release
+  ```
+    
+2. Get the name of the pod that was deployed with ibm-voice-gateway-dev by issuing the following command:
+  ```bash
+  kubectl get pod
+  ```
+    
+3. Check under Events to see whether the image was successfully pulled and the container was created and started by issuing the following command with the pod name:
+  ```bash
+  kubectl describe pod <pod name>
+  ```
 
 ## Uninstalling the chart
 
 1. To uninstall the deployed chart from the master node dashboard, click Workloads -> Helm Releases.
-2. Find the release name and under action click delete.
+- Find the release name and under action click delete.
 
-To uninstall the deployed chart from the command line, issue the following command:
-```bash
-helm delete --purge my-release
-kubectl delete pvc -l release=my-release 
-```
+2. To uninstall the deployed chart from the command line, issue the following command:
+  ```bash
+  helm delete --purge my-release
+  kubectl delete pvc -l release=my-release 
+  ```
 
 ## Configuration
 
@@ -89,23 +194,19 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | Parameter                             | Description                                                  | Default                                                    |
 | ------------------------------        | ----------------------------------------------------------   | ---------------------------------------------------------- |
 | `arch.amd64`                  | Architecture preference for target worker node | `3 - Most preferred`       |
-| `replicaCount`                    | Number of replicas                                                  | `1`                         | 
-| `serviceCredentials.watsonSttUsername`           | Watson STT Username             | `n/a`                                                      |
-| `serviceCredentials.watsonSttPassword`           | Watson STT Password             | `n/a`                                                      |
-| `serviceCredentials.watsonSttUrl`           | Watson STT URL             | `https://stream.watsonplatform.net/speech-to-text/api`                                                      |
-| `serviceCredentials.watsonTtsUsername`           | Watson TTS Username             | `n/a`                                                      |
-| `serviceCredentials.watsonTtsPassword`           | Watson TTS Password             | `n/a`                                                      |
-| `serviceCredentials.watsonTtsUrl`           | Watson TTS URL             | `https://stream.watsonplatform.net/text-to-speech/api`                                                      |
-| `serviceCredentials.watsonConversationWorkspaceId`           | Watson Conversation Workspace ID             | `n/a`                                                      |
-| `serviceCredentials.watsonConversationUsername`           | Watson Conversation Username             | `n/a`                                                      |
-| `serviceCredentials.watsonConversationPassword`           | Watson Conversation Password             | `n/a`                                                      |
-| `serviceCredentials.watsonConversationUrl`           | Watson Conversation URL             | `https://gateway.watsonplatform.net/conversation/api`                                                      |
-| `image.sipOrchestrator.image`           | Sip Orchestrator Docker image             | `ibmcom/voice-gateway-so`                                                      |
+| `productName`                  | Product name | `IBM Voice Gateway`       |
+| `serviceAccountName`                  | Name of service account | `n/a`       |
+| `replicaCount`                    | Number of replicas                                                  | `1`                         |
+| `nodeSelector`                    | Node selector label                                                  | `n/a`                         |
+| `tenantConfigSecretName`           | Tenant Config secret name             | `vgw-tenantconfig-secret`                                                      |
+| `image.sipOrchestrator.repository`           | Sip Orchestrator repository             | `ibmcom/voice-gateway-so`                                                      |
 | `image.sipOrchestrator.containerName`           | Sip Orchestrator container name             | `vgw-sip-orchestrator`                                                      |
-| `image.mediaRelay.image`           | Media Relay Docker image             | `ibmcom/voice-gateway-mr`                                                      |
+| `image.sipOrchestrator.tag`           | Sip Orchestrator docker image tag             | `1.0.0.7`                                                      |
+| `image.mediaRelay.repository`           | Media Relay repository             | `ibmcom/voice-gateway-mr`                                                      |
 | `image.mediaRelay.containerName`           | Media Relay container name             | `vgw-media-relay`                                                      |
-| `image.tag`           | Docker image tag             | `1.0.0.6b`                                                      |
-| `image.pullPolicy`           | Docker image pull policy             | `Always`                                                      |
+| `image.mediaRelay.tag`           | Media Relay docker image tag             | `1.0.0.7`                                                      |
+| `image.pullPolicy`           | Image pull policy             | `Always`                                                      |
+| `image.imagePullSecrets`           | Docker repository image pull secret             | `n/a`                                                      |
 | `persistence.useDynamicProvisioning`           | Dynamic provisioning setup             | `false`                                                      |
 | `recordingsVolume.name`           | Name of the persistent volume claim             | `recordings`                                                      |
 | `recordingsVolume.storageClassName`           | Existing storage class name             | `n/a`                                                      |
@@ -125,14 +226,10 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `mediaRelayEnvVariables.proxyHost`           | Media Relay Proxy Host             | `n/a`                                                      |
 | `mediaRelayEnvVariables.proxyPort`           | Media Relay Proxy Port             | `n/a`                                                      |
 | `mediaRelayEnvVariables.proxyUsername`           | Media Relay Proxy Username             | `n/a`                                                      |
-| `mediaRelayEnvVariables.proxyPassword`           | Media Relay Proxy Password             | `n/a`                                                      |
+| `mediaRelayEnvVariables.proxyPasswordSecret`           | Media Relay Proxy Password secret name             | `n/a`                                                      |
 | `mediaRelayEnvVariables.watsonSttEnableProxy`           | Watson STT Enable Proxy             | `true`                                                      |
 | `mediaRelayEnvVariables.watsonTtsEnableProxy`           | Watson TTS Enable Proxy             | `true`                                                      |
 | `mediaRelayEnvVariables.musicOnHoldEnableProxy`           | Music On Hold Enable Proxy             | `false`                                                      |
-| `mediaRelayEnvVariables.watsonSttModel`           | Watson STT Model             | `en-US_NarrowbandModel`                                                      |
-| `mediaRelayEnvVariables.echoSuppression`           | Echo Suppression             | `true`                                                      |
-| `mediaRelayEnvVariables.watsonTtsVoice`           | Watson TTS Voice             | `en-US_AllisonVoice`                                                      |
-| `mediaRelayEnvVariables.ttsCacheTimeToLive`           | TTS Cache Time to Live             | `0`                                                      |
 | `sipOrchestratorEnvVariables.mediaRelayHost`           | Media Relay Host             | `localhost:8080`                                                      |
 | `sipOrchestratorEnvVariables.sipPort`           | SIP Port             | `5060`                                                      |
 | `sipOrchestratorEnvVariables.sipPortTcp`           | SIP Port for TCP             | `5060`                                                      |
@@ -147,39 +244,36 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `sipOrchestratorEnvVariables.proxyHost`           | Sip Orchestrator Proxy Host             | `n/a`                                                      |
 | `sipOrchestratorEnvVariables.proxyPort`           | Sip Orchestrator Proxy Port             | `n/a`                                                      |
 | `sipOrchestratorEnvVariables.proxyUsername`           | Sip Orchestrator Proxy Username             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.proxyPassword`           | Sip Orchestrator Proxy Password             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.whitelistFromUri`           | Whitelist From URI             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.whitelistToUri`           | Whitelist To URI             | `n/a`                                                      |
+| `sipOrchestratorEnvVariables.proxyPasswordSecret`           | Sip Orchestrator Proxy Password secret name            | `n/a`                                                      |
 | `sipOrchestratorEnvVariables.trustedIpList`           | Trusted IP List             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.customSipInviteHeader`           | Custom SIP Invite Header             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.customSipSessionHeader`           | Custom SIP Session Header             | `Call-ID`                                                      |
-| `sipOrchestratorEnvVariables.sendProvisionalResponse`           | Send Provisional Response             | `true`                                                      |
-| `sipOrchestratorEnvVariables.sendSipCallIdToConversation`           | Send SIP Call ID To Conversation             | `false`                                                      |
-| `sipOrchestratorEnvVariables.sendSipRequestUriToConversation`           | Send SIP Request URI To Conversation             | `false`                                                      |
-| `sipOrchestratorEnvVariables.sendSipToUriToConversation`           | Send SIP To URI To Conversation             | `false`                                                      |
-| `sipOrchestratorEnvVariables.sendSipFromUriToConversation`           | Send SIP From URI To Conversation             | `false`                                                      |
-| `sipOrchestratorEnvVariables.conversationFailedReplyMessage`           | Conversation Failed Reply Message             | `Call being transferred to an agent due to a technical problem. Good bye.`                                                      |
-| `sipOrchestratorEnvVariables.transferDefaultTarget`           | Transfer Default Target             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.transferFailedReplyMessage`           | Transfer Failed Reply Message             | `Call transfer to an agent failed. Please try again later. Good bye.`                                                      |
-| `sipOrchestratorEnvVariables.disconnectCallOnTransferFailure`           | Disconnect Call On Transfer Failure             | `true`                                                      |
-| `sipOrchestratorEnvVariables.putCallerOnHoldOnTransfer`           | Put Caller On Hold On Transfer             | `true`                                                      |
 | `sipOrchestratorEnvVariables.cmrHealthCheckFailErrCode`           | CMR Health Check Fail Err Code             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.reportingUrl`           | Reporting URL             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.reportingUsername`           | Reporting Username             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.reportingPassword`           | Reporting Password             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.reportingCdrEventIndex`           | Reporting CDR Event Index             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.reportingConversationEventIndex`           | Reporting Conversation Event Index             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.reportingTranscriptionEventIndex`           | Reporting Transcription Event Index             | `n/a`                                                      |
-| `sipOrchestratorEnvVariables.watsonConversationApiVersion`           | Watson Conversation Api Version             | `2017-05-26`                                                      |
-| `sipOrchestratorEnvVariables.watsonConversationReadTimeout`           | Watson Conversation Read Timeout             | `5`                                                      |
-| `sipOrchestratorEnvVariables.watsonConversationConnectTimeout`           | Watson Conversation Connect Timeout             | `10`                                                      |
+| `sipOrchestratorEnvVariables.consoleLogFormat`           | Console logging format             | `json`                                                      |
+| `sipOrchestratorEnvVariables.consoleLogLevel`           | Console logging level             | `info`                                                      |
+| `sipOrchestratorEnvVariables.consoleLogSource`           | Console logging sources             | `message,trace,accessLog,ffdc`                                                      |
+| `metering.meteringServerURL`           | Metering Server URL             | `https://mycluster.icp:8443/meteringapi`                                                      |
+| `metering.meteringApiKey`           | Metering Api Key             | `n/a`                                                      |
+| `metering.icpMasterNodeIP`           | IBM Cloud Private Master Node IP             | `mycluster.icp`                                                      |
 
 
+### Configuring secrets for PROXY_PASSWORD for the Sip Orchestrator and the Media Relay
+
+- You can create the secret separately for the Sip Orchestrator and the Media Relay or use the same one.
+- To create the secret use one of the two ways:
+  ```bash
+  kubectl create secret generic so-proxy-password --from-literal=SO_PROXY_PASSWORD=4ny7aahcg8
+  kubectl create secret generic mr-proxy-password --from-literal=MR_PROXY_PASSWORD=9k6tyspyg2
+  ```
+    
+  ```bash
+  kubectl create secret generic proxy-password --from-literal=SO_PROXY_PASSWORD=4ny7aahcg8 --from-literal=MR_PROXY_PASSWORD=9k6tyspyg2
+  ```
+
+- Enter the secret name in the `proxyPasswordSecret` field of the respective container or you can set the mediaRelayEnvVariables.proxyPasswordSecret and sipOrchestratorEnvVariables.proxyPasswordSecret variables during installation using Helm CLI.
 
 ## Storage
 
 - PersistentVolume needs to be pre-created prior to installing the chart if `Enable Recording` is set to `true` and no dynamic provisioning has been set up. 
-- A PersistentVolume can be created by creating a yaml file as shown in the following example: 
+- A PersistentVolume can be created with specification as shown in the following yaml example: 
   
   ```yaml
   kind: PersistentVolume
@@ -200,9 +294,10 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
   **Important:** Make sure the name of PersistentVolume is `recordings`,  accessModes is `ReadWriteMany` and persistentVolumeReclaimPolicy is `Retain`.
 
   You can create a PersistentVolume using the above template by executing:
-
-      kubectl create -f <yaml-file>
-
+  ```bash
+  kubectl create -f <yaml-file>
+  ```
+  
 ## Limitations
 
 Because this deployment uses hostNetwork mode, the Helm Chart will deploy one pod per node.

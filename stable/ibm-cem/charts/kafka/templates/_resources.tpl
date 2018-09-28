@@ -16,26 +16,26 @@ kafka:
         memory: "1200Mi"
         cpu: "0.5"
       limits:
-        memory: "1400Mi"
+        memory: "1600Mi"
         cpu: "1.5" 
 kafkarest:
   size0:
-    jvmArgs: "-Xms64M -Xmx256M"
+    jvmArgs: "-Xms64M -Xmx200M"
     resources:
       requests:
         memory: "350Mi"
         cpu: "0.2"
       limits:
-        memory: "450Mi"
+        memory: "600Mi"
         cpu: "1.0" 
   size1:
-    jvmArgs: "-Xms64M -Xmx256M"
+    jvmArgs: "-Xms64M -Xmx200M"
     resources:
       requests:
         memory: "350Mi"
         cpu: "0.2"
       limits:
-        memory: "450Mi"
+        memory: "600Mi"
         cpu: "1.0"
 {{- end -}}
 {{- define "kafka.comp.size.data" -}}

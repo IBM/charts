@@ -7,7 +7,9 @@
 {{- $cdbConfigTemplateName := include "sch.names.volumeClaimTemplateName" (list . "config" $statefulSetName) -}}
 {{- $rootData := fromYaml (include "root.data" .) -}}
 {{- $rootMetering := $rootData.metering -}}
-{{- if .Capabilities.APIVersions.Has "apps/v1beta2" -}}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
 apiVersion: apps/v1beta2
 {{- else -}}
 apiVersion: apps/v1beta1
@@ -28,7 +30,7 @@ spec:
       app: {{ include "sch.names.appName" (list .) | quote }}
       heritage: {{ .Release.Service }}
       component: {{ $compName | quote }}
-{{- if and (.Capabilities.KubeVersion.Major | hasPrefix "1") (.Capabilities.KubeVersion.Minor | hasPrefix "7") }}
+{{- if semverCompare ">=1.7.0" .Capabilities.KubeVersion.GitVersion }}
   updateStrategy:
     type: RollingUpdate
 {{- end }}
@@ -38,7 +40,6 @@ spec:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
         origin: helm-cem
       annotations:
-        checksum/couchdb-cred-secret: {{ include (print $.Template.BasePath "/secret/couchdb-cred-secret.yaml") . | sha256sum }}
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
       affinity:
@@ -171,7 +172,7 @@ spec:
       volumes:
         - name: {{ $cdbConfigTemplateName }}
           configMap:
-            name: {{ $configMapName }}
+            name: {{ $configMapName }}-configmap
   {{ if not .Values.global.persistence.enabled }}
         - name: {{ $cdbDataTemplateName }}
           emptyDir: {}
