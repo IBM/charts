@@ -1,4 +1,7 @@
 # WAS VM Quickstarter
+
+THIS CHART IS NOW DEPRECATED. On September 28th, 2018 this version of the Helm chart for IBM WAS VM Quickstarter Community Edition will no longer be supported. The chart is replaced by the ibm-was-vm-quickstarter-dev chart. The production version of the chart, ibm-was-vm-quickstarter-prod, is available on IBM Passport Advantage. This chart will be removed on October 12, 2018.
+
 IBM WebSphere Application Server for IBM Cloud Private VM Quickstarter Community Edition provides the WebSphere product experience in a cloud environment by enabling self-service creation of preconfigured WebSphere environments running in virtual machines. Throughout this documentation, the service is also referred to as _WAS VM Quickstarter_.
 
 ## Introduction
