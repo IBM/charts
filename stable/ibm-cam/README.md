@@ -29,17 +29,19 @@ IBM Cloud Automation Manager is only supported to run in IBM Cloud Private.
 ## Resources Required
 
 * The minimum hardware requirements for IBM Cloud Automation Manager is a single worker node with at least 4 vCPU and 16GB of memory.
-For a full list of hardware requirements go to: https://www.ibm.com/support/knowledgecenter/SS2L37_2.1.0.3/cam_requirements.html
+For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_requirements.html
 
-* Persistent Volumes are required to be pre-created.  For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_2.1.0.3/cam_create_pv.html
+* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_create_pv.html
+
+* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_requirements.html
 
 ## Installing the Chart
 
-This chart supports various installation options.  For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_2.1.0.3/cam_planning.html
+This chart supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_planning.html
 
 ## Configuration
 
-For the full list of configuration options supporte by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_2.1.0.3/cam_installation_parameters.html
+For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_installation_parameters.html
 
 ## Limitations
 

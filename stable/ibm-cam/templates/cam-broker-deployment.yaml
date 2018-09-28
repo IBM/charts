@@ -102,11 +102,24 @@ spec:
         - configMapRef:
             name: redis-config
         env:
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbPassword
         - name: DB_URL
           valueFrom:
             secretKeyRef:
-              name: cam-database-secret
-              key: dburl
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbUrl
         - name: CAM_TOKEN
           valueFrom:
             secretKeyRef:
@@ -122,8 +135,6 @@ spec:
             configMapKeyRef:
               name: oauth-client-map
               key: PROXY_IP
-        - name: SERVICE_DASHBOARD
-          value: https://$(ICP_PROXY_IP):30000/cam
         - name: ICP_ENDPOINT
           value: https://$(ICP_MASTER_IP):8443
         - name: ORPHEUS_IDENTITY_API_URL
@@ -134,3 +145,15 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+      initContainers:
+      - name: cam-broker-init
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy:  {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh", "-c"]
+        args:
+          - mkdir -p /var/camlog/cam-broker && chown -R 1000:1000 /var/camlog/cam-broker;
+        volumeMounts:
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog
