@@ -33,5 +33,7 @@ slt:
     id: "OpenLiberty_67365423789_18002_151_00000"
     name: "Open Liberty"
     version: "18.0.0.2"
+  kube:
+    provider: Any
 {{- end -}}
 
