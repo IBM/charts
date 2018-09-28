@@ -3,10 +3,10 @@
 
 ## Introduction
 This chart installs Hazelcast, and in-memory data grid cache.  
-This chart installs the [hazelcast/hazelcast-kubernetes](https://hub.docker.com/r/hazelcast/hazelcast-kubernetes/) Docker image.  
+This chart installs the [hazelcast/hazelcast](https://hub.docker.com/r/hazelcast/hazelcast/) Docker image.  
 
 ## Chart Details
-* Deployment: hazelcast-kubernetes image includes a discovery plugin, allowing for autodiscovery of replicas within a namespace
+* Deployment: hazelcast image includes a discovery plugin, allowing for autodiscovery of replicas within a namespace
 * ConfigMap: contains the hazelcast.xml server configuration
 
 ## Prerequisites
@@ -17,6 +17,8 @@ This chart installs the [hazelcast/hazelcast-kubernetes](https://hub.docker.com/
 * MEM (default) 768Mi
 
 ## Installing the Chart
+
+When installing the default Hazelcast Docker image, ensure that an image policy exists that allows pulling from the registry `docker.io/hazelcast/hazelcast:*`.  
 
 To install the chart with the release name `my-release`:
 
@@ -52,9 +54,9 @@ The following tables lists the configurable parameters of the ibm-hazelcast-dev 
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
 | `replicaCount`             | Number of deployment replicas                   | `1`                                                        |
-| `image.repository`         | `Hazelcast` image repository.                   | `hazelcast/hazelcast-kubernetes`                           |
+| `image.repository`         | `Hazelcast` image repository.                   | `hazelcast/hazelcast`                           |
 | `image.pullPolicy`         | Image pull policy                               | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
-| `image.tag`                | `Hazelcast` image tag                           | `3.10`                                                     |
+| `image.tag`                | `Hazelcast` image tag                           | `3.10.5`                                                     |
 | `service.type`             | k8s service type exposing ports, e.g. `NodePort`| `ClusterIP`                                                |
 | `service.externalPort`     | External TCP Port for this service              | `5701`                                                     |
 | `resources.requests.memory`| Memory resource requests                        | `576Mi`                                                    |
@@ -66,7 +68,7 @@ The following tables lists the configurable parameters of the ibm-hazelcast-dev 
 | `heap.maxHeapSize`         | JVM Maximum Heap Size                           | `256m`                                                     |
 | `javaOpts`                 | JVM Options                                     |                                                            |
 
-A subset of the above parameters map to the environmental variables defined for the hazelcast-kubernetes Docker image. For more information please refer to the [Hazelcast](https://hub.docker.com/r/hazelcast/hazelcast-kubernetes/) image documentation.
+A subset of the above parameters map to the environmental variables defined for the hazelcast Docker image. For more information please refer to the [Hazelcast](https://hub.docker.com/r/hazelcast/hazelcast/) image documentation.
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
