@@ -1,0 +1,136 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the index manager deployment
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{- if .Values.messageIndexing.messageIndexingEnabled }}
+{{ $namePrefix := .sch.chart.components.indexmgr.deployment.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $compName := .sch.chart.components.indexmgr.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# Service Account
+{{ $serviceAccount := .sch.chart.components.indexmgr.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+{{ $serviceNamePrefix := .sch.chart.components.indexmgr.service.name -}}
+{{ $serviceName := include "sch.names.fullCompName" (list . $serviceNamePrefix) -}}
+{{ $elasticServicePrefix := .sch.chart.components.elasticSearch.service.name -}}
+{{ $elasticServiceName := include "sch.names.fullCompName" (list . $elasticServicePrefix) -}}
+{{ $elasticStsNamePrefix := .sch.chart.components.elasticSearch.statefulSet.name -}}
+{{ $elasticStsName := include "sch.names.statefulSetName" (list . $elasticStsNamePrefix) -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ $name }}"
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+    node: "0"
+spec:
+  serviceName: {{ $serviceName }}
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+        node: "0"
+      annotations:
+{{ include "metering" (list . ) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      hostname: indexmgr
+      subdomain: {{ $serviceName }}
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      securityContext:
+        fsGroup: 1000
+      volumes:
+      {{- include "license.accept.ref" . | indent 6 }}
+      affinity:
+      {{- include "customNodeaffinity" . | indent 6 }}
+      containers:
+        - name: index-manager
+          image: {{ include "eventstreams.image" (list . "eventstreams-index-manager" .Values.global.image.imageTags.indexmgrTag "true") | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
+          ports:
+            - name: api
+              containerPort: {{ $ports.indexmgr.api }}
+            - name: metrics
+              containerPort: {{ $ports.indexmgr.metrics }}
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - cd
+            failureThreshold: 2
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ $ports.indexmgr.api }}
+              httpHeaders:
+                - name: Accept
+                  value: '*/*'
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ELASTIC_ENDPOINT
+              value: "{{ $elasticServiceName }}:{{ $ports.elasticsearch.api }}"
+            - name: ELASTIC_HOSTS
+              value: "{{ $elasticStsName }}-0,{{ $elasticStsName }}-1"
+            - name: ELASTIC_MEMORY
+              value:
+                "{{ regexReplaceAll "i" .Values.messageIndexing.resources.limits.memory "b" }}"
+            - name: REQUEST_TIMEOUT
+              value: "30"
+            - name: TRACE_LEVEL
+              value: "0"
+            - name: API_PORT
+              value: "{{ $ports.indexmgr.api }}"
+            - name: METRICS_PORT
+              value: "{{ $ports.indexmgr.metrics }}"
+            - name: SPLIT_BRAIN_CHECK_INTERVAL
+              value: "60"
+            - name: UPDATE_POLL_INTERVAL
+              value: "1"
+            - name: INDEX_CREATION_RETRY_TIME
+              value: "1"
+            - name: INDEX_CREATION_RETRY_COUNT
+              value: "10"
+            - name: TOPIC_DELETION_POLL_INTERVAL
+              value: "5"
+            - name: ROLLOVER_INTERVAL
+              value: "30"
+{{- end -}}
+{{- end -}}

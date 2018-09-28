@@ -1,0 +1,126 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Runs a container that registers the IBM Event Streams UI as an OAuth endpoint
+#  to allow log-ins to the Event Streams Admin UI
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $namePrefix := .sch.chart.components.essential.certGenJob.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'essential'
+{{ $compName := .sch.chart.components.essential.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "function" "setup-secrets")) -}}
+# Name of the new image pull secret in kube-system
+{{ $imagePullSecret := .sch.chart.components.essential.imagePullSecret.name -}}
+{{ $imagePullSecretName := include "sch.names.fullCompName" (list . $imagePullSecret) -}}
+{{ $proxySecretNamePrefix := .sch.chart.components.proxy.secret.name -}}
+{{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecretNamePrefix ) -}}
+# Validation of user supplied input
+{{- if eq .Values.tls.type  "provided"}}
+  # user has supplied their own certificate details
+  {{- if empty .Values.tls.key }}
+    {{ fail "Configuration error: Please enter the Base64 encoded TLS private key in Secure connections section." }}
+  {{- end }}
+  {{- if empty .Values.tls.cert }}
+    {{ fail "Configuration error: Please enter the Base64 encoded TLS certificate in Secure connections section." }}
+  {{- end }}
+  {{- if empty .Values.tls.cacert }}
+    {{ fail "Configuration error: Please enter the Base64 encoded CA certificate in Secure connections section." }}
+  {{- end }}
+  {{- if eq (regexMatch "^[A-Za-z0-9+/]*={0,3}$" .Values.tls.key) false}}
+    {{ fail "Configuration error: Please enter a valid Base64 encoded TLS private key in Secure connections section." }}
+  {{- end }}
+  {{- if eq (regexMatch "^[A-Za-z0-9+/]*={0,3}$" .Values.tls.cert) false }}
+    {{ fail "Configuration error: Please enter a valid Base64 encoded TLS certificate in Secure connections section." }}
+  {{- end }}
+  {{- if eq (regexMatch "^[A-Za-z0-9+/]*={0,3}$" .Values.tls.cacert) false }}
+    {{ fail "Configuration error: Please enter a valid Base64 encoded CA certificate in Secure connections section." }}
+  {{- end }}
+{{- end }}
+{{- if eq .Values.tls.type  "selfsigned"}}
+  {{- if .Values.tls.key }}
+  {{ fail "Configuration error: You cannot select self-signed certificate and provide a TLS private key." }}
+  {{- end }}
+  {{- if .Values.tls.cert }}
+  {{ fail "Configuration error: You cannot select self-signed certificate and provide a TLS certificate." }}
+  {{- end }}
+  {{- if .Values.tls.cacert }}
+  {{ fail "Configuration error: You cannot select self-signed certificate and provide a CA certificate." }}
+  {{- end }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  namespace: kube-system
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    # This needs to run before we deploy, as UI component installs
+    # depend on the secrets existing already, and will fail to start
+    # otherwise.
+    "helm.sh/hook": pre-install
+    # We don't delete this if it fails, as the logs may be useful to
+    # diagnose a failed install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    # This needs to happen before all other jobs as they will need access to this
+    # image pull secret
+    "helm.sh/hook-weight": "5"
+spec:
+  template:
+    metadata:
+      namespace: kube-system
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      {{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ $imagePullSecretName | quote }}
+      {{- end }}
+      securityContext:
+        fsGroup: 1001
+      affinity:
+{{- include "customNodeaffinity" . | indent 6 }}
+      restartPolicy: Never
+      containers:
+        - name: "cert-generator"
+          image: {{ include "eventstreams.image" (list . "eventstreams-certs" .Values.global.image.imageTags.certGenTag "true") | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - all
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: "ES_NAMESPACE"
+              value: {{ .Release.Namespace | quote }}
+            - name: "RELEASE_NAME"
+              value: {{ .Release.Name | quote }}
+            - name: "ES_SECRET_NAME"
+              value: {{ $proxySecretName | quote }}
+            {{- if eq (empty .Values.proxy.externalEndpoint) false}}
+            - name: "ES_CNAME"
+              value: {{ .Values.proxy.externalEndpoint }}
+            {{ end -}}
+            {{- if eq .Values.tls.type  "provided"}}
+            - name: "ES_CERT"
+              value: {{ .Values.tls.cert }}
+            - name: "ES_KEY"
+              value: {{ .Values.tls.key }}
+            - name: "ES_CACERT"
+              value: {{ .Values.tls.cacert }}
+            {{ end -}}
+{{ end -}}
+

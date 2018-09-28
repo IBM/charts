@@ -11,6 +11,7 @@
 # Defines the pod that runs the UI web server
 ###############################################################################
 {{- include "sch.config.init" (list . "rest.sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "security.sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.ui.deployment.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 {{ $id := (include "asDnsLabel" .Release.Name) }}
@@ -24,22 +25,32 @@
 {{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
 {{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
 # Service Account to grant Kubernetes access
-{{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
+{{ $serviceAccount := .sch.chart.components.ui.serviceAccount.name -}}
 {{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
 # Secret and config map used by the proxy container
 {{ $secret := .sch.chart.components.proxy.secret.name -}}
 {{ $secretName := include "sch.names.fullCompName" (list . $secret) | quote -}}
-{{ $configMap := .sch.chart.components.uiproxy.configMap.name -}}
-{{ $configMapName := include "sch.names.fullCompName" (list . $configMap) | quote -}}
-apiVersion: apps/v1beta1
+# Check if geo-replication is enabled
+{{- $features := fromYaml (include "features" . ) -}}
+{{- $replicatorEnabled := index $features "replicator" "enabled" -}}
+# Import product version which is used by Feedback
+{{ $edition := .sch.chart.edition }}
+{{ $values := fromYaml (include "sch.chart.config.values" . ) -}}
+{{ $productName := index $values.sch.chart.productName $edition | trim -}}
+{{ $productVersion := .sch.chart.productVersion -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+# Get accessController service name
+{{ $accessControllerService := .sch.chart.components.security.accesscontroller.service.name -}}
+{{ $accessControllerServiceName := include "sch.names.fullCompName" (list . $accessControllerService) -}}
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
-  annotations:
-    helm.sh/created: {{ .Release.Time.Seconds | quote }}
 spec:
   replicas: {{ .sch.config.ui.replicas }}
   selector:
@@ -48,21 +59,26 @@ spec:
       serviceSelector: {{ $namePrefix | quote }}
   template:
     metadata:
-      namespace: {{ .Release.Namespace | quote }}
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
       labels:
 {{ $labels | indent 8 }}
       annotations:
-      {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{ include "metering" (list . ) | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
       {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      securityContext:
+        fsGroup: 1000
       volumes:
+        - name: redis-storage
+          emptyDir: {}
       {{- include "license.accept.ref" . | indent 6 }}
       affinity:
       {{- include "customNodeaffinity" . | indent 6 }}
+      terminationGracePeriodSeconds: 60
       # UI pods are made up of two containers
       #  1) UI web server
       #  2) redis container for persisting user sessions
@@ -70,36 +86,58 @@ spec:
         #
         # UI web server pods
         - name: "ui"
-          image: "{{ .Values.global.image.repository }}/eventstreams-ui:{{ .sch.chart.images.uiTag }}"
+          image: {{ include "eventstreams.image" (list . "eventstreams-ui" .Values.global.image.imageTags.uiTag "true") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
           resources:
             limits:
 {{ toYaml .sch.config.ui.resources.limits | indent 14 }}
             requests:
 {{ toYaml .sch.config.ui.resources.requests | indent 14 }}
-          livenessProbe:
-            httpGet:
-              path: /status
-              port: {{ .sch.config.ui.ports.port }}
-            initialDelaySeconds: 30
-            periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /status
-              port: {{ .sch.config.ui.ports.port }}
+              port: {{ $ports.ui.webserver }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: {{ $ports.ui.webserver }}
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
             - name: ID
               value: "{{ $id }}"
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: EVENT_STREAMS_EDITION
+              value: "{{ $productName }}"
+            - name: EVENT_STREAMS_VERSION
+              value: "{{ $productVersion }}"
             - name: "API_URL"
-              value: "http://{{ $restServiceName }}:{{ .sch.config.rest.ports.targetPort }}"
+              value: "http://{{ $restServiceName }}:{{ $ports.rest.server }}"
             - name: "CLIENT_ID"
               valueFrom:
                 secretKeyRef:
                   name: {{ $oauthSecretName }}
                   key: "username"
+            - name: "CLUSTER_NAME"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterName"
             - name: "CLIENT_SECRET"
               valueFrom:
                 secretKeyRef:
@@ -115,23 +153,45 @@ spec:
                 secretKeyRef:
                   name: {{ $oauthSecretName }}
                   key: "clusterExternalPort"
+            - name: "ACCESS_CONTROLLER_SERVICE_NAME"
+              value: {{ $accessControllerServiceName | quote }}
+            - name: "ACCESS_CONTROLLER_SERVICE_PORT"
+              value: {{ $ports.security.accessController | quote}}
+            {{- if $replicatorEnabled }}
+            - name: GEOREPLICATION_ENABLED
+              value: "true"
+            {{- end }}
+            - name: TRACE_STATE
+              value: "{\"ExpressApp\":false,\"Simulated\":false,\"KubernetesClient\":false}"
         #
         # redis pods
         - name: redis
-          image: "redis"
-          imagePullPolicy: Always
-          livenessProbe:
+          image: {{ include "eventstreams.image" (list . "redis" .Values.global.image.imageTags.redisTag "false") | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          volumeMounts:
+          - name: redis-storage
+            mountPath: /data
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
+          readinessProbe:
             exec:
               command:
                 - sh
                 - -c
                 - /usr/local/bin/redis-cli -h $(hostname) ping
             failureThreshold: 2
-            initialDelaySeconds: 30
+            initialDelaySeconds: 10
             periodSeconds: 10
             successThreshold: 1
             timeoutSeconds: 2
-          readinessProbe:
+          livenessProbe:
             exec:
               command:
                 - sh
@@ -144,12 +204,19 @@ spec:
             timeoutSeconds: 2
         # Proxy server container
         - name: "proxy"
-          image: "{{ .Values.global.image.repository }}/eventstreams-proxy:{{ .sch.chart.images.proxyTag }}"
+          image: {{ include "eventstreams.image" (list . "eventstreams-proxy" .Values.global.image.imageTags.proxyTag "true") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
-            - name: CONFIG_MAP_NAME
-              value: {{ $configMapName }}
             - name: TLS_CERT
               valueFrom:
                 secretKeyRef:
@@ -160,19 +227,27 @@ spec:
                 secretKeyRef:
                   name: {{ $secretName }}
                   key: "tls.key"
+            - name: ES_PROXY_CONFIG
+              value: |-
+                {
+                  "routes": "[{\"port\":{{ $ports.ui.proxy }}, \"service\": \"localhost:{{ $ports.ui.webserver }}\"}]",
+                  "tlsEnabled": "true",
+                  "connectionTimeoutMs": "3600000",
+                  "traceLevel": "0",
+                  "logFormat": "json"
+                }
           ports:
             - name: uiendpoint
-              containerPort: {{ .sch.config.ui.proxy.port }}
+              containerPort: {{ $ports.ui.proxy }}
           readinessProbe:
             httpGet:
               path: "/ready"
-              port: 8080
+              port: {{ $ports.ui.health }}
             initialDelaySeconds: 1
             periodSeconds: 5
           livenessProbe:
             httpGet:
               path: "/live"
-              port: 8080
+              port: {{ $ports.ui.health }}
             initialDelaySeconds: 15
             periodSeconds: 15
-      terminationGracePeriodSeconds: 60

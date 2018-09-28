@@ -1,21 +1,15 @@
-# What’s new in Chart Version 0.1.1
+# What's new in Chart Version 1.0.0
 
-* Bug fix - Fix UI auth issue when running on multiple External IPs.
-
-# What’s new in Chart Version 0.1.0
-
-* IBM Event Streams Tech Preview release
+* IBM Event Streams first release
 
 # Fixes
 * None
 
 # Prerequisites
-1. Kubernetes 1.9
+1. Kubernetes 1.11.0
 
 # Version History
 
-| Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
-| ----- | ---- | ------------ | ------------------ | ---------------- | ------- | 
-| 0.1.2 | June 25, 2018 | >=1.9 |  | None | Tech Preview update |
-| 0.1.1 | May 31, 2018 | >=1.9 |  | None | Tech Preview update |
-| 0.1.0 | May 31, 2018 | >=1.9 | IBM Event Streams consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release. | None | Tech Preview |
+| Chart | Date               | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
+| ----- | ------------------ | ------------------- | ------------------ | ---------------- | ------- |
+| 1.0.0 | September 28, 2018 | >=1.11.0            | IBM Event Streams consists of a number of versioned images. The combination of images in use must not be changed from those shipped by the release.                   | None             | First release

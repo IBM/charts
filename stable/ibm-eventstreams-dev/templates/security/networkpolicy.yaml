@@ -1,0 +1,66 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Access controller network access policy
+# Ingress : kafka pods
+# Egress : IAM
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $compName := .sch.chart.components.security.compName -}}
+{{ $compNameKafka := .sch.chart.components.kafka.compName -}}
+{{ $compNameRest := .sch.chart.components.rest.compName -}}
+{{ $uiNameRest := .sch.chart.components.ui.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $namePrefix := .sch.chart.components.security.networkPolicy -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) }}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      component: {{ $compName | quote }}
+      release: {{ .Release.Name }}
+  policyTypes:
+  - Egress
+  - Ingress
+  ingress:
+  # connections from kafka brokers
+  - from:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameKafka | quote }}
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameRest | quote }}
+    - podSelector:
+        matchLabels:
+          component: {{ $uiNameRest | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.accessController }}
+  egress:
+  # connections to IAM
+  - to:
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.iamTokenGeneration }}
+      - protocol: TCP
+        port: {{ $ports.security.iamPolicyDecision }}
+      - protocol: TCP
+        port: {{ $ports.security.iamPolicyAdministration }}
+{{ end -}}

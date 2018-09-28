@@ -1,20 +1,20 @@
-# Breaking changes
+# What’s new in the MQ Advanced for Developers Chart, Version 2.1.0
 
-- Kubernetes resource names have changed, to prevent problems with long names in some systems.  This will require you to manually upgrade from a previous release.
-- If you used DNS SRV records to locate the correct MQ port, then you need to use the name `qmgr` instead of `qmgr-server`.
-- The chart value `service.name` has been removed, as it wasn't used correctly.
-
-# What’s new in the MQ Advanced Chart, Version 2.0.2
-
-- Bug Fixes
+- SecurityContext values are now declared for the container
+- A service account name can now be configured
+- Added new IBM Cloud Pak content
 
 # Fixes
 
-- Fixed error in service selector for helm tests.
+- None
 
-# Prerequisites
+# Documentation
 
-Note: if you have already attempted to upgrade to Version 2.0.0, 2.0.1 or 2.0.2 (without following these instructions), then you will need to perform additional steps to complete a successful upgrade.
+## Upgrading to Version 2.1.0 from Versions <= 1.3.0
+
+### Prerequisites
+
+Note: if you have already attempted to upgrade from Version 1.3.0 or earlier (without following these instructions), then you will need to perform additional steps to complete a successful upgrade.
 
 - If your attempted upgrade failed, then you can follow the upgrade instructions to upgrade your release.
 
@@ -25,9 +25,7 @@ Note: if you have already attempted to upgrade to Version 2.0.0, 2.0.1 or 2.0.2 
     kubectl delete pvc $NEW_PVC_NAME
     ```
 
-# Documentation
-
-## Upgrading to Version 2.0.2
+### Upgrade instructions
 
 To perform these instructions you will need to have permissions to modify the PersistentVolume (PV) for your release. This is required to update the “Reclaim Policy” and "Claim Reference" in steps 2, 7 and 12.
 
@@ -121,13 +119,13 @@ Note: You may experience upgrade issues if you have a long release name (25+ cha
   kubectl create -f pvc-new.yaml
   ```
 
-10. Install the Version 2.0.2 Chart
+10. Install the Version 2.1.0 Chart
 
   ```sh
   helm install --name $RELEASE -f user-supplied-values.yaml [CHART]
   ```
 
-  > Where [CHART] is the Version 2.0.2 chart in your Helm repository.
+  > Where [CHART] is the Version 2.1.0 chart in your Helm repository.
 
 11. Validate upgrade
 
@@ -143,6 +141,7 @@ Note: You may experience upgrade issues if you have a long release name (25+ cha
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 2.1.0 | September 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Declaration of securityContext; Configurable service account name; New IBM Cloud Pak content |
 | 2.0.2 | August 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Fixed error in service selector for helm tests |
 | 2.0.1 | July 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Reverted statefulset to apps/v1beta2 to prevent deletion failures |
 | 2.0.0 | July 2018    | >= 1.9 | = MQ 9.1.0.0  | New Kubernetes resource names and labels | Added metrics service |

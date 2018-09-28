@@ -11,6 +11,7 @@
 # Defines a config map that allows configuration of the proxy
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
+{{ $kafkaconfig := include "sch.config.init" (list . "kafka.listeners.sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.proxy.configMap.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
 # Component is 'proxy' as this makes up part of implementing the Kafka proxy
@@ -28,47 +29,92 @@
 {{ $kafkaServiceName := include "sch.names.fullCompName" (list . $kafkaService) -}}
 {{ $restService := .sch.chart.components.rest.service.name -}}
 {{ $restServiceName := include "sch.names.fullCompName" (list . $restService) -}}
+# Get the list of Kafka Listener Ports. We'll need to create node ports for each of these.
+{{ $listenerPorts := .sch.config.kafka.listeners -}}
+{{ $kafkaInternalAdvertisedListeners := .sch.config.kafka.internalAdvertisedListeners -}}
+{{ $listeners := $listenerPorts | splitList "," -}}
+# Get the mapping of kafka proxy ports and read them into a dictionary
+{{ $kafkaProxyMappings := .sch.config.kafka.kafkaProxyMappings -}}
+{{ $kafkaProxyMappingsList := $kafkaProxyMappings | splitList "," -}}
+{{ $kafkaProxyMappingsDict := dict -}}
+{{ range $MapIndex, $portMapping := $kafkaProxyMappingsList -}}
+{{ $ports := $portMapping | split ":" -}}
+{{ $_ := set $kafkaProxyMappingsDict $ports._0 $ports._1 -}}
+{{ end -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $portdefs := .sch.config.ports }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
 data:
-  adminService: "{{ $restServiceName }}:9080"
+  adminService: "{{ $restServiceName }}:{{ $portdefs.rest.server }}"
+  bootstrapServers: "[]"
   # The string that sandwiches the broker ID between a '.'
   # e.g. [release]-[chart_name]-kafka-broker-svc-[broker_id].<namespace>:[port]
   brokerService: "-{{ $kafkaService }}-"
   headlessService: "-{{ $kafkaHeadless }}."
   serviceName: {{ $serviceName | quote }}
   connectionTimeoutMs: "3600000"
-  externalAccessEnabled: "{{ .Values.proxy.externalAccessEnabled }}"
+  externalAccessEnabled: "true"
   externalHostOrIP: "{{ .Values.proxy.externalEndpoint }}"
   revision: "0"
+  internalAdvertisedListeners: "{{ $kafkaInternalAdvertisedListeners }}"
+  tlsEnabled: "true"
+  tlsHandshakeTimeoutMs: "10000"
+  traceLevel: "0"
+  logFormat: "json"
+  listenerTypes: |
+    [
+      {{- $kafkalisteners := dict "types" (list) -}}
+      {{- range $ListenerIndex, $listenerType := $listeners -}}
+      {{- $portType := $listenerType | split ":" -}}
+      {{ if hasPrefix "INTERNAL" $portType._0 -}}
+      {{ else if hasKey $kafkaProxyMappingsDict $portType._2 }}
+      {{ range $MapIndex, $portMapping := $kafkaProxyMappingsList -}}
+      {{ $ports := $portMapping | split ":" -}}
+      {{ if eq $portType._2 $ports._0 }}
+      {{- $noOp := printf "{\"ListenerType\": \"%s\", \"Port\": %s}" $portType._0 $ports._1 | append $kafkalisteners.types | set $kafkalisteners "types" -}}
+      {{- end -}}
+      {{- end -}}
+      {{- end -}}
+      {{- end -}}
+      {{- join "," $kafkalisteners.types -}}
+    ]
   routes: |
     [
-      {{ if .Values.proxy.externalAccessEnabled -}}
       {
         "Port": 0,
         "NodePort": 0,
-        "Service": "{{ $kafkaHeadlessName }}.{{ $.Release.Namespace }}:9093"
+        "Service": "{{ $kafkaHeadlessName }}.{{ $.Release.Namespace }}:{{ $portdefs.kafka.externalProxySecure }}"
       }
-      {{ range $i, $e := until $rep -}}
+      {{- range $brokerIndex, $broker := until $rep }}
+      {{- range $ListenerIndex, $listenerType := $listeners -}}
+      {{- $portType := $listenerType | split ":" -}}
+      {{- if hasPrefix "INTERNAL" $portType._0 -}}
+      {{ else if hasKey $kafkaProxyMappingsDict $portType._2 }}
+      {{ range $MapIndex, $portMapping := $kafkaProxyMappingsList -}}
+      {{ $ports := $portMapping | split ":" -}}
+      {{ if eq $portType._2 $ports._0 }}
       ,{
         "Port": 0,
         "NodePort": 0,
-        "Service": "{{ $kafkaServiceName }}-{{ $i }}.{{ $.Release.Namespace }}:9093"
+        "Service": "{{ $kafkaServiceName }}-{{ $brokerIndex }}.{{ $.Release.Namespace }}:{{ $ports._1 }}"
       }
       {{- end -}}
-    {{- end }}
+      {{- end -}}
+      {{- else }}
+      ,{
+        "Port": 0,
+        "NodePort": 0,
+        "Service": "{{ $kafkaServiceName }}-{{ $brokerIndex }}.{{ $.Release.Namespace }}:{{ $portType._2 }}"
+      }
+      {{- end -}}
+      {{- end -}}
+      {{- end -}}
     ]
-  tlsEnabled: "{{ .Values.proxy.secureConnectionsEnabled }}"
-  tlsHandshakeTimeoutMs: "10000"
-{{- if .Values.proxy.externalAccessEnabled  }}
-{{- else }}
-  {{- if .Values.proxy.secureConnectionsEnabled }}
-    {{ fail "Configuration error: You have selected 'Secure Connections Only', please also select 'Enable external access' to fully enable this feature." }}
-  {{- end}}
-{{- end }}
 {{ end -}}

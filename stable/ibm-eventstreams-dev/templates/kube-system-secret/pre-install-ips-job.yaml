@@ -16,9 +16,9 @@
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 # Component is 'essential'
 {{ $compName := .sch.chart.components.essential.compName -}}
-{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "function" "setup-secrets")) -}}
 # Name of the new temporary service account
-{{ $serviceAccount := .sch.chart.components.essential.secretCopierSA.name -}}
+{{ $serviceAccount := .sch.chart.components.essential.preInstallSA.name -}}
 {{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount) -}}
 # Name of the new image pull secret in kube-system
 {{ $imagePullSecret := .sch.chart.components.essential.imagePullSecret.name -}}
@@ -27,7 +27,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
   annotations:
@@ -37,7 +37,7 @@ metadata:
     "helm.sh/hook": pre-install
     # We don't delete this if it fails, as the logs may be useful to
     # diagnose a failed install
-    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
     # This needs to happen before all other jobs as they will need access to this
     # image pull secret
     "helm.sh/hook-weight": "3"
@@ -50,13 +50,28 @@ spec:
 {{ $labels | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      securityContext:
+        fsGroup: 1000
       affinity:
 {{- include "customNodeaffinity" . | indent 6 }}
       restartPolicy: Never
       containers:
-        - name: "{{ $name }}"
-          image: ibmcom/k8s-kubectl:v1.8.3
-          imagePullPolicy: IfNotPresent
+        - name: "ips-copier"
+          image: {{ include "eventstreams.image" (list . "eventstreams-kubectl" .Values.global.image.imageTags.kubectlTag "true") | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
           command:
             - sh
             - -c

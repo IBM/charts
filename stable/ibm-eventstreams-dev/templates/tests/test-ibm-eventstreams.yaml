@@ -9,7 +9,7 @@
 #
 ###############################################################################
 # A simple test for validating Helm installs of IBM Event Streams by checking
-#  that we can connect to all expected ports
+# that we can connect to all expected ports
 ###############################################################################
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
 {{- $namePrefix := "service-test" -}}
@@ -29,17 +29,22 @@ metadata:
   labels:
 {{ $labels | indent 4 }}
 spec:
+  {{- if .Values.global.image.pullSecret }}
+  imagePullSecrets:
+    - name: {{ .Values.global.image.pullSecret }}
+  {{- end }}
+  restartPolicy: Never
   containers:
     - name: "helm-test"
-      image: alpine:3.6
+      image: {{ include "eventstreams.image" (list . "alpine" .Values.global.image.imageTags.alpineTag "false") | quote }}
+      imagePullPolicy: {{ .Values.global.image.pullPolicy }}
       command:
         - /bin/sh
         - -c
         - "echo Connecting to Kafka headless service port {{ $kafkaHeadlessName }} 9092; \
           nc -w2 -v {{ $kafkaHeadlessName }} 9092; \
-          echo Connecting to Kafka metrics endpoint http://{{ $kafkaHeadlessName }}:8080/metrics ; \
-          wget http://{{ $kafkaHeadlessName }}:8080/metrics; \
+          echo Connecting to Kafka metrics endpoint http://{{ $kafkaHeadlessName }}:8081/metrics ; \
+          wget http://{{ $kafkaHeadlessName }}:8081/metrics; \
           echo Connecting to ZooKeeper headless service port {{ $zookeeperHeadlessName }} 2181; \
           nc -w2 -v {{ $zookeeperHeadlessName }} 2181; \
           echo Test complete"
-  restartPolicy: Never
