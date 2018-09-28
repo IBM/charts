@@ -101,9 +101,15 @@ collectDiagnosticsData() {
     echo -e "\n"
 
     echo "**********************************************************"
-    echo "GET Persistent Volumes in Services namespace"
+    echo "GET CAM Persistent Volumes"
     echo "**********************************************************"
-    kubectl get persistentvolume
+    kubectl get persistentvolume -l 'type in (cam-terraform, cam-logs, cam-mongo, cam-bpd-appdata)'
+    echo -e "\n"
+
+    echo "**********************************************************"
+    echo "DESCRIBE CAM Persistent Volumes"
+    echo "**********************************************************"
+    kubectl describe persistentvolume -l 'type in (cam-terraform, cam-logs, cam-mongo, cam-bpd-appdata)'
     echo -e "\n"
 
     echo "**********************************************************"
