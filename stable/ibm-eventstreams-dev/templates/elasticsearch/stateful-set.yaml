@@ -1,0 +1,167 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Kubernetes pods that will make up the cluster of Elasticsearch nodes
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{- if .Values.messageIndexing.messageIndexingEnabled }}
+{{ $namePrefix := .sch.chart.components.elasticSearch.statefulSet.name -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $namePrefix) -}}
+{{ $compName := .sch.chart.components.elasticSearch.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# Service Account
+{{ $serviceAccount := .sch.chart.components.elasticSearch.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+{{ $serviceNamePrefix := .sch.chart.components.elasticSearch.service.name -}}
+{{ $serviceName := include "sch.names.fullCompName" (list . $serviceNamePrefix) -}}
+{{ $indexmgrService := .sch.chart.components.indexmgr.service.name -}}
+{{ $indexmgrServiceName := include "sch.names.fullCompName" (list . $indexmgrService) -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  # identify the headless service that will enable access to Elasticsearch nodes
+  serviceName: {{ $serviceName | quote }}
+  # Deployed in parallel to enable faster deployments
+  podManagementPolicy: "Parallel"
+  # number of nodes in the Elasticsearch cluster
+  #  changing this after install may lead to problems with Elasticsearch
+  replicas: 2
+  # Elasticsearch node pods are uniquely identified based on release name
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+{{ include "metering" (list . ) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.global.image.pullSecret }}
+      securityContext:
+        fsGroup: 1001
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      volumes:
+      {{- include "license.accept.ref" . | indent 6 }}
+      affinity:
+      {{- include "customNodeaffinity" . | indent 6 }}
+        # we don't want multiple co-located Elasticsearch nodes
+        #  so this anti-affinity rule should prevent
+        #  nodes with the elastic name being scheduled on
+        #  the same host
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        - {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: elastic
+          image: {{ include "eventstreams.image" (list . "eventstreams-elastic-search" .Values.global.image.imageTags.elasticSearchTag "true") | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
+          resources:
+            #  The regex used to validate these resource limits are more restrictive
+            #  than the syntax that K8S normally allows, because these values are
+            #  also used to define the max heap for the Elastic JVM processes.
+            #  We enforce that the request and limit are equal to the limit, as this
+            #  is optimal for Elastic.
+            {{- if regexMatch "^[0-9]*(Gi|Mi|G|M)$" .Values.messageIndexing.resources.limits.memory }}
+            limits:
+{{ toYaml .Values.messageIndexing.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.messageIndexing.resources.limits | indent 14 }}
+            {{- else }}
+            {{ fail "Configuration error: You have entered an invalid Memory limit for message indexing nodes. Please enter the value in '^[0-9]*(Gi|Mi|G|M)$' format." }}
+            {{- end }}
+          ports:
+            - name: api
+              containerPort: {{ $ports.elasticsearch.api }}
+            - name: publishing
+              containerPort: {{ $ports.elasticsearch.publishing }}
+          livenessProbe:
+            httpGet:
+              path: /_cat/health?v
+              port: {{ $ports.elasticsearch.api }}
+              httpHeaders:
+                - name: Accept
+                  value: '*/*'
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10
+          # We need the Elastic nodes to be able to communicate with each other through the service immidiately,
+          # therefore we only run a simple bash command to see if the container is up before declaring it 'ready'
+          # and allowed Kubernetes to wire it up to the service.
+          # All traffic to the Elastic service will be through the Index Manager, which will carry out
+          # it's own checks before sending any requests. So we don't need to worry about traffic flooding
+          # in once the readiness probe is passed.
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - cd
+            failureThreshold: 2
+            initialDelaySeconds: 180
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 2
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: CLUSTER_NAME
+              value: "{{ .Release.Name }}-cluster"
+            - name: SERVICE_NAME
+              value: "{{ $serviceName }}"
+            - name: PORT
+              value: "{{ $ports.elasticsearch.api }}"
+            - name: HOSTS
+              value: "[\"{{ $statefulSetName }}-0.{{ $serviceName }}\", \"{{ $statefulSetName }}-1.{{ $serviceName }}\"]"
+            - name: JVM_HEAP_INITIAL
+              value: '-Xms{{ .Values.messageIndexing.resources.limits.memory | replace "i" "" }}'
+            - name: JVM_HEAP_MAX
+              value: '-Xmx{{ .Values.messageIndexing.resources.limits.memory | replace "i" "" }}'
+            - name: INDEXMGR_HOSTNAME
+              value: '{{ $indexmgrServiceName }}:{{ $ports.indexmgr.api }}'
+{{- end -}}
+{{- end -}}

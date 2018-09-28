@@ -12,17 +12,22 @@
 ####################################################################################
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
 {{- include "sch.config.init" (list . "ui.sch.chart.config.values") -}}
-{{ $namePrefix := .sch.chart.components.uiproxy.service.name -}}
-{{ $name := include "sch.names.fullCompName" (list . $namePrefix) }}
+# the proxy is using the UI service name as that is what it is from an architectural level
+# i.e. this is the service that is providing access to the UI
+{{- $namePrefix := .sch.chart.components.ui.service.name -}}
+{{- $name := include "sch.names.fullCompName" (list . $namePrefix) }}
 # Component is 'uiproxy' as this makes up part of implementing the UI proxy
 {{ $compName := .sch.chart.components.uiproxy.compName -}}
 {{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
-{{ $deploymentName := .sch.chart.components.ui.deployment.name -}}
+{{ $deploymentName := .sch.chart.components.ui.deployment.name }}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
 spec:
@@ -30,7 +35,7 @@ spec:
   ports:
     - name: "admin-ui-https"
       protocol: TCP
-      port: {{ .sch.config.ui.proxy.port }}
+      port: {{ $ports.ui.proxy }}
   selector:
     release: {{ .Release.Name | quote }}
     serviceSelector: {{ $deploymentName | quote }}

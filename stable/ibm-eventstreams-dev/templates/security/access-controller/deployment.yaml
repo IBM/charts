@@ -1,0 +1,180 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the pod that runs the access controller server
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{- $securityConfig := include "sch.config.init" (list . "security.sch.chart.config.values") -}}
+{{ $namePrefix := .sch.chart.components.security.accesscontroller.deployment.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $id := (include "asDnsLabel" .Release.Name) }}
+{{ $compName := .sch.chart.components.security.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# Service Account
+{{ $serviceAccount := .sch.chart.components.security.accesscontroller.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+# Oauth secret name which is used by the UI
+{{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
+{{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
+# Names of other elements to refer to
+{{ $secret := .sch.chart.components.proxy.secret.name -}}
+{{ $secretName := include "sch.names.fullCompName" (list . $secret) | quote -}}
+# The IAM Secret that contains the IAM Service ID and API Key
+{{ $serviceIDNamePrefix := .sch.chart.components.security.iamSecret.name -}}
+{{ $serviceIDName := include "sch.names.fullCompName" (list . $serviceIDNamePrefix ) -}}
+# ServiceName is used to define the initial part of the service name that we'll register with ICP.
+{{ $serviceName := .sch.chart.components.security.serviceName -}}
+# IAM URL is the internal IAM Token service endpoint.
+{{ $iamURL := .sch.config.security.accesscontroller.iamUrl -}}
+# PDP URL is the internal IAM PDP endpoint.
+{{ $pdpURL := .sch.config.security.accesscontroller.pdpUrl -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  replicas: {{ .sch.config.security.accesscontroller.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+        releaseCandidate: 2018.3.0-RC6
+{{ include "metering" (list . ) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      securityContext:
+        fsGroup: 1000
+      volumes:
+        - name: redis-storage
+          emptyDir: {}
+        - name: public-certs-volume
+          secret:
+            secretName: {{ $secretName }}
+      {{- include "license.accept.ref" . | indent 6 }}
+      affinity:
+      {{- include "customNodeaffinity" . | indent 6 }}
+      containers:
+      - name: redis
+        image: {{ include "eventstreams.image" (list . "redis" .Values.global.image.imageTags.redisTag "false") | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - all
+        volumeMounts:
+          - name: redis-storage
+            mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - /usr/local/bin/redis-cli -h $(hostname) ping
+          failureThreshold: 2
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - /usr/local/bin/redis-cli -h $(hostname) ping
+          failureThreshold: 2
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+      - name: "access-controller"
+        image: {{ include "eventstreams.image" (list . "eventstreams-access-controller" .Values.global.image.imageTags.accessControllerTag "true") | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - all
+        ports:
+          - containerPort: {{ $ports.security.accessController }}
+        readinessProbe:
+          timeoutSeconds: 15
+          periodSeconds: 15
+          initialDelaySeconds: 45
+          httpGet:
+            port: {{ $ports.security.accessController }}
+            path: /v1/alive
+            scheme: HTTPS
+        livenessProbe:
+          timeoutSeconds: 15
+          periodSeconds: 15
+          initialDelaySeconds: 60
+          httpGet:
+            port: {{ $ports.security.accessController }}
+            path: /v1/alive
+            scheme: HTTPS
+        resources:
+          limits:
+{{ toYaml .sch.config.security.accesscontroller.resources.limits | indent 14 }}
+          requests:
+{{ toYaml .sch.config.security.accesscontroller.resources.requests | indent 14 }}
+        env:
+        - name: NAMESPACE
+          value: {{ .Release.Namespace | quote }}
+        - name: CONTROL_CLUSTER_INGRESS_HOST
+          value: ""
+        - name: LISTEN_PORT
+          value: "{{ $ports.security.accessController }}"
+        - name: IAM_URL
+          value: "{{ $iamURL }}:{{$ports.security.iamTokenGeneration}}"
+        - name: PDP_URL
+          value: "{{ $pdpURL }}:{{$ports.security.iamPolicyDecision}}"
+        - name: REDIS_HOSTNAME
+          value: "localhost"
+        - name: TLS_CERT
+          value: /tls/tls.cert
+        - name: TLS_PRIKEY
+          value: /tls/tls.key
+        - name: SERVICE_ID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $serviceIDName }}
+              key: "{{ $serviceName }}-{{ $.Release.Name }}-api-key"
+        - name: PLATFORM
+          value: "es"
+        volumeMounts:
+          - name: public-certs-volume
+            mountPath: /tls
+            readOnly: true
+{{ end }}
