@@ -15,11 +15,23 @@ sch:
   chart:
     appName: "hazelcast"
     components: 
-      hazelcast:
-        name: "hazelcast"
+      imdg:
+        name: "imdg"
     metering:
       productName: "Hazelcast"
       productID: "Hazelcast_310_free_00000"
-      productVersion: "3.10"
+      productVersion: "3.10.5"
 {{- end -}}
 
+{{- define "statefulNames.globals.yaml" -}}
+{{ $ssn := include "sch.names.statefulSetName" (list . .sch.chart.components.imdg.name) }}
+statefulNames:
+  globals:
+    appName: {{ include "sch.names.appName" (list .) }}
+    statefulSetName: {{ $ssn }}
+{{- end -}}
+
+{{- define "statefulNames.globals" -}}
+{{- $v := fromYaml (include "statefulNames.globals.yaml" .) -}}
+{{- $_ := merge . $v -}}
+{{- end -}}

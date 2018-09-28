@@ -113,4 +113,5 @@ spec:
 # kubectl create -f nginx.yaml
 ```
 ## Limitations
-Works on x86 platform
+- Works on x86 platform
+- Only users with privileged podsecuritypolicies can install this chart 
