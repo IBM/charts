@@ -106,11 +106,24 @@ spec:
         - configMapRef:
             name: redis-config
         env:
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbPassword
         - name: DB_URL
           valueFrom:
             secretKeyRef:
-              name: cam-database-secret
-              key: dburl
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbUrl
         - name: CAM_TOKEN
           valueFrom:
             secretKeyRef:
@@ -138,6 +151,23 @@ spec:
           value: "1112"
         - name: BLUEMIX_HOME
           value: /helmuser_common/.bluemix
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+      initContainers:
+      - name: cam-provider-helm-init
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy:  {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh", "-c"]
+        args:
+          - mkdir -p /var/camlog/cam-provider-helm/${POD_NAME} && touch /var/camlog/cam-provider-helm/${POD_NAME}/cam_out.log && touch /var/camlog/cam-provider-helm/${POD_NAME}/cam_err.log && chown -R 1000:1000 /var/camlog/cam-provider-helm;
+        volumeMounts:
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog
+        env:
         - name: POD_NAME
           valueFrom:
             fieldRef:

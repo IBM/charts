@@ -102,11 +102,24 @@ spec:
         - configMapRef:
             name: redis-config
         env:
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbPassword
         - name: DB_URL
           valueFrom:
             secretKeyRef:
-              name: cam-database-secret
-              key: dburl
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbUrl
         - name: APP_CONTEXT
           value: /servicecomposer
         - name: sessionKey
@@ -149,9 +162,19 @@ spec:
             configMapKeyRef:
               name: oauth-client-map
               key: PROXY_IP
-        - name: wlpCallbackUrl
-          value: https://$(ICP_PROXY_IP):30000/auth/liberty/callback
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+      initContainers:
+      - name: cam-service-composer-ui-init
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy:  {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh", "-c"]
+        args:
+          - mkdir -p /var/camlog/cam-service-composer-ui && chown -R 1000:1000 /var/camlog/cam-service-composer-ui;
+        volumeMounts:
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog

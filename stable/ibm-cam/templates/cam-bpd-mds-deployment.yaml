@@ -64,11 +64,24 @@ spec:
           - configMapRef:
               name: common-config
           env:
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: mongoDbPassword
             - name: DB_URL
               valueFrom:
                 secretKeyRef:
-                  name: cam-database-secret
-                  key: dburl
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: mongoDbUrl
             - name: LICENSE
               value: "accept"
             - name: CAM_ENABLED
@@ -77,6 +90,62 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+{{- if .Values.proxy.useProxy }}
+            - name: HTTPS_PROXY
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: httpsProxy          
+            - name: https_proxy
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: httpsProxy  
+            - name: HTTP_PROXY
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: httpProxy  
+            - name: http_proxy
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: httpProxy  
+            - name: NO_PROXY
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: noProxy  
+            - name: no_proxy
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: noProxy  
+{{- end }}
           livenessProbe:
             httpGet:
               path: /
@@ -114,3 +183,15 @@ spec:
       {{- end }}
       {{- end }}
 {{- end }}
+      initContainers:
+      - name: cam-bpd-mds-init
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy:  {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh", "-c"]
+        args:
+          - mkdir -p /var/camlog/cam-bpd-mds && chown -R 1000:1000 /var/camlog/cam-bpd-mds;
+        volumeMounts:
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog

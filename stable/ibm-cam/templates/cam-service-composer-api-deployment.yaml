@@ -54,6 +54,27 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-service-composer-api
       volumes:
+{{- if .Values.global.audit }}
+      - name: shared
+        emptyDir: {}
+      - name: journal
+        hostPath:
+          path: {{ .Values.auditService.config.journalPath }}
+      - name: logrotate
+        configMap:
+          name: audit-config
+          defaultMode: 420
+          items:
+          - key: logrotate
+            path: audit
+      - name: logrotate-conf
+        configMap:
+          name: audit-config
+          defaultMode: 420
+          items:
+          - key: logrotate-conf
+            path: logrotate.conf
+{{- end }}
       - name:  {{ .Values.camLogsPV.name }}
       {{- if .Values.camLogsPV.persistence.enabled }}
         persistentVolumeClaim:
@@ -86,7 +107,7 @@ spec:
           periodSeconds: 20
         readinessProbe:
           httpGet:
-            path: /api/v1/health
+            path: /api/v1/ready
             port: liveness-port
           initialDelaySeconds: 5
           periodSeconds: 20
@@ -96,17 +117,34 @@ spec:
           - name:  {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
             subPath: cam-service-composer-api
+{{- if .Values.global.audit }}
+          - name: shared
+            mountPath: /var/audit
+{{- end }}
         envFrom:
         - configMapRef:
             name: common-config
         - configMapRef:
             name: redis-config
         env:
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbPassword
         - name: DB_URL
           valueFrom:
             secretKeyRef:
-              name: cam-database-secret
-              key: dburl
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbUrl
         - name: CAM_TOKEN
           valueFrom:
             secretKeyRef:
@@ -122,6 +160,62 @@ spec:
             secretKeyRef:
               name: oauth-client-secret
               key: DEFAULT_ADMIN_USER
+{{- if .Values.proxy.useProxy }}
+        - name: HTTPS_PROXY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpsProxy          
+        - name: https_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpsProxy  
+        - name: HTTP_PROXY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpProxy  
+        - name: http_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpProxy  
+        - name: NO_PROXY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: noProxy  
+        - name: no_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: noProxy  
+{{- end }}
         - name: ICP_ENDPOINT
           value: https://$(ICP_MASTER_IP):8443
         - name: ORPHEUS_IDENTITY_API_URL
@@ -134,3 +228,70 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        - name: SCL_MIGRATION_REQUIRED 
+          value: "true"
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SERVICE_NAME
+          value: cam-service-composer-api
+        - name: AUDIT_ENABLED
+          value: "{{ .Values.global.audit }}"
+        - name: AUDIT_LOG_PATH
+          value: /var/audit/cam-service-composer-api-audit.log
+{{- if .Values.global.audit }}
+      - name: cam-service-composer-api-audit
+        image: "{{ .Values.auditService.image.repository }}icp-audit-service:{{ .Values.auditService.image.tag }}"
+        imagePullPolicy: {{ .Values.auditService.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.auditService.resources | indent 10 }}
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        volumeMounts:
+          - name:  {{ .Values.camLogsPV.name }}
+            mountPath: /var/camlog
+            subPath: cam-iaas
+          - name: shared
+            mountPath: "/var/log/audit"
+          - name: journal
+            mountPath: {{ .Values.auditService.config.journalPath }}
+          - name: logrotate
+            mountPath: "/etc/logrotate.d/audit"
+            subPath: audit
+          - name: logrotate-conf
+            mountPath: "/etc/logrotate.conf"            
+            subPath: logrotate.conf
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "service cron status"
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "service cron status"
+          initialDelaySeconds: 5
+          timeoutSeconds: 1 
+          value: "true"
+{{- end }}   
+      initContainers:
+      - name: cam-service-composer-api-init
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy:  {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh", "-c"]
+        args:
+          - mkdir -p /var/camlog/cam-service-composer-api && chown -R 1000:1000 /var/camlog/cam-service-composer-api;
+        volumeMounts:
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog

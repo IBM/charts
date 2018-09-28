@@ -104,11 +104,24 @@ spec:
         - configMapRef:
             name: redis-config
         env:
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbPassword
         - name: DB_URL
           valueFrom:
             secretKeyRef:
-              name: cam-database-secret
-              key: dburl
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbUrl
         - name: ICP_MASTER_IP
           valueFrom:
             configMapKeyRef:
@@ -124,3 +137,15 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+      initContainers:
+      - name: cam-proxy-init
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy:  {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh", "-c"]
+        args:
+          - mkdir -p /var/camlog/cam-proxy && chown -R 1000:1000 /var/camlog/cam-proxy;
+        volumeMounts:
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog

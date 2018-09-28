@@ -54,6 +54,27 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-iaas
       volumes:
+{{- if .Values.global.audit }}
+      - name: shared
+        emptyDir: {}
+      - name: journal
+        hostPath:
+          path: {{ .Values.auditService.config.journalPath }}
+      - name: logrotate
+        configMap:
+          name: audit-config
+          defaultMode: 420
+          items:
+          - key: logrotate
+            path: audit
+      - name: logrotate-conf
+        configMap:
+          name: audit-config
+          defaultMode: 420
+          items:
+          - key: logrotate-conf
+            path: logrotate.conf
+{{- end }}
       - name:  {{ .Values.camLogsPV.name }}
       {{- if .Values.camLogsPV.persistence.enabled }}
         persistentVolumeClaim:
@@ -96,22 +117,53 @@ spec:
           - name:  {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
             subPath: cam-iaas
+{{- if .Values.global.audit }}
+          - name: shared
+            mountPath: /var/audit
+{{- end }}
         envFrom:
         - configMapRef:
             name: common-config
         - configMapRef:
             name: redis-config
         env:
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbPassword
         - name: DB_URL
           valueFrom:
             secretKeyRef:
-              name: cam-database-secret
-              key: dburl
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbUrl
         - name: CIPHER_PWD
           valueFrom:
             secretKeyRef:
-              name: cam-encryption-secret
-              key: password
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: encryptionPassword
+        - name: CIPHER_PWD_NEW
+          valueFrom:
+            secretKeyRef:
+              name: cam-cipher-migration-secret
+              key: newpassword
+        - name: CIPHER_MIGRATION_TIMESTAMP_FILE
+          valueFrom:
+            secretKeyRef:
+              name: cam-cipher-migration-secret
+              key: timestampfile
         - name: CAM_TOKEN
           valueFrom:
             secretKeyRef:
@@ -136,6 +188,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         - name: WLP_CLIENT_ID
           valueFrom:
             secretKeyRef:
@@ -168,13 +224,121 @@ spec:
             secretKeyRef:
               name: oauth-client-secret
               key: DEFAULT_ADMIN_USER
+        - name: AUDIT_ENABLED
+          value: "{{ .Values.global.audit }}"
+        - name: AUDIT_LOG_PATH
+          value: /var/audit/cam-iaas-audit.log
+        - name: SERVICE_NAME
+          value: cam-iaas
 {{- if .Values.proxy.useProxy }}
         - name: HTTPS_PROXY
-          value: {{ .Values.proxy.httpsProxy }}
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpsProxy          
+        - name: https_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpsProxy  
         - name: HTTP_PROXY
-          value: {{ .Values.proxy.httpProxy }}
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpProxy  
+        - name: http_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpProxy  
         - name: NO_PROXY
-          value: "{{ .Values.proxy.noProxy }}"
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: noProxy  
+        - name: no_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: noProxy  
 {{- end }}
         - name: CAM_OFFLINE
           value: "{{ .Values.global.offline }}"
+{{- if .Values.global.audit }}
+      - name: cam-iaas-audit
+        image: "{{ .Values.auditService.image.repository }}icp-audit-service:{{ .Values.auditService.image.tag }}"
+        imagePullPolicy: {{ .Values.auditService.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.auditService.resources | indent 10 }}
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        volumeMounts:
+          - name:  {{ .Values.camLogsPV.name }}
+            mountPath: /var/camlog
+            subPath: cam-iaas
+          - name: shared
+            mountPath: "/var/log/audit"
+          - name: journal
+            mountPath: {{ .Values.auditService.config.journalPath }}
+          - name: logrotate
+            mountPath: "/etc/logrotate.d/audit"
+            subPath: audit
+          - name: logrotate-conf
+            mountPath: "/etc/logrotate.conf"            
+            subPath: logrotate.conf
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "service cron status"
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "service cron status"
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+{{- end }}
+      initContainers:
+      - name: cam-iaas-init
+        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy:  {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 0
+        command: ["/bin/sh", "-c"]
+        args:
+          - mkdir -p /var/camlog/cam-iaas && chown -R 1000:1000 /var/camlog/cam-iaas;
+        volumeMounts:
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog
