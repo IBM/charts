@@ -1,0 +1,53 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+
+{{- $namePrefix := .sch.chart.components.cli.test.name -}}
+{{- $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{- $compName := .sch.chart.components.cli.compName -}}
+{{- $testCompName :=  printf "%s-%s" $compName "test" }}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) }}
+{{- $labels := include "sch.metadata.labels.standard" (list . $testCompName) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $name | quote }}
+  annotations:
+    "helm.sh/hook": test-success
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 4 }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+              - amd64
+  volumes:
+    - name: {{ .Values.volume.name }}
+      persistentVolumeClaim:
+        claimName: {{ .Values.volume.existingClaimName }}
+  {{- if .Values.image.secretName }}
+  imagePullSecrets:
+  - name: {{ .Values.image.secretName }}
+  {{- end }}
+  containers:
+    - name: aspera-cli
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command:
+        - aspera
+        - --version
+      resources:
+        limits:
+          memory: {{ .Values.resources.limits.memory }}
+          cpu: {{ .Values.resources.limits.cpu }}
+        requests:
+          memory: {{ .Values.resources.requests.memory }}
+          cpu: {{ .Values.resources.requests.cpu }}
+      volumeMounts:
+        - mountPath: {{ .Values.volume.mountPath }}
+          name: {{ .Values.volume.name }}
+  restartPolicy: {{ .Values.job.restartPolicy }}

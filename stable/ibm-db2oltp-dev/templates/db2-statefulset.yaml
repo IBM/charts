@@ -33,7 +33,9 @@ spec:
     component: "db2"
 ---
 
-{{- if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
 apiVersion: apps/v1beta2
 {{- else }}
 apiVersion: apps/v1beta1
@@ -130,9 +132,28 @@ spec:
       {{- else }}
         emptyDir: {}
       {{- end }}
-    {{- if .Values.hadr.enabled }}
+      - name: cgvol
+        hostPath:
+          path: /sys/fs/cgroup
+      - name: sys
+        hostPath:
+          path: /proc/sys
+      - name: proc
+        hostPath:
+          path: /proc
       hostIPC: true
-    {{- end }}
+      initContainers:
+        - name: init-db2
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ template "platform" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ['sh','-c','/var/db2_setup/lib/set_kernel_params.sh']
+          volumeMounts:
+          - name: proc
+            mountPath: /host/proc
+            readOnly:  false
+          - name: sys
+            mountPath: /host/proc/sys
+            readOnly: false
       containers:
       - name: {{ template "fullname" . }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ template "platform" . }}"
@@ -176,9 +197,11 @@ spec:
           value: "false"
         - name: HADR_ENABLED
           value: "{{ .Values.hadr.enabled }}"
-        # set liveness probe to determine if container needs to be restarted
-        # - command, http, or tcp
-        # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+        - name: IS_KUBE
+          value: "true"
+         #set liveness probe to determine if container needs to be restarted
+         #- command, http, or tcp
+         #ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
         livenessProbe:
           exec:
             command:
@@ -208,6 +231,9 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+        - mountPath: /sys/fs/cgroup
+          name: cgvol
+          readOnly: true
         - mountPath: /database
         {{- if .Values.hadr.enabled }}
           name: {{ .Values.dataVolume.name | quote }}
@@ -216,12 +242,10 @@ spec:
         {{- end }}
         - mountPath: /hadr
           name: {{ template "hadrstorname" . }}
-
 {{- if .Values.global.image.secretName }}
       imagePullSecrets:
           - name: {{ .Values.global.image.secretName }}
 {{- end }}
-
   volumeClaimTemplates:
   {{- if and (.Values.persistence.enabled) ( .Values.hadr.enabled) (not .Values.dataVolume.existingClaimName) }}
   - metadata:

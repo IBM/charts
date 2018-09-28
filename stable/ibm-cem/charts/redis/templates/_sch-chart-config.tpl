@@ -17,8 +17,8 @@ sch:
 
 {{- define "redis.data" -}}
   metering:
-    productName: "Redis"
-    productID: "-"
+    productName: "Redis HA"
+    productID: "RedisHA_410r0_free_00000"
     productVersion: "{{ .Chart.AppVersion }}"
 {{- end -}}
 

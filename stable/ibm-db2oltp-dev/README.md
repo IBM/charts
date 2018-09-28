@@ -11,10 +11,31 @@ This chart will do the following:
 
 - Deploy Db2 using a [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/). A traditional deployment follows a replica set of 1, while an [HADR](#db2-hadr) deployment follows a replica set of 2.  
 - Create a Db2 Service configured to connect to the available Db2 instance on the configured client port.
+- Provide scripts to create a (or modify existing) namespace and apply either PodSecurityPolicy (for IBM Kubernetes implementations) or Security Context Constraint (for Red Hat OpenShift) to allow privileges needed by the Db2 deployment. 
 
 ## Prerequisites
+
 Some prerequisites can be found under [Release Notes](ReleaseNotes.md) along with what's new.
-### Docker container (Prereq #1) 
+
+### Pod Security Policy (Prereq #1)
+
+- The Db2 chart requires a cluster administrator to apply the provided namespace and PodSecurityPolicy yaml files. The PodSecurityPolicy applies the required privileges to the new namespace where Db2 will be installed. A cluster administrator can run the following to apply the pod security policy. 
+
+- The scripts are located in the chart's `ibm_cloud_pak/pak_extensions/prereqs` subdirectory. Since the chart is already imported into the default catalog, you can choose to clone the https://github.com/IBM/charts/tree/master/stable/ibm-db2oltp-dev repository to get access to the scripts. Once cloned, you can change directory to the `charts/stable/ibm-db2oltp-dev/ibm_cloud_pak/pak_extensions/prereqs` directory or `charts/stable/ibm-db2oltp-dev/ibm_cloud_pak/pak_extensions/prereqs/rhos` (for Red Hat OpenShift) and run the following script:
+
+On IBM Kubernetes platforms, run:
+
+`./createNSandSecurity.sh --namespace <NAMESPACE>`
+
+On Red Hat OpenShift platforms, run:
+
+`./createSCCandNS.sh --namespace <NAMESPACE>`
+
+- If the namespace existed, only the PSP (or SCC for OpenShift) and role bindings will be applied. If the namespace did not exist, a new namespace will be created with the PSP (or SCC for OpenShift) and rolebindings applied.
+
+- Remember to deploy Db2 in the namespace you have created with the respective privileges. This can be done by selecting the associated namespace in the `Target namespace` configuration panel. Or if installing by command line, you may specify `--namespace <namespace>`.
+
+### Docker container (Prereq #2) 
 
 - User must be subscribed to [Db2 Developer-C Editon on Docker Store](https://store.docker.com/images/db2-developer-c-edition) so they can generate a key to access the image.
 - After subscription, visit [Docker Cloud](https://cloud.docker.com/swarm) and in the upper right corner, click on your user ID drop-down menu and select Account Settings. Scroll down and Add API key. 
@@ -24,7 +45,7 @@ Some prerequisites can be found under [Release Notes](ReleaseNotes.md) along wit
   * To patch serviceaccount, run  `kubectl patch serviceaccount default -p ‘{“imagePullSecrets”: [{“name”: “<secretname>”}]}’ --namespace=default`
   * To specify the secret on install, you can enter it into the kube UI in the "Secret Name" box when you Click configure or if using helm CLI, use `--set global.image.secretName=<secretname>` on helm install. 
 
-### Storage (Prereq #2) 
+### Storage (Prereq #3) 
 
 - Persistence method needs to be selected to ensure data is not lost in the event we lose the node running the Db2 application. 
 PersistentVolume needs to be pre-created prior to installing the chart if `Enable persistence for this deployment` is selected and `Use dynamic provisioning for persistent volume` is not. For further details about the default values, see [persistence](#persistence) section.
@@ -109,17 +130,21 @@ spec:
 To install via Helm command line with the release name `my-release` if you do not have the helm repository:
 
 ```bash
-#This will show the repositories
-helm repo list
+# This will show the repositories
+
+helm repo list --tls
 
 # Add the helm repository
+
 helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable/
 
-#This will show all the charts related to the repository
-helm search <repo>
+# This will show all the charts related to the repository
 
-#Finally install the respective chart
-$ helm install --name my-release local/ibm-db2oltp-dev:3.0.0
+helm search <repo> --tls
+
+# Finally install the respective chart
+
+$ helm install --name my-release local/ibm-db2oltp-dev:3.1.0 --tls
 ```
 
 The command deploys ibm-db2oltp-dev on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -127,40 +152,68 @@ The command deploys ibm-db2oltp-dev on the Kubernetes cluster in the default con
 ## Configuration
 
 You may change the default of each parameter using the `--set key=value[,key=value]`.
-I.e `helm install --name my-release --set global.image.secretName=<secretname> local/ibm-db2oltp-dev:3.0.0`
+I.e `helm install --name my-release --set global.image.secretName=<secretname> local/ibm-db2oltp-dev:3.1.0 --tls`
 
 > **Tip**: You can configure the default [values.yaml](values.yaml)
 
 
-The following tables lists the configurable parameters of the ibm-db2oltp-dev chart and their default values when installing via a kube UI from clicking `configure`. They are a wrapper for the real values found in values.yaml
+The following tables lists the configurable parameters of the ibm-db2oltp-dev chart and their default values when installing via a kube UI from clicking `Configure`. They are a wrapper for the real values found in values.yaml
+
+## Container image Configuration
 
 | Parameter                           | Description                                         | Default                                                                         |
 | ----------------------------------- | ----------------------------------------------------| --------------------------------------------------------------------------------|
-| `global.image.secretName`           | Docker Store registry secret                        | `nil` - Enter a generated secret name as explained above or patch default serviceaccount | 
-| `arch`                              | Worker node architecture                            | `nil` - will try to detect it automatically based on the node deploying the chart. Or user can choose either amd64, s390x, or ppc64le | 
-| `imageRepository`                   | Db2 Developer-C Edition image repository            | `store/ibmcorp/db2_developer_c`                                                 |     
-| `imageTag`                          | Db2 Developer-C Edition image tag                   | `11.1.3.3a` - will be suffixed with `-<arch>` once architecture is determined    |
-| `imagePullPolicy`                   | Image pull policy                                   | `IfNotPresent`                                                                  |
+| `global.image.secretName`           | Docker Store registry secret                        | `nil` - Enter a generated secret name as explained above or patch default serviceaccount |
+| `arch`                              | Worker node architecture                            | `nil` - will try to detect it automatically based on the node deploying the chart. Or user can choose either amd64, s390x, or ppc64le |
+| `imageRepository`                   | Db2 Developer-C Edition image repository            | `store/ibmcorp/db2_developer_c`                                                  |
+| `imageTag`                          | Db2 Developer-C Edition image tag                   | `11.1.3.3b` - will be suffixed with `-<arch>` once architecture is determined    |
+
+## Service Configuration
+
+| Parameter                           | Description                                         | Default                                                                         |
+| ----------------------------------- | ----------------------------------------------------| --------------------------------------------------------------------------------|
 | `service.name`                      | The name of the Service                             | `ibm-db2oltp-dev`                                                               |
-| `service.port`                      | TCP port                                            | `50000`                                                                         |
-| `service.tsport`                    | Text search port                                    | `55000`                                                                         |
+| `service.port`                      | TCP port                                            | `50000`, immutable                                                              |
+| `service.tsport`                    | Text search port                                    | `55000`, immutable                                                              |
 | `service.type`                      | k8s service type exposing ports, e.g.`ClusterIP`    | `NodePort`                                                                      |
-| `db2inst.instname`                  | Db2 instance name                                   | `nil` - Default user will be created - db2inst1                                 | 
-| `db2inst.password`                  | Db2 instance password                               | `nil` - A 10 character random generated password. See below for instructions on how to retrieve it.|  
-| `options.databasename`              | Create database with name provided                  | `nil` - No database will be created                                             |  
-| `options.oracleCompatibility`       | Enable compatibility with Oracle                    | `false` - Feature will not be activated. Set to true to enable it.              |       
+
+## Database Specific Configuration
+
+| Parameter                           | Description                                         | Default                                                                         |
+| ----------------------------------- | ----------------------------------------------------| --------------------------------------------------------------------------------|
+| `db2inst.instname`                  | Db2 instance name                                   | `nil` - Default user will be created - db2inst1                                 |
+| `db2inst.password`                  | Db2 instance password                               | `nil` - A 10 character random generated password. See below for instructions on how to retrieve it.|
+| `options.databaseName`              | Create database with name provided                  | `nil` - No database will be created                                             |
+| `options.oracleCompatibility`       | Enable compatibility with Oracle                    | `false` - Feature will not be activated. Set to true to enable it.              |
+| `hadr.enabled`                      | Configure Db2 HADR                                  | `false` - If set to true, Db2 HADR will be configured. Read below for details.  |
+
+## Storage Configuration
+
+### Base Db2 Storage Configuration
+
+| Parameter                           | Description                                         | Default                                                                         |
+| ----------------------------------- | ----------------------------------------------------| --------------------------------------------------------------------------------|
 | `persistence.enabled`               | Enable persistence for this install                 | `true`  - Recommended value. If set to false, Db2 HADR can not be configured.   |
 | `peristence.useDynamicProvisioning` | Use dynamic provisioning for persistent volume      | `false` - Set to true if dynamic provisioning is available on the cluster.      |
-| `hadr.enabled`                      | Configure Db2 HADR                                  | `false` - If set to true, Db2 HADR will be configured. Read below for details.  |
-| `hadr.useDynamicProvisioning`       | Dynamic provisioning for Db2 HADR shared volume     | `false` - Set to true if dynamic provisioning is available on the cluster.      |
 | `dataVolume.name`                   | Name of the Db2 DB storage persistent volume claim  | `data-stor`                                                                     |
 | `dataVolume.existingClaimName`      | Existing volume claim for data-stor                 | `nil` - Only supported in non-HADR scenarios.                                   |
 | `dataVolume.storageClassName`       | Existing storage class name for data-stor           | `nil`                                                                           |
 | `dataVolume.size`                   | Size of the volume claim for data-stor              | `20Gi`                                                                          |
+
+### Db2 HADR feature Storage Configuration
+
+| Parameter                           | Description                                         | Default                                                                         |
+| ----------------------------------- | ----------------------------------------------------| --------------------------------------------------------------------------------|
+| `hadr.useDynamicProvisioning`       | Dynamic provisioning for Db2 HADR shared volume     | `false` - Set to true if dynamic provisioning is available on the cluster.      |
 | `hadrVolume.name`                   | Name of the Db2 HADR persistent volume claim        | `hadr-stor`                                                                     |
 | `hadrVolume.existingClaimName`      | Existing volume claim for hadr-stor                 | `nil`                                                                           |
 | `hadrVolume.storageClassName`       | Existing storage class name for hadr-stor           | `nil`                                                                           |
 | `hadrVolume.size`                   | Size of the volume claim for hadr-stor              | `1Gi`                                                                           |
+
+### Etcd Storage Configuration (when `hadr.enabled=true`)
+
+| Parameter                           | Description                                         | Default                                                                         |
+| ----------------------------------- | ----------------------------------------------------| --------------------------------------------------------------------------------|
 | `etcdVolume.name`                   | Name of the Etcd persistent volume claim            | `etcd-stor`                                                                     |
 | `etcdVolume.storageClassName`       | Existing storage class name for etcd-stor           | `nil`                                                                           |
 | `etcdVolume.size`                   | Size of the volume claim for etcd-stor              | `1Gi`                                                                           |
@@ -175,14 +228,14 @@ The following tables lists the configurable parameters of the ibm-db2oltp-dev ch
 
 In the developerWorks recipe, visit step 4 [here](https://developer.ibm.com/recipes/tutorials/db2-integration-into-ibm-cloud-private/)  `Confirming Db2 Application is Ready`
 
-> **Tip**: List all releases using `helm list`
+> **Tip**: List all releases using `helm list --tls`
 
 ## Uninstalling the Chart
 
 To uninstall/delete the `my-release` statefulset:
 
 ```bash
-$ helm delete my-release
+$ helm delete my-release --tls
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.  If a delete can result in orphaned components include instructions additional commands required for clean-up.  
@@ -261,64 +314,32 @@ Example for specifying an existing PersistentVolumeClaim for the `data-stor` vol
 1. Create the PersistentVolumeClaim
 1. Install the chart
 ```bash
-$ helm install --name my-release --set dataVolume.existingClaimName=PVC_NAME
+$ helm install --name my-release --set dataVolume.existingClaimName=PVC_NAME --tls
 ```
 
 The volume defaults to mount at a subdirectory of the volume instead of the volume root to avoid the volume's hidden directories from interfering with database creation.
 
 
 ## Namespace Limitation
-The default namespace(default) for you to deploy your workloads into will be sufficient. It is automatically configured to use two PodSecurityPolicies default and privileged.
 
-However, if you choose to deploy into another namespace, the namespace user must contain the respective required PodSecurityPolicies.  
-#### NON-HADR deployment
-```
-"spec": {
-    "allowedCapabilities": [
-      "IPC_OWNER",
-      "SYS_RESOURCE",
-      "SYS_NICE"
-    ],
-    "volumes": [
-      "*"
-    ],
-    "hostPorts": [
-      {
-        "min": 1,
-        "max": 65535
-      }
-    ],
-    "seLinux": {
-      "rule": "RunAsAny"
-    },
-    "runAsUser": {
-      "rule": "RunAsAny"
-    },
-    "supplementalGroups": {
-      "rule": "RunAsAny"
-    },
-    "fsGroup": {
-      "rule": "RunAsAny"
-    },
-  }
-  ```
-#### HADR deployment
-- On top of what we have for NON-HADR deployment, we must add to the PodSecurityPolicies
-`"privileged": true,
-"hostIPC": true,
-"hostNetwork": true,
-"allowPrivilegeEscalation": true`
+Since Db2 requires certain Linux capabilities exposed in a namespace, make sure to apply the SCC to the targeted namespace, prior to installing the chart:
 
-More details on deploying privileged containers in a non-default namespace can be found here:  
-[Kubernetes PodSecurityPolicy](https://kubernetes.io/docs/concepts/policy/pod-security-policy/)
+- The scripts are located in the chart's `ibm_cloud_pak/pak_extensions/prereqs` subdirectory. Since the chart is already imported into the default catalog, you can choose to clone the https://github.com/IBM/charts/tree/master/stable/ibm-db2oltp-dev repository to get access to the scripts. Once cloned, you can change directory to the `charts/stable/ibm-db2oltp-dev/ibm_cloud_pak/pak_extensions/prereqs` directory or `charts/stable/ibm-db2oltp-dev/ibm_cloud_pak/pak_extensions/prereqs/rhos` (for Red Hat OpenShift) and run the following script:
 
+On IBM Kubernetes platforms, run:
 
-However, you may run this command  
-`kubectl create rolebinding -n <namespace> rolebindingname --clusterrole=privileged --serviceaccount=<namespace>:default`  
-The above command attaches existing clusterrole `Privileged` to your non-default namespace with serviceaccount default. Note to change default to the name of the serviceaccount in your new namespace if explicitly created.
+`./createNSandSecurity.sh --namespace <NAMESPACE>`
+
+On Red Hat OpenShift platforms, run:
+
+`./createSCCandNS.sh --namespace <NAMESPACE>`
+
+- If the namespace existed, only the PSP (or SCC for OpenShift) and role bindings will be applied. If the namespace did not exist, a new namespace will be created with the PSP (or SCC for OpenShift) and rolebindings applied.
+
+- Remember to deploy Db2 in the namespace you have created with the respective privileges. This can be done by selecting the associated namespace in the `Target namespace` configuration panel. Or if installing by command line, you may specify `--namespace <namespace>`.
+
 
 ## Limitations
-- StatefulSet is a beta resources.
 - We do not want to scale our Db2 StatefulSets. This means we must leave the replica at 1 (itself) if for a single instance deployment and a replica of 2 if for a HADR deployment. If we scale it over 1 or 2, the Db2 instances will reference the same filesystem that consist of the instance, database directory, etc. This will cause Db2 to crash.
 - Only supports storage options that have backends for persistent volume claims.
 - ROLLING UPGRADES FROM PREVIOUS CHART RELEASES ARE NOT SUPPORTED

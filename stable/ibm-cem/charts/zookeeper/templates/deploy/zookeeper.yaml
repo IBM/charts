@@ -6,7 +6,9 @@
 {{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
 {{- $zkconfigTemplateName := include "sch.names.volumeClaimTemplateName" (list . "config" $statefulSetName) -}}
 {{- $zkdataTemplateName := include "sch.names.volumeClaimTemplateName" (list . "data" $statefulSetName) -}}
-{{- if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
 apiVersion: apps/v1beta2
 {{- else }}
 apiVersion: apps/v1beta1
@@ -29,7 +31,7 @@ spec:
       app: {{ include "sch.names.appName" (list .) | quote }}
       release: {{ .Release.Name }}
       heritage: {{ .Release.Service }}
-  {{- if and (.Capabilities.KubeVersion.Major | hasPrefix "1") (.Capabilities.KubeVersion.Minor | hasPrefix "7") }}
+  {{- if semverCompare ">=1.7.0" .Capabilities.KubeVersion.GitVersion }}
   updateStrategy:
     type: RollingUpdate
   {{- end }}

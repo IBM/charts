@@ -6,7 +6,9 @@
 {{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
 {{- $dataTemplateName := include "sch.names.volumeClaimTemplateName" (list . "data" $statefulSetName) -}}
 {{- $backTemplateName := include "sch.names.volumeClaimTemplateName" (list . "back" $statefulSetName) -}}
-{{- if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
 apiVersion: apps/v1beta2
 {{- else }}
 apiVersion: apps/v1beta1
@@ -28,7 +30,7 @@ spec:
       release: {{ .Release.Name }}
       heritage: {{ .Release.Service }}
       app: {{ include "sch.names.appName" (list .) | quote }}
-  {{- if and (.Capabilities.KubeVersion.Major | hasPrefix "1") (.Capabilities.KubeVersion.Minor | hasPrefix "7") }}
+  {{- if semverCompare ">=1.7.0" .Capabilities.KubeVersion.GitVersion }}
   updateStrategy:
     type: RollingUpdate
   {{- end }}
@@ -60,9 +62,25 @@ spec:
                 {{- else }}
                   - {{ template "arch" . }}
                 {{- end }}
+      initContainers:
+        - name: set-volume-permissions
+          image: "{{ trimSuffix "/" .Values.global.image.repository }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c", "mkdir -p /opt/ibm/cassandra/data /opt/ibm/cassandra/logs ; chown -R cassandra:cassandra /opt/ibm/cassandra/data /opt/ibm/cassandra/logs"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: {{ $dataTemplateName }}
+              mountPath: /opt/ibm/cassandra/data
+          {{ if ne .Values.global.persistence.storageClassOption.cassandrabak "none" }}
+            - name: {{ $backTemplateName }}
+              mountPath: /opt/ibm/cassandra/data/backup_tar
+          {{ end }}
+            - name: {{ .Release.Name }}-cassandralogs
+              mountPath: /opt/ibm/cassandra/logs
       containers:
         - name: {{ include "sch.names.fullCompName" (list .) | quote }}
-          image: "{{ .Values.global.image.repository }}/hdm-{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          image: "{{ trimSuffix "/" .Values.global.image.repository }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
 #          dnsPolicy: ClusterFirst
 #          restartPolicy: Always
@@ -139,7 +157,7 @@ spec:
             - name: DEFAULT_KEYSPACE
               value: metricdb
             - name: CASSANDRA_READ_REQUEST_TIMEOUT
-              value: "5000"
+              value: "10000"
             - name: CASSANDRA_WRITE_REQUEST_TIMEOUT
               value: "2000"
             - name: CASSANDRA_BACKUP_SPEED

@@ -1,5 +1,5 @@
 {{- $compName := "sentinel" -}}
-{{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "redis.sch.chart.config.values") -}}
 {{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
 {{- $rootData := fromYaml (include "root.data" .) -}}
 {{- $rootMetering := $rootData.metering -}}
@@ -10,6 +10,11 @@ metadata:
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 100%
+    type: RollingUpdate
   replicas: {{ .Values.replicas.sentinels }}
   selector:
     matchLabels:
@@ -25,6 +30,8 @@ spec:
         name:  {{ $deploymentName }}
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
     spec:
+      securityContext:
+        runAsUser: 100
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -48,8 +55,6 @@ spec:
       serviceAccountName: {{ template "redis-ha.serviceAccountName" . }}
       containers:
       - name: sentinel
-        command: ["/bin/sh"]
-        args: ["-c", "chown redis /etc/redis/sentinel.conf;su -c '/usr/local/bin/redis-launcher.sh' -s /bin/sh redis"]
         image: "{{ .Values.global.image.repository }}/hdm-redis-ha:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote  }}
         resources:

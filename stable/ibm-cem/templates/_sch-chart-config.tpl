@@ -3,7 +3,6 @@ Chart specific config file for SCH (Shared Configurable Helpers)
 _sch-chart-config.tpl is a config file for the chart to specify additional
 values and/or override values defined in the sch/_config.tpl file.
 */ -}}
-
 {{- /*
 "sch.chart.config.values" contains the chart specific values used to override or provide
 additional configuration values used by the Shared Configurable Helpers.
@@ -17,8 +16,8 @@ sch:
 
 {{- define "ibm-cem.data" -}}
   metering:
-    productName: "IBM Cloud Event Management – Private Deployment"
-    productID: "5900-A1M"
+    productName: "{{ .Values.productName }}"
+    productID: "5737-H89"
     productVersion: "{{ .Chart.AppVersion }}"
 {{- end -}}
 
