@@ -1,3 +1,15 @@
+{{/*********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* "Restricted Materials of IBM"
+*
+*  5737-H89, 5737-H64
+*
+* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+*
+* US Government Users Restricted Rights - Use, duplication, or
+* disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+********************************************************* {COPYRIGHT-END} ****/}}
 {{- $compName := "cem-users" -}}
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
 {{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
@@ -5,6 +17,7 @@
 {{- $rootData := fromYaml (include "root.data" .) -}}
 {{- $rootMetering := $rootData.metering -}}
 {{- $configMapName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $serviceAccountName := include "sch.names.fullCompName" (list . $compName) -}}
 apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
@@ -27,8 +40,6 @@ spec:
         origin: helm-cem
       annotations:
         checksum/cemusers-config: {{ include (print $.Template.BasePath "/config/cem-users-config.yaml") . | sha256sum }}
-        checksum/cemusers-cred-secret: {{ include (print $.Template.BasePath "/secrets/cemusers-cred-secret.yaml") . | sha256sum }}
-        checksum/channelservices-cred-secret: {{ include (print $.Template.BasePath "/secrets/channelservices-cred-secret.yaml") . | sha256sum }}
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
 {{ include "ingress-host-alias" . | indent 6 }}
@@ -53,6 +64,13 @@ spec:
                   - {{ template "arch" . }}
                 {{- end }}
       initContainers:
+      - name: create-random-secrets
+        image: "{{ .Values.global.image.repository }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
+        command: ["node"]
+        args: ["create-secrets.js"]
+        env:
+        - name: RELEASE
+          value: '{{ template "releasename" . }}'
       - name: waitforcouchdb
         image: "{{ .Values.global.image.repository }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ template "releasename" . }}-couchdb.{{ .Release.Namespace }}.svc; do echo waiting for couchdb $i;i=$((i+1)); sleep 2; done;"]
@@ -91,7 +109,7 @@ spec:
         - name: INGRESS_PREFIX
           value: '{{ .Values.global.ingress.prefix }}'
         - name: INGRESS_DOMAIN
-          value: '{{ .Values.global.ingress.domain | default .Values.global.proxyIP }}'
+          value: '{{ .Values.global.ingress.domain }}'
         resources:
 {{ include "ibmcemprod.comp.size.data" (list . "cemusers" "resources") | indent 10 }}
         terminationMessagePath: "/dev/termination-log"
@@ -102,7 +120,9 @@ spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
-      securityContext: {}
+      securityContext:
+        runAsUser: 1000
+      serviceAccountName: {{ $serviceAccountName }}
       volumes:
         - name: {{ $cdbConfigTemplateName }}
           configMap:

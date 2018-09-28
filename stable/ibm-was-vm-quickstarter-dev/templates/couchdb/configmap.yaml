@@ -1,0 +1,47 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.couchdb.name }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  init.sh: |
+    #!/bin/sh
+
+    if [ "$1" = "bg" ]; then
+      /bin/sh $0 &
+      exit 0
+    fi
+    
+    while ! curl --output /dev/null --silent --head --fail http://localhost:5984; do
+      echo "Waiting for CouchDB"
+      sleep 1
+    done
+
+    echo "CouchDB is up"
+    
+    curl -X POST -H "Content-Type: application/json" -u $COUCHDB_USER:$COUCHDB_PASSWORD http://127.0.0.1:5984/_cluster_setup -d '{"action": "finish_cluster"}'
+    
+  chart.ini: |
+    [cluster]
+    n=1
+    [daemons]
+    httpsd = {couch_httpd, start_link, [https]}
+    [ssl]
+    port = 6984
+    key_file = /opt/certs/server.key
+    cert_file = /opt/certs/server.crt
+    ciphers = undefined 
+    tls_versions = undefined 
+    secure_renegotiate = undefined 

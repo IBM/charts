@@ -1,0 +1,36 @@
+#---------------------------------------------------------------------
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corporation 2018.
+#
+# US Government Users Restricted Rights - Use, duplication
+# or disclosure restricted by GSA ADP Schedule Contract
+# with IBM Corp.
+#---------------------------------------------------------------------
+
+{{- $hpaEnabled := (include "ibmcemprod.comp.hpa" (list . "integrationcontroller")) -}}
+{{ if eq $hpaEnabled "true" }}
+{{- $compName := "integration-controller" -}}
+{{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- $deploymentName := include "sch.names.fullCompName" (list . $compName) }}
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $deploymentName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-cem
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1beta2
+    kind: Deployment
+    name: {{ $deploymentName }}
+  maxReplicas: 4
+  minReplicas: 1
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      targetAverageUtilization: 80
+{{ end }}

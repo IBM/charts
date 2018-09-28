@@ -1,0 +1,61 @@
+{{- if eq .Values.cronjob.enabled false -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+
+{{- $namePrefix := .sch.chart.components.cli.job.name -}}
+{{- $configMapPrefix := .sch.chart.components.cli.configMap.name -}}
+{{- $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{- $configMapName := include "sch.names.fullCompName" (list . $configMapPrefix ) -}}
+{{- $compName := .sch.chart.components.cli.compName -}}
+{{- $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 4 }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 8 }}
+      volumes:
+        - name: {{ .Values.volume.name }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.volume.existingClaimName }}
+      {{- if .Values.image.secretName }}
+      imagePullSecrets:
+      - name: {{ .Values.image.secretName }}
+      {{- end }}
+      containers:
+        - name: aspera-cli
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            limits:
+              memory: {{ .Values.resources.limits.memory }}
+              cpu: {{ .Values.resources.limits.cpu }}
+            requests:
+              memory: {{ .Values.resources.requests.memory }}
+              cpu: {{ .Values.resources.requests.cpu }}
+          envFrom:
+           - configMapRef:
+               name: {{ $configMapName | quote }}
+           {{- if .Values.cli.passwordSecretName }}
+           - secretRef:
+               name: {{ .Values.cli.passwordSecretName }}
+           {{- end }}
+           {{- if .Values.cli.aoc.secret }}
+           - secretRef:
+               name: {{ .Values.cli.aoc.secret }}
+           {{- end }}
+          volumeMounts:
+            - mountPath: {{ .Values.volume.mountPath }}
+              name: {{ .Values.volume.name }}
+      restartPolicy: {{ .Values.job.restartPolicy }}
+{{- end -}}

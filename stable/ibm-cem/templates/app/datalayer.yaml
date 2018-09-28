@@ -1,3 +1,15 @@
+{{/*********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* "Restricted Materials of IBM"
+*
+*  5737-H89, 5737-H64
+*
+* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+*
+* US Government Users Restricted Rights - Use, duplication, or
+* disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+********************************************************* {COPYRIGHT-END} ****/}}
 {{- $compName := "datalayer" -}}
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
 {{- $statefulSetName := include "sch.names.statefulSetName" (list . $compName) -}}
@@ -6,7 +18,9 @@
 {{- $dlKeystoreTemplateName := include "sch.names.volumeClaimTemplateName" (list . "keystore" $statefulSetName) -}}
 {{- $rootData := fromYaml (include "root.data" .) -}}
 {{- $rootMetering := $rootData.metering -}}
-{{- if .Capabilities.APIVersions.Has "apps/v1beta2" -}}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
 apiVersion: apps/v1beta2
 {{- else -}}
 apiVersion: apps/v1beta1
@@ -27,7 +41,7 @@ spec:
       app: {{ include "sch.names.appName" (list .) | quote }}
       component: {{ $compName | quote }}
       heritage: {{ .Release.Service }}
-{{- if and (.Capabilities.KubeVersion.Major | hasPrefix "1") (.Capabilities.KubeVersion.Minor | hasPrefix "7") }}
+{{- if semverCompare ">=1.7.0" .Capabilities.KubeVersion.GitVersion }}
   updateStrategy:
     type: RollingUpdate
 {{- end }}
@@ -87,7 +101,7 @@ spec:
         - name: BASEURL
           value: '{{ include "cem.services.datalayer" . }}'
         - name: NODE_CONFIG
-          value: '{"cassandra": {"contactPoints": [{{- template "datalayer.contactPoints" . }}],"keyspace": "datalayer","authProvider": { "userid": "cassandra", "password": "cassandra" }},"jobstore": {"directory": "/home/dataapi/jobstore","limit": 5000},"kafka":{"enabled": true,"secured":{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }},"kafka_brokers_sasl":{{ include "cem.services.kafkabrokers.json" . }},"user": "{{ .Values.kafka.client.username }}","password": "{{ .Values.kafka.client.password }}","sslcalocation": "/etc/keystore/ca-cert","sslcertlocation": "/etc/keystore/client.pem","sslkeylocation": "/etc/keystore/client.key","sslkeypassword": "{{ .Values.kafka.ssl.password }}","kafka_admin_url":"{{ include "cem.services.kafkaadmin" . }}","topics":[{"name":"cem-notifications","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidents","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"}]}, "logging": {"useStdout": true}, "maintenance": {"kafkaConcurrencyLimit":  10, "ignoreKafkaSubscriptions": "(AUTOTEST-).*", "kafkacqueuesizekb": 10000}, "consumerName": "{{ $serviceName }}", "edition": {{ if eq .Values.productName "IBM Cloud App Management" }}"appmanagement"{{ else }}"community"{{ end }}}'
+          value: '{"cassandra": {"contactPoints": [{{- template "datalayer.contactPoints" . }}],"keyspace": "datalayer","authProvider": { "userid": "cassandra", "password": "cassandra" }, "watchdogPeriodSeconds": 60},"jobstore": {"directory": "/home/dataapi/jobstore","limit": 5000},"kafka":{"enabled": true,"secured":{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }},"kafka_brokers_sasl":{{ include "cem.services.kafkabrokers.json" . }},"user": "{{ .Values.kafka.client.username }}","password": "{{ .Values.kafka.client.password }}","sslcalocation": "/etc/keystore/ca-cert","sslcertlocation": "/etc/keystore/client.pem","sslkeylocation": "/etc/keystore/client.key","sslkeypassword": "{{ .Values.kafka.ssl.password }}","kafka_admin_url":"{{ include "cem.services.kafkaadmin" . }}","topics":[{"name":"cem-notifications","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidents","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"}]}, "logging": {"useStdout": true}, "maintenance": {"kafkaConcurrencyLimit":  10, "ignoreKafkaSubscriptions": "(AUTOTEST-).*", "kafkacqueuesizekb": 10000}, "consumerName": "{{ $serviceName }}", "edition": {{ if eq .Values.productName "IBM Cloud Event Management Community Edition" }}"community"{{ else }}"standard"{{ end }}}'
         - name: LD_LIBRARY_PATH
           value: '/app/node_modules/node-rdkafka/build/Release'
         - name: SASL_PATH
@@ -139,6 +153,7 @@ spec:
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
       securityContext:
+        runAsUser: 1000
         fsGroup: 1000
       volumes:
 {{- if eq .Values.kafka.ssl.enabled true }}

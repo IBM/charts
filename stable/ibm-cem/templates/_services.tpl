@@ -1,4 +1,16 @@
 {{/*
+********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* "Restricted Materials of IBM"
+*
+*  5737-H89, 5737-H64
+*
+* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+*
+* US Government Users Restricted Rights - Use, duplication, or
+* disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+********************************************************* {COPYRIGHT-END} ****
 There are some exceptions, but the general pattern is that the templates in
 this file define micro-service urls.
 These are used both in the application templates where they set BASEURL, and
@@ -31,7 +43,7 @@ http://{{ include "sch.names.fullCompName" (list . "brokers") }}.{{ .Release.Nam
 
 {{/* The API URL is only used for external reference */}}
 {{ define "cem.services.cemapi" -}}
-https://{{ .Values.global.ingress.domain | default .Values.global.proxyIP }}/{{ .Values.global.ingress.prefix }}api
+https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}api
 {{- end }}
 
 {{ define "cem.services.cemusers" -}}
@@ -84,6 +96,10 @@ http://{{ include "sch.names.fullCompName" (list . "notificationprocessor") }}.{
 http://{{ include "sch.names.fullCompName" (list . "integration-controller") }}.{{ .Release.Namespace }}.svc:6004
 {{- end }}
 
+{{ define "cem.services.regionrelay" -}}
+https://cem-region-relay.opsmgmt.bluemix.net/
+{{- end }}
+
 {{ define "cem.services.metricrest" -}}
 https://ea-api-REGION.opsmgmt.bluemix.net/
 {{- end }}
@@ -133,6 +149,7 @@ Use the ingress rule above for each service attached to ingress.
 {{ include "ingress-rule" (list . "norml" "normalizer" 3901) }}
 {{ include "ingress-rule" (list . "notif" "notificationprocessor" 6008) }}
 {{ include "ingress-rule" (list . "sched" "scheduling-ui" 3191) }}
+{{ include "ingress-rule" (list . "rbarb" "rba-rbs" 3005) }}
 {{- end }}
 {{ define "api-rules" -}}
 {{ include "ingress-rule" (list . "api/eventPolicies" "eventpreprocessor" 3051) }}
@@ -141,6 +158,7 @@ Use the ingress rule above for each service attached to ingress.
 {{ include "ingress-rule" (list . "api/incidentPolicies" "incidentprocessor" 6006) }}
 {{ include "ingress-rule" (list . "api/incidentquery" "incidentprocessor" 6006) }}
 {{ include "ingress-rule" (list . "api/spec/incidentPolicies" "incidentprocessor" 6006) }}
+{{ include "ingress-rule" (list . "api/v1/rba" "rba-rbs" 3005) }}
 {{- end }}
 
 {{/*

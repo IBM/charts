@@ -1,0 +1,37 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.broker.name }}
+{{- $brokerServicePort := .sch.chart.components.broker.servicePort }}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    ingress.kubernetes.io/proxy-body-size: "250m"
+    kubernetes.io/ingress.class: "nginx"
+    ingress.kubernetes.io/affinity: "cookie"
+    ingress.kubernetes.io/session-cookie-name: "route"
+    ingress.kubernetes.io/secure-backends: "true" 
+    ingress.kubernetes.io/session-cookie-hash: "sha1"
+    ingress.kubernetes.io/rewrite-target: "/"
+   
+   
+spec:
+  rules:
+  - host: 
+    http:
+      paths:
+      - path: {{ .Values.broker.ingress.path | quote }}
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+          servicePort: {{ $brokerServicePort }}
