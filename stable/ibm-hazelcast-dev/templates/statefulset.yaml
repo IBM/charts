@@ -1,25 +1,27 @@
-{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
-{{- $compName :=  .sch.chart.components.hazelcast.name -}}
-apiVersion: extensions/v1beta1
-kind: Deployment
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- include "statefulNames.globals" . }}
+apiVersion: apps/v1beta1
+kind: StatefulSet
 metadata:
-  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  name: {{ .statefulNames.globals.statefulSetName | quote }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
 spec:
   selector:
     matchLabels:
       release: "{{ .Release.Name }}"
+  serviceName: {{ .statefulNames.globals.statefulSetName | quote }}
   replicas: {{ .Values.replicaCount }}
   template:
     metadata:
       labels:
-{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
       {{ if .Values.rbac.install }}
-      serviceAccountName: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+      serviceAccountName: {{ .statefulNames.globals.statefulSetName | quote }}
       {{ end }}
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
@@ -46,41 +48,33 @@ spec:
           ports:
             - containerPort: 5701
           livenessProbe:
-            exec:
-              command:
-              - "./liveness.sh"
+            httpGet:
+              path: /hazelcast/health/node-state
+              port: 5701
             initialDelaySeconds: 30
             timeoutSeconds: 5
             periodSeconds: 10
           readinessProbe:
-            exec:
-              command:
-              - "./readiness.sh"
+            httpGet:
+              path: /hazelcast/health/node-state
+              port: 5701
             initialDelaySeconds: 30
             timeoutSeconds: 5
             periodSeconds: 10
           env:
-          - name: HAZELCAST_KUBERNETES_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
-          - name: HAZELCAST_KUBERNETES_SERVICE_NAME
-            value: {{ include "sch.names.fullCompName" (list . $compName) }}
           - name: MIN_HEAP_SIZE
             value: {{ .Values.heap.minHeapSize }}
           - name: MAX_HEAP_SIZE
             value: {{ .Values.heap.maxHeapSize }}
           - name: JAVA_OPTS
-            value: {{ .Values.javaOpts }}
-          - name: HZ_DATA
-            value: /data/hazelcast
+            value: "-Dhazelcast.http.healthcheck.enabled=true -Dhazelcast.config=/data/hazelcast/hazelcast.xml -DserviceName={{ .statefulNames.globals.statefulSetName }} -Dnamespace={{ .Release.Namespace }} {{ .Values.javaOpts }}"
           volumeMounts:
-            - name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+            - name: {{ .statefulNames.globals.statefulSetName | quote }}
               mountPath: /data/hazelcast
           resources:
 {{ toYaml .Values.resources | indent 12 }}
       volumes:
-      - name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+      - name: {{ .statefulNames.globals.statefulSetName | quote }}
         configMap:
-          name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+          name: {{ .statefulNames.globals.statefulSetName | quote }}
           defaultMode: 0744
