@@ -6,6 +6,12 @@ To override any of these values, modify the templates/_sch-chart-config.tpl file
 */ -}}
 {{- define "sch.chart.config.values" -}}
 sch:
+  restrictedNamespaces:
+    - kube-system
+    - kube-public
+    - platform
+    # - default
+
   names:
     fullCompName:
       maxLength: 62
@@ -18,6 +24,17 @@ sch:
     #  consistently as part of the same overall application
     appName: "ibm-es"
 
+    productName:
+      dev: "IBM Event Streams Community Edition"
+      prod: "IBM Event Streams"
+      foundation-prod: "IBM Event Streams Foundation Edition"
+
+    productVersion: 2018.3.0
+
+    # EDITION_START
+    edition: dev
+    # EDITION_END
+
     #
     # Names given to the Kubernetes components that make up Event Streams
     #
@@ -29,9 +46,11 @@ sch:
       essential:
         # component label for all the essential release wide resources
         compName: "essential"
+        networkPolicy: "access-jobs"
+        networkPolicyDefault: "access-default-deny"
         # all of the resources deployed by the secret secretsCopierClusterRole
-        secretCopierSA:
-          name: "secret-copy-sa"
+        preInstallSA:
+          name: "pre-install-sa"
         secretCopierClusterRole:
           name: "secret-copy-cr"
         secretCopierClusterRoleBindingReleaseNamespace:
@@ -43,15 +62,17 @@ sch:
         imagePullSecret:
           name: "secret-copy-secret"
         secretsDeleterSA:
-          name: "secretsdeleter-sa"
+          name: "secrets-deleter-sa"
         secretsDeleterClusterRole:
-          name: "secretsdeleter-cr"
+          name: "secrets-deleter-cr"
         secretsDeleterRoleBindingNamespace:
-          name: "secretsdeleter-crb-ns"
+          name: "secrets-deleter-crb-ns"
         secretsDeleterRoleBindingSystem:
-          name: "secretsdeleter-crb-sys"
+          name: "secrets-deleter-crb-sys"
         secretsDeleterJob:
-          name: "secretsdeleter-job"
+          name: "secrets-deleter-job"
+        certGenJob:
+          name: "cert-gen-job"
 
 
       #
@@ -60,6 +81,7 @@ sch:
       kafka:
         # component label for all the Kafka-related resources
         compName: "kafka"
+        networkPolicy: "kafka-access"
         # all of the resources deployed by the Kafka charts
         statefulSet:
           name: "kafka-sts"
@@ -67,15 +89,52 @@ sch:
           name: "kafka-headless-svc"
         brokerService:
           name: "kafka-broker-svc"
-        configMap:
-          name: "kafka-cm"
+        metricsConfigMap:
+          name: "metrics-cm"
         podManagerRole:
           name: "pod-manager-role"
         podManagerRoleBinding:
           name: "pod-manager-rolebinding"
         serviceAccount:
-          name: "kafka-service-account"
+          name: "kafka-sa"
 
+      #
+      # Components relating to the Kafka metrics proxy
+      #
+      kafkaMetricsProxy:
+        # component label for all the Kafka-related resources
+        compName: "metrics-proxy"
+        # all of the resources deployed by the kafka metrics proxy component
+
+      #
+      # Components relating to the elasticsearch
+      #
+      elasticSearch:
+        # component label for all the Elastic-related resources
+        compName: "elastic"
+        networkPolicy: "elastic-access"
+        # all of the resources deployed by the elastic search component
+        service:
+          name: "elastic-svc"
+        statefulSet:
+          name: "elastic-sts"
+        serviceAccount:
+          name: "elastic-sa"
+
+      #
+      # Components relating to the index manager
+      #
+      indexmgr:
+        # component label for all the Index-manager-related resources
+        compName: "indexmgr"
+        networkPolicy: "indexmgr-access"
+        # all of the resources deployed by the index manager component
+        service:
+          name: "indexmgr-svc"
+        deployment:
+          name: "indexmgr-deploy"
+        serviceAccount:
+          name: "indexmgr-sa"
 
       #
       # Components relating to the ZooKeeper nodes
@@ -83,6 +142,7 @@ sch:
       zookeeper:
         # component label for all the ZooKeeper-related resources
         compName: "zookeeper"
+        networkPolicy: "zookeeper-access"
         # all of the resources deployed by the ZooKeeper charts
         statefulSet:
           name: "zookeeper-sts"
@@ -97,6 +157,7 @@ sch:
       proxy:
         # component label for all the proxy-related resources
         compName: "proxy"
+        networkPolicy: "proxy-access"
         # all of the resources deployed by the proxy charts
         secret:
           name: "proxy-secret"
@@ -107,13 +168,39 @@ sch:
         roleBinding:
           name: "proxy-rolebinding"
         controller:
-          name: "proxy-controller-deploy"
+          name: "proxy-deploy"
         configMap:
           name: "proxy-cm"
-        clusterrole:
-          name: "proxy-clusterrole"
-        clusterroleBinding:
-          name: "proxy-clusterrolebinding"
+        serviceAccount:
+          name: "proxy-sa"
+
+      #
+      # Components relating to the Replicator
+      #
+      replicator:
+        # component label for all the replicator-related resources
+        compName: "replicator"
+        networkPolicy: "replicator-access"
+        # all of the resources deployed by the replicator charts
+        service:
+          name: "replicator-svc"
+        deployment:
+          name: "replicator-deploy"
+        configMap:
+          name: "replicator-cm"
+        secretCreatorJob:
+          name: "replicator-secret-job"
+        secretDeleterJob:
+          name: "replicator-secretdelete-job"
+        credentialsSecret:
+          name: "replicator-secret"
+        serviceAccount:
+          name: "replicator-sa"
+        rest:
+          role:
+            name: "replicator-rest-role"
+          roleBinding:
+            name: "replicator-rest-rolebinding"
 
       #
       # Components relating to the Admin REST API
@@ -121,11 +208,20 @@ sch:
       rest:
         # component label for all the REST API-related resources
         compName: "rest"
+        networkPolicy: "rest-access"
         # all of the resources deployed by the REST API charts
         service:
           name: "rest-svc"
         deployment:
           name: "rest-deploy"
+        configMap:
+          name: "rest-cm"
+        serviceAccount:
+          name: "rest-sa"
+        roles:
+          name: "rest-role"
+        roleBindings:
+          name: "rest-rolebinding"
 
       #
       # Components relating to hosting the Admin REST API proxy
@@ -136,8 +232,6 @@ sch:
         # all of the resources deployed by the rest-proxy charts
         service:
           name: "rest-proxy-svc"
-        configMap:
-          name: "rest-proxy-cm"
 
       #
       # Components relating to hosting the admin UI
@@ -145,6 +239,7 @@ sch:
       ui:
         # component label for all the UI-related resources
         compName: "ui"
+        networkPolicy: "ui-access"
         # all of the resources deployed by the UI charts
         service:
           name: "ui-svc"
@@ -158,37 +253,50 @@ sch:
           name: "ui-oauth2-client-reg"
         oauthSecret:
           name: "oauth-secret"
-
+        serviceAccount:
+          name: "ui-sa"
       #
       # Components relating to hosting the admin ui-proxy
       #
       uiproxy:
         # component label for all the ui-proxy-related resources
         compName: "uiproxy"
-        # all of the resources deployed by the ui-proxy charts
-        service:
-          name: "admin-ui-proxy-svc"
-        configMap:
-          name: "ui-proxy-cm"
 
+      #
+      # Components relating to ICP IAM Security
+      #
+      security:
+        # component label for all the ICP IAM related resources
+        compName: "security"
+        networkPolicy: "security-access"
+        # service label for auto-generation of service ID
+        serviceName: "eventstreams"
+        # secret that is used to hold the auto-generated service id and api key
+        iamSecret:
+          name: "iam-secret"
+        roleMappings:
+          name: "role-mappings"
+        serviceAccount:
+            name: "security-sa"
+        accesscontroller:
+          service:
+            name: "access-controller-svc"
+          deployment:
+            name: "access-controller-deploy"
+          serviceAccount:
+            name: "access-controller-sa"
 
+      #
+      # Components relating to Telemetry
+      #
+      telemetry:
+        # component label for all the Telemetry related resources
+        compName: "telemetry"
+        networkPolicy: "telemetry-access"
+        # name for post-install hook
+        job:
+          name: "telemetry-hook"
+        serviceAccount:
+          name: "telemetry-sa"
 
-    # Images saved here in Source Control should be Master Images
-    # DOCKER_IMAGE_TAGS_START
-    images:
-      kafkaTag: 2018-05-21-14.33.23-26ab2b84fa4a89fd50ba7fe4e899a3371fa0aff5
-      metricsReporterTag: 2018-05-17-20.03.37-d2917ebc332813573c59e61fab3d708855d172ad
-      zookeeperTag: 2018-05-17-20.19.48-0e3629c9a1664a69d250e32ae06221e85e2ce3b2
-      proxyTag: 2018-05-21-14.20.25-ffbc3a4b0567a01c539ed159752b31d23888ecdc
-      uiTag: 2018-06-25-09.46.26-7bdce095e70786dd026b27a1fb242a040145aa62
-      restTag: 2018-06-25-09.46.33-c3c00c0a6ebee3d2da638ea0fed8fdca2757e238
-      oauthTag: 2018-05-24-14.15.58-ceecba4b212262b7fd6afa1a05ff05c267529e1c
-      codegenTag: 2018-06-11-09.25.30-55eb1b9619e5b2d6d0457babed402e2ab4959962
-    # DOCKER_IMAGE_TAGS_END
-
-
-    metering:
-      productName: IBM Event Streams
-      productID: IBMEventStreamsTechPreview
-      productVersion: 0.0.1
 {{- end -}}

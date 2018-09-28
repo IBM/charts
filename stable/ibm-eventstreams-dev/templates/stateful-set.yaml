@@ -11,8 +11,9 @@
 # Defines the Kubernetes pods that will make up the cluster of Kafka brokers
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
+{{ $zookeeperConfig := include "sch.config.init" (list . "zookeeper.sch.chart.config.values" ) -}}
+{{ $securityConfig := include "sch.config.init" (list . "security.sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.kafka.statefulSet.name -}}
-{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 {{ $statefulSetName := include "sch.names.statefulSetName" (list . $namePrefix) -}}
 # Component is 'kafka' as this makes up part of implementing the Kafka cluster
 {{ $compName := .sch.chart.components.kafka.compName -}}
@@ -24,28 +25,60 @@
 # Services allowing access to individual ZooKeeper nodes - there will be one of these for each node
 {{ $zookeeperFixedIPService := .sch.chart.components.zookeeper.fixed.name -}}
 {{ $zookeeperFixedIPServiceName := include "sch.names.fullCompName" (list . $zookeeperFixedIPService) -}}
+# Name of ZooKeeper headless service
+{{ $zookeeperHeadlessService := .sch.chart.components.zookeeper.headless.name -}}
+{{ $zookeeperHeadlessServiceName := include "sch.names.fullCompName" (list . $zookeeperHeadlessService ) -}}
+# number of ZooKeeper nodes in the cluster
+{{ $zookeeperReplicas := int .sch.config.zookeeper.replicas -}}
 # Config map that identifies the metrics that should be pushed to Prometheus
-{{ $kafkaMetricsConfigMap := .sch.chart.components.kafka.configMap.name -}}
+{{ $kafkaMetricsConfigMap := .sch.chart.components.kafka.metricsConfigMap.name -}}
 {{ $kafkaMetricsConfigMapName := include "sch.names.fullCompName" (list . $kafkaMetricsConfigMap) | quote -}}
 # Service Account to grant Kubernetes access
 {{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
 {{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
-apiVersion: apps/v1beta1
+# Kafka ports are defined in a helper template
+{{ $kafkaconfig := include "sch.config.init" (list . "kafka.listeners.sch.chart.config.values") -}}
+{{ $kafkaListeners := .sch.config.kafka.listeners -}}
+{{ $kafkaProtocols := .sch.config.kafka.protocols -}}
+{{ $kafkaAdvertisedListeners := .sch.config.kafka.internalAdvertisedListeners -}}
+# Index manager service name required by kafka-metrics-proxy
+{{ $indexmgrService := .sch.chart.components.indexmgr.service.name -}}
+{{ $indexmgrServiceName := include "sch.names.fullCompName" (list . $indexmgrService) -}}
+# Elastic search service name required by kafka-metrics-proxy
+{{ $elasticSearchService := .sch.chart.components.elasticSearch.service.name -}}
+{{ $elasticSearchServiceName := include "sch.names.fullCompName" (list . $elasticSearchService) -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+# Oauth secret name which is used to get the cluster name
+{{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
+{{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
+# IAM Secret name containing the API Key
+{{ $iamSecret := .sch.chart.components.security.iamSecret.name -}}
+{{ $iamSecretName := include "sch.names.fullCompName" (list . $iamSecret ) -}}
+# Eventstreams IAM Service Name
+{{ $iamServiceName := .sch.chart.components.security.serviceName -}}
+# Access controller service that we need to connect to do IAM Authorisations
+{{ $accessControllerService := .sch.chart.components.security.accesscontroller.service.name -}}
+{{ $accessControllerServiceName := include "sch.names.fullCompName" (list . $accessControllerService) -}}
+apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ $statefulSetName | quote }}
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
-  annotations:
-    helm.sh/created: {{ .Release.Time.Seconds | quote }}
 spec:
   # identify the headless service that will enable access to these pods
   serviceName: {{ include "sch.names.fullCompName" (list . $serviceName) | quote }}
   # Kafka pods are deployed in parallel to enable faster deployments
   podManagementPolicy: "Parallel"
   # the number of brokers in the kafka cluster
+  {{- if regexMatch "(^[3-9]+[0-9]*$)|(^[1-9]+[0-9]+$)" (.Values.kafka.brokers | toString) }}
   replicas: {{ .Values.kafka.brokers }}
+  {{- else }}
+  {{ fail "Configuration error: Minimum of 3 Kafka brokers required." }}
+  {{- end }}
   # Kafka broker pods are uniquely identified based on the release name
   selector:
     matchLabels:
@@ -66,19 +99,24 @@ spec:
       {{- if regexMatch "-$" .Release.Name }}
       {{ fail "Configuration error: Format of release name is invalid." }}
       {{- end }}
-      namespace: {{ .Release.Namespace | quote }}
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
       labels:
 {{ $labels | indent 8 }}
+        configMapRevision: "default"
       annotations:
         prometheus.io/scrape: 'true'
-        prometheus.io/port: '8080'
-        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        prometheus.io/port: '{{ $ports.prometheus.collectorKafka }}'
+{{ include "metering" (list . "kafka") | indent 8 }}
     spec:
+      # # Hostname is kafka, used for internal pod communication
+      # hostname: kafka
       serviceAccountName: {{ $serviceAccountName | quote }}
       {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      securityContext:
+{{ include "fsGroupGid" (list . ) | indent 8 }}
       affinity:
       {{- include "customNodeaffinity" . | indent 6 }}
         # we don't want multiple co-located Kafka nodes
@@ -118,126 +156,254 @@ spec:
                         values:
                           -  {{ $zookeeperName }}
                  topologyKey: "kubernetes.io/hostname"
-      # Kafka pods are made up of two containers
+      # Kafka pods are made up of four containers
       #  1) Kafka broker
-      #  2) Metrics reporter that submits metrics from the Kafka broker to Prometheus
+      #  2) Metrics reporter that submits metrics from the Kafka broker to Prometheus
+      #  3) Kafka metrics proxy, an interceptor that reads kafka protocol and pipes out metadata to elasticsearch
+      #  4) Healthcheck
       containers:
         #
         # Kafka broker pods
         - name: kafka
-          {{- if .Values.global.image.repository }}
-          image: '{{ .Values.global.image.repository }}/eventstreams-kafka:{{ .sch.chart.images.kafkaTag }}'
-          {{- else }}
-          {{ fail "Configuration error: Please specify an image repository in global.image.repository." }}
-          {{- end }}
+          image: {{ include "eventstreams.image" (list . "eventstreams-kafka" .Values.global.image.imageTags.kafkaTag "true") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop:
+              - all
           resources:
-            # The regex used to validate these resource limits are more restrictive
-            #  than the syntax that K8S normally allows, because these values are
-            #  also used to define the max heap for Kafka JVM processes.
             limits:
-            {{- if regexMatch "^[0-9]*(Gi|Mi|G|M)$" .Values.kafka.resources.limits.memory }}
 {{ toYaml .Values.kafka.resources.limits | indent 14 }}
-            {{- else }}
-            {{ fail "Configuration error: You have entered an invalid Memory limit for Kafka brokers. Please enter the value in '^[0-9]*(Gi|Mi|G|M)$' format." }}
-            {{- end }}
             requests:
-            {{- if regexMatch "^[0-9]*(Gi|Mi|G|M)$" .Values.kafka.resources.requests.memory }}
 {{ toYaml .Values.kafka.resources.requests | indent 14 }}
-            {{- else }}
-            {{ fail "Configuration error: You have entered an invalid Memory request for Kafka brokers. Please enter the value in '^[0-9]*(Gi|Mi|G|M)$' format." }}
-            {{- end }}
           ports:
-            - containerPort: 9092
-              name: client-port
-            - containerPort: 9093
-              name: external-port
+            - containerPort: {{ $ports.kafka.internalKafka }}
+              name: "kafka"
+            - containerPort: {{ $ports.kafka.externalSecure }}
+              name: "ext-secure"
+            - containerPort: {{ $ports.kafka.internalEventStreamsSecure }}
+              name: "es-secure"
           readinessProbe:
-            tcpSocket:
-              port: 9092
-            initialDelaySeconds: 15
+            httpGet:
+              port: {{ $ports.kafka.healthcheck }}
+              path: /readiness
+            initialDelaySeconds: 120
             periodSeconds: 15
-            failureThreshold: 100
+            failureThreshold: 1
           livenessProbe:
-            tcpSocket:
-              port: 9092
-            initialDelaySeconds: 15
+            httpGet:
+              port: {{ $ports.kafka.healthcheck }}
+              path: /liveness
+            initialDelaySeconds: 360
             periodSeconds: 15
-            failureThreshold: 10
+            failureThreshold: 3
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
             - name: ZK_FIXED_IP_NAME
               value: {{ $zookeeperFixedIPServiceName }}
             - name: NAMESPACE
               value: {{ .Release.Namespace | quote }}
+            - name: RELEASE
+              value: {{ .Release.Name | quote }}
+            - name: "CLUSTER_NAME"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterName"
+            - name: "ES_API_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ $iamSecretName }}"
+                  key: "{{ $iamServiceName }}-{{ $.Release.Name }}-api-key"
             - name: KAFKA_HEAP_OPTS
-              value: '-Xmx{{ .Values.kafka.resources.requests.memory | replace "i" "" }} -Xms{{ .Values.kafka.resources.requests.memory | replace "i" "" }}'
+{{- if regexMatch "^[1-9][0-9]*[mg]$" .Values.kafka.jvmHeapSize }}
+              value: "-Xmx{{ .Values.kafka.jvmHeapSize }} -Xms{{ .Values.kafka.jvmHeapSize }} {{ .Values.kafka.heapOpts }}"
+{{- else }}
+{{ fail "Configuration error: You have entered an invalid JVM heap limit for Kafka brokers. Please enter the value in '^[1-9][0-9]*[mg]$' format." }}
+{{- end }}
             - name: KAFKA_LISTENERS
-              value: "INTERNAL://:9092,EXTERNAL://:9093"
-            - name: ADVERTISED_LISTENERS
-              value: "INTERNAL://:9092"
+              value: {{ $kafkaListeners }}
             - name: LISTENER_SECURITY_PROTOCOL_MAP
-              value: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
-            - name: AUTO_CREATE_TOPICS_ENABLE
-              value: {{ .Values.kafka.autoCreateTopicsEnable | quote }}
-            - name: DELETE_TOPIC_ENABLE
-              value: {{ .Values.kafka.deleteTopicEnable | quote }}
-            - name: COMPRESSION_TYPE
-              value: {{ .Values.kafka.compressionType | quote }}
-            - name: OFFSETS_TOPIC_REPLICATION_FACTOR
-            {{- if gt (int .Values.kafka.offsetsTopicReplicationFactor) (int .Values.kafka.brokers) }}
-            {{ fail "Configuration error: The value you provided for offsetsTopicReplicationFactor in the Apache Kafka section is too large. It must not be greater than the number of brokers in your Kafka cluster." }}
-            {{- else }}
-              value: {{ int .Values.kafka.offsetsTopicReplicationFactor | quote }}
-            {{- end }}
-            - name: MIN_INSYNC_REPLICAS
-            {{- if gt (int .Values.kafka.minInsyncReplicas) (int .Values.kafka.brokers) }}
-            {{ fail "Configuration error: The value you provided for minInsyncReplicas in the Apache Kafka section is too large. It must not be greater than the number of brokers in your Kafka cluster." }}
-            {{- else }}
-              value: {{ int .Values.kafka.minInsyncReplicas | quote }}
-            {{- end }}
-          {{- if .Values.persistence.enabled }}
+              value: {{ $kafkaProtocols }}
+            - name: ACCESS_CONTROLLER_HOSTNAME
+              value: {{ $accessControllerServiceName }}
+            - name: ACCESS_CONTROLLER_PORT
+              value: {{ $ports.security.accessController | quote }}
+            - name: ADVERTISED_LISTENERS
+              value: {{ $kafkaAdvertisedListeners }}
+            - name: INTER_BROKER_PROTOCOL_VERSION
+              value: {{ .Values.kafka.interBrokerProtocolVersion | quote }}
+            - name: LOG_MESSAGE_FORMAT_VERSION
+              value: {{ .Values.kafka.logMessageFormatVersion | quote }}
+            - name: BROKER_LOGGING_LEVEL
+              value: {{ .Values.kafka.brokerLoggingLevel | quote }}
           volumeMounts:
+          {{- if .Values.kafka.configMapName }}
+            - name: cluster-config-volume
+              mountPath: /opt/cluster-configmap
+              readOnly: true
+          {{- end }}
+          {{- if .Values.persistence.enabled }}
             - name: {{ .Values.persistence.dataPVC.name }}
+              mountPath: /var/data
+          {{- else }}
+            - name: "tempdir"
               mountPath: /var/data
           {{- end }}
         #
-        # Metrics reporter sidecars - receives Kafka metrics and pushes to Prometheus
+        # Metrics reporter sidecar - receives Kafka metrics and pushes to Prometheus
         - name: metrics-reporter
+          image: {{ include "eventstreams.image" (list . "eventstreams-kafka-metrics-reporter" .Values.global.image.imageTags.metricsReporterTag "true") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
-          {{- if .Values.global.image.repository }}
-          image: '{{ .Values.global.image.repository }}/eventstreams-kafka-metrics-reporter:{{ .sch.chart.images.metricsReporterTag }}'
-          {{- else }}
-          {{ fail "Configuration error: Please specify an image repository in global.image.repository." }}
-          {{- end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
+          resources:
+            limits:
+{{ toYaml .Values.kafka.metricsReporterResources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.kafka.metricsReporterResources.requests | indent 14 }}
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
             - name: NAMESPACE
               value: {{ $.Release.Namespace }}
+            - name: METRICS_PORT
+              value: "{{ $ports.kafka.metrics }}"
+            - name: IBM_JAVA_OPTIONS
+{{- if regexMatch "^[1-9][0-9]*[mg]$" .Values.kafka.metricsReporterJvmHeapSize }}
+              value: "-Xmx{{ .Values.kafka.metricsReporterJvmHeapSize }} -Xms{{ .Values.kafka.metricsReporterJvmHeapSize }}"
+{{- else }}
+{{ fail "Configuration error: You have entered an invalid JVM heap limit for metrics reporters. Please enter the value in '^[1-9][0-9]*[mg]$' format." }}
+{{- end }}
           ports:
-            - containerPort: 8080
+            - containerPort: {{ $ports.kafka.metrics }}
               name: metrics-port
           readinessProbe:
-            timeoutSeconds: 15
+            timeoutSeconds: 30
             periodSeconds: 30
-            initialDelaySeconds: 15
+            initialDelaySeconds: 90
+            failureThreshold: 100
             httpGet:
-              port: 8080
+              port: {{ $ports.kafka.metrics }}
               path: /metrics
           livenessProbe:
-            timeoutSeconds: 15
+            timeoutSeconds: 30
             periodSeconds: 30
-            initialDelaySeconds: 15
-            httpGet:
-              port: 8080
-              path: /metrics
+            initialDelaySeconds: 120
+            failureThreshold: 100
+            tcpSocket:
+              port: {{ $ports.kafka.metrics }}
           volumeMounts:
-            - name: config-volume
+            - name: metrics-config-volume
               mountPath: /etc/kafka-metrics-reporter
+        #
+        # Metrics proxy sidecar - interprets Kafka traffic metrics from the protocol and pushes to the index manager
+        - name: metrics-proxy
+          image: {{ include "eventstreams.image" (list . "eventstreams-kafka-metrics-proxy" .Values.global.image.imageTags.kafkaMetricsProxyTag "true") | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ES_PROXY_CONFIG
+              value: |-
+                {
+                  "routes": "[{\"port\":{{ $ports.kafka.externalProxySecure }}, \"service\": \"localhost:{{ $ports.kafka.externalSecure }}\"}, {\"port\":{{ $ports.kafka.internalEventStreamsSecureIntercept }}, \"service\": \"localhost:{{ $ports.kafka.internalEventStreamsSecure }}\"}]",
+                  "tlsEnabled": "false",
+                  "updateURL": "http://{{ $indexmgrServiceName }}:{{ $ports.indexmgr.metrics }}/update",
+                  "deletionURL": "http://{{ $indexmgrServiceName }}:{{ $ports.indexmgr.metrics }}/topicDelete",
+                  "connectionTimeoutMs": "3600000",
+                  "traceLevel": "0",
+                  "logFormat": "json"
+                }
+          ports:
+            - containerPort: {{ $ports.kafka.externalProxySecure }}
+              name: external
+            - containerPort: {{ $ports.kafka.internalEventStreamsSecureIntercept }}
+              name: internal
+            - containerPort: {{ $ports.proxy.health }}
+              name: proxy-health
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: "/live"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+        #
+        # Healthcheck container
+        - name: healthcheck
+          image: {{ include "eventstreams.image" (list . "eventstreams-healthcheck" .Values.global.image.imageTags.healthcheckTag "true") | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
+          ports:
+            - containerPort: {{ $ports.kafka.healthcheck }}
+              name: hc-port
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: ZOOKEEPER_CONNECT
+              value: '{{ range $index, $_ := until $zookeeperReplicas }}{{if $index}},{{end}}{{ $zookeeperFixedIPServiceName }}-{{ $index }}:2181{{ end }}'
+          readinessProbe:
+            httpGet:
+              port: {{ $ports.kafka.healthcheck }}
+              path: /healthz
+            initialDelaySeconds: 150
+            periodSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              port: {{ $ports.kafka.healthcheck }}
+              path: /healthz
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            failureThreshold: 3
       volumes:
-        - name: config-volume
+        - name: metrics-config-volume
           configMap:
             name: {{ $kafkaMetricsConfigMapName }}
+        {{- if .Values.kafka.configMapName }}
+        - name: cluster-config-volume
+          configMap:
+            name: {{ .Values.kafka.configMapName }}
+        {{- end }}
+        {{ if .Values.persistence.enabled -}}
+        {{ else }}
+        - name: "tempdir"
+          emptyDir: {}
+        {{ end }}
   {{ if .Values.persistence.enabled -}}
   volumeClaimTemplates:
     - metadata:

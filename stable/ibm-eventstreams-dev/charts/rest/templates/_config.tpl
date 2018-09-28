@@ -20,16 +20,6 @@ sch:
       # Number of replicas for the REST API server
       replicas: 1
 
-      ports:
-        # Port number for the API on individual REST API pods
-        targetPort: 9080
-        # Port number that the Service uses to expose the REST API in the cluster
-        port: 9080
-
-      proxy:
-        # Port number that the Service uses to expose the proxy in the cluster
-        port: 32000
-
     codegen:
 
       resources:
@@ -39,7 +29,5 @@ sch:
         requests:
           cpu: 200m
           memory: 300Mi
-
-      port: 3000
 
 {{- end -}}

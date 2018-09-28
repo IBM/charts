@@ -7,8 +7,4 @@
               operator: In
               values:
                 - amd64
-            - key: beta.kubernetes.io/os
-              operator: In
-              values:
-                - linux
 {{- end }}

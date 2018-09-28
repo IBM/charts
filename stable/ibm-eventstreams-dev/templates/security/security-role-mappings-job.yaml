@@ -1,0 +1,88 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Runs a container that registers the IBM Event Streams Security URL
+# security endpoints to Role mappings
+###############################################################################
+{{ $namePrefix := .sch.chart.components.security.roleMappings.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'security'
+{{ $compName := .sch.chart.components.security.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# Service Account
+{{ $serviceAccount := .sch.chart.components.security.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+# IAM Secret name containing the API Key
+{{ $securityCompSecretName := .sch.chart.components.security.iamSecret.name -}}
+{{ $iamSecretName := include "sch.names.fullCompName" (list . $securityCompSecretName ) -}}
+# Eventstreams IAM Service Name
+{{ $iamServiceName := .sch.chart.components.security.serviceName -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "5"
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 10
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      securityContext:
+        fsGroup: 1000
+      affinity:
+{{- include "customNodeaffinity" . | indent 6 }}
+      restartPolicy: Never
+      containers:
+        - name: "security-role-mapping"
+          image: {{ include "eventstreams.image" (list . "eventstreams-role-mappings" .Values.global.image.imageTags.roleMappingsTag "true") | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - all
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: "NAMESPACE"
+              value: {{ .Release.Namespace | quote }}
+            - name: "RELEASE"
+              value: {{ .Release.Name | quote }}
+            - name: "CHART_NAME"
+              value: {{ .Chart.Name | quote }}
+            - name: "IAM_API_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ $iamSecretName }}"
+                  key: "{{ $iamServiceName }}-{{ $.Release.Name }}-api-key"
+            - name: "ES_SERVICE_ID"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ $iamSecretName }}"
+                  key: "{{ $iamServiceName }}-{{ $.Release.Name }}-service-id"
+
