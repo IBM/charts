@@ -52,7 +52,7 @@ If the etcdcluster being used is a secured ETCD (SSL/TLS) then please follow ins
 
 Example of using the helm CLI to install the chart:
 ```
-helm install --debug --name my-release --set etcdEndPoint=etcd:http://192.168.70.90:2379,clusterName=$(uuid) ./helm/charts/portworx/
+helm install --debug --name my-release --set etcdEndPoint=etcd:http://192.168.70.90:2379,clusterName=$(uuidgen) ./helm/charts/portworx/
 ```
 
 ## Basic troubleshooting
@@ -60,7 +60,7 @@ helm install --debug --name my-release --set etcdEndPoint=etcd:http://192.168.70
 #### Helm install errors with "no available release name found"
 
 ```
-helm install --dry-run --debug --set etcdEndPoint=etcd:http://192.168.70.90:2379,clusterName=$(uuid) ./helm/charts/px/
+helm install --dry-run --debug --set etcdEndPoint=etcd:http://192.168.70.90:2379,clusterName=$(uuidgen) ./helm/charts/px/
 [debug] Created tunnel using local port: '37304'
 [debug] SERVER: "127.0.0.1:37304"
 [debug] Original chart version: ""
@@ -80,7 +80,7 @@ You can verify the tiller logs
 #### Helm install errors with  "Job failed: BackoffLimitExceeded"
 
 ```
-helm install --debug --set dataInterface=eth1,managementInterface=eth1,etcdEndPoint=etcd:http://192.168.70.179:2379,clusterName=$(uuid) ./helm/charts/px/
+helm install --debug --set dataInterface=eth1,managementInterface=eth1,etcdEndPoint=etcd:http://192.168.70.179:2379,clusterName=$(uuidgen) ./helm/charts/px/
 [debug] Created tunnel using local port: '36389'
 
 [debug] SERVER: "127.0.0.1:36389"
@@ -110,7 +110,7 @@ Ensure the correct etcd URL is set as a parameter to the `helm install` command.
 #### Helm install errors with "Job failed: Deadline exceeded"
 
 ```
-helm install --debug --set dataInterface=eth1,managementInterface=eth1,etcdEndPoint=etcd:http://192.168.20.290:2379,clusterName=$(uuid) ./charts/px/
+helm install --debug --set dataInterface=eth1,managementInterface=eth1,etcdEndPoint=etcd:http://192.168.20.290:2379,clusterName=$(uuidgen) ./charts/px/
 [debug] Created tunnel using local port: '39771'
 
 [debug] SERVER: "127.0.0.1:39771"
