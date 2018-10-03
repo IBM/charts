@@ -40,12 +40,13 @@ spec:
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
       annotations:
-        productName: "IBM Transformation Advisor"
+        productName: "{{ .Chart.Description }}"
         productID: "Tool"
         productVersion: "{{ .Chart.Version }}"
     spec:
       affinity:
         {{- include "nodeAffinity" . | indent 6 }}
+      serviceAccountName: {{ .Values.security.serviceAccountName  | default "default" }}
       containers:
         - name: {{ .Chart.Name }}-ui
           image: "{{ .Values.transadvui.image.repository }}:{{ .Values.transadvui.image.tag }}"
@@ -86,11 +87,18 @@ spec:
               {{- else }}
               value: "true"
               {{- end }}
+            - name: TA_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authentication.icp.secretName | default "xxplaceholderxx" }}
+                  key: db_username
+                  optional: true
             - name: TA_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ template "fullname" . }}-env-var-secret
-                  key: API_KEY_RSA_FINGER_PRINT
+                  name: {{ .Values.authentication.icp.secretName | default "xxplaceholderxx" }}
+                  key: secret
+                  optional: true
             - name: TA_UI_SERVICE_NAME # use to determine if an incoming request internally without going through an Ingress proxy
               value: {{ template "fullname" . }}-ui
             - name: TA_AUTH_ICP_MASTER_IP
@@ -107,15 +115,45 @@ spec:
               value: "{{ .Values.authentication.oidc.clientSecret }}"
             - name: NODE_TLS_REJECT_UNAUTHORIZED
               value: "0"
-
+          securityContext:
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            privileged: false
+            capabilities:
+              drop:
+              - all
+              add:
+              - CHOWN
+              - DAC_OVERRIDE
+              - FOWNER
+              - FSETID
+              - KILL
+              - SETGID
+              - SETUID
+              - SETPCAP
+              - NET_BIND_SERVICE
+              - NET_RAW
+              - SYS_CHROOT
+              - MKNOD
+              - AUDIT_WRITE
+              - SETFCAP
           # set liveness probe to determine if container needs to be restarted
           # this test is the same as the readiness probe however this tests for multiple long periods
           # of time of non-responsiveness - if fails the tests, restarts the container
           # - command, http, or tcp
           # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
           livenessProbe:
-            tcpSocket:
-              port: 3000
+            exec:
+              command:
+              - bash
+              - -c
+              {{ if .Values.ingress.enabled -}}
+              - curl -s -k localhost:3000 | grep "Authentication is not enabled"
+              {{- else }}
+              - curl -s -k localhost:3000 | grep "IBM Transformation Advisor"
+              {{- end }}
             initialDelaySeconds: 60
             timeoutSeconds: 5
             failureThreshold: 6
@@ -124,8 +162,15 @@ spec:
           # looks for short durations of non-responsiveness to identify as unavail to accept traffic
           # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
           readinessProbe:
-            tcpSocket:
-              port: 3000
+            exec:
+              command:
+              - bash
+              - -c
+              {{ if .Values.ingress.enabled -}}
+              - curl -s -k localhost:3000 | grep "Authentication is not enabled"
+              {{- else }}
+              - curl -s -k localhost:3000 | grep "IBM Transformation Advisor"
+              {{- end }}
             initialDelaySeconds: 60
             timeoutSeconds: 3
             periodSeconds: 5
