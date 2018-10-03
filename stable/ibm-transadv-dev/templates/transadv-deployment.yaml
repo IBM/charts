@@ -40,17 +40,13 @@ spec:
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
       annotations:
-        productName: "IBM Transformation Advisor"
+        productName: "{{ .Chart.Description }}"
         productID: "Tool"
         productVersion: "{{ .Chart.Version }}"
     spec:
       affinity:
         {{- include "nodeAffinity" . | indent 6 }}
-      volumes:
-        - name: create-env-var-script
-          configMap:
-            name: {{ template "fullname" . }}-env-var-script
-            defaultMode: 0744
+      serviceAccountName: {{ .Values.security.serviceAccountName  | default "default" }}
       containers:
         - name: {{ .Chart.Name }}-server
           image: "{{ .Values.transadv.image.repository }}:{{ .Values.transadv.image.tag }}"
@@ -60,9 +56,6 @@ spec:
           ports:
             - containerPort: 9080
               name: server
-          volumeMounts:
-            - name: create-env-var-script
-              mountPath: /scripts
           env:
             - name: TA_ON_ICP
               value: "true"
@@ -71,9 +64,17 @@ spec:
             - name: TA_DB_PORT
               value: $({{ template "k8name" . }}_COUCHDB_SERVICE_PORT)
             - name: TA_DB_USER
-              value: ""
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authentication.icp.secretName | default "xxplaceholderxx" }}
+                  key: db_username
+                  optional: true
             - name:  TA_DB_PASSWORD
-              value: ""
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authentication.icp.secretName | default "xxplaceholderxx" }}
+                  key: secret
+                  optional: true
             - name:  TA_LA_HOST_IP
               valueFrom:
                 fieldRef:
@@ -105,8 +106,9 @@ spec:
             - name: TA_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ template "fullname" . }}-env-var-secret
-                  key: API_KEY_RSA_FINGER_PRINT
+                  name: {{ .Values.authentication.icp.secretName | default "xxplaceholderxx" }}
+                  key: secret
+                  optional: true
             - name: TA_AUTH_ICP_MASTER_IP
               value: "{{ .Values.authentication.icp.edgeIp }}"
             - name: TA_AUTH_ICP_ENDPOINT_PORT #8443
@@ -117,15 +119,41 @@ spec:
               value:  "{{ .Values.authentication.oidc.clientId }}"
             - name: TA_AUTH_OIDC_CLIENT_SECRET
               value: "{{ .Values.authentication.oidc.clientSecret }}"
-
+          securityContext:
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            privileged: false
+            capabilities:
+              drop:
+              - all
+              add:
+              - CHOWN
+              - DAC_OVERRIDE
+              - FOWNER
+              - FSETID
+              - KILL
+              - SETGID
+              - SETUID
+              - SETPCAP
+              - NET_BIND_SERVICE
+              - NET_RAW
+              - SYS_CHROOT
+              - MKNOD
+              - AUDIT_WRITE
+              - SETFCAP
           # set liveness probe to determine if container needs to be restarted
           # this test is the same as the readiness probe however this tests for multiple long periods
           # of time of non-responsiveness - if fails the tests, restarts the container
           # - command, http, or tcp
           # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
           livenessProbe:
-            tcpSocket:
-              port: 9080
+            exec:
+              command:
+              - bash
+              - -c
+              - curl -s -k localhost:9080 | grep "WebSphere Liberty 18.0.0.3"
             initialDelaySeconds: 60
             timeoutSeconds: 5
             failureThreshold: 6
@@ -134,8 +162,11 @@ spec:
           # looks for short durations of non-responsiveness to identify as unavail to accept traffic
           # ref : https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
           readinessProbe:
-            tcpSocket:
-              port: 9080
+            exec:
+              command:
+              - bash
+              - -c
+              - curl -s -k localhost:9080 | grep "WebSphere Liberty 18.0.0.3"
             initialDelaySeconds: 5
             timeoutSeconds: 3
             periodSeconds: 5
