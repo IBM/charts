@@ -1,0 +1,178 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.chirp.compName -}}
+{{- $name := .sch.chart.components.chirp.deployment.name -}}
+{{- $httpPort := .sch.chart.components.chirp.ports.httpPort -}}
+{{- $akkaRemotePort := .sch.chart.components.chirp.ports.akkaRemotePort -}}
+{{- $akkaHttpPort := .sch.chart.components.chirp.ports.akkaHttpPort -}}
+
+apiVersion: "apps/v1"
+kind: Deployment
+metadata:
+  name: {{ $name }}-{{ .Release.Name }}
+  labels:
+    appName: {{ $name }}-{{ .Release.Name }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      appName: {{ $name }}-{{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        appName: {{ $name }}-{{ .Release.Name }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+      {{/* nodeaffinity for github.com charts, remove the following for PPA charts*/}}
+      {{- include "nodeaffinity" . | indent 6 }}
+      restartPolicy: Always
+      containers:
+        - name: {{ $name }}-{{ .Release.Name }}
+          image: {{ .Values.image.repository }}/reactive-sample-chirp-impl:{{ .Values.image.imageTags.chirp }}
+          imagePullPolicy: {{.Values.image.pullPolicy }}
+          env:
+            - name: "RP_SECRET"
+              valueFrom:
+                secretKeyRef:
+                  name: akkasecret-{{ .Release.Name }}
+                  key: chirp
+            - name: "JAVA_OPTS"
+              value: "-Dplay.http.secret.key=$RP_SECRET   -Dplay.filters.hosts.allowed.0=."
+            - name: "RP_APP_NAME"
+              value: {{ $name }}-{{ .Release.Name }}
+            - name: "RP_APP_TYPE"
+              value: lagom
+            - name: "RP_APP_VERSION"
+              value: "1.0.0-SNAPSHOT"
+            - name: "RP_DYN_JAVA_OPTS"
+              value: "-Dakka.discovery.kubernetes-api.pod-namespace=$RP_NAMESPACE"
+            - name: "RP_ENDPOINTS"
+              value: "HTTP,AKKA_REMOTE,AKKA_MGMT_HTTP"
+            - name: "RP_ENDPOINTS_COUNT"
+              value: "3"
+            - name: "RP_ENDPOINT_0_BIND_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_0_BIND_PORT"
+              value: "{{ $httpPort }}"
+            - name: "RP_ENDPOINT_0_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_0_PORT"
+              value: "{{ $httpPort }}"
+            - name: "RP_ENDPOINT_1_BIND_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_1_BIND_PORT"
+              value: "{{ $akkaRemotePort }}"
+            - name: "RP_ENDPOINT_1_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_1_PORT"
+              value: "{{ $akkaRemotePort }}"
+            - name: "RP_ENDPOINT_2_BIND_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_2_BIND_PORT"
+              value: "{{ $akkaHttpPort }}"
+            - name: "RP_ENDPOINT_2_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_2_PORT"
+              value: "{{ $akkaHttpPort }}"
+            - name: "RP_ENDPOINT_AKKA_MGMT_HTTP_BIND_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_AKKA_MGMT_HTTP_BIND_PORT"
+              value: "{{ $akkaHttpPort }}"
+            - name: "RP_ENDPOINT_AKKA_MGMT_HTTP_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_AKKA_MGMT_HTTP_PORT"
+              value: "{{ $akkaHttpPort }}"
+            - name: "RP_ENDPOINT_AKKA_REMOTE_BIND_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_AKKA_REMOTE_BIND_PORT"
+              value: "{{ $akkaRemotePort }}"
+            - name: "RP_ENDPOINT_AKKA_REMOTE_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_AKKA_REMOTE_PORT"
+              value: "{{ $akkaRemotePort }}"
+            - name: "RP_ENDPOINT_HTTP_BIND_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_HTTP_BIND_PORT"
+              value: "{{ $httpPort }}"
+            - name: "RP_ENDPOINT_HTTP_HOST"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_ENDPOINT_HTTP_PORT"
+              value: "{{ $httpPort }}"
+            - name: "RP_JAVA_OPTS"
+              value: "-Dconfig.resource=rp-application.conf -Dakka.discovery.method=kubernetes-api -Dakka.management.cluster.bootstrap.contact-point-discovery.effective-name={{ $name }}-{{ .Release.Name}} -Dakka.management.cluster.bootstrap.contact-point-discovery.required-contact-point-nr=2 -Dakka.discovery.kubernetes-api.pod-label-selector=appName=%s -Dcom.lightbend.platform-tooling.service-discovery.external-service-addresses.cas_native.0=_cql._tcp.cassandra-sub-chart-{{ .Release.Name }}.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: "RP_KUBERNETES_POD_IP"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "RP_KUBERNETES_POD_NAME"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.name"
+            - name: "RP_MODULES"
+              value: "akka-cluster-bootstrapping,akka-management,common,play-http-binding,service-discovery,status"
+            - name: "RP_NAMESPACE"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.namespace"
+            - name: "RP_PLATFORM"
+              value: kubernetes
+          ports:
+            - containerPort: {{ $httpPort }}
+              name: http
+            - containerPort: {{ $akkaRemotePort }}
+              name: "akka-remote"
+            - containerPort: {{ $akkaHttpPort }}
+              name: "akka-mgmt-http"
+          volumeMounts: []
+          command:
+            - "/rp-start"
+          args:
+            - "bin/chirp-impl"
+          readinessProbe:
+            httpGet:
+              path: "/platform-tooling/ready"
+              port: "akka-mgmt-http"
+            periodSeconds: 10
+            initialDelaySeconds: 30
+          livenessProbe:
+            httpGet:
+              path: "/platform-tooling/healthy"
+              port: "akka-mgmt-http"
+            periodSeconds: 20
+            initialDelaySeconds: 240
+          resources:
+            limits:
+              cpu: 0.250000
+              memory: 536870912
+            requests:
+              cpu: 0.250000
+              memory: 536870912
+      volumes: []
+
