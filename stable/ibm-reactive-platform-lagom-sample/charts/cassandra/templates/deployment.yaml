@@ -1,0 +1,51 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+
+apiVersion: "apps/v1beta1"
+kind: Deployment
+metadata:
+  name: {{ .Values.cassandra.fullname }}-{{ .Release.Name }}
+  labels:
+    app: {{ .Values.cassandra.name }}
+    chart: {{ .Values.cassandra.chart }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.cassandra.fullname }}
+        chart: {{ .Values.cassandra.chart }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+      {{- /* nodeaffinity for github.com charts, remove the following for PPA charts*/}}
+      {{- include "nodeaffinity" . | indent 6 }}
+      containers:
+      - name: {{ .Values.cassandra.fullname }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 9042 # cassandra
+        env:
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: RS_ENABLE_CASSANDRA
+            value: "1"
+          - name: RS_CASSANDRA_HEAP
+            value: "{{- .Values.cassandra.heap -}}"
+        readinessProbe:
+          exec:
+            command: [ "/bin/sh", "-c", "nodetool status | grep -E \"^UN\\s+${POD_IP}\"" ]
+          initialDelaySeconds: 15
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command: [ "/bin/sh", "-c", "nodetool status" ]
+          initialDelaySeconds: 15
+          timeoutSeconds: 5
