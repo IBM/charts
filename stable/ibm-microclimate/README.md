@@ -24,8 +24,10 @@ Installing the chart will:
 
 ## Prerequisites
 - IBM Cloud Private version 3.1. Older versions of IBM Cloud Private are supported by chart versions v1.5.0 and earlier only. Version support information can be found in the release notes of each chart release.
+- An IBM Cloud Private cluster with worker nodes that have x86-64 architecture.
 - Ensure [socat](http://www.dest-unreach.org/socat/doc/README) is available on all worker nodes in your cluster. Microclimate uses Helm internally and both the Helm Tiller and client require socat for port forwarding.
 - Download the IBM Cloud Private CLI, cloudctl, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
+- Before you install Microclimate, decide whether you want to deploy to IBM Cloud Kubernetes Service (IKS). If you want to deploy to IKS, when you install Microclimate, specify a Docker registry location on the `jenkins.Pipeline.Registry.URL` property. Both Microclimate and IKS need to access this registry.
 
 ## Resources Required
 
@@ -71,8 +73,6 @@ Set your kubectl context so that any subsequent kubectl commands you do are for 
 
 `kubectl config set-context $(kubectl config current-context) --namespace=<target namespace for Microclimate>`
 
-Follow the remaining steps outlined here, the important part is the use of three additional properties when installing the chart: the names of the two service accounts that are created, and the namespace to install Microclimate into.
-
 When installing the chart, you must set the `global.rbac.serviceAccountName` and `jenkins.rbac.serviceAccountName` values to two different service account names, for example `micro-sa` and `pipeline-sa`. Microclimate will create these two service accounts as well as the associated ClusterRoles and ClusterRoleBindings for the service accounts to use. 
 
 #### Create a namespace for the Microclimate pipeline
@@ -81,20 +81,21 @@ The Microclimate pipeline needs a namespace to deploy applications into. Create 
 
 `kubectl create namespace microclimate-pipeline-deployments`
 
-This is the default target namespace that the Microcliamte pipeline expects to deploy into. If you want to call the namespace a different name, you must set the `jenkins.Pipeline.TargetNamespace` value to match the name of your namespace when installing the chart.
+This is the default target namespace used by the Microclimate pipeline for deployments. If you want to specify a different namespace, you must set the `jenkins.Pipeline.TargetNamespace` chart value to match the name of the desired namespace when installing the Microclimate chart.
 
 
 #### Check that the cluster's image pull policy permits additional repositories
 
-Microclimate pipelines use images from repositories other than `docker.io/ibmcom`. To use Microclimate pipelines you must ensure you have a cluster image policy that permits the following repositories so that these images can be pulled and used.
+Microclimate pipelines pull images from repositories other than `docker.io/ibmcom`. To use Microclimate pipelines you must ensure you have a cluster image policy that permits the following repositories so that these images can be pulled.
 
 ```
+  - name: <your cluster name e.g. mycluster.icp>:8500:*
   - name: docker.io/maven:*
   - name: docker.io/lachlanevenson/k8s-helm:*
   - name: docker.io/jenkins/*
 ```
 
-Modify your cluster image policy with `kubectl edit clusterimagepolicy <policy name>`.
+Modify your cluster image policy with `kubectl edit clusterimagepolicy <policy name>`. If you aren't sure which policies you have, use `kubectl get clusterimagepolicy` to list them.
 
 Add the repositories, save your changes and they are applied. You need to add any other additional repositories here if you wish to pull images from any other locations, such as your own third party Docker registry.
 
@@ -109,50 +110,18 @@ Use the following code to create a Docker registry secret:
 kubectl create secret docker-registry microclimate-registry-secret \
   --docker-server=mycluster.icp:8500 \
   --docker-username=<account-username> \
-  --docker-password=account-password> \
+  --docker-password=<account-password> \
   --docker-email=<account-email>
 ```
 
 Verify that the secret was created successfully and exists in the target namespace for Microclimate before you continue. This secret does not need to be patched to a service account as the Microclimate installation will manage this step.
-
-#### Create the Microclimate pipeline secret in the microclimate-pipeline-deployments namespace
-
-Microclimate needs a second secret to allow the pipeline to deploy applications into the `microclimate-pipeline-deployments` namespace created previously. You can create this with the following:
-
-```
-kubectl create secret docker-registry microclimate-pipeline-secret \
-  --docker-server=mycluster.icp:8500 \
-  --docker-username=admin \
-  --docker-password=admin \
-  --docker-email=null \
-  --namespace=microclimate-pipeline-deployments
-```
-
-
-The key difference here is the usage of `--namespace microclimate-pipeline-deployments`: this is for the service account that sits in this particular namespace. Pods in this namespace will pull images from the IBM Cloud Private image registry. The secret name here is arbitrary; so long as the service account is patched to use it.
-
-You will now need to patch the default service account in this namesapce to use the secret.
-
-First, check if the default service account has `imagePullSecrets` associated with it already:
-```
-kubectl describe serviceaccount default --namespace microclimate-pipeline-deployments
-```
-If it does not contain any other secrets, patch the service account by using the following command:
-```
-kubectl patch serviceaccount default --namespace microclimate-pipeline-deployments -p '{"imagePullSecrets": [{"name": "microclimate-pipeline-secret"}]}'
-```
-
-If it does contain other secrets, you need to include these in the patch command to ensure they don't get overwritten. Inlcude these secrets in the command like so:
-```
-kubectl patch serviceaccount default --namespace microclimate-pipeline-deployments -p '{"imagePullSecrets": [{"name": "microclimate-pipeline-secret"}, {"name": "secret-1"}, ...., {"name": "secret-n"} ]}'
-```
 
 #### Create a secret so Microclimate can securely use Helm
 
 Microclimate pipelines deploy applications by using the Tiller at `kube-system`. Establish secure communication with this Tiller and configure it by creating a Kubernetes secret that contains the required certificate files.
 
 Complete the following steps to create the Kubernetes secret:
-1. Set the `$HELM_HOME` environment variable to a `.helm` folder on your system. The default value is usually `~/.helm`.
+1. Set the `$HELM_HOME` environment variable to a `.helm` folder on your system. The default value is `~/.helm`.
 2. Navigate to the IBM Cloud Private dashboard. From the menu, click **command line tools**.
 3. Choose a platform and run the `curl` command to download the application.
 4. Choose the file with the name that matches your platform.
@@ -165,6 +134,39 @@ kubectl create secret generic microclimate-helm-secret --from-file=cert.pem=$HEL
 The name of the secret that you have created is printed by the Microclimate pipeline when you run a Jenkins job against your project. With this secret present, your deployed applications appear as a Helm release alongside any others that were deployed from `kube-system`.
 
 **Note:** You need to ensure that the certificate and the secret remain valid.
+
+#### Create the Microclimate pipeline secret in the microclimate-pipeline-deployments namespace
+
+Microclimate needs a second secret to allow the pipeline to deploy applications into the `microclimate-pipeline-deployments` namespace created previously. You can create this with the following:
+
+```
+kubectl create secret docker-registry microclimate-pipeline-secret \
+  --docker-server=mycluster.icp:8500 \
+  --docker-username=<account-username> \
+  --docker-password=<account-password> \
+  --docker-email=<account-email> \
+  --namespace=microclimate-pipeline-deployments
+```
+
+
+The key difference here is the usage of `--namespace microclimate-pipeline-deployments`: this is for the service account that sits in this particular namespace. Pods in this namespace will pull images from the IBM Cloud Private image registry. The secret name here is arbitrary; so long as the service account is patched to use it.
+
+You will now need to patch the default service account in this namespace to use the secret.
+
+First, check if the default service account has `imagePullSecrets` associated with it already:
+```
+kubectl describe serviceaccount default --namespace microclimate-pipeline-deployments
+```
+If it does not contain any other secrets, patch the service account by using the following command:
+```
+kubectl patch serviceaccount default --namespace microclimate-pipeline-deployments -p '{"imagePullSecrets": [{"name": "microclimate-pipeline-secret"}]}'
+```
+
+If it does contain other secrets, include these in the patch command to ensure they aren't overwritten. For example:
+```
+kubectl patch serviceaccount default --namespace microclimate-pipeline-deployments -p '{"imagePullSecrets": [{"name": "microclimate-pipeline-secret"}, {"name": "secret-1"}, ...., {"name": "secret-n"} ]}'
+```
+
 
 #### Determine Microclimate and Jenkins hostname values
 
@@ -266,7 +268,7 @@ If you are installing by using the Helm CLI then values can be set by using one 
 
 #### Additional Pull Secrets
 
-If you wish to use more registry secrets for Microclimate to use, `global.additionalImagePullSecrets` can be set when installing installs the chart to use a YAML array of ImagePullSecrets. For example, you can include the following if installing using the catalog:
+If you wish to specify more registry secrets for Microclimate to use, `global.additionalImagePullSecrets` can be set when installing the chart to use a YAML array of ImagePullSecrets. For example, you can include the following if installing using the IBM Cloud Private catalog:
 
 ```
 - artifactory
@@ -274,7 +276,7 @@ If you wish to use more registry secrets for Microclimate to use, `global.additi
 - dockerhub
 ```
 
-From the command line instead, the following option can be specified:
+If using the command line instead, the options can be specified as follows:
 ```
 --set global.additionalImagePullSecrets[0]=<secret>,global.additionalImagePullSecrets[1]=<secret2>
 ```
@@ -293,7 +295,6 @@ From the command line instead, the following option can be specified:
 | `beacon.repository`        | Image repository for beacon                     | `ibmcom/microclimate-beacon` |
 | `beacon.tag`               | Tag for beacon image                            | `latest`|
 | `imagePullPolicy`          | Image pull policy used for all images           | `Always`    |
-| `persistence.enabled`      | Use persistent storage for Microclimate workspace | `true` |
 | `persistence.existingClaimName`        | Name of an existing PVC to be used with Microclimate - should be left blank if you use Dynamic Provisioning or if you want Microclimate to make it's own PVC     | `""` |
 | `persistence.useDynamicProvisioning`      | Use dynamic provisioning | `true` |
 | `persistence.size`         | Storage size allowed for Microclimate workspace   | `8Gi` |
@@ -358,7 +359,7 @@ These commands can be run from any host that has a kubectl client with access to
 
 - An IBM Cloud Private Administrator role is required to install into a non-default namespace. This is because two service accounts will be created if you specify the global.rbac.serviceAccountName and jenkins.rbac.serviceAccountName properties when installing the chart, which are used to allow Microclimate pods to function correctly in a non-default namespace.
 
-See the [product documentation](https://microclimate-dev2ops.github.io/knownissues) for other known issues and limitations.
+See the [product documentation](https://microclimate-dev2ops.github.io/troubleshooting#doc) for other known issues and limitations.
 
 ## Documentation
 

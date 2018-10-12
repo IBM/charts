@@ -33,8 +33,8 @@ spec:
         heritage: "{{ .Release.Service }}"
       annotations:
         productName: "IBM Microclimate v1"
-        productID: "IBMMicroclimate_18.09_perpetual_00000"
-        productVersion: "18.09"
+        productID: "IBMMicroclimate_18.10_perpetual_00000"
+        productVersion: "18.10"
 
     spec:
       # As provided in the chart. Used by Portal and File Watcher
@@ -63,7 +63,7 @@ spec:
           secretName: "{{ .Values.jenkins.Pipeline.Registry.Secret}}"
       {{- end }}
       # Don't try using a helm secret if on 2.1.0.2
-      {{- if and .Values.global.helm.tlsSecretName (not (and (.Capabilities.KubeVersion.Major | hasPrefix "1") ( .Capabilities.KubeVersion.Minor | hasPrefix "9"))) }}
+      {{- if and .Values.global.helm.tlsSecretName }}
       - name: helm-secret
         secret:
           secretName: "{{ .Values.global.helm.tlsSecretName }}"
@@ -82,6 +82,8 @@ spec:
           - name: IN_K8
             value: "true"
           - name: MULTI_USER
+            value: "true"
+          - name: PORTAL_HTTPS
             value: "true"
           - name: KUBE_NAMESPACE
             value: "{{ .Release.Namespace }}"
@@ -106,7 +108,7 @@ spec:
             value: "{{ .Values.jenkins.Pipeline.Registry.Url }}/{{ .Release.Namespace }}"
           {{- end }}
           # Don't try using a helm secret if on 2.1.0.2
-          {{- if and .Values.global.helm.tlsSecretName (not (and (.Capabilities.KubeVersion.Major | hasPrefix "1") ( .Capabilities.KubeVersion.Minor | hasPrefix "9"))) }}
+          {{- if and .Values.global.helm.tlsSecretName }}
           - name: HELM_SECRET
             value: "{{ .Values.global.helm.tlsSecretName }}"
           {{- end }}
@@ -152,19 +154,23 @@ spec:
             value: "{{ .Values.portal.clock.tolerance}}"
 
         ports:
-        - containerPort: {{ .Values.ports.portal }}
+        - containerPort: 9191
         livenessProbe:
           initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 10
           httpGet:
             path: /
-            port: {{ .Values.ports.portal }}
+            port: 9191
+            scheme: HTTPS
         readinessProbe:
           initialDelaySeconds: 15
           periodSeconds: 10
+          timeoutSeconds: 10
           httpGet:
             path: /
-            port: {{ .Values.ports.portal }}
+            port: 9191
+            scheme: HTTPS
         resources:
           requests:
             memory: {{ .Values.portal.resources.requests.memory }}
