@@ -11,11 +11,17 @@ This chart bootstraps a MongoDB deployment on a [Kubernetes](http://kubernetes.i
 1. Multi-platform manifest support
 2. Base OS with latest patches
 
+## Chart Details
+This chart will do the following:
+
+- Deploy a deployment.  
+- Create a service to connect to deployment.
+
 ## Prerequisites
 
 - Kubernetes 1.4+ with Beta APIs enabled
 - PV provisioner support in the underlying infrastructure
-- Persistent Volume is required if persistance is enabled and no dynamic provisioning has been set up. You can create a persistent volume via the IBM Cloud Private interface or through a yaml file. For example:
+- Persistent Volume is required if persistance is enabled and no dynamic provisioning has been set up. You can create a persistent volume through a yaml file. For example:
 
 ```
 apiVersion: v1
@@ -75,7 +81,7 @@ The following tables lists the configurable parameters of the MongoDB chart and 
 | `resources.limits.cpu`                       | Container CPU limit                   | 2                   |
 | `resources.limits.memory`                    | Container memory limit                | 4Gi                |
 | `resources.requests.cpu`                     | Container CPU requested               | 100m                |
-| `resources.requests.memory`                  | Container Memory requested            | 258Mi                 |
+| `resources.requests.memory`                  | Container Memory requested            | 256Mi                 |
 | `dataVolume.name`                            | Name of the PVC to be created         | `datavolume`                                             |
 | `dataVolume.storageClassName`                | Storage class of backing PVC          | `nil` (uses alpha storage class annotation)              |
 | `dataVolume.existingClaimName`               | Name of the Existing Claim to be used | `nil`                                                    |
@@ -100,8 +106,18 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 $ helm install --name my-release -f values.yaml stable/ibm-mongodb-dev
 ```
 
+## Resources Required
+
+| Parameter                           | Description                                         | Default                                                                         |
+| ----------------------------------- | ----------------------------------------------------| --------------------------------------------------------------------------------|
+| `Resource configuration`            | CPU/Memory resource requests/limits                 | Memory request/limit: `256Mi`/`4Gi`, CPU request/limit: `1000m`/`2`          |
+
 ## Persistence
 
 The MongoDB image stores the MongoDB data at the `/data/db` path of the container.
 
 The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) volume at this location. User need to create a PV before chart deployed, or enable dynamic volume provisioning in chart configuration.
+
+## Limitations
+
+UPGRADES FROM PREVIOUS CHART RELEASES ARE NOT SUPPORTED
