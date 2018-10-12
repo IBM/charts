@@ -6,7 +6,7 @@ A BGP peer resource (`BGPPeer`) represents a remote BGP peer with which the node
 cluster will peer.  Configuring BGP peers allows you to peer a 
 Calico network with your datacenter fabric (e.g. ToR). For more 
 information on cluster layouts, see Calico's documentation on 
-[L3 Topologies](https://docs.projectcalico.org/v3.0/reference/private-cloud/l3-interconnect-fabric).
+[L3 Topologies](https://docs.projectcalico.org/v3.1/reference/private-cloud/l3-interconnect-fabric).
 
 A peer can be added as a Global Peer where the added BGP Agent peers with every calico node in the cluster.
 Or BGP peerings can be configured on a per-node basis, i.e., configured as node-specific peers. 
@@ -28,7 +28,7 @@ This chart will do the following:
 You should provide the IP address of the BGP Agent to be added as a peer and the calico etcd endpoint url (Example: https://master-node-ip:4001).
 You should also provide the name of the k8s secret object that contains the key, client certificate and Certificate Authority to connect to the provided calico etcd endpoint.
 
-The k8s secret object must be created with three keys: etcd-ca, etcd-cert and etcd-key as shown in the following structure: 
+The k8s secret object must be created in the `kube-system` namespace with three keys: etcd-ca, etcd-cert and etcd-key as shown in the following structure: 
 ```
 apiVersion: v1
 kind: Secret
@@ -50,7 +50,7 @@ data:
 	.......
 	..tsde2
 ```
-> **Note**: The k8s secret object containing the etcd credentials must be created in the same namespace as the release.
+> **Note**: The k8s secret object containing the etcd credentials must be created in the `kube-system` namespace.
 
 You can provide the AS number (`default: 64512`) and Node IP address of the node in the ICP cluster when BGP Peer needs to be configured on a per-node basis. When the Node IP address is specified, the scope is node level, otherwise the scope is global.
 
@@ -86,11 +86,11 @@ The following table lists the configurable parameters of the Calico BGP Peer cha
 | `node`                       | The hostname of the node to which this peer applies. If specified, the scope is node level, otherwise the scope is global (Optional) | `nil`       |
 | `etcd.endpoint`	       | Calico etcd endpoint details. Example: https://calico-etcd-ip:calico-etcd-port (Required) | `nil`			  |
 | `etcd.secret`		       | Name of the k8s secret object containing the key, client certificate and Certificate Authority to connect to the calico etcd endpoint (Required) | `nil` |
-| `image.repository`           | `calicoctl` image repository (Required)    | `ibmcom/calico-ctl`                         |
-| `image.tag`                  | `calicoctl` image tag [v1.6.3, v2.0.2] (Required)          | `v2.0.2`                                    |
+| `image.repository`           | `calicoctl` image repository (Required)    | `calico/ctl`                         |
+| `image.tag`                  | `calicoctl` image tag (Required)           | `v3.1.3`                                    |
 | `image.pullPolicy`           | Image pull policy (Required)               | `IfNotPresent`                              |
 
-For more information refer to the [Configuring BGP Peers](https://docs.projectcalico.org/v3.0/usage/configuration/bgp) documentation.
+For more information refer to the [Configuring BGP Peers](https://docs.projectcalico.org/v3.1/usage/configuration/bgp) documentation.
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
@@ -110,4 +110,5 @@ The Chart deploys a ConfigMap and a Job to add the BGP Peer to the Calico Cluste
 
 * This Chart works only with IBM Cloud Private
 * This Chart can run on any of the three architecture types
-* This Chart supports ibm/calico-ctl versions v1.6.3 and v2.0.2
+* This Chart supports calico/ctl versions v3.1.3
+* Cluster Admin Access is needed to run this Chart as the objects are created in the restricted kube-system namespace
