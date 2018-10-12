@@ -1,35 +1,23 @@
 # Breaking Changes
-The chart for Version 1.6.0 works only with IBM Cloud Private Version 3.1.0. IBM Cloud Private Version 2.1.0.3 and 2.1.0.2 are not supported.
+No breaking changes.
 
-# What’s new in Chart Version 1.6.0
+# What’s new in Chart Version 1.7.0
 
 ## Microclimate
-* Added support for IBM Cloud Private Version 3.1.0.
-* Improved the iterative development model for Spring projects. Also made code updates are faster.
-* Secured internal communications with HTTPS.
-* Modified project deletion to be asynchronous. As a result, the loading screen does not stall while Microclimate deletes a project.
-* Limited the number of concurrent builds to prevent performance degradation when too many builds start at once. The default limit is three.
-* Added flexible language support. Also Microclimate can import, build, and deploy generic Docker type projects. The additional languages show up when you create a new project. 
-* Added the **Validate** page to the **Overview** page. The **Validate** page can be viewed during project development.
-* Added support for logging out of IBM Cloud Private installations of Microclimate.
-* The Acme Air sample application runs in Microclimate with the Java Liberty runtime.
+
+* Added build queue rank for projects.
+* Added checks for the existence of Dockerfiles during Docker project validation.
+* Updated Theia to Version 0.3.14.
+* Added Java reactive support with the Lagom framework.
+
 
 ## Pipeline
-* Added support for creating more than one pipeline that automatically deploys the last good build to a specified environment.
-* Added support for specifying a namespace for a deployment to the local cluster.
-* Added ability to override the name that is provided to the Helm release that is associated with a deployment.
-* Added ability to deploy different branches to different namespaces. A selectable list of branches, as found in the target Git repository, is provided.
-* Deleting a deployment now also deletes the deployed application.
+* No significant updates.
 
 
 ## Chart
-* Updates to support IBM Cloud Private Version 3.1.0.
-* Changed certificate for Jenkins and Portal ingress to a certificate signed by ICP.
-* Added create of Jenkins target namespace if it doesn't already exist.
-* Added check to see if target namespace exists.
-* Improved appearance of metadata values in catalog configure page.
-* Simplified installation into a non-default namespace. ClusterRole and ClusterRole bindings are now created automatically.
-* Added support for including additional imagePullSecrets via the IBM Cloud Private catalog.
+* Installation from the IBM Cloud Private catalog has simplified configuration values.
+* Updated README.
 
 
 # Fixes
@@ -42,9 +30,9 @@ The chart for Version 1.6.0 works only with IBM Cloud Private Version 3.1.0. IBM
 - Download the IBM Cloud Private CLI, `cloudctl`, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
 
 
-## Upgrading Microclimate to v1.6.0
+## Upgrading Microclimate to v1.7.0
 
-To upgrade to Microclimate v1.6.0:
+To upgrade to Microclimate v1.7.0:
 1. Obtain information about current persistent volumes so that they can be retained in the new installation.
 1. Uninstall Microclimate.
 1. Upgrade IBM Cloud Private to Version 3.1.0.
@@ -123,6 +111,7 @@ For detailed installation instructions go to https://microclimate-dev2ops.github
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.7.0 | Octiber 12, 2018 | 1.11.0  | 1810 | None | Various fixes and improvements |
 | 1.6.0 | September 14, 2018 | 1.11.0  | 1809 | Support only for ICP 3.1.0 | Various fixes and improvements |
 | 1.5.0 | Aug 20, 2018 | 1.10.0, 1.9.1 | 1808 | None | Various fixes and improvements |
 | 1.4.0 | July 20, 2018 | 1.10.0, 1.9.1 | 1807 | None | Logout implemented, various small fixes and improvements |
