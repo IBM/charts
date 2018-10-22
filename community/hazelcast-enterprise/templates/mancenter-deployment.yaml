@@ -1,0 +1,91 @@
+{{- if .Values.mancenter.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "mancenter.fullname" . }}
+  labels:
+    app: {{ template "hazelcast.name" . }}
+    chart: {{ template "hazelcast.chart" . }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "hazelcast.name" . }}
+      release: "{{ .Release.Name }}"
+      role: mancenter
+  template:
+    metadata:
+      labels:
+        app: {{ template "hazelcast.name" . }}
+        release: "{{ .Release.Name }}"
+        role: mancenter
+    spec:
+      {{- if .Values.mancenter.image.pullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.mancenter.image.pullSecrets }}
+        - name: {{ . }}
+        {{- end}}
+      {{- end}}
+      {{- if .Values.mancenter.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.mancenter.nodeSelector | indent 8 }}
+      {{- end }}
+      securityContext:
+        runAsUser: 0
+      containers:
+      - name: {{ template "mancenter.fullname" . }}
+        image: "{{ .Values.mancenter.image.repository }}:{{ .Values.mancenter.image.tag }}"
+        imagePullPolicy: {{ .Values.mancenter.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.mancenter.resources | indent 10 }}
+        ports:
+        - name: mancenter
+          containerPort: 8080
+        {{- if .Values.mancenter.livenessProbe.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /hazelcast-mancenter
+            port: 8080
+          initialDelaySeconds: {{ .Values.mancenter.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.mancenter.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.mancenter.livenessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.mancenter.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.mancenter.livenessProbe.failureThreshold }}
+        {{- end }}
+        {{- if .Values.mancenter.readinessProbe.enabled }}
+        readinessProbe:
+          httpGet:
+            path: /hazelcast-mancenter
+            port: 8080
+          initialDelaySeconds: {{ .Values.mancenter.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.mancenter.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.mancenter.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.mancenter.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.mancenter.readinessProbe.failureThreshold }}
+        {{- end }}
+        volumeMounts:
+        - name: mancenter-storage
+          mountPath: /data
+        env:
+        - name: MC_LICENSE_KEY
+        {{- if .Values.mancenter.licenseKeySecretName }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mancenter.licenseKeySecretName }}
+              key: key
+        {{- else }}
+          value: {{ .Values.mancenter.licenseKey }}
+        {{- end }}
+        - name: JAVA_OPTS
+          value: "{{ if or .Values.mancenter.licenseKey .Values.mancenter.licenseKeySecretName }}-Dhazelcast.mc.license=$(MC_LICENSE_KEY){{ end }} {{ .Values.mancenter.javaOpts }}"
+      volumes:
+      - name: mancenter-storage
+      {{- if .Values.mancenter.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.mancenter.persistence.existingClaim | default (include "mancenter.fullname" .) }}
+      {{- else }}
+        emptyDir: {}
+      {{- end -}}
+{{- end -}}
