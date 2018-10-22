@@ -5,9 +5,7 @@
 ## Quick Start
 
 ```bash
-$ helm repo add hazelcast https://hazelcast.github.io/charts/
-$ helm repo update
-$ helm install --set hazelcast.licenseKey=<license_key> hazelcast/hazelcast-enterprise
+$ helm install --set hazelcast.licenseKey=<license_key> community/hazelcast-enterprise
 ```
 
 ## Introduction
@@ -36,7 +34,7 @@ spec:
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --set hazelcast.licenseKey=<license_key> --name my-release hazelcast/hazelcast-enterprise
+$ helm install --set hazelcast.licenseKey=<license_key> --name my-release community/hazelcast-enterprise
 ```
 
 The command deploys Hazelcast on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -122,7 +120,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 ```bash
 $ helm install --name my-release \
   --set hazelcast.licenseKey=<license_key>,cluster.memberCount=3,hazelcast.rest=false \
-    hazelcast/hazelcast-enterprise
+    community/hazelcast-enterprise
 ```
 
 The above command sets number of Hazelcast members to 3 and disables REST endpoints.
@@ -130,7 +128,7 @@ The above command sets number of Hazelcast members to 3 and disables REST endpoi
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml hazelcast/hazelcast-enterprise
+$ helm install --name my-release -f values.yaml community/hazelcast-enterprise
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml) with the `hazelcast.license` filled in
