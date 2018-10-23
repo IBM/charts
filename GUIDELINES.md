@@ -144,7 +144,7 @@ Add a tillerVersion to Chart.yaml that follows the Semantic Versioning 2.0.0 for
 
 ## Deployment validation
 
-Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the current version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.
+Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the latest version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.  You can [deploy IBM Cloud Private using Vagrant](https://github.com/IBM/deploy-ibm-cloud-private/blob/master/docs/deploy-vagrant.md) to quickly bring up an environment to verify your chart.
 
 &nbsp;
 
