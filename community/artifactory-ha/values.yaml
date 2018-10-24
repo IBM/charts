@@ -82,8 +82,19 @@ database:
   type:
   host:
   port:
+  ## If you would like this chart to create the secret containing the db
+  ## password, use these values
   user:
   password:
+  ## If you have existing Kubernetes secrets containing db credentials, use
+  ## these values
+  secrets: {}
+  #  user:
+  #    name: "rds-artifactory"
+  #    key: "db-user"
+  #  password:
+  #    name: "rds-artifactory"
+  #    key: "db-password"
 
 # Artifactory
 artifactory:
@@ -97,8 +108,11 @@ artifactory:
   ## You can generate one with the command:
   ## 'openssl rand -hex 32'
   ## Pass it to helm with '--set artifactory.masterKey=${MASTER_KEY}'
+  ## Alternatively, you can use a pre-existing secret with a key called master-key by specifying masterKeySecretName
   ## IMPORTANT: You should NOT use the example masterKey for a production deployment!
   masterKey: FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+  # masterKeySecretName:
+
 
   ## Artifactory license secret.
   ## If artifactory.license.secret is passed, it will be mounted as
@@ -142,6 +156,7 @@ artifactory:
     mountPath: "/var/opt/jfrog/artifactory"
     accessMode: ReadWriteOnce
     size: 200Gi
+    maxCacheSize: 50000000000
     ## artifactory data Persistent Volume Storage Class
     ## If defined, storageClassName: <storageClass>
     ## If set to "-", storageClassName: "", which disables dynamic provisioning
@@ -188,6 +203,11 @@ artifactory:
       identity:
       credential:
       path: "artifactory-ha/filestore"
+      refreshCredentials: true
+      testConnection: false
+      ## Additional properties to set on the s3 provider
+      properties: {}
+      #  httpclient.max-connections: 100
   service:
     name: artifactory
     type: ClusterIP
@@ -207,6 +227,8 @@ artifactory:
     publicUrl:
   # Name of ConfigMap for Distribution Cert
   distributionCerts:
+
+  annotations: {}
 
   ## Type specific configurations.
   ## There is a difference between the primary and the member nodes.
@@ -262,7 +284,15 @@ artifactory:
 
     tolerations: []
 
+    ## Complete specification of the "affinity" of the member nodes; if this is non-empty,
+    ## "podAntiAffinity" values are not used.
     affinity: {}
+
+    ## Only used if "affinity" is empty
+    podAntiAffinity:
+      ## Valid values are "soft" or "hard"; any other value indicates no anti-affinity
+      type: ""
+      topologyKey: "kubernetes.io/hostname"
 
 # Nginx
 nginx:
