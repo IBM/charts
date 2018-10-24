@@ -52,7 +52,7 @@ These guidelines are intended to augment the [Helm best practices](https://docs.
 | [**README.md**](#readme-md) | All contributed charts must contain a useful README.md file with useful information a user would need to deploy the chart. In the IBM Cloud Private GUI, the README.md file is the "front page" that a user will see after clicking on the chart in the catalog. A complete description and explanations of all input parameters are strongly suggested. It is also highly recommended to include instructions on how to add your image registry to IBM Cloud Private's list of trusted image registries, since [container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.0/manage_images/image_security.html) is enabled by default beginning with IBM Cloud Private 3.1.
 | [**NOTES.txt**](#notes-txt) | Include NOTES.txt with instructions to display usage notes, next steps, &amp; relevant information. |
 | [**tillerVersion constraint**](#tillerversion-constraint) | Add a `tillerVersion` to Chart.yaml that follows the Semantic Versioning 2.0.0 format (`>=MAJOR.MINOR.PATCH`); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on. |
-| [**Deployment validation**](#deployment-validation) | Charts should be validated to deploy successfully and work as expected on IBM Cloud Private using both the Helm CLI and the IBM Cloud Private GUI |
+| [**Deployment validation**](#deployment-validation) | Charts must be validated to deploy successfully and work as expected on the latest version of IBM Cloud Private using both the Helm CLI and the IBM Cloud Private GUI. [Deploy IBM Cloud Private using Vagrant](https://github.com/IBM/deploy-ibm-cloud-private/blob/master/docs/deploy-vagrant.md) to quickly bring up an environment to verify your chart. |
 
 &nbsp;
 
@@ -144,7 +144,7 @@ Add a tillerVersion to Chart.yaml that follows the Semantic Versioning 2.0.0 for
 
 ## Deployment validation
 
-Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the current version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.
+Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the latest version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.  You can [deploy IBM Cloud Private using Vagrant](https://github.com/IBM/deploy-ibm-cloud-private/blob/master/docs/deploy-vagrant.md) to quickly bring up an environment to verify your chart.
 
 &nbsp;
 
