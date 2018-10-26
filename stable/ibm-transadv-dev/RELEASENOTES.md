@@ -1,16 +1,15 @@
 
-# What’s new in Chart Version 1.8.0
-### MQ Analysis - Beta feature
- - Data Collector report for migrating MQ Queue Managers
-### IBM Cloud Private Enhancements
- - Transformation Advisor now installs into IBM Cloud Private 3.1 non default namespace
- - Integration with MicroClimate v1.6.0
-### Usability Enhancements
- - Added new page for Application details
- - Added Quick starter guide for WebSphere Traditional on Private Cloud
- - Better error handling experience migrating bundles
+# What’s new in Chart Version 1.8.1
 
 # Fixes
+### Deployment
+ - Fixes to support deployment to ICP using the latest Liberty webProfile
+### Data Collector
+ - Fixes to support custom profiles and special characters in usernames & passwords 
+
+# Breaking Changes
+
+# Documentation
 
 # Prerequisites
 * IBM Cloud Private version 2.1.0.1+
@@ -18,6 +17,7 @@
 # Version History
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.8.1 | Oct 26, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.8.1 ibmcom/transformation-advisor-server:1.8.1 ibmcom/transformation-advisor-ui:1.8.1 | None | Data Collector Patch       |
 | 1.8.0 | Oct 01, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.8.0 ibmcom/transformation-advisor-server:1.8.0 ibmcom/transformation-advisor-ui:1.8.0 | None | MQ Analysis                | 
 | 1.7.2 | Sep 04, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.7.2 ibmcom/transformation-advisor-server:1.7.2 ibmcom/transformation-advisor-ui:1.7.2 | None | Complexity Fix             |
 | 1.7.1 | Aug 24, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.7.1 ibmcom/transformation-advisor-server:1.7.1 ibmcom/transformation-advisor-ui:1.7.1 | None | Patch for new Micro Climate|
