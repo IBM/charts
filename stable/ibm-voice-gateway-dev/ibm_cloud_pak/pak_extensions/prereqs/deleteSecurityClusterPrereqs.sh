@@ -1,3 +1,5 @@
+#!/bin/bash
+#
 ###############################################################################
 # Licensed Materials - Property of IBM.
 # Copyright IBM Corporation 2018. All Rights Reserved.
@@ -7,17 +9,10 @@
 # Contributors:
 #  IBM Corporation
 ###############################################################################
+#
+# This script can be run after all releases are deleted from the cluster.
+#
 
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: voice-gateway-clusterrole
-rules:
-- apiGroups:
-  - extensions
-  resources:
-  - podsecuritypolicies
-  resourceNames:
-  - voice-gateway-psp
-  verbs:
-  - use 
+# Delete the PodSecurityPolicy and ClusterRole for all releases of this chart.
+kubectl delete -f ibm-voice-gateway-psp.yaml
+kubectl delete -f ibm-voice-gateway-cr.yaml
