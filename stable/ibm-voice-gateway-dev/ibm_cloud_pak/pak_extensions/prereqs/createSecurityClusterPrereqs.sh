@@ -1,3 +1,5 @@
+#!/bin/bash
+#
 ###############################################################################
 # Licensed Materials - Property of IBM.
 # Copyright IBM Corporation 2018. All Rights Reserved.
@@ -7,16 +9,10 @@
 # Contributors:
 #  IBM Corporation
 ###############################################################################
+#
+# You need to run this script once prior to installing the chart.
+#
 
-name: ibm-voice-gateway-dev
-version: 2.0.1
-description: IBM Voice Gateway Helm chart (Developer Trial).
-keywords:
-  - voice gateway
-  - message queue
-  - Limited
-  - amd64
-  - ICP
-icon: https://raw.githubusercontent.com/WASdev/sample.voice.gateway/master/images/VoiceGateway_WebLogo_Color.png
-tillerVersion: ">=2.9.1"
-kubeVersion: ">=1.11"
+# Create the PodSecurityPolicy and ClusterRole for all releases of this chart.
+kubectl apply -f ibm-voice-gateway-psp.yaml
+kubectl apply -f ibm-voice-gateway-cr.yaml

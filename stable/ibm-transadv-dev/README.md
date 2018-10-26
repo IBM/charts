@@ -82,9 +82,7 @@ chmod -R 770 /opt/couchdb/data
 | Server     | 1           | 2                   |                         |
 | UI         | 1           | 2                   |                         |
 
-## Prerequisites
-
-* If persistence is enabled but no dynamic provisioning is used, Persistent Volumes must be created.
+## PodSecurityPolicy Requirements
 
 * If you have [pod security policy control](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#enabling-pod-security-policies) enabled, you must have a [PodSecurityPolicy](https://kubernetes.io/docs/concepts/policy/pod-security-policy/) that supports the following [securityContext](https://kubernetes.io/docs/concepts/policy/security-context/) settings:
   * capabilities:
@@ -99,7 +97,6 @@ chmod -R 770 /opt/couchdb/data
     * NET_BIND_SERVICE
     * NET_RAW
     * SYS_CHROOT
-    * MKNOD
     * AUDIT_WRITE
     * SETFCAP
   * allowPrivilegeEscalation: true
@@ -137,7 +134,6 @@ spec:
   - NET_BIND_SERVICE
   - NET_RAW
   - SYS_CHROOT
-  - MKNOD
   - AUDIT_WRITE
   - SETFCAP
   seLinux:
@@ -161,6 +157,10 @@ kubectl -n ta create rolebinding ta-sa:psp:unprivileged \
     --role=psp:unprivileged \
     --serviceaccount=ta:ta-sa
 ```    
+
+## Prerequisites
+
+* If persistence is enabled but no dynamic provisioning is used, Persistent Volumes must be created.
     
 ### Secret
 
@@ -222,7 +222,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | authentication.oidc.clientSecret                    | a OIDC registry will be created with this secret             | 94b6cbce793d0606c0df9e8d656a159f0c06631b                |
 | security.serviceAccountName                         | name of the service account to use                           | default                                                 |
 | couchdb.image.repository                            | couchdb image repository                                     | ibmcom/transformation-advisor-db                        |
-| couchdb.image.tag                                   | couchdb image tag                                            | 1.8.0                                                   |
+| couchdb.image.tag                                   | couchdb image tag                                            | 1.8.1                                                   |
 | couchdb.image.pullPolicy                            | couchdb image pull policy                                    | IfNotPresent                                            |
 | couchdb.resources.requests.memory                   | requests memory                                              | 2Gi                                                     |
 | couchdb.resources.requests.cpu                      | requests cpu                                                 | 1000m                                                   |
@@ -235,7 +235,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | couchdb.persistence.existingClaim                   | existing pv claim                                            | ""                                                      |
 | couchdb.persistence.storageClassName                | couchdb storage class name                                   | ""                                                      |
 | transadv.image.repository                           | transadv server image                                        | ibmcom/transformation-advisor-server                    |
-| transadv.image.tag                                  | transadv server image tag                                    | 1.8.0                                                   |
+| transadv.image.tag                                  | transadv server image tag                                    | 1.8.1                                                   |
 | transadv.image.pullPolicy                           | image pull policy                                            | IfNotPresent                                            |
 | transadv.resources.requests.memory                  | requests memory                                              | 2Gi                                                     |
 | transadv.resources.requests.cpu                     | requests cpu                                                 | 1000m                                                   |
@@ -243,7 +243,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadv.resources.limits.cpu                       | limits cpu                                                   | 16000m                                                  |
 | transadv.service.nodePort                           | transadv sevice node port                                    | 30111                                                   |
 | transadvui.image.repository                         | transadv ui image                                            | ibmcom/transformation-advisor-ui                        |
-| transadvui.image.tag                                | transadv ui image tag                                        | 1.8.0                                                   |
+| transadvui.image.tag                                | transadv ui image tag                                        | 1.8.1                                                   |
 | transadvui.image.pullPolicy                         | image pull policy                                            | IfNotPresent                                            |
 | transadvui.resources.requests.memory                | requests memory                                              | 2Gi                                                     |
 | transadvui.resources.requests.cpu                   | requests cpu                                                 | 1000m                                                   |
