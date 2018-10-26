@@ -14,17 +14,19 @@ This chart will deploy IBM Voice Gateway (Developer Trial).
 
 - IBM Cloud Private 3.1
 - A user with Cluster administrator role is required to install the chart.
-- IBM Cloud Private has RBAC enabled, so it requires that you add certain RBAC objects before you deploy the Voice Gateway Helm Chart in a non-default namespace.
 
-### Configure RBAC 
-Following RBAC objects must be created before deploying the Voice Gateway Helm Chart in a non-default namespace:
+### PodSecurityPolicy Requirements 
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation.  Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
+* Predefined PodSecurityPolicy name: [`ibm-anyuid-hostaccess-psp`](https://ibm.biz/cpkspec-psp)
+* Custom PodSecurityPolicy definition:
 
 #### PodSecurityPolicy
   ```yaml
   apiVersion: extensions/v1beta1
   kind: PodSecurityPolicy
   metadata:
-    name: voice-gateway-psp
+    name: ibm-voice-gateway-psp
   spec:
     privileged: false
     hostNetwork: true
@@ -55,50 +57,15 @@ Following RBAC objects must be created before deploying the Voice Gateway Helm C
     - 'projected'
   ```
 
-#### ServiceAccount
-*Note: You need to change namespace value to the namespace where you are installing the Voice Gateway Helm Chart.*
-  ```yaml
-  apiVersion: v1
-  kind: ServiceAccount
-  metadata:
-    name: voice-gateway-serviceaccount
-    namespace: <voice-gateway-deployment-namespace>
-  ```
-
-#### ClusterRole
-  ```yaml
-  apiVersion: rbac.authorization.k8s.io/v1
-  kind: ClusterRole
-  metadata:
-    name: voice-gateway-clusterrole
-  rules:
-  - apiGroups:
-    - extensions
-    resources:
-    - podsecuritypolicies
-    resourceNames:
-    - voice-gateway-psp
-    verbs:
-    - use  
-  ```
-  
-#### ClusterRoleBinding
-*Note: You need to change namespace value to the namespace where you are installing the Voice Gateway Helm Chart.*
-  ```yaml
-  apiVersion: rbac.authorization.k8s.io/v1
-  kind: ClusterRoleBinding
-  metadata:
-    name: voice-gateway-clusterrolebinding
-  roleRef:
-    apiGroup: rbac.authorization.k8s.io
-    kind: ClusterRole
-    name: voice-gateway-clusterrole
-  subjects:
-  - kind: ServiceAccount
-    name: voice-gateway-serviceaccount
-    namespace: <voice-gateway-deployment-namespace>
-  ```
-
+#### Configuration scripts can be used to create the required resources:
+Download the following scripts from [here](https://github.com/IBM/charts/tree/master/stable/ibm-voice-gateway-dev/ibm_cloud_pak/pak_extensions/prereqs)
+  - createSecurityClusterPrereqs.sh to create the PodSecurityPolicy and ClusterRole for all releases of this chart.
+  - createSecurityReleasePrereqs.sh to create the RoleBinding for the namespace. This script takes two arguments; the name for the release you plan to create when you install the chart and the namespace where the release will be installed.
+    - Example usage: `./createSecurityReleasePrereqs.sh myRelease myNamespace`
+  - deleteSecurityClusterPrereqs.sh to delete the PodSecurityPolicy and ClusterRole for all releases of this chart.
+  - deleteSecurityReleasePrereqs.sh to delete the RoleBinding for the namespace. This script takes two arguments; the name for the release you plan to create when you install the chart and the namespace where the release will be installed.
+    - Example usage: `./deleteSecurityReleasePrereqs.sh myRelease myNamespace`
+    
 ### Required
 - Create the following Watson services on IBM Cloud.
   - [Watson Speech to Text](https://console.bluemix.net/catalog/services/speech-to-text/)
@@ -195,16 +162,15 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | ------------------------------        | ----------------------------------------------------------   | ---------------------------------------------------------- |
 | `arch.amd64`                  | Architecture preference for target worker node | `3 - Most preferred`       |
 | `productName`                  | Product name | `IBM Voice Gateway`       |
-| `serviceAccountName`                  | Name of service account | `n/a`       |
 | `replicaCount`                    | Number of replicas                                                  | `1`                         |
 | `nodeSelector`                    | Node selector label                                                  | `n/a`                         |
 | `tenantConfigSecretName`           | Tenant Config secret name             | `vgw-tenantconfig-secret`                                                      |
 | `image.sipOrchestrator.repository`           | Sip Orchestrator repository             | `ibmcom/voice-gateway-so`                                                      |
 | `image.sipOrchestrator.containerName`           | Sip Orchestrator container name             | `vgw-sip-orchestrator`                                                      |
-| `image.sipOrchestrator.tag`           | Sip Orchestrator docker image tag             | `1.0.0.7`                                                      |
+| `image.sipOrchestrator.tag`           | Sip Orchestrator docker image tag             | `1.0.0.7a`                                                      |
 | `image.mediaRelay.repository`           | Media Relay repository             | `ibmcom/voice-gateway-mr`                                                      |
 | `image.mediaRelay.containerName`           | Media Relay container name             | `vgw-media-relay`                                                      |
-| `image.mediaRelay.tag`           | Media Relay docker image tag             | `1.0.0.7`                                                      |
+| `image.mediaRelay.tag`           | Media Relay docker image tag             | `1.0.0.7a`                                                      |
 | `image.pullPolicy`           | Image pull policy             | `Always`                                                      |
 | `image.imagePullSecrets`           | Docker repository image pull secret             | `n/a`                                                      |
 | `persistence.useDynamicProvisioning`           | Dynamic provisioning setup             | `false`                                                      |

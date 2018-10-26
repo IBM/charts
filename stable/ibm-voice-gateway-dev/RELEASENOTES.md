@@ -1,13 +1,6 @@
-# Breaking Changes
-* Removed single-tenant support. Now you can use the JSON configuration to deploy a single-tenant or multi-tenant deployment of IBM Voice Gateway.
-* Containers now do not run as root.
-
-# What's new in 2.0.0
-* Added support for for JSON based configuration.
-* Added node selector feature.
-* Added metering support.
-* Added RBAC components in readme and ibm_cloud_pak/pak_extensions/prereqs directory of the chart, which are needed when running in non-default namespace.
-* Updated images to ibmcom/voice-gateway-so:1.0.0.7 and ibmcom/voice-gateway-mr:1.0.0.7
+# What's new in 2.0.1
+- Updated voice gateway images to 1.0.0.7a
+- [What's new](https://www.ibm.com/support/knowledgecenter/SS4U29/whatsnew.html)
 
 # Prerequisites
 - IBM Cloud Private 3.1.0
@@ -20,6 +13,8 @@ None
 
 | Chart | Date        | Kubernetes Required | Image(s) Supported | Details |
 | ----- | ----------- | ----------- | ------------------ | ------- |
+| 2.0.1 | Oct 26, 2018 | >= 1.11    | ibmcom/voice-gateway-so:1.0.0.7a and ibmcom/voice-gateway-mr:1.0.0.7a | Updated images to version 1.0.0.7a |
+| 2.0.0 | Sep 28, 2018 | >= 1.11    | ibmcom/voice-gateway-so:1.0.0.7 and ibmcom/voice-gateway-mr:1.0.0.7 | Updated images to version 1.0.0.7, added support for for JSON based configuration, added node selector feature, added metering support |
 | 1.3.0 | Aug 24, 2018 | >= 1.9.1    | ibmcom/voice-gateway-so:1.0.0.6b and ibmcom/voice-gateway-mr:1.0.0.6b | Updated images to version 1.0.0.6b |
 | 1.2.0 | Jul 09, 2018 | >= 1.9.1    | ibmcom/voice-gateway-so:1.0.0.6 and ibmcom/voice-gateway-mr:1.0.0.6 | Updated images to version 1.0.0.6 |
 | 1.1.0 | Apr 25, 2018 | >= 1.9.1    | ibmcom/voice-gateway-so:1.0.0.5d and ibmcom/voice-gateway-mr:1.0.0.5d | Added support for call quiescing feature of Voice Gateway |
