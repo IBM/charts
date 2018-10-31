@@ -19,8 +19,15 @@ spec:
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
       annotations:
-        productID: ibm-powervc-k8s-volume-driver
+        productName: ibm-powervc-k8s-volume-driver
+        productID: ibm-powervc-k8s-volume-driver_1.0.1_apache_00000
+        productVersion: 1.0.1
     spec:
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+      securityContext:
+        fsGroup: 1000
       tolerations:
       - key: dedicated
         operator: Exists
@@ -43,6 +50,7 @@ spec:
                 operator: In
                 values:
                 - amd64
+      serviceAccountName: {{ .Values.security.serviceAccountName }}
       containers:
       - name: ibm-powervc-k8s-volume-flex
         image: "{{ .Values.image.flexVolumeRepo }}:{{ .Values.image.flexVolumeTag }}"
@@ -53,7 +61,7 @@ spec:
         - configMapRef:
             name: ibm-powervc-config
         - secretRef:
-            name: ibm-powervc-credentials
+            name: {{ .Values.openstack.credSecretName }}
         {{ if .Values.openstack.certData }}
         env:
         - name: OS_CACERT
@@ -66,6 +74,16 @@ spec:
         {{ end }}
         - name: flex-driver-dir
           mountPath: /flex-mount-dir
+        securityContext:
+          capabilities:
+            drop:
+            - all
+            add: []
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
       terminationGracePeriodSeconds: 1
       volumes:
       {{ if .Values.openstack.certData }}

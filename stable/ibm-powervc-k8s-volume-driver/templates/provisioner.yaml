@@ -20,8 +20,15 @@ spec:
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
       annotations:
-        productID: ibm-powervc-k8s-volume-driver
+        productName: ibm-powervc-k8s-volume-driver
+        productID: ibm-powervc-k8s-volume-driver_1.0.1_apache_00000
+        productVersion: 1.0.1
     spec:
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+      securityContext:
+        fsGroup: 1000
       nodeSelector:
         role: master
       tolerations:
@@ -38,6 +45,7 @@ spec:
                 values:
                 - ppc64le
                 - amd64
+      serviceAccountName: {{ .Values.security.serviceAccountName }}
       containers:
       - name: ibm-powervc-k8s-volume-provisioner
         image: "{{ .Values.image.provisionerRepo }}:{{ .Values.image.provisionerTag }}"
@@ -48,7 +56,7 @@ spec:
         - configMapRef:
             name: ibm-powervc-config
         - secretRef:
-            name: ibm-powervc-credentials
+            name: {{ .Values.openstack.credSecretName }}
         {{ if .Values.openstack.certData }}
         env:
         - name: OS_CACERT
@@ -56,6 +64,16 @@ spec:
         volumeMounts:
         - name: powervc-config
           mountPath: /etc/config
+        securityContext:
+          capabilities:
+            drop:
+            - all
+            add: []
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          privileged: false
       volumes:
       - name: powervc-config
         configMap:
