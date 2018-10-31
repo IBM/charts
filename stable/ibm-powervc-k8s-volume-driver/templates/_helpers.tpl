@@ -14,3 +14,14 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- $name := default .Chart.Name .Values.nameOverride -}}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+{{/*
+Define OpenStack Authentication URL.
+*/}}
+{{- define "openstack.auth_url" }}
+{{- if (contains "POWERVC_ADDR" (.Values.openstack.authURL | quote)) }}
+  {{- printf " %s" .Values.openstack.authURL | replace "POWERVC_ADDR" .Values.openstack.ipOrHostname }}
+{{- else }}
+  {{- printf " %s" .Values.openstack.authURL }}
+{{- end }}
+{{- end }}

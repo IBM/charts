@@ -1,3 +1,8 @@
+# What's new in Chart Version 1.0.1
+* IBM Cloud Pak Support.
+* Require PowerVC admin username and password to be provided in pre-created Secret object.
+
+
 # What's new in Chart Version 1.0.0
 
 The IBM PowerVC FlexVolume Driver 1.0.0 is the initial release and provides the following features:
@@ -14,5 +19,6 @@ The IBM PowerVC FlexVolume Driver 1.0.0 is the initial release and provides the 
 # Version History
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
-| ----- | ---- | ------------ | ------------------ | ---------------- | ------- | 
+| ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.0.1 | Oct 2018 | >=1.9.1 | ibmcom/ibm-powervc-k8s-volume-flex:1.0.0 ibmcom/ibm-powervc-k8s-volume-provisioner:1.0.0 | None | IBM Cloud Pak Support|
 | 1.0.0 | June 2018| >=1.9.1 | ibmcom/ibm-powervc-k8s-volume-flex:1.0.0 ibmcom/ibm-powervc-k8s-volume-provisioner:1.0.0 | None | Initial Release |
