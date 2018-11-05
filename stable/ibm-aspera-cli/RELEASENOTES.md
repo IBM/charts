@@ -26,4 +26,5 @@ ___
 
 | Chart | Date        | Kubernetes Required | Image(s) Supported         | Details                                                             |
 | ----- | ----------- | ------------------- | -------------------------- | ------------------------------------------------------------------- |
+| 1.0.1 | Oct 31, 2018| >= 1.10.0         | ibmcom/aspera-cli  | Test fix, correct icon url |
 | 1.0.0 | Sept 27, 2018| >= 1.10.0         | ibmcom/aspera-cli  | Initial Release |
