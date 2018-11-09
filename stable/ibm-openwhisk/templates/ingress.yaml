@@ -1,0 +1,69 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+{{- if eq .Values.whisk.ingress.type "standard" }}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ .Values.whisk.ingress.name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  annotations:
+    {{- range $key, $value := .Values.whisk.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  {{- if .Values.whisk.ingress.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ .Values.whisk.ingress.domain }}
+    {{- if .Values.whisk.ingress.tls.secretenabled }}
+    secretName: {{ .Values.whisk.ingress.tls.secretname | quote }}
+    {{- end }}
+  {{- end }}
+  rules:
+  - host: {{ .Values.whisk.ingress.domain }}
+    http:
+      paths:
+      - path: /api/v1/web
+        backend:
+          serviceName: controller
+          servicePort: http
+      - path: /api/v1
+        backend:
+          serviceName: controller
+          servicePort: http
+      # API GW generated API invocation
+      - path: /api
+        backend:
+          serviceName: apigateway
+          servicePort: mgmt
+      # API GW health status
+      - path: /v1/health-check
+        backend:
+          serviceName: apigateway
+          servicePort: api
+      # API management REST APIs
+      - path: /v2
+        backend:
+          serviceName: apigateway
+          servicePort: api
+      - path: /
+        backend:
+          serviceName: nginx
+          servicePort: http
+
+{{- if .Values.whisk.ingress.tls.createsecret }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.whisk.ingress.tls.secretname | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+type: {{ .Values.whisk.ingress.tls.secrettype | quote }}
+data:
+  tls.crt: {{ .Values.whisk.ingress.tls.crt }}
+  tls.key: {{ .Values.whisk.ingress.tls.key }}
+{{- end}}
+
+{{- end }}

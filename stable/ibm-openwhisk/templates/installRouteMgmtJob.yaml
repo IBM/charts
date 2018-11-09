@@ -1,0 +1,77 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: install-routemgmt
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: {{ .Values.db.name | quote }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ template "fullname" . }}
+spec:
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: install-routemgmt
+      labels:
+        name: {{ .Values.db.name | quote }}
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        app: {{ template "fullname" . }}
+    spec:
+      restartPolicy: Never
+      affinity:
+{{ include "nodeaffinity" . | indent 6 }}
+      volumes:
+      - name: task-dir
+        configMap:
+          name: install-routemgmt
+      initContainers:
+      # Wait for a controller to be up so we can perfom our CRUD actions with the CLI
+{{ include "readiness.waitForController" . | indent 6 }}
+      containers:
+      - name: routemgmt
+        image: openwhisk/kube-whisk-script-runner
+        volumeMounts:
+        - name: task-dir
+          mountPath: "/task/myTask.sh"
+          subPath: "myTask.sh"
+        env:
+          - name: "WHISK_AUTH"
+            valueFrom:
+              secretKeyRef:
+                name: whisk.auth
+                key: system
+          # poorly named envvar; actually expects full apihost (host:port)
+          - name: "WHISK_API_HOST_NAME"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_api_host_nameAndPort
+          - name: "WHISK_NAMESPACE"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_system_namespace
+          - name: "WHISK_API_GATEWAY_HOST_V2"
+            value: "http://$(APIGATEWAY_SERVICE_HOST):$(APIGATEWAY_SERVICE_PORT_API)/v2"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: install-routemgmt
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: {{ .Values.db.name | quote }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ template "fullname" . }}
+data:
+{{ (.Files.Glob "configMapFiles/installRouteMgmt/myTask.sh").AsConfig | indent 2 }}
