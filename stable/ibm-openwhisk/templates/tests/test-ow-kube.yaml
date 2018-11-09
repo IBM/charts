@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ template "fullname" . }}
+  name: {{ template "fullname" . }}-test
+  namespace: {{ .Release.Namespace }}
+spec:
+  restartPolicy: Never 
+  containers:
+  - name: {{ template "fullname" . }}-test-on
+    image: alpine
+    env:
+    - name: "OW_HOST"
+      value: "{{ .Values.whisk.ingress.apiHostName }}"
+    - name: "OW_PORT"
+      value: "{{ .Values.whisk.ingress.apiHostPort }}"
+    - name: "AUTH_GUEST"
+      value: "{{ .Values.whisk.auth.guest | b64enc }}"
+    command: ['sh', '-c', 'wget --header="Authorization: Basic $AUTH_GUEST" --no-check-certificate https://$OW_HOST:$OW_PORT/api/v1/namespaces/whisk.system/packages && cat packages']

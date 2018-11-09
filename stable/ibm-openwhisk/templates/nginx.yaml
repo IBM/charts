@@ -1,0 +1,107 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.nginx.name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: {{ .Values.nginx.name | quote }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ template "fullname" . }}
+spec:
+  {{- if .Values.nginx.httpsNodePort }}
+  type: NodePort
+  {{- end }}
+  selector:
+    name: {{ .Values.nginx.name | quote }}
+  ports:
+    - port: {{ .Values.nginx.httpPort }}
+      name: http
+    - port: {{ .Values.nginx.httpsPort }}
+      {{- if .Values.nginx.httpsNodePort }}
+      nodePort: {{ .Values.nginx.httpsNodePort }}
+      {{- end }}
+      name: https-api
+    - port: {{ .Values.nginx.httpsAdminPort }}
+      name: https-admin
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ .Values.nginx.name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: nginx
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}"
+    app: {{ template "fullname" . }}
+spec:
+  replicas: {{ .Values.nginx.replicaCount }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.nginx.name | quote }}
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{ template "fullname" . }}
+      annotations:
+        productName: OpenWhisk
+        productVersion: 9.9.9
+        productID: none
+    spec:
+      restartPolicy: {{ .Values.nginx.restartPolicy }}
+
+      {{- if .Values.affinity.enabled }}
+      affinity:
+{{ include "affinity.edge" . | indent 6 }}
+{{ include "affinity.selfAntiAffinity" ( .Values.nginx.name | quote ) | indent 6 }}
+      {{- end }}
+
+      volumes:
+      - name: nginx-certs
+        secret:
+          secretName: {{ .Values.nginx.name | quote }}
+      - name: nginx-conf
+        configMap:
+          name: {{ .Values.nginx.name | quote }}
+      - name: logs
+        emptyDir: {}
+
+      containers:
+      - name: {{ .Values.nginx.name | quote }}
+        imagePullPolicy: {{ .Values.nginx.imagePullPolicy | quote }}
+        image: {{ .Values.nginx.image | quote }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.nginx.httpPort }}
+        - name: http-api
+          containerPort: {{ .Values.nginx.httpsPort }}
+        - name: https-admin
+          containerPort: {{ .Values.nginx.httpsAdminPort }}
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: "/etc/nginx/nginx.conf"
+          subPath: "nginx.conf"
+        - name: nginx-certs
+          mountPath: "/etc/nginx/certs"
+        - name: logs
+          mountPath: "/logs"
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.nginx.httpsPort }}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 1
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.nginx.httpsPort }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 1
