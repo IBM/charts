@@ -1,0 +1,253 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+---
+{{- if eq .Values.invoker.containerFactory.impl "docker" }}
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+{{- else if eq .Values.invoker.containerFactory.impl "kubernetes" -}}
+apiVersion: apps/v1beta1
+kind: StatefulSet
+{{- end }}
+metadata:
+  name: {{ .Values.invoker.name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: {{ .Values.invoker.name | quote }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}"
+    app: {{ template "fullname" . }}
+spec:
+{{- if eq .Values.invoker.containerFactory.impl "kubernetes" }}
+  podManagementPolicy: "Parallel"
+  replicas: {{ .Values.invoker.containerFactory.kubernetes.replicaCount }}
+{{- end }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.invoker.name | quote }}
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{ template "fullname" . }}
+      annotations:
+        productName: OpenWhisk
+        productVersion: 9.9.9
+        productID: none
+    spec:
+{{- if eq .Values.invoker.containerFactory.impl "kubernetes" }}
+      serviceAccountName: {{ .Values.invoker.name | quote }}
+{{- end }}
+      restartPolicy: {{ .Values.invoker.restartPolicy }}
+
+      affinity:
+{{ include "affinity.invoker" . | indent 8 }}
+{{- if eq .Values.invoker.containerFactory.impl "kubernetes" }}
+{{ include "affinity.selfAntiAffinity" ( .Values.invoker.name | quote ) | indent 8 }}
+{{- end }}
+
+{{- if eq .Values.invoker.containerFactory.impl "docker" }}
+      volumes:
+{{ include "docker_volumes" . | indent 6 }}
+      - name: task-dir
+        configMap:
+          name: docker-pull-runtimes
+{{- end }}
+
+      initContainers:
+{{- if eq .Values.invoker.containerFactory.impl "docker" }}
+      # Pull images for all default runtimes before starting invoker
+{{ include "docker_pull_runtimes" . | indent 6 }}
+{{- end }}
+      # Wait for a controller to be up (which implies kafka, zookeeper, couchdb are all up as well).
+{{ include "readiness.waitForController" . | indent 6 }}
+
+      containers:
+      - name: {{ .Values.invoker.name | quote }}
+        imagePullPolicy: {{ .Values.invoker.imagePullPolicy | quote }}
+        image: {{ .Values.invoker.image | quote }}
+        command: [ "/bin/bash", "-c", "/init.sh --uniqueName $INVOKER_NAME" ]
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.invoker.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.invoker.port }}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        env:
+          - name: "PORT"
+            value: {{ .Values.invoker.port | quote }}
+
+          # Needed by invoker to set the environment variable __OW_API_HOST in action containers
+          - name: "WHISK_API_HOST_PROTO"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_api_host_proto
+          - name: "WHISK_API_HOST_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_api_host_port
+          - name: "WHISK_API_HOST_NAME"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_api_host_name
+          - name: "INVOKER_CONTAINER_NETWORK"
+            value: {{ .Values.invoker.containerNetwork | quote }}
+          - name: "CONFIG_whisk_docker_containerFactory_useRunc"
+            value: {{ .Values.invoker.containerFactory.useRunc | quote }}
+
+          # Properties for invoker image
+          - name: "DOCKER_IMAGE_PREFIX"
+            value: {{ .Values.docker.image.prefix | quote }}
+          - name: "DOCKER_IMAGE_TAG"
+            value: {{ .Values.docker.image.tag | quote }}
+          - name: "DOCKER_REGISTRY"
+            value: {{ .Values.docker.registry.name | quote }}
+
+          - name: "CONFIG_whisk_containerPool_numCore"
+            value: {{ .Values.invoker.containerPool.numCore | quote }}
+          - name: "CONFIG_whisk_containerPool_coreShare"
+            value: {{ .Values.invoker.containerPool.coreShare | quote }}
+
+          # DNS Server passed to action containers
+{{- if not (eq .Values.invoker.kubeDns "nil") }}
+          - name: "CONFIG_whisk_containerFactory_containerArgs_dnsServers_0"
+            value: {{ .Values.invoker.kubeDns }}
+{{ end }}
+
+          # Invoker name is the name of the node (DaemonSet) or pod (StatefulSet)
+          - name: "INVOKER_NAME"
+            valueFrom:
+              fieldRef:
+                fieldPath: {{ if eq .Values.invoker.containerFactory.impl "docker" }} spec.nodeName {{ else }} metadata.name {{ end }}
+
+          # Java options
+          - name: "JAVA_OPTS"
+            value: "-Xmx{{- .Values.invoker.jvmHeapMB -}}M {{ .Values.invoker.jvmOptions }}"
+
+          # Invoker options
+          - name: "INVOKER_OPTS"
+            value: "{{ .Values.invoker.options }} {{ if eq .Values.invoker.containerFactory.impl "docker" }} -Dwhisk.spi.ContainerFactoryProvider=whisk.core.containerpool.docker.DockerContainerFactoryProvider {{ else }} -Dkubernetes.master=https://$KUBERNETES_SERVICE_HOST -Dwhisk.spi.ContainerFactoryProvider=whisk.core.containerpool.kubernetes.KubernetesContainerFactoryProvider {{ end }}"
+
+{{ if .Values.invoker.containerFactory.kubernetes.agent.enabled }}
+          - name: "CONFIG_whisk_kubernetes_invokerAgent_enabled"
+            value:  "TRUE"
+          - name: "CONFIG_whisk_kubernetes_invokerAgent_port"
+            value: {{ .Values.invoker.containerFactory.kubernetes.agent.port | quote }}
+{{ end }}
+
+          # action runtimes
+          - name: "RUNTIMES_MANIFEST"
+            value: {{ template "runtimes_manifest" . }}
+
+          # Default to empty logs dir. This is because logs should go to stdout
+          - name: "WHISK_LOGS_DIR"
+            value: ""
+
+          # this version is the day it is deployed,
+          - name:  "CONFIG_whisk_info_date"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_info_date
+
+          # properties for DB connection
+{{ include "whisk.dbEnvVars" . | indent 10 }}
+
+          # properties for kafka connection
+          - name: "KAFKA_HOSTS"
+            value: "{{ include "kafka_host" . }}:{{ .Values.kafka.port }}"
+
+          # properties for zookeeper connection
+          - name: "ZOOKEEPER_HOSTS"
+            value: "{{ include "zookeeper_connect" . }}"
+
+        ports:
+        - name: invoker
+          containerPort: {{ .Values.invoker.port }}
+{{- if eq .Values.invoker.containerFactory.impl "docker" }}
+        volumeMounts:
+{{ include "docker_volume_mounts" . | indent 8 }}
+{{- end }}
+
+{{ if .Values.invoker.containerFactory.kubernetes.agent.enabled }}
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: {{ .Values.invoker.containerFactory.kubernetes.agent.name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: {{ .Values.invoker.containerFactory.kubernetes.agent.name | quote }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ template "fullname" . }}
+spec:
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.invoker.containerFactory.kubernetes.agent.name | quote }}
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        app: {{ template "fullname" . }}
+    spec:
+      restartPolicy: Always
+      hostNetwork: true
+
+      # TODO: disabled affinity until user-action pods are
+      #       created by KubernetesContainerFacotry with the
+      #       same affinity rules.
+      #       Requires extension to upstream kube java client
+      #       run only on nodes labeled with openwhisk-role=invoker
+
+      volumes:
+{{ include "docker_volumes" . | indent 6 }}
+      - name: userlogs
+        emptyDir: {}
+      - name: task-dir
+        configMap:
+          name: docker-pull-runtimes
+
+      initContainers:
+      # Pull images for all default runtimes before starting invoker
+{{ include "docker_pull_runtimes" . | indent 6 }}
+
+      containers:
+      - name: {{ .Values.invoker.containerFactory.kubernetes.agent.name | quote }}
+        imagePullPolicy: {{ .Values.invoker.imagePullPolicy | quote }}
+        image: {{ .Values.invoker.containerFactory.kubernetes.agent.image }}
+        securityContext:
+          privileged: true
+        ports:
+        - name: agent
+          containerPort: {{ .Values.invoker.containerFactory.kubernetes.agent.port }}
+        volumeMounts:
+{{ include "docker_volume_mounts" . | indent 8 }}
+        - name: userlogs
+          mountPath: "/action-logs"
+{{- end }}
+
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docker-pull-runtimes
+  labels:
+    name: {{ .Values.invoker.name | quote }} 
+    namespace: {{ .Release.Namespace | quote }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ template "fullname" . }}
+data:
+{{ (.Files.Glob "configMapFiles/dockerPullRuntimes/playbook.yml").AsConfig | indent 2 }}

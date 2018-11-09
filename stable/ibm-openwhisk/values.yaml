@@ -1,0 +1,231 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+
+# This file defines the default values for all variables
+# used in the OpenWhisk Helm Chart.  The variables are grouped
+# by component into subtrees.
+#
+# You _MUST_ override the default values of whisk.ingress.api_host_name
+# and whisk.ingress.api_host_port (see docs/ingress.md for a discussion
+# of how to determine values for these variables).
+#
+# Production deployments _MUST_ override the default credentials
+# that are used in whisk.auth and db.auth.
+#
+# The file docs/configurationChoices.md discusses other common
+# configuration options for OpenWhisk and which variables to override
+# to enable them.
+
+
+# Overall configuration of the deployment
+whisk:
+  # Ingress defines how to access OpenWhisk from outside the Kubernetes cluster.
+  # See docs/ingress.md for a discussion of how to provide these values.
+  ingress:
+    name: "ow-ingress"
+    apiHostName: nil
+    apiHostPort: 31001
+    apiHostProto: "https"
+    type: NodePort
+    annotations: nil
+    domain: nil
+    tls:
+      enabled: false
+      secretenabled: false
+      crt: nil
+      key: nil
+      secretname: nil
+      secrettype: nil
+      createsecret: false
+  # Production deployments _MUST_ override these default auth values
+  auth:
+    system: "789c46b1-71f6-4ed5-8c54-816aa4f8c502:abczO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP"
+    guest: "23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP"
+  versions:
+    tag: "latest"
+    cli: "latest"
+  systemNameSpace: "/whisk.system"
+  runtimes: "runtimes.json"
+
+# Docker registry
+docker:
+  image:
+    prefix: "openwhisk"
+    tag: "latest"
+  registry:
+    name: ""
+    username: ""
+    password: ""
+
+# zookeeper configurations
+zookeeper:
+  name: "zookeeper"
+  image: "zookeeper:3.4"
+  # Note: Zookeeper's quorum protocol is designed to have an odd number of replicas.
+  replicaCount: 1
+  imagePullPolicy: "IfNotPresent"
+  restartPolicy: "Always"
+  port: 2181
+  serverPort: 2888
+  leaderElectionPort: 3888
+  external: false
+  persistence:
+    enabled: false
+    pvcName: zookeeper-pvc
+    size: 2Gi
+    storageClass: default
+    accessMode: ReadWriteOnce
+  # Default values for entries in zoo.cfg (see Apache Zookeeper documentation for semantics)
+  config:
+    tickTime: 2000
+    initLimit: 5
+    syncLimit: 2
+    dataDir: "/data"
+    dataLogDir: "/datalog"
+
+# kafka configurations
+kafka:
+  name: "kafka"
+  image: "wurstmeister/kafka:0.11.0.1"
+  # NOTE: setting replicaCount > 1 will not work...actively being worked on.
+  replicaCount: 1
+  imagePullPolicy: "IfNotPresent"
+  restartPolicy: "Always"
+  port: 9092
+  external: false
+  persistence:
+    enabled: false
+    pvcName: kafka-pvc
+    size: 2Gi
+    storageClass: default
+    accessMode: ReadWriteOnce
+
+# Database configuration
+db:
+  external: false
+  # Should we run a Job to wipe and re-initialize the database when the chart is deployed?
+  # This should always be true if external is false.
+  wipeAndInit: true
+  name: "couchdb"
+  image: "apache/couchdb:2.1"
+  # NOTE: setting replicaCount > 1 will not work.
+  replicaCount: 1
+  imagePullPolicy: "IfNotPresent"
+  restartPolicy: "Always"
+  host: nil
+  port: 5984
+  provider: "CouchDB"
+  protocol: "http"
+  # Production deployments _MUST_ override the default user/password values
+  auth:
+    username: "whisk_admin"
+    password: "some_passw0rd"
+  dbPrefix: "test_"
+  activationsTable: "test_activations"
+  actionsTable: "test_whisks"
+  authsTable: "test_subjects"
+  persistence:
+    enabled: false
+    pvcName: couchdb-pvc
+    size: 8Gi
+    storageClass: default
+    accessMode: ReadWriteOnce
+
+# Nginx configurations
+nginx:
+  name: "nginx"
+  image: "nginx:1.11"
+  # NOTE: setting replicaCount > 1 is not tested and may not work
+  replicaCount: 1
+  imagePullPolicy: "IfNotPresent"
+  restartPolicy: "Always"
+  httpPort: 80
+  httpsPort: 443
+  httpsAdminPort: 8443
+  httpsNodePort: 31001
+
+# Controller configurations
+controller:
+  name: "controller"
+  image: "openwhisk/controller:latest"
+  replicaCount: 1
+  imagePullPolicy: "Always"
+  restartPolicy: "Always"
+  port: 8080
+  options: ""
+  jvmHeapMB: "1024"
+  jvmOptions: ""
+  limits:
+    actionsSequenceMaxlength: 50
+    triggersFiresPerminute: 60
+    actionsInvokesPerminute: 60
+    actionsInvokesConcurrent: 30
+
+# Invoker configurations
+invoker:
+  name: "invoker"
+  image: "openwhisk/invoker:latest"
+  imagePullPolicy: "Always"
+  restartPolicy: "Always"
+  port: 8080
+  pullRuntimesImage: "openwhisk/kube-whisk-ansible-runner:latest"
+  options: ""
+  jvmHeapMB: "512"
+  jvmOptions: ""
+  containerFactory:
+    useRunc: false
+    impl: "docker"
+    kubernetes:
+      replicaCount: 1
+      agent:
+        name: "invoker-agent"
+        image: "openwhisk/kube-invoker-agent:latest"
+        enabled: false
+        port: 3233
+  containerNetwork: "bridge"
+  containerPool:
+    numCore: 2
+    coreShare: 4
+  busyThreshold: 8
+  kubeDns: nil
+
+# API Gateway configurations
+apigw:
+  name: "apigateway"
+  image: "openwhisk/apigateway:latest"
+  # NOTE: setting replicaCount > 1 is not tested and may not work
+  replicaCount: 1
+  imagePullPolicy: "Always"
+  restartPolicy: "Always"
+  apiPort: 9000
+  mgmtPort: 8080
+
+# Redis (used by apigatewy)
+redis:
+  name: "redis"
+  image: "redis:3.2"
+  # NOTE: setting replicaCount > 1 will not work; need to add redis cluster configuration
+  replicaCount: 1
+  imagePullPolicy: "IfNotPresent"
+  restartPolicy: "Always"
+  port: 6379
+  persistence:
+    enabled: false
+    pvcName: redis-pvc
+    size: 256Mi
+    storageClass: default
+    accessMode: ReadWriteOnce
+
+# Used to define pod affinity and anti-affinity for the Kubernetes scheduler.
+# If affinity.enabled is true, then all of the deployments for the OpenWhisk
+# microservices will use node and pod affinity directives to inform the
+# scheduler how to best distribute the pods on the available nodes in the cluster.
+affinity:
+  enabled: true
+  coreNodeLabel: core
+  edgeNodeLabel: edge
+  invokerNodeLabel: invoker
+
+arch: 
+  amd64: "3 - Most preferred"
