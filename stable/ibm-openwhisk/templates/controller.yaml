@@ -1,0 +1,154 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.controller.name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: {{ .Values.controller.name | quote }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ template "fullname" . }}
+spec:
+  selector:
+    name: {{ .Values.controller.name | quote }}
+  ports:
+    - port: {{ .Values.controller.port }}
+      name: http
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.controller.name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: {{ .Values.controller.name | quote }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}"
+    app: {{ template "fullname" . }}
+spec:
+  podManagementPolicy: "Parallel"
+  replicas: {{ .Values.controller.replicaCount }}
+  name: {{ .Values.controller.name | quote }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.controller.name | quote }}
+        heritage: {{.Release.Service | quote }}
+        release: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}"
+        app: {{ template "fullname" . }}
+      annotations:
+        productName: OpenWhisk
+        productVersion: 9.9.9
+        productID: none
+    spec:
+      serviceAccountName: ow-core
+      restartPolicy: {{ .Values.controller.restartPolicy }}
+      {{- if .Values.affinity.enabled }}
+      affinity:
+{{ include "nodeaffinity" . | indent 6 }}
+{{ include "affinity.selfAntiAffinity" ( .Values.controller.name | quote ) | indent 6 }}
+      {{- end }}
+      initContainers:
+      # The controller must wait for kafka and couchdb to be ready before it starts
+{{ include "readiness.waitForKafka" . | indent 6 }}
+{{ include "readiness.waitForCouchDB" . | indent 6 }}
+
+      containers:
+      - name: {{ .Values.controller.name | quote }}
+        imagePullPolicy: {{ .Values.controller.imagePullPolicy | quote }}
+        image: {{ .Values.controller.image | quote }}
+        command: ["/bin/bash", "-c", "/init.sh `hostname | cut -d'-' -f2`"]
+        ports:
+        - name: controller
+          containerPort: {{ .Values.controller.port }}
+        - name: akka-remoting
+          containerPort: 2552
+        - name: akka-mgmt-http
+          containerPort: 19999
+        livenessProbe:
+          httpGet:
+            path: "/ping"
+            port: {{ .Values.controller.port }}
+            scheme: "HTTP"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 1
+        readinessProbe:
+          httpGet:
+            path: "/ping"
+            port: {{ .Values.controller.port }}
+            scheme: "HTTP"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 1
+        env:
+        - name: "PORT"
+          value: {{ .Values.controller.port | quote }}
+
+        - name:  "CONFIG_whisk_info_date"
+          valueFrom:
+            configMapKeyRef:
+              name: whisk.config
+              key: whisk_info_date
+        - name: "CONFIG_whisk_info_buildNo"
+          valueFrom:
+            configMapKeyRef:
+              name: whisk.config
+              key: whisk_info_buildNo
+
+        # Java options
+        - name: "JAVA_OPTS"
+          value: "-Xmx{{- .Values.controller.jvmHeapMB -}}M {{ .Values.controller.jvmOptions }}"
+
+        # specific controller arguments
+        - name: "CONTROLLER_OPTS"
+          value: {{ .Values.controller.options | quote }}
+
+        # action runtimes
+        - name: "RUNTIMES_MANIFEST"
+          value: {{ template "runtimes_manifest" . }}
+
+        - name: "CONFIG_whisk_loadbalancer_invokerBusyThreshold"
+          value: {{ .Values.invoker.busyThreshold | quote }}
+
+        # Kafka properties
+        - name: "KAFKA_HOSTS"
+          value: "{{ include "kafka_host" . }}:{{ .Values.kafka.port }}"
+        - name: "KAFKA_HOST_PORT"
+          value: {{ .Values.kafka.port | quote }}
+
+        # properties for DB connection
+{{ include "whisk.dbEnvVars" . | indent 8 }}
+
+        - name: "LIMITS_ACTIONS_SEQUENCE_MAXLENGTH"
+          value: {{ .Values.controller.limits.actionsSequenceMaxlength | quote }}
+        - name: "LIMITS_TRIGGERS_FIRES_PERMINUTE"
+          value: {{ .Values.controller.limits.triggersFiresPerminute | quote }}
+        - name: "LIMITS_ACTIONS_INVOKES_PERMINUTE"
+          value: {{ .Values.controller.limits.actionsInvokesPerminute | quote }}
+        - name: "LIMITS_ACTIONS_INVOKES_CONCURRENT"
+          value: {{ .Values.controller.limits.actionsInvokesConcurrent | quote }}
+
+        - name: "CONTROLLER_INSTANCES"
+          value: {{ .Values.controller.replicaCount | quote }}
+{{- if gt (int .Values.controller.replicaCount) 1 }}
+        - name: "CONFIG_whisk_cluster_useClusterBootstrap"
+          value: "true"
+        - name: "CONFIG_akka_actor_provider"
+          value: "cluster"
+        - name: "CONFIG_akka_discovery_method"
+          value: "kubernetes-api"
+        - name: "CONFIG_akka_discovery_kubernetesApi_podNamespace"
+          value: {{ .Release.Namespace | quote }}
+        - name: "CONFIG_akka_discovery_kubernetesApi_podLabelSelector"
+          value: "name={{ .Values.controller.name }}"
+        - name: "CONFIG_akka_discovery_kubernetesApi_podPortName"
+          value: "akka-mgmt-http"
+{{- end }}
