@@ -1,0 +1,53 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: install-routemgmt
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: install-routemgmt
+spec:
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: install-routemgmt
+      labels:
+        name: install-routemgmt
+    spec:
+      restartPolicy: Never
+      volumes:
+      - name: task-dir
+        configMap:
+          name: install-routemgmt
+      initContainers:
+      # Wait for a controller to be up so we can perfom our CRUD actions with the CLI
+{{ include "openwhisk.readiness.waitForHealthyInvoker" . | indent 6 }}
+      containers:
+      - name: routemgmt
+        image: {{ .Values.utility.scriptRunnerImage | quote }}
+        imagePullPolicy: {{ .Values.utility.imagePullPolicy | quote }}
+        volumeMounts:
+        - name: task-dir
+          mountPath: "/task/myTask.sh"
+          subPath: "myTask.sh"
+        env:
+          - name: "WHISK_AUTH"
+            valueFrom:
+              secretKeyRef:
+                name: whisk.auth
+                key: system
+          # poorly named envvar; actually expects full apihost (host:port)
+          - name: "WHISK_API_HOST_NAME"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_api_host_nameAndPort
+          - name: "WHISK_NAMESPACE"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_system_namespace
+          - name: "WHISK_API_GATEWAY_HOST_V2"
+            value: "http://$(APIGATEWAY_SERVICE_HOST):$(APIGATEWAY_SERVICE_PORT_API)/v2"

@@ -1,0 +1,49 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.apigw.name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: {{ .Values.apigw.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+spec:
+  replicas: {{ .Values.apigw.replicaCount }}
+  selector:
+    matchLabels:
+      name: {{ .Values.apigw.name | quote }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.apigw.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+    spec:
+      restartPolicy: {{ .Values.apigw.restartPolicy }}
+
+      {{- if .Values.affinity.enabled }}
+      affinity:
+{{ include "openwhisk.affinity.core" . | indent 8 }}
+{{ include "openwhisk.affinity.selfAntiAffinity" ( .Values.apigw.name | quote ) | indent 8 }}
+      {{- end }}
+
+      containers:
+        - name: apigateway
+          imagePullPolicy: {{ .Values.apigw.imagePullPolicy | quote }}
+          image: {{ .Values.apigw.image | quote }}
+          ports:
+          - name: mgmt
+            containerPort: {{ .Values.apigw.mgmtPort }}
+          - name: api
+            containerPort: {{ .Values.apigw.apiPort }}
+          env:
+          - name: "REDIS_HOST"
+            value: "{{ include "openwhisk.redis_host" . }}"
+          - name: "REDIS_PORT"
+            value: {{ .Values.redis.port | quote }}
+          - name: "PUBLIC_GATEWAY_URL"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_api_host_url
