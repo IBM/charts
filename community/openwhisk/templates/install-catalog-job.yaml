@@ -1,0 +1,46 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: install-catalog
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: install-catalog
+spec:
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: install-catalog
+      labels:
+        name: install-catalog
+    spec:
+      restartPolicy: Never
+      volumes:
+      - name: task-dir
+        configMap:
+          name: install-catalog
+      initContainers:
+      # Wait for a controller to be up so we can perfom our CRUD actions with the CLI
+{{ include "openwhisk.readiness.waitForHealthyInvoker" . | indent 6 }}
+      containers:
+      - name: catalog
+        image: {{ .Values.utility.scriptRunnerImage | quote }}
+        imagePullPolicy: {{ .Values.utility.imagePullPolicy | quote }}
+        volumeMounts:
+        - name: task-dir
+          mountPath: "/task/myTask.sh"
+          subPath: "myTask.sh"
+        env:
+          - name: "WHISK_AUTH"
+            valueFrom:
+              secretKeyRef:
+                name: whisk.auth
+                key: system
+          # poorly named envvar; actually expects full apihost (host:port)
+          - name: "WHISK_API_HOST_NAME"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_api_host_nameAndPort

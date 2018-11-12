@@ -1,0 +1,96 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+{{ if not .Values.zookeeper.external }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.zookeeper.name | quote }}
+  namespace: {{ .Release.Namespace | quote}}
+  labels:
+    name: {{ .Values.zookeeper.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+spec:
+  serviceName: {{ .Values.zookeeper.name | quote }}
+  podManagementPolicy: "Parallel"
+  replicas: {{ .Values.zookeeper.replicaCount }}
+  selector:
+    matchLabels:
+      name: {{ .Values.zookeeper.name | quote }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.zookeeper.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+    spec:
+      restartPolicy: {{ .Values.zookeeper.restartPolicy | quote }}
+
+{{- if .Values.affinity.enabled }}
+      affinity:
+{{ include "openwhisk.affinity.core" . | indent 8 }}
+{{ include "openwhisk.affinity.selfAntiAffinity" ( .Values.zookeeper.name | quote ) | indent 8 }}
+{{- end }}
+
+      volumes:
+        - name: zk-config
+          configMap:
+            name: {{ .Values.zookeeper.name | quote }}
+{{- if and .Values.k8s.persistence.enabled (eq (int .Values.zookeeper.replicaCount) 1) }}
+        - name: "{{- .Values.zookeeper.persistence.pvcName -}}-data"
+          persistentVolumeClaim:
+            claimName: "{{- .Values.zookeeper.persistence.pvcName -}}-data"
+        - name: "{{- .Values.zookeeper.persistence.pvcName -}}-datalog"
+          persistentVolumeClaim:
+            claimName: "{{- .Values.zookeeper.persistence.pvcName -}}-datalog"
+{{- end }}
+
+      containers:
+      - name: {{ .Values.zookeeper.name | quote }}
+        image: {{ .Values.zookeeper.image | quote }}
+        imagePullPolicy: {{ .Values.zookeeper.imagePullPolicy | quote }}
+        command: ["/bin/bash", "-c", "hostname -s | cut -d'-' -f2 > {{ .Values.zookeeper.config.dataDir }}/myid; cat {{ .Values.zookeeper.config.dataDir }}/myid; cat /conf/zoo.cfg; zkServer.sh start-foreground"]
+        ports:
+        - name: zookeeper
+          containerPort: {{ .Values.zookeeper.port }}
+        - name: server
+          containerPort: {{ .Values.zookeeper.serverPort }}
+        - name: leader-election
+          containerPort: {{ .Values.zookeeper.leaderElectionPort }}
+
+        volumeMounts:
+        - mountPath: /conf
+          name: zk-config
+{{- if .Values.k8s.persistence.enabled }}
+        - mountPath: {{ .Values.zookeeper.config.dataDir }}
+          name: "{{- .Values.zookeeper.persistence.pvcName -}}-data"
+        - mountPath: {{ .Values.zookeeper.config.dataLogDir }}
+          name: "{{- .Values.zookeeper.persistence.pvcName -}}-datalog"
+{{- end }}
+
+{{/* PVCs created by volumeClaimTemplates must be manually removed; only create them if we absolutely need them */}}
+{{- if and .Values.k8s.persistence.enabled (gt (int .Values.zookeeper.replicaCount) 1) }}
+  volumeClaimTemplates:
+  - metadata:
+      name: "{{- .Values.zookeeper.persistence.pvcName -}}-data"
+    spec:
+{{- if .Values.k8s.persistence.useDynamicProvisioning }}
+      storageClassName: {{ .Values.k8s.persistence.defaultStorageClass }}
+{{- end }}
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.zookeeper.persistence.size }}
+  - metadata:
+      name: "{{- .Values.zookeeper.persistence.pvcName -}}-datalog"
+    spec:
+{{- if .Values.k8s.persistence.useDynamicProvisioning }}
+      storageClassName: {{ .Values.k8s.persistence.defaultStorageClass }}
+{{- end }}
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.zookeeper.persistence.size }}
+{{- end }}
+{{- end }}

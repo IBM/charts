@@ -1,0 +1,54 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+{{ if .Values.invoker.containerFactory.kubernetes.agent.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ .Values.invoker.containerFactory.kubernetes.agent.name | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: {{ .Values.invoker.containerFactory.kubernetes.agent.name | quote }}
+{{ include "openwhisk.label_boilerplate" .| indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      name: {{ .Values.invoker.containerFactory.kubernetes.agent.name | quote }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.invoker.containerFactory.kubernetes.agent.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+    spec:
+      restartPolicy: Always
+      hostNetwork: true
+
+      affinity:
+{{ include "openwhisk.affinity.invoker" . | indent 8 }}
+
+      volumes:
+{{ include "openwhisk.docker_volumes" . | indent 6 }}
+      - name: userlogs
+        emptyDir: {}
+      - name: task-dir
+        configMap:
+          name: docker-pull-runtimes
+
+      initContainers:
+      # Pull images for all default runtimes before starting invoker
+{{ include "openwhisk.docker_pull_runtimes" . | indent 6 }}
+
+      containers:
+      - name: {{ .Values.invoker.containerFactory.kubernetes.agent.name | quote }}
+        imagePullPolicy: {{ .Values.invoker.imagePullPolicy | quote }}
+        image: {{ .Values.invoker.containerFactory.kubernetes.agent.image }}
+        securityContext:
+          privileged: true
+        ports:
+        - name: agent
+          containerPort: {{ .Values.invoker.containerFactory.kubernetes.agent.port }}
+        volumeMounts:
+{{ include "openwhisk.docker_volume_mounts" . | indent 8 }}
+        - name: userlogs
+          mountPath: "/action-logs"
+{{- end }}
