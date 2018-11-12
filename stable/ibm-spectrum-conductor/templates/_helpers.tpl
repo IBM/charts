@@ -16,11 +16,19 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 {{/*- printf "%s" $name | trunc 48 - */}}
 {{- end -}}
 
-{{- define "conductorVersion" -}}
+{{- define "global.icpVersion" -}}
+    {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) -}}
+        {{- printf "2.x" -}}
+    {{- else -}}
+        {{- printf "3.1+" -}}
+    {{- end -}}
+{{- end -}}
+
+{{- define "global.conductorVersion" -}}
 {{- printf "2.3.0" -}}
 {{- end -}}
 
-{{- define "dliVersion" -}}
+{{- define "global.dliVersion" -}}
 {{- printf "1.2.0" -}}
 {{- end -}}
 
@@ -63,6 +71,7 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 {{- printf "http://cwsetcd.default:2379/v2/keys/cwsinstancedeleted" -}}
 {{- end -}}
 
+{{/* The default image is different for Conductor and DLI */}}
 {{- define "cwsImage" -}}
 {{- if .Values.dli.enabled }}
 {{- default "ibmcom/spectrum-dli:1.2.0" .Values.master.imageName -}}
@@ -73,10 +82,6 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 
 {{- define "cwsImageWithoutRegistryTag" -}}
 {{- printf "default/conductor-spark" -}}
-{{- end -}}
-
-{{- define "verifyHelmCredential" -}}
-{{- default "true" .Values.helm.verifyCredential -}}
 {{- end -}}
 
 {{- define "cwsProxyService" -}}
@@ -107,12 +112,20 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 {{- printf "{\"auths\": {\"%s\": {\"auth\": \"%s\"}}}" .Values.sig.registry (printf "%s:%s" .Values.sig.registryUser .Values.sig.registryPasswd | b64enc) | b64enc -}}
 {{- end -}}
 
+{{- define "isPAIE" -}}
+{{- if .Values.master.imageName |regexMatch ".*powerai-enterprise:.*-ppc64le" -}}
+{{- printf "yes" -}}
+{{- else -}}
+{{- printf "no" -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "helmHost" -}}
 {{- printf "tiller-deploy.kube-system:44134" -}}
 {{- end -}}
 
 {{- define "kubectlImage" -}}
-{{- if eq (.Capabilities.KubeVersion.GitVersion | trunc 7) "v1.10.0" -}}
+{{- if gt (.Capabilities.KubeVersion.Minor|int) 9 -}}
 {{- $imagetag := .Capabilities.KubeVersion.GitVersion | trunc 7 -}}
 {{- $imagename := "hyperkube" -}}
 {{- if eq .Capabilities.KubeVersion.Platform "linux/amd64" -}}
@@ -132,10 +145,10 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{- define "securedHelm" -}}
-    {{- if eq (.Capabilities.KubeVersion.GitVersion | trunc 7) "v1.10.0" -}}
-        {{- printf "true" -}}
-    {{- else -}}
+    {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 10) -}}
         {{- printf "false" -}}
+    {{- else -}}
+        {{- printf "true" -}}
     {{- end -}}
 {{- end -}}
 
@@ -177,6 +190,18 @@ We truncate at 48 chars because some Kubernetes name fields are limited to this 
 {{- printf "ibmcom/etcd:v3.1.5" -}}
 {{- else if eq .Capabilities.KubeVersion.Platform "linux/ppc64le" -}}
 {{- printf "ibmcom/etcd-ppc64le:v3.1.5" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Define memory request for common component for different platforms.
+The same container on power required more memory than x.
+*/}}
+{{- define "memoryReq" -}}
+{{- if eq .Capabilities.KubeVersion.Platform "linux/ppc64le" -}}
+{{- printf "512Mi" -}}
+{{- else -}}
+{{- printf "256Mi" -}}
 {{- end -}}
 {{- end -}}
 
