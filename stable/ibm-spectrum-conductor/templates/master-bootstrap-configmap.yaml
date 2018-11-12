@@ -236,12 +236,13 @@ data:
     {{- if .Values.dli.enabled }}
     # create certificate and key to enable https for monitor and optimizer Flask server
     CWS_TOP=$topdir
-    DLMAO_HOME=/opt/ibm/spectrumcomputing/dli/dlmao
+    #DLMAO_HOME=/opt/ibm/spectrumcomputing/dli/dlmao
     KEYSTR=$CWS_TOP/wlp/usr/shared/resources/security/serverKeyStore.jks
     if [ -z "$KEYSTRPASS" ]; then
         KEYSTRPASS=Liberty
     fi
-    DESTKEYSTR_DIR=$DLMAO_HOME/conf
+    #DESTKEYSTR_DIR=$DLMAO_HOME/conf
+    DESTKEYSTR_DIR=/opt/ibm/spectrumcomputing/dli/conf/dlinsights
     DESTKEYSTR=$DESTKEYSTR_DIR/serverKeyStore.p12
     DESTCRT=$DESTKEYSTR_DIR/srv.crt
     DESTKEY=$DESTKEYSTR_DIR/srv.key
@@ -278,23 +279,53 @@ data:
   setupHelmCLI.sh: |-
         echo "setup helm cli."
 {{- if eq (include "securedHelm" .) "true" }}
-    {{- if eq .Values.helm.credentialType "Secret" }}
-        export HELM_HOME={{ template "helmHome" . }}
-    {{- else }}
         os_arch=`arch`
         bin_arch=linux-amd64
         if [ "$os_arch" != "x86_64" ]; then
             bin_arch=linux-ppc64le
         fi
-        icp_cli=icp-${bin_arch}
-        master_ip=`curl -s http://127.0.0.1:8001/api/v1/nodes?labelSelector=master%3Dtrue|grep "kubernetes.io/hostname"|awk -F" " {'print $2'}|sed -e "s/\"//g"|sed -e "s/,//g"`
+        #master_ip=`curl -s http://127.0.0.1:8001/api/v1/nodes?labelSelector=master%3Dtrue|grep "kubernetes.io/hostname"|awk -F" " {'print $2'}|sed -e "s/\"//g"|sed -e "s/,//g"`
+        master_ip=`curl -s http://127.0.0.1:8001/api/v1/nodes?labelSelector=master%3Dtrue|grep "address"|grep -v "addresses"|head -n1|awk -F" " {'print $2'}|sed -e "s/\"//g"|sed -e "s/,//g"`
         icp_cluster=`echo {{ .Values.sig.registry }}|awk -F"." {'print $1'}`
+        if [ ! -f /usr/bin/helm ]; then
+          {{- if eq (include "global.icpVersion" .) "2.x" }}
+            if [ -f /tmp/helmdir/cli/$bin_arch/helm ]; then
+                cp /tmp/helmdir/cli/$bin_arch/helm /usr/bin/helm
+            else
+                cp /tmp/helmdir/helm /usr/bin/helm
+            fi
+          {{- else }}
+            curl -kLo /tmp/helm-${bin_arch}.tar.gz https://${master_ip}:8443/api/cli/helm-${bin_arch}.tar.gz
+            tar -xvf /tmp/helm-${bin_arch}.tar.gz -C /tmp/
+            mv /tmp/${bin_arch}/helm /usr/bin/helm
+          {{- end }}
+        fi
+    {{- if eq .Values.helm.credentialType "Secret" }}
+        export HELM_HOME={{ template "helmHome" . }}
+    {{- else }}
+        if [ -z "$ADMIN_USERNAME" -a -f /root/.helm/.credential ]; then
+            decodedCred=`cat /root/.helm/.credential |base64 -d`
+            export ADMIN_USERNAME=`echo $decodedCred|awk -F':' '{ print $1 }'`
+            export ADMIN_PASSWORD=`echo $decodedCred|awk -F':' '{ print $2 }'`
+        fi
+        {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11)}}
         plugin_installed=`bx plugin list|grep icp`
         if [ "x$plugin_installed" = "x" ]; then
+            icp_cli=icp-${bin_arch}
             wget -q https://${master_ip}:8443/api/cli/${icp_cli} --no-check-certificate -P /tmp/
             bx plugin install /tmp/${icp_cli} -f
         fi
         bx pr login -a https://${master_ip}:8443 --skip-ssl-validation -u $ADMIN_USERNAME -p $ADMIN_PASSWORD -c id-${icp_cluster}-account
+        {{- else }}
+        cloud_ctl=cloudctl-${bin_arch}
+        if [ ! -f "/usr/local/bin/cloudctl" ]; then
+            curl -kLo /tmp/$cloud_ctl https://${master_ip}:8443/api/cli/$cloud_ctl
+            chmod a+x /tmp/$cloud_ctl
+            mv /tmp/$cloud_ctl /usr/local/bin/cloudctl
+        fi
+        export HELM_HOME=/root/.helm
+        cloudctl login -a https://${master_ip}:8443 --skip-ssl-validation -u $ADMIN_USERNAME -p $ADMIN_PASSWORD -c id-${icp_cluster}-account -n default
+        {{- end }}
         if [ $? -ne 0 ]; then
             echo "helm cli setup failed. you may not be able to create any Spark Instance Groups."
         fi
@@ -303,11 +334,12 @@ data:
   startPrequisiteServices: |-
     export HELM_HOST={{ template "helmHost" . }}
     echo "initializing helm."
+    {{- if and (eq (include "securedHelm" .) "true") (ne .Values.helm.credentialType "Secret") }}
+    mkdir -p /root/.helm
+    echo "$ADMIN_USERNAME:$ADMIN_PASSWORD"|base64 > /root/.helm/.credential
+    {{- end }}
     source /var/tmp/cfc/setupHelmCLI.sh
     helm init --client-only
-    if [ $? -ne 0 ]; then
-      echo "helm init failed. you may not be able to create any Spark Instance Groups."
-    fi
 
     etcdservice=$(curl http://127.0.0.1:8001/api/v1/namespaces/{{ template "etcdServiceNamespace" . }}/services/{{template "etcdService" . }} | grep  '"kind"'|cut -d '"' -f4)
     if [ x"$etcdservice" != "xService" ]; then
@@ -346,33 +378,26 @@ data:
     topdir=/opt/ibm/spectrumcomputing
     exec 1<>$topdir/startmaster.log
     exec 2>&1
-    set -x
+    set +x
     cd /bin
     rm -rf sh
     ln -s bash sh
-    os_arch=`arch`
-    bin_arch=linux-amd64
-    if [ "$os_arch" != "x86_64" ]; then
-        bin_arch=linux-ppc64le
-    fi
     TZ=`date +%z`
     echo "GMT$TZ" >/etc/timezone
-    if [ -f /tmp/helmdir/cli/$bin_arch/helm ]; then
-        cp /tmp/helmdir/cli/$bin_arch/helm /usr/bin/helm
-    else
-        cp /tmp/helmdir/helm /usr/bin/helm
-    fi
     /bin/cp -f /tmp/kubedir/kubectl /usr/local/bin/
+
+    # workaroud to delete the zero byte Nvidia binaries for PAIE
+    {{- if eq (include "isPAIE" .) "yes" }}
+    rm -rf /usr/bin/nvidia*
+    {{- end }}
 
     echo "export PATH=$PATH" >> /etc/profile
     sh /var/tmp/cfc/startPrequisiteServices
-    {{- if eq (include "verifyHelmCredential" .) "true" }}
     helm list {{ template "helmFlag" . }}
     if [ $? -ne 0 ]; then
         echo "helm commandline failed, conductor master will not start."
-        #exit 1
+        exit 1
     fi
-    {{- end }}
     sh /var/tmp/cfc/enableLdapLogon
     sh /var/tmp/cfc/generate_ssl.sh
 
@@ -381,10 +406,9 @@ data:
     egoversion=`ls $topdir/|grep 3`
     binarytype=`ls $topdir/$egoversion |grep linux`
     sed -i "/BINARY_TYPE = \"fail\"/i\\$binarytypename=$binarytype" $topdir/kernel/conf/profile.ego
-
+    MASTER_HOST=`hostname -f`
     if [ ! -f /var/shareDir/profile.platform ]; then
           echo "Set up a new Cluster..."
-          MASTER_HOST=`hostname -f`
           sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch.xml
           sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch_master.xml
           sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_manager.xml
@@ -408,25 +432,18 @@ data:
           sed -i "s/8543/{{ template "egoRestPort" . }}/g" $topdir/kernel/conf/server_rest.xml
           sed -i "s/8643/{{ template "ascdPort" . }}/g" $topdir/ascd/conf/server_ascd.xml
           {{- if .Values.dli.enabled }}
-          sed -i "s/5000/{{ template "dliMonitorPort" . }}/g" /opt/ibm/spectrumcomputing/dli/dlmao/conf/profile.dlmao
-          sed -i "s/5001/{{ template "dliOptimizerPort" . }}/g" /opt/ibm/spectrumcomputing/dli/dlmao/conf/profile.dlmao
-          sed -i "s/9243/{{ template "dlRestPort" . }}/g" /opt/ibm/spectrumcomputing/dli/dlpd/liberty/dlrest/server.xml
-          sed -i "s/9243/{{ template "dlRestPort" . }}/g" /opt/ibm/spectrumcomputing/wlp/usr/servers/dlrest/server.xml
-          dliversion=`ls /opt/ibm/spectrumcomputing/wlp/usr/servers/gui/apps/dli/`
-          sed -i "s#//.*:9243#//{{template "master-fullname" .}}:{{ template "dlRestPort" . }}#g" /opt/ibm/spectrumcomputing/wlp/usr/servers/gui/apps/dli/$dliversion/dlgui/apidocs/restful/dlpd/index.html
-          {{- end }}
-          {{- else }}
-          {{- if .Values.dli.enabled }}
-          dliversion=`ls /opt/ibm/spectrumcomputing/wlp/usr/servers/gui/apps/dli/`
-          sed -i "s#//.*:#//${MASTER_HOST}:#g" /opt/ibm/spectrumcomputing/wlp/usr/servers/gui/apps/dli/$dliversion/dlgui/apidocs/restful/dlpd/index.html
+          sed -i "s/5000/{{ template "dliMonitorPort" . }}/g" $topdir/dli/conf/dlinsights/profile.dlinsights
+          sed -i "s/5001/{{ template "dliOptimizerPort" . }}/g" $topdir/dli/conf/dlinsights/profile.dlinsights
+          sed -i "s/5000/{{ template "dliMonitorPort" . }}/g" $topdir/dli/conf/dlpd/dlpd.conf
+          sed -i "s/5001/{{ template "dliOptimizerPort" . }}/g" $topdir/dli/conf/dlpd/dlpd.conf
           {{- end }}
           {{- end }}
           spark_pkg_dir=$topdir/conductorspark/conf/packages
           spark_versions=( "Spark1.6.1" "Spark2.1.1" "Spark2.2.0" "Spark2.3.0" "Spark2.3.1" )
           for spark_version in "${spark_versions[@]}"
           do
-              spark_k8s_yml=$spark_pkg_dir/${spark_version}-Conductor{{ template "conductorVersion" . }}/${spark_version}.k8s.yaml
-              sparkyaml=$spark_pkg_dir/${spark_version}-Conductor{{ template "conductorVersion" . }}/${spark_version}.yaml
+              spark_k8s_yml=$spark_pkg_dir/${spark_version}-Conductor{{ template "global.conductorVersion" . }}/${spark_version}.k8s.yaml
+              sparkyaml=$spark_pkg_dir/${spark_version}-Conductor{{ template "global.conductorVersion" . }}/${spark_version}.yaml
               if [ -f $spark_k8s_yml ]; then
                   mv $spark_k8s_yml $sparkyaml
                   sed -i "/maxrestarts/d" $sparkyaml
@@ -502,15 +519,23 @@ data:
     fi
 
     {{- if .Values.dli.enabled }}
+    dliversion=`ls $topdir/wlp/usr/servers/gui/apps/dli/`
+    {{- if eq .Values.cluster.proxyOption "IngressProxy" }}
+    sed -i "s/9243/{{ template "dlRestPort" . }}/g" $topdir/wlp/usr/servers/dlrest/$dliversion/server_dlrest.xml
+    sed -i "s/9243/{{ template "dlRestPort" . }}/g" $topdir/dli/$dliversion/dlpd/liberty/dlrest/$dliversion/server_dlrest.xml
+    sed -i "s#//.*:9243#//{{template "master-fullname" .}}:{{ template "dlRestPort" . }}#g" $topdir/wlp/usr/servers/gui/apps/dli/$dliversion/dlgui/apidocs/restful/dlpd/index.html
+    {{- else }}
+    sed -i "s#//.*:#//${MASTER_HOST}:#g" $topdir/wlp/usr/servers/gui/apps/dli/$dliversion/dlgui/apidocs/restful/dlpd/index.html
+    {{- end }}
     DLI_SHARED_FS=/mygpfs
     IMAGE_HOSTNAME=900d7bfbe521
     MASTER_HOST=`hostname -f`
     HOSTIP=`getent ahostsv4 $MASTER_HOST | grep -Fw "$MASTER_HOST" | awk '{print $1}'`
     HOSTNET=`ip addr show | grep inet | grep -Fw "$HOSTIP" | awk '{print $2}'`
     FABRIC_COMMIPNETWORK=${FABRIC_COMMIPNETWORK:-$HOSTNET}
-    cp $topdir/dli/dlpd/conf/dlpd.conf $topdir/dli/dlpd/conf/dlpd.conf_bak
-    sed -i "s#@FABRIC_COMMIPNETWORK@#${FABRIC_COMMIPNETWORK}#g" /opt/ibm/spectrumcomputing/dli/dlpd/conf/dlpd.conf
-    sed -i "s#${IMAGE_HOSTNAME}#${MASTER_HOST}#g" /opt/ibm/spectrumcomputing/dli/dlpd/conf/dlpd.conf
+    cp $topdir/dli/conf/dlpd/dlpd.conf $topdir/dli/conf/dlpd/dlpd.conf_bak
+    sed -i "s#@FABRIC_COMMIPNETWORK@#${FABRIC_COMMIPNETWORK}#g" $topdir/dli/conf/dlpd/dlpd.conf
+    sed -i "s#${IMAGE_HOSTNAME}#${MASTER_HOST}#g" $topdir/dli/conf/dlpd/dlpd.conf
     rm -rf $DLI_SHARED_FS/*
     cp -r ${DLI_SHARED_FS}_bak/* $DLI_SHARED_FS
     {{- end }}
@@ -521,22 +546,42 @@ data:
     egosh ego start
 
     {{- if or .Values.dli.enabled (gt (.Values.sig.gpu|int) 0) }}
-    retries=0
-    $topdir/conductorspark/{{ template "conductorVersion" . }}/etc/gpuconfig.sh enable --quiet -u Admin -x Admin
-    while [ $? -ne 0 -a $retries -le 60 ]
-    do
-       sleep 10
-       retries=$((retries+1))
-       $topdir/conductorspark/{{ template "conductorVersion" . }}/etc/gpuconfig.sh enable --quiet -u Admin -x Admin
-    done
-    if [ $retries -ge 60 ]; then
-       echo "Failed to enable GPU monitoring feature in EGO."
-       exit -1
+    AscdConfFile="$EGO_CONFDIR/../../ascd/conf/ascd.conf"
+    GPUModified=$(cat $AscdConfFile | grep "ASCD_GPU_ENABLED" | grep "ON")
+    if [ "$GPUModified" = "" ]; then
+        retries=0
+        egoUser=Admin
+        egoPass=Admin
+        egosh user logon -u $egoUser -x $egoPass
+        while [ $? -ne 0 -a $retries -le 30 ]
+        do
+            sleep 10
+            retries=$((retries+1))
+            egosh user logon -u $egoUser -x $egoPass
+        done
+        egosh service stop all
+        sleep 10
+        retries=0
+        result=`$topdir/conductorspark/{{ template "global.conductorVersion" . }}/etc/gpuconfig.sh enable --quiet -u $egoUser -x $egoPass`
+        while [ $? -ne 0 -a $retries -le 60 ]
+        do
+            echo "$result"|grep "already configured this feature"
+            if [ $? -eq 0 ]; then
+                break
+            fi
+            sleep 10
+            retries=$((retries+1))
+            result=`$topdir/conductorspark/{{ template "global.conductorVersion" . }}/etc/gpuconfig.sh enable --quiet -u $egoUser -x $egoPass`
+        done
+        if [ $retries -ge 60 ]; then
+            echo "Failed to enable GPU monitoring feature in EGO."
+            exit -1
+        fi
     fi
     {{- end }}
     #record self IP and name to ETCD
-    curl -X PUT {{ template "etcdHostDir" .}}/$(hostname) -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
-    curl -X PUT {{ template "etcdHostDir" .}}/$(hostname).$(hostname).{{.Release.Namespace}}.svc.cluster.local -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+    curl -s -X PUT {{ template "etcdHostDir" .}}/$(hostname) -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+    curl -s -X PUT {{ template "etcdHostDir" .}}/$(hostname).$(hostname).{{.Release.Namespace}}.svc.cluster.local -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
     mkdir -p /var/shareDir/sig-template/templates
     cp /var/tmp/cfc/sig-template_Chart.yaml /var/shareDir/sig-template/Chart.yaml
     cp /var/tmp/cfc/sig-template_templates_cws-slave-deployment.yaml  /var/shareDir/sig-template/templates/cws-slave-deployment.yaml
@@ -553,9 +598,9 @@ data:
             rm -f /hosts.tmp
         fi
         cat /hosts.original >> /hosts.tmp
-        curl -X PUT {{ template "etcdHostDir" .}}/$(hostname) -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
-        curl -X PUT {{ template "etcdHostDir" .}}/$(hostname).$(hostname).{{.Release.Namespace}}.svc.cluster.local -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
-        curl --silent  {{ template "etcdHostDir" .}} | python -c 'import json,sys;obj=json.load(sys.stdin); print "\n".join([":".join([x["value"], x["key"]]) for x in obj["node"]["nodes"]])' | sed "s/\/cwsnodemap\///" > /hostlist.yaml
+        curl -s -X PUT {{ template "etcdHostDir" .}}/$(hostname) -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+        curl -s -X PUT {{ template "etcdHostDir" .}}/$(hostname).$(hostname).{{.Release.Namespace}}.svc.cluster.local -d value="$(hostname -i|awk '{print $1}')" -d ttl=20
+        curl -s  {{ template "etcdHostDir" .}} | python -c 'import json,sys;obj=json.load(sys.stdin); print "\n".join([":".join([x["value"], x["key"]]) for x in obj["node"]["nodes"]])' | sed "s/\/cwsnodemap\///" > /hostlist.yaml
         tac /hostlist.yaml | while read -r line
         do
           ip=$(echo $line | cut -f 1 -d':' | xargs)
@@ -563,7 +608,6 @@ data:
           if [ ! -z "$host" ]; then
             ifit=$(grep "$ip  ${host}$" /hosts.tmp)
             if [ -z "$ifit" ]; then
-               echo "get new host line - $line"
                echo "$ip  $host"  >> /hosts.tmp
             fi
           fi
@@ -932,8 +976,10 @@ data:
                     name: sparkhome
                   - mountPath: /var/tmp/cfc
                     name: conductor-slave-bootstrap
+                  - mountPath: /dev/shm
+                    name: dshm
                   - mountPath: /etc/localtime
-                    name: host-tiemzone
+                    name: host-timezone
                     readOnly: true
               initContainers:
                 - name: sig-image
@@ -962,7 +1008,7 @@ data:
                 - name: conductor-slave-bootstrap
                   configMap:
                     name: "@SIGNAME-bootstrap"
-                - name: host-tiemzone
+                - name: host-timzone
                   hostPath:
                     path: /etc/localtime
               terminationGracePeriodSeconds: 30
@@ -1201,10 +1247,10 @@ data:
             chart: "{{.Chart.Name}}-{{.Chart.Version}}"
             app: {{ template "master-fullname" . }}
         spec:
-          {{- if .Values.dli.frameworksStorageClassName }}
+          {{- if .Values.cluster.useDynamicProvisioning }}
           storageClassName: {{ default nil .Values.dli.frameworksStorageClassName | quote }}
           {{- else }}
-          storageClassName: ""
+          storageClassName: {{ default "" .Values.dli.frameworksStorageClassName | quote }}
           {{- end }}
           accessModes:
             - ReadOnlyMany
@@ -1222,10 +1268,10 @@ data:
             chart: "{{.Chart.Name}}-{{.Chart.Version}}"
             app: {{ template "master-fullname" . }}
         spec:
-          {{- if .Values.dli.sharedFsStorageClassName }}
+          {{- if .Values.cluster.useDynamicProvisioning }}
           storageClassName: {{ default nil .Values.dli.sharedFsStorageClassName | quote }}
           {{- else }}
-          storageClassName: ""
+          storageClassName: {{ default "" .Values.dli.sharedFsStorageClassName | quote }}
           {{- end }}
           accessModes:
             - ReadWriteMany
@@ -1239,7 +1285,7 @@ data:
         apiVersion: v1
         kind: Secret
         metadata:
-          name: registrykey-@[@[ .Release.Name @]@]
+          name: @[@[ .Release.Name @]@]-registrykey
           labels:
             heritage: {{.Release.Service | quote }}
             release: {{.Release.Name | quote }}
@@ -1355,13 +1401,14 @@ data:
               {{- if .Values.dli.enabled }}
               # create certificate and key to enable https for monitor and optimizer Flask server
               CWS_TOP=$topdir
-              DLMAO_HOME=/opt/ibm/spectrumcomputing/dli/dlmao
+              #DLMAO_HOME=/opt/ibm/spectrumcomputing/dli/dlmao
 
               KEYSTR=$CWS_TOP/wlp/usr/shared/resources/security/serverKeyStore.jks
               if [ -z "$KEYSTRPASS" ]; then
                 KEYSTRPASS=Liberty
               fi
-              DESTKEYSTR_DIR=$DLMAO_HOME/conf
+              #DESTKEYSTR_DIR=$DLMAO_HOME/conf
+              DESTKEYSTR_DIR=/opt/ibm/spectrumcomputing/dli/conf/dlinsights
               DESTKEYSTR=$DESTKEYSTR_DIR/serverKeyStore.p12
               DESTCRT=$DESTKEYSTR_DIR/srv.crt
               DESTKEY=$DESTKEYSTR_DIR/srv.key
@@ -1423,6 +1470,10 @@ data:
               ln -s bash sh
               TZ=`date +%z`
               echo "GMT$TZ" >/etc/timezone
+              # workaroud to delete the zero byte Nvidia binaries for PAIE
+              {{- if eq (include "isPAIE" .) "yes" }}
+              rm -rf /usr/bin/nvidia*
+              {{- end }}
               # workaroud to help get ego linux version
               binarytypename=`cat $topdir/kernel/conf/profile.ego |grep "BINARY_TYPE = \"fail\""|awk '{print $3}'|awk -F$ '{print $2 }'`
               egoversion=`ls $topdir/|grep 3`
@@ -1705,7 +1756,7 @@ data:
               serviceAccountName: cws-{{ .Release.Name }}
               @[@[- end @]@]
               imagePullSecrets:
-                - name: registrykey-@[@[ .Release.Name @]@]
+                - name: @[@[ .Release.Name @]@]-registrykey
                 - name: sigregistrykey-@[@[ .Release.Name @]@]
               affinity:
               {{- include "nodeaffinity" . | indent 14 }}
@@ -1766,14 +1817,20 @@ data:
                       memory: "@MEMREQUEST"
                     limits:
                       {{- if or .Values.dli.enabled (gt (.Values.sig.gpu|int) 0) }}
+                      {{- if eq (include "global.icpVersion" .) "2.x" }}
                       alpha.kubernetes.io/nvidia-gpu: "@GPUREQUEST"
+                      {{- else }}
+                      nvidia.com/gpu: "@GPUREQUEST"
+                      {{- end }}
                       {{- end }}
                       cpu: "@CPUREQUEST"
                       memory: "@MEMREQUEST"
                   volumeMounts:
                       {{- if .Values.dli.enabled }}
+                      {{- if eq (include "isPAIE" .) "no" }}
                       - mountPath: /opt/DL
                         name: dldir
+                      {{- end }}
                       - mountPath: /mygpfs
                         name: mygpfs
                       {{- end }}
@@ -1785,8 +1842,10 @@ data:
                         name: conductor-slave-bootstrap
                       - mountPath: /var/run/docker.sock
                         name: docker-sock
+                      - mountPath: /dev/shm
+                        name: dshm
                       - mountPath: /etc/localtime
-                        name: host-tiemzone
+                        name: host-timezone
                         readOnly: true
                       @[@[- range $index, $v := .Values.volumes @]@]
                       - name: host-volume-@[@[$index@]@]
@@ -1828,9 +1887,11 @@ data:
               @[@[- end @]@]
               volumes:
                 {{- if .Values.dli.enabled }}
+                {{- if eq (include "isPAIE" .) "no" }}
                 - name: dldir
                   persistentVolumeClaim:
                     claimName: {{ .Release.Name }}-dl
+                {{- end }}
                 - name: mygpfs
                   persistentVolumeClaim:
                     claimName: {{ .Release.Name }}-mygpfs
@@ -1850,7 +1911,10 @@ data:
                 - name: docker-sock
                   hostPath:
                      path: /var/run/docker.sock
-                - name: host-tiemzone
+                - name: dshm
+                  emptyDir:
+                     medium: Memory
+                - name: host-timezone
                   hostPath:
                      path: /etc/localtime
                 @[@[- range $index, $v := .Values.volumes @]@]
