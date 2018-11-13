@@ -1,0 +1,37 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openwhisk-tests-smoketest
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    name: openwhisk-tests-smoketest
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  restartPolicy: Never
+  volumes:
+  - name: task-dir
+    configMap:
+      name: openwhisk-tests-smoketest-cm
+  containers:
+  - name: smoketest
+    image: {{ .Values.utility.scriptRunnerImage | quote }}
+    imagePullPolicy: {{ .Values.utility.imagePullPolicy | quote }}
+    volumeMounts:
+    - name: task-dir
+      mountPath: "/task/myTask.sh"
+      subPath: "myTask.sh"
+    env:
+      - name: "WSK_AUTH"
+        valueFrom:
+          secretKeyRef:
+            name: whisk.auth
+            key: guest
+      - name: "WSK_API_HOST_URL"
+        valueFrom:
+          configMapKeyRef:
+            name: whisk.config
+            key: whisk_api_host_url
