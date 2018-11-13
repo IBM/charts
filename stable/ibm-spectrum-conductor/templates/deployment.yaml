@@ -8,7 +8,6 @@ metadata:
     chart: "{{.Chart.Name}}"
     app: {{ template "master-fullname" . }}
 spec:
-  #serviceName: {{ template "master-fullname" . }}
   replicas: 1
   strategy:
     type: RollingUpdate
@@ -41,8 +40,9 @@ spec:
       hostname: {{ template "master-fullname" . }}
       serviceAccountName: cws-{{ .Release.Name }}
       imagePullSecrets:
-        - name: registrykey-{{ .Release.Name }}
+        - name: {{ .Release.Name }}-registrykey
       initContainers:
+      {{- if eq (include "global.icpVersion" .) "2.x" }}
       - name: helmget
         image: {{ template "helmImage" . }}
         resources:
@@ -64,6 +64,7 @@ spec:
         volumeMounts:
         - name: helmdir
           mountPath: "/helmdir"
+      {{- end }}
       - name: kubectlget
         image: {{ template "kubectlImage" . }}
         resources:
@@ -90,10 +91,10 @@ spec:
           resources:
             requests:
               cpu: 0.5
-              memory: 256Mi
+              memory: {{ template "memoryReq" . }}
             limits:
               cpu: 0.5
-              memory: 256Mi
+              memory: {{ template "memoryReq" . }}
           imagePullPolicy: IfNotPresent
           name: kubectlproxy
           readinessProbe:
@@ -121,10 +122,10 @@ spec:
           resources:
             requests:
               cpu: 0.5
-              memory: 256Mi
+              memory: {{ template "memoryReq" . }}
             limits:
               cpu: 0.5
-              memory: 256Mi
+              memory: {{ template "memoryReq" . }}
           readinessProbe:
             exec:
               command:
@@ -184,7 +185,7 @@ spec:
               {{- else }}
               port: 8443
               {{- end }}
-            initialDelaySeconds: 30
+            initialDelaySeconds: 120
             periodSeconds: 10
           livenessProbe:
             tcpSocket:
@@ -222,18 +223,20 @@ spec:
               - name: ADMIN_USERNAME
                 valueFrom:
                   secretKeyRef:
-                    name: admin-secret-{{ .Release.Name }}
+                    name: {{ .Release.Name }}-admin-secret
                     key: username
               - name: ADMIN_PASSWORD
                 valueFrom:
                   secretKeyRef:
-                    name: admin-secret-{{ .Release.Name }}
+                    name: {{ .Release.Name }}-admin-secret
                     key: password
               {{- end }}
           volumeMounts:
               {{- if .Values.dli.enabled }}
+              {{- if eq (include "isPAIE" .) "no" }}
               - mountPath: /opt/DL
                 name: dldir
+              {{- end }}
               - mountPath: /mygpfs
                 name: mygpfs
               {{- end }}
@@ -249,11 +252,15 @@ spec:
               - mountPath: /var/share
                 name: sharedir
               {{- end }}
+              {{- if eq (include "global.icpVersion" .) "2.x" }}
               - name: helmdir
                 mountPath: /tmp/helmdir
+              {{- end }}
               - name: kubedir
                 mountPath: /tmp/kubedir
-              - name: host-tiemzone
+              - name: dshm
+                mountPath: /dev/shm
+              - name: host-timezone
                 mountPath: /etc/localtime
                 readOnly: true
               {{- if and (eq (include "securedHelm" .) "true") (and (eq .Values.helm.credentialType "Secret") .Values.helm.credentialName) }}
@@ -262,9 +269,11 @@ spec:
               {{- end }}
       volumes:
         {{- if .Values.dli.enabled }}
+        {{- if eq (include "isPAIE" .) "no" }}
         - name: dldir
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-dl
+        {{- end }}
         - name: mygpfs
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-mygpfs
@@ -285,11 +294,16 @@ spec:
         - name: sharedir
           emptyDir: {}
         {{- end }}
+        {{- if eq (include "global.icpVersion" .) "2.x" }}
         - name: helmdir
           emptyDir: {}
+        {{- end }}
         - name: kubedir
           emptyDir: {}
-        - name: host-tiemzone
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: host-timezone
           hostPath:
             path: /etc/localtime
         {{- if and (eq (include "securedHelm" .) "true") (and (eq .Values.helm.credentialType "Secret") .Values.helm.credentialName) }}
