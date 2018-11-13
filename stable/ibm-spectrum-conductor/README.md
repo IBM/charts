@@ -1,5 +1,5 @@
 [![IBM Spectrum Conductor](https://developer.ibm.com/storage/wp-content/uploads/sites/91/2018/01/conductor.jpg)](https://www.ibm.com/developerworks/community/groups/service/html/communitystart?communityUuid=46ecec34-bd69-43f7-a627-7c469c1eddf8)
-# IBM Spectrum Conductor 2.3 - Evaluation
+# IBM Spectrum Conductor 2.3 - Beta
 
 ## Introduction
 IBM Spectrum Conductor helps you deploy Apache Spark applications efficiently and effectively. As an end-to-end solution for deploying and managing Spark applications, it is designed to address the requirements of organizations that adopt Spark technology for their big data analytics requirements. IBM Spectrum Conductor can support multiple instances of Apache Spark, maximizing resource utilization, and increasing performance and scale.
@@ -17,7 +17,11 @@ This Helm chart deploys two singleton services called cwsetcd and cwsproxy, whic
 
 This ibm-spectrum-conductor Helm chart deploys a singleton daemonset called cwsimagecleaner, which helps to deploy an auto-generated Spark instance group image onto the nodes in the kubernetes cluster. It commits the image to the private registry as you configured. After the Spark instance group is deleted, cwsimagecleaner is also responsible for cleaning up its image from the nodes and the registry.
 
+
+
 ## Prerequisites
+
+### PodSecurityPolicy Requirements
 
 ### Storage
 Make sure that the storage requests and kernel parameters are correctly set up before you click `configure` to install IBM Spectrum Conductor.
@@ -56,19 +60,28 @@ ibm-spectrum-conductor provides two options to satisfy this requirement. You can
 
 Before creating a secret, make sure to complete the following:
 
-1. [Setup IBM® Cloud Private CLI to manage the cluster.](http://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0.3/manage_cluster/install_cli.html)
+1. Setup IBM® Cloud Private CLI to manage the cluster.
+   * [For IBM private Cloud 2.1.0.3](http://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0.3/manage_cluster/install_cli.html)
+   * [For IBM Private Cloud 3.1.0 or higher](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_cluster/install_cli.html)
 
-2. [Install kubectl CLI to access the cluster using the CLI.](http://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0.3/manage_cluster/cfc_cli.html)  
+2. Install kubectl CLI to access the cluster using the CLI.
+   * [CLI installation guide for IBM Private Cloud 2.1.0.3](http://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0.3/manage_cluster/cfc_cli.html)
+   * [CLI installation guide for IBM Private Cloud 3.1.0 or higher](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_cluster/cfc_cli.html)
 
 To create a secret, do the following:
 
-1. Create a service account in LDAP which is utilized by the Kubernetes cluster (see http://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0.3/user_management/configure_ldap.html). The service account must be created by a cluster administrator or an administrator of a team and has access to the following resource:
+1. Create a service account in LDAP which is utilized by the Kubernetes cluster (see http://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0.3/user_management/configure_ldap.html for IBM Private Cloud 2.1.0.3 or https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/user_management/configure_ldap.html for IBM Private Cloud 3.1.0 or higher). The service account must be created by a cluster administrator or an administrator of a team and has access to the following resource:
 Namespace: "default", <the new namespace to install the ibm-spectrum-conductor helm chart>
 Helm repository: ibm-charts, local-charts
 
-Then utilize its credentials (uid/pwd) with bx pr CLI to retrieve certificates (ca.pem, key.pem, and cert.pem) into $HELM_HOME
+Then utilize its credentials (uid/pwd) with cloud CLI to retrieve certificates (ca.pem, key.pem, and cert.pem) into $HELM_HOME
+ * For IBM Private Cloud 2.1.0.3
 ````
-  # bx pr login -a https://<cluster>:8443 --skip-ssl-validation
+  # bx pr login -a https://<cluster_host_name>:8443 --skip-ssl-validation
+````
+ * For IBM Private Cloud 3.1.0 or higher
+````
+ # cloudctl login -a https://<cluster_host_name>:8443 --skip-ssl-validation
 ````
 2. Use base64 encoded certificates from $HELM_HOME (or "cd $(helm home)" ) to create a kubernetes secret containing them.
 ````
@@ -95,14 +108,14 @@ Then utilize its credentials (uid/pwd) with bx pr CLI to retrieve certificates (
 3. Enter the secret name just created in `TLS Secret Name` input in Conductor Facility Configuration section when installing the ibm-spectrum-conductor chart.
 
 ### Kernel parameters
-Before you install IBM Spectrum Conductor, the `vm_max_map_count` kernel must be set on the Kubernetes node(s) to a value of at least 262144 for the ELK services to start and run normally. To set the vm_max_map_count kernel to a value of at least 262144:
+Before you install IBM Spectrum Conductor, the `vm_max_map_count` kernel must be set on all the Kubernetes work node(s) to a value of at least 262144 for the ELK services to start and run normally. To set the vm_max_map_count kernel to a value of at least 262144:
 - Set the kernel value dynamically to ensure that the change takes effect immediately:
 ````
   # sysctl -w vm.max_map_count=262144
 ````
 - Set the kernel value in the /etc/sysctl.conf file to ensure that the change is still in effect when you restart your node:
 ````
-  # vm.max_map_count=262144
+  vm.max_map_count=262144
 ````
 
 ### GPU dependencies
@@ -246,7 +259,7 @@ Apache Livy is a service that enables easy interaction with a Spark cluster over
 ## Limitations
 - If you have a hybrid Kubernetes cluster with both Linux 64-bit and Linux on POWER 64-bit nodes, then you must pick one or the other when you deploy the ibm-spectrum-conductor Helm chart.  
 - If you are using IngressProxy, notebooks are not supported.
-- If you are using IngressProxy and authentication and authorization for the submission user is enabled, the Spark UI is not supported. 
+- If you are using IngressProxy and authentication and authorization for the submission user is enabled, the Spark UI is not supported.
 - If you enable livy server, you can only run an interactive session of livy API. Submitting batch applications using the livy API is not supported yet.
 
 ## Accessing IBM Spectrum Conductor
