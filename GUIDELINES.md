@@ -133,11 +133,11 @@ The chart itself be Apache 2.0 licensed, and must contain the Apache 2.0 license
 
 All contributed charts must contain a useful README.md file with useful information a user would need to deploy the chart. In the IBM Cloud Private GUI, the README.md file is the "front page" that a user will see after clicking on the chart in the catalog. A complete description and explanations of all input parameters are strongly suggested.
 
-It is also highly recommended to note that a user must add your registry to IBM Cloud Private's list of trusted registries before they can deploy your chart. Include instructions (or a link) on how to add your image registry to IBM Cloud Private's list of trusted image registries in your readme, since [container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.0/manage_images/image_security.html) is enabled by default beginning with IBM Cloud Private 3.1.  
+It is also highly recommended to note that a user must add your registry to IBM Cloud Private's list of trusted registries before they can deploy your chart. Include instructions (or a link) on how to add your image registry to IBM Cloud Private's list of trusted image registries in your readme, since [container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.0/manage_images/image_security.html) is enabled by default beginning with IBM Cloud Private 3.1.
 
 ## Support statement
 
-The README.md must include a section labeled `Support`.  This section should provide details and/or links to where users can get support for urgent issues with the product, get help, or submit issues.  
+The README.md must include a section labeled `Support`.  This section should provide details and/or links to where users can get support for urgent issues with the product, get help, or submit issues.
 
 ## NOTES.txt
 
@@ -411,7 +411,7 @@ To expose your Prometheus endpoint to the IBM Cloud Private monitoring service, 
       type: ClusterIP
 ```
 
-Individual metric names should be prefixed with the name of the workload, (e.g., `ibmmq_object_mqput_bytes`).  
+Individual metric names should be prefixed with the name of the workload, (e.g., `ibmmq_object_mqput_bytes`).
 
 ## License keys and pricing  
 If your chart requires a license key to deploy or to otherwise use the workload, this should be stated in the Prerequisites section of the chart's README.md. Additionally, instructions on how to acquire keys and information on pricing and trials should also be included or linked to alongside this statement so that users can readily and easily obtain the keys needed to install the chart and use the workload.  
