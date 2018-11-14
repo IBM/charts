@@ -1,5 +1,7 @@
 # OpenWhisk
 
+Apache OpenWhisk is an open source, distributed serverless platform that executes functions in response to events at any scale.
+
 ## Overview
 
 You will use Helm to deploy OpenWhisk to your Kubernetes cluster.
