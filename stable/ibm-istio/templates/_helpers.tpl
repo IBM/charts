@@ -44,20 +44,3 @@ Configmap checksum.
 {{- define "istio.configmap.checksum" -}}
 {{- print $.Template.BasePath "/configmap.yaml" | sha256sum -}}
 {{- end -}}
-
-{{- define "nodeselector" }}
-  {{- if and (.Values.global.proxyNode) (contains "icp" .Capabilities.KubeVersion.GitVersion) }}
-  proxy: 'true'
-  {{- end -}}
-  {{- if .Values.global.extraNodeSelector }}
-  {{ toYaml .Values.global.extraNodeSelector }}
-  {{- end -}}
-{{- end }}
-
-{{- define "tolerations" }}
-{{- if and (.Values.global.dedicated) (contains "icp" .Capabilities.KubeVersion.GitVersion) }}
-- key: "dedicated"
-  operator: "Exists"
-  effect: "NoSchedule"
-{{- end -}}
-{{- end }}
