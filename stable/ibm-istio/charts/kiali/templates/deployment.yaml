@@ -10,8 +10,12 @@ metadata:
     release: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: kiali
   template:
     metadata:
+      name: kiali
       labels:
         app: kiali
         chart: {{ template "kiali.chart" . }}
@@ -20,14 +24,17 @@ spec:
       annotations:
         sidecar.istio.io/inject: "false"
         scheduler.alpha.kubernetes.io/critical-pod: ""
+        productName: kiali
+        productID: kiali_{{ .Chart.Version }}_apachev2_00000
+        productVersion: {{ .Chart.Version }}
     spec:
       serviceAccountName: kiali-service-account
 {{- if .Values.global.priorityClassName }}
       priorityClassName: "{{ .Values.global.priorityClassName }}"
 {{- end }}
       containers:
-      - name: kiali
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        name: kiali
         command:
         - "/opt/kiali/kiali"
         - "-config"
@@ -65,6 +72,10 @@ spec:
         - name: JAEGER_URL
           value: {{ .Values.dashboard.jaegerURL }}
 {{- end }}
+{{- if .Values.contextPath }}
+        - name: SERVER_WEB_ROOT
+          value: {{ .Values.contextPath }}
+{{- end }} 
         livenessProbe:
           exec:
             command:
@@ -89,8 +100,8 @@ spec:
         configMap:
           name: kiali
       nodeSelector:
-      {{- include "nodeselector" . | indent 6 }}
+{{- include "kiali.nodeselector" . | indent 6 }}
       tolerations:
-      {{- include "tolerations" . | indent 6 }}
+{{- include "kiali.tolerations" . | indent 6 }}
       affinity:
-      {{- include "nodeaffinity" . | indent 6 }}
+{{- include "nodeaffinity" . | indent 6 }}
