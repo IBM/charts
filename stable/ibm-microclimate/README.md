@@ -28,6 +28,24 @@ Installing the chart will:
 - Ensure [socat](http://www.dest-unreach.org/socat/doc/README) is available on all worker nodes in your cluster. Microclimate uses Helm internally and both the Helm Tiller and client require socat for port forwarding.
 - Download the IBM Cloud Private CLI, cloudctl, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
 - Before you install Microclimate, decide whether you want to deploy to IBM Cloud Kubernetes Service (IKS). If you want to deploy to IKS, when you install Microclimate, specify a Docker registry location on the `jenkins.Pipeline.Registry.URL` property. Both Microclimate and IKS need to access this registry.
+  - To ensure that you install the chart with the correct pipeline registry URL, perform a release upgrade to your current Microclimate installation.
+  - Enter the following commands into the Helm CLI, substituting your correct value in place of the `<mycluster.icp:8500>` variable:
+    - `helm repo add ibm-charts-public https://raw.githubusercontent.com/IBM/charts/master/repo/stable`
+    - `helm upgrade microclimate --set jenkins.Pipeline.Registry.Url=<mycluster.icp:8500> ibm-charts-public/ibm-microclimate --reuse-values --tls`
+  - After you upgrade the chart with the correct registry URL, the `microclimate-ibm-microclimate-xxxxxxx-xxxxxx` portal pod, the `microclimate-ibm-microclimate-devops-xxxxxxx-xxxxxx` DevOps pod, and the `microclimate-jenkins-xxxxxxx-xxxxxx` Jenkins pod are restarted.
+  - When the portal pod is running, log in to the Microclimate portal UI, and the file-watcher, editor, and loadrunner pods are restarted.
+  - You can check your value in the Jenkins UI. Navigate to `Jenkins`>`configure system` and find the `REGISTRY` environment variable setting. If you change the value in the Jenkins UI, the change doesn't persist after you restart IBM Cloud Private.
+  - Run the `kubectl get pods` command to view the status of the pods after the upgrade.
+    ```
+    NAME                                                              READY     STATUS    RESTARTS   AGE
+    microclimate-ibm-microclimate-8d88fbd9c-w7967                     1/1       Running   0          3m
+    microclimate-ibm-microclimate-admin-editor-7784cf8d67-wrzbr       2/2       Running   0          48s
+    microclimate-ibm-microclimate-admin-filewatcher-79ff787b4766pw7   1/1       Running   0          49s
+    microclimate-ibm-microclimate-admin-loadrunner-5c587d99cd-w2fn7   1/1       Running   0          48s
+    microclimate-ibm-microclimate-atrium-5799d5cdc8-2szls             1/1       Running   0          18m
+    microclimate-ibm-microclimate-devops-55d6c67f49-tgncz             1/1       Running   0          3m
+    microclimate-jenkins-b6fd6d5b8-dz2q9                              1/1       Running   0          3m
+    ```
 
 ## Resources Required
 
