@@ -16,8 +16,7 @@ data:
     template: |-
       initContainers:
       - name: istio-init
-        image: {{ .Values.global.proxyInit.repository }}:{{ .Values.global.proxyInit.tag }}
-        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        image: "{{ .Values.global.proxy_init.repository }}:{{ .Values.global.proxy_init.tag }}"
         args:
         - "-p"
         - {{ "[[ .MeshConfig.ProxyListenPort ]]" }}
@@ -48,24 +47,28 @@ data:
         {{ "[[ else -]]" }}
         - "{{ .Values.global.proxy.excludeInboundPorts }}"
         {{ "[[ end -]]" }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         securityContext:
           capabilities:
             add:
             - NET_ADMIN
+          {{ if .Values.global.proxy.privileged }}
           privileged: true
+          {{ end -}}
         restartPolicy: Always
-      {{- if eq .Values.global.proxy.enableCoreDump true }}
+      {{ if eq .Values.global.proxy.enableCoreDump true }}
       - name: enable-core-dump
-        image: {{ .Values.global.proxyInit.repository }}:{{ .Values.global.proxyInit.tag }}
-        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         args:
         - -c
         - sysctl -w kernel.core_pattern=/etc/istio/proxy/core.%e.%p.%t && ulimit -c unlimited
         command:
           - /bin/sh
+        image: "{{ .Values.global.proxy_init.repository }}:{{ .Values.global.proxy_init.tag }}"
+        imagePullPolicy: IfNotPresent
+        resources: {}
         securityContext:
           privileged: true
-      {{- end }}
+      {{ end }}
       containers:
       - name: istio-proxy
         image: {{ "[[ if (isset .ObjectMeta.Annotations \"sidecar.istio.io/proxyImage\") -]]" }}
@@ -73,7 +76,6 @@ data:
         {{ "[[ else -]]" }}
         {{ .Values.global.proxy.repository }}:{{ .Values.global.proxy.tag }}
         {{ "[[ end -]]" }}
-        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         args:
         - proxy
         - sidecar
@@ -105,6 +107,10 @@ data:
       {{- end }}
         - --proxyAdminPort
         - {{ "[[ .ProxyConfig.ProxyAdminPort ]]" }}
+        {{ "[[ if gt .ProxyConfig.Concurrency 0 -]]" }}
+        - --concurrency
+        - {{ "[[ .ProxyConfig.Concurrency ]]" }}
+        {{ "[[ end -]]" }}
         - --controlPlaneAuthPolicy
         - {{ "[[ or (index .ObjectMeta.Annotations \"sidecar.istio.io/controlPlaneAuthPolicy\") .ProxyConfig.ControlPlaneAuthPolicy ]]" }}
         env:
@@ -126,8 +132,11 @@ data:
               fieldPath: metadata.name
         - name: ISTIO_META_INTERCEPTION_MODE
           value: {{ "[[ or (index .ObjectMeta.Annotations \"sidecar.istio.io/interceptionMode\") .ProxyConfig.InterceptionMode.String ]]" }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         securityContext:
-          privileged: false
+          {{ if .Values.global.proxy.privileged }}
+          privileged: true
+          {{ end -}}
           readOnlyRootFilesystem: true
           {{ "[[ if eq (or (index .ObjectMeta.Annotations \"sidecar.istio.io/interceptionMode\") .ProxyConfig.InterceptionMode.String) \"TPROXY\" -]]" }}
           capabilities:
@@ -139,7 +148,7 @@ data:
           {{ "[[ end -]]" }}
         restartPolicy: Always
         resources:
-        {{ "[[ if (isset .ObjectMeta.Annotations \"sidecar.istio.io/proxyCPU\") -]]" }}
+          {{ "[[ if (isset .ObjectMeta.Annotations \"sidecar.istio.io/proxyCPU\") -]]" }}
           requests:
             cpu: {{ "\"[[ index .ObjectMeta.Annotations \"sidecar.istio.io/proxyCPU\" ]]\"" }}
             memory: {{ "\"[[ index .ObjectMeta.Annotations \"sidecar.istio.io/proxyMemory\" ]]\"" }}
