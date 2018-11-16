@@ -9,7 +9,7 @@
 {{- include "sch.config.init" (list . "ibm-rook-rbd-cluster.sch.chart.config.values") }}
 {{- $poolName :=  .sch.chart.components.pool.name }}
 
-apiVersion: rook.io/v1alpha1
+apiVersion: ceph.rook.io/v1beta1
 kind: Pool
 metadata:
   name: {{ include "sch.names.fullCompName" (list . $poolName) }}
@@ -17,11 +17,17 @@ metadata:
   labels:
 {{ include "sch.metadata.labels.standard" (list . $poolName) | indent 4 }}
 spec:
-  failureDomain: host
+  failureDomain: {{ .Values.pool.failureDomain }}
+ 
+{{- if eq .Values.pool.resilienceType "replicated" }}
   replicated:
-    size: {{ .Values.cluster.pool.replicaSize }}
+    size: {{ .Values.pool.replicated.size }}
+{{- end }}
+
   # For an erasure-coded pool, comment out the replication size above and uncomment the following settings.
   # Make sure you have enough OSDs to support the replica size or erasure code chunks.
-  #erasureCoded:
-  #  dataChunks: 2
-  #  codingChunks: 1
+{{- if eq .Values.pool.resilienceType "erasurecoded" }}
+  erasureCoded:
+    dataChunks: {{ .Values.pool.erasureCoded.dataChunks }}
+    codingChunks: {{ .Values.pool.erasureCoded.codingChunks }}
+{{- end }}

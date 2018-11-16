@@ -27,12 +27,20 @@ sch:
         name: "privileged-psp-user"
       defaultsa:
         name: "default"
+      rookclustersa:
+        name: "rook-ceph-cluster"
+      rookclusterrole:
+        name: "rook-ceph-cluster"
+      rookclusterrb:
+        name: "rook-ceph-cluster"
       cephosdrolebinding:
         name: "rook-ceph-osd-psp"
       cephosdrole:
         name: "privileged-psp-user"
+      rookclustermgmtrole:
+        name: "rook-ceph-cluster-mgmt"
       cephosdsa:
-        name: "rook-ceph-osd"
+        name: "rook-ceph-cluster"
       cluster:
         name: "rook-ceph-cluster"
       prcjob:
