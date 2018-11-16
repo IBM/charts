@@ -1,5 +1,4 @@
-{{- if .Values.jaeger.ingress.enabled }}
-{{- if eq .Values.provider "jaeger" }}
+{{ if (.Values.jaeger.ingress.enabled) and eq .Values.provider "jaeger" }}
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
@@ -16,18 +15,27 @@ metadata:
     {{- end }}
 spec:
   rules:
+{{- if .Values.ingress.hosts }}
     {{- range $host := .Values.jaeger.ingress.hosts }}
     - host: {{ $host }}
       http:
         paths:
-          - path: /
+          - path: {{ if .Values.jaeger.contextPath }} {{ .Values.jaeger.contextPath }} {{ else }} / {{ end }}
             backend:
               serviceName: jaeger-query
               servicePort: 16686
+
     {{- end -}}
+{{- else }}
+    - http:
+        paths:
+          - path: {{ if .Values.jaeger.contextPath }} {{ .Values.jaeger.contextPath }} {{ else }} / {{ end }}
+            backend:
+              serviceName: jaeger-query
+              servicePort: 16686
+{{- end }}
   {{- if .Values.jaeger.ingress.tls }}
   tls:
 {{ toYaml .Values.jaeger.ingress.tls | indent 4 }}
-  {{- end }}
-{{- end }}
-{{- end }}
+  {{- end -}}
+{{- end -}}

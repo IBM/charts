@@ -20,16 +20,19 @@ spec:
       annotations:
         sidecar.istio.io/inject: "false"
         scheduler.alpha.kubernetes.io/critical-pod: ""
+        productName: grafana
+        productID: grafana_{{ .Chart.Version }}_apachev2_00000
+        productVersion: {{ .Chart.Version }}
     spec:
 {{- if .Values.global.priorityClassName }}
       priorityClassName: "{{ .Values.global.priorityClassName }}"
 {{- end }}
       containers:
-        - name: {{ template "grafana.name" . }}
+        - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
-          - containerPort: 3000
+            - containerPort: 3000
           readinessProbe:
             httpGet:
               path: /login
@@ -81,12 +84,17 @@ spec:
           volumeMounts:
           - name: data
             mountPath: /data/grafana
+      nodeSelector:
+{{- include "grafana.nodeselector" . | indent 6 }}
+      tolerations:
+{{- include "grafana.tolerations" . | indent 6 }}
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
       volumes:
       - name: data
+{{- if .Values.persist }}
+        persistentVolumeClaim:
+          claimName: istio-grafana-pvc
+{{- else }}
         emptyDir: {}
-      nodeSelector:
-      {{- include "nodeselector" . | indent 6 }}
-      tolerations:
-      {{- include "tolerations" . | indent 6 }}
-      affinity:
-      {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}

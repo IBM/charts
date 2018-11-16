@@ -8,8 +8,12 @@
 global:
   proxy:
     repository: ibmcom/istio-proxyv2
-    tag: 1.0.0
-    
+    tag: 1.0.2
+
+    # A minimal set of requested resources to applied to all deployments so that
+    # Horizontal Pod Autoscaler will be able to function (if set).
+    # Each component can overwrite these default values by adding its own resources
+    # block in the relevant section below and setting the desired resources values.
     resources:
       requests:
         cpu: 100m
@@ -17,14 +21,21 @@ global:
       # limits:
       #   cpu: 100m
       #   memory: 128Mi
-    
+
+    # Controls number of Proxy worker threads.
+    # If set to 0 (default), then start worker thread for each CPU thread/core.
+    concurrency: 0
+
     # Configures the access log for each sidecar. Setting it to an empty string will
     # disable access log for sidecar.
     accessLogFile: "/dev/stdout"
-    
+
+    #If set to true, istio-proxy container will have privileged securityContext
+    privileged: false
+
     # If set, newly injected sidecars will have core dumps enabled.
     enableCoreDump: false
-    
+
     # istio egress capture whitelist
     # https://istio.io/docs/tasks/traffic-management/egress.html#calling-external-services-directly
     # example: includeIPRanges: "172.30.0.0/16,172.20.0.0/16"
@@ -32,7 +43,7 @@ global:
     # be allowed by the sidecar
     includeIPRanges: "*"
     excludeIPRanges: ""
-    
+
     # istio ingress capture whitelist
     # examples:
     #     Redirect no inbound traffic to Envoy:    --includeInboundPorts=""
@@ -40,10 +51,10 @@ global:
     #     Redirect only selected ports:            --includeInboundPorts="80,8080"
     #includeInboundPorts: "*"
     excludeInboundPorts: ""
-    
+
     # This controls the 'policy' in the sidecar injector.
     autoInject: enabled
-    
+
     # Sets the destination Statsd in envoy (the value of the "--statsdUdpAddress" proxy argument
     # would be <host>:<port>).
     # Can also be disabled (e.g. when Mixer is not installed).
@@ -52,54 +63,56 @@ global:
       enabled: false
       host: ""
       port: 9125
-  
-  # proxy_init image is the image used to configure iptables.
-  proxyInit:
+
+  proxy_init:
+    # Base name for the proxy_init container, used to configure iptables.
     repository: ibmcom/istio-proxy_init
-    tag: 1.0.0
-  
+    tag: 1.0.2
+
   # imagePullPolicy is applied to istio control plane components.
+  # local tests require IfNotPresent, to avoid uploading to dockerhub.
+  # TODO: Switch to Always as default, and override in the local tests.
   imagePullPolicy: IfNotPresent
-  
+
   # Not recommended for user to configure this. Hyperkube image to use when creating custom resources
   kubectl:
     repository: ibmcom/kubectl
-    tag: v1.11.1
-  
+    tag: v1.11.3
+
   # controlPlaneMtls enabled. Will result in delays starting the pods while secrets are
   # propagated, not recommended for tests.
   controlPlaneSecurityEnabled: false
-  
+
   # disablePolicyChecks disables mixer policy checks.
   # Will set the value with same name in istio config map - pilot needs to be restarted to take effect.
   disablePolicyChecks: false
-  
+
   # EnableTracing sets the value with same name in istio config map, requires pilot restart to take effect.
   enableTracing: true
-  
+
   # Default mtls policy. If true, mtls between services will be enabled by default.
   mtls:
     # Default setting for service-to-service mtls. Can be set explicitly using
     # destination rules or service annotations.
     enabled: false
-  
+
   # ImagePullSecrets for all ServiceAccount, list of secrets in the same namespace
   # to use for pulling any images in pods that reference this ServiceAccount.
   # Must be set for any clustser configured with privte docker registry.
   imagePullSecrets: []
     # - private-registry-key
-  
+
   # If true, create a headless service and endpoint for istio-pilot with the remotePilotAddress and
   # sets the MeshConfig configmap discoveryAddress to 'istio-pilot.<namespace>'
   remotePilotCreateSvcEndpoint: false
-  
+
   # Remote Istio endpoints. Can be hostnames or IP addresses
   # The Pilot address is required. The others are optional.
   remotePilotAddress: ""
   remotePolicyAddress: ""
   remoteTelemetryAddress: ""
   remoteZipkinAddress: ""
-  
+
   # A minimal set of requested resources to applied to all deployments so that
   # Horizontal Pod Autoscaler will be able to function (if set).
   # Each component can overwrite these default values by adding its own resources
@@ -111,27 +124,21 @@ global:
     # limits:
     #   cpu: 100m
     #   memory: 128Mi
-  
+
   # Omit the istio-sidecar-injector configmap when generate a
   # standalone gateway. Gateways may be created in namespaces other
   # than `istio-system` and we don't want to re-create the injector
   # configmap in those.
   omitSidecarInjectorConfigMap: false
-  
+
   # Kubernetes >=v1.11.0 will create two PriorityClass, including system-cluster-critical and
   # system-node-critical, it is better to configure this in order to make sure your Istio pods
   # will not be killed because of low prioroty class.
   # Refer to https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
   # for more detail.
   priorityClassName: ""
-  
-  # Specify(true or false) whether to scheduled to proxy node with label: "proxy"="true" :
-  proxyNode: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  # Specify extra node selector.
-  extraNodeSelector: {}
-  # Specify architecture (amd64, ppc64le) and weight to be  used for scheduling as follows :
+
+  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
   #   0 - Do not use
   #   1 - Least preferred
   #   2 - No preference
@@ -139,26 +146,42 @@ global:
   arch:
     amd64: "2 - No preference"
     ppc64le: "2 - No preference"
+    s390x: "2 - No preference"
 
 #
 # sidecar-injector webhook configuration
 #
-sidecarinjectorwebhook:
+sidecarInjectorWebhook:
   enabled: true
   replicaCount: 1
-  enableNamespacesByDefault: false
   image:
     repository: ibmcom/istio-sidecar_injector
-    tag: 1.0.0
+    tag: 1.0.2
+  enableNamespacesByDefault: false
   resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
 
 #
 # security configuration
 #
 security:
   replicaCount: 1
-  selfSigned: true # indicate if self-signed CA is used.
   image:
     repository: ibmcom/istio-citadel
-    tag: 1.0.0
-  resources: {} 
+    tag: 1.0.2
+  selfSigned: true # indicate if self-signed CA is used.
+
+  resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
