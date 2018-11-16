@@ -1,7 +1,7 @@
 # IBM APP CONNECT ENTERPRISE
 
 ![ACE Logo](https://raw.githubusercontent.com/ot4i/ace-helm/master/appconnect_enterprise_logo.svg?sanitize=true)
-
+_THIS CHART IS NOW DEPRECATED. On 16th November, 2018 this version of the Helm chart for IBM App Connect Enterprise will no longer be supported. The dev chart is replaced by the ibm-ace-server-dev chart. The production version of the chart, ibm-ace-server-prod, is available on IBM Passport Advantage. This chart will be removed on November 30th, 2018._
 ## Introduction
 
 IBM® App Connect Enterprise is a market-leading lightweight enterprise integration engine that offers a fast, simple way for systems and applications to communicate with each other. As a result, it can help you achieve business value, reduce IT complexity and save money. IBM App Connect Enterprise supports a range of integration choices, skills and interfaces to optimize the value of existing technology investments. 
