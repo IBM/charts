@@ -1,41 +1,36 @@
-# © Copyright IBM Corporation 2017
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+# "Restricted Materials of IBM"
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# Copyright IBM Corp. 2018 All Rights Reserved
 #
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#*******************************************************************************
 
 #
-# The couchdbpod deploys a simple couchdb database
+# @Author Huang, Fuguo (a.k.a Ken) at 06.Nov.2018
 #
 kind: Deployment
 apiVersion: extensions/v1beta1
 
 metadata:
-  name: {{ template "fullname" . }}-couchdb
+  name: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-oidc-deployment
   labels:
-    app: {{ template "fullname" . }}-couchdb
+    app: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-oidc-deployment
     chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
-
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: {{ template "fullname" . }}-couchdb
+      app: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}--oidc-deployment
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "fullname" . }}-couchdb
+        app: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}--oidc-deployment
         chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
@@ -52,32 +47,18 @@ spec:
         runAsUser: 0
       affinity:
         {{- include "nodeAffinity" . | indent 6 }}
-      serviceAccountName: {{ .Values.security.serviceAccountName | default "default" }}
+      serviceAccountName: {{ .Values.security.serviceAccountName  | default "default" }}
       containers:
-        - name: {{ .Chart.Name }}-couchdb
+        - name: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-oidc-registration
           image: "{{ .Values.couchdb.image.repository }}:{{ .Values.couchdb.image.tag }}"
-          imagePullPolicy: {{ .Values.couchdb.image.pullPolicy }}
+          imagePullPolicy: IfNotPresent
           resources:
 {{ toYaml .Values.couchdb.resources | indent 12 }}
-          ports:
-            - containerPort: 5984
-              name: couchdb
-          env:
-            - name: COUCHDB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.authentication.icp.secretName | default "xxplaceholderxx" }}
-                  key: db_username
-                  optional: true
-            - name: COUCHDB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.authentication.icp.secretName | default "xxplaceholderxx" }}
-                  key: secret
-                  optional: true
           volumeMounts:
-            - mountPath: "/opt/couchdb/data"
-              name: couchdb-data
+            - name: registration-script
+              mountPath: /scripts
+            - name: registration-json
+              mountPath: /jsons
           securityContext:
             allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false
@@ -86,7 +67,7 @@ spec:
             privileged: false
             capabilities:
               drop:
-              - all 
+              - all
               add:
               - CHOWN
               - DAC_OVERRIDE
@@ -130,14 +111,11 @@ spec:
             periodSeconds: 5
 
       volumes:
-        - name: couchdb-data
-      {{- if .Values.couchdb.persistence.enabled }}
-          persistentVolumeClaim:
-            {{- if .Values.couchdb.persistence.existingClaim }}
-              claimName: {{ .Values.couchdb.persistence.existingClaim }}
-            {{- else }}
-              claimName: {{ default (include "fullname" .) }}-couchdb
-            {{- end -}}
-      {{- else }}
-          emptyDir: {}
-      {{- end -}}
+        - name: registration-script
+          configMap:
+            name: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-oidc-registration-script
+            defaultMode: 0744
+        - name: registration-json
+          configMap:
+            name: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-registration-json
+            defaultMode: 0744

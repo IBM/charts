@@ -1,20 +1,20 @@
-# What’s new in Chart Version  1.1.2
+# What’s new in Chart Version  1.1.3
 
-- Added a helm test
+- Improved the descriptions of the metedata for a better catalog page
 
 # Fixes
 
-- Fix NOTES for non-default namespace.
-- Some corrections and updates to the README.
+- no changes
 
 # Prerequisites
 
-- Added requirement for Kubernetes 1.9 or later
+- no changes
 
 # Version History
 
 | Chart | Date | Kubernetes Version Required | Breaking Changes | Details |
 | ----- | ---- | --------------------------- | ---------------- | ------- |
+| 1.1.3 | November 16, 2018 | >= 1.9 | None | Minor changes |
 | 1.1.2 | July 2, 2018 | >= 1.9 | None | Minor changes |
 | 1.1.1 | May 18, 2018 | >= 1.9  | None | Add rabbitmqServerAdditionalErlArgs |
 | 1.1.0 | March 20, 2018 | >= 1.9  | None | Adds TLS |
