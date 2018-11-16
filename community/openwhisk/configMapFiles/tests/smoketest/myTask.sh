@@ -58,6 +58,10 @@ if [ -z "$RESULT" ]; then
   exit 1
 fi
 
+# now delete the resouces so the test could be run again
+wsk -i api delete /demo
+wsk -i action delete hello
+
 echo "PASSED! Created Hello action and invoked via cli, web and apigateway"
 
 

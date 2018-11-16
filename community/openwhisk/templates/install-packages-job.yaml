@@ -1,0 +1,110 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: install-packages
+  labels:
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+spec:
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      name: install-packages
+      labels:
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+    spec:
+      restartPolicy: Never
+      volumes:
+      - name: task-dir
+        configMap:
+          name: install-packages-cm
+      initContainers:
+{{ include "openwhisk.readiness.waitForHealthyInvoker" . | indent 6 }}
+      containers:
+      - name: install-packages
+        image: {{ .Values.utility.scriptRunnerImage | quote }}
+        imagePullPolicy: {{ .Values.utility.imagePullPolicy | quote }}
+        volumeMounts:
+        - name: task-dir
+          mountPath: "/task/myTask.sh"
+          subPath: "myTask.sh"
+        env:
+          - name: "WHISK_AUTH"
+            valueFrom:
+              secretKeyRef:
+                name: whisk.auth
+                key: system
+          - name: "WHISK_API_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_api_host_nameAndPort
+
+          # apigateway configuration (for installing routemgmt actions)
+          - name: "WHISK_SYSTEM_NAMESPACE"
+            valueFrom:
+              configMapKeyRef:
+                name: whisk.config
+                key: whisk_system_namespace
+          - name: "WHISK_API_GATEWAY_HOST_V2"
+            value: "http://$(APIGATEWAY_SERVICE_HOST):$(APIGATEWAY_SERVICE_PORT_API)/v2"
+
+          # Provider database configuration
+          {{- if .Values.providers.db.external }}
+          # Use an external CouchDB instance for the providers
+          - name: "PROVIDER_DB_PROTOCOL"
+            value: {{ .Values.providers.db.protocol | quote }}
+          - name: "PROVIDER_DB_HOST"
+            value: {{ .Values.providers.db.host | quote }}
+          - name: "PROVIDER_DB_USERNAME"
+            value: {{ .Values.providers.db.username | quote }}
+          - name: "PROVIDER_DB_PASSWORD"
+            value: {{ .Values.providers.db.password | quote }}
+          - name: "PROVIDER_DB_PORT"
+            value: {{ .Values.providers.db.port | quote }}
+          {{- else }}
+          # Use the internally deployed CouchDB service for the providers
+          - name: "PROVIDER_DB_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: db.config
+                key: db_host
+          - name: "PROVIDER_DB_PROTOCOL"
+            valueFrom:
+              configMapKeyRef:
+                name: db.config
+                key: db_protocol
+          - name: "PROVIDER_DB_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: db.config
+                key: db_port
+          - name: "PROVIDER_DB_USERNAME"
+            valueFrom:
+              secretKeyRef:
+                name: db.auth
+                key: db_username
+          - name: "PROVIDER_DB_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                name: db.auth
+                key: db_password
+          {{ end }}
+
+          # Provider database table prefixes
+          - name: "ALARM_DB_PREFIX"
+            value: {{ .Values.providers.alarm.dbPrefix | quote }}
+          - name: "CLOUDANT_DB_PREFIX"
+            value: {{ .Values.providers.cloudant.dbPrefix | quote }}
+          - name: "KAFKA_DB_PREFIX"
+            value: {{ .Values.providers.kafka.dbPrefix | quote }}
+
+          # Should each of the providers be installed?
+          - name: "OW_INSTALL_ALARM_PROVIDER"
+            value: {{ if .Values.providers.alarm.enabled }} "yes" {{ else }} "no" {{ end }}
+          - name: "OW_INSTALL_CLOUDANT_PROVIDER"
+            value: {{ if .Values.providers.cloudant.enabled }} "yes" {{ else }} "no" {{ end }}
+          - name: "OW_INSTALL_KAFKA_PROVIDER"
+            value: {{ if .Values.providers.kafka.enabled }} "yes" {{ else }} "no" {{ end }}

@@ -1,0 +1,75 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+{{- if .Values.providers.kafka.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.providers.kafka.name | quote }}
+  labels:
+    name: {{ .Values.providers.kafka.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+spec:
+  replicas: {{ .Values.providers.kafka.replicaCount }}
+  selector:
+    matchLabels:
+      name: {{ .Values.providers.kafka.name | quote }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.providers.kafka.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+    spec:
+      restartPolicy: {{ .Values.providers.kafka.restartPolicy }}
+      initContainers:
+      # Wait for a controller to be up (which implies couchdb and kafka are up as well).
+{{ include "openwhisk.readiness.waitForController" . | indent 6 }}
+      containers:
+      - name: {{ .Values.providers.kafka.name | quote }}
+        imagePullPolicy: {{ .Values.providers.kafka.imagePullPolicy | quote }}
+        image: {{ .Values.providers.kafka.image | quote }}
+        ports:
+        - name: kafkaprovider
+          containerPort: {{ .Values.providers.kafka.apiPort }}
+        env:
+        {{- if .Values.providers.db.external }}
+        # Config database using the external instance
+        - name: "DB_URL"
+          value: {{ .Values.providers.db.protocol }}://{{ .Values.providers.db.host }}:{{ .Values.providers.db.port }}
+        - name: "DB_USER"
+          value: {{ .Values.providers.db.username | quote }}
+        - name: "DB_PASS"
+          value: {{ .Values.providers.db.password | quote }}
+        {{- else }}
+        # Config database using the same openwhisk cloudant instance
+        - name: "DB_URL"
+          valueFrom:
+            configMapKeyRef:
+              name: db.config
+              key: db_url
+        - name: "DB_USER"
+          valueFrom:
+            secretKeyRef:
+              name: db.auth
+              key: db_username
+        - name: "DB_PASS"
+          valueFrom:
+            secretKeyRef:
+              name: db.auth
+              key: db_password
+        {{- end }}
+        - name: "DB_PREFIX"
+          value: {{ .Values.providers.kafka.dbPrefix | quote }}
+        - name: "LOCAL_DEV"
+          value: "true"
+        - name: "ROUTER_HOST"
+          valueFrom:
+            configMapKeyRef:
+              name: whisk.config
+              key: whisk_api_host_nameAndPort
+        - name: "ENDPOINT_AUTH"
+          valueFrom:
+            configMapKeyRef:
+              name: whisk.config
+              key: whisk_api_host_nameAndPort
+{{- end }}
