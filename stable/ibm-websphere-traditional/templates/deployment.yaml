@@ -1,0 +1,165 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- $stateful := .Values.logs.persistLogs -}}
+{{ if $stateful }}
+apiVersion: apps/v1beta1
+kind: StatefulSet
+{{- else }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+{{- end }}
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: {{ template "fullname" . }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  {{- if $stateful }}
+  serviceName: {{ template "fullname" . }}
+  {{- end }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+  template:
+    metadata:
+      labels:
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        app: {{ template "fullname" . }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: "WebSphere Application Server"
+        productID: "53fb55e5e6f145e5ac5a6f79fd263f4f"
+        productVersion: "9.0.0.9"
+    spec:
+      {{- if .Values.configProperties.configMapName }}
+      volumes:
+      - name: config-properties
+        configMap:
+          name: {{ .Values.configProperties.configMapName }}
+      {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{/* Prefer horizontal scaling */}}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "fullname" . }}
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name | quote }}
+              topologyKey: kubernetes.io/hostname
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 
+        fsGroup: {{ .Values.persistence.fsGroupGid }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe:
+          {{- if .Values.readinessProbe.httpGet.enabled }}  
+          httpGet:
+            path: {{ .Values.readinessProbe.httpGet.path }}
+            port: {{ .Values.service.targetPort }}
+            scheme: HTTPS
+          {{- else }}
+          tcpSocket:
+            port: {{ .Values.service.targetPort }}
+          {{- end }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+        livenessProbe:
+          {{- if .Values.livenessProbe.httpGet.enabled }}
+          httpGet:
+            path: {{ .Values.livenessProbe.httpGet.path }}
+            port: {{ .Values.service.targetPort }}
+            scheme: HTTPS
+          {{- else }}
+          tcpSocket:
+            port: {{ .Values.service.targetPort }}
+          {{- end }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+        {{- if or .Values.logs.persistLogs .Values.configProperties.configMapName }}
+        volumeMounts:
+        {{- if .Values.logs.persistLogs }}
+        - mountPath: /logs
+          name: {{ .Values.persistence.name | trunc 63 | lower | trimSuffix "-" | quote }}
+          subPath: logs
+        {{- end }}
+        {{- if .Values.configProperties.configMapName }}
+        - name: config-properties
+          mountPath: /etc/websphere
+        {{- end }}
+        {{- end }}
+        resources:
+          {{- if .Values.resources.constraints.enabled}}      
+          limits:
+{{ toYaml .Values.resources.limits | indent 12 }}
+          requests:
+{{ toYaml .Values.resources.requests | indent 12 }}
+          {{- end }}
+      restartPolicy: "Always"
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: "ClusterFirst"
+  {{ if $stateful -}}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ .Values.persistence.name | trunc 63 | lower | trimSuffix "-"  | quote }}
+      labels:
+        chart: "{{ .Chart.Name }}"
+        app: {{ template "fullname" . }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kube Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.persistence.storageClassName | quote }}
+      {{- else }}
+      # bind to an existing pv.
+      # setting storageClassName to "" disables dynamic provisioning
+      storageClassName: {{ default "" .Values.persistence.storageClassName | quote }}
+      {{- if .Values.persistence.selector.label }}
+      # use selectors in the binding process
+      selector:
+        matchExpressions:
+          - {key: {{ .Values.persistence.selector.label }}, operator: In, values: [{{ .Values.persistence.selector.value }}]}
+      {{- end }}
+      {{- end }}
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size | quote }}
+  {{- end }}
