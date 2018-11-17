@@ -1,0 +1,265 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if not .Values.queueManagerEnabled }}
+{{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
+{{ $deploymentName := include "sch.names.fullName" (list .) }}
+{{ $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  annotations:
+    appconnectenterprise: 'dev'
+{{- if .Values.contentServerURL }}
+    appconnectenterpriseContentUrl: {{ index (splitList "?" (trim .Values.contentServerURL)) 0 | quote }}
+{{- end }}
+    serverName: {{ print $serverName | quote }}
+spec:
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      name: {{ $deploymentName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000
+        runAsNonRoot: true
+        fsGroup: {{ default 1001 .Values.fsGroupGid }}
+      containers:
+        - name: {{ $deploymentName }}
+          image: "{{ .Values.image.repository.aceonly }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+          - containerPort: {{ .Values.service.webuiPort }}
+            name: webui
+          - containerPort: {{ .Values.service.serverlistenerPort }}
+            name: ace-http
+          - containerPort: {{ .Values.service.serverlistenerTLSPort }}
+            name: ace-https
+          env:
+            - name: LICENSE
+              value: {{ .Values.license | quote }}
+            - name: USE_QMGR
+              value: "false"
+            - name: ACE_SERVER_NAME
+              value: {{ print $serverName | quote }}
+            {{- if .Values.contentServerURL }}
+            - name: ACE_CONTENT_SERVER_URL
+              value: {{ index (splitList "?" (trim .Values.contentServerURL)) 0 | quote }}
+            - name: ACE_CONTENT_SERVER_NAME
+              value: {{ index (splitList ":" (index (splitList "/" (trim .Values.contentServerURL)) 2)) 0 | quote }}
+            - name: ACE_CONTENT_SERVER_TOKEN
+              value: {{ index (splitList "?" (trim .Values.contentServerURL)) 1 | quote }}
+            {{- end }}
+            - name: LOG_FORMAT
+              value: {{ .Values.log.format | default "json" | quote }}
+            - name: ACE_ENABLE_METRICS
+              value: {{ .Values.metrics.enabled | default true | quote }}
+            {{- if and .Values.integrationServer.keystore .Values.integrationServer.keystore.password }}
+            - name: "ACE_KEYSTORE_PASSWORD"
+              valueFrom:
+                 secretKeyRef:
+                   name: {{ $deploymentName }}
+                   key: keystorePassword
+            {{- end }}
+            {{- if and .Values.integrationServer.truststore .Values.integrationServer.truststore.password }}
+            - name: "ACE_TRUSTSTORE_PASSWORD"
+              valueFrom:
+                 secretKeyRef:
+                   name: {{ $deploymentName }}
+                   key: truststorePassword
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.contentServerURL }}
+            - name: webusers
+              mountPath: "/home/aceuser/initial-config/webusers"
+            {{- end }}
+            {{- if and .Values.integrationServer.keystore .Values.integrationServer.keystore.password }}
+            - name: keystore
+              mountPath: "/home/aceuser/initial-config/keystore"
+            {{- end }}
+            {{- if and .Values.integrationServer.truststore .Values.integrationServer.truststore.password }}
+            - name: truststore
+              mountPath: "/home/aceuser/initial-config/truststore"
+            {{- end }}
+            {{- if .Values.integrationServer.odbcini }}
+            - name: odbcini
+              mountPath: "/home/aceuser/initial-config/odbcini"
+            {{- end }}
+            {{- if .Values.integrationServer.policy }}
+            - name: policy
+              mountPath: "/home/aceuser/initial-config/policy"
+            {{- end }}
+            {{- if .Values.integrationServer.serverconf }}
+            - name: serverconf
+              mountPath: "/home/aceuser/initial-config/serverconf"
+            {{- end }}
+            {{- if .Values.integrationServer.setdbparms }}
+            - name: setdbparms
+              mountPath: "/home/aceuser/initial-config/setdbparms"
+            {{- end }}
+            {{- if .Values.contentServerURL }}
+            - name: contentservertls
+              mountPath: "/home/aceuser/ssl"
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              add:
+              - SETPCAP
+              - AUDIT_WRITE
+              - CHOWN
+              - NET_RAW
+              - DAC_OVERRIDE
+              - FOWNER
+              - FSETID
+              - KILL
+              - SETUID
+              - SETGID
+              - NET_BIND_SERVICE
+              - SYS_CHROOT
+              - SETFCAP
+          # Set liveness probe to determine if the Integration Server is running
+          livenessProbe:
+            exec:
+              command:
+              - chkacehealthy
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the Integration Server admin endpoint is running
+          readinessProbe:
+            exec:
+              command:
+              - chkaceready
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+            limits:
+{{ toYaml .Values.aceonly.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.aceonly.resources.requests | indent 14 }}
+      volumes:
+        {{- if .Values.contentServerURL }}
+        - name: webusers
+          secret:
+            secretName: {{ $deploymentName }}
+            items:
+            - key: viewerusers
+              path: viewer-users.txt
+            - key: adminusers
+              path: admin-users.txt
+        {{- end }}
+        {{- if and .Values.integrationServer.keystore .Values.integrationServer.keystore.password }}
+        - name: keystore
+          secret:
+            secretName: {{ $deploymentName }}
+            items:
+            {{- range $key, $val := .Values.integrationServer.keystore.keys }}
+            - key: keystoreKey-{{ $key }}
+              path: {{ $key }}.key
+            - key: keystoreCert-{{ $key }}
+              path: {{ $key }}.crt
+              {{- if $val.passphrase }}
+            - key: keystorePass-{{ $key }}
+              path: {{ $key }}.pass
+              {{- end }}
+            {{- end }}
+        {{- end }}
+        {{- if and .Values.integrationServer.truststore .Values.integrationServer.truststore.password }}
+        - name: truststore
+          secret:
+            secretName: {{ $deploymentName }}
+            items:
+            {{- range $key, $val := .Values.integrationServer.truststore.certs }}
+            - key: truststoreCert-{{ $key }}
+              path: {{ $key }}.crt
+            {{- end }}
+        {{- end }}
+        {{- if .Values.integrationServer.odbcini }}
+        - name: odbcini
+          secret:
+            secretName: {{ $deploymentName }}
+            items:
+            - key: odbcini
+              path: odbc.ini
+        {{- end }}
+        {{- if .Values.integrationServer.policy }}
+        - name: policy
+          secret:
+            secretName: {{ $deploymentName }}
+            items:
+            - key: policy
+              path: default.policyxml
+            - key: policyDescriptor
+              path: policy.descriptor
+        {{- end }}
+        {{- if .Values.integrationServer.serverconf }}
+        - name: serverconf
+          secret:
+            secretName: {{ $deploymentName }}
+            items:
+            - key: serverconf
+              path: server.conf.yaml
+        {{- end }}
+        {{- if .Values.integrationServer.setdbparms }}
+        - name: setdbparms
+          secret:
+            secretName: {{ $deploymentName }}
+            items:
+            - key: setdbparms
+              path: setdbparms.txt
+        {{- end }}
+        {{- if .Values.contentServerURL }}
+        - name: contentservertls
+          secret:
+            secretName: {{ index (splitList ":" (index (splitList "/" (trim .Values.contentServerURL)) 2)) 0 | quote }}
+            items:
+            - key: contentServerCACert
+              path: cacert.pem
+        {{- end }}
+{{- end }}
