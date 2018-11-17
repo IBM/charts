@@ -11,6 +11,9 @@ export PROVIDER_DB_URL=$PROVIDER_DB_PROTOCOL://$PROVIDER_DB_USERNAME:$PROVIDER_D
 
 # Clone openwhisk repo to get installRouteMgmt.sh and core/routemgmt
 git clone https://github.com/apache/incubator-openwhisk openwhisk
+pushd openwhisk
+    git checkout $OW_GIT_TAG_OPENWHISK
+popd
 
 # Setup env for installRouteMgmt.sh
 if [ "$WHISK_API_GATEWAY_USER" ]; then
@@ -39,6 +42,9 @@ popd
 # Install the OpenWhisk Catalog
 #####
 git clone https://github.com/apache/incubator-openwhisk-catalog openwhisk-catalog
+pushd openwhisk-catalog
+    git checkout $OW_GIT_TAG_OPENWHISK_CATALOG
+popd
 
 pushd openwhisk-catalog/packages
     ./installCatalog.sh $WHISK_AUTH $WHISK_API_HOST /usr/local/bin/wsk
@@ -62,6 +68,7 @@ if [ "$OW_INSTALL_ALARM_PROVIDER" == "yes" ]; then
     git clone https://github.com/apache/incubator-openwhisk-package-alarms.git
 
     pushd /incubator-openwhisk-package-alarms
+        git checkout $OW_GIT_TAG_OPENWHISK_PACKAGE_ALARMS
         ./installCatalog.sh $WHISK_AUTH $WHISK_API_HOST $PROVIDER_DB_URL $ALARM_DB_PREFIX $WHISK_API_HOST
     popd
 fi
@@ -76,6 +83,7 @@ if [ "$OW_INSTALL_CLOUDANT_PROVIDER" == "yes" ]; then
     git clone https://github.com/apache/incubator-openwhisk-package-cloudant.git
 
     pushd /incubator-openwhisk-package-cloudant
+        git checkout $OW_GIT_TAG_OPENWHISK_PACKAGE_CLOUDANT
         ./installCatalog.sh $WHISK_AUTH $WHISK_API_HOST $PROVIDER_DB_URL $CLOUDANT_DB_PREFIX $WHISK_API_HOST
     popd
 fi
@@ -90,6 +98,7 @@ if [ "$OW_INSTALL_KAFKA_PROVIDER" == "yes" ]; then
     git clone https://github.com/apache/incubator-openwhisk-package-kafka.git
 
     pushd /incubator-openwhisk-package-kafka
+        git checkout $OW_GIT_TAG_OPENWHISK_PACKAGE_KAFKA
         ./installKafka.sh $WHISK_AUTH $WHISK_API_HOST $PROVIDER_DB_URL $KAFKA_DB_PREFIX $WHISK_API_HOST
         ./installCatalog.sh $WHISK_AUTH $WHISK_API_HOST $PROVIDER_DB_URL $KAFKA_DB_PREFIX $WHISK_API_HOST
     popd
