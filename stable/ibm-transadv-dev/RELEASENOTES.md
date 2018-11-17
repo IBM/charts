@@ -1,11 +1,26 @@
+# What’s new in Chart Version 1.9.0
+### IBM MQ
+ - See what it will take to migrate to IBM Cloud Private
+ - See summary of migration complexity for each Queue Manager
+ - See details of all migration issues including pointers to occurrences found and suggested solutions
 
-# What’s new in Chart Version 1.8.1
+### Experimental Mode
+ - Introducing experimental mode!
+ - Press Ctrl + Shift + X to see experimental dev effort values for MQ
+
+### Shared Libraries
+ - Shared Library information is now collected for each profile
+ - The inventory report for each application contains any shared libraries that are being used
+ - Shared libraries files are now available in the recommendations screen
+
+### Data Collector Enhancements
+ - Defaulting to use system Java (non-Windows systems) to reduce library and Java architecture issues
+ - Support for custom profiles
+ - Support for scanning jar and zip files
+ - Support for custom location of profileRegistry.xml
+ - Improved logging for better trouble shooting
 
 # Fixes
-### Deployment
- - Fixes to support deployment to ICP using the latest Liberty webProfile
-### Data Collector
- - Fixes to support custom profiles and special characters in usernames & passwords 
 
 # Breaking Changes
 
@@ -17,6 +32,7 @@
 # Version History
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.9.0 | Nov 15, 2018| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.0 ibmcom/transformation-advisor-server:1.9.0 ibmcom/transformation-advisor-ui:1.9.0 | None | Improved MQ Analysis       |
 | 1.8.1 | Oct 26, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.8.1 ibmcom/transformation-advisor-server:1.8.1 ibmcom/transformation-advisor-ui:1.8.1 | None | Data Collector Patch       |
 | 1.8.0 | Oct 01, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.8.0 ibmcom/transformation-advisor-server:1.8.0 ibmcom/transformation-advisor-ui:1.8.0 | None | MQ Analysis                | 
 | 1.7.2 | Sep 04, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.7.2 ibmcom/transformation-advisor-server:1.7.2 ibmcom/transformation-advisor-ui:1.7.2 | None | Complexity Fix             |

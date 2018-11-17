@@ -1,14 +1,16 @@
 # Breaking Changes
 No breaking changes.
 
-# What’s new in Chart Version 1.7.0
+# What’s new in Chart Version 1.8.0
+
 
 ## Microclimate
 
-* Added build queue rank for projects.
-* Added checks for the existence of Dockerfiles during Docker project validation.
-* Updated Theia to Version 0.3.14.
-* Added Java reactive support with the Lagom framework.
+* Added support for debugging Spring applications using the Microclimate Developer Tools for Eclipse.
+* Improved build status for Spring applications.
+* When installing, Microclimate now checks the details of its install and gives the user a message and a link to the documentation if it's unable to start.
+* Liberty delivered default non-root user support. Microclimate now supports builds with non-root user and our liberty java template generates non-root image sample.
+* Added support for IBM Cloud Private Version 3.1.1
 
 
 ## Pipeline
@@ -16,8 +18,7 @@ No breaking changes.
 
 
 ## Chart
-* Installation from the IBM Cloud Private catalog has simplified configuration values.
-* Updated README.
+* Added support for IBM Cloud Private Version 3.1.1
 
 
 # Fixes
@@ -25,17 +26,17 @@ No breaking changes.
 
 
 # Prerequisites
-- IBM Cloud Private Version 3.1.0. Older versions of IBM Cloud Private are supported only by chart versions v1.5.0 and earlier. Version support information can be found in the release notes of each chart release.
+- IBM Cloud Private Version 3.1.0 or later. Older versions of IBM Cloud Private are supported only by chart versions v1.5.0 and earlier. Version support information can be found in the release notes of each chart release.
 - Ensure [socat](http://www.dest-unreach.org/socat/doc/README) is available on all worker nodes in your cluster. Microclimate uses Helm internally, and both the Helm Tiller and client require socat for port forwarding.
 - Download the IBM Cloud Private CLI, `cloudctl`, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
 
 
-## Upgrading Microclimate to v1.7.0
+## Upgrading Microclimate to v1.8.0
 
-To upgrade to Microclimate v1.7.0:
+To upgrade to Microclimate v1.8.0:
 1. Obtain information about current persistent volumes so that they can be retained in the new installation.
 1. Uninstall Microclimate.
-1. Upgrade IBM Cloud Private to Version 3.1.0.
+1. Upgrade IBM Cloud Private to Version 3.1.0 or 3.1.1.
 1. Install Micrcolimate with the persitent volumes.
 
 More details are provided in the following sections:
@@ -111,7 +112,8 @@ For detailed installation instructions go to https://microclimate-dev2ops.github
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
-| 1.7.0 | Octiber 12, 2018 | 1.11.0  | 1810 | None | Various fixes and improvements |
+| 1.8.0 | November 16, 2018 | 1.11.0  | 1811 | None | Added support for ICP 3.1.1. Various fixes and improvements |
+| 1.7.0 | October 12, 2018 | 1.11.0  | 1810 | None | Various fixes and improvements |
 | 1.6.0 | September 14, 2018 | 1.11.0  | 1809 | Support only for ICP 3.1.0 | Various fixes and improvements |
 | 1.5.0 | Aug 20, 2018 | 1.10.0, 1.9.1 | 1808 | None | Various fixes and improvements |
 | 1.4.0 | July 20, 2018 | 1.10.0, 1.9.1 | 1807 | None | Logout implemented, various small fixes and improvements |

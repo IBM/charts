@@ -1,0 +1,223 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
+{{- $deploymentName := include "sch.names.fullName" (list .) }}
+{{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "ace-dashboard")) }}
+{{- $serverChartName := .sch.chart.serverChartName }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      name: {{ $deploymentName }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      serviceAccountName: {{ $saName }}
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: {{ default 1000 .Values.fsGroupGid }}
+      containers:
+        - name: {{ $deploymentName }}-content-server
+          image: "{{ .Values.image.contentServer }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: rootStoreDirectory
+              value: /home/node/content
+            - name: certDirectory
+              value: /home/node/ssl
+            - name: ibmAceControlApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $deploymentName }}
+                  key: ibmAceControlApiKey
+            - name: LOG_FORMAT
+              value: {{ .Values.log.format | default "json" | quote }}
+          volumeMounts:
+            - name: tls
+              mountPath: /home/node/ssl
+              readOnly: true
+            - name: content
+              mountPath: /home/node/content
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - ALL
+          # Set liveness probe to determine if the Integration Server is running
+          livenessProbe:
+            exec:
+              command:
+              - /readiness/ready.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          # Set readiness probe to determine if the Integration Server admin endpoint is running
+          readinessProbe:
+            exec:
+              command:
+              - /readiness/ready.sh
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          resources:
+            limits:
+{{ toYaml .Values.contentServer.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.contentServer.resources.requests | indent 14 }}
+        - name: {{ $deploymentName }}-control-ui
+          image: "{{ .Values.image.controlUI }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ACE_INGRESS_HOSTNAME
+              value: {{ .Values.tls.hostname }}
+            - name: ACE_SERVER_CHART_NAME
+              value: {{ $serverChartName }}
+            - name: ACE_DASHBOARD_KEY_FILE
+              value: /home/node/ssl/controlui-pri.key
+            - name: ACE_DASHBOARD_CERT_FILE
+              value: /home/node/ssl/controlui-cert.pem
+            - name: ACE_DASHBOARD_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: ACE_DASHBOARD_SSO_ENABLED
+              value: {{ .Values.ssoEnabled | quote }}
+            - name: ACE_INGRESS_PATH
+              value: {{ print .Release.Namespace "-" .Release.Name | quote }}
+            - name: ACE_CONTENT_SERVER_SERVICE_NAME
+              value: {{ $deploymentName }}
+            - name: ibmAceControlApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $deploymentName }}
+                  key: ibmAceControlApiKey
+            - name: ACE_DISCOVERY_ANNOTATION
+              value: appconnectenterprise=dev
+            - name: CLUSTER_EXTERNAL_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . "oauth2-client-reg") }}
+                  key: clusterExternalUrl
+            {{- if .Values.ssoEnabled }}
+            - name: CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . "oauth2-client-reg") }}
+                  key: username
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . "oauth2-client-reg") }}
+                  key: password
+            {{- end }}
+          volumeMounts:
+            - name: tls
+              mountPath: /home/node/ssl
+              readOnly: true
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - ALL
+          # Set liveness probe to determine if the Integration Server is running
+          livenessProbe:
+            httpGet:
+              path: /apiv2/system
+              port: 8300
+              scheme: HTTPS
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          # Set readiness probe to determine if the Integration Server admin endpoint is running
+          readinessProbe:
+            httpGet:
+              path: /apiv2/system
+              port: 8300
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          resources:
+            limits:
+{{ toYaml .Values.controlUI.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.controlUI.resources.requests | indent 14 }}
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ $deploymentName }}
+            items:
+              - key: contentServerCACert
+                path: cacert.pem
+              - key: contentServerPrivateKey
+                path: pri.key
+              - key: contentServerCert
+                path: cert.pem
+              - key: controlUICACert
+                path: controlui-cacert.pem
+              - key: controlUIPrivateKey
+                path: controlui-pri.key
+              - key: controlUICert
+                path: controlui-cert.pem
+        - name: content
+        {{- if and .Values.persistence.enabled .Values.persistence.existingClaimName}}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaimName}}
+        {{- else if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $deploymentName }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}

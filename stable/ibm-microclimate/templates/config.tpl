@@ -62,7 +62,7 @@ data:
     <?xml version='1.1' encoding='UTF-8'?>
     <jenkins.model.JenkinsLocationConfiguration>
       <adminAddress>address not configured yet &lt;nobody@nowhere&gt;</adminAddress>
-      <jenkinsUrl>https://{{ .Values.Master.HostName }}/</jenkinsUrl>
+      <jenkinsUrl>https://{{ template "jenkins.ingress-host" . }}/</jenkinsUrl>
     </jenkins.model.JenkinsLocationConfiguration>
   config.xml: |-
     <?xml version='1.0' encoding='UTF-8'?>
@@ -89,8 +89,8 @@ data:
         <scopes>openid email</scopes>
         <disableSslVerification>true</disableSslVerification>
         <logoutFromOpenidProvider>true</logoutFromOpenidProvider>
-        <endSessionUrl>http://{{ .Values.Master.HostName }}/</endSessionUrl>
-        <postLogoutRedirectUrl>http://{{ .Values.Master.HostName }}/</postLogoutRedirectUrl>
+        <endSessionUrl>http://{{ template "jenkins.ingress-host" . }}/</endSessionUrl>
+        <postLogoutRedirectUrl>http://{{ template "jenkins.ingress-host" . }}/</postLogoutRedirectUrl>
         <escapeHatchEnabled>false</escapeHatchEnabled>
         <escapeHatchSecret>{AQAAABAAAAAQpZudokiKDm2HB49D0eWt4POfG9k0K7iqUf8R5K2Gd+k=}</escapeHatchSecret>
       </securityRealm>
@@ -155,6 +155,10 @@ data:
                     <org.csanchez.jenkins.plugins.kubernetes.ContainerEnvVar>
                       <key>JENKINS_URL</key>
                       <value>http://{{ template "jenkins.fullname" . }}:{{.Values.Master.ServicePort}}{{ default "" .Values.Master.JenkinsUriPrefix }}</value>
+                    </org.csanchez.jenkins.plugins.kubernetes.ContainerEnvVar>
+                    <org.csanchez.jenkins.plugins.kubernetes.ContainerEnvVar>
+                      <key>JAVA_OPTS</key>
+                      <value>-Xmx{{ default "512m" .Values.Agent.JnlpContainer.JVM.MaxHeapSize }}</value>
                     </org.csanchez.jenkins.plugins.kubernetes.ContainerEnvVar>
                   </envVars>
                 </org.csanchez.jenkins.plugins.kubernetes.ContainerTemplate>
@@ -260,9 +264,7 @@ data:
     cp /var/jenkins_config/config.xml /var/jenkins_home;
     cp /var/jenkins_config/org.jenkinsci.plugins.workflow.libs.GlobalLibraries.xml /var/jenkins_home;
 {{- if .Values.Master.LoginOpenIdConnect }}
-    /usr/bin/curl -o /var/jenkins_home/kubectl -L https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
-    chmod +x /var/jenkins_home/kubectl
-    tmp=$(/var/jenkins_home/kubectl get configmap oauth-client-map -n services -o=jsonpath='{.data.MASTER_IP}')
+    tmp=$(kubectl get configmap oauth-client-map -n services -o=jsonpath='{.data.MASTER_IP}')
     if [ -z "$tmp" ];
     then
       sed -e 's/securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm"/!--securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm"/' /var/jenkins_home/config.xml | sed -e 's/securityRealm>/securityRealm--><securityRealm class="hudson.security.LegacySecurityRealm"\/>/' > /var/jenkins_home/config1.xml
@@ -276,9 +278,9 @@ data:
 
     cp /var/jenkins_config/jenkins.CLI.xml /var/jenkins_home;
     cp  /var/jenkins_config/jenkins.model.JenkinsLocationConfiguration.xml /var/jenkins_home;
-    /var/jenkins_home/kubectl get secret {{ .Release.Name }}-ibm-microclimate -o yaml | sed  -e '/admin-api-updated-token/d' > /var/jenkins_home/secret.yaml
-    /var/jenkins_home/kubectl delete secret {{ .Release.Name }}-ibm-microclimate
-    /var/jenkins_home/kubectl create -f /var/jenkins_home/secret.yaml
+    kubectl get secret {{ .Release.Name }}-ibm-microclimate -o yaml | sed  -e '/admin-api-updated-token/d' > /var/jenkins_home/secret.yaml
+    kubectl delete secret {{ .Release.Name }}-ibm-microclimate
+    kubectl create -f /var/jenkins_home/secret.yaml
 {{- if .Values.Master.UseSecurity }}
     mkdir -p /var/jenkins_home/users/admin;
     cp  /var/jenkins_config/user_config.xml /var/jenkins_home/users/admin/config.xml;
@@ -343,3 +345,11 @@ data:
       </libraries>
     </org.jenkinsci.plugins.workflow.libs.GlobalLibraries>
 {{ end }}
+
+{{- define "jenkins.ingress-host" -}}
+  {{- printf "%s.%s" (.Values.global.jenkinsHost | default "jenkins") .Values.global.ingressDomain -}}
+{{- end -}}
+
+{{- define "microclimate.ingress-host" -}}
+  {{- printf "%s.%s" (.Values.global.microclimateHost | default "microclimate") .Values.global.ingressDomain -}}
+{{- end -}}

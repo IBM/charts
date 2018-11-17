@@ -1,40 +1,37 @@
-# Rook Ceph cluster
+# Rook Ceph cluster - Beta
 
 ## Introduction
-[Rook](https://rook.io/), an open source orchestrator for distributed storage systems, runs in cloud Native environments.
+[Rook](https://rook.io/), an open source orchestrator for distributed storage systems, runs in Cloud Native environments.
 
-[Ceph]( https://ceph.com/) is a distributed storage system with multiple storage presentations that include object storage, block storage, and POSIX-compliant shared file system. 
+[Ceph]( https://ceph.com/) is a distributed storage system with multiple storage presentations that include object storage, block storage, and POSIX-compliant shared file system.
 
-Rook is now in alpha state and supports only Ceph distributed storage system.  
+Rook is now in beta state and supports only Ceph distributed storage system.
 
-This Helm chart deploys a Rook Ceph cluster that uses block storage. Along with storage Cluster, this chart also creates its storage pool and a StorageClass.
+## Chart details
+
+This Helm chart bootstraps a Rook Ceph cluster on a [Kubernetes](http://kubernetes.io) cluster by using the
+[Helm](https://helm.sh) package manager. Along with a storage cluster, this chart also creates a storage pool
+and a storage class.
 
 
 ## Limitations
-- Rook is supported on Linux® 64-bit cluster. Currently it is not supported on Linux® on Power® 64-bit LE and IBM® Z clusters.
+- Rook is supported on Linux® 64-bit clusters. Currently, it is not supported on Linux® on Power® 64-bit LE and IBM® Z clusters.
 - Rook supports multiple Ceph clusters. However, only one cluster per namespace can be set up.
-- Currently installation supported in default and kube-system namespaces only.
+- Currently, installation is supported only in default and kube-system namespaces.
 - Rook Ceph cluster is supported on Linux kernel version 3.15 or later.
 
 ## Prerequisites
-- Installer user must have Cluster administrator role.
-- ICP has RBAC enabled, hence it requires to add certain RBAC objects before deploying both Rook Operator and Rook Ceph Cluster charts. For more information, see [Prerequisites]( https://rook.github.io/docs/rook/master/k8s-pre-reqs.html).
-- The Rook Operator deployment must be pre-deployed on ICP cluster. This deployment must bring up one Rook Operator Pod in your cluster and a Rook Agent Pod on each of the nodes.
-- In storageNodes parameter, either disks or directories can be specified against a storage node. If disk devices are specified, they must not have any file system present.
-- The path, specified as dataDirHostPath cluster settings, must not have any pre-existing entries from previous cluster installation. Stale keys and other configurations existing from previous installation will fail the installation.
+- You must have the cluster administrator role to install the chart.
+- Role-based access control (RBAC) is enabled by default in IBM Cloud Private. Therefore, you must add certain RBAC objects before you deploy the Rook operator and Rook Ceph cluster charts. For more information, see [Prerequisites]( https://rook.github.io/docs/rook/master/k8s-pre-reqs.html).
+- You must first deploy the Rook operator chart in your IBM Cloud Private cluster. This deployment must create one Rook operator pod in your cluster and a Rook agent pod on each node.
+- In the `storage.nodes` parameter, you must specify either disks or directories for a storage node. Your storage node must be part of IBM Cloud Private cluster. If you specify disk devices, they must not have any file system present.
+- The path, which is specified as `dataDirHostPath` cluster settings, must not have any pre-existing entries from a previous cluster installation. Stale keys and other configurations that exist from a previous installation cause the installation to fail.
 
-## Installing Rook Ceph cluster
-Installation of a Rook Ceph cluster is three-step process:
-1. Configure role-based access control (RBAC)
-2. Install the Rook operator Helm chart
-3. Install the Ceph storage cluster chart
+### PodSecurityPolicy Requirements
 
-You must be a cluster administrator to install a Rook Ceph cluster.
+This chart requires the following PodSecurityPolicy before you deploy both Rook operator and Rook Ceph cluster charts:
 
-### Configure RBAC 
-Following RBAC objects must be created before deploying both Rook Operator and Rook Ceph cluster charts:
-
-#### PodSecurityPolicy
+*PodSecurityPolicy*
 
   ```
   apiVersion: extensions/v1beta1
@@ -66,7 +63,33 @@ Following RBAC objects must be created before deploying both Rook Operator and R
      - min: 8124
        max: 8124
   ```
-#### ClusterRole
+
+
+## Resources required
+
+The Ceph cluster containers have the following resource requests and limits:
+
+| Container                  | Memory Request        | Memory Limit          | CPU Request           | CPU Limit
+| -----------------------    | ------------------    | ------------------    | ------------------    | ------------------
+| Monitoring                 | 256Mi                 | 512Mi                 | 250m                  | 500m
+| ODS                        | 256Mi                 | 512Mi                 | 250m                  | 500m
+| Manager                    | 256Mi                 | 512Mi                 | 250m                  | 500m
+
+
+## Installing Rook Ceph cluster
+
+Installation of a Rook Ceph cluster is three-step process:
+1. Configure role-based access control (RBAC)
+2. Install the Rook Ceph operator Helm chart
+3. Install the Ceph storage cluster chart
+
+You must be a cluster administrator to install a Rook Ceph cluster.
+
+### Configure RBAC
+
+Create the following RBAC objects before you deploy both Rook operator and Rook Ceph cluster charts:
+
+*ClusterRole*
 
   ```
   # privilegedPSP grants access to use the privileged PSP.
@@ -85,8 +108,10 @@ Following RBAC objects must be created before deploying both Rook Operator and R
     - use  
   ```
   
-#### ClusterRoleBinding
-*Note: You need to change namespace value to the namespace where you are creating Rook Operator deployment.*
+*ClusterRoleBinding*
+
+  *Note: You need to change the namespace parameter value to the namespace where you are deploying the Rook Operator chart.*
+
 ```
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -102,76 +127,176 @@ subjects:
   namespace: <rook-operator-namespace>
   ```
   
-### Install the Rook operator Helm chart
-The Rook operator Helm chart installs the basic components that are required to create, configure, and manage Rook Ceph clusters on Kubernetes. 
+*Note: Some of these objects might already be present in your cluster.*
 
-For more information about installing the Rook operator Helm chart, see [Operator Helm Chart]( https://rook.github.io/docs/rook/master/helm-operator.html ). 
 
-Next, create the Ceph storage cluster
+### Install the Rook Ceph operator Helm chart
 
-### Create the Ceph storage cluster
+The Rook Ceph Operator Helm chart installs the basic components that are required to create, configure, and manage Rook
+Ceph clusters on Kubernetes.
 
-Install the `ibm-rook-rbd-cluster` chart to create Ceph storage cluster. It deploys a Ceph block storage cluster, and creates its storage pool and associated StorageClass.
+For more information about installing the Rook Ceph Operator Helm chart, see [Operator Helm Chart]( https://rook.github.io/docs/rook/master/helm-operator.html ).  You must install Beta release of  Rook Operator Helm chart.
+
+*Note: Make a note of the namespace in which you deployed the Rook operator Helm chart. You need to specify this namespace when you deploy the `ibm-rook-rbd-cluster` chart.*
+
+Next, install the Ceph storage cluster chart.
+
+### Install the Ceph storage cluster chart
+
+Install the `ibm-rook-rbd-cluster` chart to create a Ceph storage cluster. The chart deploys a Ceph block storage cluster, and creates its storage pool and associated StorageClass.
 
 
 ## Installing the chart
-To install `ibm-rook-rbd-cluster` chart from command line with release name `my-release`:
+
+### Installing the chart by using the command line
+
+The following sample YAML shows the storage settings that specify three nodes with disks as storage devices:
+
+```
+rookOperatorNamespace: "<Rook Ceph Operator Namespace>"
+cluster:
+  storage:
+    nodes:
+      - name: "1.2.3.4"
+        devices:
+          - name: "vdb"
+          - name: "vdc"
+      - name: "1.2.3.5"
+        devices:
+          - name: "vdb"
+      - name: "1.2.3.6"
+        devices:
+          - name: "vdb"
+```
+*Note: The node name must be name of kubernetes node as reported by `kubectl get nodes` command.*
+
+
+The following sample YAML shows storage settings that specify three nodes with directories as storage devices:
+
+```
+rookOperatorNamespace: "<Rook Ceph Operator Namespace>"
+cluster:
+  storage:
+    nodes:
+      - name: "1.2.3.4"
+        directories:
+          - path: "/rook/storage-dir"
+      - name: "1.2.3.5"
+        directories:
+          - path: "/rook/storage-dir"
+      - name: "1.2.3.6"
+        directories:
+          - path: "/rook/storage-dir"
+```
+
+*Note*:
+- Replace `<Rook Ceph Operator Namespace>` with the namespace in which you deployed the Rook Ceph Operator chart.
+- Disk devices that are specified here must not have any file system present; use `wipefs -a <disk path>` to clean the disks.
+- Storage settings can be applied at a cluster level as well as at a node level. See the *Configuration* section for details.
+
+Run the following command to install `ibm-rook-rbd-cluster` chart from command line with the release name `my-release`:
 
 ```bash
-$ install --name my-release -f  values.yaml stable/ibm-rook-rbd-cluster --tls
+helm install --name my-release -f values.yaml stable/ibm-rook-rbd-cluster --tls
+```
+
+### Installing the chart by using the management console
+
+Consider the following storage settings examples if you are installing the `ibm-rook-rbd-cluster` chart from the IBM Cloud Private Catalog.
+
+Storage setting that specifies three nodes with disks as storage devices:
+
+```
+-
+    name: "1.2.3.4"
+    devices: [{name: "vdb"}, {name: "vdc"}]
+-
+    name: "1.2.3.5"
+    devices: [{name: "vdb"}]
+-
+    name: "1.2.3.6"
+    devices: [{name: "vdb"}]
+```
+
+*Note: The node `name` must be name of kubernetes node as reported by `kubectl get nodes` command.*
+
+Storage setting that specifies three nodes with directories as storage devices:
+
+```
+-
+    name: "1.2.3.4"
+    directories: [{path: "/rook/storage-dir"}]
+-
+    name: "1.2.3.5"
+    directories: [{path: "/rook/storage-dir"}]
+-
+    name: "1.2.3.6"
+    directories: [{path: "/rook/storage-dir"}]
 ```
 
 ## Configuration
+
 The following table lists the configurable parameters of the `ibm-rook-rbd-cluster` chart and their default values.
 
 
 | Parameter                  | Description                                     | Default                                                    |
 | -----------------------    | ---------------------------------------------   | ---------------------------------------------------------- |
-| `cluster.dataDirHostPath`  | Path on the host to store configuration and data *Note: It must not have pre-exsiting entries.* | `/var/lib/rook `                                                        |
-| `cluster.hostNetwork`      | Uses host network instead of Pod network         | `false`                                                     |
-| `cluster.monCount`         | Sets number of Ceph monitoring process to start  | `3`                |
-| `cluster.pool.replicaSize` |  Number of storage replica to create             | `2`                |
-| `cluster.storageNodes`     |  List of storage nodes and its devices  *Eg. [{"name": "1.2.3.4", "device": [{"name": "sdb"}]}]* *Note: disk devices specified here must not have any file system present, use wipefs -a disk to clean disks.*                   | `nil`                                            |
-| `storageClass.name`        | Name of the storage class                        | `nil`              |
-| `storageClass.create`      | Creates storage class when set to true           | `true`             |
-| `storageClass.fsType`      | File system type supported by Kubernetes         | `ext4`             |
-| `storageClass.reclaimPolicy`  | Reclaim policy of the volume being created    | `Delete`           |
-| `storageClass.volumeBindingMode`  | Indicates how volume should be bound      | `Immediate`        |
-| `image.repository`         | Docker repository to pull hyperkube image from   | `ibmcom/hyperkube` |
-| `image.tag`                | Image tag                                        | `v1.10.0-ce`       |
-| `image.pullPolicy`         | Image pull policy                                | `IfNotPresent`     |
+| `rookOperatorNamespace`    | Namespace in which the Rook Ceph Operator Helm chart is installed. This parameter is required to grant adequate permission to Ceph operator to create and manage Ceph cluster pods. *Note: The Rook Ceph Operator Helm chart must be installed before you install the `ibm-rook-rbd-cluster` chart.* | `nil` |
+| `cluster.dataDirHostPath`  | Path on the host where configuration files are stored. If not specified, a kubernetes `emptyDir` is created. *Note: The directory must not have pre-exsiting entries.* | `/var/lib/rook `      |
+| `cluster.mon.count`        | Sets the number of Ceph monitoring processes to start. The value must be odd number in the range 1 - 9.| `3`                |
+| `cluster.mon.allowMultiplePerNode` | Set it `true` to allow multiple monitoring processes on one node. | `false`            |
+| `cluster.network.hostNetwork` |  Set it `true` to use network of the hosts instead of using the software-defined network (SDN) underneath the containers.  | `false`  |
+| `cluster.dashboard.enabled` |   Set it `true` to view the Ceph dashboard in your browser.            | `true`                |
+| `cluster.placement.all.enabled`    | Set it `true` to enable generic placement configuration for all services (mon, osd, mgr). The placement configuration is used to schedule pods on nodes. Each service has its placement configuration generated by merging the generic configuration with the most specific one, which overrides any attribute. For more information, see [Placement Configuration Settings](https://github.com/rook/rook/blob/master/Documentation/ceph-cluster-crd.md#placement-configuration-settings).| `false` |
+| `cluster.placement.all.nodeSelectorTerms` | Node affinity match expressions that are associated with nodeSelectorTerms for all the services (mon, osd, mgr). | `[]` |
+| `cluster.placement.all.tolerations` | Tolerations that are applied to pods for all the services (mon, osd, mgr). | `nil` |
+| `cluster.placement.mon.enabled`    | Set it `true` to enable generic placement configuration for Ceph monitoring service pods. The placement configuration is used to schedule pods on nodes. Each service has its placement configuration generated by merging the generic configuration with the most specific one, which overrides any attribute. For more information, see [Placement Configuration Settings](https://github.com/rook/rook/blob/master/Documentation/ceph-cluster-crd.md#placement-configuration-settings). | `false` |
+| `cluster.placement.mon.nodeSelectorTerms` | Node affinity match expressions that are associated with nodeSelectorTerms for the Ceph monitoring service. | `[]` |
+| `cluster.placement.mon.tolerations` | Tolerations that are applied to pods of the Ceph monitoring service. | `nil` |
+| `cluster.placement.osd.enabled`    | Set it `true` to enable generic placement configuration for Ceph OSD service pods. The placement configuration is used to schedule pods on nodes. Each service has its placement configuration generated by merging the generic configuration with the most specific one, which overrides any attribute. For more information, see [Placement Configuration Settings](https://github.com/rook/rook/blob/master/Documentation/ceph-cluster-crd.md#placement-configuration-settings). | `false` |
+| `cluster.placement.osd.nodeSelectorTerms` | Node affinity match expressions that are associated with nodeSelectorTerms for the Ceph OSD service. | `[]` |
+| `cluster.placement.osd.tolerations` | Tolerations that are applied to pods of the Ceph OSD service. | `nil` |
+| `cluster.placement.mgr.enabled`    | Set it `true` to enable generic placement configuration for manager service pods. The placement configuration is used to schedule pods on nodes. Each service has its placement configuration generated by merging the generic configuration with the most specific one, which overrides any attribute. | `false` |
+| `cluster.placement.mgr.nodeSelectorTerms` | Node affinity match expressions that are associated with nodeSelectorTerms for the manager service. | `[]` |
+| `cluster.placement.mgr.tolerations` | Tolerations that are applied to pods of the manager service. | `nil` |
+| `cluster.storage.useAllNodes` | Set it to `true` to choose all the nodes in the cluster for storage. | `false` |
+| `cluster.storage.useAllDevices` | Set it to `true` to automatically consume all devices found on nodes in the cluster by OSDs. Set it to `true` only if you have a controlled environment where you have no risk of formatting devices with existing data. | `false` |
+| `cluster.storage.deviceFilter` | A regular expression that allows selection of devices to be consumed by OSDs. For example, `sdb:` selects only the `sdb` device, if found; `^sd[a-d]:` selects devices that start with `sda`, `sdb`, `sdc`,and `sdd`, if found. For more information, see [Storage Selection Settings document ](https://github.com/rook/rook/blob/master/Documentation/ceph-cluster-crd.md#storage-selection-settings). | `nil` |
+| `cluster.storage.location` | Location information about the cluster to help with data placement, such as region or data center. This information is directly fed into the underlying Ceph CRUSH map. More information on CRUSH maps can be found in the [ceph docs](http://docs.ceph.com/docs/master/rados/operations/crush-map/). | `nil`|
+| `cluster.storage.config.storeType` | The underlying storage format to use for each OSD. Valid values are `filestore` or `bluestore`. | `filestore` |
+| `cluster.storage.config.databaseSizeMB`| The size of a bluestore database in megabyte (MB). | `"1024"` |
+| `cluster.storage.config.journalSizeMB` | The size of a filestore journal in MB. | `"1024"` |
+| `cluster.storage.nodes`   | List of storage nodes and its devices. The nodes are kubernets nodes of your IBM Cloud Private cluster node. The name should be as reported by `kubectl get nodes`.  Refer to `Installing the chart` for sample format. | `nil`  |
+| `resources` | List of resources for mgr, mon, and osd pods. For example, `{\"mgr\": {\"limits\": {\"cpu\":\"500m\", \"memory\": \"512Mi\"}, \"requests\": {\"cpu\":\"250m\", \"memory\": \"256Mi\"}}` are resource limits and requests for manager pods. Use `mon` key to specify resources for monitoring service, and `osd` key to specify resources for osd service. | `nil` |
+| `pool.failureDomain` | The failure domain across which the replicas or chunks of data are spread. Possible values are `osd` or `host`. Default value is `host`. For example, if you have replication of size 3 and the failure domain is `host`, all three copies of the data are placed on osds that are found on unique hosts. In such a case, you can tolerate the failure of two hosts. If the failure domain is  `osd`, you would be able to tolerate the loss of two devices. Similarly, for erasure coding, the data and coding chunks would be spread across the requested failure domain. For more information, see [Pool Settings](https://github.com/rook/rook/blob/master/Documentation/ceph-pool-crd.md#pool-settings). | `host` |
+| `pool.resilienceType` | Resilience settings for pool. A pool can be either replicated or erasure-coded for resiliency. Allowed values are `replicated` or `erasurecoded`.  |   `replicated` |
+| `pool.replicated.size` | The number of copies (replication) of the data in the pool. This value is valid when `pool.resilienceType` parameter is set to `replicated`.  | `3` |
+| `pool.erasureCoded.dataChunks` | Choose this number to divide data into as many number of chunks. This value is valid when `pool.resilienceType` parameter is set to `erasurecoded`. For allowed values, see [Erasure Coding Doc](https://github.com/rook/rook/blob/master/Documentation/ceph-pool-crd.md#erasure-coding).  | `2` |
+| `pool.codingChunks` | Number of redundant chunks to store. This value is valid when `pool.resilienceType` parameter is set to `erasurecoded`. For allowed values, see [Erasure Coding Doc](https://github.com/rook/rook/blob/master/Documentation/ceph-pool-crd.md#erasure-coding).  | `1` |
+| `storageClass.name`        | Name of the storage class that is created while you install Rook Ceph cluster.   | `nil` |
+| `storageClass.create`      | Creates a storage class when set to `true`.           | `true`             |
+| `storageClass.fsType`      | File System to use for the volume created by the storage class. Possible values are `ext4` or `xfs`. | `ext4`  |
+| `storageClass.reclaimPolicy`  | Reclaim policy of the persistent volumes that are dynamically created by the storage class.    | `Delete`           |
+| `storageClass.volumeBindingMode`  | Indicates how a volume must be bound. Possible values are `Immediate` or `WaitForFirstConsumer`. | `Immediate` |
+| `preValidation.image.repository`| Docker repository from where the validation utility image is pulled.   | `ibmcom/icp-storage-util` |
+| `preValidation.image.tag`                | Image tag that is used to choose utility image release version.  | `3.1.0`       |
+| `preValidation.image.pullPolicy`         | Docker image pull policy. Allowed values are `Always`, `Never`, or `IfNotPresent`.  | `IfNotPresent`     |
 
-Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`
+Specify each parameter by using the `--set key=value[,key=value]` argument with the `helm install` command.
 
-Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
+Alternatively, you can provide a YAML file with the parameter values while installing the chart.
+
 For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/ibm-rook-rbd-cluster --tls
-```
-
-*Note: In storageNodes parameter, either disks or directories can be specified against a storage node.*
-
-The following is sample YAML file containing storage node (with disks as storage devices) settings to get you started.
-
-```
-cluster:
-  storageNodes: [{"name": "1.2.3.4", "device" : [{"name": "sdb"}] }, {"name": "1.2.3.5", "device" : [{"name": "sdb"}] }, {"name": "1.2.3.6", "device" : [{"name": "sdb"}] }]
-```
-
-The following is sample YAML file containing storage node (with directories as storage devices) settings to get you started.
-
-```
-cluster:
-  storageNodes: [{"name": "1.2.3.4", "directories" : [{"path": "path1"}] }, {"name": "1.2.3.5", "directories" : [{"path": "path2"}] }, {"name": "1.2.3.6", "directories" : [{"path": "path3"}] }]
+helm install --name my-release -f values.yaml stable/ibm-rook-rbd-cluster --tls
 ```
 
 ## Verifying the chart
 
-If chart installation is successful you will see success message on ICP UI.
+If chart installation is successful, you see a success message on IBM Cloud Private UI.
 
-
-You will see the following post message if you are using Helm CLI :
+If you are using the Helm CLI, you see a message similar to the following message:
 
 ```
 NOTES:
@@ -186,35 +311,34 @@ NOTES:
 3. Storage class rbd-storage-class can be used to create RBD volumes.
 
    kubectl get storageclasses rbd-storage-class
- 
 ```
 
-Once chart installation is successful, it takes couple of minutes to bring up all the required pods.
-Verify that all the pods have come up and cluster is usable before using the storage class for volume claim.
+After you successfully install the chart, it takes couple of minutes for all the required pods to be ready.
 
-1. Verify that there are as many monitoring Pods (ceph-mon) as specified in cluster.monCount configuration parameter.
-2. Verify that there are as many ceph-osd Pods as number of storage nodes specified in cluster.storageNodes configuration parameter.
-3. Verify that api and ceph-mgr Pods are up.
+Before you use the storage class to claim a volume, verify that all the pods are ready and the cluster is usable.
+1. There must be as many monitoring pods (`ceph-mon`) as specified in `cluster.monCount` configuration parameter.
+2. There must be as many `ceph-osd` pods as the number of storage nodes specified in `cluster.storageNodes` configuration parameter.
+3. The `api` and `ceph-mgr` pods must be ready.
 
-All the above Pods are in same namespace where this chart is being deployed. 
 
+
+All the pods are in same namespace where you deployed the chart.
 
 ## Provisioning Persistent Volume
 
-The Ceph storage cluster creates a storage pool and associated storage class for Rook to provision Ceph storage.
+The Ceph storage cluster creates a storage pool and its associated storage class for Rook to provision Ceph storage.
 
 ```
-$ kubectl get storageclass
+kubectl get storageclass
 NAME                    TYPE
 rbd-storage-class       rook.io/block      
 
-
-$ kubectl get pool
+kubectl get pool
 NAME           KIND
 default-pool   Pool.v1alpha1.rook.io
 ```
 
-Use the following sample yaml file to create a persistent volume:
+Use the following sample YAML file to create a persistent volume:
 
 ```
 apiVersion: v1
@@ -230,20 +354,20 @@ spec:
       storage: 1Gi
 ```
 ```
-$ kubectl apply -f pvc_doc.yaml 
+kubectl apply -f pvc_doc.yaml
 persistentvolumeclaim "pv-claim" created
 
-$ kubectl get pvc
+kubectl get pvc
 NAME       STATUS    VOLUME                                     CAPACITY   ACCESSMODES   STORAGECLASS        AGE
 pv-claim   Bound     pvc-375d2c9a-537b-11e8-a81b-005056a7db67   1Gi        RWO           rbd-storage-class   7s
 ```
 
 ## Uninstalling the chart
 
-To uninstall/delete the `my-release` deployment:
+To uninstall or delete the `my-release` deployment:
 
 ```bash
-$ helm delete --purge  my-release --tls
+helm delete --purge  my-release --tls
 ```
 
 ## Copyright
