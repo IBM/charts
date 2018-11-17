@@ -1,0 +1,152 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# license must be set to "accept" in order to accept the terms of the IBM license
+license: "not accepted"
+
+# The URL to pull content from before initialising the Integration Server
+# Of the form https://releasename/path/to/dir?token
+contentServerURL:
+
+# Whether to start an image with an MQ Queue Manager.  The Queue Manager will be used by the Integration Server
+queueManagerEnabled: false
+
+image:
+  repository:
+    # name of the ace only server image
+    aceonly: ibmcom/ace
+    # name of the ace with mq server image
+    acemq: ibmcom/ace-mq
+  # tag is the tag to use for the container repository
+  tag: 11.0.0.2
+  # pullPolicy of IfNotPresent causes image pulling to be skipped if it already exists. Change to Always to force a pull.
+  pullPolicy: IfNotPresent
+  # pullSecret is the secret to use when pulling the image from a private registry
+  pullSecret:
+
+arch: amd64
+
+# gid for the secondary group the containers should run in so that they can access NFS storage.
+fsGroupGid:
+
+# persistence section specifies persistence settings which apply to the whole chart
+persistence:
+  # enabled is whether to use Persistent Volumes or not
+  enabled: true
+  # useDynamicProvisioning is whether or not to use Storage Classes to dynamically create Persistent Volumes
+  useDynamicProvisioning: true
+
+# dataPVC section specifies settings for the main Persistent Volume Claim, which is used for data in /var/mqm
+dataPVC:
+  # name sets part of the name for this Persistent Volume Claim
+  name: "data"
+  ## storageClassName is the name of the Storage Class to use, or an empty string for no Storage Class
+  storageClassName: ""
+  ## size is the minimum size of the Persistent Volume
+  size: 2Gi
+
+service:
+  type: NodePort
+  webuiPort: 7600
+  serverlistenerPort: 7800
+  serverlistenerTLSPort: 7843
+
+###########################################################
+# ibm-ace-server (ACE only) specific settings
+###########################################################
+aceonly:
+  # resource limits to apply to the ibm-ace-server containers
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      cpu: "1"
+      memory: 1024Mi
+    limits:
+      cpu: "1"
+      memory: 1024Mi
+
+###########################################################
+# ibm-ace-mq-server (ACE w/ MQ) specific settings
+###########################################################
+acemq:
+  # resource limits to apply to the ibm-ace-mq-server containers
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2048Mi
+    limits:
+      cpu: "1"
+      memory: 2048Mi
+
+# The number of pod replicas to have - note that this is only used if the MQ queue manager is NOT enabled.
+replicaCount: 3
+
+# queueManager section specifies settings for the MQ Queue Manager
+queueManager:
+  # name allows you to specify the name to use for the queue manager.  Defaults to the Helm release name.
+  name:
+  # dev section specifies settings for the MQ developer defaults available in the MQ Advanced for Developers image.
+  dev:
+    # adminPassword sets the password of the admin user
+    adminPassword:
+    # appPassword sets the password of the app user
+    appPassword:
+  # The content of an mqsc file to be run by the queue manager on startup.
+  mqsc:
+
+# integrationServer section specifies settings for the ACE Integration Server
+integrationServer:
+  # name allows you to specify the name to use for the Integration Server.  Defaults to the Helm release name.
+  name:
+  keystore:
+    password:
+    keys:
+      mykey:
+        passphrase:
+        key:
+        cert:
+  truststore:
+    password:
+    certs:
+      cacert:
+        cert:
+  odbcini:
+  policy:
+  policyDescriptor:
+  serverconf:
+  setdbparms:
+
+# log section specifies settings for MQ error logs and Integration Server console logs
+log:
+  format: json
+
+# metrics section specifies settings for generating queue manager and Integration Server metrics
+metrics:
+  enabled: true
+
+# livenessProbe section specifies setting for the ACE liveness probe, which checks for the Integration Server admin endpoint and a healthy Queue Manager
+livenessProbe:
+  # initialDelaySeconds should be raised if your system cannot start the Queue Manager and Integration Server in 120 seconds
+  initialDelaySeconds: 120
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 1
+
+# readinessProbe section specifies setting for the ACE readiness probe, which checks for the Integration Server admin endpoint and a running Queue Manager
+readinessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 1

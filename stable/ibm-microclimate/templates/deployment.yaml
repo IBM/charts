@@ -13,7 +13,7 @@ kind: Deployment
 metadata:
   name: {{ include "sch.names.fullName" (list .) }}
   labels:
-    app: {{ include "sch.names.fullName" (list .) }}
+    app: {{ include "sch.names.fullName" (list .) }}-portal
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
@@ -21,20 +21,20 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: {{ include "sch.names.fullName" (list .) }}
+      app: {{ include "sch.names.fullName" (list .) }}-portal
       release: {{ .Release.Name }}
   replicas: 1
   template:
     metadata:
       labels:
-        app: {{ include "sch.names.fullName" (list .) }}
+        app: {{ include "sch.names.fullName" (list .) }}-portal
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
       annotations:
         productName: "IBM Microclimate v1"
-        productID: "IBMMicroclimate_18.10_perpetual_00000"
-        productVersion: "18.10"
+        productID: "IBMMicroclimate_{{ .Chart.AppVersion }}_perpetual_00000"
+        productVersion: "{{ .Chart.AppVersion }}"
 
     spec:
       # As provided in the chart. Used by Portal and File Watcher
@@ -87,6 +87,8 @@ spec:
             value: "true"
           - name: KUBE_NAMESPACE
             value: "{{ .Release.Namespace }}"
+          - name: FULL_NAME
+            value: {{ include "sch.names.fullName" (list .) }}
           - name: LOADRUNNER_IMAGE
             value: {{ .Values.loadrunner.repository}}:{{ .Values.loadrunner.tag}}
           - name: LOADRUNNER_MEM_REQUEST
@@ -107,7 +109,6 @@ spec:
           - name: DOCKER_REGISTRY_URL
             value: "{{ .Values.jenkins.Pipeline.Registry.Url }}/{{ .Release.Namespace }}"
           {{- end }}
-          # Don't try using a helm secret if on 2.1.0.2
           {{- if and .Values.global.helm.tlsSecretName }}
           - name: HELM_SECRET
             value: "{{ .Values.global.helm.tlsSecretName }}"
@@ -137,7 +138,7 @@ spec:
           - name: FILE_WATCHER_CPU_LIMIT
             value: {{ .Values.filewatcher.resources.limits.cpu}}
           - name: MICROCLIMATE_VERSION
-            value: "{{ .Values.portal.tag}}"
+            value: "{{ .Chart.AppVersion }}"
           - name: BEACON_IMAGE
             value: {{ .Values.beacon.repository}}:{{ .Values.beacon.tag}}
           - name: BEACON_MEM_REQUEST
