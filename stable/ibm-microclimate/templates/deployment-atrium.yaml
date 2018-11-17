@@ -1,0 +1,80 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+# "Restricted Materials of IBM"
+#
+# Copyright IBM Corp. 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#*******************************************************************************
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-atrium
+  labels:
+    app: {{ include "sch.names.fullName" (list .) }}-atrium
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "sch.names.fullName" (list .) }}-atrium
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "sch.names.fullName" (list .) }}-atrium
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: {{ .Release.Name }}
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: "IBM Microclimate v1"
+        productID: "IBMMicroclimate_{{ .Chart.AppVersion }}_perpetual_00000"
+        productVersion: "{{ .Chart.AppVersion }}"
+
+    spec:
+      # As provided in the chart. Used by Portal and File Watcher
+      {{- if .Values.global.rbac.serviceAccountName }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      {{- end }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 8 }}
+      containers:
+      - name: microclimate-atrium
+        image: {{ .Values.atrium.repository}}:{{ .Values.atrium.tag}}
+        imagePullPolicy: "{{ .Values.imagePullPolicy}}"
+        env:
+        - name: KUBE_NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        - name: SERVICE_NAME
+          value: {{ include "sch.names.fullName" (list .) }}
+        - name: ATRIUM_NAME
+          value: {{ include "sch.names.fullName" (list .) }}-atrium
+        ports:
+        - containerPort: 9191
+        livenessProbe:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 10
+          httpGet:
+            path: /
+            port: 9191
+            scheme: HTTPS
+        readinessProbe:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 10
+          httpGet:
+            path: /
+            port: 9191
+            scheme: HTTPS
+
+        resources:
+          requests:
+            memory: {{ .Values.atrium.resources.requests.memory }}
+            cpu: {{ .Values.atrium.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.atrium.resources.limits.memory }}
+            cpu: {{ .Values.atrium.resources.limits.cpu }}
