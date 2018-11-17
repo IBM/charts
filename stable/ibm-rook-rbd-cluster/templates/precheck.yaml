@@ -5,7 +5,11 @@
 # US Government Users Restricted Rights - Use, duplication or disclosure
 # restricted by GSA ADP Schedule Contract with IBM Corp.
 ###############################################################################
+{{- if not .Values.rookOperatorNamespace }}
+{{ fail "Configuration error: Install the Ceph Operator helm chart under a namespace and specify the namespace here.  "}}
+{{- end }}
 
+{{- if .Values.preValidation.enabled }}
 {{- include "sch.config.init" (list . "ibm-rook-rbd-cluster.sch.chart.config.values") }}
 {{- $prcJobName :=  .sch.chart.components.prcjob.name }}
 
@@ -27,13 +31,15 @@ spec:
     metadata:
       name: rook-cluster-precheck
       labels:
-        name: rook-cluster-precheck
+{{ include "sch.metadata.labels.standard" (list . $prcJobName) | indent 8 }}
     spec:
       restartPolicy: Never
+      affinity:
+      {{- include "ibm-rook-rbd-cluster.nodeaffinity" . | indent 6 }}
       initContainers:
         - name: rook-operator-check
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          command: ["sh", "-c", "/usr/local/bin/kubectl get po --all-namespaces | grep rook-operator || exit 1"]
+          command: ["sh", "-c", "/usr/local/bin/kubectl get po -n {{ .Values.rookOperatorNamespace }} |  grep rook-ceph-operator || exit 1"]
         - name: rook-dup-release-check
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           command: ["sh", "-c", "/usr/local/bin/kubectl get cluster  2>&1 | grep -q \"No resources found\" || exit 1"]
@@ -42,3 +48,4 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           command: ["sh", "-c", "echo Precheck done"] 
+{{- end }}

@@ -22,7 +22,7 @@ spec:
     matchLabels:
       app: {{ include "sch.names.fullName" (list .) }}-devops
       release: {{ .Release.Name }}
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1
   template:
     metadata:
       labels:
@@ -32,8 +32,8 @@ spec:
         heritage: "{{ .Release.Service }}"
       annotations:
         productName: "IBM Microclimate Devops v1"
-        productID: "IBMMicroclimate_Devops_18.10_perpetual_00000"
-        productVersion: "18.10"
+        productID: "IBMMicroclimate_Devops_{{ .Chart.AppVersion }}_perpetual_00000"
+        productVersion: "{{ .Chart.AppVersion }}"
     spec:
       affinity:
       {{- include "nodeaffinity" . | indent 8 }}
@@ -76,7 +76,7 @@ spec:
         - name: JENKINS_URL
           value: "http://{{ .Release.Name }}-jenkins:8080"
         - name: JENKINS_EXTERNAL_URL
-          value: "https://{{ .Values.jenkins.Master.HostName }}"
+          value: "https://{{ template "jenkins.ingress-host" . }}"
         - name: JENKINS_USE_SECURITY
           value: "{{ .Values.jenkins.Master.UseSecurity }}"
         - name: JENKINS_USER
@@ -105,13 +105,8 @@ spec:
         - name: tlskey
           secret:
             secretName: {{ .Release.Name }}-tls-secret
-      # Don't try using a helm secret if on 2.1.0.2
       {{- if and .Values.global.helm.tlsSecretName }}
         - name: helm-secret
           secret:
             secretName: "{{ .Values.global.helm.tlsSecretName }}"
       {{- end }}
-    {{- if .Values.nodeSelector }}
-      nodeSelector:
-{{ toYaml .Values.nodeSelector | indent 8 }}
-    {{- end }}

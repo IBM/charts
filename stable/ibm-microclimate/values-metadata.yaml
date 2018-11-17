@@ -4,8 +4,8 @@ persistence:
     description: "Configuration options for using persistent storage with Microclimate"
   enabled:
     __metadata:
-      label: "Persistent Storage"
-      description: "Enable/disable persistent storage - WARNING: Microclimate requires persistent storage enabled to function correctly. It is recommended to keep this enabled"
+      label: "-"
+      description: "--"
       type: "boolean"
       required: true
       hidden: true
@@ -44,6 +44,13 @@ global:
       description: "If installing into a non-default namespace, a yaml array of any additional image pull secrets required (other than microclimate-registry-secret)"
       required: false
       type: "string"
+  applyPodSecurityPolicy:
+    __metadata:
+      label: "Apply Pod Security Policy"
+      description: "Automatically apply the ibm-anyuid-hostpath-psp policy when installing Microclimate"
+      type: "boolean"
+      required: false
+      immutable: false
   helm:
     tlsSecretName:
       __metadata:
@@ -57,11 +64,31 @@ global:
     serviceAccountName:
       __metadata:
         label: "Service account name for Portal"
-        description: "Name of a service account to use for Microclimate's Portal and File Watcher pods: used when deploying into a non-default namespace. If set to a non-default value, the service account will be created in the specified namespace."
+        description: "The name of the service account to be created for Microclimate to use"
         type: "string"
         required: false
         immutable: false
-        
+  jenkinsHost:
+    __metadata:
+      label: "Jenkins hostname"
+      description: "Hostname used to access Jenkins via Kubernetes ingress."
+      type: "string"
+      immutable: false
+      required: false
+  microclimateHost:
+    __metadata:
+      label: "Microclimate hostname"
+      description: "Hostname used to access Microclimate via Kubernetes ingress."
+      type: "string"
+      immutable: false
+      required: false
+  ingressDomain:
+    __metadata:
+      label: "Microclimate Ingress domain"
+      description: "Domain to be added to microclimateHost and jenkinsHost when constructing Ingress entries."
+      type: "string"
+      immutable: false
+      required: true
 
 theia:
   __metadata:
@@ -195,7 +222,7 @@ portal:
           type: "string"
           required: true
   clock:
-    tolerance: 
+    tolerance:
       __metadata:
         label: "Clock Tolerance"
         description: "The Open ID Connect clock tolerance"
@@ -263,8 +290,6 @@ utils:
       type: "string"
       required: true
   resources:
-    __metadata:
-      label: "Resource configuration"
     requests:
       memory:
         __metadata:
@@ -336,6 +361,49 @@ loadrunner:
           type: "string"
           required: true
 
+atrium:
+  __metadata:
+    label: "Atrium"
+    description: "Configuration for atrium pod"
+  repository:
+    __metadata:
+      label: "Repository"
+      description: "microclimate-atrium image location"
+      type: "string"
+      required: true
+  tag:
+    __metadata:
+      label: "Tag"
+      description: "microclimate-atrium image tag"
+      type: "string"
+      required: true
+  resources:
+    requests:
+      memory:
+        __metadata:
+          label: "Memory Request"
+          description: "The memory request for microclimate-atrium"
+          type: "string"
+          required: true
+      cpu:
+        __metadata:
+          label: "CPU Request"
+          description: "The CPU request for microclimate-atrium"
+          type: "string"
+          required: true
+    limits:
+      memory:
+        __metadata:
+          label: "Memory Limit"
+          description: "The Memory limit for microclimate-atrium"
+          type: "string"
+          required: true
+      cpu:
+        __metadata:
+          label: "CPU Limit"
+          description: "The CPU limit for microclimate-atrium"
+          type: "string"
+          required: true
 
 imagePullPolicy:
   __metadata:
@@ -412,50 +480,6 @@ devops:
           type: "string"
           required: true
 
-hostName:
-  __metadata:
-    label: "Microclimate hostname"
-    description: "Hostname used to access Microclimate via Kubernetes ingress e.g. microclimate.<icp proxy node address>.nip.io"
-    type: "string"
-    immutable: false
-    required: true
-
-persistence:
-  __metadata:
-    label: "Persistent Storage Configuration"
-    description: "Configuration options for using persistent storage with Microclimate"
-  enabled:
-    __metadata:
-      label: "Persistent Storage"
-      description: "Enable/disable persistent storage - WARNING: Microclimate requires persistent storage enabled to function correctly. It is recommended to keep this enabled"
-      type: "boolean"
-      required: true
-      hidden: true
-  existingClaimName:
-    __metadata:
-      label: "Existing PersistentVolumeClaim Name"
-      description: "The name of an existing PersistentVolumeClaim to use for Microclimate - Must be left blank if `Dynamic Provisioning` is enabled "
-      type: "string"
-      required: false
-  useDynamicProvisioning:
-    __metadata:
-      label: "Dynamic Provisioning"
-      description: "Enable/disable dynamic provisioning - 'Existing PersistentVolumeClaim Name' must be left blank to use Dynamic Provisioning"
-      type: "boolean"
-      required: true
-  size:
-    __metadata:
-      label: "Persistent storage size"
-      description: "Size of persistent storage to provision"
-      type: "string"
-      required: false
-  storageClassName:
-    __metadata:
-      label: "Persistent storage class"
-      description: "Class of storage you want to use for dynamic provisioning - leaving this blank will use the default storage class"
-      type: "string"
-      required: false
-
 arch:
   __metadata:
     label: "Architecture Affinity"
@@ -490,21 +514,41 @@ jenkins:
     serviceAccountName:
       __metadata:
         label: "Service account name"
-        description: "Use a named service account for Jenkins and DevOps pods, used when deploying into a non-default namespace. If set to a non-default value, the service account will be created in the specified namespace."     
+        description: "The name of the service account to be created for Microclimate to use"
         type: string
         required: false
     install:
       __metadata:
         label: "-"
-        description: "-"
+        description: "--"
         hidden: true
   Agent:
+    Image:
+      __metadata:
+        label: "JNLP image"
+        description: "The image to use for the JNLP slave used by Jenkins"
+        type: string
+        required: true
+    ImageTag:
+      __metadata:
+        label: "JNLP tag"
+        description: "The tag to use for the JNLP slave used by Jenkins"
+        type: string
+        required: true
     Memory:
       __metadata:
         label: "Memory request"
         description: "Memory request for the Jenkins slave"
         type: string
         required: true
+    JnlpContainer:
+      JVM:
+        MaxHeapSize:
+          __metadata:
+            label: "Maximum JVM heap size"
+            description: "Maximum JVM heap size for the Jenkins slave"
+            type: string
+            required: true
   Pipeline:
     Build:
       __metadata:
@@ -599,13 +643,6 @@ jenkins:
           immutable: false
           required: true
           hidden: true
-      HostName:
-        __metadata:
-          label: "Jenkins hostname"
-          description: "Hostname used to access Jenkins via Kubernetes ingress e.g. jenkins.<icp proxy node address>.nip.io"
-          type: "string"
-          immutable: false
-          required: true
       UseSecurity:
         __metadata:
           label: "Enable Jenkins security"
@@ -677,7 +714,7 @@ jenkins:
       LoginOpenIdConnect:
         __metadata:
           label: "-"
-          description: "-"
+          description: "--"
           hidden: true
   Persistence:
     ExistingClaim:
