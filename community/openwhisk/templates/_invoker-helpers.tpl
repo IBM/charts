@@ -33,8 +33,8 @@
 
 {{- define "openwhisk.docker_pull_runtimes" -}}
 - name: docker-pull-runtimes
-  imagePullPolicy: {{ .Values.invoker.imagePullPolicy | quote }}
-  image: {{ .Values.invoker.pullRuntimesImage | quote }}
+  imagePullPolicy: {{ .Values.utility.ansibleRunner.imagePullPolicy | quote }}
+  image: "{{- .Values.utility.ansibleRunner.imageName -}}:{{- .Values.utility.ansibleRunner.imageTag -}}"
   volumeMounts:
   - name: dockersock
     mountPath: "/var/run/docker.sock"
