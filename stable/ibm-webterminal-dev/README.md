@@ -2,6 +2,8 @@
 
 [xterm.js](https://github.com/xtermjs/xterm.js) is a web-based, full-featured terminal that allows command line access to your cluster.
 
+THIS CHART IS NOW DEPRECATED. On November 16th, 2018 this version of the Helm chart for IBM web-terminal will no longer be supported. The dev chart is replaced by a web-terminal feature embedded in the IBM Private Cloud UI in version 3.1.1. This chart will be removed on December 10th, 2018.
+
 ## Introduction
 
 The web terminal offers quick access to command line tools such as `kubectl`, `helm`, and `calicoctl`. Using these tools, you can easily administer your cluster and applications.
@@ -64,3 +66,28 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
+
+
+## Chart Details
+
+Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
+
+```bash
+$ helm install --name my-release \
+  --set credentials.password=wtAdmin \
+    stable/ibm-webterminal-dev
+```
+
+The above command sets the web-terminal `admin` password to `wtAdmin`.
+
+## Resources Required
+
+The chart deploys pods consuming minimum resources as specified in the resources configuration parameter (default: Memory: 200Mi, CPU: 100m)
+
+## Limitations
+
+None.
+
+## Copyright
+
+© Copyright IBM Corporation 2018. All Rights Reserved.
