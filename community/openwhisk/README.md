@@ -103,7 +103,7 @@ OpenWhisk's Invokers need elevated security permissions to be able to create the
 
 ## Initial setup
 
-1. Identify the Kubernetes worker nodes that should be used to execute
+Identify the Kubernetes worker nodes that should be used to execute
 user containers.  Do this by labeling each node with
 `openwhisk-role=invoker`.  If you have a multi-node cluster, for each node <INVOKER_NODE_NAME>
 you want to be an invoker, execute
