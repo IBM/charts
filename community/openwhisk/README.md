@@ -51,9 +51,9 @@ Container Image Security is enabled by default in ICP 3.1 and above. Hence add t
 
 This chart requires 5 Persistent Volumes to be created to avoid loss of data.  One of the following must be true to satisfy the Persistent Volume requirements for this chart:
 
+* When the chart is deployed, the value `k8s.persistence.enabled` is set to false to disable usage of Persistent Volumes (for development and test activities).
 * The Kubernetes cluster supports Dynamic Volume Provisioning and has a default StorageClass defined with an associated provisioner.
 * The Kubernetes cluster supports Dynamic Volume Provisioning and when the chart is deployed, the value `k8s.persistence.defaultStorageClass` is set to a StorageClass which has an associated provisioner.
-* When the chart is deployed, the value `k8s.persistence.enabled` is set to false to disable usage of Persistent Volumes.
 
 ### PodSecurityPolicy Requirements
 
