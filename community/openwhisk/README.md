@@ -156,7 +156,7 @@ To avoid loss of data, the chart requires 5 Persistent Volumes to be created.  C
 
 ## Limitations
 
-* Deployment limitation - you can only deploy one instance of a chart in a single namespace.
+* Deployment limitation - only one instance of the chart can be deploy within a namespace.
 * Platform limitation - only supports amd64.
 
 ## Documentation
@@ -171,6 +171,6 @@ Apache OpenWhisk Deployment on Kubernetes is an effort undergoing incubation at 
 
 For questions, hints, and tips for developing in Apache OpenWhisk:
 
-[Join the Dev Mailing List](https://openwhisk.apache.org/community.html#mailing-lists)
+* [Join the Dev Mailing List](https://openwhisk.apache.org/community.html#mailing-lists)
 
-[Follow OpenWhisk Media](https://openwhisk.apache.org/community.html#social)
+* [Follow OpenWhisk Media](https://openwhisk.apache.org/community.html#social)
