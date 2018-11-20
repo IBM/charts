@@ -4,7 +4,7 @@ Apache OpenWhisk is an open source, distributed serverless platform that execute
 ## Introduction
 The [Apache OpenWhisk](https://openwhisk.apache.org/) serverless platform supports a programming model in which developers write functional logic (called Actions), in any supported programming language, that can be dynamically scheduled and run in response to associated events (via Triggers) from external sources (Feeds) or from HTTP requests.
 
-This chart will deploy the core OpenWhisk platform to your Kubernetes cluster. In its default configuration, the chart enables runtime support for executing actions written in NodeJS, Python, Swift, Java, PHP, Ruby, Go, and "blackbox" docker containers.  The main components of the OpenWhisk platform are a front-end that provides a REST API to the user and the `wsk` CLI, a CouchDB instance that stores user and system data, and a control plane that is responsible for scheduling incoming invocations of user actions onto dedicated Kubernetes worker nodes that have been labeled as "invoker nodes".
+This chart will deploy the core OpenWhisk platform to your Kubernetes cluster.  In its default configuration, the chart enables runtime support for executing actions written in NodeJS, Python, Swift, Java, PHP, Ruby, Go, and "blackbox" docker containers.  The main components of the OpenWhisk platform are a front-end that provides a REST API to the user and the `wsk` CLI, a CouchDB instance that stores user and system data, and a control plane that is responsible for scheduling incoming invocations of user actions onto dedicated Kubernetes worker nodes that have been labeled as "invoker nodes".
 
 Further documentation of the OpenWhisk system architecture, programming model, tutorials, and sample programs can all be found at on the [Apache OpenWhisk project website](https://openwhisk.apache.org/).
 
@@ -28,12 +28,12 @@ In its default configuration, this chart will create the following Kubernetes re
 
 All user interaction with OpenWhisk uses the REST API exposed by the nginx service via its NodePort ingress.
 
-The chart requires one or more Kubernetes worker nodes to be designated to be used by OpenWhisk's invokers to execute user actions.  These nodes are designated by being labeled with `openwhisk-role=invoker` (see below for the `kubectl` command). In its default configuration, the invokers will schedule the containers to execute the user actions on these nodes *without* interacting with the Kubernetes scheduler.
+The chart requires one or more Kubernetes worker nodes to be designated to be used by OpenWhisk's invokers to execute user actions.  These nodes are designated by being labeled with `openwhisk-role=invoker` (see below for the `kubectl` command).  In its default configuration, the invokers will schedule the containers to execute the user actions on these nodes *without* interacting with the Kubernetes scheduler.
 
 ## Prerequisites
 * Kubernetes 1.10 - 1.11.*
 
-* Chart Persistent Volume requirements. One of the following must be true:
+* Chart Persistent Volume requirements.  One of the following must be true:
    * The Kubernetes cluster supports Dynamic Volume Provisioning and has a default StorageClass defined with an associated provisioner.
    * The Kubernetes cluster supports Dynamic Volume Provisioning and when the chart is deployed, the value `k8s.persistence.defaultStorageClass` is set to a StorageClass which has an associated provisioner.
    * When the chart is deployed, the value `k8s.persistence.enabled` is set to false to disable usage of Persistent Volumes.
@@ -55,8 +55,8 @@ OpenWhisk's Invokers need elevated security permissions to be able to create the
         name: ibm-anyuid-hostpath-psp
     annotations:
         kubernetes.io/description: "This policy allows pods to run with 
-        any UID and GID and any volume, including the host path.  
-        WARNING:  This policy allows hostPath volumes.  
+        any UID and GID and any volume, including the host path.
+        WARNING:  This policy allows hostPath volumes.
         Use with caution." 
     spec:
         allowPrivilegeEscalation: true
@@ -96,7 +96,7 @@ OpenWhisk's Invokers need elevated security permissions to be able to create the
 
 1. Identify the Kubernetes worker nodes that should be used to execute
 user containers.  Do this by labeling each node with
-`openwhisk-role=invoker`. If you have a multi-node cluster, for each node <INVOKER_NODE_NAME>
+`openwhisk-role=invoker`.  If you have a multi-node cluster, for each node <INVOKER_NODE_NAME>
 you want to be an invoker, execute
 ```shell
 kubectl label nodes <INVOKER_NODE_NAME> openwhisk-role=invoker
@@ -116,7 +116,7 @@ To install the chart with the release name `my-release`:
 $ helm install --tls --namespace <your pre-created namespace> --name my-release community/openwhisk --set whisk.ingress.apiHostName=<your ip address>
 ```
 
-The command deploys OpenWhisk on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
+The command deploys OpenWhisk on the Kubernetes cluster in the default configuration.  The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
 You can use the command ```helm status <release name>``` to get a summary of the various Kubernetes artifacts that make up your OpenWhisk deployment. Once the ```install-packages``` Pod is in the Completed state, your OpenWhisk deployment is ready to be used.
 
@@ -134,7 +134,7 @@ To uninstall/delete the `my-release` deployment:
 $ helm delete <my-release> --purge --tls
 ```
 
-The command removes all the Kubernetes components associated with the chart and deletes the release.  
+The command removes all the Kubernetes components associated with the chart and deletes the release.
 
 ## Configuration
 [Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
@@ -142,7 +142,7 @@ The command removes all the Kubernetes components associated with the chart and 
 [Please Review]
 ## Storage
 
-To avoid loss of data, the chart requires 5 Persistent Volumes to be created. Currently the chart only supports using Dynamic Volume Provisioning to create these PVs.  For development and testing purposes, it is possible to configure the Chart to disable persistence by setting the value `k8s.persistence.enabled` to false when deploying the chart.
+To avoid loss of data, the chart requires 5 Persistent Volumes to be created.  Currently the chart only supports using Dynamic Volume Provisioning to create these PVs.  For development and testing purposes, it is possible to configure the Chart to disable persistence by setting the value `k8s.persistence.enabled` to false when deploying the chart.
 
 ## Limitations
 * Deployment limitation - you can only deploy one instance of a chart in a single namespace.
@@ -152,7 +152,7 @@ To avoid loss of data, the chart requires 5 Persistent Volumes to be created. Cu
 Documentation of the OpenWhisk system architecture, programming model, tutorials, and sample programs can all be found at on the [Apache OpenWhisk project website](https://openwhisk.apache.org/).
 
 # Disclaimer
-Apache OpenWhisk Deployment on Kubernetes is an effort undergoing incubation at The Apache Software Foundation (ASF), sponsored by the Apache Incubator. Incubation is required of all newly accepted projects until a further review indicates that the infrastructure, communications, and decision making process have stabilized in a manner consistent with other successful ASF projects. While incubation status is not necessarily a reflection of the completeness or stability of the code, it does indicate that the project has yet to be fully endorsed by the ASF.
+Apache OpenWhisk Deployment on Kubernetes is an effort undergoing incubation at The Apache Software Foundation (ASF), sponsored by the Apache Incubator.  Incubation is required of all newly accepted projects until a further review indicates that the infrastructure, communications, and decision making process have stabilized in a manner consistent with other successful ASF projects.  While incubation status is not necessarily a reflection of the completeness or stability of the code, it does indicate that the project has yet to be fully endorsed by the ASF.
 
 # Support
 For questions, hints, and tips for developing in Apache OpenWhisk:
