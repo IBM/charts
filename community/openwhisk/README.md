@@ -139,7 +139,7 @@ You can use the command ```helm status <my-release> --tls``` to get a summary of
 
 ### Verifying the Chart
 
-To verify your deployment was successful! simply run:
+To verify your deployment was successful, simply run:
 ```bash
 helm test <my-release> --tls --cleanup
 ```
@@ -172,5 +172,7 @@ Apache OpenWhisk Deployment on Kubernetes is an effort undergoing incubation at 
 For questions, hints, and tips for developing in Apache OpenWhisk:
 
 * [Join the Dev Mailing List](https://openwhisk.apache.org/community.html#mailing-lists)
+
+* [Join the OpenWhisk Slack](http://slack.openwhisk.org/)
 
 * [Follow OpenWhisk Media](https://openwhisk.apache.org/community.html#social)
