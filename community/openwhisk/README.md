@@ -119,26 +119,26 @@ kubectl label nodes --all openwhisk-role=invoker
 
 Please ensure that you have reviewed the [prerequisites](#prerequisites) and the [initial setup](#initial-setup) instructions.
 
-To install the chart with the release name `my-release`:
+To install the chart using helm cli:
 
 ```bash
-$ helm install --tls --namespace <your pre-created namespace> --name my-release community/openwhisk --set whisk.ingress.apiHostName=<your ip address>
+$ helm install --tls community/openwhisk --namespace <my-namespace> --name <my-release> --set whisk.ingress.apiHostName=<cluster-ip-address>
 ```
 
 The command deploys OpenWhisk on the Kubernetes cluster in the default configuration.  The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
-You can use the command ```helm status <release name>``` to get a summary of the various Kubernetes artifacts that make up your OpenWhisk deployment. Once the ```install-packages``` Pod is in the Completed state, your OpenWhisk deployment is ready to be used.
+You can use the command ```helm status <my-release>``` to get a summary of the various Kubernetes artifacts that make up your OpenWhisk deployment. Once the ```install-packages``` Pod is in the Completed state, your OpenWhisk deployment is ready to be used.
 
 ### Verifying the Chart
 
 To verify your deployment was successful! simply run:
 ```bash
-helm test <release name>
+helm test <my-release>
 ```
 
 ### Uninstalling the Chart
 
-To uninstall/delete the `my-release` deployment:
+To uninstall/delete the deployment:
 
 ```bash
 $ helm delete <my-release> --purge --tls
