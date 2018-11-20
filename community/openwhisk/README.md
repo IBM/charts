@@ -32,13 +32,17 @@ All user interaction with OpenWhisk uses the REST API exposed by the nginx servi
 
 The chart requires one or more Kubernetes worker nodes to be designated to be used by OpenWhisk's invokers to execute user actions.  These nodes are designated by being labeled with `openwhisk-role=invoker` (see below for the `kubectl` command).  In its default configuration, the invokers will schedule the containers to execute the user actions on these nodes *without* interacting with the Kubernetes scheduler.
 
+## Resources Required
+
+* A Kubernetes cluster with at least 1 worker node with at least 4GB of memory.
+
 ## Prerequisites
 
 * Kubernetes 1.10 - 1.11.*
 
 ### Image Policy Requirements
 
-Container Image Security is enabled by default in ICP 3.1 and above. Hence add the following to the trusted registries so they can be pulled during the chart installation process:
+Container Image Security is enabled by default in ICP 3.1 and above. Hence add the following to the trusted registries so these images can be pulled during the chart installation process:
 
 * docker.io/openwhisk/*
 * docker.io/apache/couchdb:*
@@ -97,10 +101,6 @@ OpenWhisk's Invokers need elevated security permissions to be able to create the
         - '*'
     ```
 
-## Resources Required
-
-* A Kubernetes cluster with at least 1 worker node with at least 4GB of memory.
-
 ## Initial setup
 
 Identify the Kubernetes worker nodes that should be used to execute
@@ -127,13 +127,13 @@ $ helm install --tls community/openwhisk --namespace <my-namespace> --name <my-r
 
 The command deploys OpenWhisk on the Kubernetes cluster in the default configuration.  The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
-You can use the command ```helm status <my-release>``` to get a summary of the various Kubernetes artifacts that make up your OpenWhisk deployment. Once the ```install-packages``` Pod is in the Completed state, your OpenWhisk deployment is ready to be used.
+You can use the command ```helm status <my-release> --tls``` to get a summary of the various Kubernetes artifacts that make up your OpenWhisk deployment. Once the ```install-packages``` Pod is in the Completed state, your OpenWhisk deployment is ready to be used.
 
 ### Verifying the Chart
 
 To verify your deployment was successful! simply run:
 ```bash
-helm test <my-release>
+helm test <my-release> --tls
 ```
 
 ### Uninstalling the Chart
