@@ -6,7 +6,7 @@ The [Apache OpenWhisk](https://openwhisk.apache.org/) serverless platform suppor
 
 This chart will deploy the core OpenWhisk platform to your Kubernetes cluster. In its default configuration, the chart enables runtime support for executing actions written in NodeJS, Python, Swift, Java, PHP, Ruby, Go, and "blackbox" docker containers.  The main components of the OpenWhisk platform are a front-end that provides a REST API to the user and the `wsk` CLI, a CouchDB instance that stores user and system data, and a control plane that is responsible for scheduling incoming invocations of user actions onto dedicated Kubernetes worker nodes that have been labeled as "invoker nodes".
 
-Documentation of the OpenWhisk system architecture, programming model, tutorials, and sample programs can all be found at on the [Apache OpenWhisk project website](https://openwhisk.apache.org/).
+Further documentation of the OpenWhisk system architecture, programming model, tutorials, and sample programs can all be found at on the [Apache OpenWhisk project website](https://openwhisk.apache.org/).
 
 ## Chart Details
 
@@ -149,7 +149,7 @@ To avoid loss of data, the chart requires 5 Persistent Volumes to be created. Cu
 * Platform limitation - only supports amd64.
 
 ## Documentation
-* [OpenWhisk documentation](https://openwhisk.apache.org/documentation.html)
+Documentation of the OpenWhisk system architecture, programming model, tutorials, and sample programs can all be found at on the [Apache OpenWhisk project website](https://openwhisk.apache.org/).
 
 # Disclaimer
 Apache OpenWhisk Deployment on Kubernetes is an effort undergoing incubation at The Apache Software Foundation (ASF), sponsored by the Apache Incubator. Incubation is required of all newly accepted projects until a further review indicates that the infrastructure, communications, and decision making process have stabilized in a manner consistent with other successful ASF projects. While incubation status is not necessarily a reflection of the completeness or stability of the code, it does indicate that the project has yet to be fully endorsed by the ASF.
