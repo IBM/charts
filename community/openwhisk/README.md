@@ -36,10 +36,20 @@ The chart requires one or more Kubernetes worker nodes to be designated to be us
 
 * Kubernetes 1.10 - 1.11.*
 
-* One of the following must be true to satisfy the Persistent Volume requirements for this chart:
-   * The Kubernetes cluster supports Dynamic Volume Provisioning and has a default StorageClass defined with an associated provisioner.
-   * The Kubernetes cluster supports Dynamic Volume Provisioning and when the chart is deployed, the value `k8s.persistence.defaultStorageClass` is set to a StorageClass which has an associated provisioner.
-   * When the chart is deployed, the value `k8s.persistence.enabled` is set to false to disable usage of Persistent Volumes.
+### Image Policy Requirements
+
+Container Image Security is enabled by default in ICP 3.1 and above. Hence add the following to the trusted registries so they can be pulled during the chart installation process:
+
+* docker.io/openwhisk/*
+* docker.io/apache/couchdb:*
+
+### Persistent Volume Requirements
+
+One of the following must be true to satisfy the Persistent Volume requirements for this chart:
+
+* The Kubernetes cluster supports Dynamic Volume Provisioning and has a default StorageClass defined with an associated provisioner.
+* The Kubernetes cluster supports Dynamic Volume Provisioning and when the chart is deployed, the value `k8s.persistence.defaultStorageClass` is set to a StorageClass which has an associated provisioner.
+* When the chart is deployed, the value `k8s.persistence.enabled` is set to false to disable usage of Persistent Volumes.
 
 ### PodSecurityPolicy Requirements
 
