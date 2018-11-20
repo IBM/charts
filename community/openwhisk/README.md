@@ -141,7 +141,7 @@ You can use the command ```helm status <my-release> --tls``` to get a summary of
 
 To verify your deployment was successful! simply run:
 ```bash
-helm test <my-release> --tls
+helm test <my-release> --tls --cleanup
 ```
 
 ## Uninstalling the Chart
