@@ -36,14 +36,10 @@ The chart requires one or more Kubernetes worker nodes to be designated to be us
 
 * Kubernetes 1.10 - 1.11.*
 
-* Chart Persistent Volume requirements.  One of the following must be true:
+* One of the following must be true to satisfy the Persistent Volume requirements for this chart:
    * The Kubernetes cluster supports Dynamic Volume Provisioning and has a default StorageClass defined with an associated provisioner.
    * The Kubernetes cluster supports Dynamic Volume Provisioning and when the chart is deployed, the value `k8s.persistence.defaultStorageClass` is set to a StorageClass which has an associated provisioner.
    * When the chart is deployed, the value `k8s.persistence.enabled` is set to false to disable usage of Persistent Volumes.
-
-[Add more]
-* Simple bullet list of CPU, MEM, Storage requirements
-* Even if the chart only exposes a few resource settings, this section needs to inclusive of all / total resources of all charts and subcharts.
 
 ### PodSecurityPolicy Requirements
 
