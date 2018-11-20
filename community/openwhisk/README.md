@@ -57,8 +57,12 @@ This chart requires 5 Persistent Volumes to be created to avoid loss of data.  O
 
 ### PodSecurityPolicy Requirements
 
-OpenWhisk's Invokers need elevated security permissions to be able to create the containers that execute the user actions. Therefore this chart requires a PodSecurityPolicy that permits host access to be bound to the target namespace prior to installation.  Choose either a predefined PodSecurityPolicy or have your cluster administrator setup a custom PodSecurityPolicy for you:
+OpenWhisk's Invokers need elevated security permissions to be able to create the containers that execute the user actions. Therefore this chart requires a PodSecurityPolicy that permits host access to be bound to the target namespace prior to installation.  If the default Pod security policy on your cluster is not restrictive then this step is not needed. If the default is restrictive, please create a new namespace with either a predefined PodSecurityPolicy `ibm-anyuid-hostpath-psp`:
+
 * Predefined PodSecurityPolicy name: [`ibm-anyuid-hostpath-psp`](https://ibm.biz/cpkspec-psp)
+
+Alternatively, you can have your cluster administrator setup a custom PodSecurityPolicy for you using the below definition:
+
 * Custom PodSecurityPolicy definition:
 
     ```
