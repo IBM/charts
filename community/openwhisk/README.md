@@ -2,31 +2,49 @@
 Apache OpenWhisk is an open source, distributed serverless platform that executes functions in response to events at any scale.
 
 ## Introduction
-This chart is for deploying [Apache OpenWhisk](https://openwhisk.apache.org/) to your Kubernetes cluster.
+The [Apache OpenWhisk](https://openwhisk.apache.org/) serverless platform supports a programming model in which developers write functional logic (called Actions), in any supported programming language, that can be dynamically scheduled and run in response to associated events (via Triggers) from external sources (Feeds) or from HTTP requests.
 
-[Add more] 
-* Paragraph overview of the workload
-* Include links to external sources for more product info
-* Don't say "for ICP" or "Cloud Private" the chart should remain a general chart not directly stating ICP or ICS. 
+This chart will deploy the core OpenWhisk platform to your Kubernetes cluster. In its default configuration, the chart enables runtime support for executing actions written in NodeJS, Python, Swift, Java, PHP, Ruby, Go, and "blackbox" docker containers.  The main components of the OpenWhisk platform are a front-end that provides a REST API to the user and the `wsk` CLI, a CouchDB instance that stores user and system data, and a control plane that is responsible for scheduling incoming invocations of user actions onto dedicated Kubernetes worker nodes that have been labeled as "invoker nodes".
+
+Documentation of the OpenWhisk system architecture, programming model, tutorials, and sample programs can all be found at on the [Apache OpenWhisk project website](https://openwhisk.apache.org/).
 
 ## Chart Details
-[Add more]
-* Simple bullet list of what is deployed as the standard config
-* General description of the topology of the workload 
-* Keep it short and specific with items such as : ingress, services, storage, pods, statefulsets, etc. 
+
+In its default configuration, this chart will create the following Kubernetes resources:
+* Externally exposed Services
+   * nginx -- used to access the deployed OpenWhisk via its REST API.  By default exposed as a NodePort on port 31001.
+* Internal Services
+   * apigateway, controller, couchdb, kafka, nginx, redis, zookeeper
+* OpenWhisk control plane Pods:
+   * DaemonSet: invoker (on all nodes with label `openwhisk-role=invoker`)
+   * Deployments: apigateway, couchdb, nginx, redis
+   * SatefulSets: controller, kafka, zookeeper
+* Persistent Volume Claims
+   * couchdb-pvc
+   * kafka-pvc
+   * redis-pvc
+   * zookeeper-pvc-data
+   * zookeeper-pvc-datalog
+
+All user interaction with OpenWhisk uses the REST API exposed by the nginx service via its NodePort ingress.
+
+The chart requires one or more Kubernetes worker nodes to be designated to be used by OpenWhisk's invokers to execute user actions.  These nodes are designated by being labeled with `openwhisk-role=invoker` (see below for the `kubectl` command). In its default configuration, the invokers will schedule the containers to execute the user actions on these nodes *without* interacting with the Kubernetes scheduler.
 
 ## Prerequisites
 * Kubernetes 1.10 - 1.11.*
 
-[Add more]
-* PersistentVolume requirements (if persistence.enabled) - PV provisioner support, StorageClass defined, etc. (i.e. PersistentVolume provisioner support in underlying infrastructure with ibmc-file-gold StorageClass defined if persistance.enabled=true)
+* Chart Persistent Volume requirements. One of the following must be true:
+   * The Kubernetes cluster supports Dynamic Volume Provisioning and has a default StorageClass defined with an associated provisioner.
+   * The Kubernetes cluster supports Dynamic Volume Provisioning and when the chart is deployed, the value `k8s.persistence.defaultStorageClass` is set to a StorageClass which has an associated provisioner.
+   * When the chart is deployed, the value `k8s.persistence.enabled` is set to false to disable usage of Persistent Volumes.
 
 [Add more]
 * Simple bullet list of CPU, MEM, Storage requirements
 * Even if the chart only exposes a few resource settings, this section needs to inclusive of all / total resources of all charts and subcharts.
 
 ### PodSecurityPolicy Requirements
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation.  Choose either a predefined PodSecurityPolicy or have your cluster administrator setup a custom PodSecurityPolicy for you:
+
+OpenWhisk's Invokers need elevated security permissions to be able to create the containers that execute the user actions. Therefore this chart requires a PodSecurityPolicy that permits host access to be bound to the target namespace prior to installation.  Choose either a predefined PodSecurityPolicy or have your cluster administrator setup a custom PodSecurityPolicy for you:
 * Predefined PodSecurityPolicy name: [`ibm-anyuid-hostpath-psp`](https://ibm.biz/cpkspec-psp)
 * Custom PodSecurityPolicy definition:
 
@@ -72,7 +90,7 @@ This chart requires a PodSecurityPolicy to be bound to the target namespace prio
 
 ## Resources Required
 [Add more]
-* Describes Minimum System Resources Required
+* A Kubernetes cluster with at least 1 worker node with at least 4GB of memory.
 
 ## Initial setup
 
@@ -123,11 +141,8 @@ The command removes all the Kubernetes components associated with the chart and 
 
 [Please Review]
 ## Storage
-* Define how storage works with the workload
-* Dynamic vs PV pre-created
-* Considerations if using hostpath, local volume, empty dir
-* Loss of data considerations
-* Any special quality of service or security needs for storage
+
+To avoid loss of data, the chart requires 5 Persistent Volumes to be created. Currently the chart only supports using Dynamic Volume Provisioning to create these PVs.  For development and testing purposes, it is possible to configure the Chart to disable persistence by setting the value `k8s.persistence.enabled` to false when deploying the chart.
 
 ## Limitations
 * Deployment limitation - you can only deploy one instance of a chart in a single namespace.
