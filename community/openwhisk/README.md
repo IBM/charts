@@ -42,7 +42,7 @@ The chart requires one or more Kubernetes worker nodes to be designated to be us
 
 ### Image Policy Requirements
 
-Container Image Security is enabled by default in ICP 3.1 and above. Hence add the following to the trusted registries so these images can be pulled during chart installation:
+If Container Image Security is enabled, you will not be able to download non-trusted container images. If this is the case, please add the following to the trusted registries so that these container images can be pulled during chart installation:
 
 * docker.io/openwhisk/*
 * docker.io/apache/couchdb:*
