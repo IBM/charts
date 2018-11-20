@@ -133,6 +133,10 @@ The command deploys OpenWhisk on the Kubernetes cluster in the default configura
 
 You can use the command ```helm status <my-release> --tls``` to get a summary of the various Kubernetes artifacts that make up your OpenWhisk deployment. Once the ```install-packages``` Pod is in the Completed state, your OpenWhisk deployment is ready to be used.
 
+### Configuration
+
+[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
+
 ### Verifying the Chart
 
 To verify your deployment was successful! simply run:
@@ -140,7 +144,7 @@ To verify your deployment was successful! simply run:
 helm test <my-release> --tls
 ```
 
-### Uninstalling the Chart
+## Uninstalling the Chart
 
 To uninstall/delete the deployment:
 
@@ -149,14 +153,6 @@ $ helm delete <my-release> --purge --tls
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
-
-## Configuration
-
-[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
-
-## Storage
-
-To avoid loss of data, the chart requires 5 Persistent Volumes to be created.  Currently the chart only supports using Dynamic Volume Provisioning to create these PVs.  For development and testing purposes, it is possible to configure the Chart to disable persistence by setting the value `k8s.persistence.enabled` to false when deploying the chart.
 
 ## Limitations
 
