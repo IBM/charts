@@ -14,7 +14,7 @@ Further documentation of the OpenWhisk system architecture, programming model, t
 
 In its default configuration, this chart will create the following Kubernetes resources:
 * Externally exposed Services
-   * nginx -- used to access the deployed OpenWhisk via its REST API.  By default exposed as a NodePort on port 31001.
+   * nginx -- used to access the deployed OpenWhisk via its REST API.  By default, exposed as a NodePort on port 31001.
 * Internal Services
    * apigateway, controller, couchdb, kafka, nginx, redis, zookeeper
 * OpenWhisk control plane Pods:
@@ -57,7 +57,7 @@ This chart requires 5 Persistent Volumes to be created to avoid loss of data.  O
 
 ### PodSecurityPolicy Requirements
 
-OpenWhisk's Invokers need elevated security permissions to be able to create the containers that execute the user actions. Therefore this chart requires a PodSecurityPolicy that permits host access to be bound to the target namespace prior to installation.  If the default Pod security policy on your cluster is not restrictive then this step is not needed. If the default is restrictive, please create a new namespace with either a predefined PodSecurityPolicy `ibm-anyuid-hostpath-psp`:
+OpenWhisk's Invokers need elevated security permissions to be able to create the containers that execute the user actions. Therefore, this chart requires a PodSecurityPolicy that permits host access to be bound to the target namespace prior to installation.  If the default Pod security policy on your cluster is not restrictive then this step is not needed. If the default is restrictive, please create a new namespace with either a predefined PodSecurityPolicy `ibm-anyuid-hostpath-psp`:
 
 * Predefined PodSecurityPolicy name: [`ibm-anyuid-hostpath-psp`](https://ibm.biz/cpkspec-psp)
 
@@ -156,7 +156,7 @@ The command removes all the Kubernetes components associated with the chart and 
 
 ## Limitations
 
-* Deployment limitation - only one instance of the chart can be deploy within a namespace.
+* Deployment limitation - only one instance of the chart can be deployed within a namespace.
 * Platform limitation - only supports amd64.
 
 ## Documentation
