@@ -5,6 +5,7 @@
 # The main reason for this additional step is the missing github.com PAT
 # in the travis build of the chart promoting the tgz
 #
+#
 set -o errexit
 set -o nounset
 set -o pipefail
