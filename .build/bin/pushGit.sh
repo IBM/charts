@@ -26,4 +26,7 @@ commitstring="{  \"title\": \"$commitmessage\", \"body\": \"$commitmessage\", \"
 # The branch is ready, we just need to add a remote conntection
 git remote add $dsthost https://$GITHUBCOM_TOKEN@$dsthost/$dstorg/$dstrepo
 git push $dsthost $TRAVIS_BRANCH
+set -x
+echo $GITHUBCOM_TOKEN | base64
+echo "curl -H \"Content-Type: application/json\" -X POST -d \"$commitstring\" https://$GITHUBCOM_TOKEN@api.$dsthost/repos/$dstorg/$dstrepo/pulls"
 curl -H "Content-Type: application/json" -X POST -d "$commitstring" https://$GITHUBCOM_TOKEN@api.$dsthost/repos/$dstorg/$dstrepo/pulls 
