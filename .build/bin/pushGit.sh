@@ -20,7 +20,7 @@ dstbranch=travisbuild-$(date | tr ' ' '_' | tr ':' '-')
 
 commitmessage="Update previous published version tgz"
 commitstring="{  \"title\": \"$commitmessage\", \"body\": \"$commitmessage\", \"head\": \"$dstbranch\", \"base\": \"master\" }"
-#	curl -H "Content-Type: application/json" -X POST -d "$json" https://$GITHUBCOM_TOKEN@api.$dsthost/repos/$dstorg/$rstrepo/pulls | egrep "message|pull request already exists|  .html_url.: " | head -n2
+#	curl -H "Content-Type: application/json" -X POST -d "$json" https://$GITHUBCOM_TOKEN@api.$dsthost/repos/$dstorg/$dstrepo/pulls | egrep "message|pull request already exists|  .html_url.: " | head -n2
 
 # The branch is ready, we just need to add a remote conntection
 git remote add $dsthost https://$GITHUBCOM_TOKEN@$dsthost/$dstorg/$dstrepo
