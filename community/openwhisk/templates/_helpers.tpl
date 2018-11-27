@@ -131,5 +131,5 @@ app: {{ template "openwhisk.fullname" . }}
 
 {{/* tlssecretname for ingress */}}
 {{- define "openwhisk.tls_secret_name" -}}
-{{ .Values.whisk.ingress.tlssecretname | default "ow-ingress-tls-secret" | quote }}
+{{ .Values.whisk.ingress.tls.secretname | default "ow-ingress-tls-secret" | quote }}
 {{- end -}}
