@@ -1,3 +1,22 @@
+<!--
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+-->
+
 # OpenWhisk
 
 Apache OpenWhisk is an open source, distributed serverless platform that executes functions in response to events at any scale.
@@ -71,15 +90,15 @@ Alternatively, you can have your cluster administrator setup a custom PodSecurit
     metadata:
         name: ibm-anyuid-hostpath-psp
     annotations:
-        kubernetes.io/description: "This policy allows pods to run with 
+        kubernetes.io/description: "This policy allows pods to run with
         any UID and GID and any volume, including the host path.
         WARNING:  This policy allows hostPath volumes.
-        Use with caution." 
+        Use with caution."
     spec:
         allowPrivilegeEscalation: true
         fsGroup:
             rule: RunAsAny
-        requiredDropCapabilities: 
+        requiredDropCapabilities:
         - MKNOD
         allowedCapabilities:
         - SETPCAP
@@ -94,7 +113,7 @@ Alternatively, you can have your cluster administrator setup a custom PodSecurit
         - SETGID
         - NET_BIND_SERVICE
         - SYS_CHROOT
-        - SETFCAP 
+        - SETFCAP
         runAsUser:
             rule: RunAsAny
         seLinux:
@@ -126,12 +145,12 @@ Please ensure that you have reviewed the [prerequisites](#prerequisites) and the
 To install the chart using helm cli:
 
 ```bash
-$ helm install --tls community/openwhisk --namespace <my-namespace> --name <my-release> --set whisk.ingress.apiHostName=<cluster-ip-address>
+$ helm install [--tls] openwhisk --namespace <my-namespace> --name <my-release> --set whisk.ingress.apiHostName=<cluster-ip-address>
 ```
 
 The command deploys OpenWhisk on the Kubernetes cluster in the default configuration.  The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
-You can use the command ```helm status <my-release> --tls``` to get a summary of the various Kubernetes artifacts that make up your OpenWhisk deployment. Once the ```install-packages``` Pod is in the Completed state, your OpenWhisk deployment is ready to be used.
+You can use the command ```helm status <my-release> [--tls]``` to get a summary of the various Kubernetes artifacts that make up your OpenWhisk deployment. Once the ```install-packages``` Pod is in the Completed state, your OpenWhisk deployment is ready to be used.
 
 ### Configuration
 
@@ -141,7 +160,7 @@ You can use the command ```helm status <my-release> --tls``` to get a summary of
 
 To verify your deployment was successful, simply run:
 ```bash
-helm test <my-release> --tls --cleanup
+helm test <my-release> [--tls] --cleanup
 ```
 
 ## Uninstalling the Chart
@@ -149,7 +168,7 @@ helm test <my-release> --tls --cleanup
 To uninstall/delete the deployment:
 
 ```bash
-$ helm delete <my-release> --purge --tls
+$ helm delete <my-release> --purge [--tls]
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
