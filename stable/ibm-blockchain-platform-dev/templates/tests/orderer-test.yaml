@@ -1,0 +1,48 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-orderer-helmtest
+  labels:
+    app: {{ .Release.Name }}-orderer-helmtest
+    chart: {{ .Chart.Name }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: beta.kubernetes.io/arch
+              operator: In
+              values:
+                - {{ .Values.ca.app.arch }}
+  restartPolicy: Never
+  containers:
+    - name: {{ .Release.Name }}-orderer-helmtest
+      {{- if .Values.global.multiarch }}
+      image: {{ .Values.orderer.app.arch }}/busybox
+      {{- else }}
+      image: {{ .Values.orderer.app.arch }}/busybox
+      {{- end }}
+      {{- if .Values.orderer.enabled }}
+      command: ["sh", "-c", "nc -vz {{ .Release.Name }}-orderer 7050"]
+      {{- else }}
+      command: ["sh", "-c", "exit 0"]
+      {{- end }}
