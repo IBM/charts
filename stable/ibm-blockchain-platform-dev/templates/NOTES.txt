@@ -1,0 +1,76 @@
+{{- if .Values.ca.enabled -}}
+1. Get the application URL by running these commands:
+{{- if contains "NodePort" .Values.ca.service.type }}
+  export SERVICE_NAME=$(kubectl get services --namespace {{ .Release.Namespace }} -l "app=ibm-ibp, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services $SERVICE_NAME)
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -l "proxy=true" -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "ClusterIP" .Values.ca.service.type }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app=ibm-ibp, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  kubectl port-forward $POD_NAME 8080:80
+{{- end }}
+
+2. Get the endpoint URL by running these commands:
+  export APISERVER=$(kubectl config view --minify | grep server | cut -f 2- -d ":" | tr -d " ")
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app=ibm-ibp, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export NAMESPACE={{.Release.Namespace}}
+  export SERVICE_NAME=$(kubectl get services --namespace {{ .Release.Namespace }} -l "app=ibm-ibp, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo $APISERVER/api/v1/namespaces/$NAMESPACE/services/$SERVICE_NAME:7054/proxy
+
+3. Get TLS certificate
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app=ibm-ibp, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl exec $POD_NAME -- cat /etc/hyperledger/fabric-ca-server/ca-cert.pem > tls.pem && cat tls.pem | base64
+
+4. Enroll the bootstrap admin identity:
+  Enroll with TLS CA:
+  fabric-ca-client enroll -d -u http://$CA_ADMIN:$CA_PASSWORD@$SERVICE_NAME:7054 --tls.certfiles tls-cert.pem --caname tlsca --enrollment.profile tls
+  Enroll with default CA:
+  fabric-ca-client enroll -d -u http://$CA_ADMIN:$CA_PASSWORD@$SERVICE_NAME:7054 --tls.certfiles tls-cert.pem
+{{- else if .Values.orderer.enabled }}  
+1. Get the application URL by running these commands:
+{{- if contains "NodePort" .Values.orderer.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ .Release.Name }}-orderer)
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -l "proxy=true" -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "ClusterIP" .Values.orderer.service.type }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app=orderer, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  kubectl port-forward $POD_NAME 8080:80
+{{- end }}
+
+2. Get the endpoint URL by running these commands:
+  export APISERVER=$(kubectl config view --minify | grep server | cut -f 2- -d ":" | tr -d " ")
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app=orderer, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export NAMESPACE={{.Release.Namespace}}
+  export SERVICE_NAME={{ .Release.Name }}-orderer
+  echo $APISERVER/api/v1/namespaces/$NAMESPACE/services/$SERVICE_NAME:7050/proxy
+  
+3. Get orderer TLS root cert file
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app=orderer, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl exec $POD_NAME -- cat /certs/tls/signcerts/cert.pem > cert.pem
+{{- else if .Values.peer.enabled }}
+1. Get the application URL by running these commands:
+{{- if contains "NodePort" .Values.peer.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ .Release.Name }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -l "proxy=true" -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "ClusterIP" .Values.orderer.service.type }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ .Release.Name }}, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  kubectl port-forward $POD_NAME 8080:80
+{{- end }}
+
+2. Get the endpoint URL by running these commands:
+  export APISERVER=$(kubectl config view --minify | grep server | cut -f 2- -d ":" | tr -d " ")
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ .Release.Name }}, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export NAMESPACE={{.Release.Namespace}}
+  export SERVICE_NAME={{ .Release.Name }}
+  echo $APISERVER/api/v1/namespaces/$NAMESPACE/services/$SERVICE_NAME:7051/proxy
+  
+3. Get peer TLS root cert file
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ .Release.Name }}, release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl exec $POD_NAME -c peer -- cat /certs/tls/cacerts/cacert.pem > cacert.pem
+
+4. For more information, see IBM Blockchian Platform documentation at https://console.bluemix.net/docs/services/blockchain/ibp-for-icp-about.html
+{{- end -}}
