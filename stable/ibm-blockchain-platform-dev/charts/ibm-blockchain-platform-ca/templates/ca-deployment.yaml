@@ -1,0 +1,221 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.ca.compName }}
+{{- $labels := include "sch.metadata.labels.standard" (list . $compName) }}
+{{- $annotations := include "sch.metadata.annotations.metering" (list . .sch.chart.metering) }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-fabric-ca-deployment
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    helm.sh/created: {{ .Release.Time.Seconds | quote }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+{{- $annotations | indent 8 }}
+    spec:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.app.arch }}
+      initContainers:
+        - name: ca-init
+{{- if .Values.global.multiarch }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+{{- else }}
+          image: "{{ .Values.image.repository }}-{{ .Values.app.arch }}:{{ .Values.image.tag }}"
+{{- end }}
+          imagePullPolicy: Always
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-ca-configmap
+          env:
+          {{- include "license.accept.env.ref" . | indent 10 }}
+          - name: FABRIC_CA_HOME
+            value: /etc/hyperledger/fabric-ca-server
+          {{- if eq "mysql" .Values.db.type }}
+          - name: MYSQL_USER_NAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.ca.caAdminSecret }}
+                key: mysql-user-name
+          - name: MYSQL_USER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.ca.caAdminSecret }}
+                key: mysql-user-password
+          {{- end }}
+          - name: CA_ADMIN_NAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.ca.caAdminSecret }}
+                key: ca-admin-name
+          - name: CA_ADMIN_PW
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.ca.caAdminSecret }}
+                key: ca-admin-password
+          command:
+          {{- if eq "mysql" .Values.db.type }}
+          - sh
+          - -c
+          - |
+            sleep 10
+            echo "Waiting for MySQL service"
+            apt-get update
+            apt-get install -y inetutils-ping
+            if $(ping -c 1 ${MYSQL_SERVER_HOSTNAME}>/dev/null); then
+              fabric-ca-server init -b ${CA_ADMIN_NAME}:${CA_ADMIN_PW} -d --db.type mysql --db.datasource ${MYSQL_USER_NAME}:${MYSQL_USER_PASSWORD}@tcp\(${MYSQL_SERVER_HOSTNAME}:3306\)/fabric_ca?parseTime=true             
+            fi
+          {{- else }}
+          - sh
+          - -c
+          - |
+            fabric-ca-server init -b ${CA_ADMIN_NAME}:${CA_ADMIN_PW}
+          {{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+          - name: {{ .Release.Name }}-fabric-ca
+            mountPath: /etc/hyperledger/fabric-ca-server
+      containers:
+        - name: ca
+{{- if .Values.global.multiarch }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+{{- else }}
+          image: "{{ .Values.image.repository }}-{{ .Values.app.arch }}:{{ .Values.image.tag }}"
+{{- end }}
+          imagePullPolicy: Always
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - NET_BIND_SERVICE
+          envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-ca-configmap
+          env:
+          {{- include "license.accept.env.ref" . | indent 10 }}
+          - name: FABRIC_CA_HOME
+            value: /etc/hyperledger/fabric-ca-server
+          - name: SERVICE_HOST
+            value: {{ include "sch.names.fullName" (list .) }}
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: PROXY_IP
+            value: {{ .Values.proxyIP }}
+          {{- if eq "mysql" .Values.db.type }}
+          - name: MYSQL_USER_NAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.ca.caAdminSecret }}
+                key: mysql-user-name
+          - name: MYSQL_USER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.ca.caAdminSecret }}
+                key: mysql-user-password
+          command:
+          - sh
+          - -c
+          - |
+            cd /etc/hyperledger/fabric-ca-server &&            
+            mkdir -p ca &&
+            mkdir -p ca/tls &&
+            cp /etc/hyperledger/tlsca_config/tlsca-config.yaml ca/tls/fabric-ca-config.yaml &&
+            fabric-ca-server start -d --db.type mysql --db.datasource ${MYSQL_USER_NAME}:${MYSQL_USER_PASSWORD}@tcp\(${MYSQL_SERVER_HOSTNAME}:3306\)/fabric_ca?parseTime=true --cafiles /etc/hyperledger/fabric-ca-server/ca/tls/fabric-ca-config.yaml --csr.hosts $(SERVICE_HOST) --csr.hosts localhost --csr.hosts $HOST_IP --csr.hosts $PROXY_IP
+          {{- else }}
+          command:
+          - sh
+          - -c
+          - |
+            cd /etc/hyperledger/fabric-ca-server &&            
+            mkdir -p ca &&
+            mkdir -p ca/tls &&
+            cp /etc/hyperledger/tlsca_config/tlsca-config.yaml ca/tls/fabric-ca-config.yaml &&
+            fabric-ca-server start --cafiles /etc/hyperledger/fabric-ca-server/ca/tls/fabric-ca-config.yaml --csr.hosts $(SERVICE_HOST) --csr.hosts localhost --csr.hosts $PROXY_IP --csr.hosts $HOST_IP
+          {{- end }}
+          ports:
+            - containerPort: 7054
+          livenessProbe:
+            tcpSocket:
+              port: 7054
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 7054
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            periodSeconds: 5
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+          - name: {{ .Release.Name }}-fabric-ca
+            mountPath: /etc/hyperledger/fabric-ca-server
+          - name: tlsca-config
+            mountPath: /etc/hyperledger/tlsca_config
+      volumes:
+      - name: {{ .Release.Name }}-fabric-ca
+      {{- if .Values.persistence.enabled }} 
+        persistentVolumeClaim:
+          {{- if .Values.dataPVC.existingClaimName }}
+            claimName: {{ .Values.dataPVC.existingClaimName }}
+          {{- else }}
+            claimName: {{ .Release.Name }}-fabric-ca-pvc
+          {{- end }}
+      {{- else }} 
+        emptyDir: {}    
+      {{- end }} 
+      - name: tlsca-config
+        configMap:
+          name: {{ .Release.Name }}-tlsca-config   
