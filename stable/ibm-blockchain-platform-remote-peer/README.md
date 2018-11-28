@@ -1,5 +1,7 @@
 # IBM Blockchain Platform Remote Peer (Beta)
 
+THIS CHART IS NOW DEPRECATED. On 28th November, 2018 this version of the Helm chart for IBM Blockchain Platform - Remote Peer (beta) will no longer be supported. The dev chart is replaced by the ibm-blockchain-platform-dev chart. The production version of the chart,ibm-blockchain-platform-dev, is available on IBM Passport Advantage. This chart will be removed on November 30th, 2018.
+
 ## Introduction
 
 IBM® Blockchain Platform Remote Peer for IBM Cloud Private (ICP) Beta enables you to run peers on your own infrastructure. Members of the IBM Blockchain Platform can install the remote peer through ICP and then connect the peer to Starter or Enterprise Plan networks on the platform. The IBM Blockchain Platform and remote peers are based on Hyperledger Fabric. This Beta edition of the IBM Blockchain Remote Peer offering is meant for exploration, development, and testing.
