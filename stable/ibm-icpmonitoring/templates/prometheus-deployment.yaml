@@ -55,10 +55,6 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.imagePullSecrets }}
     {{- end }}
-    {{- if eq .Values.environment "openshift" }}
-      securityContext:
-        fsGroup: 65534    
-    {{- else }}
       initContainers:
         - name: init-container
           image: "{{ .Values.init.image.repository }}:{{ .Values.init.image.tag }}"
@@ -67,14 +63,15 @@ spec:
           volumeMounts:
             - name: storage-volume
               mountPath: /var/lib/prometheus/data
-    {{- end }}
       containers:
         - name: configmap-reload-prometheus
           image: {{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            runAsUser: 65534
           args:
             - --volume-dir=/etc/config
-            - --webhook-url=http://127.0.0.1:9090/-/reload
+            - --webhook-url=http://127.0.0.1:9090/prometheus/-/reload
           volumeMounts:
             - name: config-volume
               mountPath: /etc/config
@@ -82,9 +79,11 @@ spec:
         - name: configmap-reload-alertrules
           image: {{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            runAsUser: 65534
           args:
             - --volume-dir=/etc/alert-rules
-            - --webhook-url=http://127.0.0.1:9090/-/reload
+            - --webhook-url=http://127.0.0.1:9090/prometheus/-/reload
           volumeMounts:
             - name: rules-volume
               mountPath: /etc/alert-rules
@@ -92,12 +91,15 @@ spec:
         - name: prometheus
           image: {{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            runAsUser: 65534
           args:
             - --config.file=/etc/config/prometheus.yml
             - --web.enable-lifecycle
             - --web.enable-admin-api
             - --storage.tsdb.path=/var/lib/prometheus/data
             - --storage.tsdb.retention={{ .Values.prometheus.retention }}
+            - --web.external-url=https://{{ .Values.clusterAddress }}:{{ .Values.clusterPort }}/prometheus
           {{- range $key, $value := .Values.prometheus.args }}
             - --{{ $key }}={{ $value }}
           {{- end }}
@@ -106,7 +108,7 @@ spec:
         {{- if .Values.prometheus.probe.enabled }}
           readinessProbe:
             httpGet:
-              path: /-/ready
+              path: /prometheus/-/ready
               port: 9090
           {{- if .Values.prometheus.probe.readiness.args }}
 {{ toYaml .Values.prometheus.probe.readiness.args | indent 12 }}
@@ -117,7 +119,7 @@ spec:
           {{- end }}
           livenessProbe:
             httpGet:
-              path: /-/healthy
+              path: /prometheus/-/healthy
               port: 9090
           {{- if .Values.prometheus.probe.liveness.args }}
 {{ toYaml .Values.prometheus.probe.liveness.args | indent 12 }}
@@ -166,8 +168,8 @@ spec:
             - mountPath: "/opt/ibm/router/entry"
               name: router-entry
           {{- if eq .Values.mode "managed" }}
-            - mountPath: "/opt/ibm/router/rbac"
-              name: rbac-config
+            - mountPath: "/opt/ibm/router/lua-scripts"
+              name: lua-scripts-config-config
           {{- end }}
       {{- end }}
       volumes:
@@ -222,7 +224,7 @@ spec:
             defaultMode: 0744
       {{- end }}
       {{- if eq .Values.mode "managed" }}
-        - name: rbac-config
+        - name: lua-scripts-config-config
           configMap:
-            name: {{ template "prometheus.fullname" . }}-rbac-config      
+            name: {{ template "prometheus.fullname" . }}-lua-scripts-config      
       {{- end }}

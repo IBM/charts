@@ -1,0 +1,111 @@
+# Licensed Materials - Property of IBM
+# 5737-E67
+# @ Copyright IBM Corporation 2016, 2018. All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ template "grafana.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    component: setds
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "grafana.fullname" . }}-ds-job-config
+data:
+  job.yaml: |-
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      labels:
+        app: {{ template "grafana.fullname" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        component: setds
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      name: {{ template "grafana.fullname" . }}-ds
+      namespace: {{ .Release.Namespace }}
+    spec:
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app: {{ template "grafana.fullname" . }}
+            component: setds
+            release: "{{ .Release.Name }}"
+        spec:
+        {{- if eq .Values.mode "managed" }}
+          tolerations:
+          - key: "dedicated"
+            operator: "Exists"
+            effect: "NoSchedule"
+        {{- end }}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                    - amd64
+                    - ppc64le
+                {{- if eq .Values.mode "managed" }}
+                  - key: management
+                    operator: In
+                    values:
+                    - "true"
+                {{- end }}
+          containers:
+          - name: grafana-ds
+            image: {{ .Values.curl.image.repository }}:{{ .Values.curl.image.tag }}
+            imagePullPolicy: {{ .Values.imagePullPolicy }}
+            command: ["/opt/entry/entrypoint.sh"]
+            securityContext:
+              runAsUser: 65534
+          {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
+            volumeMounts:
+              - mountPath: "/opt/entry"
+                name: grafana-ds-entry
+              - mountPath: "/opt/ibm/monitoring/certs"
+                name: monitoring-client-certs
+              - mountPath: "/opt/ibm/monitoring/ca-certs"
+                name: monitoring-ca-cert
+          volumes:
+            - name: monitoring-client-certs
+              secret:
+              {{- if .Values.tls.client.existingSecretName }}
+                secretName: {{ .Values.tls.client.existingSecretName }}
+              {{- else }}
+                secretName: {{ template "monitoring.fullname" . }}-client-certs
+              {{- end }}
+            - name: monitoring-ca-cert
+              secret:
+                secretName: {{ .Values.tls.ca.secretName }}
+            - name: grafana-ds-entry
+              configMap:
+                name: {{ template "grafana.fullname" . }}-ds-entry-config
+                defaultMode: 0777 
+          {{- else }}
+            env:
+              - name: GF_SECURITY_ADMIN_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ template "grafana.fullname" . }}-secret
+                    key: username
+              - name: GF_SECURITY_ADMIN_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ template "grafana.fullname" . }}-secret
+                    key: password
+            volumeMounts:
+              - mountPath: "/opt/entry"
+                name: grafana-ds-entry
+          volumes:
+            - name: grafana-ds-entry
+              configMap:
+                name: {{ template "grafana.fullname" . }}-ds-entry-config
+                defaultMode: 0777    
+          {{- end }}
+          restartPolicy: OnFailure

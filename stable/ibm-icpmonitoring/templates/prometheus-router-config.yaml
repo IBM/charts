@@ -34,9 +34,9 @@ data:
         # Without this, cosocket-based code in worker
         # initialization cannot resolve localhost.
 
-        upstream prometheus {
-            server 127.0.0.1:9090;
-        }
+        #upstream prometheus {
+        #    server 127.0.0.1:9090/prometheus/;
+        #}
 
         proxy_cache_path /tmp/nginx-mesos-cache levels=1:2 keys_zone=mesos:1m inactive=10m;
 
@@ -51,7 +51,7 @@ data:
         ';
 
         init_by_lua '
-            rbac = require "rbac"
+            rewrite = require "rewrite"
         ';
       {{- if eq .Values.environment "openshift" -}}
         resolver {OPENSHIFT_RESOLVER};
@@ -75,15 +75,36 @@ data:
             server_name dcos.*;
             root /opt/ibm/router/nginx/html;
 
+            location /federate {
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header Host $http_host;
+
+              proxy_pass http://127.0.0.1:9090/prometheus/federate;
+            }
+
+            location /api/v1/series {
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header Host $http_host;
+              
+              if ($arg_match[] = "helm_release_info") {
+                 content_by_lua 'rewrite.write_release_response()';
+              } 
+            {{- if eq .Values.mode "managed" -}}
+              rewrite_by_lua 'rewrite.rewrite_query()';
+            {{- end }}
+              proxy_pass http://127.0.0.1:9090/prometheus/api/v1/series;                
+
+            }
+
             location / {
               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
               proxy_set_header Host $http_host;
               
             {{- if eq .Values.mode "managed" -}}
-              rewrite_by_lua 'rbac.rewrite_rbac_query()';
+              rewrite_by_lua 'rewrite.rewrite_query()';
             {{- end }}
 
-              proxy_pass http://prometheus/;
+              proxy_pass http://127.0.0.1:9090/prometheus/;
             }
 
         }
