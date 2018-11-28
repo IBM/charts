@@ -25,6 +25,7 @@ prometheus.yml: |-
         insecure_skip_verify: true
     {{- else }}
       scheme: http
+      path_prefix: /alertmanager
     {{- end }}
 
   rule_files:
@@ -36,6 +37,7 @@ prometheus.yml: |-
       static_configs:
         - targets:
           - 127.0.0.1:9090
+      metrics_path: /prometheus/metrics
 
     # A scrape configuration for running Prometheus on a Kubernetes cluster.
     # This uses separate scrape configs for cluster components (i.e. API server, node)
@@ -196,6 +198,9 @@ prometheus.yml: |-
           action: replace
           target_label: __scheme__
           regex: (https?)
+        - source_labels: [__meta_kubernetes_endpoint_port_name, __meta_kubernetes_service_annotation_filter_by_port_name]
+          action: drop
+          regex: ^([^m].+|m[^e].+|me[^t].+|met[^r].+|metr[^i].+|metri[^c].+|metric[^s]).*;true 
         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
           action: replace
           target_label: __metrics_path__
@@ -240,6 +245,9 @@ prometheus.yml: |-
         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
           action: keep
           regex: https
+        - source_labels: [__meta_kubernetes_endpoint_port_name, __meta_kubernetes_service_annotation_filter_by_port_name]
+          action: drop
+          regex: ^([^m].+|m[^e].+|me[^t].+|met[^r].+|metr[^i].+|metri[^c].+|metric[^s]).*;true
         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
           action: replace
           target_label: __metrics_path__
@@ -248,7 +256,7 @@ prometheus.yml: |-
           action: replace
           target_label: __address__
           regex: (\d+).(\d+).(\d+).(\d+):(\d+);(.+)
-          replacement: $1-$2-$3-$4.$6.pod.cluster.local:$5
+          replacement: $1-$2-$3-$4.$6.pod.{{ .Values.clusterDomain }}:$5
         - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
           action: replace
           target_label: __address__

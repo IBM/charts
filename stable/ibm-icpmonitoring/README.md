@@ -89,7 +89,6 @@ Parameter | Description | Default
 `prometheus.resources.limits.memory` | prometheus memory imits | 512Mi
 `prometheus.resources.requests.cpu` | prometheus cpu requests | 100m
 `prometheus.resources.requests.memory` | prometheus memory requests | 128Mi
-`prometheus.alertRuleFiles` | Prometheus alert rules template | alertRules
 `prometheus.configFiles` | Prometheus configurations template | prometheusConfig
 `prometheus.rbacRoleCreation` | create rbac role&rolebinding if true | true
 `prometheus.ingress.enabled` | create promethues ingress if true | false
@@ -100,6 +99,14 @@ Parameter | Description | Default
 `prometheus.etcdTarget.etcdPort` | etcd server's port | 4001
 `prometheus.etcdTarget.secret` | secret used to access etcd metrics endpoint | etcd-secret
 `prometheus.etcdTarget.tlsConfig` | tls config for etcd scrape configuration | {}
+`prometheus.alerts.nodeMemoryUsage.enabled`| Default alert to trigger when the `prometheus.alerts.nodeMemoryUsage.nodeMemoryUsageThreshold` is exceeded | true
+`prometheus.alerts.nodeMemoryUsage.nodeMemoryUsageThreshold`| Default percentage to trigger a high memory usage alert | 85
+`prometheus.alerts.highCPUUsage.enabled`| Default alert to trigger when the `prometheus.alerts.highCPUUsage.highCPUUsageThreshold` is exceeded | true
+`prometheus.alerts.highCPUUsage.highCPUUsageThreshold`| Default percentage to trigger a high CPU usage alert | 85
+`prometheus.alerts.failedJobs`| Default alert if a job failed.  | true
+`prometheus.alerts.elasticsearchClusterHealth`| Alerts if the elasticsearch cluster is not healthy.  | false
+`prometheus.alerts.podsTerminated`| Alerts if a pod was terminated and didn't complete.  | true
+`prometheus.alerts.podsRestarting`| Alerts if a pod is restarting more than 5 times in 10 minutes.  | true
 `alertmanager.image.repository` | alertmanager container image name | ibmcom/alertmanager
 `alertmanager.image.tag` | alertmanager container image tag | v0.13.0
 `alertmanager.port` | alertmanager service port | 80
