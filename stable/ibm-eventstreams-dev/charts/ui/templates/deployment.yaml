@@ -44,6 +44,8 @@
 # Get accessController service name
 {{ $accessControllerService := .sch.chart.components.security.accesscontroller.service.name -}}
 {{ $accessControllerServiceName := include "sch.names.fullCompName" (list . $accessControllerService) -}}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -70,14 +72,18 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
       volumes:
         - name: redis-storage
           emptyDir: {}
       {{- include "license.accept.ref" . | indent 6 }}
       affinity:
-      {{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
       terminationGracePeriodSeconds: 60
       # UI pods are made up of two containers
       #  1) UI web server
@@ -93,7 +99,7 @@ spec:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
@@ -153,6 +159,21 @@ spec:
                 secretKeyRef:
                   name: {{ $oauthSecretName }}
                   key: "clusterExternalPort"
+            - name: "PROXY_EXTERNAL_IP"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "proxyExternalIP"
+            - name: "CLUSTER_CA_DOMAIN"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterCADomain"
+            - name: "EXTERNAL_IP"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: "externalHostOrIP"
             - name: "ACCESS_CONTROLLER_SERVICE_NAME"
               value: {{ $accessControllerServiceName | quote }}
             - name: "ACCESS_CONTROLLER_SERVICE_PORT"
@@ -166,7 +187,7 @@ spec:
         #
         # redis pods
         - name: redis
-          image: {{ include "eventstreams.image" (list . "redis" .Values.global.image.imageTags.redisTag "false") | quote }}
+          image: {{ include "eventstreams.image" (list . "eventstreams-redis" .Values.global.image.imageTags.redisTag "ibmcom") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           volumeMounts:
           - name: redis-storage
@@ -176,7 +197,7 @@ spec:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
@@ -211,7 +232,7 @@ spec:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
@@ -221,12 +242,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ $secretName }}
-                  key: "tls.cert"
+                  key: "https.cert"
             - name: TLS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ $secretName }}
-                  key: "tls.key"
+                  key: "https.key"
             - name: ES_PROXY_CONFIG
               value: |-
                 {
