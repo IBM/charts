@@ -8,56 +8,52 @@
 # disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 #
 ###############################################################################
-# This job deletes the secrets created in
-# the release namespace and kube-system namespace that are labelled
-# with the release name
-#
-# As these secrets are created by hooks, they're not managed by the
-# helm lifecycle, and don't get deleted by running 'helm delete'
+# This job runs before upgrade. It deletes oauth job that was created
+# during the install. This job is required so that we can upgrade with re running 
+# the oauth job.
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
-{{ $namePrefix := .sch.chart.components.essential.secretsDeleterJob.name -}}
+{{ $namePrefix := .sch.chart.components.essential.oauthJobDeleterJob.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
-{{ $id := (include "asDnsLabel" .Release.Name) -}}
 # Component is 'essential'
 {{ $compName := .sch.chart.components.essential.compName -}}
-{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "function" "delete-secrets")) -}}
-# Name of the new temporary service account
-{{ $serviceAccount := .sch.chart.components.essential.secretsDeleterSA.name -}}
-{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# Job needs to run in the kube-system namespace as this is registering with the
+#  existing oauth handler
+{{ $namespace := "kube-system" -}}
 # Default user for security context
 {{ $defaultUser := .sch.securityContext.defaultUser -}}
+# Name of the copy of the image pull secret in kube-system
+{{ $imagePullSecret := .sch.chart.components.essential.imagePullSecret.name -}}
+{{ $imagePullSecretName := include "sch.names.fullCompName" (list . $imagePullSecret) -}}
+# Name of the job to be deleted
+{{ $oauthjob := .sch.chart.components.ui.oauth2ClientRegistration.name -}}
+{{ $oauthJobName := include "sch.names.fullCompName" (list . $oauthjob ) -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  namespace: {{ $namespace | quote }}
   labels:
 {{ $labels | indent 4 }}
   annotations:
-    # This needs to run after a Helm delete is completed, as the secrets
-    #  are created by pre-install hooks and are therefore not automatically
-    #  deleted by a `helm delete`.
-    "helm.sh/hook": post-delete
+    # This needs to run before a helm upgrade
+    #  so that the oauth job will be deleted and re run during the upgrade
+    "helm.sh/hook": pre-upgrade
     # We don't delete this pod in the event of a failed delete hook, as it
     #  might have logs that would be useful for diagnosis.
     "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
-    # This needs to happen after all of the other post-delete
-    #  jobs, as this Job removes the pull secret that those post-delete
-    #  jobs depend on.
     "helm.sh/hook-weight": "3"
 spec:
-  activeDeadlineSeconds: 1000
   template:
     metadata:
       name: {{ $name | quote }}
       labels:
 {{ $labels | indent 8 }}
     spec:
-      serviceAccountName: {{ $serviceAccountName | quote }}
       {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
-        - name: {{ .Values.global.image.pullSecret }}
+        - name: {{ $imagePullSecretName }}
       {{- end }}
       hostNetwork: false
       hostPID: false
@@ -69,7 +65,7 @@ spec:
 {{ include "customNodeaffinity"  (list .) | indent 8 }}
       restartPolicy: Never
       containers:
-        - name: "secret-deleter"
+        - name: "oauth-job-deleter"
           image: {{ include "eventstreams.image" (list . "eventstreams-kubectl" .Values.global.image.imageTags.kubectlTag "ibmcom") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           securityContext:
@@ -84,5 +80,5 @@ spec:
           command:
             - sh
             - -c
-            - 'kubectl delete secrets -n {{ .Release.Namespace | quote }} -l release={{ .Release.Name | quote }} && kubectl delete secrets -n kube-system -l release={{ .Release.Name | quote }} && echo Done'
+            - 'kubectl delete job --namespace=kube-system {{ $oauthJobName }}; echo Done'
 {{ end -}}

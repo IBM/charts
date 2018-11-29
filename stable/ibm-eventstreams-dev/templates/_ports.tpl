@@ -21,12 +21,6 @@ sch:
 
       #ports used for security
       security:
-        # IAM token generation port, service is in kube-system
-        iamTokenGeneration: 10443
-        # IAM Policy Decision Point, service is in kube-system
-        iamPolicyDecision: 7998
-        # IAM Policy Administration Point, service is in kube-system
-        iamPolicyAdministration: 39001
         # Secure endpoint for console
         icpSSL: 8443
         # Access controller endpoint

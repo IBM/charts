@@ -23,6 +23,8 @@
 # Name of the new image pull secret in kube-system
 {{ $imagePullSecret := .sch.chart.components.essential.imagePullSecret.name -}}
 {{ $imagePullSecretName := include "sch.names.fullCompName" (list . $imagePullSecret) -}}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -54,21 +56,25 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
       affinity:
-{{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity" (list .) | indent 8 }}
       restartPolicy: Never
       containers:
         - name: "ips-copier"
-          image: {{ include "eventstreams.image" (list . "eventstreams-kubectl" .Values.global.image.imageTags.kubectlTag "true") | quote }}
+          image: {{ include "eventstreams.image" (list . "eventstreams-kubectl" .Values.global.image.imageTags.kubectlTag "ibmcom") | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           securityContext:
             privileged: false
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all

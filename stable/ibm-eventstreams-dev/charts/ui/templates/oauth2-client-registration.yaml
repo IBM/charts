@@ -21,12 +21,17 @@
 {{- $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
 {{- $uiProxyServiceName :=  .sch.chart.components.ui.service.name -}}
 {{- $uiProxySvcName := include "sch.names.fullCompName" (list . $uiProxyServiceName) -}}
+# Secret and config map used by the proxy container
+{{ $proxySecret := .sch.chart.components.proxy.secret.name -}}
+{{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecret) | quote -}}
 # Job needs to run in the kube-system namespace as this is registering with the
 #  existing oauth handler
 {{ $namespace := "kube-system" -}}
 # Name of the copy of the image pull secret in kube-system
 {{ $imagePullSecret := .sch.chart.components.essential.imagePullSecret.name -}}
 {{ $imagePullSecretName := include "sch.names.fullCompName" (list . $imagePullSecret) -}}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -45,10 +50,14 @@ spec:
       imagePullSecrets:
         - name: {{ $imagePullSecretName | quote }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        fsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
       affinity:
-{{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
       restartPolicy: Never
       containers:
         - name: "oauth2-client-reg"
@@ -71,6 +80,8 @@ spec:
               value: {{ .Release.Name | quote }}
             - name: "ES_SECRET_NAME"
               value: {{ $oauthSecretName }}
+            - name: "PROXY_SECRET_NAME"
+              value: {{ $proxySecretName }}
             - name: "UI_PROXY_SVC_NAME"
               value: {{ $uiProxySvcName }}
             - name: "OAUTH2_CLIENT_REGISTRATION_SECRET"

@@ -29,6 +29,8 @@
 # import port definitions
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $ports := .sch.config.ports }}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -64,7 +66,12 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
 {{ include "fsGroupGid" (list . ) | indent 8 }}
       volumes:
         {{ if .Values.persistence.enabled -}}
@@ -74,7 +81,7 @@ spec:
         {{ end }}
       {{- include "license.accept.ref" . | indent 6 }}
       affinity:
-      {{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
         # we don't want multiple co-located ZooKeeper nodes
         #  so this anti-affinity rule should prevent
         #  nodes with the zookeeper name being scheduled on
@@ -128,8 +135,6 @@ spec:
             {{- include "license.accept.env.ref" . | indent 10 }}
             - name: ZK_ENSEMBLE
               value: '{{ range $index, $_ := until (.sch.config.zookeeper.replicas | int) }}{{ $zookeeperFixedIPServiceName }}-{{ $index }}.{{ $.Release.Namespace }}.svc.cluster.local;{{ end }}'
-            - name: ZK_HEAP_SIZE
-              value: '200M'
             - name: ZK_TICK_TIME
               value: '2000'
             - name: ZK_INIT_LIMIT
@@ -191,7 +196,7 @@ spec:
         storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
         {{- else }}
         # Disable dynamic provisioning
-        storageClassName: ""
+        storageClassName: {{ default "" .Values.dataPVC.storageClassName | quote }}
         {{- end }}
         accessModes: [ "ReadWriteOnce" ]
         resources:
