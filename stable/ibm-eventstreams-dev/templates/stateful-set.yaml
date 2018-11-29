@@ -61,6 +61,8 @@
 # Access controller service that we need to connect to do IAM Authorisations
 {{ $accessControllerService := .sch.chart.components.security.accesscontroller.service.name -}}
 {{ $accessControllerServiceName := include "sch.names.fullCompName" (list . $accessControllerService) -}}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -93,11 +95,11 @@ spec:
       {{- if regexMatch "^[a-z][a-z0-9-]*[a-z0-9]*$" .Release.Name }}
       name: {{ .Release.Name | quote }}
       {{- else }}
-      {{ fail "Configuration error: Format of release name is invalid." }}
+      {{ fail (cat "Configuration error: Format of release name is invalid:" .Release.Name) }}
       {{- end }}
       # Check release name does not end with a dash.
       {{- if regexMatch "-$" .Release.Name }}
-      {{ fail "Configuration error: Format of release name is invalid." }}
+      {{ fail (cat "Configuration error: Format of release name is invalid:" .Release.Name) }}
       {{- end }}
       namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
       labels:
@@ -115,10 +117,15 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
 {{ include "fsGroupGid" (list . ) | indent 8 }}
       affinity:
-      {{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
         # we don't want multiple co-located Kafka nodes
         #  so this anti-affinity rule should prevent
         #  nodes with the kafka name being scheduled on
@@ -221,11 +228,7 @@ spec:
                   name: "{{ $iamSecretName }}"
                   key: "{{ $iamServiceName }}-{{ $.Release.Name }}-api-key"
             - name: KAFKA_HEAP_OPTS
-{{- if regexMatch "^[1-9][0-9]*[mg]$" .Values.kafka.jvmHeapSize }}
-              value: "-Xmx{{ .Values.kafka.jvmHeapSize }} -Xms{{ .Values.kafka.jvmHeapSize }} {{ .Values.kafka.heapOpts }}"
-{{- else }}
-{{ fail "Configuration error: You have entered an invalid JVM heap limit for Kafka brokers. Please enter the value in '^[1-9][0-9]*[mg]$' format." }}
-{{- end }}
+              value: {{ .Values.kafka.heapOpts | quote }}
             - name: KAFKA_LISTENERS
               value: {{ $kafkaListeners }}
             - name: LISTENER_SECURITY_PROTOCOL_MAP
@@ -240,8 +243,18 @@ spec:
               value: {{ .Values.kafka.interBrokerProtocolVersion | quote }}
             - name: LOG_MESSAGE_FORMAT_VERSION
               value: {{ .Values.kafka.logMessageFormatVersion | quote }}
+            - name: ROOT_LOGGING_LEVEL
+              value: "INFO"
             - name: BROKER_LOGGING_LEVEL
-              value: {{ .Values.kafka.brokerLoggingLevel | quote }}
+              value: "INFO"
+            - name: REQUEST_LOGGING_LEVEL
+              value: "WARN"
+            - name: LOG_CLEANER_LOGGING_LEVEL
+              value: "INFO"
+            - name: KAFKA_AUTH_LOGGING_LEVEL
+              value: "INFO"
+            - name: LOG_TO_STDOUT
+              value: "false"
           volumeMounts:
           {{- if .Values.kafka.configMapName }}
             - name: cluster-config-volume
@@ -265,7 +278,7 @@ spec:
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
@@ -281,11 +294,7 @@ spec:
             - name: METRICS_PORT
               value: "{{ $ports.kafka.metrics }}"
             - name: IBM_JAVA_OPTIONS
-{{- if regexMatch "^[1-9][0-9]*[mg]$" .Values.kafka.metricsReporterJvmHeapSize }}
-              value: "-Xmx{{ .Values.kafka.metricsReporterJvmHeapSize }} -Xms{{ .Values.kafka.metricsReporterJvmHeapSize }}"
-{{- else }}
-{{ fail "Configuration error: You have entered an invalid JVM heap limit for metrics reporters. Please enter the value in '^[1-9][0-9]*[mg]$' format." }}
-{{- end }}
+              value: "-XX:+UseContainerSupport"
           ports:
             - containerPort: {{ $ports.kafka.metrics }}
               name: metrics-port
@@ -317,7 +326,7 @@ spec:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
@@ -363,7 +372,7 @@ spec:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
