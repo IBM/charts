@@ -7,14 +7,12 @@
   {{- $version := $root.Chart.Version -}}
   {{- $edition := $root.sch.chart.edition -}}
   {{- $productName := index $root.sch.chart.productName $edition -}}
+{{- /* ################### dev logic ################################# */ -}}
   {{- if eq $edition "dev" -}}
 productName: {{ $productName }}
 productID: 5737_H33_communityEdition_nonChargeable
 productVersion: {{ $version }}
-  {{- else if eq $edition "foundation-prod" -}}
-productName: {{ $productName }}
-productID: 5737_H33_foundationEdition_nonChargeable
-productVersion: {{ $version }}
+{{- /* #################### prod logic ################################ */ -}}
   {{- else if eq $edition "prod" -}}
     {{- if eq $pod "" -}}
 productName: {{ $productName }}
@@ -31,6 +29,12 @@ productVersion: '|replicator:{{ $version }}|metrics-reporter:{{ $version }}'
     {{- else -}}
       {{- fail "Invalid pod" -}}
     {{- end -}}
+{{- /* ################### foundation-prod logic ###################### */ -}}
+  {{- else if eq $edition "foundation-prod" -}}
+productName: {{ $productName }}
+productID: 5737_H33_foundationEdition_nonChargeable
+productVersion: {{ $version }}
+{{- /* Invalid edition, fail the build as cannot define metering */ -}}
   {{- else -}}
     {{- fail "Invalid edition" -}}
   {{- end -}}

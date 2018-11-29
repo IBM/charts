@@ -26,6 +26,8 @@
 # import port definitions
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $ports := .sch.config.ports }}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -58,15 +60,19 @@ spec:
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
       {{- if .Values.global.image.pullSecret }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        fsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
       volumes:
       {{- include "license.accept.ref" . | indent 6 }}
       affinity:
-      {{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
         # we don't want multiple co-located Elasticsearch nodes
         #  so this anti-affinity rule should prevent
         #  nodes with the elastic name being scheduled on
@@ -95,7 +101,7 @@ spec:
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
@@ -157,10 +163,6 @@ spec:
               value: "{{ $ports.elasticsearch.api }}"
             - name: HOSTS
               value: "[\"{{ $statefulSetName }}-0.{{ $serviceName }}\", \"{{ $statefulSetName }}-1.{{ $serviceName }}\"]"
-            - name: JVM_HEAP_INITIAL
-              value: '-Xms{{ .Values.messageIndexing.resources.limits.memory | replace "i" "" }}'
-            - name: JVM_HEAP_MAX
-              value: '-Xmx{{ .Values.messageIndexing.resources.limits.memory | replace "i" "" }}'
             - name: INDEXMGR_HOSTNAME
               value: '{{ $indexmgrServiceName }}:{{ $ports.indexmgr.api }}'
 {{- end -}}
