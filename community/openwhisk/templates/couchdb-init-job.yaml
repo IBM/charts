@@ -1,0 +1,77 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+{{ if .Values.db.wipeAndInit }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: init-couchdb
+  labels:
+    name: init-couchdb
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+spec:
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: init-couchdb
+      labels:
+        name: init-couchdb
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+    spec:
+      restartPolicy: Never
+      volumes:
+      - name: task-dir
+        configMap:
+          name: init-couchdb
+      - name: whisk-auth
+        secret:
+          secretName: whisk.auth
+      containers:
+      - name: init-couchdb
+        image: "{{- .Values.utility.ansibleRunner.imageName -}}:{{- .Values.utility.ansibleRunner.imageTag -}}"
+        imagePullPolicy: {{ .Values.utility.ansibleRunner.imagePullPolicy | quote }}
+        command: ["/bin/bash", "-c", "set -e; . /task/initdb.sh"]
+        volumeMounts:
+        - name: task-dir
+          mountPath: "/task/initdb.sh"
+          subPath: "initdb.sh"
+        - name: whisk-auth
+          mountPath: "/etc/whisk-auth"
+        env:
+        - name: "DB_PROTOCOL"
+          valueFrom:
+            configMapKeyRef:
+              name: db.config
+              key: db_protocol
+        - name: "DB_HOST"
+          valueFrom:
+            configMapKeyRef:
+              name: db.config
+              key: db_host
+        - name: "DB_PORT"
+          valueFrom:
+            configMapKeyRef:
+              name: db.config
+              key: db_port
+        - name: "DB_PREFIX"
+          valueFrom:
+            configMapKeyRef:
+              name: db.config
+              key: db_prefix
+        - name: "COUCHDB_USER"
+          valueFrom:
+            secretKeyRef:
+              name: db.auth
+              key: db_username
+        - name: "COUCHDB_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: db.auth
+              key: db_password
+        - name: "NODENAME"
+          value: "couchdb0"
+
+        # tag to use for git clone to get ansible files to initialize couchdb
+        - name: "OW_GIT_TAG_OPENWHISK"
+          value: {{ .Values.whisk.versions.openwhisk.gitTag | quote }}
+{{ end }}
