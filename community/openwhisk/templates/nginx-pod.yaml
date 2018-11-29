@@ -1,0 +1,58 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.nginx.name | quote }}
+  labels:
+    name: {{ .Values.nginx.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+spec:
+  replicas: {{ .Values.nginx.replicaCount }}
+  selector:
+    matchLabels:
+      name: {{ .Values.nginx.name | quote }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.nginx.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+    spec:
+      restartPolicy: {{ .Values.nginx.restartPolicy }}
+
+      {{- if .Values.affinity.enabled }}
+      affinity:
+{{ include "openwhisk.affinity.edge" . | indent 8 }}
+{{ include "openwhisk.affinity.selfAntiAffinity" ( .Values.nginx.name | quote ) | indent 8 }}
+      {{- end }}
+
+      volumes:
+      - name: nginx-certs
+        secret:
+          secretName: {{ .Values.nginx.name | quote }}
+      - name: nginx-conf
+        configMap:
+          name: {{ .Values.nginx.name | quote }}
+      - name: logs
+        emptyDir: {}
+
+      containers:
+      - name: {{ .Values.nginx.name | quote }}
+        image: "{{- .Values.nginx.imageName -}}:{{- .Values.nginx.imageTag -}}"
+        imagePullPolicy: {{ .Values.nginx.imagePullPolicy | quote }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.nginx.httpPort }}
+        - name: http-api
+          containerPort: {{ .Values.nginx.httpsPort }}
+        - name: https-admin
+          containerPort: {{ .Values.nginx.httpsAdminPort }}
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: "/etc/nginx/nginx.conf"
+          subPath: "nginx.conf"
+        - name: nginx-certs
+          mountPath: "/etc/nginx/certs"
+        - name: logs
+          mountPath: "/logs"
