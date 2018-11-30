@@ -30,6 +30,9 @@ sch:
       console:
         name: "console"
         servicePort: "4445"
+      dashboard:
+        name: "dashboard"
+        servicePort: "4446"
       couchdb:
         name: "couchdb"
         servicePort: "6984"
