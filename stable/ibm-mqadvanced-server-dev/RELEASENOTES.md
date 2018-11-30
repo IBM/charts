@@ -1,8 +1,10 @@
-# What’s new in the MQ Advanced for Developers Chart, Version 2.1.0
+# Breaking Changes
 
-- SecurityContext values are now declared for the container
-- A service account name can now be configured
-- Added new IBM Cloud Pak content
+- None
+
+# What’s new in the MQ Advanced for Developers Chart, Version 2.2.0
+
+- Upgrade IBM MQ version to 9.1.1
 
 # Fixes
 
@@ -10,7 +12,9 @@
 
 # Documentation
 
-## Upgrading to Version 2.1.0 from Versions <= 1.3.0
+- [What's new and changed in IBM MQ Version 9.1.0](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.1.0/com.ibm.mq.pro.doc/q113110_.htm)
+
+## Upgrading to Version 2.2.0 from Versions <= 1.3.0
 
 ### Prerequisites
 
@@ -119,13 +123,13 @@ Note: You may experience upgrade issues if you have a long release name (25+ cha
   kubectl create -f pvc-new.yaml
   ```
 
-10. Install the Version 2.1.0 Chart
+10. Install the Version 2.2.0 Chart
 
   ```sh
   helm install --name $RELEASE -f user-supplied-values.yaml [CHART]
   ```
 
-  > Where [CHART] is the Version 2.1.0 chart in your Helm repository.
+  > Where [CHART] is the Version 2.2.0 chart in your Helm repository.
 
 11. Validate upgrade
 
@@ -141,6 +145,7 @@ Note: You may experience upgrade issues if you have a long release name (25+ cha
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 2.2.0 | November 2018 | >= 1.9 | = MQ 9.1.1.0 | None | Updated to IBM MQ 9.1.1 |
 | 2.1.0 | September 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Declaration of securityContext; Configurable service account name; New IBM Cloud Pak content |
 | 2.0.2 | August 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Fixed error in service selector for helm tests |
 | 2.0.1 | July 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Reverted statefulset to apps/v1beta2 to prevent deletion failures |
