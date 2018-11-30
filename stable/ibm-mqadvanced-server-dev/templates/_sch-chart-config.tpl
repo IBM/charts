@@ -29,5 +29,5 @@ sch:
     metering:
       productName: IBM MQ Advanced for Developers
       productID: 98102d16795c4263ad9ca075190a2d4d
-      productVersion: "9.1.0.0"
+      productVersion: "9.1.1.0"
 {{- end -}}
