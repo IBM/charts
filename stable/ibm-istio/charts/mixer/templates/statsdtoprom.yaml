@@ -1,0 +1,98 @@
+
+{{- $statsdname := "statsd-prom-bridge" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: istio-{{ $statsdname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "mixer.name" . }}
+    chart: {{ template "mixer.chart" . }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    istio: {{ $statsdname }}
+spec:
+  ports:
+  - name: statsd-prom
+    port: 9102
+  - name: statsd-udp
+    port: 9125
+    protocol: UDP
+  selector:
+    istio: {{ $statsdname }}
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: istio-{{ $statsdname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "mixer.name" . }}
+    chart: {{ template "mixer.chart" . }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    istio: {{ $statsdname }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "mixer.name" . }}
+        chart: {{ template "mixer.chart" . }}
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        istio: {{ $statsdname }}
+      annotations:
+        sidecar.istio.io/inject: "false"
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+        productName: istio-{{ $statsdname }}
+        productID: istio-{{ $statsdname }}_{{ .Chart.Version }}_apachev2_00000
+        productVersion: {{ .Chart.Version }}
+    spec:
+      serviceAccountName: istio-mixer-service-account
+{{- if .Values.global.priorityClassName }}
+      priorityClassName: "{{ .Values.global.priorityClassName }}"
+{{- end }}
+      volumes:
+      - name: config-volume
+        configMap:
+          name: istio-statsd-prom-bridge
+      nodeSelector:
+{{- include "mixer.nodeselector" . | indent 6 }}
+      tolerations:
+{{- include "mixer.tolerations" . | indent 6 }}
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
+      containers:
+      - name: {{ $statsdname }}
+        image: "{{ .Values.prometheusStatsdExporter.repository }}:{{ .Values.prometheusStatsdExporter.tag }}"
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: 9102
+        - containerPort: 9125
+          protocol: UDP
+        args:
+        - '-statsd.mapping-config=/etc/statsd/mapping.conf'
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9102
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9102
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        resources:
+{{- if .Values.prometheusStatsdExporter.resources }}
+{{ toYaml .Values.prometheusStatsdExporter.resources | indent 10 }}
+{{- else }}
+{{ toYaml .Values.global.defaultResources | indent 10 }}
+{{- end }}
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/statsd

@@ -9,7 +9,10 @@ metadata:
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: certmanager
   template:
     metadata:
       labels:
@@ -17,47 +20,56 @@ spec:
         chart: {{ template "certmanager.chart" . }}
         heritage: {{ .Release.Service }}
         release: {{ .Release.Name }}
-        {{- if .Values.podLabels }}
+{{- if .Values.podLabels }}
 {{ toYaml .Values.podLabels | indent 8 }}
-        {{- end }}
+{{- end }}
       annotations:
         sidecar.istio.io/inject: "false"
         scheduler.alpha.kubernetes.io/critical-pod: ""
-        {{- if .Values.podAnnotations }}
+        productName: certmanager
+        productID: certmanager_{{ .Chart.Version }}_apachev2_00000
+        productVersion: {{ .Chart.Version }}
+      {{- if .Values.podAnnotations }}
 {{ toYaml .Values.podAnnotations | indent 8 }}
-        {{- end }}
+      {{- end }}
     spec:
       serviceAccountName: certmanager
 {{- if .Values.global.priorityClassName }}
       priorityClassName: "{{ .Values.global.priorityClassName }}"
 {{- end }}
       containers:
-      - name: certmanager
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-        args:
-        - --cluster-resource-namespace=$(POD_NAMESPACE)
-        - --leader-election-namespace=$(POD_NAMESPACE)
-      {{- if .Values.extraArgs }}
-{{ toYaml .Values.extraArgs | indent 8 }}
-      {{- end }}
-        env:
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        livenessProbe:
-          exec:
-            command: ["sh", "-c", "exec echo start cert-manager"]
-          initialDelaySeconds: 30
-          timeoutSeconds: 5
-        readinessProbe:
-          exec:
-            command: ["sh", "-c", "exec echo start cert-manager"]
-          initialDelaySeconds: 10
-          timeoutSeconds: 2
-        resources:
-{{ toYaml .Values.resources | indent 10 }}
+        - name: certmanager
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+          - --cluster-resource-namespace=$(POD_NAMESPACE)
+          - --leader-election-namespace=$(POD_NAMESPACE)
+        {{- if .Values.extraArgs }}
+{{ toYaml .Values.extraArgs | indent 10 }}
+        {{- end }}
+          env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "exec echo start cert-manager"]
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "exec echo start cert-manager"]
+            initialDelaySeconds: 10
+            timeoutSeconds: 2
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+{{- include "certmanager.nodeselector" . | indent 6 }}
+      tolerations:
+{{- include "certmanager.tolerations" . | indent 6 }}
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
 {{- if .Values.podDnsPolicy }}
       dnsPolicy: {{ .Values.podDnsPolicy }}
 {{- end }}
@@ -65,9 +77,3 @@ spec:
       dnsConfig:
 {{ toYaml .Values.podDnsConfig | indent 8 }}
 {{- end }}
-      nodeSelector:
-      {{- include "nodeselector" . | indent 6 }}
-      tolerations:
-      {{- include "tolerations" . | indent 6 }}
-      affinity:
-      {{- include "nodeaffinity" . | indent 6 }}

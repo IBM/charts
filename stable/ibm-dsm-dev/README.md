@@ -21,7 +21,7 @@ This chart will do the following:
 
 ## Prerequisites
 
-- Kubernetes 1.6 with Beta APIs enabled
+- Kubernetes 1.8.3 or later versions
 - Helm 2.3.1 and later version
 - Retrieve image pull secret by accepting the terms and conditions here - http://ibm.biz/db2-dsm-license (set in global.image.secret)
 - Two PersistentVolume(s) need to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using a yaml file as the following example:

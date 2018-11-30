@@ -6,6 +6,20 @@ global:
     label: "Global Settings"
     description: "Specify global settings."
     type: "string"
+  k8sIngressSelector:
+    __metadata:
+      label: "k8s Ingress Selector"
+      description: "Gateway used for legacy k8s Ingress resources. By default it is using 'istio:ingress', to match 0.8 config. It requires that ingress.enabled is set to true. You can also set it to ingressgateway, or any other gateway you define in the 'gateway' section."
+      type: "string"
+      immutable: false
+      required: false
+  k8sIngressHttps:
+    __metadata:
+      label: "Enable k8s Ingress HTTPs"
+      description: "k8sIngressHttps will add port 443 on the ingress and ingressgateway. It REQUIRES that the certificates are installed  in the expected secrets - enabling this option without certificates will result in LDS rejection and the ingress will not work."
+      type: "boolean"
+      immutable: false
+      required: false
   proxy:
     repository:
       __metadata:
@@ -30,11 +44,25 @@ global:
             description: "Specify the minimum requested CPU."
             immutable: false
             required: false
+    concurrency:
+      __metadata:
+        label: "Number of Proxy Worker Threads"
+        description: "Controls number of proxy worker threads. If set to 0 (default), then start worker thread for each CPU thread/core."
+        type: "number"
+        immutable: false
+        required: false
     accessLogFile:
       __metadata:
         label: "Configures the access log for each sidecar"
         description: "Configures the access log for each sidecar. Setting it to an empty string will disable access log for sidecar."
         type: "string"
+        immutable: false
+        required: false
+    privileged:
+      __metadata:
+        label: "Enable Privileged Security Context for Proxy"
+        description: "Configure privileged securityContext for proxy. If set to true, istio-proxy container will have privileged securityContext."
+        type: "boolean"
         immutable: false
         required: false
     enableCoreDump:
@@ -94,7 +122,7 @@ global:
           type: "number"
           immutable: false
           required: false
-  proxyInit:
+  proxy_init:
     repository:
       __metadata:
         label: "Proxy_init Image Repository"
@@ -105,7 +133,7 @@ global:
     tag:
       __metadata:
         label: "Proxy_init Image Tag"
-        description: "Proxy_init image version"
+        description: "Proxy_init image version."
         type: "string"
         immutable: false
         required: false
@@ -124,20 +152,6 @@ global:
         type: "string"
         immutable: false
         required: false
-  k8sIngressSelector:
-    __metadata:
-      label: "k8s Ingress Selector"
-      description: "Gateway used for legacy k8s Ingress resources. By default it is using 'istio:ingress', to match 0.8 config. It requires that ingress.enabled is set to true. You can also set it to ingressgateway, or any other gateway you define in the 'gateway' section."
-      type: "string"
-      immutable: false
-      required: false
-  k8sIngressHttps:
-    __metadata:
-      label: "Enable k8s Ingress HTTPs"
-      description: "k8sIngressHttps will add port 443 on the ingress and ingressgateway. It REQUIRES that the certificates are installed  in the expected secrets - enabling this option without certificates will result in LDS rejection and the ingress will not work."
-      type: "boolean"
-      immutable: false
-      required: false
   imagePullPolicy:
     __metadata:
       label: "Image Pull Policy"
@@ -188,8 +202,6 @@ global:
       type: "string"
       immutable: false
       required: false
-      items:
-        type: "string"
   oneNamespace:
     __metadata:
       label: "Restrict to one namespace"
@@ -255,28 +267,6 @@ global:
       type: "string"
       immutable: false
       required: false
-  proxyNode:
-    __metadata:
-      label: "Proxy Node"
-      description: "Specify(true or false) whether to scheduled to proxy node with label: \"proxy\"=\"true\""
-      type: "boolean"
-      immutable: false
-      required: false
-  dedicated:
-    __metadata:
-      label: "Deploy to Dedicated Node"
-      description: "The field controls whether to deploy to dedicated node with taint 'dedicated=:NoSchedule', defaults to 'true'."
-      type: "boolean"
-      immutable: false
-      required: false
-  extraNodeSelector:
-    __metadata:
-      label: "Extra Node Selector"
-      description: "Specify the extra node selector for all deployments."
-      type: "string"
-      minProperties: 0
-      immutable: false
-      required: false
   arch:
     amd64:
       __metadata:
@@ -299,6 +289,23 @@ global:
       __metadata:
         name: "ppc64le"
         label: "PPC64LE scheduling preference"
+        description: "Architecture preference for target worker node."
+        type: "string"
+        immutable: false
+        required: false
+        options:
+        - label: "0 - Do not use"
+          value: "0 - Do not use"
+        - label: "1 - Least preferred"
+          value: "1 - Least preferred"
+        - label: "2 - No preference"
+          value: "2 - No preference"
+        - label: "3 - Most preferred"
+          value: "3 - Most preferred"
+    s390x:
+      __metadata:
+        name: "s390x"
+        label: "S390X scheduling preference"
         description: "Architecture preference for target worker node."
         type: "string"
         immutable: false
@@ -378,6 +385,26 @@ ingress:
         label: "Ingress Port Settings"
         type: "string"
         description: "Specify ports settings for ingress deployment and service."
+    selector:
+      __metadata:
+        label: "Ingress Service Selector"
+        description: "Specify selector for ingress services."
+        type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
 
 gateways:
   __metadata:
@@ -391,7 +418,7 @@ gateways:
       type: "boolean"
       immutable: false
       required: false
-  ingressgateway:
+  istio-ingressgateway:
     enabled:
       __metadata:
         label: "Enable Ingressgateway"
@@ -439,7 +466,30 @@ gateways:
       __metadata:
         label: "Istio Ingressgateway Resources"
         description: "Specify the resource(CPU/Memory) requests & limits for Istio Ingressgateway."
-        type: "string"  
+        type: "string"
+    nodeRole:
+      __metadata:
+        label: "Node Role"
+        description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+        type: "string"
+        immutable: false
+        required: false
+    nodeSelector:
+      __metadata:
+        label: "Node Selector"
+        description: "Specify the extra node selector for deployment."
+        type: "string"
+        minProperties: 0
+        immutable: false
+        required: false
+    cpu:
+      targetAverageUtilization:
+        __metadata:
+          label:  "Ingressgateway CPU Target Average Utilization"
+          description: "Specify the CPU target average utilization for ingressgateway."
+          type: "number"
+          immutable: false
+          required: false
     loadBalancerIP:
       __metadata:
         label: "Load Balancer IP"
@@ -471,7 +521,7 @@ gateways:
         label: "Ingressgateway volumes Settings"
         type: "string"
         description: "Specify volumes settings for ingressgateway deployment."
-  egressgateway:
+  istio-egressgateway:
     enabled:
       __metadata:
         label: "Enable Egressgateway"
@@ -520,6 +570,29 @@ gateways:
         label: "Istio Egressgateway Resources"
         description: "Specify the resource(CPU/Memory) requests & limits for Istio Egressgateway."
         type: "string"
+    nodeRole:
+      __metadata:
+        label: "Node Role"
+        description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+        type: "string"
+        immutable: false
+        required: false
+    nodeSelector:
+      __metadata:
+        label: "Node Selector"
+        description: "Specify the extra node selector for deployment."
+        type: "string"
+        minProperties: 0
+        immutable: false
+        required: false
+    cpu:
+      targetAverageUtilization:
+        __metadata:
+          label:  "Egressgateway CPU Target Average Utilization"
+          description: "Specify the CPU target average utilization for egressgateway."
+          type: "number"
+          immutable: false
+          required: false
     serviceAnnotations:
       __metadata:
         label: "Egressgateway Service Annotations"
@@ -544,7 +617,7 @@ gateways:
         label: "Egressgateway volumes Settings"
         type: "string"
         description: "Specify volumes settings for egressgateway deployment."
-  ilbgateway:
+  istio-ilbgateway:
     enabled:
       __metadata:
         label: "Enable ILB Gateway"
@@ -604,6 +677,29 @@ gateways:
             description: "Specify the minimum requested memory."
             immutable: false
             required: false
+    nodeRole:
+      __metadata:
+        label: "Node Role"
+        description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+        type: "string"
+        immutable: false
+        required: false
+    nodeSelector:
+      __metadata:
+        label: "Node Selector"
+        description: "Specify the extra node selector for deployment."
+        type: "string"
+        minProperties: 0
+        immutable: false
+        required: false
+    cpu:
+      targetAverageUtilization:
+        __metadata:
+          label:  "ILB Gateway CPU Target Average Utilization"
+          description: "Specify the CPU target average utilization for ILB Gateway."
+          type: "number"
+          immutable: false
+          required: false
     loadBalancerIP:
       __metadata:
         label: "Load Balancer IP"
@@ -636,10 +732,10 @@ gateways:
         type: "string"
         description: "Specify volumes settings for ILB gateway deployment."
 
-sidecarinjectorwebhook:
+sidecarInjectorWebhook:
   __metadata:
     label: "Sidecar Injector Webhook Settings"
-    description: "Specify sidecarinjectorwebhook settings."
+    description: "Specify sidecar injector webhook settings."
     type: "string"
   enabled:
     __metadata:
@@ -673,7 +769,7 @@ sidecarinjectorwebhook:
     tag:
       __metadata:
         label: "Sidecar Injector Image Tag"
-        description: "Sidecar Injector image version"
+        description: "Sidecar injector image version."
         type: "string"
         immutable: false
         required: false
@@ -682,6 +778,21 @@ sidecarinjectorwebhook:
       label: "Istio Sidecar Injector Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Istio Sidecar Injector."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
 
 galley:
   __metadata:
@@ -705,7 +816,7 @@ galley:
   image:
     repository:
       __metadata:
-        label: "Galley Injector Image Repository"
+        label: "Galley Image Repository"
         description: "Docker registry to pull galley image from."
         type: "string"
         immutable: false
@@ -722,6 +833,21 @@ galley:
       label: "Istio Galley Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Istio Galley."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
 
 mixer:
   __metadata:
@@ -762,7 +888,22 @@ mixer:
       label: "Istio Mixer Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Istio Mixer."
       type: "string"
-  policy:
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
+  istio-policy:
     autoscaleEnabled:
       __metadata:
         label: "Enable Policy Auto Scaler"
@@ -792,7 +933,7 @@ mixer:
           type: "number"
           immutable: false
           required: false
-  telemetry:
+  istio-telemetry:
     autoscaleEnabled:
       __metadata:
         label: "Enable Telemetry Auto Scaler"
@@ -921,6 +1062,36 @@ pilot:
           description: "Specify the minimum requested memory."
           immutable: false
           required: false
+  env:
+    __metadata:
+      label: "Pilot Env Settings"
+      description: "Specify env settings for pilot deployment."
+      type: "string"
+      immutable: false
+      required: false
+  cpu:
+    targetAverageUtilization:
+      __metadata:
+          label: "Target Average Utilization"
+          description: "Specify CPU target average utilization."
+          type: "number"
+          immutable: false
+          required: false
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
 
 security:
   __metadata:
@@ -968,8 +1139,23 @@ security:
       label: "Istio Citadel Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Istio Citadel."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
 
-telemetrygateway:
+telemetry-gateway:
   __metadata:
     label: "Telemetry Gateway Settings"
     description: "Specify telemetry gateway settings."
@@ -1030,6 +1216,20 @@ grafana:
         type: "string"
         immutable: false
         required: false
+  persist:
+    __metadata:
+      label: "Enable Grafana Persistence"
+      description: "Specify whether to enable grafana persistence."
+      type: "boolean"
+      immutable: false
+      required: false
+  storageClassName:
+    __metadata:
+      label: "Storage Class Name for Grafana Persistence"
+      description: "Specify storage class name for grafana persistence."
+      type: "string"
+      immutable: false
+      required: false
   security:
     enabled:
       __metadata:
@@ -1093,6 +1293,21 @@ grafana:
       label: "Istio Grafana Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Istio Grafana."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
 
 prometheus:
   __metadata:
@@ -1156,6 +1371,21 @@ prometheus:
       label: "Prometheus Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Prometheus."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
 
 servicegraph:
   __metadata:
@@ -1233,10 +1463,6 @@ servicegraph:
         label: "Servicegraph Ingress hosts"
         description: "Specify the hosts for Servicegraph ingress."
         type: "string"
-        minItems: 1,
-        maxItems: 3,
-        items:
-          type: "string"
         immutable: false
         required: false
     annotations:
@@ -1258,6 +1484,21 @@ servicegraph:
       label: "Istio Servicegraph Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Istio Servicegraph."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
   prometheusAddr:
     __metadata:
       label: "Prometheus Address"
@@ -1302,13 +1543,20 @@ tracing:
           immutable: false
           required: false
     memory:
-      maxTraces:
+      max_traces:
         __metadata:
           label: "Jaeger Max Traces"
-          description: "Spectify max traces limits for jaeger."
+          description: "Specify max traces limits for jaeger."
           type: "number"
           immutable: false
           required: false
+    contextPath:
+      __metadata:
+        label: "Jaeger UI Base Path"
+        description: "Specify the base path for all jaeger HTTP routes."
+        type: "string"
+        immutable: false
+        required: false
     ingress:
       enabled:
         __metadata:
@@ -1322,8 +1570,6 @@ tracing:
           label: "Jaeger Ingress hosts"
           description: "Specify the hosts for Jaeger ingress."
           type: "string"
-          items:
-            type: "string"
           immutable: false
           required: false
       annotations:
@@ -1389,8 +1635,6 @@ tracing:
         label: "Tracing Ingress hosts"
         description: "Specify the hosts for tracing ingress."
         type: "string"
-        items:
-          type: "string"
         immutable: false
         required: false
     annotations:
@@ -1412,6 +1656,21 @@ tracing:
       label: "Istio Tracing Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Istio Tracing."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
 
 kiali:
   __metadata:
@@ -1447,6 +1706,13 @@ kiali:
         type: "string"
         immutable: false
         required: false
+  contextPath:
+    __metadata:
+      label: "Kiali UI Base Path"
+      description: "Specify the base path for all kiali HTTP routes."
+      type: "string"
+      immutable: false
+      required: false
   ingress:
     enabled:
       __metadata:
@@ -1460,8 +1726,6 @@ kiali:
         label: "Kiali Ingress hosts"
         description: "Specify the hosts for Kiali ingress."
         type: "string"
-        items:
-          type: "string"
         immutable: false
         required: false
     annotations:
@@ -1519,6 +1783,21 @@ kiali:
       label: "Kiali Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Kiali."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
 
 certmanager:
   __metadata:
@@ -1530,13 +1809,6 @@ certmanager:
       label: "Enable Cert Manager"
       description: "Specify whether to enable Cert Manager for Istio."
       type: "boolean"
-      immutable: false
-      required: false
-  replicaCount:
-    __metadata:
-      label: "Replica Count"
-      description: "Specify number of desired pods for Cert Manager deployment."
-      type: "number"
       immutable: false
       required: false
   image:
@@ -1559,8 +1831,6 @@ certmanager:
       label: "Cert Manager Extra Args"
       description: "Specify the extra arguments for the Cert Manager."
       type: "string"
-      items:
-        type: "string"
       immutable: false
       required: false
   podAnnotations:
@@ -1603,3 +1873,18 @@ certmanager:
       label: "Cert Manager Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Cert Manager."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
