@@ -14,7 +14,7 @@ datasource.yaml: |-
       type: prometheus
       isDefault: true
       editable: false
-    {{- if and (ne .Values.mode "managed") .Values.tls.enabled }}
+    {{- if or (eq .Values.mode "managed") .Values.tls.enabled }}
       access: proxy
       url: https://{{ template "prometheus.fullname" . }}:{{ .Values.prometheus.port }}
       jsonData:
@@ -24,9 +24,6 @@ datasource.yaml: |-
         tlsCACert: "CA_CONTENT"
         tlsClientCert: "CERT_CONTENT"
         tlsClientKey: "KEY_CONTENT"
-    {{- else if (eq .Values.mode "managed") }}
-      access: direct
-      url: https://{{ .Values.clusterAddress }}:{{ .Values.clusterPort }}/prometheus
     {{- else }}
       access: proxy
       url: http://{{ template "prometheus.fullname" . }}:{{ .Values.prometheus.port }}   

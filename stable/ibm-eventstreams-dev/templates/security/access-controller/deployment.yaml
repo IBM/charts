@@ -11,7 +11,6 @@
 # Defines the pod that runs the access controller server
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
-{{- $securityConfig := include "sch.config.init" (list . "security.sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.security.accesscontroller.deployment.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 {{ $id := (include "asDnsLabel" .Release.Name) }}
@@ -20,7 +19,7 @@
 # Service Account
 {{ $serviceAccount := .sch.chart.components.security.accesscontroller.serviceAccount.name -}}
 {{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
-# Oauth secret name which is used by the UI
+# Oauth secret name
 {{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
 {{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
 # Names of other elements to refer to
@@ -31,13 +30,13 @@
 {{ $serviceIDName := include "sch.names.fullCompName" (list . $serviceIDNamePrefix ) -}}
 # ServiceName is used to define the initial part of the service name that we'll register with ICP.
 {{ $serviceName := .sch.chart.components.security.serviceName -}}
-# IAM URL is the internal IAM Token service endpoint.
-{{ $iamURL := .sch.config.security.accesscontroller.iamUrl -}}
-# PDP URL is the internal IAM PDP endpoint.
-{{ $pdpURL := .sch.config.security.accesscontroller.pdpUrl -}}
+# import security definitions
+{{- include "sch.config.init" (list . "security.sch.chart.config.values") | trim -}}
 # import port definitions
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $ports := .sch.config.ports }}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -57,7 +56,8 @@ spec:
       labels:
 {{ $labels | indent 8 }}
       annotations:
-        releaseCandidate: 2018.3.0-RC6
+        # Used for identifying release candidates
+        releaseCandidate: 2018.3.1-RC1
 {{ include "metering" (list . ) | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
@@ -65,27 +65,37 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
       volumes:
         - name: redis-storage
           emptyDir: {}
         - name: public-certs-volume
           secret:
             secretName: {{ $secretName }}
+        - name: ca-certs-volume
+          secret:
+            secretName: {{ $secretName }}
+            items:
+            - key: tls.cluster
+              path: ca-certificates.crt
       {{- include "license.accept.ref" . | indent 6 }}
       affinity:
-      {{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
       containers:
       - name: redis
-        image: {{ include "eventstreams.image" (list . "redis" .Values.global.image.imageTags.redisTag "false") | quote }}
+        image: {{ include "eventstreams.image" (list . "eventstreams-redis" .Values.global.image.imageTags.redisTag "ibmcom") | quote }}
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
         securityContext:
           privileged: false
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: {{ $defaultUser }}
           capabilities:
             drop:
             - all
@@ -99,7 +109,7 @@ spec:
               - -c
               - /usr/local/bin/redis-cli -h $(hostname) ping
           failureThreshold: 2
-          initialDelaySeconds: 30
+          initialDelaySeconds: 10
           periodSeconds: 10
           successThreshold: 1
           timeoutSeconds: 2
@@ -110,7 +120,7 @@ spec:
               - -c
               - /usr/local/bin/redis-cli -h $(hostname) ping
           failureThreshold: 2
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
           periodSeconds: 10
           successThreshold: 1
           timeoutSeconds: 2
@@ -122,7 +132,7 @@ spec:
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: {{ $defaultUser }}
           capabilities:
             drop:
             - all
@@ -131,7 +141,6 @@ spec:
         readinessProbe:
           timeoutSeconds: 15
           periodSeconds: 15
-          initialDelaySeconds: 45
           httpGet:
             port: {{ $ports.security.accessController }}
             path: /v1/alive
@@ -139,7 +148,6 @@ spec:
         livenessProbe:
           timeoutSeconds: 15
           periodSeconds: 15
-          initialDelaySeconds: 60
           httpGet:
             port: {{ $ports.security.accessController }}
             path: /v1/alive
@@ -150,16 +158,15 @@ spec:
           requests:
 {{ toYaml .sch.config.security.accesscontroller.resources.requests | indent 14 }}
         env:
+        {{- include "license.accept.env.ref" . | indent 6 }}
         - name: NAMESPACE
           value: {{ .Release.Namespace | quote }}
         - name: CONTROL_CLUSTER_INGRESS_HOST
           value: ""
         - name: LISTEN_PORT
           value: "{{ $ports.security.accessController }}"
-        - name: IAM_URL
-          value: "{{ $iamURL }}:{{$ports.security.iamTokenGeneration}}"
-        - name: PDP_URL
-          value: "{{ $pdpURL }}:{{$ports.security.iamPolicyDecision}}"
+        - name: ICP_PDP_SUFFIX
+          value: {{ .sch.config.security.iamPDPSuffix | quote}}
         - name: REDIS_HOSTNAME
           value: "localhost"
         - name: TLS_CERT
@@ -171,10 +178,33 @@ spec:
             secretKeyRef:
               name: {{ $serviceIDName }}
               key: "{{ $serviceName }}-{{ $.Release.Name }}-api-key"
+        - name: "IAM_CLIENT_ID"
+          valueFrom:
+            secretKeyRef:
+              name: {{ $oauthSecretName }}
+              key: "username"
+        - name: "IAM_CLIENT_SECRET"
+          valueFrom:
+            secretKeyRef:
+              name: {{ $oauthSecretName }}
+              key: "password"
         - name: PLATFORM
-          value: "es"
+          value: "onprem"
+        - name: "ICP_CLUSTER_EXTERNAL_IP"
+          valueFrom:
+            secretKeyRef:
+              name: {{ $oauthSecretName }}
+              key: "clusterExternalIP"
+        - name: "ICP_CLUSTER_EXTERNAL_PORT"
+          valueFrom:
+            secretKeyRef:
+              name: {{ $oauthSecretName }}
+              key: "clusterExternalPort"
         volumeMounts:
           - name: public-certs-volume
             mountPath: /tls
+            readOnly: true
+          - name: ca-certs-volume
+            mountPath: /etc/ssl/certs
             readOnly: true
 {{ end }}

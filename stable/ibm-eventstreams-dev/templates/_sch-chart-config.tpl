@@ -6,6 +6,13 @@ To override any of these values, modify the templates/_sch-chart-config.tpl file
 */ -}}
 {{- define "sch.chart.config.values" -}}
 sch:
+  securityContext:
+    # This is the default user that should be used by charts that create containers
+    # This user should also be the one created and used in the dockerfile
+    # If an alternate user is required in the dockerfile, the security context user in the container should be changed to reflect this
+    # The user in the security context of the chart (level above container) should be left as default as it will be overriden by the containers user
+    defaultUser: 1000
+
   restrictedNamespaces:
     - kube-system
     - kube-public
@@ -28,8 +35,9 @@ sch:
       dev: "IBM Event Streams Community Edition"
       prod: "IBM Event Streams"
       foundation-prod: "IBM Event Streams Foundation Edition"
+      cip-prod: "IBM Event Streams Cloud Integration Platform Edition"
 
-    productVersion: 2018.3.0
+    productVersion: 2018.3.1
 
     # EDITION_START
     edition: dev
@@ -73,6 +81,9 @@ sch:
           name: "secrets-deleter-job"
         certGenJob:
           name: "cert-gen-job"
+        oauthJobDeleterJob:
+          name: "oauth-jobdeleter-job"
+
 
 
       #
@@ -277,7 +288,7 @@ sch:
         roleMappings:
           name: "role-mappings"
         serviceAccount:
-            name: "security-sa"
+          name: "security-sa"
         accesscontroller:
           service:
             name: "access-controller-svc"

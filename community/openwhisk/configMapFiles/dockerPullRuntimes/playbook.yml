@@ -1,0 +1,48 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+---
+
+# Playbook to prefetch runtime action images from a docker registry for an invoker node
+# as specified by the RUNTIMES_MANIFEST environment variable
+# Note: If RUNTIMES_REGISTRY is not "", it must include a trailing '/'
+
+- hosts: localhost
+  vars:
+    docker_pull_retries: 10
+    docker_pull_delay: 10
+    runtimes_registry: "{{ lookup('env', 'RUNTIMES_REGISTRY') | default() }}"
+    runtimes_registry_username: "{{ lookup('env', 'RUNTIMES_REGISTRY_USERNAME') | default() }}"
+    runtimes_registry_password: "{{ lookup('env', 'RUNTIMES_REGISTRY_PASSWORD') | default() }}"
+    runtimes_manifest: "{{ lookup('env', 'RUNTIMES_MANIFEST') }}"
+    runtimes_manifest_json: "{{ lookup('env', 'RUNTIMES_MANIFEST') | from_json }}"
+
+  tasks:
+    - name: docker login
+      docker_login:
+        registry: "{{ runtimes_registry }}"
+        username: "{{ runtimes_registry_username }}"
+        password: "{{ runtimes_registry_password }}"
+      when: runtimes_registry != "" and runtimes_registry_password is defined
+
+    - name: "Display runtime manifest"
+      debug:
+        var: runtimes_manifest
+
+    - name: "Process runtime manifest"
+      set_fact:
+        docker_images_managed: "{{ runtimes_manifest_json.runtimes.values() | sum(start=[]) | selectattr('deprecated', 'equalto', false)  | map(attribute='image') | list | unique }}"
+        docker_images_blackbox: "{{ runtimes_manifest_json.blackboxes }}"
+
+    - name: "pull runtime action images per manifest"
+      shell: "docker pull {{runtimes_registry}}{{item.prefix}}/{{item.name}}:{{item.tag | default()}}"
+      with_items:
+        - "{{ docker_images_managed }}"
+      retries: "{{ docker_pull_retries }}"
+      delay: "{{ docker_pull_delay }}"
+
+    - name: "pull blackboxes action images per manifest"
+      shell: "docker pull {{runtimes_registry}}{{item.prefix}}/{{item.name}}:{{item.tag | default()}}"
+      with_items:
+        - "{{ docker_images_blackbox }}"
+      retries: "{{ docker_pull_retries }}"
+      delay: "{{ docker_pull_delay }}"

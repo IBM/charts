@@ -86,6 +86,7 @@ The following table contains guidance from IBM on how to build workloads that pr
 | [Metering](#metering) | Charts should include metering annotations so that users can meter usage with the IBM Cloud Private metering service. |
 | [Logging](#logging) | Workload containers should write logs to stdout and stderr, so they can be automatically consumed by the IBM Cloud Private logging service (Elasticsearch/Logstash/Kibana.) Workloads are also encouraged to include provide links to relevant Kibana dashboards in README.md, so that users can download them and import them to Kibana. |
 | [Monitoring](#monitoring) | Workloads should integrate with the default IBM Cloud Private monitoring service (Prometheus/Grafana), by exposing Prometheus metrics through a Kubernetes `Service` and annotating that endpoint so that it will be automatically consumed by the IBM Cloud Private monitoring service. |
+| [License keys and pricing](#license-keys-and-pricing) | If your chart requires a license key to deploy or to otherwise use the workload, this should be stated in the Prerequisites section of the chart's README.md. |
 
 # Detailed guidance
 
@@ -412,3 +413,6 @@ To expose your Prometheus endpoint to the IBM Cloud Private monitoring service, 
 ```
 
 Individual metric names should be prefixed with the name of the workload, (e.g., `ibmmq_object_mqput_bytes`).
+
+## License keys and pricing  
+If your chart requires a license key to deploy or to otherwise use the workload, this should be stated in the Prerequisites section of the chart's README.md. Additionally, instructions on how to acquire keys and information on pricing and trials should also be included or linked to alongside this statement so that users can readily and easily obtain the keys needed to install the chart and use the workload.  

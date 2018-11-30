@@ -1,0 +1,391 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.peer.compName }}
+{{- $labels := include "sch.metadata.labels.standard" (list . $compName) }}
+{{- $annotations := include "sch.metadata.annotations.metering" (list . .sch.chart.metering) }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    orgname: {{ .Values.env.orgMSP }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        productName: {{ .Values.global.productName }}
+        productID: {{ .Values.global.productID }}
+        productVersion: {{ .Chart.Version }}
+      labels:
+        app: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        orgname: {{ .Values.env.orgMSP }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          fsGroup: 2000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.app.arch }}
+        podAntiAffinity:  
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: orgname
+                  operator: In
+                  values:
+                  - {{ .Values.env.orgMSP }}
+              topologyKey: kubernetes.io/hostname                  
+      initContainers:
+      - name: "init"
+{{- if .Values.global.multiarch }}
+        image: "{{ .Values.app.initimage }}:{{ .Values.app.inittag }}"
+{{- else }}
+        image: "{{ .Values.app.initimage }}-{{ .Values.app.arch }}:{{ .Values.app.inittag }}"
+{{- end }}
+        imagePullPolicy: Always
+        securityContext:	
+          privileged: false	
+          allowPrivilegeEscalation: false	
+          readOnlyRootFilesystem: false	
+          capabilities:	
+            drop:	
+            - ALL
+        volumeMounts:
+        - name: certs-secret
+          mountPath: /secret
+        - name: peer-msp
+          mountPath: /certs        
+        - name: init-temp
+          mountPath: /opt        
+        env:
+        {{- include "license.accept.env.ref" . | indent 8 }}
+        - name: TYPE
+          value: peer
+        - name: CRYPTO_JSON_LOCATION
+          value: /secret/secret.json
+        - name: CORE_PEER_MSPCONFIGPATH
+          value: /certs/msp
+        - name: MSP_SECRET_NAME
+          value: {{ .Release.Name }}-peer-mspsecret
+        - name: "MY_POD_NAMESPACE"
+          valueFrom:
+            fieldRef:
+              fieldPath: "metadata.namespace"
+      containers:
+      - name: "peer"
+{{- if .Values.global.multiarch }}
+        image: "{{ .Values.app.image }}:{{ .Values.app.tag }}"
+{{- else }}
+        image: "{{ .Values.app.image }}-{{ .Values.app.arch }}:{{ .Values.app.tag }}"
+{{- end }}
+        imagePullPolicy: Always
+        securityContext:	
+          privileged: false	
+          allowPrivilegeEscalation: false	
+          readOnlyRootFilesystem: false	
+          capabilities:	
+            drop:	
+            - ALL	
+            add:	
+            - NET_BIND_SERVICE
+        env:
+        {{- include "license.accept.env.ref" . | indent 8 }}
+        # - name: CORE_PEER_ADDRESSAUTODETECT
+        #   value: "false"
+        # - name: CORE_PEER_ADDRESS
+        #   value: "0.0.0.0:7051"
+        # - name: CORE_PEER_LISTENADDRESS
+        #   value: "0.0.0.0:7051"
+        # - name: CORE_PEER_EVENTS_ADDRESS
+        #   value: "0.0.0.0:7052"
+        # - name: CORE_PEER_CHAINCODELISTENADDRESS
+        #   value: "0.0.0.0:7053"
+        # - name: CORE_PEER_GOSSIP_BOOTSTRAP
+        #   value: ""
+        # - name: CORE_PEER_GOSSIP_ORGLEADER
+        #   value: ""
+        # - name: CORE_PEER_PROFILE_ENABLED
+        #   value: "true"
+        - name: CORE_VM_ENDPOINT
+          value: "localhost:2375"
+        - name: CORE_CHAINCODE_GOLANG_RUNTIME
+          value: golangruntime:latest
+        - name: CORE_CHAINCODE_CAR_RUNTIME
+          value: carruntime:latest
+        - name: CORE_CHAINCODE_NODE_RUNTIME
+          value: noderuntime:latest
+        - name: CORE_CHAINCODE_BUILDER
+          value: builder:latest
+        - name: CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE
+          value: "bridge"
+        - name: CORE_PEER_MSPCONFIGPATH
+          value: "/certs/msp"
+        - name: CORE_LOGGING_LEVEL
+          value: "debug"
+        - name: CORE_PEER_FILESYSTEMPATH
+          value: "/data/peer/"
+        # - name: CORE_PEER_ID
+        #   value: "fabric-peer"
+        - name: CORE_PEER_LOCALMSPID
+          value: {{ .Values.env.orgMSP }}
+        - name: CORE_PEER_TLS_ENABLED
+          value: "true"
+        - name: CORE_PEER_TLS_CERT_FILE
+          value: "/certs/tls/signcerts/cert.pem"
+        - name: CORE_PEER_TLS_KEY_FILE
+          value: "/certs/tls/keystore/key.pem"
+        - name: CORE_PEER_TLS_ROOTCERT_FILE
+          value: "/certs/tls/cacerts/cacert.pem"
+        {{- if eq .Values.peerinfo.stateDb "couchdb" }}
+        - name: CORE_LEDGER_STATE_STATEDATABASE
+          value: CouchDB
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS
+          value: localhost:5984
+        - name: COUCHDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.app.secret }}
+              key: couchdbusr
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.app.secret }}
+              key: couchdbusr
+        - name: COUCHDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.app.secret }}
+              key: couchdbpwd
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.app.secret }}
+              key: couchdbpwd
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_MAXRETRIESONSTARTUP
+          value: "20"
+        - name: ADD_MORE_USERS
+          value: "true"
+        - name: NUM_USERS
+          value: "1"
+        - name: COUCHDB1_USER
+          value: peer-temp
+        - name: COUCHDB1_PASSWORD
+          value: pass-temp
+        {{- else }}
+        - name: CORE_LEDGER_STATE_STATEDATABASE
+          value: ""
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS
+          value: ""
+        - name: COUCHDB_USER
+          value: ""
+        - name: COUCHDB_PASSWORD
+          value: ""
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME
+          value: ""
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD
+          value: ""
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_MAXRETRIESONSTARTUP
+          value: ""
+        - name: ADD_MORE_USERS
+          value: ""
+        - name: NUM_USERS
+          value: ""
+        - name: COUCHDB1_USER
+          value: ""
+        - name: COUCHDB1_PASSWORD
+          value: ""
+        {{- end }}
+        - name: FABRIC_CFG_PATH
+          value: "/etc/hyperledger/fabric/"
+        - name: GROUP_ID
+          value: "0"
+        - name: USER_ID
+          value: "0"
+        - name: USERNAME
+          value: root
+        ports:
+        - containerPort: 7051
+        - containerPort: 7052
+        - containerPort: 7053
+        livenessProbe:
+          tcpSocket:
+            port: 7051
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          tcpSocket:
+            port: 7051
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.peerResources | indent 10 }}           
+        volumeMounts:
+        - mountPath: /data
+          name: fabric-peer-0
+        - name: peer-msp
+          mountPath: /certs
+    {{- if eq .Values.peerinfo.stateDb "couchdb" }}
+      - name: "couchdb"
+{{- if .Values.global.multiarch }}
+        image: "{{ .Values.peerinfo.couchdbImage }}:{{ .Values.peerinfo.couchdbTag }}"
+{{- else }}
+        image: "{{ .Values.peerinfo.couchdbImage }}-{{ .Values.app.arch }}:{{ .Values.peerinfo.couchdbTag }}"
+{{- end }}
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+            - CHOWN
+            - DAC_OVERRIDE
+            - SETGID
+            - SETUID
+        env:
+        {{- include "license.accept.env.ref" . | indent 8 }}
+        - name: COUCHDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.app.secret }}
+              key: couchdbusr
+        - name: COUCHDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.app.secret }}
+              key: couchdbpwd
+        ports:
+        - containerPort: 5984
+        livenessProbe:
+          tcpSocket:
+            port: 5984
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          tcpSocket:
+            port: 5984
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.couchdbResources | indent 10 }}           
+        volumeMounts:
+        - mountPath: /opt/couchdb/data
+          name: db-data
+    {{- else }}
+        - mountPath: /mnt/data/peer/ledgersData/stateLeveldb
+          name: db-data   
+    {{- end }}
+      - name: "dind" 
+{{- if .Values.global.multiarch }}
+        image: "{{ .Values.app.dindimage }}:{{ .Values.app.dindtag }}"
+{{- else }}
+        image: "{{ .Values.app.dindimage }}-{{ .Values.app.arch }}:{{ .Values.app.dindtag }}"
+{{- end }}
+        imagePullPolicy: Always
+        env:
+        {{- include "license.accept.env.ref" . | indent 8 }}
+        ports:
+        - containerPort: 2375
+        livenessProbe:
+          tcpSocket:
+            port: 2375
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          tcpSocket:
+            port: 2375
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          periodSeconds: 5
+        securityContext: 
+            privileged: true 
+            readOnlyRootFilesystem: false	
+            runAsNonRoot: false	
+            runAsUser: 0	
+            capabilities:	
+              drop:	
+              - ALL	
+              add:	
+              - NET_BIND_SERVICE
+      volumes:
+      - name: fabric-peer-0
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          {{- if .Values.dataPVC.existingClaimName }}
+          claimName: {{ .Values.dataPVC.existingClaimName }}
+          {{- else }}
+          claimName: {{ .Release.Name }}-{{ .Values.dataPVC.name }}
+          {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: db-data
+      {{- if .Values.persistenceDb.enabled }}
+        persistentVolumeClaim:
+          {{- if .Values.statedbPVC.existingClaimName }}
+          claimName: {{ .Values.statedbPVC.existingClaimName }}
+          {{- else }}
+          claimName: "{{ .Release.Name }}-{{ .Values.statedbPVC.name }}"
+          {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: certs-secret
+        secret:
+          secretName: {{ .Values.app.secret }}
+      - name: peer-config
+        configMap: 
+          name: {{ .Release.Name }}-peer-configmap
+      - name: peer-msp
+        emptyDir:
+          medium: Memory
+      - name: init-temp
+        emptyDir:
+          medium: Memory

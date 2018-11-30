@@ -24,6 +24,13 @@
 {{ $iamSecretName := include "sch.names.fullCompName" (list . $securityCompSecretName ) -}}
 # Eventstreams IAM Service Name
 {{ $iamServiceName := .sch.chart.components.security.serviceName -}}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
+# import security definitions
+{{- include "sch.config.init" (list . "security.sch.chart.config.values") | trim -}}
+# Oauth secret name which is used to get the cluster IP and Port
+{{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
+{{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -49,10 +56,14 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
       affinity:
-{{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
       restartPolicy: Never
       containers:
         - name: "security-role-mapping"
@@ -63,7 +74,7 @@ spec:
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
@@ -85,4 +96,18 @@ spec:
                 secretKeyRef:
                   name: "{{ $iamSecretName }}"
                   key: "{{ $iamServiceName }}-{{ $.Release.Name }}-service-id"
+            - name: "CLUSTER_EXTERNAL_IP"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterExternalIP"
+            - name: "CLUSTER_EXTERNAL_PORT"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterExternalPort"
+            - name: ICP_IAM_PAP_SUFFIX
+              value: {{ .sch.config.security.iamPAPSuffix | quote}}
+            - name: ICP_IAM_TOKEN_SUFFIX
+              value: {{ .sch.config.security.iamTokenSuffix | quote}}
 

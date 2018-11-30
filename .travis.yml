@@ -8,6 +8,7 @@ branches:
   only:
   - travisbuild 
   - master
+  - /^tgz_merge_request.*20\d\d$/ 
 
 env:
   - OCTOKIT_API_ENDPOINT="https://github.com/"
@@ -21,10 +22,16 @@ install:
   - echo "In Install path"
   - env | egrep "TRAVIS|MASTER"
   # The process will be very limited, and will look for commits
-  - if [[ ! "$TRAVIS_COMMIT_MESSAGE" = *"from IBM/ibm-source-master"* ]] && [[ "$TRAVIS_PULL_REQUEST" = "false" ]] && [[ "$TRAVIS_BRANCH" = "$MASTER_BRANCH" ]] && [[ "$TRAVIS_EVENT_TYPE" = "push" ]] && [[ "$TRAVIS_REPO_SLUG" = "IBM/charts" ]]; 
+  - if [[ ! "$TRAVIS_COMMIT_MESSAGE" =~ (from IBM/ibm-source-master|Update index with tgz) ]] && [[ "$TRAVIS_PULL_REQUEST" = "false" ]] && [[ "$TRAVIS_BRANCH" = "$MASTER_BRANCH" ]] && [[ "$TRAVIS_EVENT_TYPE" = "push" ]] && [[ "$TRAVIS_REPO_SLUG" = "IBM/charts" ]]; 
       then
         curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash;
         helm init --client-only; 
         .build/bin/diffIndex.sh;
-      else echo "This is a PR, or commit on non-master, no index build";
+      else
+        if [[ "$TRAVIS_REPO_SLUG" = "IBMPrivateCloud/charts" ]] && [[ "$TRAVIS_EVENT_TYPE" = "push" ]] ; 
+          then
+            .build/bin/pushGit.sh;
+          else 
+            echo "This is a PR, or commit on non-master, no index build";
+       fi
     fi

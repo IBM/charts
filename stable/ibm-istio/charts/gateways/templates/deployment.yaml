@@ -4,7 +4,7 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: istio-{{ $key }}
+  name: {{ $key }}
   namespace: {{ $.Release.Namespace }}
   labels:
     chart: {{ template "gateway.chart" $ }}
@@ -27,13 +27,16 @@ spec:
       annotations:
         sidecar.istio.io/inject: "false"
         scheduler.alpha.kubernetes.io/critical-pod: ""
+        productName: {{ $key }}
+        productID: {{ $key }}_{{ $.Chart.Version }}_apachev2_00000
+        productVersion: {{ $.Chart.Version }}
     spec:
-      serviceAccountName: istio-{{ $key }}-service-account
+      serviceAccountName: {{ $key }}-service-account
 {{- if $.Values.global.priorityClassName }}
       priorityClassName: "{{ $.Values.global.priorityClassName }}"
 {{- end }}
       containers:
-        - name: istio-{{ $key }}
+        - name: istio-proxy
           image: "{{ $.Values.global.proxy.repository }}:{{ $.Values.global.proxy.tag }}"
           imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
           ports:
@@ -54,7 +57,7 @@ spec:
           - --connectTimeout
           - '10s' #connectTimeout
           - --serviceCluster
-          - istio-{{ $key }}
+          - {{ $key }}
           - --zipkinAddress
         {{- if $.Values.global.istioNamespace }}
           - zipkin.{{ $.Values.global.istioNamespace }}:9411
@@ -135,10 +138,13 @@ spec:
             mountPath: {{ .mountPath | quote }}
             readOnly: true
           {{- end }}
+{{- if $spec.additionalContainers }}
+{{ toYaml $spec.additionalContainers | indent 8 }}
+{{- end }}
       volumes:
       - name: istio-certs
         secret:
-          secretName: istio.istio-{{ $key }}-service-account
+          secretName: istio.{{ $key }}-service-account
           optional: true
       {{- range $spec.secretVolumes }}
       - name: {{ .name }}
@@ -146,12 +152,18 @@ spec:
           secretName: {{ .secretName | quote }}
           optional: true
       {{- end }}
+      {{- range $spec.configVolumes }}
+      - name: {{ .name }}
+        configMap:
+          name: {{ .configMapName | quote }}
+          optional: true
+      {{- end }}
       nodeSelector:
-      {{- include "nodeselector" $ | indent 6 }}
+{{- include "gateway.nodeselector" $ | indent 6 }}
       tolerations:
-      {{- include "tolerations" $ | indent 6 }}
+{{- include "gateway.tolerations" $ | indent 6 }}
       affinity:
-      {{- include "nodeaffinity" $ | indent 6 }}
+{{- include "nodeaffinity" $ | indent 6 }}
 ---
 {{- end }}
 {{- end }}

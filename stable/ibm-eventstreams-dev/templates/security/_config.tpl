@@ -6,6 +6,10 @@ sch:
     # Security-specific settings not intended for overriding
     #
     security:
+    
+      iamPAPSuffix: "iam-pap"
+      iamPDPSuffix: "iam-pdp"
+      iamTokenSuffix: "iam-token"
 
       accesscontroller:
         
@@ -21,9 +25,5 @@ sch:
 
         # Number of replicas for the access controller server
         replicas: 2
-
-        iamUrl: "https://iam-token-service.kube-system"
-        pdpUrl: "http://iam-pdp.kube-system"
-        papUrl: "http://iam-pap.kube-system"
 
 {{- end -}}

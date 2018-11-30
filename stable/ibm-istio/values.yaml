@@ -6,26 +6,47 @@
 
 # Common settings.
 global:
+
+  # Gateway used for legacy k8s Ingress resources. By default it is
+  # using 'istio:ingress', to match 0.8 config. It requires that
+  # ingress.enabled is set to true. You can also set it
+  # to ingressgateway, or any other gateway you define in the 'gateway'
+  # section.
+  k8sIngressSelector: ingress
+
+  # k8sIngressHttps will add port 443 on the ingress and ingressgateway.
+  # It REQUIRES that the certificates are installed  in the
+  # expected secrets - enabling this option without certificates
+  # will result in LDS rejection and the ingress will not work.
+  k8sIngressHttps: false
+
   proxy:
     repository: ibmcom/istio-proxyv2
-    tag: 1.0.0
-    
+    tag: 1.0.2
+
     # Resources for the sidecar.
     resources:
       requests:
         cpu: 10m
-    #    memory: 128Mi
-    #  limits:
-    #    cpu: 100m
-    #    memory: 128Mi
-    
+      #  memory: 128Mi
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+
+    # Controls number of Proxy worker threads.
+    # If set to 0 (default), then start worker thread for each CPU thread/core.
+    concurrency: 0
+
     # Configures the access log for each sidecar. Setting it to an empty string will
     # disable access log for sidecar.
     accessLogFile: "/dev/stdout"
-    
+
+    #If set to true, istio-proxy container will have privileged securityContext
+    privileged: false
+
     # If set, newly injected sidecars will have core dumps enabled.
     enableCoreDump: false
-    
+
     # istio egress capture whitelist
     # https://istio.io/docs/tasks/traffic-management/egress.html#calling-external-services-directly
     # example: includeIPRanges: "172.30.0.0/16,172.20.0.0/16"
@@ -33,18 +54,18 @@ global:
     # be allowed by the sidecar
     includeIPRanges: "*"
     excludeIPRanges: ""
-    
+
     # istio ingress capture whitelist
     # examples:
     #     Redirect no inbound traffic to Envoy:    --includeInboundPorts=""
     #     Redirect all inbound traffic to Envoy:   --includeInboundPorts="*"
     #     Redirect only selected ports:            --includeInboundPorts="80,8080"
-    # includeInboundPorts: "*"
+    #includeInboundPorts: "*"
     excludeInboundPorts: ""
-    
+
     # This controls the 'policy' in the sidecar injector.
     autoInject: enabled
-    
+
     # Sets the destination Statsd in envoy (the value of the "--statsdUdpAddress" proxy argument
     # would be <host>:<port>).
     # Can also be disabled (e.g. when Mixer is not installed).
@@ -52,71 +73,55 @@ global:
       enabled: true
       host: istio-statsd-prom-bridge
       port: 9125
-  
-  # proxy_init image is the image used to configure iptables.
-  proxyInit:
+
+  proxy_init:
+    # Base name for the proxy_init container, used to configure iptables.
     repository: ibmcom/istio-proxy_init
-    tag: 1.0.0
-  
-  # Not recommended for user to configure this. Hyperkube image to use when creating custom resources
-  kubectl:
-    repository: ibmcom/kubectl
-    tag: v1.11.1
-  
-  # Gateway used for legacy k8s Ingress resources. By default it is
-  # using 'istio:ingress', to match 0.8 config. It requires that
-  # ingress.enabled is set to true. You can also set it
-  # to ingressgateway, or any other gateway you define in the 'gateway'
-  # section.
-  k8sIngressSelector: ingress
-  
-  # k8sIngressHttps will add port 443 on the ingress and ingressgateway.
-  # It REQUIRES that the certificates are installed  in the
-  # expected secrets - enabling this option without certificates
-  # will result in LDS rejection and the ingress will not work.
-  k8sIngressHttps: false
-  
+    tag: 1.0.2
+
   # imagePullPolicy is applied to istio control plane components.
+  # local tests require IfNotPresent, to avoid uploading to dockerhub.
+  # TODO: Switch to Always as default, and override in the local tests.
   imagePullPolicy: IfNotPresent
-  
+
   # controlPlaneMtls enabled. Will result in delays starting the pods while secrets are
   # propagated, not recommended for tests.
   controlPlaneSecurityEnabled: false
-  
+
   # disablePolicyChecks disables mixer policy checks.
   # Will set the value with same name in istio config map - pilot needs to be restarted to take effect.
   disablePolicyChecks: false
-  
+
   # EnableTracing sets the value with same name in istio config map, requires pilot restart to take effect.
   enableTracing: true
-  
+
   # Default mtls policy. If true, mtls between services will be enabled by default.
   mtls:
     # Default setting for service-to-service mtls. Can be set explicitly using
     # destination rules or service annotations.
     enabled: false
-  
+
   # ImagePullSecrets for all ServiceAccount, list of secrets in the same namespace
   # to use for pulling any images in pods that reference this ServiceAccount.
   # Must be set for any clustser configured with privte docker registry.
   imagePullSecrets: []
     # - private-registry-key
-  
+
   # Whether to restrict the applications namespace the controller manages;
   # If not set, controller watches all namespaces
   oneNamespace: false
-  
+
   # Whether to perform server-side validation of configuration.
   configValidation: true
-  
+
   # If set to true, the pilot and citadel mtls will be exposed on the
   # ingress gateway
   meshExpansion: false
-  
+
   # If set to true, the pilot and citadel mtls and the plain text pilot ports
   # will be exposed on an internal gateway
   meshExpansionILB: false
-  
+
   # A minimal set of requested resources to applied to all deployments so that
   # Horizontal Pod Autoscaler will be able to function (if set).
   # Each component can overwrite these default values by adding its own resources
@@ -128,37 +133,36 @@ global:
     # limits:
     #   cpu: 100m
     #   memory: 128Mi
-  
-  # Include the crd definition when generating the template.
-  # For 'helm template' and helm install > 2.10 it should be true.
-  # For helm < 2.9, crds must be installed ahead of time with
-  # 'kubectl apply -f install/kubernetes/helm/istio/templates/crds.yaml
-  # and this options must be set off.
-  crds: true
-  
-  # istio control plane namespace
-  istioNamespace: ""
-  
-  # Omit the istio-sidecar-injector configmap when generate a
-  # standalone gateway. Gateways may be created in namespaces other
-  # than `istio-system` and we don't want to re-create the injector
-  # configmap in those.
-  omitSidecarInjectorConfigMap: false
-  
+
+  # Not recommended for user to configure this. Hyperkube image to use when creating custom resources
+  kubectl:
+    repository: ibmcom/kubectl
+    tag: v1.11.3
+
   # Kubernetes >=v1.11.0 will create two PriorityClass, including system-cluster-critical and
   # system-node-critical, it is better to configure this in order to make sure your Istio pods
   # will not be killed because of low prioroty class.
   # Refer to https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
   # for more detail.
   priorityClassName: ""
+
+  # Include the crd definition when generating the template.
+  # For 'helm template' and helm install > 2.10 it should be true.
+  # For helm < 2.9, crds must be installed ahead of time with
+  # 'kubectl apply -f install/kubernetes/helm/istio/templates/crds.yaml
+  # and this options must be set off.
+  crds: true
+
+  # istio control plane namespace
+  istioNamespace: ""
+
+  # Omit the istio-sidecar-injector configmap when generate a
+  # standalone gateway. Gateways may be created in namespaces other
+  # than `istio-system` and we don't want to re-create the injector
+  # configmap in those.
+  omitSidecarInjectorConfigMap: false
   
-  # Specify(true or false) whether to scheduled to proxy node with label: "proxy"="true" :
-  proxyNode: true
-  # Specify(true or false) whether to scheduled to dedicated node as addon :
-  dedicated: true
-  # Specify extra node selector.
-  extraNodeSelector: {}
-  # Specify architecture (amd64, ppc64le) and weight to be  used for scheduling as follows :
+  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows:
   #   0 - Do not use
   #   1 - Least preferred
   #   2 - No preference
@@ -166,6 +170,7 @@ global:
   arch:
     amd64: "2 - No preference"
     ppc64le: "2 - No preference"
+    s390x: "2 - No preference"
 
 #
 # ingress configuration
@@ -186,6 +191,15 @@ ingress:
       nodePort: 32000
     - port: 443
       name: https
+    selector:
+      istio: ingress
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: proxy
+  # Specify extra node selector.
+  nodeSelector: {}
 
 #
 # Gateways Configuration
@@ -196,8 +210,8 @@ ingress:
 #
 gateways:
   enabled: true
-  
-  ingressgateway:
+
+  istio-ingressgateway:
     enabled: true
     labels:
       app: istio-ingressgateway
@@ -206,12 +220,27 @@ gateways:
     autoscaleMin: 1
     autoscaleMax: 5
     resources: {}
+      # limits:
+      #  cpu: 100m
+      #  memory: 128Mi
+      #requests:
+      #  cpu: 1800m
+      #  memory: 256Mi
+    # Specify which node current component will be scheduled to, this option support 
+    # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+    # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+    # be deployed to ICP management node if set to 'management'.
+    nodeRole: proxy
+    # Specify extra node selector.
+    nodeSelector: {}
+    cpu:
+      targetAverageUtilization: 80
     loadBalancerIP: ""
     serviceAnnotations: {}
     type: LoadBalancer #change to NodePort, ClusterIP or LoadBalancer if need be
 
     ports:
-    ## You can add custom gateway ports
+      ## You can add custom gateway ports
     - port: 80
       targetPort: 80
       name: http2
@@ -230,8 +259,9 @@ gateways:
     - port: 8060
       targetPort: 8060
       name: tcp-citadel-grpc-tls
-    # Telemetry-related ports are enabled in gateway - but will only redirect if
-    # the gateway configration for the various components are enabled.
+    - port: 853
+      targetPort: 853
+      name: tcp-dns-tls
     - port: 15030
       targetPort: 15030
       name: http2-prometheus
@@ -246,7 +276,7 @@ gateways:
       secretName: istio-ingressgateway-ca-certs
       mountPath: /etc/istio/ingressgateway-ca-certs
 
-  egressgateway:
+  istio-egressgateway:
     enabled: true
     labels:
       app: istio-egressgateway
@@ -255,25 +285,34 @@ gateways:
     autoscaleMin: 1
     autoscaleMax: 5
     resources: {}
+    # Specify which node current component will be scheduled to, this option support 
+    # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+    # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+    # be deployed to ICP management node if set to 'management'.
+    nodeRole: proxy
+    # Specify extra node selector.
+    nodeSelector: {}
+    cpu:
+      targetAverageUtilization: 80
     serviceAnnotations: {}
     type: ClusterIP #change to NodePort or LoadBalancer if need be
     ports:
-    - port: 80
-      name: http2
-    - port: 443
-      name: https
+      - port: 80
+        name: http2
+      - port: 443
+        name: https
     secretVolumes:
-    - name: egressgateway-certs
-      secretName: istio-egressgateway-certs
-      mountPath: /etc/istio/egressgateway-certs
-    - name: egressgateway-ca-certs
-      secretName: istio-egressgateway-ca-certs
-      mountPath: /etc/istio/egressgateway-ca-certs
-  
+      - name: egressgateway-certs
+        secretName: istio-egressgateway-certs
+        mountPath: /etc/istio/egressgateway-certs
+      - name: egressgateway-ca-certs
+        secretName: istio-egressgateway-ca-certs
+        mountPath: /etc/istio/egressgateway-ca-certs
+
   # Mesh ILB gateway creates a gateway of type InternalLoadBalancer,
   # for mesh expansion. It exposes the mtls ports for Pilot,CA as well
   # as non-mtls ports to support upgrades and gradual transition.
-  ilbgateway:
+  istio-ilbgateway:
     enabled: false
     labels:
       app: istio-ilbgateway
@@ -285,6 +324,18 @@ gateways:
       requests:
         cpu: 800m
         memory: 512Mi
+      #limits:
+      #  cpu: 1800m
+      #  memory: 256Mi
+    # Specify which node current component will be scheduled to, this option support 
+    # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+    # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+    # be deployed to ICP management node if set to 'management'.
+    nodeRole: proxy
+    # Specify extra node selector.
+    nodeSelector: {}
+    cpu:
+      targetAverageUtilization: 80      
     loadBalancerIP: ""
     serviceAnnotations: {}
     type: LoadBalancer
@@ -298,8 +349,8 @@ gateways:
     - port: 8060
       targetPort: 8060
       name: tcp-citadel-grpc-tls
-    # Port 5353 is forwarded to kube-dns
-    - port: 5353
+    # Port 853 is reserved for the kube-dns gateway
+    - port: 853
       name: tcp-dns
     secretVolumes:
     - name: ilbgateway-certs
@@ -312,14 +363,21 @@ gateways:
 #
 # sidecar-injector webhook configuration
 #
-sidecarinjectorwebhook:
+sidecarInjectorWebhook:
   enabled: true
   replicaCount: 1
-  enableNamespacesByDefault: false
   image:
     repository: ibmcom/istio-sidecar_injector
-    tag: 1.0.0
+    tag: 1.0.2
+  enableNamespacesByDefault: false
   resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
 
 #
 # galley configuration
@@ -329,8 +387,15 @@ galley:
   replicaCount: 1
   image:
     repository: ibmcom/istio-galley
-    tag: 1.0.0
+    tag: 1.0.2
   resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
 
 #
 # mixer configuration
@@ -340,23 +405,30 @@ mixer:
   replicaCount: 1
   image:
     repository: ibmcom/istio-mixer
-    tag: 1.0.0
+    tag: 1.0.2
   resources: {}
-  
-  policy:
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
+
+  istio-policy:
     autoscaleEnabled: true
     autoscaleMin: 1
     autoscaleMax: 5
     cpu:
       targetAverageUtilization: 80
-  
-  telemetry:
+
+  istio-telemetry:
     autoscaleEnabled: true
     autoscaleMin: 1
     autoscaleMax: 5
     cpu:
       targetAverageUtilization: 80
-  
+
   prometheusStatsdExporter:
     repository: ibmcom/prom-statsd-exporter
     tag: v0.6.0
@@ -369,10 +441,10 @@ pilot:
   enabled: true
   replicaCount: 1
   autoscaleMin: 1
-  autoscaleMax: 1
+  autoscaleMax: 5
   image:
     repository: ibmcom/istio-pilot
-    tag: 1.0.0
+    tag: 1.0.2
   sidecar: true
   traceSampling: 100.0
   # Resources for a small pilot install
@@ -380,6 +452,18 @@ pilot:
     requests:
       cpu: 500m
       memory: 2048Mi
+  env:
+    PILOT_PUSH_THROTTLE_COUNT: 100
+    GODEBUG: gctrace=2
+  cpu:
+    targetAverageUtilization: 80
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
 
 #
 # security configuration
@@ -387,16 +471,23 @@ pilot:
 security:
   enabled: true
   replicaCount: 1
-  selfSigned: true # indicate if self-signed CA is used.
   image:
     repository: ibmcom/istio-citadel
-    tag: 1.0.0
+    tag: 1.0.2
+  selfSigned: true # indicate if self-signed CA is used.
   resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
 
 #
 # addons configuration
 #
-telemetrygateway:
+telemetry-gateway:
   gatewayName: ingressgateway
   grafanaEnabled: false
   prometheusEnabled: false
@@ -406,7 +497,9 @@ grafana:
   replicaCount: 1
   image:
     repository: ibmcom/istio-grafana
-    tag: 1.0.0
+    tag: 1.0.2
+  persist: false
+  storageClassName: ""
   security:
     enabled: false
     secretName: grafana
@@ -418,6 +511,13 @@ grafana:
     type: ClusterIP
     externalPort: 3000
   resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
 
 prometheus:
   enabled: true
@@ -431,13 +531,20 @@ prometheus:
       enabled: false
       port: 32090
   resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
 
 servicegraph:
   enabled: false
   replicaCount: 1
   image:
     repository: ibmcom/istio-servicegraph
-    tag: 1.0.0
+    tag: 1.0.2
   service:
     annotations: {}
     name: http
@@ -457,6 +564,14 @@ servicegraph:
       #   hosts:
       #     - servicegraph.local
   resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
+  # prometheus addres
   prometheusAddr: http://prometheus:9090
 
 tracing:
@@ -465,9 +580,10 @@ tracing:
   jaeger:
     image:
       repository: ibmcom/jaegertracing-all-in-one
-      tag: 1.5
+      tag: 1.7
     memory:
-      maxTraces: 50000
+      max_traces: 50000
+    contextPath: /jaeger
     ingress:
       enabled: false
       # Used to create an Ingress record.
@@ -501,13 +617,21 @@ tracing:
       #   hosts:
       #     - tracing.local
   resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
 
 kiali:
   enabled: false
   replicaCount: 1
   image:
     repository: ibmcom/kiali
-    tag: istio-release-1.0
+    tag: v0.8
+  contextPath: /kiali
   ingress:
     enabled: false
     ## Used to create an Ingress record.
@@ -528,11 +652,18 @@ kiali:
 
     # Override the automatically detected Grafana URL, usefull when Grafana service has no ExternalIPs
     grafanaURL: ""
-    
+
     # Override the automatically detected Jaeger URL, usefull when Jaeger service has no ExternalIPs
     jaegerURL: ""
   resources: {}
-  
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}
+
 # Certmanager uses ACME to sign certificates. Since Istio gateways are
 # mounting the TLS secrets the Certificate CRDs must be created in the
 # istio-system namespace. Once the certificate has been created, the
@@ -540,7 +671,6 @@ kiali:
 # restart, DestinationRules can be created using the ACME-signed certificates.
 certmanager:
   enabled: false
-  replicaCount: 1
   image:
     repository: ibmcom/cert-manager
     tag: v0.3.1
@@ -548,7 +678,7 @@ certmanager:
   extraArgs: []
   podAnnotations: {}
   podLabels: {}
-  
+
   # Optional DNS settings, useful if you have a public and private DNS zone for
   # the same domain on Route 53. What follows is an example of ensuring
   # cert-manager can access an ingress or DNS TXT records at all times.
@@ -559,6 +689,12 @@ certmanager:
   #   nameservers:
   #     - "1.1.1.1"
   #     - "8.8.8.8"
-  
   email: ""
   resources: {}
+  # Specify which node current component will be scheduled to, this option support 
+  # two values: 'proxy' and 'management', and will only be applied to ICP Cluster.
+  # If set to 'proxy', current component will be deployed to ICP proxy node; It will 
+  # be deployed to ICP management node if set to 'management'.
+  nodeRole: management
+  # Specify extra node selector.
+  nodeSelector: {}

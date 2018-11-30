@@ -20,6 +20,8 @@
 {{ $kafkaHeadlessName :=  (include "sch.names.fullCompName" (list . $kafkaHeadless)) -}}
 {{ $zookeeperHeadless := .sch.chart.components.zookeeper.headless.name -}}
 {{ $zookeeperHeadlessName :=  (include "sch.names.fullCompName" (list . $zookeeperHeadless)) }}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -33,10 +35,19 @@ spec:
   imagePullSecrets:
     - name: {{ .Values.global.image.pullSecret }}
   {{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: {{ $defaultUser }}
+    fsGroup: 405
+  affinity:
+{{ include "customNodeaffinity"  (list .) | indent 4 }}
   restartPolicy: Never
   containers:
     - name: "helm-test"
-      image: {{ include "eventstreams.image" (list . "alpine" .Values.global.image.imageTags.alpineTag "false") | quote }}
+      image: {{ include "eventstreams.image" (list . "eventstreams-alpine" .Values.global.image.imageTags.alpineTag "ibmcom") | quote }}
       imagePullPolicy: {{ .Values.global.image.pullPolicy }}
       securityContext:
         privileged: false
@@ -44,6 +55,9 @@ spec:
         allowPrivilegeEscalation: false
         runAsNonRoot: true
         runAsUser: 405
+        capabilities:
+          drop:
+          - all
       command:
         - /bin/sh
         - -c

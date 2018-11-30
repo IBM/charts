@@ -30,3 +30,34 @@ Create chart name and version as used by the chart label.
 {{- define "gateway.chart" -}}
 {{- .Chart.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+{{- define "gateway.nodeselector" -}}
+{{- if contains "icp" .Capabilities.KubeVersion.GitVersion -}}
+{{- range $key, $spec := .Values -}}
+{{- if and (ne $key "global") (ne $key "enabled") -}}
+  {{- if eq $spec.nodeRole "proxy" }}
+  proxy: "true"
+  {{- end -}}
+  {{- if eq $spec.nodeRole "management" }}
+  management: "true"
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{- define "gateway.tolerations" -}}
+{{- if contains "icp" .Capabilities.KubeVersion.GitVersion -}}
+{{- range $key, $spec := .Values -}}
+{{- if and (ne $key "global") (ne $key "enabled") -}}
+{{- if or (eq $spec.nodeRole "proxy") (eq $spec.nodeRole "management") }}
+- key: "dedicated"
+  operator: "Exists"
+  effect: "NoSchedule"
+- key: CriticalAddonsOnly
+  operator: Exists
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}

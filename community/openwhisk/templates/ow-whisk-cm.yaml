@@ -1,0 +1,36 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+# There are some variables that a user must define for their deployment.
+# Check for those values here and attempt to give helpful error messages.
+#
+{{- if ne .Values.whisk.ingress.type "LoadBalancer" }}
+# whisk.ingress.type is {{ required "You must provide a value for whisk.ingress.type (See docs/ingress.md)" .Values.whisk.ingress.type }}
+# whisk.ingress.apiHostName is {{ required "You must provide a value for whisk.ingress.apiHostName (See docs/ingress.md)" .Values.whisk.ingress.apiHostName }}
+# whisk.ingress.apiHostPort is {{ required "You must provide a value for whisk.ingress.apiHostPort (See docs/ingress.md)" .Values.whisk.ingress.apiHostPort }}
+{{- end }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: whisk.config
+  labels:
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+data:
+  whisk_info_date: {{ .Values.whisk.versions.openwhisk.buildDate | quote }}
+  whisk_info_buildNo: {{ .Values.whisk.versions.openwhisk.buildNo | quote }}
+  whisk_cli_version_tag: {{ .Values.whisk.versions.openwhiskCli.tag | quote }}
+  whisk_system_namespace: {{ .Values.whisk.systemNameSpace | quote }}
+{{- if eq .Values.whisk.ingress.type "LoadBalancer" }}
+  whisk_api_host_proto: "https"
+  whisk_api_host_port: {{ .Values.nginx.httpsPort | quote }}
+  whisk_api_host_name: "{{ .Values.nginx.name }}.{{ .Release.Namespace }}.svc.{{ .Values.k8s.domain }}"
+  whisk_api_host_nameAndPort: "{{ .Values.nginx.name }}.{{ .Release.Namespace }}.svc.{{ .Values.k8s.domain }}:{{ .Values.nginx.httpsPort }}"
+  whisk_api_host_url: "https://{{ .Values.nginx.name }}.{{ .Release.Namespace }}.svc.{{ .Values.k8s.domain }}:{{ .Values.nginx.httpsPort }}"
+{{- else }}
+  whisk_api_host_proto: {{ .Values.whisk.ingress.apiHostProto | quote }}
+  whisk_api_host_port: {{ .Values.whisk.ingress.apiHostPort | quote }}
+  whisk_api_host_name: {{ .Values.whisk.ingress.apiHostName | quote }}
+  whisk_api_host_nameAndPort: "{{ .Values.whisk.ingress.apiHostName }}:{{ .Values.whisk.ingress.apiHostPort }}"
+  whisk_api_host_url: "{{ .Values.whisk.ingress.apiHostProto }}://{{ .Values.whisk.ingress.apiHostName }}:{{ .Values.whisk.ingress.apiHostPort }}"
+{{- end }}

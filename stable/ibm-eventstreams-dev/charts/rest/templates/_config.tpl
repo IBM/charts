@@ -11,7 +11,7 @@ sch:
       # ref: http://kubernetes.io/docs/user-guide/compute-resources/
       resources:
         limits:
-          cpu: 1000m
+          cpu: 4000m
           memory: 2Gi
         requests:
           cpu: 500m
