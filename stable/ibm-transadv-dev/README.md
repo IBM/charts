@@ -1,12 +1,27 @@
+# IBM CLOUD TRANSFORMATION ADVISOR
+
+Useful videos can be found [here](https://transformationadvisor.github.io/video/).
+
 ## Introduction
 
-[Transformation Advisor](https://developer.ibm.com/recipes/tutorials/deploying-transformation-advisor-into-ibm-cloud-private/) has the capability to quickly evaluate your on-premise applications for rapid deployment on WebSphere Application Server and Liberty on Public and/or Private Cloud environments. 
+[IBM Cloud Transformation Advisor](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.0/featured_applications/transformation_advisor.html) helps you plan, prioritize, and package your on-premises workloads for modernization on IBM Cloud and IBM Cloud Private. 
 
-Transformation Advisor will:
- - Gather your preferences regarding your current and desired target environments
- - Via a downloaded agent it will analyse your existing applications and upload the results to a single location
- - Provide recommendations for migration and development cost estimates to undertake the migrations across different platforms
- - Automatically create the necessary images and deploy your application directly into [IBM Cloud Private](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0.2/featured_applications/transformation_advisor.html) 
+IBM Cloud Transformation Advisor will:
+ - Gather your preferences regarding your current on-premises environment and desired cloud environments
+ - Analyze your existing middleware deployments and upload the results to the IBM Cloud Transformation Advisor UI with a downloaded data collector
+ - Provide recommendations for cloud migration and modernization as well as an estimated effort to migrate to different platforms
+ - Create necessary deployment artifacts to accelerate your migration into IBM Cloud and IBM Cloud Private
+
+IBM Cloud Transformation Advisor can scan and analyze the following on-premises workloads. The list is frequently growing, so check back often for what's new!
+
+**Java EE application servers**
+- WebSphere Application Server v7+ (application-only scanning v6.1+)
+- Oracle tm WebLogic v6.x+
+- Redhat tm JBoss v4.x+
+- Java applications directly 
+
+**Messaging**
+- IBM MQ v7+
 
 ## Chart Details
 The Transformation Advisor is delivered as an interconnected set of pods and kubernetes services. It consists of three pods: server, ui and database.
@@ -38,7 +53,7 @@ spec:
     path: "/usr/data"
 ```
 
-In case NFS PV is used one needs to make sure this folder exists on a disk where the data is stored and that it has enough permissions. This is to avoid "permission for changing ownership" error:
+In case NFS PV is used one needs to make sure this folder exists on a disk where the data is stored and that it has enough permissions (NOTE: folder MUST have this name "/opt/couchdb/data" as it is referred from the charts). This is to avoid "permission for changing ownership" error:
 ```bash
 mkdir -p /opt/couchdb/data
 ```
@@ -82,7 +97,28 @@ chmod -R 770 /opt/couchdb/data
 | Server     | 1           | 2                   |                         |
 | UI         | 1           | 2                   |                         |
 
-## PodSecurityPolicy Requirements
+## Install into a non-default namespace
+
+1. You need to follow the **PodSecurityPolicy Requirements** section below to create a namespace, service account, pod security policy, a role that has the policy and bind the
+role to the service account.
+
+2. After installation, TA with Ingress will not be enabled automatically unless you have registered OIDC client with the same OIDC client id, OIDC client secret, and TA release name.
+
+3. To enabled TA, you need an Admin to run the script at the bottom of your helm release page. Here is how to go to helm release page: 
+Click the hamburger menu on the left upper corner in the ICP console > Workloads > Helm Releases > Click the TA release name you just created > Notes section is at the bottom of the page
+
+## PodSecurityPolicy Requirements 
+
+NOTE: ICP 3.1.1+ provides a pre-defined set of PodSecurityPolicies:
+* ibm-restricted-psp (default PSP, most-restrictive)
+* ibm-anyuid-psp
+* ibm-anyuid-hostpath-psp
+* ibm-anyuid-hostaccess-psp
+* ibm-privileged-psp (least-restrictive)   
+
+Select any of those along with the preselected ibm-restricted-psp while creating the namespace for Transformation Advisor. Installation will use default settings. No additional steps are needed.  
+
+In case of a custom PSP being required:  
 
 * If you have [pod security policy control](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#enabling-pod-security-policies) enabled, you must have a [PodSecurityPolicy](https://kubernetes.io/docs/concepts/policy/pod-security-policy/) that supports the following [securityContext](https://kubernetes.io/docs/concepts/policy/security-context/) settings:
   * capabilities:
@@ -160,6 +196,7 @@ kubectl -n ta create rolebinding ta-sa:psp:unprivileged \
 
 ## Prerequisites
 
+* If ingress is enabled, access to "services" namespace is required to set up authentication. 
 * If persistence is enabled but no dynamic provisioning is used, Persistent Volumes must be created.
     
 ### Secret
@@ -194,15 +231,13 @@ The command deploys `ibm-transadv-dev` on the Kubernetes cluster in the default 
 > **Note**: Those parameters are required for install `authentication.icp.edgeIp`, `authentication.icp.secretName`
 
 ## Open Transformation Advisor UI
-- From Menu navigate to Workloads -> Deployments
-- Click "ibm-transadv-dev-ui" deployment
-- Click on Endpoint "access 3000"
+- From Transformation Advisor release
+- Click "Launch" button
+- Click "release-name"-ui  
 
-If ingress is used in ICP 2.1.0.1 or 2.1.0.2
-- From Menu navigate to Workloads -> Deployments
-- Click "ibm-transadv-dev-ui" deployment
-- Manually construct the URL of that form https://`<Ingress IP`>/`<Release name`>-ui
-- "Release name" can be taken from the **Expose details** section in the "ibm-transadv-dev-ui" deployment page
+(If "View In Menu" option is enabled on install)  
+- From Menu navigate to Tools
+- Click "Transformation"
 
 ## Configuration
 
@@ -222,7 +257,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | authentication.oidc.clientSecret                    | a OIDC registry will be created with this secret             | 94b6cbce793d0606c0df9e8d656a159f0c06631b                |
 | security.serviceAccountName                         | name of the service account to use                           | default                                                 |
 | couchdb.image.repository                            | couchdb image repository                                     | ibmcom/transformation-advisor-db                        |
-| couchdb.image.tag                                   | couchdb image tag                                            | 1.8.1                                                   |
+| couchdb.image.tag                                   | couchdb image tag                                            | 1.9.0                                                   |
 | couchdb.image.pullPolicy                            | couchdb image pull policy                                    | IfNotPresent                                            |
 | couchdb.resources.requests.memory                   | requests memory                                              | 2Gi                                                     |
 | couchdb.resources.requests.cpu                      | requests cpu                                                 | 1000m                                                   |
@@ -235,7 +270,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | couchdb.persistence.existingClaim                   | existing pv claim                                            | ""                                                      |
 | couchdb.persistence.storageClassName                | couchdb storage class name                                   | ""                                                      |
 | transadv.image.repository                           | transadv server image                                        | ibmcom/transformation-advisor-server                    |
-| transadv.image.tag                                  | transadv server image tag                                    | 1.8.1                                                   |
+| transadv.image.tag                                  | transadv server image tag                                    | 1.9.0                                                   |
 | transadv.image.pullPolicy                           | image pull policy                                            | IfNotPresent                                            |
 | transadv.resources.requests.memory                  | requests memory                                              | 2Gi                                                     |
 | transadv.resources.requests.cpu                     | requests cpu                                                 | 1000m                                                   |
@@ -243,7 +278,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadv.resources.limits.cpu                       | limits cpu                                                   | 16000m                                                  |
 | transadv.service.nodePort                           | transadv sevice node port                                    | 30111                                                   |
 | transadvui.image.repository                         | transadv ui image                                            | ibmcom/transformation-advisor-ui                        |
-| transadvui.image.tag                                | transadv ui image tag                                        | 1.8.1                                                   |
+| transadvui.image.tag                                | transadv ui image tag                                        | 1.9.0                                                   |
 | transadvui.image.pullPolicy                         | image pull policy                                            | IfNotPresent                                            |
 | transadvui.resources.requests.memory                | requests memory                                              | 2Gi                                                     |
 | transadvui.resources.requests.cpu                   | requests cpu                                                 | 1000m                                                   |
@@ -258,6 +293,10 @@ The following tables lists the configurable parameters of the Transformation Adv
 
 - This chart should only use the default image tags provided with the chart. Different image versions might not be compatible with different versions of this chart.
 
+## FAQ
+
+For more help, or if you are experiencing issues please refer to the FAQ [here](https://transformationadvisor.github.io/).
+
 ## Copyright
 
-© Copyright IBM Corporation 2017. All Rights Reserved.
+© Copyright IBM Corporation 2018. All Rights Reserved.

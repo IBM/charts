@@ -46,7 +46,7 @@ Check if tag contains specific platform suffix and if not set based on kube plat
 {{- define "platform" -}}
 {{- if not .Values.image.arch }}
   {{- if (eq "linux/amd64" .Capabilities.KubeVersion.Platform) }}
-    {{- printf "-%s" "x86_64" }}
+    {{- printf "-%s" "amd64" }}
   {{- end -}}
   {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
     {{- printf "-%s" "ppc64le" }}
@@ -56,7 +56,7 @@ Check if tag contains specific platform suffix and if not set based on kube plat
   {{- end -}}
 {{- else -}}
   {{- if eq .Values.image.arch "amd64" }}
-    {{- printf "-%s" "x86_64" }}
+    {{- printf "-%s" "amd64" }}
   {{- else -}}
     {{- printf "-%s" .Values.image.arch }}
   {{- end -}}

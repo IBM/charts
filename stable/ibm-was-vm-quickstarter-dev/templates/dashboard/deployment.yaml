@@ -1,0 +1,80 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $compName := .sch.chart.components.dashboard.name }}
+{{- $commonName := .sch.chart.components.common.name }}
+{{- $brokerName := .sch.chart.components.broker.name }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "selector.matchLabels" (list . $compName) | indent 6 }}
+  replicas: 1
+  revisionHistoryLimit: 3
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAntiAffinity" . | indent 6 }}
+      containers:
+        - name: {{ $compName | quote }}
+          image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          readinessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          env:
+            - name: FUNC_PROVIDER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+                  key: providerUsername
+            - name: FUNC_PROVIDER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+                  key: providerPassword
+            - name: IAM_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+                  key: iamClientId
+            - name: IAM_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+                  key: iamClientSecret
+            - name: ICP_BASE_URL
+              value: {{ .Values.iam.endpoint | quote }}
+            - name: PROXY_PATH
+              value: {{ .Values.dashboard.ingress.path | quote }}
+            - name: BROKER_PROXY_PATH
+              value: {{ .Values.broker.ingress.path | quote }}
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret | quote }}
+      {{- end }}

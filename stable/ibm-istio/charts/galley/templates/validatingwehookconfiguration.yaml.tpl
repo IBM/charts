@@ -1,4 +1,4 @@
-{{- define "validatingwebhookconfiguration.yaml.tpl" }}
+{{ define "validatingwebhookconfiguration.yaml.tpl" }}
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:

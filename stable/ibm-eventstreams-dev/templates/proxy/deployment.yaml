@@ -40,6 +40,8 @@
 # import port definitions
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $ports := .sch.config.ports }}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -66,10 +68,14 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
       affinity:
-{{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
       containers:
         - name: "proxy"
           image: {{ include "eventstreams.image" (list . "eventstreams-kafka-proxy" .Values.global.image.imageTags.kafkaProxyTag "true") | quote }}
@@ -79,7 +85,7 @@ spec:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all

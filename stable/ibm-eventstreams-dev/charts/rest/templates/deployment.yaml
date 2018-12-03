@@ -44,23 +44,22 @@
 # Kafka proxy config map used to allow geo-replicators access to this cluster
 {{ $kafkaProxyConfigMap := .sch.chart.components.proxy.configMap.name -}}
 {{ $kafkaProxyConfigMapName := include "sch.names.fullCompName" (list . $kafkaProxyConfigMap) | quote -}}
+# import security definitions
+{{- include "sch.config.init" (list . "security.sch.chart.config.values") | trim -}}
 # import port definitions
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $ports := .sch.config.ports }}
 # Oauth secret name which is used to get the cluster name
 {{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
 {{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) | quote -}}
-{{- $securityConfig := include "sch.config.init" (list . "security.sch.chart.config.values") -}}
-# IAM URL is the internal IAM Token service endpoint.
-{{ $iamURL := .sch.config.security.accesscontroller.iamUrl -}}
-# PAP URL is the internal IAM PAP endpoint.
-{{ $papURL := .sch.config.security.accesscontroller.papUrl -}}
 # Get accessController service name
 {{ $accessControllerService := .sch.chart.components.security.accesscontroller.service.name -}}
 {{ $accessControllerServiceName := include "sch.names.fullCompName" (list . $accessControllerService) -}}
 # Proxy secret name which is used to get the cluster ca cert
 {{ $proxySecret := .sch.chart.components.proxy.secret.name -}}
 {{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecret) | quote -}}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -87,8 +86,12 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
       volumes:
       {{- include "license.accept.ref" . | indent 6 }}
       {{- if $replicatorEnabled }}
@@ -115,16 +118,16 @@ spec:
                   - key: externalHostOrIP
                     path: externalHostOrIP
       affinity:
-      {{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
       initContainers:
         - name: "wait-for-kafka-headless"
-          image: {{ include "eventstreams.image" (list . "busybox" .Values.global.image.imageTags.busyboxTag "false") | quote }}
+          image: {{ include "eventstreams.image" (list . "eventstreams-busybox" .Values.global.image.imageTags.busyboxTag "ibmcom") | quote }}
           securityContext:
             privileged: false
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
@@ -138,7 +141,7 @@ spec:
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all
@@ -170,7 +173,7 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 10
             successThreshold: 1
-            failureThreshold: 3
+            failureThreshold: 6
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
             - name: KAFKA_STS_NAME
@@ -194,27 +197,40 @@ spec:
                 secretKeyRef:
                   name: {{ $proxySecretName }}
                   key: "tls.cluster"
+            - name: "CLUSTER_EXTERNAL_IP"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterExternalIP"
+            - name: "CLUSTER_EXTERNAL_PORT"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterExternalPort"
             - name: KAFKA_BOOTSTRAP_URL
               value: "{{ $kafkaHeadlessServiceName }}.{{ .Release.Namespace }}:{{ $ports.kafka.internalEventStreamsSecureIntercept }}"
             - name: ZOOKEEPER_CONNECT
               value: "{{ $zookeeperHeadlessServiceName }}.{{ .Release.Namespace }}:{{ $ports.zookeeper.client }}"
             - name: INDEX_MANAGER_URL
               value: "{{ $indexmgrServiceName }}.{{ .Release.Namespace }}:{{ $ports.indexmgr.api }}"
-            - name: IAM_TOKEN_URL
-              value: "{{ $iamURL }}:{{$ports.security.iamTokenGeneration}}"
-            - name: PAP_URL
-              value: "{{ $papURL }}:{{$ports.security.iamPolicyAdministration}}"
+            - name: ICP_PAP_SUFFIX
+              value: {{ .sch.config.security.iamPAPSuffix | quote}}
+            - name: ICP_IAM_TOKEN_SUFFIX
+              value: {{ .sch.config.security.iamTokenSuffix | quote}}
             - name: ACCESS_CONTROLLER_SERVICE_NAME
               value: {{ $accessControllerServiceName | quote}}
             - name: ACCESS_CONTROLLER_SERVICE_PORT
               value: {{ $ports.security.accessController | quote}}
             - name: PROMETHEUS_HOST
               valueFrom:
-                configMapKeyRef:
-                  name: {{ $kafkaProxyConfigMapName }}
-                  key: "externalHostOrIP"
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterExternalIP"
             - name: PROMETHEUS_PORT
-              value: "8443"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterExternalPort"
             # - name: BOOTSTRAP_SERVERS
             #   valueFrom:
             #    configMapKeyRef:
@@ -282,7 +298,7 @@ spec:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
               - all

@@ -4,7 +4,7 @@
 
 ## Introduction
 
-This chart is installed on remote clusters to connect with the Istio control plane on a local cluster, to support the [Istio multi-cluster](https://istio.io/docs/setup/kubernetes/multicluster-install/) feature. 
+This chart is installed on remote clusters to connect with the Istio control plane on a local cluster, to support the [Istio multi-cluster](https://istio.io/docs/setup/kubernetes/multicluster-install/) feature.
 
 Multicluster functions by enabling Kubernetes control planes running a remote configuration to connect to **one** Istio control plane. Once one or more remote Kubernetes clusters are connected to the Istio control plane, Envoy can then communicate with the **single** Istio control plane and form a mesh network across multiple Kubernetes clusters.
 
@@ -49,9 +49,11 @@ The `istio-remote` helm chart requires the four specific variables to be configu
 | Parameter | Description | Values | Default |
 | --------- | ----------- | ------ | ------- |
 | `global.proxy.repository` | Specifies the proxy image location | valid image repository | `ibmcom/istio-proxyv2` |
-| `global.proxy.tag` | Specifies the proxy image version | valid image tag | `1.0.0` |
+| `global.proxy.tag` | Specifies the proxy image version | valid image tag | `1.0.2` |
 | `global.proxy.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | `{requests.cpu: 100m, requests.memory: 128Mi}` |
+| `global.proxy.concurrency` | Controls number of proxy worker threads. If set to 0 (default), then start worker thread for each CPU thread/core | valid number(>=0) | `0` |
 | `global.proxy.accessLogFile`| Specifies the access log for each sidecar, an empty string will disable access log for sidecar | valid file path or empty string | `/dev/stdout` |
+| `global.proxy.privileged` | Configure privileged securityContext for proxy. If set to true, istio-proxy container will have privileged securityContext | true/false | `false` |
 | `global.proxy.enableCoreDump` | Specifies whether to enable debug information for envoy sidecar | true/false | `false` |
 | `global.proxy.includeIPRanges` | Specifies istio egress capture whitelist | example: includeIPRanges: "172.30.0.0/16,172.20.0.0/16" | `*` |
 | `global.proxy.excludeIPRanges` | Specifies istio egress capture blacklist | example: excludeIPRanges: "172.40.0.0/16,172.50.0.0/16" | `""` |
@@ -60,11 +62,11 @@ The `istio-remote` helm chart requires the four specific variables to be configu
 | `global.proxy.envoyStatsd.enabled` | Specifies whether to enable the destination statsd in envoy | true/false | `true` |
 | `global.proxy.envoyStatsd.host` | Specifies host for the destination statsd in envoy | destination statsd host | `istio-statsd-prom-bridge` |
 | `global.proxy.envoyStatsd.port` | Specifies host port for the destination statsd in envoy | destination statsd port | `9125` |
-| `global.proxyInit.repository` | Specifies the proxy init image location | valid image repository | `ibmcom/istio-proxy_init` |
-| `global.proxyInit.tag` | Specifies the proxy init image version | valid image tag | `1.0.0` |
+| `global.proxy_init.repository` | Specifies the proxy init image location | valid image repository | `ibmcom/istio-proxy_init` |
+| `global.proxy_init.tag` | Specifies the proxy init image version | valid image tag | `1.0.2` |
 | `global.imagePullPolicy` | Specifies the image pull policy | valid image pull policy | `IfNotPresent` |
 | `global.kubectl.repository` | Specifies the kubectl image location | valid image repository | `ibmcom/kubectl` |
-| `global.kubectl.tag` | Specifies the kubectl image version | valid image tag | `v1.11.1` |
+| `global.kubectl.tag` | Specifies the kubectl image version | valid image tag | `v1.11.3` |
 | `global.controlPlaneSecurityEnabled` | Specifies whether control plane mTLS is enabled | true/false | `false` |
 | `global.disablePolicyChecks` | Specifies whether to disables mixer policy checks | true/false | `false` |
 | `global.enableTracing` | Specifies whether to enables the Tracing | true/false | `true` |
@@ -78,22 +80,24 @@ The `istio-remote` helm chart requires the four specific variables to be configu
 | `gobal.defaultResources` | Specifies resources(CPU/Memory) requests & limits applied to all deployments | valid CPU&memory settings | `{requests.cpu: 10m}` |
 | `global.omitSidecarInjectorConfigMap` | Specifies whether to omit the istio-sidecar-injector configmap when generate a standalone gateway | true/false | `false` |
 | `global.priorityClassName` | Specifies priority class to make sure Istio pods will not be evicted because of low prioroty class | valid priority class name | `""` |
-| `global.proxyNode` | Specifies whether to deploy to proxy node with labels `proxy=true`(effective only on IBM Cloud Private) | true/false | `true` |
-| `global.dedicated` | Specifies whether to deploy to dedicated node with taint `dedicated=:NoSchedule`(effective only on IBM Cloud Private) | true/false | `true` |
-| `global.extraNodeSelector` | Specifies customized node selector for all components | valid node selector | {} |
 | `global.arch.amd64`| Architecture preference for amd64 node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
 | `global.arch.ppc64le` | Architecture preference for ppc64le node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
-| `sidecarinjectorwebhook.enabled` | Specifies whether the Automatic Sidecar Injector should be installed | true/false | `true` |
-| `sidecarinjectorwebhook.replicaCount` | Specifies number of desired pods for Automatic Sidecar Injector Webhook | number | `1` |
-| `sidecarinjectorwebhook.enableNamespacesByDefault` | Specifies use the default namespaces for Automatic Sidecar Injector Webhook | true/false | `false` |
-| `sidecarinjectorwebhook.image.repository` | Specifies the Automatic Sidecar Injector image location | valid image repository | `ibmcom/istio-sidecar_injector` |
-| `sidecarinjectorwebhook.image.tag` | Specifies the Automatic Sidecar Injector image version | valid image tag | `1.0.0` |
-| `sidecarinjectorwebhook.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `global.arch.s390x` | Architecture preference for s390x node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
+| `sidecarInjectorWebhook.enabled` | Specifies whether the Automatic Sidecar Injector should be installed | true/false | `true` |
+| `sidecarInjectorWebhook.replicaCount` | Specifies number of desired pods for Automatic Sidecar Injector Webhook | number | `1` |
+| `sidecarInjectorWebhook.enableNamespacesByDefault` | Specifies use the default namespaces for Automatic Sidecar Injector Webhook | true/false | `false` |
+| `sidecarInjectorWebhook.image.repository` | Specifies the Automatic Sidecar Injector image location | valid image repository | `ibmcom/istio-sidecar_injector` |
+| `sidecarInjectorWebhook.image.tag` | Specifies the Automatic Sidecar Injector image version | valid image tag | `1.0.2` |
+| `sidecarInjectorWebhook.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `sidecarInjectorWebhook.nodeRole` | Specify which node current component will be scheduled to(effective only on IBM Cloud Private) | `proxy`/`management` | `management` |
+| `sidecarInjectorWebhook.nodeSelector` | Specifies customized node selector for deployment | valid node selector | {} |
 | `security.replicaCount` | Specifies number of desired pods for Citadel deployment | number | `1` |
 | `security.selfSigned` | Specifies whether self-signed CA is enabled | true/false | `true` |
 | `security.image.repository` | Specifies the Citadel image location | valid image repository | `ibmcom/istio-citadel` |
-| `security.image.tag` | Specifies the Citadel image version | valid image tag | `1.0.0` |
+| `security.image.tag` | Specifies the Citadel image version | valid image tag | `1.0.2` |
 | `security.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
+| `security.nodeRole` | Specify which node current component will be scheduled to(effective only on IBM Cloud Private) | `proxy`/`management` | `management` |
+| `security.nodeSelector` | Specifies customized node selector for deployment | valid node selector | {} |
 
 ## Uninstalling the Chart
 

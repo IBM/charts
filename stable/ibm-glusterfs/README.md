@@ -22,16 +22,15 @@ The Helm chart completes the following tasks:
 ## Limitations
 - The chart supports the installation of only a new storage cluster under kube-system namespace.
 - The chart supports creation of only one GlusterFS storage cluster in an IBM® Cloud Private cluster.
-- `ibm-glusterfs` Helm chart upgrade from previous version is not supported.
 
 ## Prerequisites
 
-- An IBM® Cloud Private Version 3.1.0 cluster must be installed.
+- An IBM® Cloud Private Version 3.1.0 or later must be installed.
 - You must use at least three storage nodes to configure GlusterFS storage cluster. For more information about creating storage nodes, see [Deployment Scenarios](#deployment-scenarios).
 - The storage device that is used for GlusterFS must have a capacity of at least 25 GB.
 - The storage devices that you use for GlusterFS must be raw disks. They must not be formatted, partitioned, or used for file system storage needs. You must use the symbolic link (symlink) to identify the GlusterFS storage device. For more information about creating symlinks, see [Storage Devices](#storage-devices).
-- You must install the `dm_thin_pool` kernel module on all the storage nodes.
-- You must install the GlusterFS client on the nodes in your cluster that might use a GlusterFS volume.
+- You must install the `dm_thin_pool` kernel module on all the storage nodes. For more information, see [Configure dm_thin_pool](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/manage_cluster/prepare_nodes.html).
+- You must install the GlusterFS client on the nodes in your cluster that might use a GlusterFS volume. For more information, see [Install GlusterFS client](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/manage_cluster/prepare_nodes.html)
 - The GlusterFS client version must be the same as the version of the GlusterFS server that is installed.
 - You must pre-create a secret with a password for the Heketi user 'admin' and provide the secret name in the `heketi.authSecret` parameter. Follow these steps to create the secret:
   1. Encode the new password in `base64` and update the `admin_password` section with the new base64-encoded password.
@@ -60,13 +59,15 @@ The Helm chart completes the following tasks:
 
      **Note**: The name of the key must be the same as `admin_password`.
 
+## PodSecurityPolicy Requirements
+
 ## Deployment Scenarios
 
 GlusterFS storage cluster can be deployed on dedicated storage host group nodes or on worker nodes.
 
 ### Dedicated GlusterFS storage nodes
 
-Define a custom host group with at least three nodes. For more information about defining a host group, see [Defining custom host groups](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/installing/hosts.html#hostgroup). This custom host group automatically labels the nodes and taints them to make the nodes dedicated for GlusterFS Storage. If you enabled firewall in your cluster, you need to open all the ports that are used by GlusterFS daemon and bricks.
+Define a custom host group with at least three nodes. For more information about defining a host group, see [Defining custom host groups](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/installing/hosts.html#hostgroup). This custom host group automatically labels the nodes and taints them to make the nodes dedicated for GlusterFS Storage. If you enabled firewall in your cluster, you need to open all the ports that are used by GlusterFS daemon and bricks.
 
 ### Worker nodes as GlusterFS storage nodes
 
@@ -82,7 +83,7 @@ Ensure that you use at least three worker nodes to configure GlusterFS. You have
 
 - Configure GlusterFS on dedicated nodes 
 
-  1. Configure a custom host group with the dedicated GlusterFS storage nodes. For more information about how to add a host group, see [Adding a host group](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/installing/add_node.html#host_group).
+  1. Configure a custom host group with the dedicated GlusterFS storage nodes. For more information about how to add a host group, see [Adding a host group](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/installing/add_node.html#host_group).
 
      Following is an example configuration of a host group with dedicated GlusterFS storage nodes. You add this configuration in the /<installation_directory>/cluster/hosts file.
 
@@ -147,7 +148,7 @@ Ensure that you use at least three worker nodes to configure GlusterFS. You have
 
 You must use the symlink to identify the GlusterFS storage device. Do not use device names, such as `/dev/sdb`, because the name might change between system restarts.
 
-  **Note**: The special characters that Heketi allows to be used in the device name are `^/[a-zA-Z0-9_./-]+$`. If your device name or system-generated symlink has special characters that are not allowed by Heketi, then you must manually create the symlink.
+  **Note**: The special characters that Heketi allows to be used in the device name are `^/[a-zA-Z0-9_.:/-]+$`. If your device name or system-generated symlink has special characters that are not allowed by Heketi, then you must manually create the symlink.
 
 ### Use system generated symlinks
 
@@ -240,7 +241,7 @@ The GlusterFS and Heketi containers have the following resource requests and lim
 
 | Container                  | Memory Request        | Memory Limit          | CPU Request           | CPU Limit             |
 | -----------------------    | ------------------    | ------------------    | ------------------    | ------------------    |
-| GlusterFS                  | 128Mi                 | 256Mi                 | 100m                  | 200m                  |
+| GlusterFS                  | 512Mi                 | 1Gi                   | 500m                  | 1000m                 |
 | Heketi                     | 512Mi                 | 1Gi                   | 500m                  | 1000m                 |
 
 
@@ -270,15 +271,16 @@ The following table lists the configurable parameters of the `ibm-glusterfs` cha
 | gluster.image.tag                         | GlusterFS image tag to use for this deployment          | v4.0.2            |
 | gluster.image.pullPolicy                  | GlusterFS image pull policy                             | IfNotPresent      |
 | gluster.installType                       | GlusterFS installation type.                            | Fresh             |
-| gluster.resources.requests.cpu            | Describes the minimum amount of CPU required            | Default is 100m. See Kubernetes - [CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
-| gluster.resources.requests.memory         | Describes the minimum amount of memory required         | Default is 128Mi. See Kubernetes - [Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory)                 |
-| gluster.resources.limits.cpu              | Describes the maximum amount of CPU allowed             | Default is 200m   |
-| gluster.resources.limits.memory           | Describes the maximum amount of memory allowed          | Default is 256Mi  |
+| gluster.resources.requests.cpu            | Describes the minimum amount of CPU required            | Default is 500m. See Kubernetes - [CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
+| gluster.resources.requests.memory         | Describes the minimum amount of memory required         | Default is 512Mi. See Kubernetes - [Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory)                 |
+| gluster.resources.limits.cpu              | Describes the maximum amount of CPU allowed             | Default is 1000m  |
+| gluster.resources.limits.memory           | Describes the maximum amount of memory allowed          | Default is 1Gi    |
 | heketi.image.repository                   | Heketi image to use for this deployment                 | ibmcom/heketi     |
-| heketi.image.tag                          | Heketi image tag to use for this deployment             | v7.0.0            |
+| heketi.image.tag                          | Heketi image tag to use for this deployment             | v8.0.0            |
 | heketi.image.pullPolicy                   | Heketi image pull policy                                | IfNotPresent      |
 | heketi.backupDbSecret                     | Name of the k8s secret where Heketi database is backed up to | heketi-db-backup  |
 | heketi.authSecret                         | Secret for password of the Heketi `admin` user          |                   |
+| heketi.maxInFlightOperations              | Maximum number of requests processed by heketi at a time| 20                |
 | heketi.resources.requests.cpu             | Describes the minimum amount of CPU required            | Default is 500m   |
 | heketi.resources.requests.memory          | Describes the minimum amount of memory required         | Default is 512Mi  |
 | heketi.resources.limits.cpu               | Describes the maximum amount of CPU allowed             | Default is 1000m  |

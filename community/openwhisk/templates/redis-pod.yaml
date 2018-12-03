@@ -1,0 +1,65 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.redis.name | quote }}
+  labels:
+    name: {{ .Values.redis.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+spec:
+  replicas: {{ .Values.redis.replicaCount }}
+  selector:
+    matchLabels:
+      name: {{ .Values.redis.name | quote }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.redis.name | quote }}
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+    spec:
+      restartPolicy: {{ .Values.redis.restartPolicy }}
+
+      {{- if .Values.affinity.enabled }}
+      affinity:
+{{ include "openwhisk.affinity.core" . | indent 8 }}
+{{ include "openwhisk.affinity.selfAntiAffinity" ( .Values.redis.name | quote ) | indent 8 }}
+      {{- end }}
+
+{{- if .Values.k8s.persistence.enabled }}
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: {{ .Values.redis.persistence.pvcName | quote }}
+{{- end }}
+
+{{- if .Values.k8s.persistence.enabled }}
+      initContainers:
+      - name: redis-init
+        image: busybox
+        command:
+          - chown
+          - -v
+          - -R
+          - 999:999
+          - /data
+        volumeMounts:
+        - mountPath: /data
+          name: redis-data
+          readOnly: false
+{{- end }}
+
+      containers:
+        - name: redis
+          image: "{{- .Values.redis.imageName -}}:{{- .Values.redis.imageTag -}}"
+          imagePullPolicy: {{ .Values.redis.imagePullPolicy | quote }}
+{{- if .Values.k8s.persistence.enabled }}
+          volumeMounts:
+          - mountPath: /data
+            name: redis-data
+            readOnly: false
+{{- end }}
+          ports:
+          - name: redis
+            containerPort: {{ .Values.redis.port }}

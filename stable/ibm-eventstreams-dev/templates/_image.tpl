@@ -11,6 +11,9 @@ and the image repository it is pulling from
     {{- $imageName := (include "sch.utils.getItem" (list $params 1 "")) -}}
     {{- /* The image tag shared across editions */ -}}
     {{- $tagName := (include "sch.utils.getItem" (list $params 2 "")) -}}
+    {{- $platformName := "icp" -}}
+    {{- $osName := "linux" -}}
+    {{- $archName := $root.Values.global.arch -}}
     {{- /*
     A boolean string for whether this is an eventstreams owned image
     this only effects whether we pull from ibmcom or not from dockerhub
@@ -29,25 +32,25 @@ and the image repository it is pulling from
         {{- if eq $repoName "ibmcom" -}}
             {{- /* If eventstreams image template as normal */ -}}
             {{- if eq $ibmImage "true" -}}
-                {{ printf "%s/%s-ce:%s" $repoName $imageName $tagName }}
+                {{ printf "%s/%s-ce-%s-%s-%s:%s" $repoName $imageName $platformName $osName $archName $tagName }}
             {{- /* if not ibmImage pull from dockerhub directly */ -}}
             {{- else if eq $ibmImage "false" -}}
-                {{ printf "%s:%s" $imageName $tagName }}
+                {{ printf "%s-%s-%s-%s:%s" $imageName $platformName $osName $archName $tagName }}
             {{- /* Used for pulling from custom dockerhub repos */ -}}
             {{- else -}}
-                {{ printf "%s/%s:%s" $ibmImage $imageName $tagName }}
+                {{ printf "%s/%s-%s-%s-%s:%s" $ibmImage $imageName $platformName $osName $archName $tagName }}
             {{- end }}
         {{- /* else pulling from a private repo */ -}}
         {{- else -}}
             {{- /* if ibmImage add -ce */ -}}
             {{- if eq $ibmImage "true" -}}
-                {{ printf "%s/%s-ce:%s" $repoName $imageName $tagName }}
+                {{ printf "%s/%s-ce-%s-%s-%s:%s" $repoName $imageName $platformName $osName $archName $tagName }}
             {{- else -}}
-                {{ printf "%s/%s:%s" $repoName $imageName $tagName }}
+                {{ printf "%s/%s-%s-%s-%s:%s" $repoName $imageName $platformName $osName $archName $tagName }}
             {{- end }}
         {{- end -}}
 {{- /* prod and foundation-prod edition logic */ -}}
     {{- else -}}
-        {{ printf "%s/%s:%s" $repoName $imageName $tagName }}
+        {{ printf "%s/%s-%s-%s-%s:%s" $repoName $imageName $platformName $osName $archName $tagName }}
     {{- end -}}
 {{- end -}}

@@ -55,17 +55,23 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.imagePullSecrets }}
     {{- end }}
-    {{- if eq .Values.environment "openshift" }}
-      securityContext:
-        fsGroup: 65534  
-    {{- end }}
+      initContainers:
+        - name: init-container
+          image: "{{ .Values.init.image.repository }}:{{ .Values.init.image.tag }}"
+          imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+          command: ["chown", "-R", "nobody:nogroup", "/var/lib/alertmanager/data"]
+          volumeMounts:
+            - name: storage-volume
+              mountPath: /var/lib/alertmanager/data
       containers:
         - name: configmap-reload
           image: {{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            runAsUser: 65534
           args:
             - --volume-dir=/etc/config
-            - --webhook-url=http://127.0.0.1:9093/-/reload
+            - --webhook-url=http://127.0.0.1:9093/alertmanager/-/reload
           volumeMounts:
             - name: config-volume
               mountPath: /etc/config
@@ -73,9 +79,12 @@ spec:
         - name: alertmanager
           image: {{ .Values.alertmanager.image.repository }}:{{ .Values.alertmanager.image.tag }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            runAsUser: 65534
           args:
             - --config.file=/etc/config/alertmanager.yml
             - --storage.path=/var/lib/alertmanager/data
+            - --web.external-url=https://{{ .Values.clusterAddress }}:{{ .Values.clusterPort }}/alertmanager
             - --cluster.listen-address=$(POD_IP):9094
           env:
             - name: POD_IP
@@ -87,7 +96,7 @@ spec:
         {{- if .Values.alertmanager.probe.enabled }}
           readinessProbe:
             httpGet:
-              path: /api/v1/status
+              path: /alertmanager/api/v1/status
               port: 9093
           {{- if .Values.alertmanager.probe.readiness.args }}
 {{ toYaml .Values.alertmanager.probe.readiness.args | indent 12 }}
@@ -98,7 +107,7 @@ spec:
           {{- end }}
           livenessProbe:
             httpGet:
-              path: /api/v1/status
+              path: /alertmanager/api/v1/status
               port: 9093
           {{- if .Values.alertmanager.probe.liveness.args }}
 {{ toYaml .Values.alertmanager.probe.liveness.args | indent 12 }}

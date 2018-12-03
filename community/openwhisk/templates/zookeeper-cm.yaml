@@ -1,0 +1,26 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor
+# license agreements; and to You under the Apache License, Version 2.0.
+
+{{ if not .Values.zookeeper.external }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.zookeeper.name | quote }}
+  labels:
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+data:
+  zoo.cfg: |
+    tickTime={{ .Values.zookeeper.config.tickTime }}
+    clientPort={{ .Values.zookeeper.port }}
+    initLimit={{ .Values.zookeeper.config.initLimit }}
+    syncLimit={{ .Values.zookeeper.config.syncLimit }}
+    dataDir={{ .Values.zookeeper.config.dataDir }}
+    dataLogDir={{ .Values.zookeeper.config.dataLogDir }}
+{{- $kubeDomain := .Values.k8s.domain }}
+{{- $zkname := .Values.zookeeper.name }}
+{{- $zkserverport := .Values.zookeeper.serverPort }}
+{{- $zkelectionport := .Values.zookeeper.leaderElectionPort }}
+{{- range $i, $e := until (int .Values.zookeeper.replicaCount) }}
+    server.{{ . }}={{ $zkname }}-{{ . }}.{{ $zkname }}.{{ $.Release.Namespace }}.svc.{{ $kubeDomain }}:{{ $zkserverport }}:{{ $zkelectionport }}
+{{- end }}
+{{- end }}

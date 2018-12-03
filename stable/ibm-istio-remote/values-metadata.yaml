@@ -37,6 +37,13 @@ global:
             description: "Specify the minimum requested memory."
             immutable: false
             required: false
+    concurrency:
+      __metadata:
+        label: "Number of Proxy Worker Threads"
+        description: "Controls number of proxy worker threads. If set to 0 (default), then start worker thread for each CPU thread/core."
+        type: "number"
+        immutable: false
+        required: false
     accessLogFile:
       __metadata:
         label: "Configures the access log for each sidecar"
@@ -101,19 +108,11 @@ global:
           type: "number"
           immutable: false
           required: false
-  proxyInit:
-    repository:
+    privileged:
       __metadata:
-        label: "Proxy_init Image Repository"
-        description: "Docker registry to pull proxy_init image from."
-        type: "string"
-        immutable: false
-        required: false
-    tag:
-      __metadata:
-        label: "Proxy_init Image Tag"
-        description: "Proxy_init image version"
-        type: "string"
+        label: "Enable Privileged Security Context for Proxy"
+        description: "Configure privileged securityContext for proxy. If set to true, istio-proxy container will have privileged securityContext."
+        type: "boolean"
         immutable: false
         required: false
   imagePullPolicy:
@@ -130,6 +129,21 @@ global:
         value: "Never"
       - label: "IfNotPresent"
         value: "IfNotPresent"
+  proxy_init:
+    repository:
+      __metadata:
+        label: "Proxy_init Image Repository"
+        description: "Docker registry to pull proxy_init image from."
+        type: "string"
+        immutable: false
+        required: false
+    tag:
+      __metadata:
+        label: "Proxy_init Image Tag"
+        description: "Proxy_init image version."
+        type: "string"
+        immutable: false
+        required: false
   kubectl:
     repository:
       __metadata:
@@ -181,8 +195,6 @@ global:
       type: "string"
       immutable: false
       required: false
-      items:
-        type: "string"
   remotePilotCreateSvcEndpoint:
     __metadata:
       label: "Create Remote Pilot Service and Endpoint"
@@ -241,28 +253,6 @@ global:
       type: "string"
       immutable: false
       required: false
-  proxyNode:
-    __metadata:
-      label: "Proxy Node"
-      description: "Specify(true or false) whether to scheduled to proxy node with label: \"proxy\"=\"true\""
-      type: "boolean"
-      immutable: false
-      required: false
-  dedicated:
-    __metadata:
-      label: "Deploy to Dedicated Node"
-      description: "The field controls whether to deploy to dedicated node with taint 'dedicated=:NoSchedule', defaults to 'true'."
-      type: "boolean"
-      immutable: false
-      required: false
-  extraNodeSelector:
-    __metadata:
-      label: "Extra Node Selector"
-      description: "Specify the extra node selector for all deployments."
-      type: "string"
-      minProperties: 0
-      immutable: false
-      required: false
   arch:
     amd64:
       __metadata:
@@ -298,11 +288,28 @@ global:
           value: "2 - No preference"
         - label: "3 - Most preferred"
           value: "3 - Most preferred"
+    s390x:
+      __metadata:
+        name: "s390x"
+        label: "S390X scheduling preference"
+        description: "Architecture preference for target worker node."
+        type: "string"
+        immutable: false
+        required: false
+        options:
+        - label: "0 - Do not use"
+          value: "0 - Do not use"
+        - label: "1 - Least preferred"
+          value: "1 - Least preferred"
+        - label: "2 - No preference"
+          value: "2 - No preference"
+        - label: "3 - Most preferred"
+          value: "3 - Most preferred"
 
-sidecarinjectorwebhook:
+sidecarInjectorWebhook:
   __metadata:
     label: "Sidecar Injector Webhook Settings"
-    description: "Specify sidecarinjectorwebhook settings."
+    description: "Specify sidecarInjectorWebhook settings."
     type: "string"
   enabled:
     __metadata:
@@ -336,7 +343,7 @@ sidecarinjectorwebhook:
     tag:
       __metadata:
         label: "Sidecar Injector Image Tag"
-        description: "Sidecar Injector image version"
+        description: "Sidecar injector image version."
         type: "string"
         immutable: false
         required: false
@@ -345,25 +352,27 @@ sidecarinjectorwebhook:
       label: "Istio Sidecar Injector Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Istio Sidecar Injector."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false
+
 security:
   __metadata:
     label: "Security Settings"
     description: "Specify security settings."
     type: "string"
-  replicaCount:
-    __metadata:
-      label: "Replica Count"
-      description: "Specify number of desired pods for Citadel deployment."
-      type: "number"
-      immutable: false
-      required: false
-  selfSigned:
-    __metadata:
-      label: "Self Signed"
-      description: "Indicate if self-signed CA is used."
-      type: "boolean"
-      immutable: false
-      required: false
   image:
     repository:
       __metadata:
@@ -379,8 +388,37 @@ security:
         type: "string"
         immutable: false
         required: false
+  replicaCount:
+    __metadata:
+      label: "Replica Count"
+      description: "Specify number of desired pods for Citadel deployment."
+      type: "number"
+      immutable: false
+      required: false
+  selfSigned:
+    __metadata:
+      label: "Self Signed"
+      description: "Indicate if self-signed CA is used."
+      type: "boolean"
+      immutable: false
+      required: false
   resources:
     __metadata:
       label: "Istio Citadel Resources"
       description: "Specify the resource(CPU/Memory) requests & limits for Istio Citadel."
       type: "string"
+  nodeRole:
+    __metadata:
+      label: "Node Role"
+      description: "Specify which node current component will be deployed to(effective only on IBM Cloud Private), values could be 'proxy' or 'management'."
+      type: "string"
+      immutable: false
+      required: false
+  nodeSelector:
+    __metadata:
+      label: "Node Selector"
+      description: "Specify the extra node selector for deployment."
+      type: "string"
+      minProperties: 0
+      immutable: false
+      required: false

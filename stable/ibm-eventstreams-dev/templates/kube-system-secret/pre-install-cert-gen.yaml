@@ -55,6 +55,8 @@
   {{ fail "Configuration error: You cannot select self-signed certificate and provide a CA certificate." }}
   {{- end }}
 {{- end }}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -66,7 +68,7 @@ metadata:
     # This needs to run before we deploy, as UI component installs
     # depend on the secrets existing already, and will fail to start
     # otherwise.
-    "helm.sh/hook": pre-install
+    "helm.sh/hook": pre-install, pre-upgrade
     # We don't delete this if it fails, as the logs may be useful to
     # diagnose a failed install
     "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
@@ -84,10 +86,14 @@ spec:
       imagePullSecrets:
         - name: {{ $imagePullSecretName | quote }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        fsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
       affinity:
-{{- include "customNodeaffinity" . | indent 6 }}
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
       restartPolicy: Never
       containers:
         - name: "cert-generator"

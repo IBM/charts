@@ -3,6 +3,7 @@ kind: Deployment
 metadata:
   name: istio-pilot
   namespace: {{ .Release.Namespace }}
+  # TODO: default template doesn't have this, which one is right ?
   labels:
     app: {{ template "pilot.name" . }}
     chart: {{ template "pilot.chart" . }}
@@ -24,6 +25,9 @@ spec:
       annotations:
         sidecar.istio.io/inject: "false"
         scheduler.alpha.kubernetes.io/critical-pod: ""
+        productName: istio-pilot
+        productID: istio-pilot_{{ .Chart.Version }}_apachev2_00000
+        productVersion: {{ .Chart.Version }}
     spec:
       serviceAccountName: istio-pilot-service-account
 {{- if .Values.global.priorityClassName }}
@@ -51,16 +55,16 @@ spec:
 {{- end }}
           readinessProbe:
             httpGet:
-              path: /debug/endpointz
+              path: /ready
               port: 8080
-            initialDelaySeconds: 30
+            initialDelaySeconds: 5
             periodSeconds: 30
             timeoutSeconds: 5
           livenessProbe:
             httpGet:
-              path: /debug/endpointz
+              path: /ready
               port: 8080
-            initialDelaySeconds: 30
+            initialDelaySeconds: 5
             periodSeconds: 30
             timeoutSeconds: 5
           env:
@@ -74,10 +78,14 @@ spec:
               fieldRef:
                 apiVersion: v1
                 fieldPath: metadata.namespace
-          - name: PILOT_THROTTLE
-            value: "500"
           - name: PILOT_CACHE_SQUASH
             value: "5"
+          {{- if .Values.env }}
+          {{- range $key, $val := .Values.env }}
+          - name: {{ $key }}
+            value: "{{ $val }}"
+          {{- end }}
+          {{- end }}
 {{- if .Values.traceSampling }}
           - name: PILOT_TRACE_SAMPLING
             value: "{{ .Values.traceSampling }}"
@@ -109,7 +117,7 @@ spec:
           - istio-pilot
           - --templateFile
           - /etc/istio/proxy/envoy_pilot.yaml.tmpl
-        {{- if .Values.global.controlPlaneSecurityEnabled}}
+        {{- if $.Values.global.controlPlaneSecurityEnabled}}
           - --controlPlaneAuthPolicy
           - MUTUAL_TLS
         {{- else }}
@@ -147,7 +155,11 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 30
           resources:
+{{- if .Values.global.proxy.resources }}
 {{ toYaml .Values.global.proxy.resources | indent 12 }}
+{{- else }}
+{{ toYaml .Values.global.defaultResources | indent 12 }}
+{{- end }}
           volumeMounts:
           - name: istio-certs
             mountPath: /etc/certs
@@ -160,9 +172,10 @@ spec:
       - name: istio-certs
         secret:
           secretName: istio.istio-pilot-service-account
+          optional: true   
       nodeSelector:
-      {{- include "nodeselector" . | indent 6 }}
+{{- include "pilot.nodeselector" . | indent 6 }}
       tolerations:
-      {{- include "tolerations" . | indent 6 }}
+{{- include "pilot.tolerations" . | indent 6 }}
       affinity:
-      {{- include "nodeaffinity" . | indent 6 }}
+{{- include "nodeaffinity" . | indent 6 }}
