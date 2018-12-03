@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This chart deploys a single IBM® MQ Advanced for Developers server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
+This chart deploys a single IBM® MQ Advanced for Developers version 9.1.1 server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
 
 ## Chart Details
 
@@ -16,28 +16,54 @@ This chart will do the following:
 
 * Kubernetes 1.9 or greater, with beta APIs enabled
 * If persistence is enabled (see [configuration](#configuration)), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
-* If you have [pod security policy control](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#enabling-pod-security-policies) enabled, you must have a [PodSecurityPolicy](https://kubernetes.io/docs/concepts/policy/pod-security-policy/) that supports the following [securityContext](https://kubernetes.io/docs/concepts/policy/security-context/) settings:
-  * capabilities:
-    * CHOWN
-    * DAC_OVERRIDE
-    * FSETID
-    * FOWNER
-    * NET_RAW
-    * SETGID
-    * SETUID
-    * SETFCAP
-    * SETPCAP
-    * NET_BIND_SERVICE
-    * SYS_CHROOT
-    * KILL
-    * AUDIT_WRITE
-  * allowPrivilegeEscalation: true
-  * readOnlyRootFilesystem: false
-  * runAsNonRoot: false
-  * runAsUser: 0
-  * privileged: false
-> **Note**: If you are deploying to an IBM Cloud Private environment that does not support these security settings by default. Follow these [instructions](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/app_center/nd_helm.html) to enable your deployment.
 * If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191)
+
+### PodSecurityPolicy Requirements
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation.  Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
+* Predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp)
+* Custom PodSecurityPolicy definition:
+
+```
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: ibm-mq-psp
+  spec:
+    allowPrivilegeEscalation: true
+    fsGroup:
+      rule: RunAsAny
+    requiredDropCapabilities:
+    - MKNOD
+    allowedCapabilities:
+    - SETPCAP
+    - AUDIT_WRITE
+    - CHOWN
+    - NET_RAW
+    - DAC_OVERRIDE
+    - FOWNER
+    - FSETID
+    - KILL
+    - SETUID
+    - SETGID
+    - NET_BIND_SERVICE
+    - SYS_CHROOT
+    - SETFCAP
+    runAsUser:
+      rule: RunAsAny
+    seLinux:
+      rule: RunAsAny
+    supplementalGroups:
+      rule: RunAsAny
+    volumes:
+    - configMap
+    - emptyDir
+    - projected
+    - secret
+    - persistentVolumeClaim
+    forbiddenSysctls:
+    - '*'
+```
 
 ## Resources Required
 
@@ -51,13 +77,15 @@ See the [configuration](#configuration) section for how to configure these value
 
 ## Installing the Chart
 
-You can install the chart with the release name `foo` as follows:
+Install the chart, specifying the release name (for example `foo`) and Helm repository name (for example `mylocal-repo`) with the following command:
 
 ```sh
-helm install --name foo stable/ibm-mqadvanced-server-dev --set license=accept
+helm install --name foo mylocal-repo/ibm-mqadvanced-server-dev --set license=accept --tls
 ```
 
-This command accepts the [IBM MQ Advanced for Developers license](LICENSES/LICENSE_ILAN) and deploys an MQ Advanced for Developers server on the Kubernetes cluster. The [configuration](#configuration) section lists the parameters that can be configured during installation.
+This example assumes that you have a local Helm repository configured, called `mylocal-repo`.  You could alternatively reference a local directory containing the Helm chart code.
+
+This command accepts the [IBM MQ Advanced for Developers license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-AVCJ4S) and deploys an MQ Advanced for Developers server on the Kubernetes cluster. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
 > **Tip**: See all the resources deployed by the chart using `kubectl get all -l release=foo`
 
