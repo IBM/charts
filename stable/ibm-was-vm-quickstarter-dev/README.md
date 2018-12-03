@@ -17,8 +17,9 @@ The Helm chart deploys the following components:
 * `wasaas-cloudsm-frontend` Kubernetes pod which hosts the front end of the service management framework.
 * `wasaas-cloudsm-backend` Kubernetes pod which hosts the back end of the service management framework.
 * `wasaas-couchdb` Kubernetes pod which hosts the CouchDB NoSQL datastore that stores the service management data for the service.
+* `wasaas-dashboard` Kubernetes pod which hosts the administrative dashboard application.
 * `wasaas-devops` Kubernetes pod which hosts devops scripts, such as must-gather and installation verification test (IVT) scripts.
-* Ingresses for the `wasaas-console` and `wasaas-broker` pods.
+* Ingresses for the `wasaas-console`, `wasaas-dashboard`, and `wasaas-broker` pods.
 
 
 ## Prerequisites
@@ -145,19 +146,22 @@ The following tables lists the configurable parameters of the `ibm-was-vm-quicks
 | `vsphere.ipv4Gateway`           | The IP address of the IPv4 gateway to use for WAS deployments | |
 | `vsphere.ipv4PrefixLength`      | The length of your IPv4 prefix | |
 | `vsphere.ipPool`                | comma separated list of IP addresses to be used as host IPs for WAS virtual machine deployments. See [Prerequisites](https://www.ibm.com/support/knowledgecenter/SSTF9X/install-prerequisites.html) for details | |
-| `console.image.repository`      | WAS VM Quickstarter Console Docker image repository | `ibmcom/wasaas-console`  |
-| `console.image.tag`             | WAS VM Quickstarter console Docker image tag  |  `2.0` |
+| `console.image.repository`      | WAS VM Quickstarter console Docker image repository | `ibmcom/wasaas-console`  |
+| `console.image.tag`             | WAS VM Quickstarter console Docker image tag  |  `2.0.2` |
 | `console.ingress.path`          | WAS VM Quickstarter console ingress path  | `/wasaas-console/`  |
 | `broker.image.repository`       | WAS VM Quickstarter broker Docker image repository | `ibmcom/wasaas-wasdevaas`  |
-| `broker.image.tag`              | WAS VM Quickstarter broker Docker image tag  |  `2.0` |
+| `broker.image.tag`              | WAS VM Quickstarter broker Docker image tag  |  `2.0.2` |
 | `broker.ingress.path`           | WAS VM Quickstarter broker ingress path  | `/wasaas-broker/`  |
 | `cloudsm.image.repository`      | WAS VM Quickstarter service management Docker image repository | `ibmcom/wasaas-cloudsm`  |
-| `cloudsm.image.tag`             | WAS VM Quickstarter service management Docker image tag  |  `2.0` |
-| `cloudsm.capacity`              | Resource capacity in [service blocks](#resource-management) | `10` |
+| `cloudsm.image.tag`             | WAS VM Quickstarter service management Docker image tag  |  `2.0.2` |
+| `cloudsm.capacity`              | Resource capacity in [service blocks](https://www.ibm.com/support/knowledgecenter/SSTF9X/about-resource-management.html) | `10` |
+| `dashboard.image.repository`    | WAS VM Quickstarter dashboard Docker image repository | `ibmcom/wasaas-console`  |
+| `dashboard.image.tag`           | WAS VM Quickstarter dashboard Docker image tag  |  `2.0.2` |
+| `dashboard.ingress.path`        | WAS VM Quickstarter dashboard ingress path  | `/wasaas-dashboard/`  |
 | `devops.image.repository`       | WAS VM Quickstarter devOps Docker image repository | `ibmcom/wasaas-devops`  |
-| `devops.image.tag`              | WAS VM Quickstarter devOps Docker image tag  |  `2.0` |
+| `devops.image.tag`              | WAS VM Quickstarter devOps Docker image tag  |  `2.0.2` |
 | `couchdb.image.repository`      | WAS VM Quickstarter CouchDB Docker image repository | `couchdb`  |
-| `couchdb.image.tag`             | WAS VM Quickstarter CouchDB Docker image tag  |  `2.2.1` |
+| `couchdb.image.tag`             | WAS VM Quickstarter CouchDB Docker image tag  |  `2.1.1` |
 | `couchdb.persistentVolume.useDynamicProvisioning` | Indicates whether to use dynamic provisioning  |  `false` |
 | `couchdb.persistentVolume.size`                   | Persistent volume size  | `10Gi`  |
 | `couchdb.persistentVolume.storageClass`           | Persistent volume storage class  | |
@@ -174,6 +178,7 @@ The following tables lists the configurable parameters of the `ibm-was-vm-quicks
 
 ## Limitations
 - You can deploy the Helm chart multiple times by using different Helm releases.  If you target the same Cloud Automation Manager and vSphere environments, care must be given to set the capacity and IP addresses to not collide with other instances of the WAS VM Quickstarter service.
+- WAS VM Quickstarter supports x86-64 platforms only.
 
 ## Documentation
 
