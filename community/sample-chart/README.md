@@ -120,4 +120,4 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 * Can be links to special procedures in the knowledge center.
 
 ## Support
-* This section should provide details and/or links to where users can get support for urgent issues with the product, get help, or submit issues.
+* This section should either link to or describe what support is available for the product.  
