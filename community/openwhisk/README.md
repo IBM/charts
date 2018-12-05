@@ -137,6 +137,37 @@ You can use the command ```helm status <my-release> [--tls]``` to get a summary 
 
 [Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
 
+#### Configuring Ingress
+
+An IBM Cloud Private cluster has full support for TLS
+and can be configured with additional annotations to
+fine tune ingress performance.
+
+A prerequisite for OpenWhisk TLS access via Ingress as currently configured
+is a Fully Qualified Domain Name (FQDN) that can be resolved correctly from
+within OpenWhisk and points to the SSL Ingress point, usually your load
+balancer or proxy node.
+
+You will also need to create a TLS certificate to be used by the Ingress
+controller for your domain.  The YAML to create in Kubernetes is
+(substituting the real values for `<your fqdn>`):
+
+```yaml
+apiVersion: certmanager.k8s.io/v1alpha1
+kind: Certificate
+metadata:
+name: openwhisk-tls-secret-1
+namespace: openwhisk
+spec:
+commonName: <your fqdn>
+dnsNames:
+- <your fqdn>
+issuerRef:
+kind: ClusterIssuer
+name: icp-ca-issuer
+secretName: openwhisk-tls-secret-1
+```
+
 ### Verifying the Chart
 
 To verify your deployment was successful, simply run:
