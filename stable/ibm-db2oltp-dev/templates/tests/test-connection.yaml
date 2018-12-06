@@ -14,9 +14,43 @@ spec:
   imagePullSecrets:
     - name: {{ .Values.global.image.secretName }}
 {{- end }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      #If you specify multiple nodeSelectorTerms associated with nodeAffinity types, 
+      #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+      #
+      #If you specify multiple matchExpressions associated with nodeSelectorTerms, 
+      #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+      #
+      #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- if .Values.arch }}
+            - {{ .Values.arch }}
+            {{- else }}
+            - {{ template "arch" . }}
+            {{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: true
   containers:
   - name: {{ template "fullname" . }}
     image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ template "platform" . }}"
+    securityContext:
+      runAsNonRoot: false
+      runAsUser: 0
+      capabilities:
+        drop:
+        - ALL
+        #Need the default Docker capabilities. Additional ones are "SYS_RESOURCE", "IPC_OWNER", "SYS_NICE"
+        add: ["SYS_RESOURCE", "IPC_OWNER", "SYS_NICE", "SETPCAP", "CHOWN", "FOWNER", "NET_RAW", "DAC_OVERRIDE", "FSETID", "KILL", "SETGID", "SETUID", "MKNOD", "AUDIT_WRITE", "SYS_CHROOT", "NET_BIND_SERVICE", "SETFCAP"]
+      allowPrivilegeEscalation: true
+      readOnlyRootFilesystem: false
+      privileged: false
     env:
       - name: DB
         value: "{{ .Values.options.databaseName }}"
