@@ -19,7 +19,7 @@ This chart ...
 * PersistentVolume requirements (if persistence.enabled) - PV provisioner support, StorageClass defined, etc. (i.e. PersistentVolume provisioner support in underlying infrastructure with ibmc-file-gold StorageClass defined if persistance.enabled=true)
 * Simple bullet list of CPU, MEM, Storage requirements
 * Even if the chart only exposes a few resource settings, this section needs to inclusive of all / total resources of all charts and subcharts.
-
+* Describe any custom image policy requirements if using a non-whitelisted image repository.
 
 ## Resources Required
 * Describes Minimum System Resources Required
@@ -27,14 +27,14 @@ This chart ...
 ## Installing the Chart
 * Include at the basic things necessary to install the chart from the Helm CLI - the general happy path
 * Include setup of other items required
-* Security privileges required to deploy chart
+* Security privileges required to deploy chart (role, PodSecurityPolicy, etc)
 * Include verification of the chart 
 * Ensure CLI only and avoid any ICP or ICS language used
 
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release stable/<chartname>
+$ helm install --tls --namespace <your pre-created namespace> --name my-release stable/<chartname>
 ```
 
 The command deploys <Chart name> on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -54,7 +54,7 @@ See NOTES.txt associated with this chart for verification instructions
 To uninstall/delete the `my-release` deployment:
 
 ```bash
-$ helm delete my-release --purge
+$ helm delete my-release --purge --tls
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.  If a delete can result in orphaned components include instructions with additional commands required for clean-up.  
@@ -118,3 +118,6 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 ## Documentation
 * Can have as many supporting links as necessary for this specific workload however don't overload the consumer with unnecessary information.
 * Can be links to special procedures in the knowledge center.
+
+## Support
+* This section should either link to or describe what support is available for the product.  

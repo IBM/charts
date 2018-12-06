@@ -1,9 +1,9 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ template "fullname" . }}
+  name: {{ template "sample.chart.fullname" . }}
   labels:
-    app: {{ template "fullname" . }}
+    app: {{ template "sample.chart.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
@@ -15,21 +15,42 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "fullname" . }}
+        app: {{ template "sample.chart.name" . }}
         chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
       annotations:
-        productName: IBM nginx sample
-        productID: IBMNginxSample_1000_sample_00000
-        productVersion: 1.0
+        productName: "IBM nginx sample"
+        productID: "IBMNginxSample_1000_sample_00000"
+        productVersion: "1.0"
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        {{/* nginx requires a root user.  Charts should not typically run with root. */}}
+        runAsNonRoot: false
+        runAsUser: 0
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}   
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            {{/* nginx requires this is set to false */}}
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - CHOWN
+              - DAC_OVERRIDE
+              - SETGID
+              - SETUID
+              - NET_BIND_SERVICE
           ports:
             - containerPort: 80
           volumeMounts:
@@ -48,4 +69,4 @@ spec:
       volumes:
         - name: index-vol
           configMap:
-            name: {{ template "fullname" . }}-config
+            name: {{ template "sample.chart.fullname" . }}-config
