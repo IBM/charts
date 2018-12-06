@@ -14,5 +14,5 @@ sch:
     metering:
       productName: "Db2 Developer-C Edition"
       productID: "IBMDb2DeveloperCEdition_11133_dev_00000"
-      productVersion: "11.1.3.3"        
+      productVersion: "11.1.4.4"        
 {{- end -}}
