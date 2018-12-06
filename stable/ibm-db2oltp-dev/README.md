@@ -4,7 +4,7 @@
 
 ## Introduction
 
-This chart consist of IBM Db2 Developer-C Edition v11.1.3.3 and is a persistent relational database intended to be deployed in a kubernetes environments. For full step-by-step documentation for installing this chart click [here](https://developer.ibm.com/recipes/tutorials/db2-integration-into-ibm-cloud-private/) for the developerWorks recipe.
+This chart consist of IBM Db2 Developer-C Edition v11.1.4.4 and is a persistent relational database intended to be deployed in a kubernetes environments. For full step-by-step documentation for installing this chart click [here](https://developer.ibm.com/recipes/tutorials/db2-integration-into-ibm-cloud-private/) for the developerWorks recipe.
 
 ## Chart Details
 This chart will do the following:
@@ -17,7 +17,76 @@ This chart will do the following:
 
 Some prerequisites can be found under [Release Notes](ReleaseNotes.md) along with what's new.
 
-### Pod Security Policy (Prereq #1)
+### PodSecurityPolicy Requirements
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
+
+* Predefined PodSecurityPolicy name: [`ibm-privileged-psp`](https://ibm.biz/cpkspec-psp)
+* Custom PodSecurityPolicy definition:
+
+```yaml
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: db2oltp-dev-psp
+spec:
+  allowPrivilegeEscalation: true
+  privileged: false
+  allowedCapabilities:
+  - SETPCAP
+  - MKNOD
+  - AUDIT_WRITE
+  - CHOWN
+  - NET_RAW
+  - DAC_OVERRIDE
+  - FOWNER
+  - FSETID
+  - KILL
+  - SETGID
+  - SETUID
+  - NET_BIND_SERVICE
+  - SYS_CHROOT
+  - SETFCAP
+  - SYS_RESOURCE
+  - IPC_OWNER
+  - SYS_NICE
+  fsGroup:
+    rule: RunAsAny
+  hostIPC: true
+  hostNetwork: false
+  hostPID: false
+  hostPorts:
+  - max: 65535
+    min: 1
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - '*'
+```
+
+* Custom ClusterRole for the custom PodSecurityPolicy:
+
+```yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: db2oltp-dev-cr
+rules:
+- apiGroups:
+  - extensions
+  resources:
+  - podsecuritypolicies
+  resourceNames:
+  - db2oltp-dev-psp
+  verbs:
+  - use
+```
+
+#### Configuration scripts can be used to create the required resources
 
 - The Db2 chart requires a cluster administrator to apply the provided namespace and PodSecurityPolicy yaml files. The PodSecurityPolicy applies the required privileges to the new namespace where Db2 will be installed. A cluster administrator can run the following to apply the pod security policy. 
 
@@ -35,17 +104,17 @@ On Red Hat OpenShift platforms, run:
 
 - Remember to deploy Db2 in the namespace you have created with the respective privileges. This can be done by selecting the associated namespace in the `Target namespace` configuration panel. Or if installing by command line, you may specify `--namespace <namespace>`.
 
-### Docker container (Prereq #2) 
+### Docker container (Prereq #1) 
 
-- User must be subscribed to [Db2 Developer-C Editon on Docker Store](https://store.docker.com/images/db2-developer-c-edition) so they can generate a key to access the image.
-- After subscription, visit [Docker Cloud](https://cloud.docker.com/swarm) and in the upper right corner, click on your user ID drop-down menu and select Account Settings. Scroll down and Add API key. 
+- User must be subscribed to [Db2 Developer-C Editon on Docker Store](https://store.docker.com/images/db2-developer-c-edition) to access the image. 
+- A Docker Api-Key is no longer required. Instead, the docker-password may be used.
 - Create Docker Store registry secret must be pre-created via kubectl CLI:
-  * `kubectl create secret docker-registry <secretname>  --docker-username=<userid> --docker-password=<API key> --docker-email=<email> --namespace=default`
+  * `kubectl create secret docker-registry <secretname>  --docker-username=<userid> --docker-password=<pwd> --docker-email=<email> --namespace=default`
 - Patch default serviceaccount in namespace services OR specify the name of the created secret on install:
   * To patch serviceaccount, run  `kubectl patch serviceaccount default -p ‘{“imagePullSecrets”: [{“name”: “<secretname>”}]}’ --namespace=default`
   * To specify the secret on install, you can enter it into the kube UI in the "Secret Name" box when you Click configure or if using helm CLI, use `--set global.image.secretName=<secretname>` on helm install. 
 
-### Storage (Prereq #3) 
+### Storage (Prereq #2) 
 
 - Persistence method needs to be selected to ensure data is not lost in the event we lose the node running the Db2 application. 
 PersistentVolume needs to be pre-created prior to installing the chart if `Enable persistence for this deployment` is selected and `Use dynamic provisioning for persistent volume` is not. For further details about the default values, see [persistence](#persistence) section.
@@ -144,7 +213,7 @@ helm search <repo> --tls
 
 # Finally install the respective chart
 
-$ helm install --name my-release local/ibm-db2oltp-dev:3.1.0 --tls
+$ helm install --name my-release local/ibm-db2oltp-dev:3.2.0 --tls
 ```
 
 The command deploys ibm-db2oltp-dev on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -152,7 +221,7 @@ The command deploys ibm-db2oltp-dev on the Kubernetes cluster in the default con
 ## Configuration
 
 You may change the default of each parameter using the `--set key=value[,key=value]`.
-I.e `helm install --name my-release --set global.image.secretName=<secretname> local/ibm-db2oltp-dev:3.1.0 --tls`
+I.e `helm install --name my-release --set global.image.secretName=<secretname> local/ibm-db2oltp-dev:3.2.0 --tls`
 
 > **Tip**: You can configure the default [values.yaml](values.yaml)
 
@@ -166,7 +235,7 @@ The following tables lists the configurable parameters of the ibm-db2oltp-dev ch
 | `global.image.secretName`           | Docker Store registry secret                        | `nil` - Enter a generated secret name as explained above or patch default serviceaccount |
 | `arch`                              | Worker node architecture                            | `nil` - will try to detect it automatically based on the node deploying the chart. Or user can choose either amd64, s390x, or ppc64le |
 | `imageRepository`                   | Db2 Developer-C Edition image repository            | `store/ibmcorp/db2_developer_c`                                                  |
-| `imageTag`                          | Db2 Developer-C Edition image tag                   | `11.1.3.3b` - will be suffixed with `-<arch>` once architecture is determined    |
+| `imageTag`                          | Db2 Developer-C Edition image tag                   | `11.1.4.4` - will be suffixed with `-<arch>` once architecture is determined    |
 
 ## Service Configuration
 
