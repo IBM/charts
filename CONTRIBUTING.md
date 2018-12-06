@@ -2,7 +2,7 @@
 
 This repository hosts helm charts intended for use with IBM(R) Cloud Private.
 
-**Important:** all contributions from outside of IBM must be made to the `community` directory. The `stable` directory is used only for charts distributed by IBM. IBM teams must continue to deliver charts through the existing internal build process, and cannot add charts directly through GitHub.
+**Important:** the `stable` directory cannot be directly contributed to through GitHub and is used only for IBM product charts that go through IBM's internal build process. If you are contributing charts for non-IBM products, or are from an IBM team contributing charts for open source projects, these contributions must be made to the `community` directory.
 
 The `repo/stable` and `repo/community` directories are helm repositories, and their index.yaml file is built automatically based on the `MASTER` branch. The `repo/stable` repository is part of the default configuration of IBM Cloud Private, and as such, all charts in that repository will be displayed by default in the IBM Cloud Private catalog. The `repo/community` repository can be easily added to the IBM Cloud Private user interface by navigating to **Manage > Helm Repositories** adding https://github.com/ibm/charts/tree/master/repo/community to the list of Helm repositories. (It may be added by default in future releases of IBM Cloud Private.)
 
