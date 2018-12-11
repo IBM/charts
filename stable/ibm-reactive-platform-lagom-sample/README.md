@@ -27,6 +27,10 @@ As well as deploying the Chirper microservices, the Helm chart:
 * Kubernetes 1.11 or later
 * A dedicated "Kubernetes" namespace
 
+## PodSecurityPolicy Requirements
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator setup a custom PodSecurityPolicy for you based on the predefined policy below:
+* Predefined PodSecurityPolicy name: [ibm-anyuid-psp](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md)
+
 
 ## Resources Required
 * CPU: 1 core
@@ -39,6 +43,7 @@ To install the chart from the command line with the release name `my-release` in
     helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable/ --tls
     helm install --name my-release --set hostname=chirper.<icp proxy node address>.nip.io --namespace my-namespace ibm-charts/ibm-reactive-platform-lagom-sample --tls
 
+Note that the hostname is a required value and needs to be set as part of the helm install.
 This command deploys the Chirper Reactive_platform Lagom Sample on the Kubernetes cluster in the default configuration. The configuration section lists the parameters that can be configured during installation.
 ### Installing with IBM Cloud Private
 To install the chart with the release name `my-release`:
@@ -70,6 +75,16 @@ You can programmatically run the test in the following way:
     helm test my-release
 
 replacing `my-release` with whatever you named your deployment.
+
+## Upgrading the chart
+First, ensure that the repo has been added to the helm list via the command (if not previously done - see "Installing from the command line" instructions):
+
+    helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable/ --tls
+
+Then run the following command to upgrade your deployed chart to the latest version, replacing `my-release` with whatever you named your deployment:
+
+    helm upgrade `my-release` ibm-charts/ibm-reactive-platform-lagom-sample --recreate-pods --tls
+
 
 ## Configuration
 
