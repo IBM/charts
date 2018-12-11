@@ -1,13 +1,37 @@
+# Helm test - Checks access to the metrics endpoint
+{{- include "sch.config.init" (list . "nodejsSample.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.nodejsSample.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "metrics-endpoint-test" -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) }}
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ .Release.Name }}-metrics-endpoint-test"
+  name: "{{ $fullTestCompName }}"
   annotations:
     "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
 spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000 
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
   restartPolicy: Never
   containers:
-    - name: "{{ .Release.Name }}-metrics-endpoint-test"
-      image: ibmcom/icp-nodejs-sample:latest
+    - name: "{{ $fullTestCompName }}"
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1000
+        capabilities:
+          drop:
+          - ALL
       command: ["wget"]
-      args:  ['{{ template "fullname" . }}:{{ .Values.service.port }}/metrics']
+      args:  ['{{ include "sch.names.fullCompName" (list . $compName) }}:{{ .Values.service.port }}/metrics','-O','-']
