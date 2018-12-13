@@ -1,26 +1,17 @@
-# What’s new in Chart Version 1.9.0
-### IBM MQ
- - See what it will take to migrate to IBM Cloud Private
- - See summary of migration complexity for each Queue Manager
- - See details of all migration issues including pointers to occurrences found and suggested solutions
-
-### Experimental Mode
- - Introducing experimental mode!
- - Press Ctrl + Shift + X to see experimental dev effort values for MQ
-
-### Shared Libraries
- - Shared Library information is now collected for each profile
- - The inventory report for each application contains any shared libraries that are being used
- - Shared libraries files are now available in the recommendations screen
-
+# What’s new in Chart Version 1.9.1
 ### Data Collector Enhancements
- - Defaulting to use system Java (non-Windows systems) to reduce library and Java architecture issues
- - Support for custom profiles
- - Support for scanning jar and zip files
- - Support for custom location of profileRegistry.xml
- - Improved logging for better trouble shooting
+ - Configurable heap sizes for analysis of large systems
+ - Support for -java-home parameter
+ - Support for execution as user other than wsadmin owner
+ - Improved handling of SOAP Timeout issues
+ - Improved robustness of handling outside file locations
+ - Improved handling of unexpected files during upload
 
 # Fixes
+### Analysis Enhancements
+ - Applications without technologies are now handled correctly
+ - Fixed incorrectly detected technologies
+ - Fixed bugs around complexity tags
 
 # Breaking Changes
 
@@ -32,6 +23,7 @@
 # Version History
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.9.1 | Dec 13, 2018| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.1 ibmcom/transformation-advisor-server:1.9.1 ibmcom/transformation-advisor-ui:1.9.1 | None | DC Enhancements            |
 | 1.9.0 | Nov 15, 2018| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.0 ibmcom/transformation-advisor-server:1.9.0 ibmcom/transformation-advisor-ui:1.9.0 | None | Improved MQ Analysis       |
 | 1.8.1 | Oct 26, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.8.1 ibmcom/transformation-advisor-server:1.8.1 ibmcom/transformation-advisor-ui:1.8.1 | None | Data Collector Patch       |
 | 1.8.0 | Oct 01, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.8.0 ibmcom/transformation-advisor-server:1.8.0 ibmcom/transformation-advisor-ui:1.8.0 | None | MQ Analysis                | 
