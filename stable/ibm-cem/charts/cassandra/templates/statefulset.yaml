@@ -42,6 +42,17 @@ spec:
       labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        supplementalGroups:
+        {{- range $group := .Values.global.persistence.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -57,31 +68,22 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
-      initContainers:
-        - name: set-volume-permissions
-          image: "{{ trimSuffix "/" .Values.global.image.repository }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["sh", "-c", "mkdir -p /opt/ibm/cassandra/data /opt/ibm/cassandra/logs ; chown -R cassandra:cassandra /opt/ibm/cassandra/data /opt/ibm/cassandra/logs"]
-          securityContext:
-            runAsUser: 0
-          volumeMounts:
-            - name: {{ $dataTemplateName }}
-              mountPath: /opt/ibm/cassandra/data
-          {{ if ne .Values.global.persistence.storageClassOption.cassandrabak "none" }}
-            - name: {{ $backTemplateName }}
-              mountPath: /opt/ibm/cassandra/data/backup_tar
-          {{ end }}
-            - name: {{ .Release.Name }}-cassandralogs
-              mountPath: /opt/ibm/cassandra/logs
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       containers:
         - name: {{ include "sch.names.fullCompName" (list .) | quote }}
-          image: "{{ trimSuffix "/" .Values.global.image.repository }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.image.name }}{{ if eq .Capabilities.KubeVersion.Platform "linux/ppc64le" }}-ppc64le{{ end }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
 #          dnsPolicy: ClusterFirst
 #          restartPolicy: Always
 #          securityContext: {}
@@ -147,7 +149,7 @@ spec:
             - name: CASSANDRA_SCRIPTS
               value: /opt/ibm/backup_scripts
             - name: CASSANDRA_SEEDS
-              value: "CUSTOM_KUBERNETES_STATEFULSET_SEED_LIST"
+              value: {{ .Values.seeds | quote }}
             - name: CASSANDRA_COMMITLOG_COMPRESSION
               value: LZ4Compressor
             - name: CASSANDRA_COMMITLOG_TOTAL_SPACE_MB
@@ -168,6 +170,8 @@ spec:
               value: "500"
             - name: CASSANDRA_AUTHENTICATION_ENABLED
               value: "enabled"
+            - name: CASSANDRA_BOOTSTRAP_CONFIG
+              value: {{ .Release.Name }}-cassandra-bootstrap-config
             #
             # Remove the comment from the next two
             # lines to enable the jolokia jvm agent.

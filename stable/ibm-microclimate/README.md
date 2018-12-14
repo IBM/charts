@@ -24,10 +24,74 @@ Installing the chart will:
 
 ## Prerequisites
 - IBM Cloud Private version 3.1. Older versions of IBM Cloud Private are supported by chart versions v1.5.0 and earlier only. Version support information can be found in the release notes of each chart release.
-- An IBM Cloud Private cluster with worker nodes that have x86-64 architecture.
+- An IBM Cloud Private cluster with worker nodes that have x86-64 or ppc64le architecture.
 - Ensure [socat](http://www.dest-unreach.org/socat/doc/README) is available on all worker nodes in your cluster. Microclimate uses Helm internally and both the Helm Tiller and client require socat for port forwarding.
 - Download the IBM Cloud Private CLI, cloudctl, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
 - Before you install Microclimate, decide whether you want to deploy to IBM Cloud Kubernetes Service (IKS). If you want to deploy to IKS, when you install Microclimate, specify a Docker registry location on the `jenkins.Pipeline.Registry.URL` property. Both Microclimate and IKS need to access this registry.
+
+## Pod Security Policies
+Microclimate requires a `PodSecurityPolicy` to be bound to the target namespace prior to installation.
+
+The predefined `PodSecurityPolicy`, `ibm-anyuid-hostpath-psp`, is verified for this chart. If your target namespace does not already have this policy applied, Microclimate applies the policy during the installation. See the following code for the `ClusterRole` that is applied as well as the `PodSecurityPolicy`.
+
+The following code shows the predefined `PodSecurityPolicy`, `ibm-anyuid-hostpath-psp`:
+```
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  annotations:
+    kubernetes.io/description: "This policy allows pods to run with 
+      any UID and GID and any volume, including the host path.  
+      WARNING:  This policy allows hostPath volumes.  
+      Use with caution." 
+  name: ibm-anyuid-hostpath-psp
+spec:
+  allowPrivilegeEscalation: true
+  fsGroup:
+    rule: RunAsAny
+  requiredDropCapabilities: 
+  - MKNOD
+  allowedCapabilities:
+  - SETPCAP
+  - AUDIT_WRITE
+  - CHOWN
+  - NET_RAW
+  - DAC_OVERRIDE
+  - FOWNER
+  - FSETID
+  - KILL
+  - SETUID
+  - SETGID
+  - NET_BIND_SERVICE
+  - SYS_CHROOT
+  - SETFCAP 
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - '*'
+```
+
+The following code shows the custom `ClusterRole` for the predefined `PodSecurityPolicy`, `ibm-anyuid-hostpath-psp`:
+```
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+  name: ibm-anyuid-hostpath-clusterrole
+rules:
+- apiGroups:
+  - extensions
+  resourceNames:
+  - ibm-anyuid-hostpath-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+```
 
 ## Resources Required
 
@@ -89,6 +153,9 @@ The Microclimate pipeline needs a namespace to deploy applications into. Create 
 
 This is the default target namespace used by the Microclimate pipeline for deployments. If you want to specify a different namespace, you must set the `jenkins.Pipeline.TargetNamespace` chart value to match the name of the desired namespace when installing the Microclimate chart.
 
+#### Determine your `cluster_ca_domain`
+
+The following steps require the `cluster_ca_domain` certificate authority (CA) domain. During IBM Cloud Private installation, this CA domain was set in the config.yaml file. If you did not specify a CA domain name, `mycluster.icp` is the default value.
 
 #### Create a new ClusterImagePolicy
 
@@ -103,9 +170,8 @@ metadata:
   name: microclimate-cluster-image-policy
 spec:
   repositories:
-  - name: mycluster.icp:8500/*
+  - name: <cluster_ca_domain>:8500/*
   - name: docker.io/maven:*
-  - name: docker.io/lachlanevenson/k8s-helm:*
   - name: docker.io/jenkins/*
   - name: docker.io/docker:*
 ```
@@ -121,7 +187,7 @@ Use the following code to create a Docker registry secret:
 
 ```
 kubectl create secret docker-registry microclimate-registry-secret \
-  --docker-server=mycluster.icp:8500 \
+  --docker-server=<cluster_ca_domain>:8500 \
   --docker-username=<account-username> \
   --docker-password=<account-password> \
   --docker-email=<account-email>
@@ -154,7 +220,7 @@ Microclimate needs a second secret to allow the pipeline to deploy applications 
 
 ```
 kubectl create secret docker-registry microclimate-pipeline-secret \
-  --docker-server=mycluster.icp:8500 \
+  --docker-server=<cluster_ca_domain>:8500 \
   --docker-username=<account-username> \
   --docker-password=<account-password> \
   --docker-email=<account-email> \
@@ -380,11 +446,11 @@ These commands can be run from any host that has a kubectl client with access to
 
 To ensure that you install the chart with the correct pipeline registry URL, perform a release upgrade to your current Microclimate installation.
 
-- Enter the following commands into the Helm CLI, substituting your correct value in place of the `<mycluster.icp:8500>` and `<ns2>` variables:
+- Enter the following commands into the Helm CLI, substituting your correct value in place of the `<cluster_ca_domain:8500>` and `<ns2>` variables:
   - `helm repo add ibm-charts-public https://raw.githubusercontent.com/IBM/charts/master/repo/stable`
-  - `helm upgrade microclimate --set jenkins.Pipeline.Registry.Url=<mycluster.icp:8500> --namespace <ns2> ibm-charts-public/ibm-microclimate --reuse-values --tls`
+  - `helm upgrade microclimate --set jenkins.Pipeline.Registry.Url=<cluster_ca_domain:8500> --namespace <ns2> ibm-charts-public/ibm-microclimate --reuse-values --tls`
 - After you upgrade the chart with the correct registry URL, the `microclimate-ibm-microclimate-<xxx-xxx>` portal pod, the `microclimate-ibm-microclimate-devops-<xxx-xxx>` DevOps pod, and the `microclimate-jenkins-<xxx-xxx>` Jenkins pod are restarted.
-- You can check your registry URL value in the Jenkins UI. Navigate to `Jenkins`>`Manage Jenkins`>`Configure System`>`Global properties`>`Environment variables`. Then, find the `Name: REGISTRY` and `Value: mycluster.icp:8500/ns2` to see the environment variable setting. If you change the value in the Jenkins UI, the change doesn't persist after you restart IBM Cloud Private.
+- You can check your registry URL value in the Jenkins UI. Navigate to `Jenkins`>`Manage Jenkins`>`Configure System`>`Global properties`>`Environment variables`. Then, find the `Name: REGISTRY` and `Value: <cluster_ca_domain>:8500/ns2` to see the environment variable setting. If you change the value in the Jenkins UI, the change doesn't persist after you restart IBM Cloud Private.
 - When the portal pod is running, log in to the Microclimate portal UI, and the file-watcher, editor, and loadrunner pods are restarted.
 - Run the `kubectl get pods` command to view the status of the pods after the upgrade.
   ```
@@ -397,6 +463,10 @@ To ensure that you install the chart with the correct pipeline registry URL, per
   microclimate-ibm-microclimate-devops-55d6c67f49-tgncz             1/1       Running   0          3m
   microclimate-jenkins-b6fd6d5b8-dz2q9                              1/1       Running   0          3m
   ```
+
+## PodSecurityPolicy Requirements
+
+We bundle the role binding for the ibm-anyuid-hostpath-psp as part of the chart, so that they are installed alongside Microclimate, without requiring user intervention
 
 ## Limitations
 
