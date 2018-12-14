@@ -34,7 +34,11 @@ spec:
         redis-node: "true"
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
+        runAsNonRoot: true
         runAsUser: 100
       affinity:
         nodeAffinity:
@@ -51,15 +55,13 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       serviceAccountName: {{ template "redis-ha.serviceAccountName" . }}
       containers:
       - name: redis
-        image: "{{ .Values.global.image.repository }}/hdm-redis-ha:{{ .Values.image.tag }}"
+        image: "{{ include "redis.getImageRepo" . }}/hdm-redis-ha:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy | quote  }}
         resources:
 {{ include "redis.comp.size.data" (list . "server" "resources") | indent 10 }}
@@ -89,5 +91,14 @@ spec:
             - "redis-cli -h $(hostname) ping"
           initialDelaySeconds: 20
           periodSeconds: 30
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 100
+          capabilities:
+            drop:
+            - ALL
       volumes:
       - name: data

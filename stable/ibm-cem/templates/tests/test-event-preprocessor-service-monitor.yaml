@@ -23,6 +23,12 @@ metadata:
 {{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
     origin: helm-cem
 spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -38,14 +44,12 @@ spec:
           - key: beta.kubernetes.io/arch
             operator: In
             values:
-            {{- if .Values.arch }}
-              - {{ .Values.arch }}
-            {{- else }}
-              - {{ template "arch" . }}
-            {{- end }}
+            {{- range $arch := .Values.arch }}
+              - {{ $arch -}}
+            {{ end }}
   containers:
     - name: "cem-helm-tests"
-      image: "{{ .Values.global.image.repository }}/hdm-cem-helm-tests:{{ .Values.commonimages.cemhelmtests.image.tag }}"
+      image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-cem-helm-tests:{{ .Values.commonimages.cemhelmtests.image.tag }}"
       env:
         - name: test_url
           value: '{{ include "cem.services.eventpreprocessor" . }}'
@@ -53,4 +57,13 @@ spec:
           value: "3051"
       imagePullPolicy: IfNotPresent
       command: ["sh", "-c", "wget --timeout=10 --no-check-certificate -O - $test_url/servicemonitor"]
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1000
+        capabilities:
+          drop:
+          - ALL
   restartPolicy: Never

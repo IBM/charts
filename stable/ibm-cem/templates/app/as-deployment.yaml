@@ -16,6 +16,7 @@
 {{- $rbaTlsTemplateName := include "sch.names.volumeClaimTemplateName" (list . "config" $deploymentName) -}}
 {{- $rootData := fromYaml (include "root.data" .) -}}
 {{- $rootMetering := $rootData.metering -}}
+
 apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
@@ -40,6 +41,12 @@ spec:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
 {{ include "ingress-host-alias" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -55,19 +62,49 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       initContainers:
       - name: waitforcouchdb
-        image: "{{ .Values.global.image.repository }}/hdm-icp-rba-as:{{ .Values.commonimages.rba.as.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-as:{{ .Values.commonimages.rba.as.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ template "releasename" . }}-couchdb.{{ .Release.Namespace }}.svc; do echo waiting for couchdb $i;i=$((i+1)); sleep 2; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+      - name: migratedata
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-as:{{ .Values.commonimages.rba.as.image.tag }}"
+        command: ["sh", "-c", "npm run migration"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        env:
+{{ include "rbaas.env" . | indent 8 }}
       containers:
       - name: rba-as
-        image: "{{ .Values.global.image.repository }}/hdm-icp-rba-as:{{ .Values.commonimages.rba.as.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-as:{{ .Values.commonimages.rba.as.image.tag }}"
         imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
         args:
         - npm
         - start
@@ -87,67 +124,16 @@ spec:
         resources:
 {{ include "ibmcemprod.comp.size.data" (list . "as" "resources") | indent 10 }}
         env:
-        - name: LICENSE
-          value: {{ .Values.license | default "not accepted" }}
-        - name: RBA_AUTOMATIONSERVICE_EXTERNAL_HOST
-          value: {{ include "cem.service.host" (list . "cem.services.rbaas") }}
-        - name: RBA_DATABASE_ENCRYPTION_KEYNAME
-          valueFrom:
-            secretKeyRef:
-              name: '{{ template "releasename" . }}-cem-model-secret'
-              key: keyname
-        - name: RBA_DATABASE_ENCRYPTION_KEYVALUE
-          valueFrom:
-            secretKeyRef:
-              name: '{{ template "releasename" . }}-cem-model-secret'
-              key: keyvalue
-        - name: RBA_DEVOPS_USER
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-rba-devops-secret
-              key: username
-        - name: RBA_DEVOPS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-rba-devops-secret
-              key: password
-        - name: RBA_AS_ENABLE_API_DOCS
-          value: 'true'
-        - name: RBA_DEPLOYMODE
-          value:  'icp-cem'
-        - name: RBA_JWT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-rba-jwt-secret
-              key: secret
-        - name: RBA_AUTOMATIONSERVICE_EXTERNAL_PROTOCOL
-          value:  {{ include "cem.service.protocol" (list . "cem.services.rbaas") }}
-        - name: RBA_AUTOMATIONSERVICE_INTERNAL_PROTOCOL
-          value:  http
-        - name: RBA_DATABASE_CLUSTER_ENABLED
-          value: 'true'
-        - name: RBA_DATABASE_CLUSTER_PROTOCOL
-          value: {{ include "cem.service.protocol" (list . "cem.services.couchdb") }}
-        - name: RBA_DATABASE_CLUSTER_HOST
-          value: {{ include "cem.service.host" (list . "cem.services.couchdb") }}
-        - name: RBA_DATABASE_CLUSTER_PORT
-          value: {{ include "cem.service.port" (list . "cem.services.couchdb") | quote }}
-        - name: RBA_DATABASE_CLUSTER_DBNAMEPREFIX
-          value: icp
-        - name: RBA_DATABASE_CLUSTER_USER
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-{{ .Values.couchdb.secretName }}
-              key: username
-        - name: RBA_DATABASE_CLUSTER_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-{{ .Values.couchdb.secretName }}
-              key: password
-        - name: INGRESS_PREFIX
-          value: '{{ .Values.global.ingress.prefix }}'
-        - name: INGRESS_DOMAIN
-          value: '{{ .Values.global.ingress.domain }}'
+{{ include "rbaas.env" . | indent 8 }}
       restartPolicy: Always
-      securityContext:
-        runAsUser: 1000
+{{ if eq .Values.rba.as.updateStrategy "RollingUpdate" }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+{{ else }}
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+{{ end }}

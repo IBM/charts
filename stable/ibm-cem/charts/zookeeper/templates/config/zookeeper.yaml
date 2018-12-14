@@ -4,7 +4,6 @@
 kind: ConfigMap
 metadata:
   name: {{ $configMapName | quote }}
-  namespace: {{ .Release.Namespace }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
 apiVersion: v1
@@ -45,9 +44,15 @@ data:
     # Set to "0" to disable auto purge feature
     autopurge.purgeInterval=6
     cnxTimeout=1000
+    {{- if .Values.global.zookeeper.clusterSize }}
+    {{- range $index := until (.Values.global.zookeeper.clusterSize | int) }}
+    server.{{add $index 1}}={{ $root.Release.Name }}-zookeeper-{{$index}}.{{ $root.Release.Name }}-zkensemble.{{ $root.Release.Namespace }}.svc:2888:3888:participant
+    {{- end }}
+    {{- else }}
     {{- range $index := until (.Values.clusterSize | int) }}
     server.{{add $index 1}}={{ $root.Release.Name }}-zookeeper-{{$index}}.{{ $root.Release.Name }}-zkensemble.{{ $root.Release.Namespace }}.svc:2888:3888:participant
-    {{- end}}
+    {{- end }}
+    {{- end }}
   log4j.properties: |-
     log4j.rootLogger=INFO, stdout
     log4j.appender.stdout=org.apache.log4j.ConsoleAppender

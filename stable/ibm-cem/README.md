@@ -1,7 +1,7 @@
 # IBM Cloud Event Management Community Edition
 
 ## Introduction
-* Use the IBM® Cloud Event Management Community Edition service to set up real-time incident management for your services, applications, and infrastructure.
+* Use the IBM® Cloud Event Management service to set up real-time incident management for your services, applications, and infrastructure.
 * Restore service and resolve operational incidents fast!
 * Empower your DevOps teams to correlate different sources of events into actionable incidents, synchronize teams, and automate incident resolution.
 * The service sets you on course to achieve efficient and reliable operational health, service quality and continuous improvement.
@@ -46,18 +46,6 @@ Ingress resources:
 * cem-api
 * cem-ingress
 
-Secret resources:
-* cem-couchdb-secret
-* cem-brokers-cred-secret
-* cem-cemusers-cred-secret
-* cem-channelservices-cred-secret
-* cem-email-cred-secret
-* cem-event-analytics-ui-session-secret
-* cem-integrationcontroller-cred-secret
-* cem-nexmo-cred-secret
-* rba-devops-secret
-* rba-jwt-secret
-
 Service resources:
 * cassandra
 * couchdb
@@ -95,9 +83,76 @@ Pods are spread across worker nodes using the Kubernetes anti-affinity feature.
 
 ## Prerequisites
 
-* IBM Cloud Private 2.1.0.3
+* IBM Cloud Private 2.1.0.3 or higher
 * Cluster admin privilege is required for OIDC registration, cluster security policies and service broker
 * The default storage class is used.  See the Storage section below.
+
+## PodSecurityPolicy Requirements
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+
+The predefined PodSecurityPolicy name: ibm-restricted-psp has been verified for this chart, if your target namespace is bound to this PodSecurityPolicy you can proceed to install the chart.
+
+This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the ICP user interface or the supplied instructions/scripts in the pak_extension pre-install directory.
+
+- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
+  - Custom PodSecurityPolicy definition:
+    ```
+    apiVersion: extensions/v1beta1
+    kind: PodSecurityPolicy
+    metadata:
+      annotations:
+        kubernetes.io/description: "This policy is the most restrictive, 
+          requiring pods to run with a non-root UID, and preventing pods from accessing the host." 
+        apparmor.security.beta.kubernetes.io/allowedProfileNames: runtime/default
+        apparmor.security.beta.kubernetes.io/defaultProfileName: runtime/default
+        seccomp.security.alpha.kubernetes.io/allowedProfileNames: docker/default
+        seccomp.security.alpha.kubernetes.io/defaultProfileName: docker/default
+      name: ibm-restricted-psp
+    spec:
+      allowPrivilegeEscalation: false
+      forbiddenSysctls:
+      - '*'
+      fsGroup:
+        ranges:
+        - max: 65535
+          min: 1
+        rule: MustRunAs
+      requiredDropCapabilities:
+      - ALL
+      runAsUser:
+        rule: MustRunAsNonRoot
+      seLinux:
+        rule: RunAsAny
+      supplementalGroups:
+        ranges:
+        - max: 65535
+          min: 1
+        rule: MustRunAs
+      volumes:
+      - configMap
+      - emptyDir
+      - projected
+      - secret
+      - downwardAPI
+      - persistentVolumeClaim
+    ```
+  - Custom ClusterRole for the custom PodSecurityPolicy:
+    ```
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: ibm-restricted-psp-clusterrole
+    rules:
+    - apiGroups:
+      - extensions
+      resourceNames:
+      - ibm-restricted-psp
+      resources:
+      - podsecuritypolicies
+      verbs:
+      - use
+    ```
+
 
 ## Resources Required
 #### System resources, based on default install parameters.
@@ -127,7 +182,7 @@ Note:
 
 ## Verifying the Chart via the Command Line: 
 
-* To verify the installation after all pods are in the ready state, run the following kubectl command:
+* To verify the installation after all pods are in the ready state, run the following helm command:
 `helm test <release> --tls --cleanup`
 
 ## Post installation
@@ -140,111 +195,129 @@ Note:
 2. Locate the installed helm release and select the actions menu -> Delete
 3. Confirm deletion by selecting the Remove button
 
-The helm delete command does not delete Persistent Volumes created by the installation. If the chart is removed and you do not want to retain its data:
+Removing helm release? If the chart is removed and you do not want to retain its data:
 1. Select the Menu -> Platform -> Storage
 2. Review any orphned Persistnece Volume Claims and delete as required.
-
-### Uninstalling the Chart via the Command Line
-
-To uninstall and delete the deployment:
-
-```bash
-helm delete --purge <release> --tls
-```
-
-The helm delete command does not delete Persistent Volumes created by the installation. If the chart is removed and you do not want to retain its data, review any orphaned Persistent Volume claims using the following command, and delete as required.
-
-```console
-$ kubectl get pvc -l release=<release>
-```
 
 ## Configuration
 
 The following tables lists the global configurable parameters of the cloud-event-management chart and their default values.
 
-| Parameter                                        | Description                              | Default              |
-| ------------------------------------------------ | ---------------------------------------- | -------------------- |
-| `global.image.repository`                        | Registry containing CEM services images  | ``                   |
-| `global.image.pullSecret`                        | Images pull secret                       | ``                   |
-| `global.masterIP`                                | The IP of the kubernetes master node     | ``                     |
-| `global.masterPort`                              | The Port of the kubernetes master node   | `8443`               |
-| `global.environmentSize`                         | The resource footprint requested         | `size0` _NOTE:1_     |
-| `global.cassandraNodeReplicas`                   | The number of cassandra servers          | `1`                  |
-| `global.persistence.enabled`                     | Data persistance between restarts        | `true`               |
-| `global.persistence.storageClassName`            | Persistance storage name                 | `nil`                |
-| `global.persistence.storageClassOption.datalayerjobs`   | Storage class option for Datalayer          | `default`              |
-| `global.persistence.storageClassOption.kafkadata`       | Storage class option for Kafka              | `default`              |
-| `global.persistence.storageClassOption.cassandradata`   | Storage class option for Cassandra data     | `default`              |
-| `global.persistence.storageClassOption.cassandrabak`    | Storage class option for Cassandra backup   | `default`              |
-| `global.persistence.storageClassOption.zookeeperdata`   | Storage class option for Zookeeper          | `default`              |
-| `global.persistence.storageClassOption.couchdbdata`     | Storage class option for CouchDB            | `default`              |
-| `global.persistence.storageSize.cassandradata`    | Data storage for each cassandra server   | `50Gi`               |
-| `global.persistence.storageSize.cassandrabak`     | Backup storage for each casandra server  | `50Gi`               |
-| `global.persistence.storageSize.couchdbdata `     | Storage for each couchdb server          | `1Gi`                |
-| `global.persistence.storageSize.datalayerjobs `   | Storage for dataapi service              | `512Mi`              |
-| `global.ingress.domain`                          | Fully Qualified Domain Name of Cloud Event Management            |          |
-| `global.ingress.tlsSecret`                       | TLS cerfificates for Ingress controller  | _NOTE:2_             |
-| `global.ingress.prefix`                          | Prefix for UI path to UI end point       | ``                   |
-| `commonimages.brokers.image.tag`                 | Brokers image tag                        |                      |
-| `commonimages.cemusers.image.tag`                | Users image tag                          |                      |
-| `commonimages.channelservices.image.tag`         | Channel services image tag               |                      |
-| `commonimages.datalayer.image.tag`               | Data layer image tag                     |                      |
-| `commonimages.eventanalyticsui.image.tag`        | Event analytics ui image tag             |                      |
-| `commonimages.eventpreprocessor.image.tag`       | Event preprocessor image tag             |                      |
-| `commonimages.incidentprocessor.image.tag`       | Incident processor image tag             |                      |
-| `commonimages.notificationprocessor.image.tag`   | Notification processor image tag         |                      |
-| `commonimages.integrationcontroller.image.tag`   | Integration Controller image tag         |                      |
-| `commonimages.normalizer.image.tag`              | Normalizer image tag                     |                      |
-| `commonimages.schedulingui.image.tag`            | Scheduling ui image tag                  |                      |
-| `commonimages.rba.rbs.image.tag`                 | Runbook service image tag                |                      |
-| `commonimages.rba.as.image.tag`                  | Automation service image tag             |                      |
-| `commonimages.cemhelmtests.image.tag`            | CEM helm tests image tag                 |                      |
-| `productName`                                    | Product name                             |                      |
-| `license`                                        | License                                  | `not accepted`       |
-| `arch`                                           | Architecture                             |                      |
-| `brokers.clusterSize`                            | Brokers cluster size                     | `1`                  |
-| `cemusers.clusterSize`                           | CEM users cluster size                   | `1`                  |
-| `channelservices.clusterSize`                    | Channel services cluster size            | `1`                  |
-| `datalayer.clusterSize`                          | Data layer cluster size                  | `1`                  |
-| `eventanalyticsui.clusterSize`                   | Eventan alytics ui cluster size          | `1`                  |
-| `eventpreprocessor.clusterSize`                  | Event preprocessor cluster size          | `1`                  |
-| `incidentprocessor.clusterSize`                  | Incident processor cluster size          | `1`                  |
-| `integrationcontroller.clusterSize`              | Integration controller cluster size      | `1`                  |
-| `normalizer.clusterSize`                         | Normalizer cluster size                  | `1`                  |
-| `normalizer.outgoingUseSelfsignedCert`           | Self signed certificate                  | `true`               |
-| `notificationprocessor.clusterSize`              | Notification processor cluster size      | `1`                  |
-| `schedulingui.clusterSize`                       | Scheduling ui cluster size               | `1`                  |
-| `rba.rbs.clusterSize`                            | Runbook cluster size                     | `1`                  |
-| `rba.as.clusterSize`                             | Automation cluster size                  | `1`                  |
-| `kafka.clusterSize`                              | Kafka cluster size                       | `1`                  |
-| `kafka.client.username`                          | Kafka username                           |                      |
-| `kafka.client.password`                          | Kafka password                           |                      |
-| `kafka.admin.username`                           | Kafka admin username                     |                      |
-| `kafka.admin.password`                           | Kafka admin password                     |                      |
-| `kafka.ssl.enabled`                              | Enable kafka SSL                         |                      |
-| `kafka.ssl.secret`                               | Kafka TLS secret                         |                      |
-| `kafka.ssl.password`                             | Kafka TLS password                       |                      |
-| `couchdb.clusterSize`                            | CouchDB cluster size                     | `1`                  |
-| `couchdb.autoClusterConfig.enabled`              | CouchDB cluster config                   | `false`              |
-| `couchdb.numShards`                              | CouchDB number of shards                 | `8`                  |
-| `couchdb.numReplicas`                            | CouchDB number of replicas               | `3`                  |
-| `couchdb.secretName`                             | CouchDB secret name                      |                      |
-| `redis.replicas.servers`                         | Redis servers replica count              | `3`                  | 
-| `redis.replicas.sentinels`                       | Redis sentinels replica count            | `3`                  | 
-| `email.mail`                                     | Sender email configuration               | `noreply-your-company-notification@your-company.com` |
-| `email.type`                                     | Email type                               | `direct`             |
-| `email.smtphost`                                 | Smtp host                                | ``                   | 
-| `email.smtpport`                                 | Smtp port                                | ``                   | 
-| `email.smtpuser`                                 | Smtp user                                | ``                   | 
-| `email.smtppassword`                             | Smtp password                            | ``                   | 
-| `email.apikey`                                   | API key required by the Sendgrid API     | ``                   | 
-| `nexmo.enabled`                                  | Nexmo SMS and Voice Messages             | `false`              | 
-| `nexmo.key`                                      | API key required by the Nexmo API        | ``                   | 
-| `nexmo.secret`                                   | API secret required by the Nexmo API     | ``                   | 
-| `nexmo.sms`                                      | Nexmo number to send SMS messages        | ``                   | 
-| `nexmo.voice`                                    | Nexmo number to send voice messages      | ``                   | 
-| `nexmo.numbers`                                  | API key required by the Sendgrid API     | `{}`                 | 
-| `nexmo.countryblacklist`                         | Blacklisted countries                    | `{}`                  | 
+| Parameter | Description | Default | 
+|-----------|-------------|---------| 
+| `commonimages` | CEM Services Image Tags| 
+| `commonimages.brokers.image.tag` | Brokers image tag. DO NOT EDIT| 
+| `commonimages.cemusers.image.tag` | CEM Users image tag. DO NOT EDIT| 
+| `commonimages.channelservices.image.tag` | channelservices image tag. DO NOT EDIT| 
+| `commonimages.datalayer.image.tag` | Datalayer image tag. DO NOT EDIT| 
+| `commonimages.eventanalyticsui.image.tag` | eventanalyticsui image tag. DO NOT EDIT| 
+| `commonimages.eventpreprocessor.image.tag` | eventpreprocessor image tag. DO NOT EDIT| 
+| `commonimages.incidentprocessor.image.tag` | incidentprocessor image tag. DO NOT EDIT| 
+| `commonimages.notificationprocessor.image.tag` | notificationprocessor image tag. DO NOT EDIT| 
+| `commonimages.integrationcontroller.image.tag` | integrationcontroller image tag. DO NOT EDIT| 
+| `commonimages.normalizer.image.tag` | normalizer image tag. DO NOT EDIT| 
+| `commonimages.schedulingui.image.tag` | schedulingui image tag. DO NOT EDIT| 
+| `commonimages.rba.rbs.image.tag` | rba-rbs image tag. DO NOT EDIT| 
+| `commonimages.rba.as.image.tag` | rba-as image tag. DO NOT EDIT| 
+| `commonimages.cemhelmtests.image.tag` | cemhelmtests image tag. DO NOT EDIT| 
+| `productName` | Product Name. Recommended NOT to be changed.| 
+| `license` | Must be set to "accept" to proceed with installation. Defaults to Not Accepted.| 
+| `arch` | Supported architecture. DO NOT EDIT| 
+| `brokers` | Brokers Configuration| 
+| `brokers.clusterSize` | Number of pod replicas| 
+| `cemusers` | CEM Users Configuration| 
+| `cemusers.clusterSize` | Number of pod replicas| 
+| `channelservices` | Channel Services Configuration| 
+| `channelservices.clusterSize` | Number of pod replicas| 
+| `datalayer` | Data Layer Configuration| 
+| `datalayer.clusterSize` | Number of pod replicas. For production, the recommended replica count is 4 or greater.| 
+| `eventanalyticsui` | CEM UI Configuration| 
+| `eventanalyticsui.clusterSize` | Number of pod replicas| 
+| `eventpreprocessor` | Event Preprocessor Configuration| 
+| `eventpreprocessor.clusterSize` | Number of pod replicas| 
+| `incidentprocessor` | Incident Processor Configuration| 
+| `incidentprocessor.clusterSize` | Number of pod replicas| 
+| `integrationcontroller` | Integration Controller Configuration| 
+| `integrationcontroller.clusterSize` | Number of pod replicas| 
+| `normalizer` | Normalizer Configuration| 
+| `normalizer.clusterSize` | Number of pod replicas| 
+| `normalizer.outgoingUseSelfsignedCert` | The Switch on self signed certificate check box is enabled by default. It is recommended to leave this check box enabled. Turn this feature on to send outgoing notifications through a secured (HTTP) webhook that uses a self-signed certificate.| 
+| `notificationprocessor` | Notification Processor Configuration| 
+| `notificationprocessor.clusterSize` | Number of pod replicas| 
+| `schedulingui` | Scheduling UI Configuration| 
+| `schedulingui.clusterSize` | Number of pod replicas| 
+| `rba` | IBM Runbook Automation Services Configuration| 
+| `rba.rbs.clusterSize` | Number of pod replicas| 
+| `rba.rbs.updateStrategy` | In case of release upgrades a migration task might require downtime to prevent inconsistencies (select Recreate). If no data is migrated, no downtime is necessary (select RollingUpdate)| 
+| `rba.as.clusterSize` | Automation - number of pod replicas| 
+| `rba.as.updateStrategy` | In case of release upgrades a migration task might require downtime to prevent inconsistencies (select Recreate). If no data is migrated, no downtime is necessary (select RollingUpdate)| 
+| `zookeeper` | Zookeeper Configuration| 
+| `zookeeper.clusterSize` | Number of pod replicas| 
+| `kafka` | Kafka Configuration| 
+| `kafka.clusterSize` | Number of pod replicas| 
+| `kafka.client.username` | kafka username. DO NOT EDIT| 
+| `kafka.client.password` | kafka password. DO NOT EDIT| 
+| `kafka.admin.username` | kafka admin username. DO NOT EDIT| 
+| `kafka.admin.password` | kafka admin password. DO NOT EDIT| 
+| `kafka.ssl.enabled` | Enable Kafka SSL. DO NOT EDIT.| 
+| `kafka.ssl.secret` | kafka tls secret. DO NOT EDIT| 
+| `kafka.ssl.password` | kafka tls password. DO NOT EDIT| 
+| `couchdb` | CouchDB Configuration| 
+| `couchdb.clusterSize` | Number of pod replicas| 
+| `couchdb.autoClusterConfig.enabled` | Allows you to scale up the Couchbd stateful set automatically using the kubernetes scale command. You must give the default service account in your namespace read access to the kubernetes API before enabling this parameter. Refer to the documentation for more information.| 
+| `couchdb.numShards` | This is equivalent to the 'q' parameter in the '[cluster]' section in default.ini and specifies the number of shards. See the [cluster] section documentation in the Couchdb document for details on this parameter. You are recomended to leave it as default unless you increase the number of stateful set replicas to 3 or more. Cloud Event Management uses the default sharding value of 8 shards. This allows up to 8 replicas. Consult couchdb documentation for details on these parameters.| 
+| `couchdb.numReplicas` | This is equivalent to the 'n' parameter  in the '[cluster]' section in default.ini and specifies the number of replicas of each document. See the Couchdb documentation for advice on what this should be set to. You are recommended to leave this as the default unless you increase the number of stateful set replicas to more than 3. Cloud Event Management uses the default sharding value of 3 replicas. This allows up to 8 replicas. Consult couchdb documentation for details on these parameters.| 
+| `couchdb.secretName` | couchdb secret name. DO NOT EDIT| 
+| `redis` | Redis Configuration| 
+| `redis.replicas.servers` | Number of pod replicas| 
+| `redis.replicas.sentinels` | Sentinels - number of pod replicas| 
+| `email` | Sender Email Configuration| 
+| `email.mail` | Set this property to the Email address that should be shown as the sender (From) of the message.| 
+| `email.type` | Set this property to "smtp" to use a mail relay server. This requires setting the other smtp-prefixed properties as well. Set to "direct" (default) to send directly to the recipient's server. Use "api" if the "sendgrid" service is available. This requires the "apikey" property also to be set.| 
+| `email.smtphost` | When "type" is set to "smtp", set this to the host name of your smtp server used for mail relay.| 
+| `email.smtpport` | When "type" is set to "smtp", set this to the port number used by the smtp server specified by the "smtphost" value.| 
+| `email.smtpuser` | When "type" is set to "smtp", set this to a valid user name for the smtp server specified by the "smtphost" value.| 
+| `email.smtppassword` | When "type" is set to "smtp", set this to the password for the user name defined by the "smtpuser" value.| 
+| `email.apikey` | When "type" is set to "api", set this value to the API key required by the Sendgrid API. (Send mail authorization is required).| 
+| `nexmo` | Nexmo SMS and Voice Configuration| 
+| `nexmo.enabled` | Set this property to enable the use of Nexmo to send SMS / Voice messages| 
+| `nexmo.key` | Set this value to the API Key required by the Nexmo API| 
+| `nexmo.secret` | Set this value to the API secret required by the Nexmo API| 
+| `nexmo.sms` | Set this to the Nexmo number from which to send SMS messages| 
+| `nexmo.voice` | Set this to the Nexmo number from which to send Voice messages| 
+| `nexmo.numbers` | Override numbers used for selected countries. Property names are country codes, values are objects with "voice" and "sms" properties'| 
+| `nexmo.countryblacklist` | Numbers from countries to which messages must not be sent| 
+| `global` | Global properties accessed in main and dependent charts| 
+| `global.image.repository` | Link to the registry containing all CEM services images| 
+| `global.image.pullSecret` | If the image registry requires authenication create a docker-registry secret with the Docker credentials and set this value to the name of that secret. Leave empty when using a public registry.| 
+| `global.masterIP` | ICP - Master IP| 
+| `global.masterPort` | ICP - Master Port| 
+| `global.environmentSize` | Controls the resource sizes the value can be either 'size1' or 'size0'. Size0 is a minimal spec for evaluation or development purposes.| 
+| `global.cassandraNodeReplicas` | cassandra - node replicas| 
+| `global.persistence.enabled` | enable persistence| 
+| `global.persistence.supplementalGroups` | Provide the gid of the volumes as list (required for NFS).| 
+| `global.persistence.storageClassName` | storage - class name| 
+| `global.persistence.storageClassOption.datalayerjobs` | data layer jobs storage class option| 
+| `global.persistence.storageClassOption.kafkadata` | kafka data storage class option| 
+| `global.persistence.storageClassOption.cassandradata` | Cassandra data Storage Class Type. This can be disabled by not specifying any option.| 
+| `global.persistence.storageClassOption.cassandrabak` | cassandra backup storage class option| 
+| `global.persistence.storageClassOption.zookeeperdata` | zookeeper data storage class option| 
+| `global.persistence.storageClassOption.couchdbdata` | couchdb data storage class option| 
+| `global.persistence.storageSize.cassandradata` | cassandra data storage size option| 
+| `global.persistence.storageSize.cassandrabak` | cassandra back up storage size option| 
+| `global.persistence.storageSize.couchdbdata` | couchdb data storage size option| 
+| `global.persistence.storageSize.datalayerjobs` | data layer jobs storage size option| 
+| `global.ingress.domain` | Domain must be set to the fully qualified domain name (FQDN) of the CEM service. This FQDN must resolve to the IP address of the ICp proxy host running the ingress controller.  This normally requires a DNS entry, for testing /etc/hosts on any client host may be updated.| 
+| `global.ingress.tlsSecret` | If tlsSecret is the empty string CEM will use the default TLS certificate installed on the ingress controller. If this certificate does not match the value of Domain browsers and other clients will raise security warnings. For production use a TLS certificate for the FQDN should be obtained from a well known certificate authority and installed in a TLS secret in the namespace. tlsSecret must be set to the name of this secret.| 
+| `global.ingress.prefix` | If multiple releases of CEM are installed in a single ICp each should be given a different FQDN, and each should have a TLS certificate installed. If the same FQDN is used for each release, or tlsSecret is left empty for any release, global.ingress.prefix may be used to give each a different path.  E.g. if global.ingress.domain is 'cem.example.com' and global.ingress.prefix is 'mycem/', the UI end point will be https://cem.example.com/mycem/cemui.| 
+| `global.ingress.port` | If installing into an ingress controller that has a specified port number that is different than the default (443), then the port number can be specified here. Normally, this port should be the default value.| 
+| `watsonworkspace` | Watson Workspace Outgoing Integration Configuration| 
+| `watsonworkspace.appid` | After creating a Watson Workspace application that CEM can integrate with, provide the Watson Workspace application ID to send outgoing notifications.| 
+| `watsonworkspace.appsecret` | After creating a Watson Workspace application that CEM can integrate with, provide the Watson Workspace application secret to send outgoing notifications.| 
+| `watsonworkspace.sharetoken` | After creating a Watson Workspace application that CEM can integrate with, provide the Watson Workspace application share token to send outgoing notifications.| 
+| `cemservicebroker` | CEM Service Broker Configuration| 
+| `cemservicebroker.suffix` | If multiple Cloud Event Management products are installed causing multiple cluster service broker registrations, a suffix will be required to separate out the instances so more than one cluster service broker can be registered within a single ICp environment. If not specified, no suffix will be added to the cluster service broker registered service.| 
+
 
 _NOTE:_
 
@@ -255,7 +328,7 @@ _NOTE:_
 ## Storage
 
 * If the default storage class is glusterfs then Persistent Volumes will be dynamically provisioned.
-* If you require a none-default storage class, update the persistance.storageClassName to the storage class name. Alternatively, set each individual value under global.persistance.storageClassOption to specific persistent volumes.
+* If you require a non-default storage class, update the persistance.storageClassName to the storage class name. Alternatively, set each individual value under global.persistance.storageClassOption to specific persistent volumes.
 
 ## Limitations
 
