@@ -24,46 +24,73 @@ This chart requires a PodSecurityPolicy to be bound to the target namespace prio
 * Predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp)
 * Custom PodSecurityPolicy definition:
 
+> Note: This PodSecurityPolicy only needs to be created once. If it already exist, skip this step.
+
 ```
 apiVersion: extensions/v1beta1
 kind: PodSecurityPolicy
 metadata:
   name: ibm-mq-psp
-  spec:
-    allowPrivilegeEscalation: true
-    fsGroup:
-      rule: RunAsAny
-    requiredDropCapabilities:
-    - MKNOD
-    allowedCapabilities:
-    - SETPCAP
-    - AUDIT_WRITE
-    - CHOWN
-    - NET_RAW
-    - DAC_OVERRIDE
-    - FOWNER
-    - FSETID
-    - KILL
-    - SETUID
-    - SETGID
-    - NET_BIND_SERVICE
-    - SYS_CHROOT
-    - SETFCAP
-    runAsUser:
-      rule: RunAsAny
-    seLinux:
-      rule: RunAsAny
-    supplementalGroups:
-      rule: RunAsAny
-    volumes:
-    - configMap
-    - emptyDir
-    - projected
-    - secret
-    - persistentVolumeClaim
-    forbiddenSysctls:
-    - '*'
+spec:
+  allowPrivilegeEscalation: true
+  fsGroup:
+    rule: RunAsAny
+  requiredDropCapabilities:
+  - MKNOD
+  allowedCapabilities:
+  - SETPCAP
+  - AUDIT_WRITE
+  - CHOWN
+  - NET_RAW
+  - DAC_OVERRIDE
+  - FOWNER
+  - FSETID
+  - KILL
+  - SETUID
+  - SETGID
+  - NET_BIND_SERVICE
+  - SYS_CHROOT
+  - SETFCAP
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - secret
+  - persistentVolumeClaim
+  forbiddenSysctls:
+  - '*'
 ```
+
+* Custom ClusterRole for the custom PodSecurityPolicy:
+
+```
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ibm-mq-psp-clusterrole
+rules:
+- apiGroups:
+  - extensions
+  resourceNames:
+  - ibm-mq-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+
+```
+
+The cluster admin can either paste the above PSP and ClusterRole definitions into the create resource screen in the UI or run the following two commands:
+
+- `kubectl create -f <PSP yaml file>`
+- `kubectl create clusterrole ibm-mq-psp-clusterrole --verb=use --resource=podsecuritypolicy --resource-name=ibm-mq-psp`
+
+In ICP 3.1, you also need to create the RoleBinding:
+
+- `kubectl create rolebinding ibm-mq-psp-rolebinding --clusterrole=ibm-mq-psp-clusterrole --serviceaccount=<namespace>:default --namespace=<namespace>`
 
 ## Resources Required
 
