@@ -43,6 +43,12 @@ spec:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
 {{ include "ingress-host-alias" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -58,28 +64,53 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       initContainers:
       - name: create-random-secrets
-        image: "{{ .Values.global.image.repository }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
         command: ["node"]
         args: ["create-secrets.js"]
         env:
         - name: RELEASE
           value: '{{ template "releasename" . }}'
       - name: waitforcouchdb
-        image: "{{ .Values.global.image.repository }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ template "releasename" . }}-couchdb.{{ .Release.Namespace }}.svc; do echo waiting for couchdb $i;i=$((i+1)); sleep 2; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
       - name: waitforredis
-        image: "{{ .Values.global.image.repository }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ template "releasename" . }}-redis-master-svc.{{ .Release.Namespace }}.svc; do echo waiting for redis $i;i=$((i+1)); sleep 2; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
       containers:
       - name: cem-users
-        image: "{{ .Values.global.image.repository }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-cem-users:{{ .Values.commonimages.cemusers.image.tag }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 6002
           protocol: TCP
@@ -110,6 +141,20 @@ spec:
           value: '{{ .Values.global.ingress.prefix }}'
         - name: INGRESS_DOMAIN
           value: '{{ .Values.global.ingress.domain }}'
+        - name: INGRESS_PORT
+          value: '{{ .Values.global.ingress.port }}'
+{{ if eq .Values.productName "Event Management for IBM Multicloud Manager" }}
+        - name: AUTH_ICP_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: 'platform-auth-idp-credentials'
+              key: admin_username
+        - name: AUTH_ICP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: 'platform-auth-idp-credentials'
+              key: admin_password
+{{ end }}
         resources:
 {{ include "ibmcemprod.comp.size.data" (list . "cemusers" "resources") | indent 10 }}
         terminationMessagePath: "/dev/termination-log"
@@ -120,8 +165,6 @@ spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
-      securityContext:
-        runAsUser: 1000
       serviceAccountName: {{ $serviceAccountName }}
       volumes:
         - name: {{ $cdbConfigTemplateName }}

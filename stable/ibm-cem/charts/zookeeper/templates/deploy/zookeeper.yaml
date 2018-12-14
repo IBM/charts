@@ -21,11 +21,14 @@ metadata:
   labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
   name: {{ $statefulSetName }}
-  namespace: {{ .Release.Namespace }}
 spec:
   serviceName:  {{ include "sch.names.fullCompName" (list .) | quote | replace "zookeeper" "zkensemble" }}
   podManagementPolicy: "Parallel"
+  {{- if .Values.global.zookeeper.clusterSize }}
+  replicas: {{ .Values.global.zookeeper.clusterSize }}
+  {{- else }}
   replicas: {{ .Values.clusterSize }}
+  {{- end }}
   selector:
     matchLabels:
       app: {{ include "sch.names.appName" (list .) | quote }}
@@ -41,8 +44,22 @@ spec:
       labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
       annotations:
+        #container.apparmor.security.beta.kubernetes.io/{{ include "sch.names.fullCompName" (list .) }}: runtime/default
+        #container.apparmor.security.beta.kubernetes.io/init-config: runtime/default
+        #seccomp.security.alpha.kubernetes.io/pod: docker/default
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        supplementalGroups:
+        {{- range $group := .Values.global.persistence.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -58,24 +75,11 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       terminationGracePeriodSeconds: 10
       initContainers:
-      - name: set-volume-permissions
-        image: "{{ .Values.global.image.repository }}/hdm-zookeeper:{{ .Values.image.tag }}"
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
-        command: ["sh", "-c", "chown -R zookeeper:zookeeper /var/lib/zookeeper/"]
-        securityContext:
-          runAsUser: 0
-        volumeMounts:
-        - name: {{ $zkconfigTemplateName }}
-          mountPath: /opt/zookeeper/conf
-        - name: {{ $zkdataTemplateName }}
-          mountPath: /var/lib/zookeeper/data
       - name: init-config
         image: "{{ .Values.global.image.repository }}/hdm-zookeeper:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -85,6 +89,15 @@ spec:
           mountPath: /opt/zookeeper/conf
         - name: {{ $zkdataTemplateName }}
           mountPath: /var/lib/zookeeper/data
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
       containers:
       - name: {{ include "sch.names.fullCompName" (list .) | quote }}
         image: "{{ .Values.global.image.repository }}/hdm-zookeeper:{{ .Values.image.tag }}"
@@ -105,6 +118,15 @@ spec:
         - /opt/start-zookeeper.sh
         - start-foreground
         - /var/lib/zookeeper/data/zoo.cfg
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
         readinessProbe:
           exec:
             command:

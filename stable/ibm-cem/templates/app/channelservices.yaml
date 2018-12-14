@@ -40,6 +40,12 @@ spec:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
 {{ include "ingress-host-alias" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -55,14 +61,21 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       containers:
       - name: channelservices
-        image: "{{ .Values.global.image.repository }}/hdm-channelservices:{{ .Values.commonimages.channelservices.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-channelservices:{{ .Values.commonimages.channelservices.image.tag }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 3091
           protocol: TCP
@@ -93,6 +106,8 @@ spec:
           value: '{{ .Values.global.ingress.prefix }}'
         - name: INGRESS_DOMAIN
           value: '{{ .Values.global.ingress.domain }}'
+        - name: INGRESS_PORT
+          value: '{{ .Values.global.ingress.port }}'
         resources:
 {{ include "ibmcemprod.comp.size.data" (list . "channelservices" "resources") | indent 10 }}
         terminationMessagePath: "/dev/termination-log"
@@ -100,8 +115,6 @@ spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
-      securityContext:
-        runAsUser: 1000
   strategy:
     type: RollingUpdate
     rollingUpdate:

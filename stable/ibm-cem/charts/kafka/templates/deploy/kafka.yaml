@@ -24,9 +24,13 @@ metadata:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
   name: {{ $statefulSetName }}
 spec:
-  serviceName:  {{ include "sch.names.fullCompName" (list .) | quote }}
+  serviceName:  {{ include "sch.names.fullCompName" (list . ) | quote }}
   podManagementPolicy: "Parallel"
+  {{- if .Values.global.kafka.clusterSize }}
+  replicas: {{ .Values.global.kafka.clusterSize }}
+  {{- else }}
   replicas: {{ .Values.clusterSize }}
+  {{- end }}
   selector:
     matchLabels:
       app: {{ include "sch.names.appName" (list .) | quote }}
@@ -42,8 +46,20 @@ spec:
       labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config/kafka.yaml") . | sha256sum }}
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        supplementalGroups:
+        {{- range $group := .Values.global.persistence.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -59,32 +75,52 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       terminationGracePeriodSeconds: 10
       initContainers:
       - name: waitforzookeeper
-        image: "{{ .Values.global.image.repository }}/hdm-kafka:{{ .Values.image.tag }}"
-        command: ["sh", "-c", "i=1;until getent hosts {{ template "releasename" . }}-zookeeper.{{ .Release.Namespace }}.svc; do echo waiting for zookeeper $i;i=$((i+1)); sleep 2; done;"]
-      - name: set-volume-permissions
-        image: "{{ .Values.global.image.repository }}/hdm-kafka:{{ .Values.image.tag }}"
-        command: ["sh", "-c", "chown -R kafka:kafka /var/lib/kafka/"]
+        image: "{{ include "kafka.getImageRepo" . }}/hdm-kafka:{{ .Values.image.tag }}"
+        command: ["sh", "-c", "i=1;until getent hosts {{ template "kafka.releasename" . }}-zookeeper.{{ .Release.Namespace }}.svc; do echo waiting for zookeeper $i;i=$((i+1)); sleep 2; done;"]
         securityContext:
-          runAsUser: 0
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+      {{- if kindIs "slice" .Values.advertisedListeners }}
+      - name: get-nodeports
+        image: "{{ include "kafka.getImageRepo" . }}/hdm-kafka:{{ .Values.image.tag }}"
+        command:
+        - /bin/sh
+        - -c
+        - python3 /etc/kafka/get-service-nodeport.py
+        env:
+        - name: PODNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['statefulset.kubernetes.io/pod-name']
         volumeMounts:
         - name: {{ $kkConfigTemplateName }}
           mountPath: /etc/kafka
-{{ if .Values.ssl.enabled }}
-        - name: {{ $kkKeystoreTemplateName }}
-          mountPath: /etc/keystore
-{{ end }}
-        - name: {{ $kkDataTemplateName }}
-          mountPath: /var/lib/kafka/data
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+      {{- end }}
       - name: init-config
-        image: "{{ .Values.global.image.repository }}/hdm-kafka:{{ .Values.image.tag }}"
+        image: "{{ include "kafka.getImageRepo" . }}/hdm-kafka:{{ .Values.image.tag }}"
         env:
         - name: NODE_NAME
           valueFrom:
@@ -104,10 +140,30 @@ spec:
 {{ end }}
         - name: {{ $kkDataTemplateName }}
           mountPath: /var/lib/kafka/data
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
       containers:
         - name: {{ include "sch.names.fullCompName" (list .) | quote }}
-          image: "{{ .Values.global.image.repository }}/hdm-kafka:{{ .Values.image.tag }}"
+          image: "{{ include "kafka.getImageRepo" . }}/hdm-kafka:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
           ports:
             - containerPort: 9092
               protocol: TCP
@@ -127,9 +183,13 @@ spec:
             - name: KAFKA_LOG4J_OPTS
               value: "-Dlog4j.configuration=file:/etc/kafka/log4j.properties"
             - name: ZOOKEEPER_URL
-              value: "{{ template "releasename" . }}-zookeeper:2181"
+              value: "{{ template "kafka.releasename" . }}-zookeeper:2181"
             - name: KAFKA_NUM_BROKERS
+              {{- if .Values.global.kafka.clusterSize }}
+              value: {{ .Values.global.kafka.clusterSize | quote }}
+              {{- else }}
               value: {{ .Values.clusterSize | quote }}
+              {{- end }}
             - name: POD_IP
               valueFrom:
                 fieldRef:
@@ -159,26 +219,44 @@ spec:
 {{ end }}
 {{ if .Values.kafkarest.enabled }}
         - name: {{ include "sch.names.fullCompName" (list . "rest") | quote }}
-          image: "{{ .Values.global.image.repository }}/hdm-kafkarest:{{ .Values.kafkarest.image.tag }}"
+          image: "{{ include "kafka.getImageRepo" . }}/hdm-kafkarest:{{ .Values.kafkarest.image.tag }}"
           imagePullPolicy: {{ .Values.kafkarest.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            {{- if .Values.kafkarest.enablePrivilegedPorts }}
+            runAsNonRoot: false
+            runAsUser: 0
+            {{- else }}
+            runAsNonRoot: true
+            runAsUser: 1001
+            {{- end }}
+            capabilities:
+              drop:
+              - ALL
           ports:
-            - containerPort: 80
+            - containerPort: 8080
               name: rest-client
               protocol: TCP
-            - containerPort: 443
+            - containerPort: 8443
               name: secure-client
               protocol: TCP
           env:
             - name: KAFKA_SERVICE_HOST
-              value: "{{ template "fullname" . }}"
+              value: {{ include "sch.names.fullCompName" (list . ) | quote }}
             - name: KAFKA_SERVICE_PORT
               value: "9092"
             - name: LOG_LEVEL
               value: "INFO"
             - name: ZOOKEEPER_URL
-              value: "{{ template "releasename" . }}-zookeeper:2181"
+              value: "{{ template "kafka.releasename" . }}-zookeeper:2181"
             - name: TOPIC_REPLICATION_FACTOR
+              {{- if .Values.global.kafka.clusterSize }}
+              value: {{ .Values.global.kafka.clusterSize | quote }}
+              {{- else }}
               value: {{ .Values.clusterSize | quote }}
+              {{- end }}
             - name: TOPIC_PARTITIONS
               value: {{ .Values.defaultTopicPartitions | quote }}
             - name: JVM_ARGS
@@ -188,14 +266,14 @@ spec:
           livenessProbe:
             httpGet:
               path: 1.0/kafkarest/status
-              port: 80
+              port: 8080
               scheme: HTTP
             initialDelaySeconds: 180
             timeoutSeconds: 10
           readinessProbe:
             httpGet:
               path: 1.0/kafkarest/readiness
-              port: 80
+              port: 8080
               scheme: HTTP
             initialDelaySeconds: 30
             timeoutSeconds: 10
@@ -203,11 +281,21 @@ spec:
             - name: {{ $kkConfigTemplateName }}
               mountPath: /opt/kafka/config/shared
               readOnly: true
+            - name: class-cache
+              mountPath: /opt/ibm/wlp/usr/servers/.classCache
+            - name: logs
+              mountPath: /opt/generic-kafka/logs
 {{ end }}
       volumes:
+      - name: class-cache
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
       - name: {{ $kkConfigTemplateName }}
         configMap:
-          name: {{ template "fullname" . }}
+          name: {{ template "kafka.fullname" . }}
 {{ if .Values.ssl.enabled }}
       - name: {{ $kkKeystoreTemplateName }}
         secret:
