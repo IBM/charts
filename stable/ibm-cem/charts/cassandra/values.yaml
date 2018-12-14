@@ -1,7 +1,10 @@
 # This is a YAML-formatted file
 # Declare name/value pair to be passed into you templates
 
-arch: ""
+arch:   # list of supported arch s390x ppc64le amd64
+  - amd64
+  - ppc64le
+
 
 global:
   environmentSize: "size0"
@@ -14,32 +17,46 @@ global:
   persistence:
     enabled: true # Use a form of persistence storage for stateful applications
     #useDynamicProvisioning: true
+    supplementalGroups:     # this is required for NFS storage
+      # - 1001              # - provide the gid of the volumes as list
+      # - 1002
 # Individual PVCs can be of different types if desired.
 # local-storage is only an option for apps/v1beta1 statefulsets, which is only Cassandra today
     storageClassName: ""
     storageClassOption:
-      # The recommendation is to use fast local storage for Cassandra's data. 
-      # This may require manual PV creation by the Cloud Administrators, for example creating "local-storage" PVs.    
-      # Cassandra data consists of potentially large SSTable files. 
+      # The recommendation is to use fast local storage for Cassandra's data.
+      # This may require manual PV creation by the Cloud Administrators, for example creating "local-storage" PVs.
+      # Cassandra data consists of potentially large SSTable files.
       # Writes will be very sequential IO.
-      # Compaction of SSTables will be sequential reads and writes.   
-      # Reads for time series data will generally be sequential. 
+      # Compaction of SSTables will be sequential reads and writes.
+      # Reads for time series data will generally be sequential.
       # Workloads with many small reads could create random IO requests, if the requests are not able to be fulfilled from memory.
-      # In general, HDDs are acceptable for Cassandra due to the sequential nature of the IO.  
+      # In general, HDDs are acceptable for Cassandra due to the sequential nature of the IO.
       # It is recommended though to have multiple drives in a raid array based on the number of threads to allow for concurrent reads/writes.
-      # SSDs will have the best performance, but due to the size of large time series data in Cassandra could be cost prohibitive.   
+      # SSDs will have the best performance, but due to the size of large time series data in Cassandra could be cost prohibitive.
       #cassandradata: "local-storage"
       cassandradata: "default"
-      # The cassandrabak PV is an optional backup PV used for storing the backups of Cassandra data.  
+      # The cassandrabak PV is an optional backup PV used for storing the backups of Cassandra data.
       # If you do not require or want a separate backup PV, set cassandrabak to "none".
-      # If running with "none", by default the backups will be stored in the same PV as the data.  
+      # If running with "none", by default the backups will be stored in the same PV as the data.
       cassandrabak: "default"
     storageSize:
       cassandradata: "50Gi"
       cassandrabak: "50Gi"
 
+# List of seeds to use when starting cassandra. Use one of the following options:
+#   "<IP Address>:<IP Address>..."
+#     A colon separated list of one or more seeds.  Example: "10.0.0.1:10.0.0.2"
+#     All Cassandra nodes will bootstrap in parralel
+#   CUSTOM_KUBERNETES_STATEFULSET_SEED_LIST
+#     Generate the seed list using getent hosts
+#     If no data non Cassandara seed nodes (id > 0) will bootstrap after node 0
+#   CUSTOM_KUBERNETES_STATEFULSET_SEED_LIST_API
+#     Generate the seed list using k8s API
+#     Cassandra nodes will bootstrap consecutively, seed nodes (0 and 1) first
+seeds: "CUSTOM_KUBERNETES_STATEFULSET_SEED_LIST"
 
 image:
   name: "hdm-cassandra"
-  tag: "HDM_201809130855"
+  tag: "HDM_201811301429"
   pullPolicy: IfNotPresent

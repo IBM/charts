@@ -11,10 +11,39 @@ metadata:
     app: {{ $podName }}-test
   annotations:
     "helm.sh/hook": test-success
+    #container.apparmor.security.beta.kubernetes.io/{{ $podName }}-test: runtime/default
+    #seccomp.security.alpha.kubernetes.io/pod: docker/default
 spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- range $arch := .Values.arch }}
+              - {{ $arch -}}
+            {{ end }}
   containers:
     - name: "{{ $podName }}-test"
       image: "{{ .Values.global.image.repository }}/hdm-zookeeper:{{ .Values.image.tag }}"
       imagePullPolicy: {{ .Values.image.pullPolicy }}
-      command: ["sh"]
+      command: ["sh"]   # well this is pretty useless.
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1001
+        capabilities:
+          drop:
+          - ALL
   restartPolicy: Never

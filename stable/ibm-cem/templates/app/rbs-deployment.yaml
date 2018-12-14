@@ -16,6 +16,7 @@
 {{- $rbsTlsTemplateName := include "sch.names.volumeClaimTemplateName" (list . "tls" $deploymentName) -}}
 {{- $rootData := fromYaml (include "root.data" .) -}}
 {{- $rootMetering := $rootData.metering -}}
+
 apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
@@ -40,6 +41,12 @@ spec:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
 {{ include "ingress-host-alias" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -55,22 +62,61 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       initContainers:
       - name: waitforcouchdb
-        image: "{{ .Values.global.image.repository }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ template "releasename" . }}-couchdb.{{ .Release.Namespace }}.svc; do echo waiting for couchdb $i;i=$((i+1)); sleep 2; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
       - name: waitforkafka
-        image: "{{ .Values.global.image.repository }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
         command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+      - name: migratedata
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        command: ["sh", "-c", "npm run migration"]
+        env:
+{{ include "rbarbs.env" . | indent 8 }}
       containers:
       - name: rba-rbs
-        image: "{{ .Values.global.image.repository }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
         imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
         args:
         - npm
         - start
@@ -91,119 +137,16 @@ spec:
         resources:
 {{ include "ibmcemprod.comp.size.data" (list . "rbs" "resources") | indent 10 }}
         env:
-        - name: LICENSE
-          value: {{ .Values.license | default "not accepted" }}
-        - name: RBA_RBS_CEMFEEDBACK_URL
-          value: {{ include "cem.services.incidentprocessor" . }}/api/incidents/v1
-        - name: RBA_RBS_CEMUIPROXYPREFIX
-          value: '/{{ .Values.global.ingress.prefix }}cemui/proxy/rba'
-        - name: RBA_RBS_MAIL_NOTIFICATION_CEMTYPE
-          value: '{{ .Values.email.type }}'
-{{ if eq .Values.email.type "smtp" }}
-        - name: RBA_RBS_MAIL_NOTIFICATION_HOST
-          value: '{{ .Values.email.smtphost }}'
-        - name: RBA_RBS_MAIL_NOTIFICATION_PORT
-          value: '{{ .Values.email.smtpport }}'
-        - name: RBA_RBS_MAIL_NOTIFICATION_REQUIRE_TLS
-          value: 'true'
-        - name: RBA_RBS_MAIL_NOTIFICATION_USER
-          valueFrom:
-            secretKeyRef:
-              name: '{{ template "releasename" . }}-cem-email-cred-secret'
-              key: smtpuser
-        - name: RBA_RBS_MAIL_NOTIFICATION_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: '{{ template "releasename" . }}-cem-email-cred-secret'
-              key: smtppassword
-        - name: RBA_RBS_MAIL_NOTIFICATION_FROM
-          value: '{{ .Values.email.mail }}'
-{{ end }}
-        - name: RBA_RBS_KAFKA_BROKERS
-          value: '{{ include "cem.services.kafkabrokers" . }}'
-        - name: RBA_RBS_KAFKA_USERNAME
-          value: '{{ .Values.kafka.client.username }}'
-        - name: RBA_RBS_KAFKA_PASSWORD
-          value: '{{ .Values.kafka.client.password }}'
-        - name: RBA_RBS_KAFKA_SSL_ENABLED
-          value: '{{ .Values.kafka.ssl.enabled }}'
-        - name: RBA_RBS_KAFKA_CONSUMER_TOPIC
-          value: 'incidents'
-        - name: RBA_RBS_KAFKA_CONSUMER_GROUPID
-          value: 'rba'
-        - name: RBA_RBS_KAFKA_CONSUMER_CLIENTID
-          value: 'RBA'
-        - name: VCAP_APP_HOST
-          value: {{ template "releasename" . }}-rba-rbs.{{ .Release.Namespace }}.svc
-        - name: RBA_DEPLOYMODE
-          value:  'icp-cem'
-        - name: RBA_RUNBOOKSERVICE_EXTERNAL_HOST
-          value: {{ include "cem.service.host" (list . "cem.services.rba") }}
-        - name: RBA_RUNBOOKSERVICE_EXTERNAL_PROTOCOL
-          value: {{ include "cem.service.protocol" (list . "cem.services.rba") }}
-        - name: RBA_RUNBOOKSERVICE_INTERNAL_PROTOCOL
-          value: http
-        - name: RBA_DATABASE_CLUSTER_ENABLED
-          value: 'true'
-        - name: RBA_DATABASE_CLUSTER_PROTOCOL
-          value: {{ include "cem.service.protocol" (list . "cem.services.couchdb") }}
-        - name: RBA_DATABASE_CLUSTER_HOST
-          value: {{ include "cem.service.host" (list . "cem.services.couchdb") }}
-        - name: RBA_DATABASE_CLUSTER_PORT
-          value: {{ include "cem.service.port" (list . "cem.services.couchdb") | quote }}
-        - name: RBA_DATABASE_CLUSTER_USER
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-{{ .Values.couchdb.secretName }}
-              key: username
-        - name: RBA_DATABASE_CLUSTER_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-{{ .Values.couchdb.secretName }}
-              key: password
-        - name: RBA_DATABASE_CLUSTER_DBNAMEPREFIX
-          value: 'icp'
-        - name: RBA_RBS_USERGROUPSERVICE_PROTOCOL
-          value: {{ include "cem.service.protocol" (list . "cem.services.cemusers") }}
-        - name: RBA_RBS_USERGROUPSERVICE_HOST
-          value: {{ include "cem.service.host" (list . "cem.services.cemusers") }}
-        - name: RBA_RBS_USERGROUPSERVICE_PORT
-          value: {{ include "cem.service.port" (list . "cem.services.cemusers") | quote }}
-        - name: RBA_RBS_USERGROUPSERVICE_USER
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-cem-cemusers-cred-secret
-              key: username
-        - name: RBA_RBS_USERGROUPSERVICE_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-cem-cemusers-cred-secret
-              key: password
-        - name: RBA_DEVOPS_USER
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-rba-devops-secret
-              key: username
-        - name: RBA_DEVOPS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-rba-devops-secret
-              key: password
-        - name: RBA_JWT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "releasename" . }}-rba-jwt-secret
-              key: secret
-        - name: RBA_AUTOMATIONSERVICE_EXTERNAL_HOST
-          value: {{ include "cem.service.host" (list . "cem.services.rbaas") }}
-        - name: RBA_AUTOMATIONSERVICE_EXTERNAL_PROTOCOL
-          value: {{ include "cem.service.protocol" (list . "cem.services.rbaas") }}
-        - name: RBA_AUTOMATIONSERVICE_EXTERNAL_PORT
-          value: {{ include "cem.service.port" (list . "cem.services.rbaas") | quote }}
-        - name: INGRESS_PREFIX
-          value: '{{ .Values.global.ingress.prefix }}'
-        - name: INGRESS_DOMAIN
-          value: '{{ .Values.global.ingress.domain }}'
+{{ include "rbarbs.env" . | indent 8 }}
       restartPolicy: Always
-      securityContext:
-        runAsUser: 1000
+{{ if eq .Values.rba.rbs.updateStrategy "RollingUpdate" }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+{{ else }}
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+{{ end }}

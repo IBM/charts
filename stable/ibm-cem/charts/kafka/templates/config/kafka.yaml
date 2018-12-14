@@ -4,35 +4,73 @@
 kind: ConfigMap
 metadata:
   name: {{ $configMapName | quote }}
-  namespace: {{ .Release.Namespace }}
   labels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
 apiVersion: v1
 data:
+{{- if kindIs "slice" .Values.advertisedListeners }}
+  get-service-nodeport.py: |-
+    import json
+    import requests
+    import os
+    from time import sleep
+    import urllib3
+    urllib3.disable_warnings()
+    podname = os.environ['PODNAME']
+    service = podname + "-ext"
+    apiServer='https://' + os.environ['KUBERNETES_SERVICE_HOST'] + ':' + os.environ['KUBERNETES_SERVICE_PORT']
+    token= open("/var/run/secrets/kubernetes.io/serviceaccount/token","r").read()
+    namespace= open("/var/run/secrets/kubernetes.io/serviceaccount/namespace","r").read()
+    url= apiServer + '/api/v1/namespaces/' + namespace + '/services/' + service
+    head = {'Authorization':'Bearer ' + token,'Accept':'application/json'}
+    resp = requests.get(url, headers=head, verify=False).json()
+    # check for lack of permissions
+    if 'reason' in resp and resp['reason']=='Forbidden':
+      print("The default serviceaccount does not have the required permissions to query the services API")
+      exit(9)
+
+    if 'spec' in resp and 'ports' in resp['spec']:
+      f = open("/tmp/externalPorts.env", "w")
+      for port in resp['spec']['ports']:
+        if 'external-kafka' == port['name']:
+          f.write("EXTERNAL_KAFKA_PORT=" + str(port['nodePort']) + "\n" )
+        if 'external-kafka-secure' == port['name']:
+          f.write("EXTERNAL_KAFKA_SECURE_PORT=" + str(port['nodePort']) + "\n")
+
+{{- end }}
   init.sh: |-
     #!/bin/bash
     set -x
+    # if there is an env file with nodeport, source it.
+    if [ -e /tmp/externalPorts.env ]; then
+      source /tmp/externalPorts.env
+      echo "NodePort for service 'external-kafka' is : $EXTERNAL_KAFKA_PORT"
+      echo "NodePort for service 'external-kafka-secure' is : $EXTERNAL_KAFKA_SECURE_PORT"
+    fi
+
     KAFKA_BROKER_ID=${HOSTNAME##*-}
     cp -f /etc/kafka/server.properties /var/lib/kafka/data/server.properties
     sed -i "s/#init#broker.id=#init#/broker.id=$KAFKA_BROKER_ID/" /var/lib/kafka/data/server.properties
-    {{ if .Values.ssl.allowInsecure }}
-      sed -i "s/0.0.0.0:9092/$POD_IP:9092/" /var/lib/kafka/data/server.properties
-    {{ end }}
-    {{ if .Values.ssl.enabled }}
-    sed -i "s/0.0.0.0:9093/$POD_IP:9093/" /var/lib/kafka/data/server.properties
-    {{ end }}
-    hash kubectl 2>/dev/null || {
-      sed -i "s/#init#broker.rack=#init#/#init#broker.rack=# kubectl not found in path/" /var/lib/kafka/data/server.properties
-    } && {
-      ZONE=$(kubectl get node "$NODE_NAME" -o=go-template='{{ .Values.go.failuredomain }}')
-      if [ $? -ne 0 ]; then
-        sed -i "s/#init#broker.rack=#init#/#init#broker.rack=# zone lookup failed, see -c init-config logs/" /var/lib/kafka/data/server.properties
-      elif [ "x$ZONE" == "x<no value>" ]; then
-        sed -i "s/#init#broker.rack=#init#/#init#broker.rack=# zone label not found for node $NODE_NAME/" /var/lib/kafka/data/server.properties
-      else
-        sed -i "s/#init#broker.rack=#init#/broker.rack=$ZONE/" /var/lib/kafka/data/server.properties
-      fi
-    }
+
+    # configure the advertised.listeners
+    listenerHostnames=({{ template "kafka.advertisedListenersAsBashArray" . }})
+    # add some new lines to the broker config
+    echo -e "\n\n"  >> /var/lib/kafka/data/server.properties
+
+    # lookup hostname in array based on KAFKA_BROKER_ID
+    if [ ! -z ${listenerHostnames[$KAFKA_BROKER_ID]} ]; then
+      EXTERNAL_KAFKA_HOSTNAME=${listenerHostnames[$KAFKA_BROKER_ID]}
+    # fail back to first defined listener hostname
+    elif [ ! -z ${listenerHostnames[0]} ]; then
+      EXTERNAL_KAFKA_HOSTNAME=${listenerHostnames[0]}
+    fi
+
+    # generate advertised listeners based on ssl/allowInsecure/advertisedListeners settings
+    echo "advertised.listeners={{ template "kafka.advertisedListeners" . }}" >> /var/lib/kafka/data/server.properties
+
+    # configure protocol map
+    echo "listener.security.protocol.map=PLAINTEXT:PLAINTEXT,PLAINTEXT_EXTERNAL:PLAINTEXT,SASL_SSL_EXTERNAL:SASL_SSL,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL" >> /var/lib/kafka/data/server.properties
+
 {{ if .Values.ssl.enabled }}
   kafka_client_jaas.conf: |-
     KafkaClient {
@@ -70,7 +108,7 @@ data:
     ssl.key.password={{ .Values.global.ssl.password }}
     sasl.mechanism=PLAIN
 {{ end }}
-    bootstrap.servers={{ template "fullname" . }}-0.broker.{{.Release.Namespace}}.svc:{{ if .Values.ssl.enabled }}9093{{ else }}9092{{ end }}
+    bootstrap.servers={{ template "kafka.fullname" . }}-0.{{.Release.Namespace}}.svc:{{ if .Values.ssl.enabled }}9093{{ else }}9092{{ end }}
     compression.type=none
   server.properties: |-
     # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -211,12 +249,11 @@ data:
     #################### SASL Settings ########################
     sasl.enabled.mechanisms=PLAIN
     sasl.mechanism.inter.broker.protocol=PLAIN
-    security.inter.broker.protocol=SASL_SSL
-    listeners={{ if .Values.ssl.allowInsecure }}PLAINTEXT://0.0.0.0:9092,{{ end }}SASL_SSL://0.0.0.0:9093
-    advertised.listeners={{ if .Values.ssl.allowInsecure }}PLAINTEXT://0.0.0.0:9092,{{ end }}SASL_SSL://0.0.0.0:9093
+    inter.broker.listener.name=SASL_SSL
+    listeners={{ if .Values.ssl.allowInsecure }}PLAINTEXT://0.0.0.0:9092{{ if kindIs "slice" .Values.advertisedListeners }},PLAINTEXT_EXTERNAL://0.0.0.0:19092,{{ end }}{{ end }}SASL_SSL://0.0.0.0:9093{{ if kindIs "slice" .Values.advertisedListeners }},SASL_SSL_EXTERNAL://0.0.0.0:19093{{ end }}
 {{ else }}
-    listeners=PLAINTEXT://0.0.0.0:9092
-    advertised.listeners=PLAINTEXT://0.0.0.0:9092
+    inter.broker.listener.name=PLAINTEXT
+    listeners=PLAINTEXT://0.0.0.0:9092{{ if kindIs "slice" .Values.advertisedListeners }},PLAINTEXT_EXTERNAL://0.0.0.0:19092{{ end }}
 {{ end }}
     ####################### OTHER #############################
     authorizer.class.name=kafka.security.auth.SimpleAclAuthorizer

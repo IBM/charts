@@ -42,6 +42,17 @@ spec:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        supplementalGroups:
+        {{- range $group := .Values.global.persistence.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -57,26 +68,22 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
-      initContainers:
-      - name: set-volume-permissions
-        image: "{{ .Values.global.image.repository }}/hdm-couchdb:{{ .Values.image.tag }}"
-        command: ["sh", "-c", "chown -R 999:999 /opt/couchdb/data"]
-        securityContext:
-          runAsUser: 0
-        volumeMounts:
-        - name: {{ $cdbDataTemplateName }}
-          mountPath: /opt/couchdb/data
-        - name: {{ $cdbConfigTemplateName }}
-          mountPath: /opt/couchdb/etc/default.d
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       containers:
         - name: couchdb
-          image: "{{ .Values.global.image.repository }}/hdm-couchdb:{{ .Values.image.tag }}"
+          image: "{{ include "couchdb.getImageRepo" . }}/hdm-couchdb:{{ .Values.image.tag }}"
           imagePullPolicy: Always
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
           ports:
             - name: couchdb
               containerPort: 5984
@@ -136,7 +143,7 @@ spec:
 {{ if .Values.autoClusterConfig.enabled }}
         - name: cluster-config
           imagePullPolicy: Always
-          image: "{{ .Values.global.image.repository }}/hdm-cem-python-sidecar:{{ .Values.sidecarImage.tag }}"
+          image: "{{ include "couchdb.getImageRepo" . }}/hdm-cem-python-sidecar:{{ .Values.sidecarImage.tag }}"
           env:
             - name: AUTO_CLUSTER_CONFIG
               value: "true"

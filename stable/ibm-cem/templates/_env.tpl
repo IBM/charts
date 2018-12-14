@@ -1,4 +1,8 @@
 {{- define "cloudeventmanagement.brokers.env" -}}
+- name: OSBCREDENTIALS_USERNAME
+  value: not-applicable
+- name: OSBCREDENTIALS_PASSWORD
+  value: not-applicable
 - name: LOGMET_LOG_HOST
   value: logs.opvis.bluemix.net
 - name: LOGMET_LOG_PORT
@@ -55,6 +59,8 @@
   value: 99b23e24-a751-4217-bb64-edc00b87e672
 - name: CEMSERVICEBROKER_EVENTMANAGEMENTPLANID
   value: 3e0c0fc1-bce1-4d81-9885-ae3f0d218d28
+- name: CEMSERVICEBROKER_EVENTMANAGEMENTMCMBASEPLANID
+  value: 7a2a80eb-90c6-4846-8cd4-c10d83bc2f73
 - name: CEMSERVICEBROKER_LOCATIONNAME
   value: ICP
 - name: CEMSERVICEBROKER_MEDIA
@@ -86,7 +92,9 @@
 - name: CEMSERVICEBROKER_MASTERURL
   value: 'https://cem-bm-broker.mybluemix.net'
 - name: SSMENDPOINT_FQDN
-  value: cem-brokers-us-south.prodssmopsmgmt.bluemix.net
+  value: not-applicable
+- name: SSMENDPOINT_FQDN2
+  value: not-applicable
 - name: SSMENDPOINT_PARTS
   value: '[{"id":"D00T4ZX","type":"base","events":1000,"messages":200,"runbooks":200},{"id":"D00CMZX","type":"base","events":20000,"messages":1000,"runbooks":1000},{"id":"D00T3ZX","type":"base","events":300000,"messages":10000,"runbooks":10000},{"id":"D00T5ZX","type":"base","unlimited":true},{"id":"D00CQZX","type":"addon","events":20000,"messages":1000,"runbooks":1000,"allowOverage":true}]'
 - name: SSMENDPOINT_OTCDBNAME
@@ -150,7 +158,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -208,23 +216,43 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
-- name: MH_BROKERS_SASL_BROKERS
-  value: ''
-- name: MH_USERNAME
-  value: none
-- name: MH_PASSWORD
-  value: none
-- name: MH_API_KEY
-  value: none
-- name: MH_ADMIN_URL
-  value: 'https://kafka-admin-prod01.messagehub.services.us-south.bluemix.net:443'
-- name: MH_REST_URL
-  value: 'https://kafka-rest-prod01.messagehub.services.us-south.bluemix.net:443'
-- name: MH_MQLIGHT_LOOKUP_URL
-  value: 'https://mqlight-lookup-prod01.messagehub.services.us-south.bluemix.net/Lookup?serviceId=INSTANCE_ID'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: MAINTENANCE_KAFKA_CQUEUE_SIZE_KB
   value: '100000'
+- name: MCM_POLL_INTERVAL
+  value: '86400'
+- name: MCM_POLL_DELAY
+  value: '90'
+- name: MODEL_KEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyname
+- name: MODEL_KEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyvalue
+- name: MODEL_HKEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyname
+- name: MODEL_HKEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyvalue
+- name: RBA_PDOC_OBJECTSTORAGE_AUTHURL
+  value: 'https://identity.open.softlayer.com'
+- name: RBA_PDOC_OBJECTSTORAGE_REGION
+  value: dallas
+- name: RBA_PDOC_OBJECTSTORAGE_USERID
+  value: ''
+- name: RBA_PDOC_OBJECTSTORAGE_PASSWORD
+  value: ''
+- name: RBA_PDOC_OBJECTSTORAGE_PROJECTID
+  value: ''
 - name: SERVICEMONITOR_MONITORS
   value: '{"cemusers":"{{ include "cem.services.cemusers" . }}","channelservices":"{{ include "cem.services.channelservices" . }}","eventpreprocessor":"{{ include "cem.services.eventpreprocessor" . }}","incidentprocessor":"{{ include "cem.services.incidentprocessor" . }}","normalizer":"{{ include "cem.services.normalizer" . }}","notificationprocessor":"{{ include "cem.services.notificationprocessor" . }}","integrationcontroller":"{{ include "cem.services.integrationcontroller" . }}","schedulingui":"{{ include "cem.services.schedulingui" . }}","uiserver":"{{ include "cem.services.uiserver" . }}"}'
 - name: SYSLOG_TARGETS
@@ -343,13 +371,33 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
   value: '{{ include "cem.services.notificationprocessor" . }}'
 - name: SCHEDULINGUI_URL
   value: '{{ include "cem.services.schedulingui" . }}'
+- name: MODEL_KEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyname
+- name: MODEL_KEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyvalue
+- name: MODEL_HKEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyname
+- name: MODEL_HKEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyvalue
 - name: REDIS_SSH_USERNAME
   value: none
 - name: REDIS_PASSWORD
@@ -375,7 +423,7 @@
 - name: AUTH_PROVIDER_MODE
   value: icp
 - name: AUTH_REDIRECT_URIS
-  value: 'https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}cemui,{{ include "cem.services.rba" . }},{{ include "cem.services.uiserver" . }},{{ include "cem.services.apm" . }},https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}apmui/auth/cemusers/redirect'
+  value: 'https://{{ .Values.global.ingress.domain }}{{ if ne .Values.global.ingress.port 443.0 }}:{{ .Values.global.ingress.port }}{{ end }}/{{ .Values.global.ingress.prefix }}cemui,{{ include "cem.services.rba" . }},{{ include "cem.services.uiserver" . }},{{ include "cem.services.apm" . }},https://{{ .Values.global.ingress.domain }}{{ if ne .Values.global.ingress.port 443.0 }}:{{ .Values.global.ingress.port }}{{ end }}/{{ .Values.global.ingress.prefix }}apmui/auth/cemusers/redirect'
 - name: BLUEMIX_API_URL
   value: 'https://api.REGION.bluemix.net'
 - name: BLUEMIX_MCCP_URL
@@ -562,7 +610,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -734,7 +782,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -757,6 +805,8 @@
   value: '15'
 - name: COUCHDB_DBNAME
   value: collabopsuser
+- name: DATALAYER_DISABLED
+  value: 'false'
 - name: DATALAYER_URL
   value: '{{ include "cem.services.datalayer" . }}'
 - name: DATALAYER_KEEPALIVE
@@ -788,7 +838,7 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: MAINTENANCE_DISABLED_URIS
   value: ''
 - name: MAINTENANCE_GAMS
@@ -995,7 +1045,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -1046,6 +1096,16 @@
   value: normalizer
 - name: BOOTSTRAP_DELAY
   value: '60000'
+- name: IC_HMAC_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-intctl-hmac-secret'
+      key: keyvalue
+- name: IC_HMAC_NAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-intctl-hmac-secret'
+      key: keyname
 - name: IC_USERNAME
   valueFrom:
     secretKeyRef:
@@ -1180,7 +1240,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -1220,7 +1280,7 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: MH_MQLIGHT_LOOKUP_URL
   value: 'https://mqlight-lookup-prod01.messagehub.services.us-south.bluemix.net/Lookup?serviceId=INSTANCE_ID'
 - name: MH_BROKERS_SASL_BROKERS
@@ -1398,7 +1458,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -1421,6 +1481,8 @@
   value: '15'
 - name: COUCHDB_DBNAME
   value: collabopsuser
+- name: DATALAYER_DISABLED
+  value: 'false'
 - name: DATALAYER_URL
   value: '{{ include "cem.services.datalayer" . }}'
 - name: DATALAYER_KEEPALIVE
@@ -1621,7 +1683,7 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: LOGMET_LOG_HOST
   value: logs.opvis.bluemix.net
 - name: LOGMET_LOG_PORT
@@ -1697,13 +1759,33 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
   value: '{{ include "cem.services.notificationprocessor" . }}'
 - name: SCHEDULINGUI_URL
   value: '{{ include "cem.services.schedulingui" . }}'
+- name: MODEL_KEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyname
+- name: MODEL_KEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyvalue
+- name: MODEL_HKEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyname
+- name: MODEL_HKEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyvalue
 - name: UAG_URL
   value: '{{ include "cem.services.cemusers" . }}'
 - name: UAG_USERNAME
@@ -1726,6 +1808,8 @@
     secretKeyRef:
       name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
+- name: USAGE_NOTIFY_PERCENTS
+  value: '75,90,100'
 {{- end -}}
 
 {{- define "cloudeventmanagement.normalizer.env" -}}
@@ -1784,7 +1868,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -1997,7 +2081,7 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: MH_BROKERS_SASL_BROKERS
   value: ''
 - name: MH_USERNAME
@@ -2061,13 +2145,33 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: ''
+  value: self
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
   value: '{{ include "cem.services.notificationprocessor" . }}'
 - name: SCHEDULINGUI_URL
   value: '{{ include "cem.services.schedulingui" . }}'
+- name: MODEL_KEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyname
+- name: MODEL_KEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: keyvalue
+- name: MODEL_HKEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyname
+- name: MODEL_HKEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-model-secret'
+      key: hkeyvalue
 - name: REDIS_SSH_USERNAME
   value: none
 - name: REDIS_PASSWORD

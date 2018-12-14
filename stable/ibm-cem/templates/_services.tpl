@@ -81,7 +81,11 @@ http://{{ include "sch.names.fullCompName" (list . "incidentprocessor") }}.{{ .R
 {{- end }}
 
 {{ define "cem.services.kafkaadmin" -}}
+{{ if (or (eq .Values.productName "IBM Cloud App Management") (eq .Values.productName "IBM Cloud App Management Advanced")) -}}
 http://{{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc:80
+{{- else -}}
+http://{{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc:8080
+{{- end }}
 {{- end }}
 
 {{ define "cem.services.normalizer" -}}
@@ -159,6 +163,7 @@ Use the ingress rule above for each service attached to ingress.
 {{ include "ingress-rule" (list . "api/incidentquery" "incidentprocessor" 6006) }}
 {{ include "ingress-rule" (list . "api/spec/incidentPolicies" "incidentprocessor" 6006) }}
 {{ include "ingress-rule" (list . "api/v1/rba" "rba-rbs" 3005) }}
+{{ include "ingress-rule" (list . "api-gateway" "rba-rbs" 3005) }}
 {{- end }}
 
 {{/*

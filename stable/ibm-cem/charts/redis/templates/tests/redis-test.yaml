@@ -11,9 +11,36 @@ metadata:
     heritage: {{ .Release.Service }}
     chart: {{ .Chart.Name }}
 spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- range $arch := .Values.arch }}
+              - {{ $arch -}}
+            {{ end }}
   containers:
     - name: redis-tests
-      image: "{{ .Values.global.image.repository }}/hdm-redis-ha:{{ .Values.image.tag }}"
+      image: "{{ include "redis.getImageRepo" . }}/hdm-redis-ha:{{ .Values.image.tag }}"
       imagePullPolicy: {{ .Values.image.pullPolicy }}
-      command: ["sh"]
+      # Check one can connect to the master at 6379 port
+      command: ["bash", "-c", "redis-cli -h {{ .Release.Name }}-redis-master-svc -p 6379 ping"]
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 100
+        capabilities:
+          drop:
+          - ALL
   restartPolicy: Never

@@ -40,6 +40,12 @@ spec:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
 {{ include "ingress-host-alias" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -55,18 +61,34 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                  - {{ .Values.arch }}
-                {{- else }}
-                  - {{ template "arch" . }}
-                {{- end }}
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
       initContainers:
       - name: waitforkafka
-        image: "{{ .Values.global.image.repository }}/hdm-notificationprocessor:{{ .Values.commonimages.notificationprocessor.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-notificationprocessor:{{ .Values.commonimages.notificationprocessor.image.tag }}"
         command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
       containers:
       - name: notificationprocessor
-        image: "{{ .Values.global.image.repository }}/hdm-notificationprocessor:{{ .Values.commonimages.notificationprocessor.image.tag }}"
+        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-notificationprocessor:{{ .Values.commonimages.notificationprocessor.image.tag }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 6008
           protocol: TCP
@@ -108,6 +130,8 @@ spec:
           value: '{{ .Values.global.ingress.prefix }}'
         - name: INGRESS_DOMAIN
           value: '{{ .Values.global.ingress.domain }}'
+        - name: INGRESS_PORT
+          value: '{{ .Values.global.ingress.port }}'
         resources:
 {{ include "ibmcemprod.comp.size.data" (list . "notificationprocessor" "resources") | indent 10 }}
         terminationMessagePath: "/dev/termination-log"
@@ -115,8 +139,6 @@ spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
-      securityContext:
-        runAsUser: 1000
       volumes:
 {{- if eq .Values.kafka.ssl.enabled true }}
       - name: {{ $npKeystoreTemplateName }}
