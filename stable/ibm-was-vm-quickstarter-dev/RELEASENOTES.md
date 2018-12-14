@@ -1,8 +1,11 @@
-# What's new in Chart Version 2.0.2
+# What's new in Chart Version 2.0.3
+
+The following changes apply only to the Helm chart. For a full list of product updates, see [What's new in VM Quickstarter](https://www.ibm.com/support/knowledgecenter/SSTF9X/about-whats-new.html).
 
 ## New features
 
-  - Added an [administrative dashboard](https://www.ibm.com/support/knowledgecenter/SSTF9X/admin-dashboard.html) where you can view and make changes to WebSphere service instances, resources, and more.
+  - Identified a pre-defined `PodSecurityPolicy` and defined a custom `PodSecurityPolicy` for the chart.
+  - Updated all key containers to run as a non-root user.
 
 ## Breaking Changes
   - None
@@ -21,6 +24,7 @@
 
 | Chart | Date | IBM Cloud Private Required | CAM Required | Image(s) Supported |  Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 2.0.3 | Dec 14, 2018 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.3 ibmcom/wasaas-cloudsm:2.0.3 ibmcom/wasaas-wasdevaas:2.0.3 ibmcom/wasaas-console:2.0.3 ibmcom/wasaas-dashboard:2.0.3 couchdb:2.1.1 | `PodSecurityPolicy` support and non-root updates. |
 | 2.0.2 | Nov 30, 2018 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.2 ibmcom/wasaas-cloudsm:2.0.2 ibmcom/wasaas-wasdevaas:2.0.2 ibmcom/wasaas-console:2.0.2 couchdb:2.1.1 | New administrative dashboard. |
 | 2.0.1 | | | | | skipped |
 | 2.0.0 | Sept 30, 2018 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0 ibmcom/wasaas-cloudsm:2.0 ibmcom/wasaas-wasdevaas:2.0 ibmcom/wasaas-console:2.0 couchdb:2.1.1 | Simplified configuration - fewer config parameters, migration support, installation in non-default namespace, bug fixes |

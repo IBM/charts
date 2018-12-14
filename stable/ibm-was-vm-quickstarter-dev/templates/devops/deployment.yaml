@@ -34,6 +34,7 @@ spec:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
         checksum/config: {{ include (print $.Template.BasePath "/devops/configmap.yaml") . | sha256sum }}
     spec:
+      {{- include "wasaas.security.pod.host" . | indent 6 }}
       serviceAccountName: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
@@ -41,7 +42,8 @@ spec:
       initContainers:
         - name: init-copy
           image: busybox
-          command: ['sh','-c','cp /config-map/* /config-storage; ls -lrt /config-storage']
+          command: ['sh', '-c', 'cp /config-map/* /config-storage; chmod -R g+rwX /config-storage']
+          {{- include "wasaas.security.container.init" . | indent 10 }}
           volumeMounts:
           - name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
             mountPath: /config-map
@@ -120,6 +122,7 @@ spec:
               value: {{ .Values.console.ingress.path | quote }}
             - name: DASHBOARD_PROXY_PATH
               value: {{ .Values.dashboard.ingress.path | quote }}
+          {{- include "wasaas.security.container.nonroot" . | indent 10 }}
           volumeMounts:
             - name: config-storage
               mountPath: /wasaas/test/ivt.properties

@@ -27,6 +27,86 @@ The following prerequisites apply only to deploying the Helm chart. For a detail
 
 You must be a cluster administrator to install the Helm chart. The `wasaas-devops` container requires additional permissions to access a secret in the `services` namespace and to discover the ip address of the proxy node.
 
+### PodSecurityPolicy Requirements
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. You can either use a predefined PodSecurityPolicy or have your cluster administrator set up a custom PodSecurityPolicy for you.
+
+#### Predefined PodSecurityPolicy
+
+The chart can be used with the [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp) predefined PodSecurityPolicy.
+
+#### Custom PodSecurityPolicy
+
+To set up a custom PodSecurityPolicy, the cluster administrator can either manually create the following resources, or use the configuration scripts to create and delete the resources.
+
+* Custom PodSecurityPolicy definition:
+
+  ```yaml
+  apiVersion: extensions/v1beta1
+  kind: PodSecurityPolicy
+  metadata:
+    name: ibm-was-vm-quickstarter-psp
+  spec:
+    allowPrivilegeEscalation: false
+    forbiddenSysctls:
+    - '*'
+    fsGroup:
+      rule: RunAsAny
+    requiredDropCapabilities:
+    - ALL
+    allowedCapabilities:
+    - CHOWN
+    - DAC_OVERRIDE
+    - KILL
+    - FOWNER
+    - SETUID
+    - SETGID
+    runAsUser:
+      rule: RunAsAny
+    seLinux:
+      rule: RunAsAny
+    supplementalGroups:
+      rule: RunAsAny
+    volumes:
+    - configMap
+    - emptyDir
+    - projected
+    - secret
+    - downwardAPI
+    - persistentVolumeClaim
+  ```
+
+* Custom ClusterRole for the custom PodSecurityPolicy:
+
+  ```yaml
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: ibm-was-vm-quickstarter-clusterrole
+  rules:
+  - apiGroups:
+    - extensions
+    resourceNames:
+    - ibm-was-vm-quickstarter-psp
+    resources:
+    - podsecuritypolicies
+    verbs:
+    - use
+  ```
+
+##### Configuration scripts for custom PodSecurityPolicy
+
+As an alternative to manually creating the custom PodSecurityPolicy resource, the cluster administrator can use the following scripts to create and delete the required PodSecurityPolicy resources. Download the scripts from the [prereqs](https://github.com/IBM/charts/tree/master/stable/ibm-was-vm-quickstarter-dev/ibm_cloud_pak/pak_extensions/prereqs) directory.
+
+  - `createSecurityClusterPrereqs.sh`: Creates the PodSecurityPolicy and ClusterRole for all releases of this chart.
+  - `createSecurityNamespacePrereqs.sh`: Creates the RoleBinding for the namespace. This script takes one argument, the name of a pre-existing namespace where the chart will be installed.
+       
+       Example usage: `./createSecurityNamespacePrereqs.sh myNamespace`
+  - `deleteSecurityClusterPrereqs.sh`: Deletes the PodSecurityPolicy and ClusterRole for all releases of this chart.
+  - `deleteSecurityNamespacePrereqs.sh`: Deletes the RoleBinding for the namespace. This script takes one argument, the name of the namespace where the chart was installed.
+       
+       Example usage: `./deleteSecurityNamespacePrereqs.sh myNamespace`
+
 ### Persistent Volumes
 
  The WAS VM Quickstarter service requires the following persistent volumes:
