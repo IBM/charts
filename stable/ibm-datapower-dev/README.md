@@ -4,51 +4,50 @@
 
 [IBM® DataPower Gateway](http://www-03.ibm.com/software/products/en/datapower-gateway) is a purpose-built security and integration gateway that addresses the business needs for mobile, API, web, SOA, B2B, and cloud workloads. It is designed to provide a consistent configuration-based approach to security, governance, integration and routing.
 
+[//]: # (Chart Name Start)
+## Chart Name
+IBM DataPower Gateway Virtual Edition for Developers
+
+[//]: # (Chart Name End)
 
 ## Introduction
-
-This chart deploys a single IBM DataPower Gateway node with a default pattern into an IBM Cloud Private or other Kubernetes environment. The default pattern,  the `RESTProxy` pattern, configures the DataPower node to act as a reverse proxy, directing client requests to the appropriate backend server.
-
-## Prerequisites
-helm and kubectl must be installed and configured on your system.
-
-## Resources Required
-Minimum resources per pod: 2 CPU and 4 GB RAM
-
-## Installing the Chart
-To install the chart with the release name `my-release` and default pattern (See .Values.patternName below):
- ```bash
-$ helm install --name my-release -f <mycrypto.yaml> stable/ibm-datapower-dev
-```
-
-Where `<mycrypto.yaml>` is a yaml file that contains the parameters `crypto.frontsideCert` and `crypto.frontsideKey` and their respective base64-encoded values. These values are the base64-encoding of the raw key and certificate file with all whitespace removed.
-
-> **Tip**: List all releases using `helm list`
-## Verifying the Chart
-See NOTES.txt associated with this chart for verification instructions
-
-## Uninstalling the Chart
-To uninstall/delete the `my-release` deployment:
-
-```bash
-$ helm delete my-release
-```  
-
-To completely uninstall/delete the `my-release` deployment:
-```bash
-$ helm delete --purge my-release
-```
-## Limitations
-This chart is for developer purposes only. No support is provided. Not eligible for production use.
+This chart deploys a single IBM DataPower Gateway node with a default pattern into a Kubernetes environment. The default pattern,  the `restProxy` pattern, configures the DataPower node to act as a reverse proxy, directing client requests to the appropriate backend server.
 
 ## Chart Details
 Deploys IBM DataPower Gateway Virtual Edition for Developers.
 Only works with DataPower version 7.7.1.1 and above.
 
+## Prerequisites
+helm and kubectl must be installed and configured on your system.
+
+[//]: # (Resources Required Start)
+## Resources Required
+Minimum resources per pod: 2 CPU and 4 GB RAM
+
+[//]: # (Resources Required End)
+
+## Installing the Chart
+To install the chart with the release name `my-release` and default pattern (See .Values.patternName below):
+ ```bash
+$ helm install --name my-release -f <mycrypto.yaml> stable/ibm-datapower-dev --tls
+```
+
+Where `<mycrypto.yaml>` is a yaml file that contains the parameters `crypto.frontsideCert` and `crypto.frontsideKey` and their respective base64-encoded values. These values are the base64-encoding of the raw key and certificate file with all whitespace removed.
+
+To uninstall/delete the `my-release` deployment:
+```bash
+$ helm delete my-release --tls
+```  
+
+To completely uninstall/delete the `my-release` deployment:
+```bash
+$ helm delete --purge my-release --tls
+```
+
 ## Configuration
 The helm chart has the following Values that can be overriden using the install `--set` parameter or by providing your own values file. For example:
 
-`helm install --set image.repository=<myimage> stable/ibm-datapower-dev`
+`helm install --set image.repository=<myimage> stable/ibm-datapower-dev --tls`
 
 | Value                                 | Description                                   | Default             |
 |---------------------------------------|-----------------------------------------------|---------------------|
@@ -73,9 +72,9 @@ The helm chart has the following Values that can be overriden using the install 
 | `datapower.snmpState`                 | SNMP admin state                              | enabled             |
 | `datapower.snmpPort`                  | SNMP interface port                           | 1161                |
 | `service.name`                        | Name to add to service                        | datapower           |
-| `patternName`                         | The name of the datapower pattern to load     | RESTProxy           |
-| `RESTProxy.backendURL`                | The backend URL datapower will proxy          | https://www.ibm.com |
-| `RESTProxy.containerPort`             | The backend URL datapower will proxy          | 8443                |
+| `patternName`                         | The name of the datapower pattern to load     | restProxy           |
+| `restProxy.backendURL`                | The backend URL datapower will proxy          | https://www.ibm.com |
+| `restProxy.containerPort`             | The backend URL datapower will proxy          | 8443                |
 | `crypto.frontsideCert`                | base64 encoded certificate                    | N/A                 |
 | `crypto.frontsideKey`                 | base64 encoded key                            | N/A                 |
 
@@ -83,21 +82,34 @@ The helm chart has the following Values that can be overriden using the install 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/ibm-datapower-dev
+$ helm install --name my-release -f values.yaml stable/ibm-datapower-dev --tls
 ```
 
 The `patternName` specifies the configuration included with the deployment. Pattern-specific options are prefixed by the `patternName` in values.yaml.
 The available patterns are:
 
-- `RESTProxy` : Configures the DataPower Gateway as a proxy for RESTful services, the service is available over HTTP or HTTPS(if crypto parameters are set) at `RESTProxy.containerPort` and proxies to `RESTProxy.backendURL`.
+- `restProxy` : Configures the DataPower Gateway as a proxy for RESTful services, the service is available over HTTP or HTTPS(if crypto parameters are set) at `restProxy.containerPort` and proxies to `restProxy.backendURL`.
 - `none` : Does not include any configuration. You may only interact with the gateway using `kubectl attach`.
+> **Tip**: List all releases using `helm list --tls`
+
+[//]: # (Limitations Start)
+## Limitations
+- This chart is for developer purposes only. No support is provided. Not eligible for production use.
+- No limit on number of deployments.
+- No limit on number of deployments per namespace.
+- Limited to amd64 architectures.
+
+[//]: # (Limitations End)
+
+## Documentation
+See NOTES.txt associated with this chart for verification instructions
 
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
 
 [View the official IBM DataPower Gateway for Developers Docker Image in Docker Hub](https://hub.docker.com/r/ibmcom/datapower/)
 
-[View the IBM DataPower Gateway Product Page](http://www-03.ibm.com/software/products/en/datapower-gateway)
+[View the IBM DataPower Gateway Product Page](https://www.ibm.com/products/datapower-gateway/resources)
 
 [View the IBM DataPower Gateway Documentation](https://www.ibm.com/support/knowledgecenter/SS9H2Y)
 
