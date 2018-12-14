@@ -31,9 +31,20 @@ spec:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
         checksum/broker_config: {{ include (print $.Template.BasePath "/broker/configmap.yaml") . | sha256sum }}
     spec:
+      {{- include "wasaas.security.pod.host" . | indent 6 }}
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "podAntiAffinity" . | indent 6 }}
+      {{- if .Values.migration.enabled }}
+      initContainers:
+        - name: init
+          image: busybox
+          command: ['sh', '-c', 'chmod -R g+rwX /migration']
+          {{- include "wasaas.security.container.init" . | indent 10 }}
+          volumeMounts:
+          - name: migrationvolume
+            mountPath: /migration
+      {{- end }}
       containers:
         - name: {{ $compName | quote }}
           image: "{{ .Values.broker.image.repository }}:{{ .Values.broker.image.tag }}"
@@ -108,6 +119,7 @@ spec:
                   key: iamClientSecret
             - name: ICP_BASE_URL
               value: {{ .Values.iam.endpoint | quote }}
+          {{- include "wasaas.security.container.nonroot" . | indent 10 }}
           volumeMounts:
             {{- if .Values.migration.enabled }}
             - name: migrationvolume
@@ -148,7 +160,8 @@ spec:
         - name: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
           secret:
             secretName: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
-            defaultMode: 256
+            # must be group readable
+            defaultMode: 0640
             items:
              - key: key.jks
                path: key.jks
