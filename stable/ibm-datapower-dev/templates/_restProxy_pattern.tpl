@@ -1,6 +1,6 @@
-{{/* DataPower Configuration for the RESTProxy Pattern */}}
-{{- define "RESTProxyConfig" }}
-RESTProxy.cfg: |
+{{/* DataPower Configuration for the restProxy Pattern */}}
+{{- define "restProxyConfig" }}
+restProxy.cfg: |
     top; configure terminal;
     
     # configuration generated Thu Apr 19 10:19:12 2018; firmware version 298100
@@ -48,7 +48,7 @@ RESTProxy.cfg: |
     
     %endif%
     
-    action "RESTProxy_rest-gw-policy_rule_error_fetch_0"
+    action "restProxy_rest-gw-policy_rule_error_fetch_0"
       reset
       type fetch
       input "INPUT"
@@ -75,7 +75,7 @@ RESTProxy.cfg: |
       http-method-limited2 POST
     exit
     
-    action "RESTProxy_rest-gw-policy_rule_error_results_output_0"
+    action "restProxy_rest-gw-policy_rule_error_results_output_0"
       reset
       type results
       input "PIPE"
@@ -100,7 +100,7 @@ RESTProxy.cfg: |
       http-method-limited2 POST
     exit
     
-    action "RESTProxy_rest-gw-policy_rule_client_convert-http_0"
+    action "restProxy_rest-gw-policy_rule_client_convert-http_0"
       reset
       type convert-http
       input "INPUT"
@@ -127,7 +127,7 @@ RESTProxy.cfg: |
       http-method-limited2 POST
     exit
     
-    action "RESTProxy_rest-gw-policy_rule_client_results_output_0"
+    action "restProxy_rest-gw-policy_rule_client_results_output_0"
       reset
       type results
       input "INPUT"
@@ -152,7 +152,7 @@ RESTProxy.cfg: |
       http-method-limited2 POST
     exit
 
-    action "RESTProxy_rest-gw-policy_rule_server_results_output_0"
+    action "restProxy_rest-gw-policy_rule_server_results_output_0"
       reset
       type results
       input "INPUT"
@@ -177,10 +177,10 @@ RESTProxy.cfg: |
       http-method-limited2 POST
     exit
     
-    rule "RESTProxy_rest-gw-policy_rule_error"
+    rule "restProxy_rest-gw-policy_rule_error"
       reset
-        action "RESTProxy_rest-gw-policy_rule_error_fetch_0"
-        action "RESTProxy_rest-gw-policy_rule_error_results_output_0"
+        action "restProxy_rest-gw-policy_rule_error_fetch_0"
+        action "restProxy_rest-gw-policy_rule_error_results_output_0"
       type error-rule
       input-filter none
       output-filter none
@@ -188,10 +188,10 @@ RESTProxy.cfg: |
       no unprocessed 
     exit
     
-    rule "RESTProxy_rest-gw-policy_rule_client"
+    rule "restProxy_rest-gw-policy_rule_client"
       reset
-        action "RESTProxy_rest-gw-policy_rule_client_convert-http_0"
-        action "RESTProxy_rest-gw-policy_rule_client_results_output_0"
+        action "restProxy_rest-gw-policy_rule_client_convert-http_0"
+        action "restProxy_rest-gw-policy_rule_client_results_output_0"
       type request-rule
       input-filter none
       output-filter none
@@ -199,9 +199,9 @@ RESTProxy.cfg: |
       no unprocessed 
     exit
     
-    rule "RESTProxy_rest-gw-policy_rule_server"
+    rule "restProxy_rest-gw-policy_rule_server"
       reset
-        action "RESTProxy_rest-gw-policy_rule_server_results_output_0"
+        action "restProxy_rest-gw-policy_rule_server_results_output_0"
       type response-rule
       input-filter none
       output-filter none
@@ -209,7 +209,7 @@ RESTProxy.cfg: |
       no unprocessed 
     exit
     
-    matching "RESTProxy_ALL"
+    matching "restProxy_ALL"
       urlmatch "*"
       no match-with-pcre 
       no combine-with-or 
@@ -224,14 +224,14 @@ RESTProxy.cfg: |
       xquerydefault "store:///reject-all-json.xq"
     exit
     
-    stylepolicy "RESTProxy_rest-gw-policy"
+    stylepolicy "restProxy_rest-gw-policy"
       reset
       filter "store:///filter-reject-all.xsl"
       xsldefault "store:///identity.xsl"
       xquerydefault "store:///reject-all-json.xq"
-      match "RESTProxy_ALL" "RESTProxy_rest-gw-policy_rule_client"
-      match "RESTProxy_ALL" "RESTProxy_rest-gw-policy_rule_server"
-      match "RESTProxy_ALL" "RESTProxy_rest-gw-policy_rule_error"
+      match "restProxy_ALL" "restProxy_rest-gw-policy_rule_client"
+      match "restProxy_ALL" "restProxy_rest-gw-policy_rule_server"
+      match "restProxy_ALL" "restProxy_rest-gw-policy_rule_error"
     exit
     
     %if% available "metadata"
@@ -394,22 +394,22 @@ RESTProxy.cfg: |
     %endif%
 {{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
     crypto
-      certificate "RESTProxy_cert" "cert:///cert.pem"
+      certificate "restProxy_cert" "cert:///cert.pem"
     exit
 
     crypto
-      key "RESTProxy_key" "cert:///key.pem"
+      key "restProxy_key" "cert:///key.pem"
     exit
 
     crypto
-      idcred "RESTProxy_ident_cred" "RESTProxy_key" "RESTProxy_cert"
+      idcred "restProxy_ident_cred" "restProxy_key" "restProxy_cert"
     exit
 
     crypto
       
     %if% available "ssl-server"
 
-    ssl-server "RESTProxy_server_profile"
+    ssl-server "restProxy_server_profile"
       protocols "TLSv1d1+TLSv1d2" 
     ciphers ECDHE_RSA_WITH_AES_256_GCM_SHA384
      ciphers ECDHE_RSA_WITH_AES_256_CBC_SHA384
@@ -435,7 +435,7 @@ RESTProxy.cfg: |
      ciphers RSA_WITH_AES_128_GCM_SHA256
      ciphers RSA_WITH_AES_128_CBC_SHA256
      ciphers RSA_WITH_AES_128_CBC_SHA 
-      idcred RESTProxy_ident_cred
+      idcred restProxy_ident_cred
       no request-client-auth 
       require-client-auth 
       validate-client-cert 
@@ -458,9 +458,9 @@ RESTProxy.cfg: |
 
     %if% available "source-https"
 
-    source-https "RESTProxy_rest-gw-fsh"
+    source-https "restProxy_rest-gw-fsh"
       local-address 0.0.0.0
-      port {{ .Values.RESTProxy.containerPort }} 
+      port {{ .Values.restProxy.containerPort }} 
       http-client-version HTTP/1.1
       allowed-features "HTTP-1.0+HTTP-1.1+POST+GET+PUT+HEAD+DELETE+QueryString+FragmentIdentifiers" 
       persistent-connections 
@@ -476,7 +476,7 @@ RESTProxy.cfg: |
       max-querystring-len 8190
       credential-charset protocol
       ssl-config-type server
-      ssl-server RESTProxy_server_profile
+      ssl-server restProxy_server_profile
       http2-max-streams 100
       http2-max-frame 16384
       no http2-stream-header 
@@ -486,9 +486,9 @@ RESTProxy.cfg: |
 {{ else }}    
     %if% available "source-http"
     
-    source-http "RESTProxy_rest-gw-fsh"
+    source-http "restProxy_rest-gw-fsh"
       local-address 0.0.0.0
-      port {{ .Values.RESTProxy.containerPort }}
+      port {{ .Values.restProxy.containerPort }}
       http-client-version HTTP/1.1
       allowed-features "HTTP-1.0+HTTP-1.1+POST+GET+PUT+DELETE+QueryString+FragmentIdentifiers" 
       persistent-connections 
@@ -512,7 +512,7 @@ RESTProxy.cfg: |
 {{- end }}
     
     crypto
-      valcred "RESTProxy_valcred"
+      valcred "restProxy_valcred"
         cert-validation-mode "legacy"
         use-crl "off"
         require-crl "off"
@@ -527,7 +527,7 @@ RESTProxy.cfg: |
       
     %if% available "ssl-client"
 
-    ssl-client "RESTProxy_ssl_client"
+    ssl-client "restProxy_ssl_client"
       protocols "TLSv1d1+TLSv1d2" 
       ciphers ECDHE_RSA_WITH_AES_256_GCM_SHA384
      ciphers ECDHE_RSA_WITH_AES_256_CBC_SHA384
@@ -554,7 +554,7 @@ RESTProxy.cfg: |
      ciphers RSA_WITH_AES_128_CBC_SHA256
      ciphers RSA_WITH_AES_128_CBC_SHA
       no validate-server-cert 
-      valcred RESTProxy_valcred
+      valcred restProxy_valcred
       caching 
       cache-timeout 300
       cache-size 100
@@ -629,7 +629,7 @@ RESTProxy.cfg: |
     
     %if% available "policy-attachments"
     
-    policy-attachments "RESTProxy_rest-gw"
+    policy-attachments "restProxy_rest-gw"
       enforcement-mode enforce
       policy-references 
       sla-enforcement-mode allow-if-no-sla
@@ -639,16 +639,16 @@ RESTProxy.cfg: |
     
     %if% available "mpgw"
     
-    mpgw "RESTProxy"
+    mpgw "restProxy"
       no policy-parameters
       priority normal
-      front-protocol RESTProxy_rest-gw-fsh
+      front-protocol restProxy_rest-gw-fsh
       xml-manager default
       ssl-client-type client
-      ssl-client RESTProxy_ssl_client
+      ssl-client restProxy_ssl_client
       default-param-namespace "http://www.datapower.com/param/config"
       query-param-namespace "http://www.datapower.com/param/query"
-      backend-url "{{ .Values.RESTProxy.backendURL }}"
+      backend-url "{{ .Values.restProxy.backendURL }}"
       propagate-uri 
       monitor-processing-policy terminate-at-first-throttle
       request-attachments strip
@@ -729,11 +729,11 @@ RESTProxy.cfg: |
       response-type preprocessed
       no follow-redirects 
       rewrite-location-header 
-      stylepolicy RESTProxy_rest-gw-policy
+      stylepolicy restProxy_rest-gw-policy
       type static-backend
       no compression 
       no allow-cache-control 
-      policy-attachments RESTProxy_rest-gw
+      policy-attachments restProxy_rest-gw
       no wsmagent-monitor 
       wsmagent-monitor-capture-mode all-messages
       proxy-http-response 
@@ -789,7 +789,7 @@ RESTProxy.cfg: |
     
     %if% available "slm-policy"
     
-    slm-policy "RESTProxy_rest-gw-slm"
+    slm-policy "restProxy_rest-gw-slm"
       eval-method execute-all-statements
       no api-mgmt 
     exit

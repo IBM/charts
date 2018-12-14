@@ -24,7 +24,7 @@ spec:
         heritage: "{{ .Release.Service }}"
         app: {{ template "fullname" . }}
       annotations:
-        productName: 'IBM DataPower Gateway'
+        productName: 'IBM DataPower Gateway Virtual Edition for Developers'
         productID: 'IBMDataPowerGatewayVirtualEdition_{{ .Values.datapower.image.tag }}_Developers'
         productVersion: "{{ .Values.datapower.image.tag }}"
         prometheus.io/scrape: 'true'
@@ -39,17 +39,36 @@ spec:
       - name: {{ .name }}
       {{- end }}
 {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.datapower.image.repository }}:{{ .Values.datapower.image.tag }}"
-        imagePullPolicy: {{ .Values.datapower.image.pullPolicy }} 
+        imagePullPolicy: {{ .Values.datapower.image.pullPolicy }}
+        command:
+          - sh
+          - -c
+          - |
+            exec /start.sh --log-format {{ .Values.datapower.env.defaultLogFormat }}
         stdin: true
         tty: true
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 101
+          capabilities:
+            drop:
+            - ALL
         resources:
           limits:
             cpu: {{ .Values.datapower.resources.limits.cpu }}
             memory: {{ .Values.datapower.resources.limits.memory | quote }}
-          requests: 
+          requests:
             cpu: {{ .Values.datapower.resources.requests.cpu}}
             memory: {{ .Values.datapower.resources.requests.memory | quote }}
         env:
@@ -70,7 +89,7 @@ spec:
           httpGet:
             path: /
             port: service
-{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
+{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}
             scheme: HTTPS
 {{ else }}
             scheme: HTTP
@@ -82,7 +101,7 @@ spec:
           httpGet:
             path: /
             port: service
-{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
+{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}
             scheme: HTTPS
 {{ else }}
             scheme: HTTP
@@ -96,13 +115,13 @@ spec:
         volumeMounts:
             - mountPath: "/drouter/config"
               name: {{ template "fullname" . }}-config-volume
-{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
-            - mountPath: "/drouter/secure/usrcerts"
+{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}
+            - mountPath: "/drouter/secure/usrcerts/{{ .Values.patternName }}"
               name: {{ template "fullname" . }}-secret-volume
 {{- end }}
       volumes:
         - name: {{ template "fullname" . }}-config-volume
-          configMap: 
+          configMap:
             name: {{ template "fullname" . }}-config
             items:
             - key: {{ .Values.patternName }}.cfg
@@ -112,14 +131,22 @@ spec:
             - key: auto-startup.cfg
               path: "auto-startup.cfg"
 
-{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
+{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}
         - name: {{ template "fullname" . }}-secret-volume
           secret:
             secretName: {{ template "fullname" . }}-secret
             items:
             - key: key.pem
-              path: "{{ .Values.patternName }}/key.pem"
+              path: "key.pem"
             - key: cert.pem
-              path: "{{ .Values.patternName }}/cert.pem"
+              path: "cert.pem"
 {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: "beta.kubernetes.io/arch"
+                  operator: In
+                  values: ["amd64"]
 {{- end }}
