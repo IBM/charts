@@ -17,7 +17,11 @@ StrictHostKeyChecking no
 UserKnownHostsFile=/dev/null
 Port $SSH_PORT
 EOS
-  sed -i "s/^Port.*/Port $SSH_PORT/g" /etc/ssh/sshd_config
+  if grep -q "^Port " /etc/ssh/sshd_config; then
+    sed -i "s/^Port .*/Port $SSH_PORT/g" /etc/ssh/sshd_config
+  else
+    echo "Port $SSH_PORT" >> /etc/ssh/sshd_config
+  fi
   curr_user=${SUDO_USER}
   [ -z $curr_user ] && curr_user=${USER}
   chown -R ${curr_user} ${HOME}/.ssh
