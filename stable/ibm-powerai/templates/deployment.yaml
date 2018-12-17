@@ -11,10 +11,10 @@
 apiVersion: apps/v1
 {{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
 apiVersion: apps/v1beta2
-{{- else }}	
-apiVersion: apps/v1beta1	
+{{- else }}
+apiVersion: apps/v1beta1
 {{- end }}
-{{- if .Values.ddl.enabled }}
+{{- if or .Values.ddl.enabled .Values.paiDistributed.mode }}
 kind: StatefulSet
 {{- else }}
 kind: Deployment
@@ -27,7 +27,7 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
-  {{- if .Values.ddl.enabled }}
+  {{- if or .Values.ddl.enabled .Values.paiDistributed.mode }}
   serviceName: {{ template "fullname" . }}
   podManagementPolicy: Parallel
   {{- end }}
@@ -47,9 +47,12 @@ spec:
       annotations:
         productName: "PowerAI"
         productID: "5765-PAI"
-        productVersion: "{{ .Chart.Version }}"
+        productVersion: "1.5.4"
 
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 2051
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -59,7 +62,7 @@ spec:
                 operator: In
                 values:
                 - "ppc64le"
-        {{- if and .Values.ddl.enabled }}
+        {{- if or .Values.ddl.enabled .Values.paiDistributed.mode }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
@@ -73,18 +76,19 @@ spec:
       {{- if .Values.resources.gputype }}
       nodeSelector:
         gputype: {{ .Values.resources.gputype }}
-      {{- end }}     
+      {{- end }}
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+
         {{- if .Values.global.image.secretName }}
         imagePullSecrets:
         - name: {{ .Values.global.image.secretName }}
         {{- end }}
         command: [ "/bin/bash", "-c" ]
         {{- define "makeArgs" }}
-        {{- if .Values.ddl.enabled }}
+        {{- if or .Values.ddl.enabled .Values.paiDistributed.mode }}
         {{- print "sudo -E bash /powerai/config/setup_ssh.sh;" }}
         {{- end }}
         {{- if (ne .Values.command "") }}
@@ -92,10 +96,25 @@ spec:
         {{- end }}
         {{- end }}
         args: [ "{{ template "makeArgs" . }}tail -f /dev/null;" ]
-        {{- if .Values.ddl.useInfiniBand }}
         securityContext:
+          privileged: false
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
           capabilities:
-            add: ["IPC_LOCK", "SYS_PTRACE", "SYS_RESOURCE"]
+            drop:
+            - ALL
+        {{- if or .Values.ddl.useInfiniBand .Values.paiDistributed.useInfiniBand }}
+            add: ["AUDIT_WRITE", "CHOWN", "FOWNER", "SETUID", "SETGID", "SYS_CHROOT", "DAC_OVERRIDE", "NET_BIND_SERVICE", "IPC_LOCK", "SYS_PTRACE", "SYS_RESOURCE"]
+        {{- else }}
+            add:
+            - AUDIT_WRITE
+            - CHOWN
+            - FOWNER
+            - SETUID
+            - SETGID
+            - SYS_CHROOT
+            - DAC_OVERRIDE
+            - NET_BIND_SERVICE
         {{- end }}
         ports:
         {{- if .Values.service.port }}
@@ -104,6 +123,8 @@ spec:
         {{- end }}
         {{- if .Values.ddl.enabled }}
         - containerPort: {{ .Values.ddl.sshPort }}
+        {{- else if .Values.paiDistributed.mode }}
+        - containerPort: {{ .Values.paiDistributed.sshPort }}
         {{- end }}
         env:
         {{- if (eq .Values.license "accept") }}
@@ -113,8 +134,11 @@ spec:
         {{- if .Values.ddl.enabled }}
         - name: SSH_PORT
           value: "{{ .Values.ddl.sshPort }}"
+        {{- else if .Values.paiDistributed.mode }}
+        - name: SSH_PORT
+          value: "{{ .Values.paiDistributed.sshPort }}"
         {{- end }}
-        {{- if .Values.ddl.useInfiniBand }}
+        {{- if or .Values.ddl.useInfiniBand .Values.paiDistributed.useInfiniBand }}
         - name: INFINIBAND
           value: "1"
         {{- end }}
@@ -138,31 +162,36 @@ spec:
         {{- end }}
         resources:
           limits:
-          {{- if .Values.ddl.useInfiniBand }}
+          {{- if or .Values.ddl.useInfiniBand .Values.paiDistributed.useInfiniBand }}
             tencent.com/rdma: 1 # requesting 1 RDMA device
           {{- end }}
           {{- if .Values.ddl.enabled }}
-            {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) }}             
-              alpha.kubernetes.io/nvidia-gpu: {{ .Values.ddl.gpuPerHost }}
+            {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) }}
+            alpha.kubernetes.io/nvidia-gpu: {{ .Values.ddl.gpuPerHost }}
             {{- else }}
-              nvidia.com/gpu: {{ .Values.ddl.gpuPerHost }}
+            nvidia.com/gpu: {{ .Values.ddl.gpuPerHost }}
+            {{- end }}
+          {{- else if .Values.paiDistributed.mode }}
+            {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) }}
+            alpha.kubernetes.io/nvidia-gpu: {{ .Values.paiDistributed.gpuPerHost }}
+            {{- else }}
+            nvidia.com/gpu: {{ .Values.paiDistributed.gpuPerHost }}
             {{- end }}
           {{- else }}
-            {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) }}                       
-              alpha.kubernetes.io/nvidia-gpu: {{ .Values.resources.gpu }}
+            {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) }}
+            alpha.kubernetes.io/nvidia-gpu: {{ .Values.resources.gpu }}
             {{- else }}
-              nvidia.com/gpu: {{ .Values.resources.gpu }}
-            {{- end }} 
-                                 
+            nvidia.com/gpu: {{ .Values.resources.gpu }}
+            {{- end }}
           {{- end }}
         volumeMounts:
-        {{- if .Values.ddl.useInfiniBand }}
+        {{- if or .Values.ddl.useInfiniBand .Values.paiDistributed.useInfiniBand }}
         - mountPath: /dev/shm
           name: dshm
         {{- end }}
         - name: "{{ template "fullname" . }}-{{ .Values.poweraiPVC.name }}"
           mountPath: /powerai/data
-        {{- if .Values.ddl.enabled }}
+        {{- if or .Values.ddl.enabled .Values.paiDistributed.mode }}
         - name: ssh-volume
           readOnly: true
           mountPath: "/powerai/sshkeys"
@@ -170,7 +199,7 @@ spec:
           mountPath: "/powerai/config"
         {{- end }}
       volumes:
-      {{- if .Values.ddl.useInfiniBand }}
+      {{- if or .Values.ddl.useInfiniBand .Values.paiDistributed.useInfiniBand }}
       - name: dshm
         emptyDir:
           medium: Memory
@@ -196,11 +225,23 @@ spec:
       dnsConfig:
         searches:
           - {{ template "fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+      {{- else if .Values.paiDistributed.mode }}
+      - name: ssh-volume
+        secret:
+          secretName: {{ .Values.paiDistributed.sshKeySecret }}
+      - name: cfgmap-volume
+        configMap:
+          name: {{ template "fullname" . }}
+      dnsConfig:
+        searches:
+          - {{ template "fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
       {{- end }}
-      {{- if .Values.ddl.useInfiniBand }}
+      {{- if or .Values.ddl.useInfiniBand .Values.paiDistributed.useInfiniBand }}
       hostPID: true
+      hostIPC: true
       {{- end }}
-      {{- if .Values.ddl.useHostNetwork }}
+      {{- if or .Values.ddl.useHostNetwork .Values.paiDistributed.useHostNetwork }}
       hostNetwork: true
+      hostIPC: true
       dnsPolicy: ClusterFirstWithHostNet
       {{- end }}

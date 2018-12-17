@@ -40,6 +40,8 @@ Return number of replicas based on .Values.resources.gpu and .Values.ddl.gpuPerH
 {{- define "workerCount" -}}
   {{- if and .Values.ddl.enabled (ne (int .Values.resources.gpu) 0)  (ne (int .Values.ddl.gpuPerHost) 0)}}
   {{- print (div (add .Values.resources.gpu .Values.ddl.gpuPerHost -1)  .Values.ddl.gpuPerHost) }}
+  {{- else if and .Values.paiDistributed.mode (ne (int .Values.resources.gpu) 0)  (ne (int .Values.paiDistributed.gpuPerHost) 0)}}
+  {{- print (div (add .Values.resources.gpu .Values.paiDistributed.gpuPerHost -1)  .Values.paiDistributed.gpuPerHost) }}
   {{- else }}
   {{- print "1" }}
   {{- end }}
