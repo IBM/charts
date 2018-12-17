@@ -137,3 +137,10 @@ Response Code: 000
 Incorrect ETCD URL provided. It is either not reachable or is incorrect...
 ```
 Ensure the correct etcd URL is set as a parameter to the `helm install` command.
+
+
+## Support
+
+If you have an enterprise license, please contact us at support@portworx.com with your license key and logs.
+
+We are always available on Slack. Join us on [Slack](http://slack.portworx.com)
