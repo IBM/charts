@@ -88,22 +88,6 @@ helm install --name artifactory-ha \
 
 Get more details on configuring Artifactory in the [official documentation](https://www.jfrog.com/confluence/).
 
-### Create Distribution Certificates for Artifactory Enterprise Plus
-```bash
-# Create private.key and root.crt
-openssl req -newkey rsa:2048 -nodes -keyout private.key -x509 -days 365 -out root.crt
-```
-
-Once Created, Use it to create ConfigMap
-```bash
-# Create ConfigMap distribution-certs
-kubectl create configmap distribution-certs --from-file=private.key=private.key --from-file=root.crt=root.crt
-```
-Pass it to `helm`
-```bash
-helm install --name artifactory --set artifactory.distributionCerts=distribution-certs jfrog/artifactory-ha
-```
-
 ### Artifactory storage
 Artifactory HA support a wide range of storage back ends. You can see more details on [Artifactory HA storage options](https://www.jfrog.com/confluence/display/RTF/HA+Installation+and+Setup#HAInstallationandSetup-SettingUpYourStorageConfiguration)
 
@@ -143,11 +127,20 @@ To use an AWS S3 bucket as the cluster's filestore
 - Pass AWS S3 parameters to `helm install` and `helm upgrade`
 ```bash
 ...
+# With explicit credentials:
 --set artifactory.persistence.type=aws-s3 \
 --set artifactory.persistence.awsS3.endpoint=${AWS_S3_ENDPOINT} \
 --set artifactory.persistence.awsS3.region=${AWS_REGION} \
 --set artifactory.persistence.awsS3.identity=${AWS_ACCESS_KEY_ID} \
 --set artifactory.persistence.awsS3.credential=${AWS_SECRET_ACCESS_KEY} \
+...
+
+...
+# With using existing IAM role
+--set artifactory.persistence.type=aws-s3 \
+--set artifactory.persistence.awsS3.endpoint=${AWS_S3_ENDPOINT} \
+--set artifactory.persistence.awsS3.region=${AWS_REGION} \
+--set artifactory.persistence.awsS3.roleName=${AWS_ROLE_NAME} \
 ...
 ```
 **NOTE:** Make sure S3 `endpoint` and `region` match. See [AWS documentation on endpoint](https://docs.aws.amazon.com/general/latest/gr/rande.html)
@@ -191,7 +184,7 @@ Once primary cluster is running, open Artifactory UI and insert the license(s) i
 
 ##### Kubernetes Secret
 You can deploy the Artifactory license(s) as a [Kubernetes secret](https://kubernetes.io/docs/concepts/configuration/secret/).
-Prepare a text file with the license(s) written in it. If writing multiple licenses, it's important to put **two new lines between each license block**!
+Prepare a text file with the license(s) written in it. If writing multiple licenses (must be in the same file), it's important to put **two new lines between each license block**!
 ```bash
 # Create the Kubernetes secret (assuming the local license file is 'art.lic')
 kubectl create secret generic artifactory-cluster-license --from-file=./art.lic
@@ -199,7 +192,8 @@ kubectl create secret generic artifactory-cluster-license --from-file=./art.lic
 # Pass the license to helm
 helm install --name artifactory-ha --set artifactory.license.secret=artifactory-cluster-license,artifactory.license.dataKey=art.lic jfrog/artifactory-ha
 ```
-**NOTE:** You have to keep passing the license secret parameters as `--set artifactory.license.secret=artifactory-cluster-license,artifactory.license.dataKey=art.lic` on all future calls to `helm install` and `helm upgrade`!
+**NOTE:** This method is relevant for initial deployment only! Once Artifactory is deployed, you should not keep passing these parameters as the license is already persisted into Artifactory's storage (they will be ignored).
+Updating the license should be done via Artifactory UI or REST API.
 
 ### Bootstrapping Artifactory
 **IMPORTANT:** Bootstrapping Artifactory needs license. Pass license as shown in above section.
@@ -289,7 +283,7 @@ This can be done with the following parameters
 # Make sure your Artifactory Docker image has the MySQL database driver in it
 ...
 --set postgresql.enabled=false \
---set artifactory.postStartCommand="curl -L -o /opt/jfrog/artifactory/tomcat/lib/mysql-connector-java-5.1.41.jar https://jcenter.bintray.com/mysql/mysql-connector-java/5.1.41/mysql-connector-java-5.1.41.jar && chown 1030:1030 /opt/jfrog/artifactory/tomcat/lib/mysql-connector-java-5.1.41.jar" \
+--set artifactory.preStartCommand="curl -L -o /opt/jfrog/artifactory/tomcat/lib/mysql-connector-java-5.1.41.jar https://jcenter.bintray.com/mysql/mysql-connector-java/5.1.41/mysql-connector-java-5.1.41.jar" \
 --set database.type=mysql \
 --set database.host=${DB_HOST} \
 --set database.port=${DB_PORT} \
@@ -353,6 +347,8 @@ The following table lists the configurable parameters of the artifactory chart a
 | `artifactory.image.version`          | Container image tag                  | `.Chart.AppVersion`                        |
 | `artifactory.masterKey`           | Artifactory Master Key. Can be generated with `openssl rand -hex 32` |`FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF`|
 | `artifactory.masterKeySecretName` | Artifactory Master Key secret name                                   |                                                                  |
+| `artifactory.preStartCommand`                    | Command to run before entrypoint starts |                             |
+| `artifactory.postStartCommand`                   | Command to run after container starts   |                             |
 | `artifactory.license.secret` | Artifactory license secret name              |                                            |
 | `artifactory.license.dataKey`| Artifactory license secret data key          |                                            |
 | `artifactory.service.name`   | Artifactory service name to be set in Nginx configuration | `artifactory`                 |
@@ -362,6 +358,7 @@ The following table lists the configurable parameters of the artifactory chart a
 | `artifactory.internalPort`   | Artifactory service internal port                         | `8081`                        |
 | `artifactory.internalPortReplicator` | Replicator service internal port | `6061`   |
 | `artifactory.externalPortReplicator` | Replicator service external port | `6061`   |
+| `artifactory.extraEnvironmentVariables`          | Extra environment variables to pass to Artifactory. See [documentation](https://www.jfrog.com/confluence/display/RTF/Installing+with+Docker#InstallingwithDocker-SupportedEnvironmentVariables) |   |
 | `artifactory.livenessProbe.enabled`              | Enable liveness probe                     |  `true`                                               |
 | `artifactory.livenessProbe.initialDelaySeconds`  | Delay before liveness probe is initiated  | 180                                                   |
 | `artifactory.livenessProbe.periodSeconds`        | How often to perform the probe            | 10                                                    |
@@ -394,15 +391,16 @@ The following table lists the configurable parameters of the artifactory chart a
 | `artifactory.persistence.awsS3.bucketName`          | AWS S3 bucket name                     | `artifactory-ha`             |
 | `artifactory.persistence.awsS3.endpoint`            | AWS S3 bucket endpoint                 | See https://docs.aws.amazon.com/general/latest/gr/rande.html |
 | `artifactory.persistence.awsS3.region`              | AWS S3 bucket region                   |                              |
+| `artifactory.persistence.awsS3.roleName`            | AWS S3 IAM role name                   |                             |
 | `artifactory.persistence.awsS3.identity`            | AWS S3 AWS_ACCESS_KEY_ID               |                              |
 | `artifactory.persistence.awsS3.credential`          | AWS S3 AWS_SECRET_ACCESS_KEY           |                              |
+| `artifactory.persistence.awsS3.properties`          | AWS S3 additional properties           |                              |
 | `artifactory.persistence.awsS3.path`                | AWS S3 path in bucket                  | `artifactory-ha/filestore`   |
-| `artifactory.persistence.awsS3.refreshCredentials`  | AWS S3 renew credentials on expiration | `true`                       |
+| `artifactory.persistence.awsS3.refreshCredentials`  | AWS S3 renew credentials on expiration | `true` (When roleName is used, this parameter will be set to true) |
 | `artifactory.persistence.awsS3.testConnection`      | AWS S3 test connection on start up     | `false`                      |
-| `artifactory.javaOpts.other` | Artifactory extra java options (for all nodes) | `-Dartifactory.locking.provider.type=db` |
-| `artifactory.replicator.enabled`            | Enable Artifactory Replicator | `false`                                    |
-| `artifactory.distributionCerts`            | Name of ConfigMap for Artifactory Distribution Certificate  |               |
-| `artifactory.replicator.publicUrl`            | Artifactory Replicator Public URL |                                      |
+| `artifactory.javaOpts.other`                        | Artifactory additional java options (for all nodes) |                 |
+| `artifactory.replicator.enabled`                    | Enable Artifactory Replicator          | `false`                      |
+| `artifactory.replicator.publicUrl`              | Artifactory Replicator Public URL |                                    |
 | `artifactory.primary.resources.requests.memory` | Artifactory primary node initial memory request  |                     |
 | `artifactory.primary.resources.requests.cpu`    | Artifactory primary node initial cpu request     |                     |
 | `artifactory.primary.resources.limits.memory`   | Artifactory primary node memory limit            |                     |
@@ -460,11 +458,13 @@ The following table lists the configurable parameters of the artifactory chart a
 | `nginx.env.ssl`                   | Nginx Environment enable ssl               | `true`                                  |
 | `nginx.env.skipAutoConfigUpdate`  | Nginx Environment to disable auto configuration update | `false`                     |
 | `nginx.customConfigMap`           | Nginx CustomeConfigMap name for `nginx.conf` | ` `                                   |
+| `nginx.customArtifactoryConfigMap`| Nginx CustomeConfigMap name for `artifactory-ha.conf` | ` `                          |
 | `nginx.resources.requests.memory` | Nginx initial memory request               | `250Mi`                                 |
 | `nginx.resources.requests.cpu`    | Nginx initial cpu request                  | `100m`                                  |
 | `nginx.resources.limits.memory`   | Nginx memory limit                         | `250Mi`                                 |
 | `nginx.resources.limits.cpu`      | Nginx cpu limit                            | `500m`                                  |
 | `postgresql.enabled`              | Use enclosed PostgreSQL as database        | `true`                                  |
+| `postgresql.imageTag`             | PostgreSQL version                         | `9.6.11`                                |
 | `postgresql.postgresDatabase`     | PostgreSQL database name                   | `artifactory`                           |
 | `postgresql.postgresUser`         | PostgreSQL database user                   | `artifactory`                           |
 | `postgresql.postgresPassword`     | PostgreSQL database password               |                                         |
@@ -478,12 +478,15 @@ The following table lists the configurable parameters of the artifactory chart a
 | `database.type`                  | External database type (`postgresql`, `mysql`, `oracle` or `mssql`)  |                       |
 | `database.host`                  | External database hostname                         |                                         |
 | `database.port`                  | External database port                             |                                         |
+| `database.url`                   | External database connection URL                   |                                         |
 | `database.user`                  | External database username                         |                                         |
 | `database.password`              | External database password                         |                                         |
 | `database.secrets.user.name`     | External database username `Secret` name           |                                         |
 | `database.secrets.user.key`      | External database username `Secret` key            |                                         |
 | `database.secrets.password.name` | External database password `Secret` name           |                                         |
 | `database.secrets.password.key`  | External database password `Secret` key            |                                         |
+| `database.secrets.url.name     ` | External database url `Secret` name                |                                         |
+| `database.secrets.url.key`       | External database url `Secret` key                 |                                         |
 
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
