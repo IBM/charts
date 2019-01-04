@@ -584,3 +584,6 @@ You can create an image enforcement policy by using the IBM Cloud Private Web co
 - https://www.jfrog.com/confluence/display/EP/Getting+Started
 - https://www.jfrog.com/confluence/display/RTF/Installing+Artifactory
 - https://www.jfrog.com/confluence/
+
+## Support
+If you have an issue installing Artifactory, please contact us at https://github.com/jfrog/charts.
