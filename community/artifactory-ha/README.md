@@ -427,7 +427,7 @@ The following table lists the configurable parameters of the artifactory chart a
 | `nginx.name`                | Nginx name                        | `nginx`                                                |
 | `nginx.replicaCount`        | Nginx replica count               | `1`                                                    |
 | `nginx.uid`                 | Nginx User Id                     | `104`                                                  |
-| `nginx.git`                 | Nginx Group Id                    | `107`                                                  |
+| `nginx.gid`                 | Nginx Group Id                    | `107`                                                  |
 | `nginx.image.repository`    | Container image                   | `docker.bintray.io/jfrog/nginx-artifactory-pro`        |
 | `nginx.image.version`       | Container version                 | `.Chart.AppVersion`                                    |
 | `nginx.image.pullPolicy`    | Container pull policy             | `IfNotPresent`                                         |
