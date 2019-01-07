@@ -34,4 +34,4 @@ kubectl config use-context $CLUSTER_NAME
 
 Then [configure your helm command line interface](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0/app_center/create_helm_cli.html) to work with `helm`.
 
-_Copyright IBM Corporation 2017. All Rights Reserved._
+_Copyright IBM Corporation 2019. All Rights Reserved._
