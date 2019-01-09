@@ -18,12 +18,31 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
 spec:
+  affinity:
+{{- include "nodeaffinity" . | indent 4 }}
   restartPolicy: Never
   containers:
   - name: {{ template "minio.fullname" . }}-test
     image: "{{ .Values.mcImage.repository }}:{{ .Values.mcImage.tag }}"
     imagePullPolicy: {{ .Values.image.pullPolicy }}
     command: ["/test/test-minio.sh"]
+    env:
+    - name: MINIO_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.minioAccessSecret | quote }}
+          key: accesskey
+    - name: MINIO_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.minioAccessSecret | quote }}
+          key: secretkey
+    - name: TLS_ENABLED
+{{- if .Values.tls.enabled }}
+      value: "true"
+{{ else }}
+      value: "false"
+{{- end }}
     volumeMounts:
       - name: {{ template "minio.fullname" . }}-test
         mountPath: "/test"
