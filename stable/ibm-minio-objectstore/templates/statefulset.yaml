@@ -16,6 +16,8 @@ spec:
     matchLabels:
       app: {{ template "minio.name" . }}
       release: {{ .Release.Name }}
+  updateStrategy:
+    type: RollingUpdate
   template:
     metadata:
       name: {{ template "minio.fullname" . }}
@@ -80,12 +82,12 @@ spec:
             - name: MINIO_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.minioAccessSercret }}
+                  name: {{ .Values.minioAccessSecret }}
                   key: accesskey
             - name: MINIO_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.minioAccessSercret }}
+                  name: {{ .Values.minioAccessSecret }}
                   key: secretkey
           resources:
 {{ toYaml .Values.resources | indent 12 }}
@@ -96,8 +98,6 @@ spec:
       affinity:
 {{- include "nodeaffinity" . | indent 8 }}
       tolerations:
-        - key: dedicated
-          operator: Exists
         - key: CriticalAddonsOnly
           operator: Exists
 {{- with .Values.tolerations }}
@@ -111,10 +111,10 @@ spec:
             secretName: {{ template "minio.fullname" . }}
 {{- end }}
 {{- if eq .Values.tls.type  "provided" }}
-{{- if empty .Values.tls.minioTlsSercret }}
+{{- if empty .Values.tls.minioTlsSecret }}
 {{ fail "Configuration error: Please enter name of secret containing  TLS certificate and key." }}
 {{- end }}
-            secretName: {{ .Values.tls.minioTlsSercret }}
+            secretName: {{ .Values.tls.minioTlsSecret }}
 {{- end }}
             defaultMode: 420
             items:
@@ -127,7 +127,7 @@ spec:
 {{- end }}
         - name: minio-user
           secret:
-            secretName: {{ .Values.minioAccessSercret }}
+            secretName: {{ .Values.minioAccessSecret }}
         - name: minio-server-config
           configMap:
             name: {{ template "minio.fullname" . }}
