@@ -25,12 +25,26 @@ spec:
     spec:
       affinity:
       {{- include "nodeaffinity" . | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
       {{- if .Values.jenkins.rbac.serviceAccountName }}
       serviceAccountName: {{ .Values.jenkins.rbac.serviceAccountName }}
       {{- end }}
       containers:
       - name: "command-check"
         image: "{{ .Values.utils.repository }}:{{ .Values.utils.tag }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         command: ["/bin/sh","-c","kubectl delete secret {{ .Release.Name }}-tls-secret {{ .Release.Name }}-mc-tls-secret --ignore-not-found=true  && kubectl delete csr '{{ template "jenkins.ingress-host" . }}' '{{ template "microclimate.ingress-host" . }}' --ignore-not-found=true"]
         resources:
           requests:

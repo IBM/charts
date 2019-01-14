@@ -365,6 +365,17 @@ If using the command line instead, the options can be specified as follows:
 --set global.additionalImagePullSecrets[0]=<secret>,global.additionalImagePullSecrets[1]=<secret2>
 ```
 
+#### Git configuration
+
+You can use Microclimate with your own source code management system, for example, your own hosted GitLab that might be using self-signed certificates.
+
+Microclimate uses a Git client in two ways, for the Portal component when importing a project, and for Microclimate pipelines when checking out source code to build, push, and potentially deploy. You can specify an extra Git option that you want to use, for example `--global http.sslVerify false` which accepts self-signed certificates when Microclimate uses Git.
+
+If using the command line, the option can be specified as follows:
+```
+--set global.gitOption="--global http.sslVerify false"
+```
+
 #### Configuration parameters
 
 | Parameter                  | Description                                     | Default                                                    |
@@ -390,6 +401,7 @@ If using the command line instead, the options can be specified as follows:
 | `global.jenkinsHost`       | Host name used for Ingress for Jenkins          | `jenkins` |
 | `global.helm.tlsSecretName`    | Name of the Kubernetes secret to be used by the Microclimate pipeline: must be provided in order to use Tiller securely | `""` |
 | `global.rbac.serviceAccountName`    | Name of a service account to create for Microclimate's Portal and File Watcher components to use | `"default"` |
+| `global.gitOption`    | An extra Git configuration option to be used for Microclimate | `""` |
 | `global.applyPodSecurityPolicy`    | Automatically apply the ibm-anyuid-hostpath-psp policy to the namespace Microclimate is installed into | `true` |
 
 
@@ -446,11 +458,11 @@ These commands can be run from any host that has a kubectl client with access to
 
 To ensure that you install the chart with the correct pipeline registry URL, perform a release upgrade to your current Microclimate installation.
 
-- Enter the following commands into the Helm CLI, substituting your correct value in place of the `<cluster_ca_domain:8500>` and `<ns2>` variables:
+- Enter the following commands into the Helm CLI, substituting your correct value in place of the `<mycluster.icp:8500>` and `<ns2>` variables:
   - `helm repo add ibm-charts-public https://raw.githubusercontent.com/IBM/charts/master/repo/stable`
-  - `helm upgrade microclimate --set jenkins.Pipeline.Registry.Url=<cluster_ca_domain:8500> --namespace <ns2> ibm-charts-public/ibm-microclimate --reuse-values --tls`
+  - `helm upgrade microclimate --set jenkins.Pipeline.Registry.Url=<mycluster.icp:8500> --namespace <ns2> ibm-charts-public/ibm-microclimate --reuse-values --tls`
 - After you upgrade the chart with the correct registry URL, the `microclimate-ibm-microclimate-<xxx-xxx>` portal pod, the `microclimate-ibm-microclimate-devops-<xxx-xxx>` DevOps pod, and the `microclimate-jenkins-<xxx-xxx>` Jenkins pod are restarted.
-- You can check your registry URL value in the Jenkins UI. Navigate to `Jenkins`>`Manage Jenkins`>`Configure System`>`Global properties`>`Environment variables`. Then, find the `Name: REGISTRY` and `Value: <cluster_ca_domain>:8500/ns2` to see the environment variable setting. If you change the value in the Jenkins UI, the change doesn't persist after you restart IBM Cloud Private.
+- You can check your registry URL value in the Jenkins UI. Navigate to `Jenkins`>`Manage Jenkins`>`Configure System`>`Global properties`>`Environment variables`. Then, find the `Name: REGISTRY` and `Value: mycluster.icp:8500/ns2` to see the environment variable setting. If you change the value in the Jenkins UI, the change doesn't persist after you restart IBM Cloud Private.
 - When the portal pod is running, log in to the Microclimate portal UI, and the file-watcher, editor, and loadrunner pods are restarted.
 - Run the `kubectl get pods` command to view the status of the pods after the upgrade.
   ```

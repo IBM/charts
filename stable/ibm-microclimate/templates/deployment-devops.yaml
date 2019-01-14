@@ -41,10 +41,25 @@ spec:
       {{- if .Values.jenkins.rbac.serviceAccountName }}
       serviceAccountName: {{ .Values.jenkins.rbac.serviceAccountName }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
       - name: devops-chart
         image: "{{ .Values.devops.repository }}:{{ .Values.devops.tag }}"
         imagePullPolicy: {{ .Values.devops.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         ports:
           - containerPort: 9191
         volumeMounts:
@@ -91,6 +106,8 @@ spec:
           value: "{{ .Release.Namespace }}"
         - name: MICROCLIMATE_SECRET
           value: {{ template "jenkins.fullname" . }}
+        - name: EXTRA_GIT_OPTION
+          value: "{{ .Values.global.gitOption }}"
         resources:
           requests:
             memory: {{ .Values.devops.resources.requests.memory }}
