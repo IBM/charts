@@ -1,23 +1,10 @@
 # Breaking Changes
 No breaking changes.
 
-# What’s new in Chart Version 1.9.0
-
+# What’s new in Chart Version 1.10.0
 
 ## Microclimate
-* Support for Linux® on Power® (ppc64le).
-* New `Cancel load` facility when viewing application metrics, enabling you to stop loading application metrics for a selected project. For more information, see [Performance testing your project](performancetesting).
-* Improved GitHub integration, enabling you to more easily commit your project to a GitHub repository.
-* Removed the Node.js template to improve your experience when creating Node.js projects.
-
-
-## Pipeline
-* Support for Linux® on Power® (ppc64le).
-
-
-## Chart
-* Improved installation in IBM Cloud Private. The installation process now auto-detects when required parameters for installing into IBM Cloud Private are missing and highlights these to you.
-
+* Microclimate portal now has a new logging feature to help with problem determination.
 
 # Fixes
 * Various minor bug and stability fixes.
@@ -29,7 +16,7 @@ No breaking changes.
 - Download the IBM Cloud Private CLI, `cloudctl`, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
 
 
-# Upgrading from 1.8.0
+# Upgrading from 1.9.0
 
 Microclimate can be upgraded from the IBM Cloud Private Helm Releases view. When performing the upgrade, ensure the `Reuse Value` option is selected.
 
@@ -49,6 +36,7 @@ For detailed installation instructions go to https://microclimate-dev2ops.github
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.10.0 | January  11, 2019 | 1.11.0  | 1901 | None | Improved logging. Various fixes and stability improvements |
 | 1.9.0 | December 13, 2018 | 1.11.0  | 1812 | None | Added support for Linux® on Power® (ppc64le). |
 | 1.8.0 | November 16, 2018 | 1.11.0  | 1811 | None | Added support for ICP 3.1.1. Various fixes and improvements |
 | 1.7.0 | October 12, 2018 | 1.11.0  | 1810 | None | Various fixes and improvements |

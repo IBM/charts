@@ -73,7 +73,7 @@ data:
       </disabledAdministrativeMonitors>
       <version>{{ .Values.Master.ImageTag }}</version>
       <numExecutors>0</numExecutors>
-      <mode>NORMAL</mode>
+      <mode>PERFORMANCE</mode>
       <useSecurity>{{ .Values.Master.UseSecurity }}</useSecurity>
       <authorizationStrategy class="hudson.security.FullControlOnceLoggedInAuthorizationStrategy">
         <denyAnonymousReadAccess>true</denyAnonymousReadAccess>
@@ -114,8 +114,13 @@ data:
               <inheritFrom></inheritFrom>
               <name>default</name>
               <instanceCap>2147483647</instanceCap>
-              <idleMinutes>0</idleMinutes>
+              <idleMinutes>60</idleMinutes>
               <label>{{ .Release.Name }}-{{ .Values.Agent.Component }}</label>
+              <yaml>
+    spec:
+      affinity:
+      {{- include "nodeaffinity" . | indent 8 }}
+              </yaml>
               <nodeSelector>
                 {{- $local := dict "first" true }}
                 {{- range $key, $value := .Values.Agent.NodeSelector }}
@@ -123,7 +128,7 @@ data:
                   {{- $key }}={{ $value }}
                   {{- $_ := set $local "first" false }}
                 {{- end }}</nodeSelector>
-                <nodeUsageMode>NORMAL</nodeUsageMode>
+                <nodeUsageMode>PERFORMANCE</nodeUsageMode>
               <volumes>
 {{- range $index, $volume := .Values.Agent.volumes }}
                 <org.csanchez.jenkins.plugins.kubernetes.volumes.{{ $volume.type }}Volume>
@@ -184,7 +189,8 @@ data:
           <jenkinsUrl>http://{{ template "jenkins.fullname" . }}:{{.Values.Master.ServicePort}}{{ default "" .Values.Master.JenkinsUriPrefix }}</jenkinsUrl>
           <jenkinsTunnel>{{ template "jenkins.fullname" . }}-agent:50000</jenkinsTunnel>
           <containerCap>50</containerCap>
-          <retentionTimeout>5</retentionTimeout>
+          <retentionTimeout>60</retentionTimeout>
+          <podRetention class="org.csanchez.jenkins.plugins.kubernetes.pod.retention.Default"/>
           <connectTimeout>0</connectTimeout>
           <readTimeout>0</readTimeout>
         </org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud>
@@ -212,7 +218,7 @@ data:
               <default>
                 <comparator class="hudson.util.CaseInsensitiveComparator"/>
               </default>
-              <int>11</int>
+              <int>12</int>
               <string>BUILD</string>
               <string>{{ .Values.Pipeline.Build }}</string>
               <string>DEPLOY</string>
@@ -235,6 +241,8 @@ data:
               <string>{{ .Values.rbac.serviceAccountName }}</string>
               <string>RELEASE_NAME</string>
               <string>{{ .Release.Name | replace "-" "_" }}</string>
+              <string>EXTRA_GIT_OPTIONS</string>
+              <string>{{ .Values.global.gitOption }}</string>
             </tree-map>
           </envVars>
         </hudson.slaves.EnvironmentVariablesNodeProperty>
