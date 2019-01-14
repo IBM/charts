@@ -28,10 +28,24 @@ spec:
       {{- end }}
       affinity:
       {{- include "nodeaffinity" . | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
       containers:
       - name: filewatcher-editor-delete
         image: {{ .Values.kubectl.repository}}:{{ .Values.kubectl.tag}}
         imagePullPolicy: {{ .Values.imagePullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         # If the delete fails, echo "Cleanup Failed" and return 0 (from echo) to prevent endless cleanup retries.
         command: [ "sh", "-c", "kubectl delete deploy,svc -l release={{ .Release.Name}} -l component=microclimate-user-resource || echo 'Cleanup Failed'" ]
       restartPolicy: Never
