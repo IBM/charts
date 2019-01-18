@@ -11,6 +11,7 @@ The `repo/stable` and `repo/community` directories are helm repositories, and th
 To contribute a chart:
  - Create your own fork of this repository.
  - Ensure that your chart meets the required standards for contributions, as described in [GUIDELINES.md](https://github.com/IBM/charts/blob/master/GUIDELINES.md).
+ - OPTIONAL: If you are trying to achieve CloudPak status for your chart, also ensure the chart meets these additional requirements: [CLOUDPAK.md](https://github.com/IBM/charts/blob/master/CLOUDPAK.md)
  - Add your chart source to the `community` directory.
  - Add a `.tgz` archive of your chart (created using `helm package`) to the `repo/community` directory.
  - Be sure to include your developer sign-off (described below) in your commit message.
@@ -29,7 +30,7 @@ To enable a consistent user experience, contributed charts must conform to the s
 
 ## Certficate of Origin
 
-This project uses the _Developer Certificateof Origin_ as posted at https://developercertificate.org
+This project uses the _Developer Certificate of Origin_ as posted at https://developercertificate.org
 
 A developer sign-off is required for all contributions to the `community` subdirectory. This sign-off certifies that you have the right to contribute the code to this community.
 To sign off, include the line below in your commit comment.
