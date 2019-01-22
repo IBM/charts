@@ -10,8 +10,8 @@ The `repo/stable` and `repo/community` directories are helm repositories, and th
 
 To contribute a chart:
  - Create your own fork of this repository.
- - Ensure that your chart meets the required standards for contributions, as described in [GUIDELINES.md](https://github.com/IBM/charts/blob/master/GUIDELINES.md).
- - OPTIONAL: If you are trying to achieve CloudPak status for your chart, also ensure the chart meets these additional requirements: [CLOUDPAK.md](https://github.com/IBM/charts/blob/master/CLOUDPAK.md)
+ - Ensure that your chart meets the required standards for contributions, as described in [GUIDELINES.md](GUIDELINES.md).
+ - OPTIONAL: If you are trying to achieve CloudPak status for your chart, also ensure the chart meets these additional requirements: [cloud-pak.md](https://github.com/IBM/cloud-pak/blob/master/community/cloud-pak.md)
  - Add your chart source to the `community` directory.
  - Add a `.tgz` archive of your chart (created using `helm package`) to the `repo/community` directory.
  - Be sure to include your developer sign-off (described below) in your commit message.
@@ -26,7 +26,7 @@ can be found in the LICENSE file or online at
   http://www.apache.org/licenses/LICENSE-2.0
   
 ## Chart Standards and Guidelines
-To enable a consistent user experience, contributed charts must conform to the set of standards documented in [GUIDELINES.md](https://github.com/IBM/charts/blob/master/GUIDELINES.md). In addition to required standards, this document also offers guidance on additional ways that charts can be enhanced to improve the user experience on IBM Cloud Private, but are not required for inclusion in this repository.
+To enable a consistent user experience, contributed charts must conform to the set of standards documented in [GUIDELINES.md](GUIDELINES.md). In addition to required standards, this document also offers guidance on additional ways that charts can be enhanced to improve the user experience on IBM Cloud Private, but are not required for inclusion in this repository.
 
 ## Certficate of Origin
 
