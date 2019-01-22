@@ -7,7 +7,7 @@ The IBM Community charts repository is both a Helm repository and a repository f
 
 IBM Cloud Private's catalog view displays a set of Helm charts that are available to be deployed by polling a list of Helm repositories. By default, these repositories include the Helm repository that is hosted locally inside the IBM Cloud Private cluster itself, and IBM's chart repository for IBM-developed charts, at [https://raw.githubusercontent.com/IBM/charts/master/repo/stable/](https://raw.githubusercontent.com/IBM/charts/master/repo/stable/).
 
-As of IBM Cloud Private 2.1.0.3, the IBM Community charts repository is not displayed in the catalog by default, though it will likely be added to the list of default repositories in the future. Users can add the repository to their catalog view by navigating to **Manage &gt; Helm Repositories** in the IBM Cloud Private user interface, and adding [https://raw.githubusercontent.com/IBM/charts/master/repo/community/](https://raw.githubusercontent.com/IBM/charts/master/repo/community/) to the list.
+As of IBM Cloud Private 3.1.1, the IBM Community charts repository is also displayed in the catalog by default.  If you are using and older version of ICP, users can manually add the repository to their catalog view by navigating to **Manage &gt; Helm Repositories** in the IBM Cloud Private user interface, and adding [https://raw.githubusercontent.com/IBM/charts/master/repo/community/](https://raw.githubusercontent.com/IBM/charts/master/repo/community/) to the list.
 
 &nbsp;
 
