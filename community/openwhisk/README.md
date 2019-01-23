@@ -135,7 +135,7 @@ You can use the command ```helm status <my-release> [--tls]``` to get a summary 
 
 ### Configuration
 
-[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
+[Values.yaml](https://github.com/IBM/charts/blob/master/community/openwhisk/values.yaml) outlines the configuration options that are supported by this chart.
 
 ### Verifying the Chart
 
