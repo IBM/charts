@@ -117,21 +117,17 @@ chart and their default values.
 
 ## Support
 
-IBM does not provide official support for open source helm charts,
-containers, and open source packages in general.  
-All helm charts and
-packages are supported through standard open source forums and helm
-charts are updated on a best effort basis.  Any issues found can be
-reported through the links below, and fixes may be proposed/submitted
-using standard git issues as noted below.
+The helm charts are provided "as-is" and without warranty of any kind.
 
-For issues that are related to IBM Cloud Private, you can take advantage
-of both free digital support and paid support offered by ICP.
+All helm charts and packages are supported through standard open source forums and helm charts are updated on a best effort basis.
 
+Any issues found can be reported through the links below, and fixes may be proposed/submitted using standard git issues as noted below.
 
-Issues may be reported through:
+[Submit issue to Helm Chart] ( https://github.com/ppc64le/charts/issues )
 
-Mailing list: lysannef@us.ibm.com
+[Submit issue to Tensorflow docker image]  ( https://github.com/ppc64le/build-scripts/issues )
+
+[Submit issue to Tensorflow open source community] ( https://github.com/tensorflow/tensorflow/issues )
 
 ## Limitations
 
