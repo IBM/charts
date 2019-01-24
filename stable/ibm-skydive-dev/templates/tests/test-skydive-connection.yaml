@@ -11,11 +11,17 @@ metadata:
     heritage: "{{ .Release.Service }}"
     
 spec:
+  hostNetwork: true
+  hostPID: true
+  hostIPC: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
   affinity:
     {{- include "nodeaffinity" . | indent 6 }}
   containers:
   - name: skydive-connection-test
-    image: {{ .Values.image.repository }}
+    image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
     args:
     - client
     ports:
@@ -23,6 +29,14 @@ spec:
     - containerPort: {{ .Values.service.port }}
       protocol: UDP
     - containerPort: 12379
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: false
+      capabilities:
+            add:
+            - all
     env:
     - name: SKYDIVE_ANALYZERS
       value: "{{ template "fullname" . }}-service:{{ .Values.service.port }}"
