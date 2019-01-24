@@ -4,13 +4,12 @@ This repository hosts helm charts intended for use with IBM(R) Cloud Private.
 
 **Important:** the `stable` directory cannot be directly contributed to through GitHub and is used only for IBM product charts that go through IBM's internal build process. If you are contributing charts for non-IBM products, or are from an IBM team contributing charts for open source projects, these contributions must be made to the `community` directory.
 
-The `repo/stable` and `repo/community` directories are helm repositories, and their index.yaml file is built automatically based on the `MASTER` branch. The `repo/stable` repository is part of the default configuration of IBM Cloud Private, and as such, all charts in that repository will be displayed by default in the IBM Cloud Private catalog. The `repo/community` repository can be easily added to the IBM Cloud Private user interface by navigating to **Manage > Helm Repositories** adding https://github.com/ibm/charts/tree/master/repo/community to the list of Helm repositories. (It may be added by default in future releases of IBM Cloud Private.)
-
 ## Overview
 
 To contribute a chart:
  - Create your own fork of this repository.
- - Ensure that your chart meets the required standards for contributions, as described in [GUIDELINES.md](https://github.com/IBM/charts/blob/master/GUIDELINES.md).
+ - Ensure that your chart meets the required standards for contributions, as described in [GUIDELINES.md](GUIDELINES.md).
+ - OPTIONAL: If you are trying to achieve CloudPak status for your chart, also ensure the chart meets these additional requirements: [cloud-pak.md](https://github.com/IBM/cloud-pak/blob/master/community/cloud-pak.md)
  - Add your chart source to the `community` directory.
  - Add a `.tgz` archive of your chart (created using `helm package`) to the `repo/community` directory.
  - Be sure to include your developer sign-off (described below) in your commit message.
@@ -25,11 +24,11 @@ can be found in the LICENSE file or online at
   http://www.apache.org/licenses/LICENSE-2.0
   
 ## Chart Standards and Guidelines
-To enable a consistent user experience, contributed charts must conform to the set of standards documented in [GUIDELINES.md](https://github.com/IBM/charts/blob/master/GUIDELINES.md). In addition to required standards, this document also offers guidance on additional ways that charts can be enhanced to improve the user experience on IBM Cloud Private, but are not required for inclusion in this repository.
+To enable a consistent user experience, contributed charts must conform to the set of standards documented in [GUIDELINES.md](GUIDELINES.md). In addition to required standards, this document also offers guidance on additional ways that charts can be enhanced to improve the user experience on IBM Cloud Private, but are not required for inclusion in this repository.
 
-## Certficate of Origin
+## Certificate of Origin
 
-This project uses the _Developer Certificateof Origin_ as posted at https://developercertificate.org
+This project uses the _Developer Certificate of Origin_ as posted at https://developercertificate.org
 
 A developer sign-off is required for all contributions to the `community` subdirectory. This sign-off certifies that you have the right to contribute the code to this community.
 To sign off, include the line below in your commit comment.
