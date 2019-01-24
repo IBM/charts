@@ -11,8 +11,8 @@ Skydive is SDN-agnostic but provides SDN drivers in order to enhance the topolog
 ![](https://github.com/skydive-project/skydive.network/raw/images/overview.gif)
 
 ## Prerequisites
-* IBM Cloud Private 2.1.0.1 or higher
-* Kubernetes cluster 1.7 or higher
+* IBM Cloud Private 2.1.0.3 or higher
+* Kubernetes cluster 1.10.3 or higher
 
 - Persistent volume is needed only if you want to "look back in time" with skydive (that is, if you are interested in the monitoring history); if you don't , then it is not required (an elastic search container will not be created). You can create a persistent volume via the IBM Cloud Private interface or through a yaml file. For example:
 
@@ -34,7 +34,7 @@ spec:
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release stable/skydive
+$ helm install --name my-release stable/ibm-skydive-dev
 ```
 
 The command deploys skydive on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -59,9 +59,9 @@ The following tables lists the configurable parameters of skydive chart and thei
 
 | Parameter                            | Description                                     | Default                                                    |
 | ----------------------------------   | ---------------------------------------------   | ---------------------------------------------------------- |
-| `global.image.secretName`            | Image secret for private repository             | Empty                                                      |
 | `image.repository`                   | Skydive image repository                        | `ibmcom/skydive`                                           |
-| `image.tag`                          | Image tag                                       | `0.18`                                                     |
+| `image.tag`                          | Image tag                                       | `0.21.0`                                                   |
+| `image.secretName`                   | Image secret for private repository             | Empty                                                      |
 | `image.imagePullPolicy`              | Image pull policy                               | `IfNotPresent`                                             |
 | `resources`                          | CPU/Memory resource requests/limits             | Memory: `8192Mi`, CPU: `2000m`                             |
 | `service.name`                       | service name                                    | `skydive`                                                  |
@@ -97,7 +97,15 @@ env:
   - name: SKYDIVE_LOGGING_LEVEL
     value: "DEBUG"
 ```
- 
+Environment variables for SkyDive can also be defined using UI. The Env field should be changed, for example:
+```
+  [{"name":"SKYDIVE_LOGGING_LEVEL","value":"DEBUG"}]
+```
+
+## PodSecurityPolicy Requirements
+
+None
+
 ## Resources Required
 The chart deploys pods and daemon-set consuming minimum resources as specified in the `resources` configuration parameter (default: Memory: `512Mi`, CPU: `100m`)
 
@@ -108,7 +116,10 @@ Refer to section [Security implications](#security-implications)
 ## Persistence
 Skydive analyzer uses elasticsearch to store data at the `/usr/share/elasticsearch/data` path of the Analyzer container.
 
-The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) at this location. User need to create a PV before chart deployed, or enable dynamic volume provisioning in chart configuration.
+The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) at this location. User needs to create a PV before chart deployed, or enable dynamic volume provisioning in chart configuration.
+
+To make Elasticsearch work properly the user needs to set kernel setting vm.max_map_count to at least 262144 on each worker node. Please check
+[https://www.elastic.co/guide/en/elasticsearch/reference/5.5/docker.html](https://www.elastic.co/guide/en/elasticsearch/reference/5.5/docker.html)
 
 ## Documentation
 Skydive documentation can be found here:

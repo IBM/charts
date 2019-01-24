@@ -22,12 +22,18 @@ spec:
         heritage: "{{ .Release.Service }}"
         tier: analyzer
     spec:
+      hostNetwork: true
+      hostPID: true
+      hostIPC: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       affinity:
         {{- include "nodeaffinity" . | indent 6 }}
-      {{- if .Values.global.image.secretName }}
-      {{- if ne .Values.global.image.secretName ""}}
+      {{- if .Values.image.secretName }}
+      {{- if ne .Values.image.secretName ""}}
       imagePullSecrets:
-      - name: {{ .Values.global.image.secretName }}
+      - name: {{ .Values.image.secretName }}
       {{- end }}
       {{- end }}      
       containers:
@@ -42,6 +48,19 @@ spec:
         - containerPort: {{ .Values.service.port }}
           protocol: UDP
         - containerPort: 12379
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+                add:
+                - SYS_ADMIN
+                - SYS_RESOURCE
+                - SYS_TIME
+                - NET_BROADCAST
+                - NET_ADMIN
         readinessProbe:
           httpGet:
             port: 8082
@@ -56,14 +75,10 @@ spec:
           periodSeconds: 10
           failureThreshold: 10
         env:
+        - name: SKYDIVE_UI
+          value: '{"theme":"light","k8s_enabled":"true","topology": {"favorites":{"infrastructure":"G.V().Has(\"Manager\",NE(\"k8s\"))","kubernetes":"G.V().Has(\"Manager\",\"k8s\")"},"default_filter":"infrastructure"}}'
         - name: SKYDIVE_ANALYZER_TOPOLOGY_PROBES
           value: "k8s"
-        - name: SKYDIVE_UI_TOPOLOGY_FAVORITES
-          value: '{"infrastructure":"G.V().Has(\"Manager\", NE(\"k8s\"))","kubernetes":"G.V().Has(\"Manager\", \"k8s\")"}'
-        - name: SKYDIVE_UI_TOPOLOGY_DEFAULT_FILTER
-          value: 'infrastructure'
-        - name: SKYDIVE_UI_THEME
-          value: "light"
       {{- if .Values.persistence.enabled }}
         - name: SKYDIVE_ANALYZER_FLOW_BACKEND
           value: "elasticsearchflow"
@@ -100,7 +115,7 @@ spec:
         - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_BULK_MAXDELAY
           value: "10"  
         - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_RETRY
-          value: "5"  
+          value: "5"        
       {{- end }}
         - name: SKYDIVE_EMBEDDED
           value: "true"
@@ -113,12 +128,27 @@ spec:
       {{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
-
+        volumeMounts:
+        - name: ssl
+          mountPath: /etc/ssl/certs
     {{- if .Values.persistence.enabled }}
       - name: skydive-elasticsearch
-        image: elasticsearch:2
+        image: {{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}
         ports:
         - containerPort: 9200
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+                add:
+                - SYS_ADMIN
+                - SYS_RESOURCE
+                - SYS_TIME
+                - NET_BROADCAST
+                - NET_ADMIN
         readinessProbe:
           httpGet:
             port: 9200
@@ -135,12 +165,16 @@ spec:
         env:
         - name: network.host
           value: "0.0.0.0"
+        - name: xpack.security.enabled
+          value: "false" 
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
         - name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"
           mountPath: /usr/share/elasticsearch/data
+    {{- end }}      
       volumes:
+    {{- if .Values.persistence.enabled }}  
       - name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"   
         persistentVolumeClaim:
         {{- if .Values.dataVolume.existingClaimName }}
@@ -149,3 +183,7 @@ spec:
           claimName: {{ template "fullname" . }}-{{ .Values.dataVolume.name }}
         {{- end }}
     {{- end }}
+      - name: ssl
+        hostPath:
+          path: /etc/ssl/certs
+

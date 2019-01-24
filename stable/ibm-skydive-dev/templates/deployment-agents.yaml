@@ -21,15 +21,22 @@ spec:
         heritage: "{{ .Release.Service }}"
         tier: agent
     spec:
+      hostNetwork: true
+      hostPID: true
+      hostIPC: true
+      securityContext:
+        runAsNonRoot: false        
       affinity:
         {{- include "nodeaffinity" . | indent 6 }}
+      tolerations:
+      - operator: "Exists"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       hostPID: true
-      {{- if .Values.global.image.secretName }}
-      {{- if ne .Values.global.image.secretName ""}}
+      {{- if .Values.image.secretName }}
+      {{- if ne .Values.image.secretName ""}}
       imagePullSecrets:
-      - name: {{ .Values.global.image.secretName }}
+      - name: {{ .Values.image.secretName }}
       {{- end }}
       {{- end }}      
       containers:
@@ -70,6 +77,13 @@ spec:
       {{- end }}
         securityContext:
           privileged: true
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            add:
+            - all
         volumeMounts:
         - name: docker
           mountPath: /var/run/docker.sock
