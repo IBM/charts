@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "rstudio.fullname" . }}
+  labels:
+    app: {{ template "rstudio.name" . }}
+    chart: {{ template "rstudio.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "rstudio.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "rstudio.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "rstudio.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: rstudio
+        productID: rstudio_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+      {{- if .Values.annotations }}
+{{ toYaml .Values.annotations | indent 8 }}
+      {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+             drop:
+             - MKNOD
+          command: ["sh","-c","set -e && useradd -m -d /home/test test && echo test:test | chpasswd; rstudio-server online;/usr/sbin/rstudio-server start;sleep infinity;"]
+          ports:
+          - name: http
+            containerPort: 8787
+            protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
