@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "nodered.fullname" . }}
+  labels:
+    app: {{ template "nodered.name" . }}
+    chart: {{ template "nodered.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "nodered.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "nodered.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "nodered.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: node_red
+        productID: node_red_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+      {{- if .Values.annotations }}
+{{ toYaml .Values.annotations | indent 8 }}
+      {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+             drop:
+              - ALL 
+          ports:
+            - name: http
+              containerPort: 1880
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
