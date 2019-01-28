@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "mesos.fullname" . }}
+  labels:
+    app: {{ template "mesos.name" . }}
+    chart: {{ template "mesos.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "mesos.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "mesos.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "mesos.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: mesos
+        productID: mesos_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+             drop:
+             - MKNOD
+          command: ["sh","-c","set PATH=$PATH:/opt/ibm/mesos/sbin;MESOS_SYSTEMD_ENABLE_SUPPORT=false;mesos-master --registry=in_memory" ]
+          ports:
+          - name: http 
+            containerPort: 5050
+            protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:      
+          - name: mesos-data
+            mountPath: /var/log/mesos
+          - name: tmpdata-data
+            mountPath: /var/tmp/mesos
+      volumes:
+      - name: mesos-data
+        {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ if .Values.persistence.mesos.existingClaim }}{{ .Values.persistence.mesos.existingClaim }}{{- else }}{{ template "mesos.fullname" . }}-mesos{{- end }}
+       {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: tmpdata-data
+        {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ if .Values.persistence.tmpdata.existingClaim }}{{ .Values.persistence.tmpdata.existingClaim }}{{- else }}{{ template "mesos.fullname" . }}-tmpdata{{- end }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
