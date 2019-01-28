@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "orientdb.fullname" . }}
+  labels:
+    app: {{ template "orientdb.name" . }}
+    chart: {{ template "orientdb.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "orientdb.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "orientdb.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "orientdb.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: orientdb
+        productID: orientdb_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+             drop:
+             - MKNOD
+          env:
+          - name: ORIENTDB_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+               name: {{ template "orientdb.fullname" . }}
+               key: orientdb-password
+          ports:
+            - name: http
+              containerPort: {{ .Values.port.port1 }}
+          livenessProbe:
+            httpGet:
+              path: /orientdb/www/index.htm
+              port: http
+              httpHeaders:
+              - name: Accept-Encoding
+                value: gzip
+            initialDelaySeconds: 60
+            timeoutSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+              httpHeaders:
+              - name: Accept-Encoding
+                value: gzip
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          ports:
+            - name: http1
+              containerPort: {{ .Values.port.port2 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http1
+              httpHeaders:
+              - name: Accept-Encoding
+                value: gzip
+            initialDelaySeconds: 60
+            timeoutSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http1
+              httpHeaders:
+              - name: Accept-Encoding
+                value: gzip
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
