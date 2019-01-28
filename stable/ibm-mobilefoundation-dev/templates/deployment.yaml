@@ -1,0 +1,95 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+apiVersion: apps/v1beta2
+{{- else }}
+apiVersion: apps/v1beta1
+{{- end }}
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        productName: IBM MobileFirst Platform Foundation
+        productID: IBMMobileFirstPlatformFoundation_8000_perpetual_00000
+        productVersion: 8.0.0.0
+      labels:
+        app: {{ template "name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.arch }}
+                - {{ .Values.arch }}
+                {{- else }}
+                - {{ template "arch" . }}
+                {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+      - name: {{ .Chart.Name }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9080
+          initialDelaySeconds: 530
+          timeoutSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9080
+          initialDelaySeconds: 500
+          timeoutSeconds: 30
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+          - name: WLP_LOGGING_CONSOLE_FORMAT
+            value: {{ .Values.logs.consoleFormat }}
+          - name: WLP_LOGGING_CONSOLE_LOGLEVEL
+            value: {{ .Values.logs.consoleLogLevel }}
+          - name : WLP_LOGGING_CONSOLE_SOURCE
+            value: {{ .Values.logs.consoleSource }}
+        ports:
+          - containerPort: 9080
+          - containerPort: 9443
+          - containerPort: 9600
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
