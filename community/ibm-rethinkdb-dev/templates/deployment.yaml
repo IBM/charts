@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "rethinkdb.fullname" . }}
+  labels:
+    app: {{ template "rethinkdb.name" . }}
+    chart: {{ template "rethinkdb.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "rethinkdb.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "rethinkdb.name" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        chart: {{ template "rethinkdb.chart" . }}
+      annotations:
+        productName: rethinkdb
+        productID: rethinkdb_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+             drop:
+             - MKNOD
+          command: ["rethinkdb", "--bind", "all"]
+          ports:
+            - name: http1
+              containerPort: 28015 
+            - name: http2
+              containerPort: 29015
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+          - name: rethinkdb-data
+            mountPath: /data
+      volumes:
+      - name: rethinkdb-data
+        persistentVolumeClaim:
+          claimName: {{ template "rethinkdb.fullname" . }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
