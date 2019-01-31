@@ -20,7 +20,7 @@ sch:
     metering:
       productName: "Hazelcast"
       productID: "Hazelcast_310_free_00000"
-      productVersion: "3.10.5"
+      productVersion: "3.10.6"
 {{- end -}}
 
 {{- define "statefulNames.globals.yaml" -}}

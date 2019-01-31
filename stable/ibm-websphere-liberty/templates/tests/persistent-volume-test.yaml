@@ -13,30 +13,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
+{{- include "slt.config.init" (list . "slt.chart.config.values") -}}
 {{ if .Values.logs.persistLogs }}
+{{- $name := include "slt.utils.name" (list .) -}}
+{{- $fullname := include "slt.utils.fullname" (list .) }}
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ template "fullname" . }}-pv-test"
+  name: "{{ $fullname }}-pv-test"
   labels:
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    app: {{ template "name" . }}
+    app: {{ $name }}
   annotations:
     "helm.sh/hook": test-success
 spec:
+  affinity:
+{{- include "slt.affinity.nodeaffinity" (list .) | indent 2 }}
+{{- include "slt.security.context.pod" (list .) | indent 2 }}
   containers:
-    - name: "{{ template "fullname" . }}-pv-test"
-      image: alpine
-      command: ["sh", "-c", 'ls -R /tmp/nfs/wlp/ && ls /tmp/nfs/wlp/logs/messages.log']
-      volumeMounts:
-      - name: pv-test-volume
-        mountPath: /tmp/nfs/wlp
-        readOnly: false
+  - name: "{{ $fullname }}-pv-test"
+    image: radial/busyboxplus:curl
+{{- include "slt.security.context.container" (list .) | indent 4 }}
+    command: ["sh", "-c", 'ls -R /tmp/nfs/wlp/ && ls /tmp/nfs/wlp/logs/messages.log']
+    volumeMounts:
+    - name: pv-test-volume
+      mountPath: /tmp/nfs/wlp
+      readOnly: false
   volumes:
   - name: pv-test-volume
     persistentVolumeClaim:
-      claimName: {{ .Values.persistence.name }}-{{ template "fullname" . }}-0
+      claimName: {{ .Values.persistence.name }}-{{ $fullname }}-0
   restartPolicy: Never
 {{ end }}
