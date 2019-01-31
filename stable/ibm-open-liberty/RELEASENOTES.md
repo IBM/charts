@@ -1,21 +1,32 @@
 # What’s new... 
 
-## Latest: Chart Version 1.6.0
+## Latest: Chart Version 1.7.0
 
-1. Added support to serve `/metrics` on HTTP port. 
-1. Updated Kibana dashboard files.
-1. Added new Grafana dashboard file.
-1. Re-arranged dashboard files to be under `ibm-open-liberty/ibm_cloud_pak/pak_extensions/dashboards`
+1. The value service.name is now used as the service metadata name and DNS A record. If unspecified, it will default to the generated `fullname`. The DNS SRV port name will be assigned as `http` or `https` respectively if ssl is enabled.
+1. Removed the value jmsService.name. The DNS SRV port name will be assigned as `jms` or `jmss` respectively if ssl is enabled.
+1. Removed the value iiopService.name. The DNS SRV port name will be assigned as `iiop` or `iiops` respectively if ssl is enabled.
+1. Defined the most restrictive PodSecurityPolicy for the chart and provided scripts to create the required Kubernetes resources.
+1. Added more configurable parameters to values.yaml, such as environment variables, ingress annotations, readiness and liveness probes.
+1. Updated minimum `kubeVersion` of chart to ensure patch for [CVE-2018-1002105](https://github.com/kubernetes/kubernetes/issues/71411) is installed.
+1. Unlinked visualizations from liberty all search, and set default time range (15 minutes) for efficiency.
+1. Sort dashboard searches by @timestamp to avoid timeout error, include searches sorted by Sequence for proper ordering.
 
 ## Breaking Changes
-  - None 
+
+* None
 
 ## Fixes
-  - None
+
+* None
 
 ## Prerequisites
-  - Tiller v2.7.0
-  - For all others, refer to [Requirements in README.md](/stable/ibm-websphere-liberty/README.md)
+
+* Tiller v2.7.0
+* For all others, refer to prerequisites in [README.md](https://github.com/IBM/charts/tree/master/stable/ibm-open-liberty/README.md).
+
+## Documentation
+
+Please refer to [README.md](https://github.com/IBM/charts/tree/master/stable/ibm-open-liberty/README.md).
 
 ## Known Issues
 
@@ -35,10 +46,11 @@ The chart does not yet provide an out of the box secure configuration for the /m
 
 | Chart | Date         | IBM Cloud Private Supported | Details                      |
 | ----- | ------------ | --------------------------- | ---------------------------- |
-| 1.6.0 | Sep 28, 2018 | >=2.1.0.2                   | - Added support to serve `/metrics` on HTTP port  <br/>                                                                       - New and updated Grafana and Kibana dashboards <br/> - IBM Certified Cloud Pak manifest       |
-| 1.5.1 | Aug 22, 2018 | >=2.1.0.2                   | - Added metering annotations                          |
-| 1.5.0 | Jul 11, 2018 | >=2.1.0.2                   | - Hazelcast session caching <br/> - Host support for Ingress configuration <br/> - Protocol support for IIOP and JMS  <br/>  - Multi-architecture support                           |
-| 1.4.0 | N/A          | N/A                         | Skipped this release         |
-| 1.3.0 | N/A          | N/A                         | Skipped this release         |
-| 1.2.0 | Apr 11, 2018 | >=2.1.0.1                   | Sync with commercial chart.                         |
-| 1.1.0 | Mar 26, 2018 | >=2.1.0.1                   | Initial release.    Includes JSON logging.                      |
+| 1.7.0 | Jan 31, 2019 | >=2.1.0.2                   | Defined the most restrictive PodSecurityPolicy; Added support for more configurable parameters; Changed HTTP, JMS and IIOP service names     |
+| 1.6.0 | Sep 28, 2018 | >=2.1.0.2                   | Added support to serve `/metrics` on HTTP port; New and updated Grafana and Kibana dashboards; IBM Certified Cloud Pak manifest     |
+| 1.5.1 | AUG 22, 2018 | >=2.1.0.2                   | Added metering annotations                                  |
+| 1.5.0 | Jul 11, 2018 | >=2.1.0.2                   | Hazelcast session caching; Host support for Ingress configuration; Protocol support for IIOP and JMS; Multi-architecture support  |
+| 1.4.0 | N/A          | N/A                         | Skipped this release                                         |
+| 1.3.0 | N/A          | N/A                         | Skipped this release                                         |
+| 1.2.0 | Apr 11, 2018 | >=2.1.0.1                   | Sync with commercial chart.                                  |
+| 1.1.0 | Mar 26, 2018 | >=2.1.0.1                   | Initial release. Includes JSON logging.                      |

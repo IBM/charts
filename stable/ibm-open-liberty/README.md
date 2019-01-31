@@ -16,7 +16,75 @@ From a browser, use http://*external-ip*:*nodeport* to access the application.
 
 ## Prerequisites
 
-None
+### PodSecurityPolicy Requirements
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
+
+* Predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp)
+* Custom PodSecurityPolicy definition:
+
+```yaml
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: ibm-open-liberty-psp
+spec:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  allowedCapabilities:
+  - CHOWN
+  - DAC_OVERRIDE
+  - SETGID
+  - SETUID
+  - NET_BIND_SERVICE
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  fsGroup:
+    rule: RunAsAny
+  volumes:
+  - configMap
+  - secret
+```
+
+* Custom ClusterRole for the custom PodSecurityPolicy:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ibm-open-liberty-clusterrole
+rules:
+- apiGroups:
+  - extensions
+  resourceNames:
+  - ibm-open-liberty-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+```
+
+#### Configuration scripts can be used to create the required resources
+
+Download the following scripts located at [/ibm_cloud_pak/pak_extensions/pre-install](https://github.com/IBM/charts/tree/master/stable/ibm-open-liberty/ibm_cloud_pak/pak_extensions/pre-install) directory.
+
+* The pre-install instructions are located at `clusterAdministration/createSecurityClusterPrereqs.sh` for cluster admins to create the PodSecurityPolicy and ClusterRole for all releases of this chart.
+
+* The namespace scoped instructions are located at `namespaceAdministration/createSecurityNamespacePrereqs.sh` for team admin/operator to create the RoleBinding for the namespace. This script takes one argument; the name of a pre-existing namespace where the chart will be installed.
+  * Example usage: `./createSecurityNamespacePrereqs.sh myNamespace`
+
+#### Configuration scripts can be used to clean up resources created
+
+Download the following scripts located at [/ibm_cloud_pak/pak_extensions/post-delete](https://github.com/IBM/charts/tree/master/stable/ibm-open-liberty/ibm_cloud_pak/pak_extensions/post-delete) directory.
+
+* The post-delete instructions are located at `clusterAdministration/deleteSecurityClusterPrereqs.sh` for cluster admins to delete the PodSecurityPolicy and ClusterRole for all releases of this chart.
+
+* The namespace scoped instructions are located at `namespaceAdministration/deleteSecurityNamespacePrereqs.sh` for team admin/operator to delete the RoleBinding for the namespace. This script takes one argument; the name of the namespace where the chart was installed.
+  * Example usage: `./deleteSecurityNamespacePrereqs.sh myNamespace`
 
 ## Limitations
 
@@ -36,33 +104,52 @@ The Helm chart has the following values that can be overridden by using `--set n
 | `image`     | `pullPolicy` | Image Pull Policy. | `Always`, `Never`, or `IfNotPresent`. Defaults to `Always` if the `:latest` tag is specified, or `IfNotPresent` otherwise. See Kubernetes - [Updating Images](https://kubernetes.io/docs/concepts/containers/images/#updating-images)  |
 |           | `repository` | Name of image, including repository prefix (if required). | See Docker - [Extended tag description](https://docs.docker.com/engine/reference/commandline/tag/#parent-command) |
 |           | `tag`        | Docker image tag. | See Docker - [Tag](https://docs.docker.com/engine/reference/commandline/tag/) |
+|           | `readinessProbe`       | Configure when container is ready to start accepting traffic. Use this to override the default readiness probe configuration. See [Configure Liveness and Readiness Probes](#configure-liveness-and-readiness-probes) for more information. | YAML object of readiness probe |
+|           | `livenessProbe`        | Configure when to restart container. Use this to override the default liveness probe configuration. See [Configure Liveness and Readiness Probes](#configure-liveness-and-readiness-probes) for more information. | YAML object of liveness probe |
+|           | `extraEnvs`        | Extra environment variables for the image. | YAML array of environment variables |
+|           | `lifecycle`        | Handlers for the PostStart and PreStop lifecycle events of container. | YAML object of lifecycle handlers |
+|           | `serverOverridesConfigMapName`        | Name of the ConfigMap that contains server configuration overrides (within key 'server-overrides.xml') to configure your Liberty server at deployment. | Name of ConfigMap |
+|           | `extraVolumeMounts`  | Additional `volumeMounts` for server pods | YAML array of `volumeMounts` definitions |
+| `resourceNameOverride` |     | This name will be appended to the release name to form the name of resources created by the chart. By default, this is set to the chart name. |  |
+| `deployment`     | `annotations` | Additional annotations to be added to Deployment (or StatefulSet if persistence is enabled) | YAML object of annotations |
+|                  | `labels`     | Additional labels to be added to Deployment (or StatefulSet if persistence is enabled)  | YAML object of labels |
+| `pod`     | `annotations` | Additional annotations to be added to pods | YAML object of annotations |
+|           | `labels`     | Additional labels to be added to pods  | YAML object of labels |
+|           | `extraInitContainers` | Additional Init Containers which are run before the containers are started | YAML array of `initContainers` definitions |
+|           | `extraContainers`     | Additional containers to be added to the server pods | YAML array of `containers` definitions |
+|           | `extraVolumes`        | Additional volumes for server pods | YAML array of `volume` definitions |
 | `service` | `enabled`  | Specifies whether the HTTP port service is enabled or not.  |   |
-|           | `name`       | The name of the HTTP port service.  | |
+|           | `name`       | The service metadata name and DNS A record.  | |
 |           | `port`       | The HTTP port that this container exposes.  |   |
 |           | `targetPort` | HTTP Port that will be exposed externally by the pod. | |
 |           | `type`       | Specify type of service. | Valid options are `ClusterIP` and `NodePort`. See [Publishing services - service types](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services---service-types). This parameter is ignored for headless services and instead, it is forced to `clusterIP` with a value of `None`. This chart makes a service headless when persistence is enabled, which is done by setting either `logs.persistTransactionLogs` or `logs.persistLogs` to `true`. See [Headless services](https://kubernetes.io/docs/concepts/services-networking/service/#headless-services). |
+|           | `labels`         | Additional labels to be added to service.                       |  YAML object of labels  |
+|           | `annotations`    | Additional annotations to be added to service.                  |  YAML object of annotations  |
+|           | `extraPorts`     | List of additional ports that are exposed by this service.      |  YAML list service ports. See [Virtual IPs and service proxies](https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies).    |
+|           | `extraSelectors` | List of additional label keys and values. Kubernetes routes service traffic to pods with label keys and values matching selector values.| See [Services](https://kubernetes.io/docs/concepts/services-networking/service/). |
 | `iiopService`| `enabled` | Specifies whether the IIOP port service is enabled or not.  |   |
-|           | `name`       | The name of the IIOP port service.  | |
 |           | `nonSecurePort`       | The IIOP port that this container exposes.  |   |
 |           | `nonSecureTargetPort` | IIOP Port that will be exposed externally by the pod. | |
 |           | `securePort`       | The secure IIOP port that this container exposes. Specifying this port is needed if SSL is enabled. |   |
 |           | `secureTargetPort` | Secure IIOP Port that will be exposed externally by the pod. Specifying this port is needed if SSL is enabled. | |
 |           | `type`       | Specify type of service. | Valid options are `ClusterIP` and `NodePort`. See [Publishing services - service types](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services---service-types). This parameter is ignored for headless services and instead, it is forced to `clusterIP` with a value of `None`. This chart makes a service headless when persistence is enabled, which is done by setting either `logs.persistTransactionLogs` or `logs.persistLogs` to `true`. See [Headless services](https://kubernetes.io/docs/concepts/services-networking/service/#headless-services).|
 | `jmsService`| `enabled`  | Specifies whether the JMS port service is enabled or not.  |   |
-|           | `name`       | The name of the JMS port service.  | |
 |           | `port`       | The JMS port that this container exposes.  |   |
 |           | `targetPort` | JMS Port that will be exposed externally by the pod. | |
 |           | `type`       | Specify type of service. | Valid options are `ClusterIP` and `NodePort`. See [Publishing services - service types](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services---service-types). This parameter is ignored for headless services and instead, it is forced to `clusterIP` with a value of `None`. This chart makes a service headless when persistence is enabled, which is done by setting either `logs.persistTransactionLogs` or `logs.persistLogs` to `true`. See [Headless services](https://kubernetes.io/docs/concepts/services-networking/service/#headless-services). |
 | `ssl`       | `enabled`                       | Specifies whether SSL is enabled. Set to `true` if SSL will be enabled via the generated SSL configuration or if Liberty is configured to use SSL in the Docker image. | `true` (default) or `false` |
 |           | `useClusterSSLConfiguration`    | Set to `true` if you want to use the SSL ConfigMap and secrets generated by the `createClusterSSLConfiguration` option. Set to `false` if the Docker image already has SSL configured. | `false` (default) or `true` |
 |           | `createClusterSSLConfiguration` | Specifies whether to automatically generate SSL ConfigMap and secrets. The generated ConfigMap is: `liberty-config`.  The generated secrets are: `mb-keystore`, `mb-keystore-password`, `mb-truststore`, and `mb-truststore-password`.  Only generate the SSL configuration one time. If you generate the configuration a second time, errors might occur. | `false` (default) or `true` |
-| `ingress`   | `enabled`        | Specifies whether to use Ingress.        |  `false` (default) or `true`  |
+| `ingress` | `enabled`        | Specifies whether to use Ingress.        |  `false` (default) or `true`  |
 |           | `rewriteTarget`  | Specifies the target URI where the traffic must be redirected.  | See Kubernetes - Annotation `ingress.kubernetes.io/rewrite-target` - [Rewrite Target](https://github.com/kubernetes/ingress-nginx/tree/master/docs/examples/rewrite)  |
 |           | `path`           | Specifies the path for the Ingress HTTP rule.    |  See Kubernetes - [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/)  |
 |           | `host`          | Specifies a fully qualified domain names of Ingress, as defined by RFC 3986. |  See [Ingress configuration](#ingress-configuration) for more into on this. |
 |           | `secretName`    | Specifies the name of the Kubernetes secret that contains Ingress' TLS certificate and key.   |  See [Ingress configuration](#ingress-configuration) for more into on this. |
+|           | `labels`         | Specifies custom labels.         |  YAML object of labels  |
+|           | `annotations`    | Specifies custom annotations.    |  YAML object of annotations  |
 | `persistence` | `name`                   | Descriptive name that will be used as prefix for the generated persistence volume claim. A volume is only bound if either `logs.persistTransactionLogs` or `logs.persistLogs` is set to `true`. | |
 |             | `useDynamicProvisioning` | If `true`, the persistent volume claim will use the `storageClassName` to bind the volume. If `storageClassName` is not set then it will use the default StorageClass setup by kube Administrator.  If `false`, the selector will be used for the binding process. | `true` (default) or `false` |
+|             | `fsGroupGid`             | Defines file system group ID for volumes that support ownership management. This value is added to the container’s supplemental groups.  | `nil` |
 |             | `storageClassName`       | Specifies a StorageClass pre-created by the Kubernetes sysadmin. When set to `""`, then the PVC is bound to the default StorageClass setup by kube Administrator. | |
 |             | `selector.label`         | When matching a PV, the label is used to find a match on the key.  | See Kubernetes - [Labels and Selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/). | |
 |             | `selector.value`         | When matching a PV, the value is used to find a match on the values.  | See Kubernetes - [Labels and Selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/). | |
@@ -70,7 +157,7 @@ The Helm chart has the following values that can be overridden by using `--set n
 | `logs`        | `persistLogs`            | When `true`, the server logs will be persisted to the volume bound according to the persistence parameters. | `false` (default) or `true` |
 |             | `persistTransactionLogs` | When `true`, the transaction logs will be persisted to the volume bound according to the persistence parameters. | `false` (default) or `true` |
 |             | `consoleFormat`          | _[18.0.0.1+]_ Specifies container log output format. | `json` (default) or `basic` |
-|             | `consoleLogLevel`        | _[18.0.0.1+]_ Controls the granularity of messages that go to the container log. | `info` (default), `audit`, `warning`, `error` or off | 
+|             | `consoleLogLevel`        | _[18.0.0.1+]_ Controls the granularity of messages that go to the container log. | `info` (default), `audit`, `warning`, `error` or off |
 |             | `consoleSource`          | _[18.0.0.1+]_ Specifies the sources that are written to the container log. Use a comma separated list for multiple sources. This property only applies when `consoleFormat` is set to `json`.  | Sources can be one or more of `message`, `trace`, `accessLog`, `ffdc`. Default value is `message,trace,accessLog,ffdc` |
 | `microprofile` | `health.enabled` | Specifies whether to use the [MicroProfile Health](https://microprofile.io/project/eclipse/microprofile-health) endpoint (`/health`) for readiness probe of the container. Requires HTTP service to be enabled. | `false` (default) or `true` |
 | `monitoring` | `enabled` | _[18.0.0.3+]_ Specifies whether to use Liberty features `monitor-1.0` and `mpMetrics-1.1` to monitor the server runtime environment and application metrics. Requires HTTP service to be enabled. | `false` (default) or `true` |
@@ -89,8 +176,9 @@ The Helm chart has the following values that can be overridden by using `--set n
 |           | `s390x`       | Architecture preference for s390x worker node. | `0 - Do not use`, `1 - Least preferred`, `2 - No preference` (default) or `3 - Most preferred` |
 | `env`       | `jvmArgs`             | Specifies the `JVM_ARGS` environmental variable for the Liberty runtime.     | |
 | `sessioncache` | `hazelcast.enabled`          | Enable session caching using Hazelcast                             | `false` |
-|                | `hazelcast.image.repository` | Name of Hazelcast image, including repository prefix (if required).| `hazelcast/hazelcast-kubernetes` |
-|                | `hazelcast.image.tag`        | Docker image tag                                                   | `3.10` |
+| `sessioncache` | `hazelcast.embedded` | Hazelcast Topology. Embedded (true). Client/Server (false). | `false` |
+|                | `hazelcast.image.repository` | Name of Hazelcast image, including repository prefix (if required).| `hazelcast/hazelcast` |
+|                | `hazelcast.image.tag`        | Docker image tag                                                   | `3.10.6` |
 |                | `hazelcast.image.pullPolicy` | Image Pull Policy                                                  | `IfNotPresent` |
 | `rbac`         | `install`                    | Install RBAC. Set to `true` if using a namespace with RBAC.        | `true` |
 
@@ -116,6 +204,21 @@ RUN mkdir -p /logs \
 
 The Helm release ConfigMap contains Liberty server configuration that is driven by the configuration choices of the chart deployer, using associated environmental variables. The Liberty container receives automatic updates to files from this ConfigMap.
 
+You can also use the `image.serverOverridesConfigMapName` parameter to provide a ConfigMap to configure your Liberty server at deployment. The server configuration must be included within key `server-overrides.xml`. It will be mounted at `/config/configDropins/overrides/server-overrides.xml`.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-server-config
+data:
+  server-overrides.xml: |-
+    <server>
+      <!-- Customize the configuration. -->
+    </server>
+```
+
+If you are including other server configuration files in the `configDropins/overrides` directory, note that the files are processed in alphabetical order.
 
 #### Transaction logs
 
@@ -159,6 +262,8 @@ You can also create a PV from IBM Cloud Private dashboard by following these ste
 2. Copy and paste the PV template.
 3. Click **Create**.
 
+_Note:_ For volumes that support ownership management, specify the group ID of the group owning the persistent volumes' file systems using the `persistence.fsGroupGid` parameter.
+
 #### Analyzing Liberty messages
 
 Logging in JSON format is enabled by default. Log events are forwarded to Elasticsearch automatically. Use Kibana to monitor and analyze the log events. Sample Kibana dashboards are provided at the Helm chart's [dashboards](https://github.com/IBM/charts/tree/master/stable/ibm-open-liberty/ibm_cloud_pak/pak_extensions/dashboards/) folder.
@@ -189,11 +294,21 @@ If the chart is deployed into IBM Cloud Kubernetes Service:
 * `ingress.host` must be provided and set to the IBM-provided Ingress _subdomain_ or your custom domain. See [Select an app domain and TLS termination](https://console.bluemix.net/docs/containers/cs_ingress.html#public_inside_2) for more info on how to get this value in IBM Cloud Kubernetes Service.
 * `ingress.secretName` must be provided. If you are using the IBM-provided Ingress domain, set this parameter to the name of the IBM-provided Ingress secret. However, if you are using a custom domain, set this parameter to the secret that you created earlier that holds your custom TLS certificate and key. See [IBM Cloud Kubernetes Service documentation](https://console.bluemix.net/docs/containers/cs_ingress.html#public_inside_2) for more info on how to get these value in an IBM Cloud Kubernetes Service cluster.
 
+#### Configure Liveness and Readiness Probes
+
+With the default configuration, readiness and liveness probes are determined by using an HTTP probe with path set to `/` or `/health` if MicroProfile Health is enabled. The container is considered healthy if connection can be established, otherwise it's considered a failure.
+
+Optionally, you can override the default configurations for readiness and liveness probes by configuring `image.readinessProbe` and `image.livenessProbe` parameters, respectively. Complete definition of the probe must be provided if you choose to override.
+
+The `initialDelaySeconds` defines how long to wait before performing the first probe. Default value for readiness probe is 2 seconds and for liveness probe is 20 seconds. You should set appropriate values for your container, if necessary, to ensure that the readiness and liveness probes don’t interfere with each other. Otherwise, the liveness probe might continuously restart the pod and the pod will never be marked as ready.
+
+More information about configuring liveness and readiness probes can be found [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/)
+
 #### Session Caching
 
 When installing the default Hazelcast Docker image, ensure that an image policy exists that allows pulling from the registry `docker.io/hazelcast/hazelcast:*`.
 
-Session caching is disabled by default. To use session caching, the Liberty feature sessionCache-1.0 must be installed. The session caching feature builds on top of an existing technology called JCache (JSR 107), which provides an API for distributed in-memory caching. There are several providers of JCache implementations. One example is Hazelcast In-Memory Data Grid. Enabling Hazelcast session caching automatically retrieves the Hazelcast client libraries from the hazelcast-kubernetes image, and configures the Hazelcast client and Liberty server feature sessionCache-1.0. The configuration is held in the ConfigMap associated with the helm release. By default, the Hazelcast client will auto-discover the Hazelcast server cluster within the same namespace. 
+Session caching is disabled by default. To use session caching, the Liberty feature sessionCache-1.0 must be installed. The session caching feature builds on top of an existing technology called JCache (JSR 107), which provides an API for distributed in-memory caching. There are several providers of JCache implementations. One example is Hazelcast In-Memory Data Grid. Enabling Hazelcast session caching automatically retrieves the Hazelcast client libraries from the hazelcast-kubernetes image, and configures the Hazelcast client and Liberty server feature sessionCache-1.0. The configuration is held in the ConfigMap associated with the helm release. By default, the Hazelcast client will auto-discover the Hazelcast server cluster within the same namespace. Embedded and client/server topologies are supported, for more information, see the [Hazelcast Manual](https://docs.hazelcast.org/docs/latest-development/manual/html/Hazelcast_Overview/Hazelcast_Topology.html).
 
 #### Monitoring
 
@@ -226,6 +341,8 @@ The helm chart creates the following Kubernetes resources that drive the configu
 |             | ssl.xml                            | /etc/wlp/configmap/                      | Configures SSL. |
 |             | cluster-ssl.xml                    | /etc/wlp/configmap/                      | Configures SSL with cluster/namespace `mb` secrets. |
 |             | liberty-sessioncache-hazelcast.xml | /etc/wlp/configmap/                      | Configures Liberty session cache & Hazelcast client libraries. |
+|             | health.xml                         | /etc/wlp/configmap/                      | Configures MicroProfile Health |
+|             | monitoring.xml                     | /etc/wlp/configmap/                      | Configures monitoring |
 |             | hazelcast-client.xml               | /opt/ibm/wlp/usr/shared/config/hazelcast | Configures Hazelcast client. |
 
 

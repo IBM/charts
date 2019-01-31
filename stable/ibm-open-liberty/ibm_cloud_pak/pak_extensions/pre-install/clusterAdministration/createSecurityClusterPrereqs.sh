@@ -1,3 +1,5 @@
+#!/bin/bash
+#
 ###############################################################################
 # Copyright (c) 2017 IBM Corp.
 # 
@@ -13,19 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
-{{/* vim: set filetype=mustache: */}}
-{{/*
-Expand the name of the chart.
-*/}}
-{{- define "name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 24 | trimSuffix "-" -}}
-{{- end -}}
+#
+# You need to run this script once prior to installing the chart.
+#
 
-{{/*
-Create a default fully qualified app name.
-We truncate at 24 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
-*/}}
-{{- define "fullname" -}}
-{{- $name := default .Chart.Name .Values.nameOverride -}}
-{{- printf "%s-%s" .Release.Name $name | trunc 24 | trimSuffix "-" -}}
-{{- end -}}
+# Create the PodSecurityPolicy and ClusterRole for all releases of this chart.
+kubectl apply -f ibm-open-liberty-psp.yaml
+kubectl apply -f ibm-open-liberty-cr.yaml

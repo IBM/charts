@@ -41,37 +41,50 @@ spec:
                   values:
                   - {{ .Release.Name | quote }}
               topologyKey: kubernetes.io/hostname
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
       containers:
-        - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports:
-            - containerPort: 5701
-          livenessProbe:
-            httpGet:
-              path: /hazelcast/health/node-state
-              port: 5701
-            initialDelaySeconds: 30
-            timeoutSeconds: 5
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /hazelcast/health/node-state
-              port: 5701
-            initialDelaySeconds: 30
-            timeoutSeconds: 5
-            periodSeconds: 10
-          env:
-          - name: MIN_HEAP_SIZE
-            value: {{ .Values.heap.minHeapSize }}
-          - name: MAX_HEAP_SIZE
-            value: {{ .Values.heap.maxHeapSize }}
-          - name: JAVA_OPTS
-            value: "-Dhazelcast.http.healthcheck.enabled=true -Dhazelcast.config=/data/hazelcast/hazelcast.xml -DserviceName={{ .statefulNames.globals.statefulSetName }} -Dnamespace={{ .Release.Namespace }} {{ .Values.javaOpts }}"
-          volumeMounts:
-            - name: {{ .statefulNames.globals.statefulSetName | quote }}
-              mountPath: /data/hazelcast
-          resources:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+          - containerPort: 5701
+        livenessProbe:
+          httpGet:
+            path: /hazelcast/health/node-state
+            port: 5701
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /hazelcast/health/node-state
+            port: 5701
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+          periodSeconds: 10
+        env:
+        - name: MIN_HEAP_SIZE
+          value: {{ .Values.heap.minHeapSize }}
+        - name: MAX_HEAP_SIZE
+          value: {{ .Values.heap.maxHeapSize }}
+        - name: JAVA_OPTS
+          value: "-Dhazelcast.http.healthcheck.enabled=true -Dhazelcast.config=/data/hazelcast/hazelcast.xml -DserviceName={{ .statefulNames.globals.statefulSetName }} -Dnamespace={{ .Release.Namespace }} {{ .Values.javaOpts }}"
+        volumeMounts:
+          - name: {{ .statefulNames.globals.statefulSetName | quote }}
+            mountPath: /data/hazelcast
+        resources:
 {{ toYaml .Values.resources | indent 12 }}
       volumes:
       - name: {{ .statefulNames.globals.statefulSetName | quote }}
