@@ -9,10 +9,10 @@
 ###############################################################################
 {{- $stateful := .Values.logs.persistLogs -}}
 {{ if $stateful }}
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: StatefulSet
 {{- else }}
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 {{- end }}
 metadata:
@@ -22,6 +22,13 @@ metadata:
     app: {{ template "fullname" . }}
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
+{{- with .Values.deployment.labels }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.deployment.annotations }}
+  annotations:
+{{ toYaml . | indent 4}}
+{{- end }}   
 spec:
   {{- if $stateful }}
   serviceName: {{ template "fullname" . }}
@@ -39,16 +46,27 @@ spec:
         app: {{ template "fullname" . }}
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
+{{- with .Values.pod.labels }}
+{{ toYaml . | indent 8 }}
+{{- end }}        
       annotations:
         productName: "WebSphere Application Server"
         productID: "53fb55e5e6f145e5ac5a6f79fd263f4f"
-        productVersion: "9.0.0.9"
+        productVersion: "9.0.0.10"
+{{- with .Values.pod.annotations }}
+{{ toYaml . | indent 8 }}
+{{- end }}        
     spec:
-      {{- if .Values.configProperties.configMapName }}
+      {{- if or .Values.configProperties.configMapName .Values.pod.extraVolumes }}
       volumes:
+      {{- if .Values.configProperties.configMapName }}
       - name: config-properties
         configMap:
           name: {{ .Values.configProperties.configMapName }}
+      {{- end }}
+{{- with .Values.pod.extraVolumes }}
+{{ toYaml . | indent 6 }}
+{{- end -}}
       {{- end }}
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
@@ -110,7 +128,7 @@ spec:
           {{- end }}
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
-        {{- if or .Values.logs.persistLogs .Values.configProperties.configMapName }}
+        {{- if or .Values.logs.persistLogs .Values.configProperties.configMapName .Values.image.extraVolumeMounts }}
         volumeMounts:
         {{- if .Values.logs.persistLogs }}
         - mountPath: /logs
@@ -121,7 +139,14 @@ spec:
         - name: config-properties
           mountPath: /etc/websphere
         {{- end }}
+ {{- with .Values.image.extraVolumeMounts }}
+{{ toYaml . | indent 8 }}
+{{- end -}}         
         {{- end }}
+{{- if .Values.image.extraEnvs }}
+        env:      
+{{ toYaml .Values.image.extraEnvs | indent 8 }}
+{{- end }}          
         resources:
           {{- if .Values.resources.constraints.enabled}}      
           limits:
