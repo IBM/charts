@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "crate.fullname" . }}
+  labels:
+    app: {{ template "crate.name" . }}
+    chart: {{ template "crate.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "crate.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "crate.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "crate.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: crate
+        productID: crate_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+             drop:
+              - MKNOD
+          ports:
+          - name: http
+            containerPort: 4200
+            protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /_plugin/crate-admin/#/
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /_plugin/crate-admin/#/
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
