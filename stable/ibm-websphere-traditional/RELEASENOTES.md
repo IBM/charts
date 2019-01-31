@@ -1,7 +1,9 @@
 
-# What’s new in Chart Version 1.0.0
+# What’s new in Chart Version 1.1.0
 
-Initial release of WebSphere Application Server traditional Base edition helm chart.
+1. Added various extension points across different resources. Now it is possible to declare extra environment variables, volume mounts, labels and annotations for various Kubernetes resources.
+1. Added Kibana dashboards that take advantage of the logging in JSON format.
+1. Updated minimum `kubeVersion` of chart to ensure patch for [CVE-2018-1002105](https://github.com/kubernetes/kubernetes/issues/71411) is installed.
 
 ## Breaking Changes
 
@@ -14,11 +16,11 @@ Initial release of WebSphere Application Server traditional Base edition helm ch
 ## Prerequisites
 
 * Tiller >= v2.9.1
-* For all others, refer to [Requirements in README.md](README.md)
+* For all others, refer to prerequisites in README.md
 
 ## Documentation
 
-Please refer to [README.md](README.md)
+Please refer to README.md
 
 ## Limitations
 
@@ -43,4 +45,5 @@ Please refer to [README.md](README.md)
 
 | Chart | Date          | IBM Cloud Private Supported | Details                      |
 | ----- | ------------- | --------------------------- | ---------------------------- |
+| 1.1.0 | JAN 31, 2019   | >=3.1.0                     | Added support for more configurable parameters; Added Kibana dashboards |
 | 1.0.0 | NOV 16, 2018   | >=3.1.0                     | Initial release              |

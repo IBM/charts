@@ -1,13 +1,14 @@
 # Breaking Changes
 
 
-# What’s new in Chart Version 1.1.0
+# What’s new in Chart Version 1.2.0
 
-With Hazelcast 1.1.0 on IBM Cloud, the following new
+With Hazelcast 1.2.0 on IBM Cloud, the following new
 features are available:
-* Deployment type changed to StatefulSet
-* hazelcast/hazelcast Docker image 3.10.5
-* Update readiness and liveness probes to new endpoint
+* hazelcast/hazelcast Docker image 3.10.6
+* Scoped ClusterRole to specific Role
+* Workload compatible with ibm-restricted-psp Pod Security Policy
+  * Container runs as UID 1001
 
 
 # Fixes
@@ -23,6 +24,7 @@ features are available:
 # Version History
 
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
-| ----- | ---- | ------------ | ------------------ | ---------------- | ------- | 
+| ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.2.0 | January 28, 2019 | >=3.1.0.0 | hazelcast/hazelcast | | Update Hazelcast to 3.10.6. ibm-restricted-psp compatibility. Scoped ClusterRole to specific Role. Container run as UID 1001. |
 | 1.1.0 | September 28, 2018 | >=2.1.0.1 | hazelcast/hazelcast | | Change deployment type to StatefulSet. Update hazelcast supported docker image, version, and probes. |
 | 1.0.0 | June 22, 2018 | >=2.1.0.1 | hazelcast/hazelcast-kubernetes | | Initial release. |
