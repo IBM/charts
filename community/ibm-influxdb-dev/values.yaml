@@ -1,0 +1,235 @@
+## influxdb image version
+## ref: https://hub.docker.com/r/library/influxdb/tags/
+image:
+  repo: "ibmcom/influxdb-ppc64le"
+  tag: "0.10"
+  pullPolicy: IfNotPresent
+
+## Specify a service type
+## NodePort is default
+## ref: http://kubernetes.io/docs/user-guide/services/
+##
+service:
+  ## Add annotations to service
+  annotations: {}
+  type: ClusterIP
+  ## Add IP Cluster
+  clusterIP: ""
+  ## Add external IPs that route to one or more cluster nodes
+  externalIPs: []
+  ## Specify LoadBalancer IP (only allow on some cloud provider)
+  loadBalancerIP: ""
+  ## Allow source IPs to access on service (if empty, any access allow)
+  loadBalancerSourceRanges: []
+
+## Persist data to a persistent volume
+##
+persistence:
+  enabled: false
+  ## If true will use an existing PVC instead of creating one
+  useExisting: false
+  ## Name of existing PVC to be used in the influx deployment
+  name:
+  ## influxdb data Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  ##
+  useDynamicProvisioning: false
+  storageClass: "-"
+  accessMode: ReadWriteOnce
+  size: 8Gi
+
+node: "ppc64le"
+## Create default user through Kubernetes job
+## Defaults indicated below
+##
+setDefaultUser:
+  enabled: false
+
+  ## Image of the container used for job
+  ## Default: appropriate/curl:latest
+  ##
+  image:  ibmcom/curl-ppc64le:3.6
+
+  ## Deadline for job so it does not retry forever.
+  ## Default: activeDeadline: 300
+  ##
+  activeDeadline: 300
+
+  ## Restart policy for job
+  ## Default: OnFailure
+  restartPolicy: OnFailure
+
+  user:
+
+    ## The user name
+    ## Default: "admin"
+    username: "admin"
+
+    ## User password
+    ## single quotes must be escaped (\')
+    ## Default: (Randomly generated 10 characters of AlphaNum)
+    password:
+
+    ## User privileges
+    ## Default: "WITH ALL PRIVILEGES"
+    privileges: "WITH ALL PRIVILEGES"
+
+## Configure resource requests and limits
+## ref: http://kubernetes.io/docs/user-guide/compute-resources/
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 0.1
+  limits:
+    memory: 16Gi
+    cpu: 8
+
+ingress:
+  enabled: false
+  tls: false
+  secretName: my-tls-cert # only needed if tls above is true
+  hostname: influxdb.foobar.com
+  annotations:
+    # kubernetes.io/ingress.class: "nginx"
+    # kubernetes.io/tls-acme: "true"
+
+## Use an alternate scheduler, e.g. "stork".
+## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
+##
+schedulerName:
+
+## Node labels for pod assignment
+## Ref: https://kubernetes.io/docs/user-guide/node-selection/
+##
+nodeSelector: {}
+
+## The InfluxDB image uses several environment variables to automatically
+## configure certain parts of the server.
+## Ref: https://hub.docker.com/_/influxdb/
+env:
+  # - name: INFLUXDB_DB
+  #   value: "demo"
+
+## Change InfluxDB configuration parameters below:
+## Defaults are indicated
+## ref: https://docs.influxdata.com/influxdb/v1.1/administration/config/
+config:
+  reportingDisabled: false
+  bindAddress: 8088
+  storageDirectory: /var/lib/influxdb
+  meta:
+    retentionAutocreate: true
+    loggingEnabled: true
+  data:
+    queryLogEnabled: true
+    cacheMaxMemorySize: 1073741824
+    cacheSnapshotMemorySize: 26214400
+    cacheSnapshotWriteColdDuration: 10m0s
+    compactFullWriteColdDuration: 4h0m0s
+    maxSeriesPerDatabase: 1000000
+    maxValuesPerTag: 100000
+    traceLoggingEnabled: false
+  coordinator:
+    writeTimeout: 10s
+    maxConcurrentQueries: 0
+    queryTimeout: 0s
+    logQueriesAfter: 0s
+    maxSelectPoint: 0
+    maxSelectSeries: 0
+    maxSelectBuckets: 0
+  retention:
+    enabled: true
+    checkInterval: 30m0s
+  shardPrecreation:
+    enabled: true
+    checkInterval: 10m0s
+    advancePeriod: 30m0s
+  admin:
+    enabled: false
+    bindAddress: 8083
+    httpsEnabled: false
+    httpsCertificate: /etc/ssl/influxdb.pem
+  monitor:
+    storeEnabled: true
+    storeDatabase: _internal
+    storeInterval: 10s
+  subscriber:
+    enabled: true
+    httpTimeout: 30s
+    insecureSkipVerify: false
+    caCerts: ""
+    writeConcurrency: 40
+    writeBufferSize: 1000
+  http:
+    enabled: true
+    bindAddress: 8086
+    authEnabled: false
+    logEnabled: true
+    writeTracing: false
+    pprofEnabled: true
+    httpsEnabled: false
+    httpsCertificate: /etc/ssl/influxdb.pem
+    httpsPrivateKey: ""
+    maxRowLimit: 10000
+    maxConnectionLimit: 0
+    sharedSecret: "beetlejuicebeetlejuicebeetlejuice"
+    realm: InfluxDB
+    unixSocketEnabled: false
+    bindSocket: /var/run/influxdb.sock
+  graphite:
+    enabled: false
+    bindAddress: 2003
+    database: graphite
+    retentionPolicy: autogen
+    protocol: tcp
+    batchSize: 5000
+    batchPending: 10
+    batchTimeout: 1s
+    consistencyLevel: one
+    separator: .
+    udpReadBuffer: 0
+    # Uncomment to define graphite templates
+    templates:
+      - "graphite.metric.*.*.* measurement.run"
+  collectd:
+    enabled: false
+    bindAddress: 25826
+    database: collectd
+    retentionPolicy: autogen
+    batchSize: 5000
+    batchPending: 10
+    batchTimeout: 10s
+    readBuffer: 0
+    typesdb: /usr/share/collectd/types.db
+    securityLevel: none
+    authFile: /etc/collectd/auth_file
+  opentsdb:
+    enabled: false
+    bindAddress: 4242
+    database: opentsdb
+    retentionPolicy: autogen
+    consistencyLevel: one
+    tlsEnabled: false
+    certificate: /etc/ssl/influxdb.pem
+    batchSize: 1000
+    batchPending: 5
+    batchTimeout: 1s
+    logPointErrors: true
+  udp:
+    enabled: false
+    bindAddress: 8089
+    database: udp
+    retentionPolicy: autogen
+    batchSize: 5000
+    batchPending: 10
+    readBuffer: 0
+    batchTimeout: 1s
+    precision: "ns"
+  continuousQueries:
+    logEnabled: true
+    enabled: true
+    runInterval: 1s

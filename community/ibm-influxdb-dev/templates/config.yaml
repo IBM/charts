@@ -1,0 +1,157 @@
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "influxdb.fullname" . }}
+  labels:
+    app: {{ template "influxdb.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+data:
+  influxdb.conf: |+
+    reporting-disabled = {{ .Values.config.reportingDisabled | default false }}
+    bind-address = ":{{ .Values.config.bindAddress }}"
+
+    [meta]
+      dir = "{{ .Values.config.storageDirectory }}/meta"
+      retention-autocreate = {{ .Values.config.meta.retentionAutocreate }}
+      logging-enabled = {{ .Values.config.meta.loggingEnabled }}
+
+    [data]
+      dir = "{{ .Values.config.storageDirectory }}/data"
+      wal-dir = "{{ .Values.config.storageDirectory }}/wal"
+      query-log-enabled = {{ .Values.config.data.queryLogEnabled }}
+      cache-max-memory-size = {{ .Values.config.data.cacheMaxMemorySize | int64 }}
+      cache-snapshot-memory-size = {{ .Values.config.data.cacheSnapshotMemorySize | int64 }}
+      cache-snapshot-write-cold-duration = "{{ .Values.config.data.cacheSnapshotWriteColdDuration }}"
+      compact-full-write-cold-duration = "{{ .Values.config.data.compactFullWriteColdDuration }}"
+      max-series-per-database = {{ .Values.config.data.maxSeriesPerDatabase | int64 }}
+      max-values-per-tag = {{ .Values.config.data.maxValuesPerTag | int64 }}
+      trace-logging-enabled = {{ .Values.config.data.traceLoggingEnabled }}
+
+    [coordinator]
+      write-timeout = "{{ .Values.config.coordinator.writeTimeout }}"
+      max-concurrent-queries = {{ .Values.config.coordinator.maxConcurrentQueries | int64 }}
+      query-timeout = "{{ .Values.config.coordinator.queryTimeout }}"
+      log-queries-after = "{{ .Values.config.coordinator.logQueriesAfter }}"
+      max-select-point = {{ .Values.config.coordinator.maxSelectPoint | int64 }}
+      max-select-series = {{ .Values.config.coordinator.maxSelectSeries | int64 }}
+      max-select-buckets = {{ .Values.config.coordinator.maxSelectBuckets | int64 }}
+
+    [retention]
+      enabled = {{ .Values.config.retention.enabled }}
+      check-interval = "{{ .Values.config.retention.checkInterval }}"
+
+    [shard-precreation]
+      enabled = {{ .Values.config.shardPrecreation.enabled }}
+      check-interval = "{{ .Values.config.shardPrecreation.checkInterval }}"
+      advance-period = "{{ .Values.config.shardPrecreation.advancePeriod }}"
+
+    [admin]
+      enabled = {{ .Values.config.admin.enabled }}
+      bind-address = ":{{ .Values.config.admin.bindAddress }}"
+      https-enabled = {{ .Values.config.admin.httpsEnabled }}
+      https-certificate = "{{ .Values.config.admin.httpsCertificate }}"
+
+    [monitor]
+      store-enabled = {{ .Values.config.monitor.storeEnabled }}
+      store-database = "{{ .Values.config.monitor.storeDatabase }}"
+      store-interval = "{{ .Values.config.monitor.storeInterval }}"
+
+    [subscriber]
+      enabled = {{ .Values.config.subscriber.enabled }}
+      http-timeout = "{{ .Values.config.subscriber.httpTimeout }}"
+      insecure-skip-verify = {{ .Values.config.subscriber.insecureSkipVerify }}
+      ca-certs = "{{ .Values.config.subscriber.caCerts }}"
+      write-concurrency = {{ .Values.config.subscriber.writeConcurrency | int64 }}
+      write-buffer-size = {{ .Values.config.subscriber.writeBufferSize | int64 }}
+
+    [http]
+      enabled = {{ .Values.config.http.enabled }}
+      bind-address = ":{{ .Values.config.http.bindAddress }}"
+      auth-enabled = {{ .Values.config.http.authEnabled }}
+      log-enabled = {{ .Values.config.http.logEnabled }}
+      write-tracing = {{ .Values.config.http.writeTracing }}
+      pprof-enabled = {{ .Values.config.http.pprofEnabled }}
+      https-enabled = {{ .Values.config.http.httpsEnabled }}
+      https-certificate = "{{ .Values.config.http.httpsCertificate }}"
+      https-private-key = "{{ .Values.config.http.httpsPrivateKey }}"
+      max-row-limit = {{ .Values.config.http.maxRowLimit | int64 }}
+      max-connection-limit = {{ .Values.config.http.maxConnectionLimit | int64 }}
+      shared-secret = "{{ .Values.config.http.sharedSecret }}"
+      realm = "{{ .Values.config.http.realm }}"
+      unix-socket-enabled = {{ .Values.config.http.unixSocketEnabled }}
+      bind-socket = "{{ .Values.config.http.bindSocket }}"
+    
+    # TODO: allow multiple graphite listeners
+    
+    [[graphite]]
+      enabled = {{ .Values.config.graphite.enabled }}
+      bind-address = ":{{ .Values.config.graphite.bindAddress }}"
+      database = "{{ .Values.config.graphite.database }}"
+      retention-policy = "{{ .Values.config.graphite.retentionPolicy }}"
+      protocol = "{{ .Values.config.graphite.protocol }}"
+      batch-size = {{ .Values.config.graphite.batchSize | int64 }}
+      batch-pending = {{ .Values.config.graphite.batchPending | int64 }}
+      batch-timeout = "{{ .Values.config.graphite.batchTimeout }}"
+      consistency-level = "{{ .Values.config.graphite.consistencyLevel }}"
+      separator = "{{ .Values.config.graphite.separator }}"
+      udp-read-buffer = {{ .Values.config.graphite.udpReadBuffer | int64 }}
+      {{- if .Values.config.graphite.templates }}
+      templates = [
+        {{- range .Values.config.graphite.templates }}
+          {{ quote . }},
+        {{- end }}
+      ]
+      {{- end }}
+    
+    # TODO: allow multiple collectd listeners with templates
+
+    [[collectd]]
+      enabled = {{ .Values.config.collectd.enabled }}
+      bind-address = ":{{ .Values.config.collectd.bindAddress }}"
+      database = "{{ .Values.config.collectd.database }}"
+      retention-policy = "{{ .Values.config.collectd.retentionPolicy }}"
+      batch-size = {{ .Values.config.collectd.batchSize | int64 }}
+      batch-pending = {{ .Values.config.collectd.batchPending | int64 }}
+      batch-timeout = "{{ .Values.config.collectd.batchTimeout }}"
+      read-buffer = {{ .Values.config.collectd.readBuffer | int64 }}
+      typesdb = "{{ .Values.config.collectd.typesdb }}"
+      security-level = "{{ .Values.config.collectd.securityLevel }}"
+      auth-file = "{{ .Values.config.collectd.authFile }}"
+    
+    # TODO: allow multiple opentsdb listeners with templates
+
+    [[opentsdb]]
+      enabled = {{ .Values.config.opentsdb.enabled }}
+      bind-address = ":{{ .Values.config.opentsdb.bindAddress }}"
+      database = "{{ .Values.config.opentsdb.database }}"
+      retention-policy = "{{ .Values.config.opentsdb.retentionPolicy }}"
+      consistency-level = "{{ .Values.config.opentsdb.consistencyLevel }}"
+      tls-enabled = {{ .Values.config.opentsdb.tlsEnabled }}
+      certificate = "{{ .Values.config.opentsdb.certificate }}"
+      batch-size = {{ .Values.config.opentsdb.batchSize | int64 }}
+      batch-pending = {{ .Values.config.opentsdb.batchPending | int64 }}
+      batch-timeout = "{{ .Values.config.opentsdb.batchTimeout }}"
+      log-point-errors = {{ .Values.config.opentsdb.logPointErrors }}
+    
+    # TODO: allow multiple udp listeners with templates
+
+    [[udp]]
+      enabled = {{ .Values.config.udp.enabled }}
+      bind-address = ":{{ .Values.config.udp.bindAddress }}"
+      database = "{{ .Values.config.udp.database }}"
+      retention-policy = "{{ .Values.config.udp.retentionPolicy }}"
+      batch-size = {{ .Values.config.udp.batchSize | int64 }}
+      batch-pending = {{ .Values.config.udp.batchPending | int64 }}
+      read-buffer = {{ .Values.config.udp.readBuffer | int64 }}
+      batch-timeout = "{{ .Values.config.udp.batchTimeout }}"
+      precision = "{{ .Values.config.udp.precision }}"
+
+    [continuousQueries]
+      log-enabled = {{ .Values.config.continuousQueries.logEnabled }}
+      enabled = {{ .Values.config.continuousQueries.enabled }}
+      run-interval = "{{ .Values.config.continuousQueries.runInterval }}"
+
+
