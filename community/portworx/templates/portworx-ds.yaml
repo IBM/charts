@@ -23,6 +23,7 @@
 {{- $etcdCA := .Values.etcd.ca | default "none" }}
 {{- $etcdCert := .Values.etcd.cert | default "none" }}
 {{- $etcdKey := .Values.etcd.key | default "none" }}
+{{- $consulToken := .Values.consul.token | default "none" }}
 {{- $etcdEndPoints := .Values.etcdEndPoint }}
 {{- $misc := .Values.misc | default "" | split " " }}
 
@@ -31,6 +32,9 @@ kind: DaemonSet
 metadata:
   name: portworx
   namespace: kube-system
+  annotations:
+    portworx.com/install-source: helm/{{.Release.Service}}-r{{.Release.Revision}}
+    portworx.com/helm-vars: chart="{{.Chart.Name}}-{{.Chart.Version}}"{{range $k, $v := .Values }}{{if $v}},{{ $k }}="{{ $v }}"{{end}}{{end}}
 spec:
   minReadySeconds: 0
   updateStrategy:
@@ -141,6 +145,10 @@ spec:
               "-key", "{{ $etcdKey }}",
               {{- end -}}
 
+              {{- if ne $consulToken "none" }}
+              "-acltoken", "{{ $consulToken }}",
+              {{- end -}}
+
               {{- if .misc }}
                 {{- range $index, $name := $misc }}
               "{{ $name }}",
@@ -222,16 +230,16 @@ spec:
               mountPath: /opt/pwx
             - name: sysdmount
               mountPath: /etc/systemd/system
+            - name: journalmount1
+              mountPath: /var/run/log
+              readOnly: true
+            - name: journalmount2
+              mountPath: /var/log
+              readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
-          {{- if (.Values.openshiftInstall) and (eq .Values.openshiftInstall true)}}
-            - name: proc1nsmount
-              mountPath: /host_proc
-          {{- else }}
-            - name: proc1nsmount
-              mountPath: /host_proc/1/ns
-          {{- end }}
-
+            - name: hostproc
+              mountPath: /host_proc              
           {{- else if eq (.Values.deploymentType | upper | lower) "docker" }}
             - name: dev
               mountPath: /dev
@@ -332,32 +340,26 @@ spec:
             path: /etc/pwx
         - name: cores
           hostPath:
-            path: /var/cores
+            path: {{if eq $pksInstall true }}/var/vcap/store/cores{{else}}/var/cores{{end}}
         {{- if eq (.Values.deploymentType | upper | lower) "oci" }}
-        {{- if eq $pksInstall true }}
         - name: optpwx
           hostPath:
-            path: /var/vcap/store/opt/pwx
-        {{- else }}
-        - name: optpwx
-          hostPath:
-            path: /opt/pwx
-        {{- end }}
-        - name: dbusmount
-          hostPath:
-            path: /var/run/dbus
-        {{- if (.Values.openshiftInstall) and (eq .Values.openshiftInstall true) }}
-        - name: proc1nsmount
-          hostPath:
-            path: /proc
-        {{- else }}
-        - name: proc1nsmount
-          hostPath:
-            path: /proc/1/ns
-        {{- end }}
+            path: {{if eq $pksInstall true }}/var/vcap/store/opt/pwx{{else}}/opt/pwx{{end}}
         - name: sysdmount
           hostPath:
             path: /etc/systemd/system
+        - name: journalmount1
+          hostPath:
+            path: /var/run/log
+        - name: journalmount2
+          hostPath:
+            path: /var/log
+        - name: dbusmount
+          hostPath:
+            path: /var/run/dbus
+        - name: hostproc
+          hostPath:
+            path: /proc
         {{- else if eq (.Values.deploymentType | upper | lower) "docker" }}
         - name: libosd
           hostPath:
