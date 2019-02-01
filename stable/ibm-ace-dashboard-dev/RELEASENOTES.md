@@ -1,18 +1,18 @@
 # Breaking Changes
 * None
 
-# What’s new in IBM App Connect Enterprise Chart Version 1.0.0
+# What’s new in IBM App Connect Enterprise Chart Version 1.1.0
 
 With IBM App Connect Enterprise Dashboard Chart for Kubernetes environments, the following new
 features are available:
 
-* Deploy an IBM App Connect Enterprise Dashboard
+* Updated to use the App Connect Enterprise v11 FP3 runtime
 
 # Fixes
 
 # Prerequisites
 
-1. IBM Cloud Private version 3.1.0.0
+1. IBM Cloud Private version 3.1.1
 
 # Documentation
 For more information go to https://www.ibm.com/support/knowledgecenter/en/SSTTDS_11.0.0/com.ibm.etools.mft.doc/bz91410_.htm
@@ -21,4 +21,5 @@ For more information go to https://www.ibm.com/support/knowledgecenter/en/SSTTDS
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Details |
 | ----- | ---- | ------------------- | ------------------ | ------- |
+| 1.1.0 | Jan 31, 2019  | >=v1.11.1 | ibmcom/ace-dashboard:11.0.0.3, ibmcom/ace-icp-configurator:11.0.0.3, ibmcom/ace-content-server:11.0.0.3| 11.0.0.3 FP Update |
 | 1.0.0 | Nov 14, 2018 | >=v1.11.1   | ibmcom/ace-dashboard:11.0.0.2, ibmcom/ace-icp-configurator:11.0.0.2, ibmcom/ace-content-server:11.0.0.2| Initial Chart |
