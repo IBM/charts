@@ -15,7 +15,9 @@
 {{- if not .Values.queueManagerEnabled }}
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
 {{ $deploymentName := include "sch.names.fullName" (list .) }}
+{{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{ $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
+{{ $secretName := .Values.configurationSecret | default (printf "%s-%s" $deploymentName "configuration") }}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -51,6 +53,7 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
+      serviceAccountName: {{ $saName }}
       {{- if .Values.image.pullSecret }}
       imagePullSecrets:
         - name: {{ .Values.image.pullSecret }}
@@ -80,6 +83,8 @@ spec:
               value: "false"
             - name: ACE_SERVER_NAME
               value: {{ print $serverName | quote }}
+            - name: SERVICE_NAME
+              value: {{ include "sch.names.fullName" (list .) }}
             {{- if .Values.contentServerURL }}
             - name: ACE_CONTENT_SERVER_URL
               value: {{ index (splitList "?" (trim .Values.contentServerURL)) 0 | quote }}
@@ -92,49 +97,41 @@ spec:
               value: {{ .Values.log.format | default "json" | quote }}
             - name: ACE_ENABLE_METRICS
               value: {{ .Values.metrics.enabled | default true | quote }}
-            {{- if and .Values.integrationServer.keystore .Values.integrationServer.keystore.password }}
+            - name: MQSI_OVERRIDE_HOSTNAME
+              value: {{ .Values.service.iP }}
             - name: "ACE_KEYSTORE_PASSWORD"
               valueFrom:
                  secretKeyRef:
-                   name: {{ $deploymentName }}
+                   name: {{ $secretName }}
+                   optional: true
                    key: keystorePassword
-            {{- end }}
-            {{- if and .Values.integrationServer.truststore .Values.integrationServer.truststore.password }}
             - name: "ACE_TRUSTSTORE_PASSWORD"
               valueFrom:
                  secretKeyRef:
-                   name: {{ $deploymentName }}
+                   name: {{ $secretName }}
+                   optional: true
                    key: truststorePassword
-            {{- end }}
           volumeMounts:
             {{- if .Values.contentServerURL }}
             - name: webusers
               mountPath: "/home/aceuser/initial-config/webusers"
             {{- end }}
-            {{- if and .Values.integrationServer.keystore .Values.integrationServer.keystore.password }}
+            {{- if .Values.integrationServer.keystoreKeyNames }}
             - name: keystore
               mountPath: "/home/aceuser/initial-config/keystore"
             {{- end }}
-            {{- if and .Values.integrationServer.truststore .Values.integrationServer.truststore.password }}
+            {{- if .Values.integrationServer.truststoreCertNames }}
             - name: truststore
               mountPath: "/home/aceuser/initial-config/truststore"
             {{- end }}
-            {{- if .Values.integrationServer.odbcini }}
             - name: odbcini
               mountPath: "/home/aceuser/initial-config/odbcini"
-            {{- end }}
-            {{- if .Values.integrationServer.policy }}
             - name: policy
               mountPath: "/home/aceuser/initial-config/policy"
-            {{- end }}
-            {{- if .Values.integrationServer.serverconf }}
             - name: serverconf
               mountPath: "/home/aceuser/initial-config/serverconf"
-            {{- end }}
-            {{- if .Values.integrationServer.setdbparms }}
             - name: setdbparms
               mountPath: "/home/aceuser/initial-config/setdbparms"
-            {{- end }}
             {{- if .Values.contentServerURL }}
             - name: contentservertls
               mountPath: "/home/aceuser/ssl"
@@ -188,72 +185,70 @@ spec:
         - name: webusers
           secret:
             secretName: {{ $deploymentName }}
+            optional: true
             items:
             - key: viewerusers
               path: viewer-users.txt
             - key: adminusers
               path: admin-users.txt
         {{- end }}
-        {{- if and .Values.integrationServer.keystore .Values.integrationServer.keystore.password }}
+        {{- if .Values.integrationServer.keystoreKeyNames }}
+        # Marked as optional as the passphrase is not required and may not be provided
         - name: keystore
           secret:
-            secretName: {{ $deploymentName }}
+            secretName: {{ $secretName }}
+            optional: true
             items:
-            {{- range $key, $val := .Values.integrationServer.keystore.keys }}
-            - key: keystoreKey-{{ $key }}
-              path: {{ $key }}.key
-            - key: keystoreCert-{{ $key }}
-              path: {{ $key }}.crt
-              {{- if $val.passphrase }}
-            - key: keystorePass-{{ $key }}
-              path: {{ $key }}.pass
-              {{- end }}
+            {{- range $key := splitList "," .Values.integrationServer.keystoreKeyNames }}
+            - key: keystoreKey-{{ nospace $key }}
+              path: {{ nospace $key }}.key
+            - key: keystoreCert-{{ nospace $key }}
+              path: {{ nospace $key }}.crt
+            - key: keystorePass-{{ nospace $key }}
+              path: {{ nospace $key }}.pass
             {{- end }}
         {{- end }}
-        {{- if and .Values.integrationServer.truststore .Values.integrationServer.truststore.password }}
+        {{- if .Values.integrationServer.truststoreCertNames }}
+        # Not marked as optional as the user has specified this certificate should exist in the secret
         - name: truststore
           secret:
-            secretName: {{ $deploymentName }}
+            secretName: {{ $secretName }}
             items:
-            {{- range $key, $val := .Values.integrationServer.truststore.certs }}
-            - key: truststoreCert-{{ $key }}
-              path: {{ $key }}.crt
+            {{- range $cert := splitList "," .Values.integrationServer.truststoreCertNames }}
+            - key: truststoreCert-{{ nospace $cert }}
+              path: {{ nospace $cert }}.crt
             {{- end }}
         {{- end }}
-        {{- if .Values.integrationServer.odbcini }}
         - name: odbcini
           secret:
-            secretName: {{ $deploymentName }}
+            secretName: {{ $secretName }}
+            optional: true
             items:
             - key: odbcini
               path: odbc.ini
-        {{- end }}
-        {{- if .Values.integrationServer.policy }}
         - name: policy
           secret:
-            secretName: {{ $deploymentName }}
+            secretName: {{ $secretName }}
+            optional: true
             items:
             - key: policy
               path: default.policyxml
             - key: policyDescriptor
               path: policy.descriptor
-        {{- end }}
-        {{- if .Values.integrationServer.serverconf }}
         - name: serverconf
           secret:
-            secretName: {{ $deploymentName }}
+            secretName: {{ $secretName }}
+            optional: true
             items:
             - key: serverconf
               path: server.conf.yaml
-        {{- end }}
-        {{- if .Values.integrationServer.setdbparms }}
         - name: setdbparms
           secret:
-            secretName: {{ $deploymentName }}
+            secretName: {{ $secretName }}
+            optional: true
             items:
             - key: setdbparms
               path: setdbparms.txt
-        {{- end }}
         {{- if .Values.contentServerURL }}
         - name: contentservertls
           secret:
