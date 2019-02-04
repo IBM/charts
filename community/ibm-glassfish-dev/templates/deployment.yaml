@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "glassfish.fullname" . }}
+  labels:
+    app: {{ template "glassfish.name" . }}
+    chart: {{ template "glassfish.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "glassfish.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "glassfish.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "glassfish.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: glassfish
+        productID: glassfish_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+             drop:
+              - ALL
+          ports:
+            - name: http1
+              containerPort: 4848
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
