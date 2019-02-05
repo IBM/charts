@@ -1,0 +1,153 @@
+{{- include "sch.config.init" (list . "isamruntime.sch.chart.config.values") -}}
+{{- $pvcName := "dataPVC" -}}
+
+{{- if .Values.container.enabled }}
+
+#
+# This file contains the main deployment definition used by the helm chart 
+# installation.
+#
+
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ template "runtime.name" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  replicas: {{ .Values.container.replicas }}
+
+  selector:
+    matchLabels:
+      app: {{ template "runtime.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+
+  template:
+    metadata:
+      labels:
+        # XXX: For some reason the 'app' label needs to be the fully qualified
+        #      application name else the helm_test command fails because we
+        #      can't resolve the application name.  This should be revisited
+        #      at some point in the future so that we can make use of the 
+        #      sch.metadata.labels.standard tag.
+        app: {{ template "runtime.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+
+    spec:
+
+      hostNetwork:    false
+      hostPID:        false
+      hostIPC:        false
+      securityContext:
+        runAsNonRoot: false
+        runAsUser:    0
+
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "runtime.name" . }}
+            topologyKey: "kubernetes.io/hostname"
+
+      imagePullSecrets:
+        - name: {{ template "docker.credentials.secret" . }}
+
+      containers:
+      - name:  {{ template "runtime.name" . }}
+
+        securityContext:
+          privileged:               false
+          readOnlyRootFilesystem:   false
+          allowPrivilegeEscalation: true
+          runAsNonRoot:             false
+          runAsUser:                0
+          capabilities:
+            add:
+            - SETUID
+            - SETGID
+
+        image: "{{ .Values.global.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.global.image.pullPolicy | quote }}
+        env:
+        - name: SNAPSHOT
+          value: {{ default "" .Values.global.container.snapshot | quote }}
+        - name: FIXPACKS
+          value: {{ default "" .Values.global.container.fixpacks | quote }}
+        - name: SERVICE
+          value: runtime
+        - name: ADMIN_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "admin.secret" . }}
+              key: {{ template "admin.secret.key" . }}
+        - name: AUTO_RELOAD_FREQUENCY
+          value: {{ default "" .Values.global.container.autoReloadInterval | quote }}
+        - name: CONFIG_SERVICE_URL
+          value: {{ template "config.service.url" . }}
+        - name: CONFIG_SERVICE_USER_NAME
+          value: "admin"
+        - name: CONFIG_SERVICE_USER_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "admin.secret" . }}
+              key: {{ template "admin.secret.key" . }}
+
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - "if [ ! -f /var/run/bootstrap.pid ]; then /sbin/health_check.sh; fi"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        readinessProbe:
+          exec:
+            command:
+            {{- if not .Values.global.container.readinessProbeDisabled }}
+            - /sbin/health_check.sh
+            {{- else }}
+            - /usr/bin/true
+            {{- end }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        ports:
+        - name: {{ .sch.chart.config.servicename }}
+          containerPort: {{ template "runtime.port" . }}
+        - name: {{ .sch.chart.config.adminservicename }}
+          containerPort: {{ template "admin.port" . }}
+
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+
+        volumeMounts:
+        - name: {{ template "pvc.name" . }}
+          mountPath: /var/application.logs
+          subPath: runtime.logs
+
+      volumes:
+        - name: {{ template "pvc.name" . }}
+        {{- if .Values.global.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "pvc.name" . }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+
+{{- end }}
+
