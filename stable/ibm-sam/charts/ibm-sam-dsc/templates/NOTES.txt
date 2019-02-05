@@ -1,0 +1,39 @@
+{{- include "sch.config.init" (list . "isamdsc.sch.chart.config.values") -}}
+
+{{- if .Values.container.enabled -}}
+
+1.0 General Information:
+
+To obtain the administrator password execute the following command:
+    kubectl get secret --namespace {{ .Release.Namespace }} {{ template "admin.secret" . }} -o jsonpath="{.data.{{ template "admin.secret.key" . }}}" | base64 --decode; echo
+
+2.0 DSC
+
+The distributed session cache service should only ever be accessed by ISAM components running in the same cluster.  
+
+The primary distributed session cache service can be accessed using the {{ include "dsc.name" (list . "primary") }} host and {{ template "runtime.port" . }} port.  
+
+{{- if .Values.container.useReplica -}}
+
+The secondary distributed session cache service can be accessed using the {{ include "dsc.name" (list . "secondary") }} host and {{ template "runtime.port" . }} port.  
+
+The two distributed session cache replicas will communicate over the {{ template "replica.port" . }} port.
+{{- end -}}
+
+To connect to the administation Web service of the primary container use kubernetes port forwarding:
+
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "dsc.name" (list . "primary") }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 9443:{{ template "admin.port" . }}
+
+{{- if .Values.container.useReplica -}}
+
+To connect to the administation Web service of the secondary container use kubernetes port forwarding:
+
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "dsc.name" (list . "secondary") }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 9443:{{ template "admin.port" . }}
+{{- end -}}
+
+The server can then be accessed at the following URL: https://127.0.0.1:9443
+
+{{- end -}}
+

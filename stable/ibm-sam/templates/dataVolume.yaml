@@ -1,0 +1,38 @@
+{{- include "sch.config.init" (list . "isam.sch.chart.config.values") -}}
+
+#
+# This file contains the definitions for the data volume used by this helm
+# chart.  We only create a persistent volume claim if persistence has been
+# enabled and an existing volume claim has not been specified.
+#
+
+{{ if and .Values.global.persistence.enabled (not .Values.global.dataVolume.existingClaimName) -}}
+
+kind: PersistentVolumeClaim
+apiVersion: v1
+
+metadata:
+  name: {{ template "pvc.name" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  {{- if .Values.global.persistence.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by the kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.global.dataVolume.storageClassName | quote }}
+  {{- else }}
+  storageClassName: {{ default "" .Values.global.dataVolume.storageClassName | quote }}
+  {{- end }}
+
+  accessModes:
+    - "{{ .Values.global.dataVolume.accessModes  }}"
+
+  resources:
+    requests:
+      storage: {{ .Values.global.dataVolume.size | quote }}
+{{- end }}
+ 
+

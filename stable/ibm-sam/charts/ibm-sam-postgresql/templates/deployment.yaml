@@ -1,0 +1,134 @@
+{{- include "sch.config.init" (list . "isampostgresql.sch.chart.config.values") -}}
+{{- $pvcName := "dataPVC" -}}
+
+{{- if .Values.container.enabled }}
+
+#
+# This file contains the main deployment definition used by the helm chart 
+# installation.
+#
+
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ template "postgresql.name" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "postgresql.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+
+  template:
+    metadata:
+      labels:
+        # XXX: For some reason the 'app' label needs to be the fully qualified
+        #      application name else the helm_test command fails because we
+        #      can't resolve the application name.  This should be revisited
+        #      at some point in the future so that we can make use of the 
+        #      sch.metadata.labels.standard tag.
+        app: {{ template "postgresql.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+
+    spec:
+
+      hostNetwork:    false
+      hostPID:        false
+      hostIPC:        false
+
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "postgresql.name" . }}
+            topologyKey: "kubernetes.io/hostname"
+
+      containers:
+      - name:  {{ template "postgresql.name" . }}
+
+        securityContext:
+          privileged:               false
+          readOnlyRootFilesystem:   false
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - SETUID
+            - SETGID
+
+          # XXX: The install of this helm chart in the CI/CD environment fails
+          # if I specify runAsNonRoot or runAsUser.  It works fine however in
+          # a local helm/kubernetes environment.
+          # runAsNonRoot:             true
+          # runAsUser:                70
+
+        image: "{{ .Values.global.image.dbrepository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.global.image.pullPolicy | quote }}
+        env:
+        - name: POSTGRES_USER
+          value: {{ template "postgresql.dbuser" . | quote }}
+        - name: PGUSER
+          value: {{ template "postgresql.dbuser" . | quote }}
+        - name: POSTGRES_DB
+          value: {{ template "postgresql.dbname" . | quote }}
+        - name: POSTGRES_INITDB_ARGS
+          value: ""
+        - name: POSTGRES_SSL_CN
+          value: ""
+        - name: POSTGRES_UNSECURE
+          value: "true"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "admin.secret" . }}
+              key: {{ template "admin.secret.key" . }}
+
+        livenessProbe:
+          tcpSocket:
+            port: {{ template "postgresql.port" . }}
+          initialDelaySeconds: 15
+          periodSeconds: 20 
+
+        readinessProbe:
+          tcpSocket:
+            port:  {{ template "postgresql.port" . }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        ports:
+        - name: {{ .sch.chart.config.servicename }}
+          containerPort: {{ template "postgresql.port" . }}
+
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+
+        volumeMounts:
+        - name: {{ template "pvc.name" . }}
+          mountPath: /var/lib/postgresql/data
+          subPath:   postgresql.data
+
+      volumes:
+        - name: {{ template "pvc.name" . }}
+        {{- if .Values.global.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "pvc.name" . }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+
+{{- end }}
+

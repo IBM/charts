@@ -1,0 +1,56 @@
+{{- include "sch.config.init" (list . "isamruntime.sch.chart.config.values") -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . "test") }}
+
+{{- if .Values.container.enabled }}
+
+#
+# This file contains the test definition which is used to validate the
+# health of this helm chart.
+#
+
+apiVersion: v1
+kind: Pod
+
+metadata:
+  name: "{{ $fullTestCompName }}"
+
+  annotations:
+    "helm.sh/hook": test-success
+
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  hostNetwork:    false
+  hostPID:        false
+  hostIPC:        false
+  securityContext:
+    runAsNonRoot: false
+    runAsUser:    1
+
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    image: "centos:7"
+    env:
+    # XXX: What test can we run here?  We can only really look and see if the
+    #      image is running.  It won't actually start until we have a 
+    #      configuration snapshot available.
+    command: ['true']
+
+    securityContext:
+      privileged:               false
+      readOnlyRootFilesystem:   true
+      allowPrivilegeEscalation: false
+      runAsNonRoot:             false
+      runAsUser:                1
+      capabilities:
+        drop:
+        - ALL
+
+  restartPolicy: Never
+
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+
+{{- end }}
+
