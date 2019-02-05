@@ -1,0 +1,31 @@
+{{- include "sch.config.init" (list . "isamconfig.sch.chart.config.values") -}}
+
+1.0 General Information:
+
+To obtain the administrator password execute the following command:
+    kubectl get secret --namespace {{ .Release.Namespace }} {{ template "admin.secret" . }} -o jsonpath="{.data.{{ template "admin.secret.key" . }}}" | base64 --decode; echo
+
+2.0 Configuration
+
+The configuration server should be used to configure the environment.  
+
+{{- if contains "NodePort" .Values.service.type }}
+
+To connect to your server obtain the external IP address and port:
+
+HOST=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath='{.items[0].status.addresses[0].address}')
+PORT=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ template "config.name" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+
+The server can then be accessed at the following URL: https://$HOST:$PORT
+
+{{- else if contains "ClusterIP" .Values.service.type }}
+
+To connect to your server using kubernetes port forwarding:
+
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ template "config.name" . }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 9443:{{ template "admin.port" . }}
+
+The server can then be accessed at the following URL: https://127.0.0.1:9443
+
+{{- end }}
+

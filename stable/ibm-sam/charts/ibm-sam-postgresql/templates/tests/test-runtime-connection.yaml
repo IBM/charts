@@ -1,0 +1,67 @@
+{{- include "sch.config.init" (list . "isampostgresql.sch.chart.config.values") -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . "test") }}
+
+{{- if .Values.container.enabled }}
+
+#
+# This file contains the test definition which is used to validate the
+# health of this helm chart.
+#
+
+apiVersion: v1
+kind: Pod
+
+metadata:
+  name: "{{ $fullTestCompName }}"
+
+  annotations:
+    "helm.sh/hook": test-success
+
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  hostNetwork:    false
+  hostPID:        false
+  hostIPC:        false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser:    70
+
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    image: "{{ .Values.global.image.dbrepository }}:{{ .Values.global.image.tag }}"
+    env:
+      - name: DBCMD
+        value: "psql"
+      - name: HOST
+        value: {{ template "postgresql.name" . }}
+      - name: DATABASE_NAME
+        value: {{ template "postgresql.dbname" . }}
+      - name: USER
+        value: {{ template "postgresql.dbuser" . }}
+      - name: PGPASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ template "admin.secret" . }}
+            key: {{ template "admin.secret.key" . }}
+
+    command: ["sh", "-c", "$DBCMD -U $USER -h $HOST -l"]
+
+    securityContext:
+      privileged:               false
+      readOnlyRootFilesystem:   true
+      allowPrivilegeEscalation: false
+      runAsNonRoot:             true
+      runAsUser:                70
+      capabilities:
+        drop:
+        - ALL
+
+  restartPolicy: Never
+
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+
+{{- end }}
+
