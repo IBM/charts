@@ -1,0 +1,131 @@
+{{- include "sch.config.init" (list . "isam.sch.chart.config.values") -}}
+
+General Information:
+====================
+
+To obtain the administrator password execute the following command:
+    kubectl get secret --namespace {{ .Release.Namespace }} {{ template "admin.secret" . }} -o jsonpath="{.data.{{ template "admin.secret.key" . }}}" | base64 --decode; echo
+
+Configuration
+=============
+
+The configuration server should be used to configure the environment.  
+
+{{- if contains "NodePort" .Values.isamconfig.service.type }}
+
+To connect to your server obtain the external IP address and port:
+
+HOST=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath='{.items[0].status.addresses[0].address}')
+PORT=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ template "config.name" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+
+The server can then be accessed at the following URL: https://$HOST:$PORT
+
+{{- else if contains "ClusterIP" .Values.isamconfig.service.type }}
+
+To connect to your server using kubernetes port forwarding:
+
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ template "config.name" . }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 9443:{{ template "admin.port" . }}
+
+The server can then be accessed at the following URL: https://127.0.0.1:9443
+
+{{- end }}
+
+Web Reverse Proxy
+=================
+
+The Web Reverse Proxy instances should be used as an entry point into the environment.  The instance names for the Web Reverse Proxy will be of the format: wrp_<instance_index> (where <instance_index> is the index of the instance, starting at 0).
+
+{{- if contains "NodePort" .Values.isamwrp.service.type }}
+
+To connect to your server obtain the external IP address and port:
+
+HOST=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath='{.items[0].status.addresses[0].address}')
+PORT=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "wrp.name" (list . "<instance_index>") }} -o jsonpath='{.spec.ports[0].nodePort}')
+
+The server can then be accessed at the following URL: https://$HOST:$PORT
+
+{{- else if contains "ClusterIP" .Values.isamwrp.service.type }}
+
+To connect to your server using kubernetes port forwarding:
+
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "wrp.name" (list . "<instance_index>") }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 9443:{{ template "runtime.port" . }}
+
+The server can then be accessed at the following URL: https://127.0.0.1:9443
+
+{{- end }}
+
+To connect to the administation Web service of the container use kubernetes port forwarding:
+
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "wrp.name" (list . "<instance_index>") }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 9443:{{ template "admin.port" . }}
+
+The server can then be accessed at the following URL: https://127.0.0.1:9443
+
+{{- if .Values.isamruntime.container.enabled }}
+
+Runtime
+=======
+
+The federation and advanced access control runtime requests should always be serviced via a secure Web reverse proxy instance.  The runtime service can be accessed by the secure Web reverse proxy over SSL through the {{ template "runtime.name" . }} host and {{ template "runtime.port" . }} port.
+
+To connect to the administation Web service of the container use kubernetes port forwarding:
+
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ template "runtime.name" . }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 9443:{{ template "admin.port" . }}
+
+The server can then be accessed at the following URL: https://127.0.0.1:9443
+
+{{- end }}
+
+{{- if .Values.isamdsc.container.enabled }}
+
+DSC
+===
+
+The distributed session cache service should only ever be accessed by ISAM components running in the same cluster.  
+
+The primary distributed session cache service can be accessed using the {{ include "dsc.name" (list . "primary") }} host and {{ template "runtime.port" . }} port.  
+
+{{- if .Values.isamdsc.container.useReplica }}
+
+The secondary distributed session cache service can be accessed using the {{ include "dsc.name" (list . "secondary") }} host and {{ template "runtime.port" . }} port.  
+
+The two distributed session cache replicas will communicate over the {{ template "replica.port" . }} port.
+{{- end }}
+
+To connect to the administation Web service of the primary container use kubernetes port forwarding:
+
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "dsc.name" (list . "primary") }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 9443:{{ template "admin.port" . }}
+
+{{- if .Values.isamdsc.container.useReplica }}
+
+To connect to the administation Web service of the secondary container use kubernetes port forwarding:
+
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "dsc.name" (list . "secondary") }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 9443:{{ template "admin.port" . }}
+{{- end }}
+
+The server can then be accessed at the following URL: https://127.0.0.1:9443
+
+{{- end }}
+
+{{- if .Values.isampostgresql.container.enabled }}
+
+PostgreSQL
+==========
+
+The PostgreSQL service provided is not meant for production and should only be used in proof of concept or demo environments.
+
+The database has been configured with the following attributes:
+  host:          {{ template "postgresql.name" . }}
+  port:          {{ template "postgresql.port" . }}
+  secure:        false
+  database name: {{ template "postgresql.dbname" . }}
+  database user: {{ template "postgresql.dbuser" . }}
+  password:      -- same as the administrator password for the environment
+
+{{- end }}
+

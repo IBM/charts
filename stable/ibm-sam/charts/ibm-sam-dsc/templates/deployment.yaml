@@ -1,0 +1,165 @@
+{{- include "sch.config.init" (list . "isamdsc.sch.chart.config.values") -}}
+
+{{- if .Values.container.enabled }}
+
+{{- $dot := . }}
+{{- range $index, $element := .sch.chart.config.servers -}}
+
+#
+# This file contains the main deployment definition used by the helm chart 
+# installation.
+#
+
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ include "dsc.name" (list $dot $element) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $dot "") | indent 4 }}
+
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "dsc.name" (list $dot $element) }}
+      chart: {{ $.Chart.Name }}
+      release: {{ $.Release.Name }}
+      heritage: {{ $.Release.Service }}
+
+  template:
+    metadata:
+      labels:
+        # XXX: For some reason the 'app' label needs to be the fully qualified
+        #      application name else the helm_test command fails because we
+        #      can't resolve the application name.  This should be revisited
+        #      at some point in the future so that we can make use of the 
+        #      sch.metadata.labels.standard tag.
+        app: {{ include "dsc.name" (list $dot $element) }}
+        chart: {{ $.Chart.Name }}
+        release: {{ $.Release.Name }}
+        heritage: {{ $.Release.Service }}
+
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list $dot $.sch.chart.metering) | indent 8 }}
+
+    spec:
+
+      hostNetwork:    false
+      hostPID:        false
+      hostIPC:        false
+      securityContext:
+        runAsNonRoot: false
+        runAsUser:    0
+
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list $dot) | indent 8 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ include "dsc.name" (list $dot $element) }}
+            topologyKey: "kubernetes.io/hostname"
+
+      imagePullSecrets:
+        - name: {{ template "docker.credentials.secret" $dot }}
+
+      containers:
+      - name:  {{ include "dsc.name" (list $dot $element) }}
+
+        securityContext:
+          privileged:               false
+          readOnlyRootFilesystem:   false
+          allowPrivilegeEscalation: true
+          runAsNonRoot:             false
+          runAsUser:                0
+          capabilities:
+            add:
+            - SETUID
+            - SETGID
+
+        image: "{{ $.Values.global.image.repository }}:{{ $.Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" $.Values.global.image.pullPolicy | quote }}
+        env:
+        - name: SNAPSHOT
+          value: {{ default "" $.Values.global.container.snapshot | quote }}
+        - name: FIXPACKS
+          value: {{ default "" $.Values.global.container.fixpacks | quote }}
+        - name: SERVICE
+          value: dsc
+        - name: INSTANCE
+          {{- if (eq $element "primary") }}
+          value: "1"
+          {{- else }}
+          value: "2"
+          {{- end }}
+        - name: ADMIN_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "admin.secret" $dot }}
+              key: {{ template "admin.secret.key" $dot }}
+        - name: AUTO_RELOAD_FREQUENCY
+          value: {{ default "" $.Values.global.container.autoReloadInterval | quote }}
+        - name: CONFIG_SERVICE_URL
+          value: {{ template "config.service.url" $dot }}
+        - name: CONFIG_SERVICE_USER_NAME
+          value: "admin"
+        - name: CONFIG_SERVICE_USER_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "admin.secret" $dot }}
+              key: {{ template "admin.secret.key" $dot }}
+
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - "if [ ! -f /var/run/bootstrap.pid ]; then /sbin/health_check.sh; fi"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        readinessProbe:
+          exec:
+            command:
+            {{- if not $.Values.global.container.readinessProbeDisabled }}
+            - /sbin/health_check.sh
+            {{- else }}
+            - /usr/bin/true
+            {{- end }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        ports:
+        - name: {{ include "dsc.service.name" (list $dot $element) }}
+          containerPort: {{ template "runtime.port" $dot }}
+        - name: {{ include "dsc.admin.service.name" (list $dot $element) }}
+          containerPort: {{ template "admin.port" $dot }}
+        - name: {{ include "dsc.replica.service.name" (list $dot $element) }}
+          containerPort: {{ template "replica.port" $dot }}
+
+        resources:
+{{ toYaml $.Values.resources | indent 10 }}
+
+        volumeMounts:
+        - name: {{ template "pvc.name" $dot }}
+          mountPath: /var/application.logs
+          subPath: dsc.logs
+
+      volumes:
+        - name: {{ template "pvc.name" $dot }}
+        {{- if $.Values.global.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "pvc.name" $dot }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+
+---
+
+{{- end -}}
+
+{{- end -}}
+

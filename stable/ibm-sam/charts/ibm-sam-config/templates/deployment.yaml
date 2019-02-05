@@ -1,0 +1,130 @@
+{{- include "sch.config.init" (list . "isamconfig.sch.chart.config.values") -}}
+{{- $pvcName := "dataPVC" -}}
+
+#
+# This file contains the main deployment definition used by the helm chart 
+# installation.
+#
+
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ template "config.name" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "config.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+
+  template:
+    metadata:
+      labels:
+        # XXX: For some reason the 'app' label needs to be the fully qualified
+        #      application name else the helm_test command fails because we
+        #      can't resolve the application name.  This should be revisited
+        #      at some point in the future so that we can make use of the 
+        #      sch.metadata.labels.standard tag.
+        app: {{ template "config.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+
+    spec:
+
+      hostNetwork:    false
+      hostPID:        false
+      hostIPC:        false
+      securityContext:
+        runAsNonRoot: false
+        runAsUser:    0
+
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ template "config.name" . }}
+            topologyKey: "kubernetes.io/hostname"
+
+
+      imagePullSecrets:
+        - name: {{ template "docker.credentials.secret" . }}
+
+      containers:
+      - name:  {{ template "config.name" . }}
+
+        securityContext:
+          privileged:               false
+          readOnlyRootFilesystem:   false
+          allowPrivilegeEscalation: true
+          runAsNonRoot:             false
+          runAsUser:                0
+          capabilities:
+            add:
+            - SETUID
+            - SETGID
+
+        image: "{{ .Values.global.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.global.image.pullPolicy | quote }}
+        env:
+        - name: SNAPSHOT
+          value: {{ default "" .Values.global.container.snapshot | quote }}
+        - name: FIXPACKS
+          value: {{ default "" .Values.global.container.fixpacks | quote }}
+        - name: SERVICE
+          value: config
+        - name: ADMIN_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "admin.secret" . }}
+              key: {{ template "admin.secret.key" . }}
+
+        readinessProbe:
+          tcpSocket:
+            port:  {{ template "admin.port" . }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        livenessProbe:
+          tcpSocket:
+            port: {{ template "admin.port" . }}
+          initialDelaySeconds: 15
+          periodSeconds: 20 
+
+        ports:
+        - name: {{ .sch.chart.config.servicename }}
+          containerPort: {{ template "admin.port" . }}
+
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+
+        volumeMounts:
+        - name: {{ template "pvc.name" . }}
+          mountPath: /var/shared
+          subPath: config.shared
+        - name: {{ template "pvc.name" . }}
+          mountPath: /var/application.logs
+          subPath: config.logs
+
+      volumes:
+        - name: {{ template "pvc.name" . }}
+        {{- if .Values.global.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "pvc.name" . }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+
