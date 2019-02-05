@@ -1,17 +1,15 @@
-# What’s new in Chart Version 1.9.1
+# What’s new in Chart Version 1.9.2
 ### Data Collector Enhancements
- - Configurable heap sizes for analysis of large systems
- - Support for -java-home parameter
- - Support for execution as user other than wsadmin owner
- - Improved handling of SOAP Timeout issues
- - Improved robustness of handling outside file locations
- - Improved handling of unexpected files during upload
+ - Static and dynamic dependency information is now collected
+### Analysis Enhancements
+ - Analysis includes the relationships between Applications and Shared Libraries
+ - Analysis includes the relationships between Applications and MQ QueueManagers
+### Migration Enhancements
+ - Required Shared Libraries are identified during migration
+ - Binaries can be sourced from a Maven repository during migration
+ - Migrated applications use the latest CloudPak Liberty Helm charts
 
 # Fixes
-### Analysis Enhancements
- - Applications without technologies are now handled correctly
- - Fixed incorrectly detected technologies
- - Fixed bugs around complexity tags
 
 # Breaking Changes
 
@@ -23,6 +21,7 @@
 # Version History
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.9.2 | Feb 05, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.2 ibmcom/transformation-advisor-server:1.9.2 ibmcom/transformation-advisor-ui:1.9.2 | None | Add Shared Libs, MQManagers|
 | 1.9.1 | Dec 13, 2018| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.1 ibmcom/transformation-advisor-server:1.9.1 ibmcom/transformation-advisor-ui:1.9.1 | None | DC Enhancements            |
 | 1.9.0 | Nov 15, 2018| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.0 ibmcom/transformation-advisor-server:1.9.0 ibmcom/transformation-advisor-ui:1.9.0 | None | Improved MQ Analysis       |
 | 1.8.1 | Oct 26, 2018| >=2.1.0.1 | ibmcom/transformation-advisor-db:1.8.1 ibmcom/transformation-advisor-server:1.8.1 ibmcom/transformation-advisor-ui:1.8.1 | None | Data Collector Patch       |
