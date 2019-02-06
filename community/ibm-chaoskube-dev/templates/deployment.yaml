@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ printf "%s-%s" .Release.Name .Values.name }}
+  labels:
+    app: {{ printf "%s-%s" .Release.Name .Values.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ printf "%s-%s" .Release.Name .Values.name }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ printf "%s-%s" .Release.Name .Values.name }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: chaoskube
+        productID: chaoskube_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name: {{ .Values.name }}
+        image: {{ .Values.image }}:{{ .Values.imageTag }}
+        securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+             drop:
+             - ALL
+        command: ["sh","-c","/bin/chaoskube"]
+        args:
+        - --interval={{ .Values.interval }}
+        - --labels={{ .Values.labels }}
+        - --annotations={{ .Values.annotations }}
+        - --namespaces={{ .Values.namespaces }}
+        {{- if not .Values.dryRun }}
+        - --no-dry-run
+        {{- end }}
+        - --excluded-weekdays={{ .Values.excludedWeekdays }}
+        - --excluded-times-of-day={{ .Values.excludedTimesOfDay }}
+        - --excluded-days-of-year={{ .Values.excludedDaysOfYear }}
+        - --timezone={{ .Values.timezone }}
+        livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+        readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+        resources:
+          requests:
+            cpu: {{ .Values.resources.cpu }}
+            memory: {{ .Values.resources.memory }}
+          limits:
+            cpu: {{ .Values.resources.cpu }}
+            memory: {{ .Values.resources.memory }}
+      serviceAccountName: {{ if .Values.rbac.create }}{{ printf "%s-%s" .Release.Name .Values.name }}{{ else }}"{{ .Values.rbac.serviceAccountName }}"{{ end }}
+{{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+{{- end -}}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
+
