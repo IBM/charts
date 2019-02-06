@@ -28,6 +28,25 @@ Test the installation with:
 helm test weave-scope
 ```
 
+## Configure authentication
+
+Create a secret in the same namespace as Weave Scope with your username and password:
+
+```bash
+$ kubectl -n scope create secret generic weave-scope-auth \
+--from-literal=username=admin \
+--from-literal=password=change-me
+```
+
+Install or upgrade the chart with basic auth enabled:
+
+```bash
+$ helm install --name weave-scope stable/weave-scope \
+--namespace scope \
+--set basicAuth.enabled=true \
+--set basicAuth.secretName=weave-scope-auth
+```
+
 ## Uninstalling the Chart
 
 To uninstall/delete the `weave-scope` deployment:
