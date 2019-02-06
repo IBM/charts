@@ -2,87 +2,56 @@
 
 ## About this chart
 
-This chart contains two subcharts (*weave-scope-frontend* and *weave-scope-agent*) which deploy the corresponding components of Weave Scope, an interactive container monitoring and visualization application.
-
-Either subchart can be deployed on its own (set the "enabled" value to "false" for the chart you want to suppress) or the two can be deployed together (the default).
+This chart installs [Weave Scope](https://github.com/weaveworks/scope), an interactive container monitoring and cluster visualization application.
 
 ## Prerequisites
 
 * Kubernetes >= 1.9
 
+## Image Policy Requirements
+
+If Container Image Security is enabled, you have to add `quay.io/weaveworks/*` to the trusted registries so that these container images can be pulled during chart installation.
+
 ## Installing the Chart
 
-To install the chart with the release name `my-release`:
+To install the chart with the release name `weave-scope` in the `scope` namespace:
 
 ```bash
-$ helm install --name my-release stable/weave-scope
+$ helm install --name weave-scope stable/weave-scope --namespace scope
 ```
 
 The command deploys Weave Scope on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
-> **Tip**: List all releases using `helm list`
+Test the installation with:
+
+```bash
+helm test weave-scope
+```
 
 ## Uninstalling the Chart
 
-To uninstall/delete the `my-release` deployment:
+To uninstall/delete the `weave-scope` deployment:
 
 ```bash
-$ helm delete my-release
+$ helm delete --purge weave-scope
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
-
 ## Configuration
-
-Note that most of this documentation is repeated in `values.yaml`; if you're in a hurry you can skip this part here and read it there.  Values with no default noted have no default.
-
-### Global values
 
 | Parameter | Description | Default |
 |----------:|:------------|:--------|
-| **image.*** | the parameters of the image pulls for this release | |
 | **image.repository** | the image that will be used for this release (required) | `quay.io/weaveworks/scope` |
 | **image.tag** | the version of Weave Scope desired for this release (required) | `1.10.1`
 | **image.pullPolicy** | the imagePullPolicy for the container (required): IfNotPresent, Always, or Never | `IfNotPresent`
-| **service.*** | the configuration of the service used to access the frontend | |
-| **service.port** | the port exposed by the Scope frontend service (required if weave-scope-frontend is enabled) -- this is a global so we can access its value easily from the agent subchart | `80` |
-| **service.type** | the type of the frontend service (required if weave-scope-frontend is enabled): ClusterIP, NodePort or LoadBalancer -- this is a global to keep it with the other values for configuring the frontend service | `ClusterIP` |
-
-
-### Weave Scope frontend values
-
-The **weave-scope-frontend** section controls how the Scope frontend is installed.
-
-| Parameter | Description | Default |
-|----------:|:------------|:--------|
-| **enabled** | controls whether the frontend is deployed | `true` |
-| **resources.*** | controls requests/limits for the frontend (these values are all optional) | |
-| **resources.requests.cpu** | CPU request in MHz (m) | |
-| **resources.requests.memory** | memory request in MiB (Mi) | |
-| **resources.limits.cpu** | CPU limit in MHz (m) | |
-| **resources.limits.memory** | memory limit in MiB (Mi) | |
-
-### Weave Scope agent
-
-The **agent** section controls how the Weave Scope node agent pods are installed.
-
-| Parameter | Description | Default |
-|----------:|:------------|:--------|
-| **enabled** | controls whether the agent is deployed | `true` |
-| **dockerBridge** | the name of the Docker bridge interface | `docker0` |
-| **scopeFrontendAddr** | the host:port of a Scope frontend to send data to -- this is only needed in cases where the frontend is deployed separately from the agent (e.g. an install outside the cluster or a pre-existing install inside it) | |
-| **probeToken** | the token used to connect to Weave Cloud -- this is not needed for connecting to non-cloud Scope frontends | |
-| **rbac.*** | controls RBAC resource creation/use | |
-| **rbac.create** | whether RBAC resources should be created (required) -- this **must** be set to false if RBAC is not enabled in the cluster; it *may* be set to false in an RBAC-enabled cluster to allow for external management of RBAC | true |
-| **serviceAccount.create** | whether a new service account name that the agent will use should be created. | `true` |
-| **serviceAccount.name** | service account to be used.  If not set and serviceAccount.create is `true` a name is generated using the fullname template. |  |
-| **resources.*** | controls requests/limits for the agent (these values are all optional) | |
-| **resources.requests.cpu** | CPU request in MHz (m) | |
-| **resources.requests.memory** | memory request in MiB (Mi)| |
-| **resources.limits.cpu** | CPU limit in MHz (m) | |
-| **resources.limits.memory** | memory limit in MiB (Mi) | |
+| **frontend.service.port** | the port exposed by the Scope frontend service | `80` |
+| **frontend.service.type** | the type of the frontend service: ClusterIP, NodePort or LoadBalancer | `ClusterIP` |
+| **agent.dockerBridge** | the name of the Docker bridge interface | `docker0` |
+| **agent.rbac.create** | whether RBAC resources should be created | true |
+| **agent.serviceAccount.create** | whether a new service account name that the agent will use should be created. | `true` |
+| **agent.serviceAccount.name** | service account to be used.  If not set and serviceAccount.create is `true` a name is generated using the fullname template. |  |
 
 ## Other notes
 
-* The Deployment for the frontend specifies a single replica; multiple replicas of the frontend, although they may run, probably will not work as expected since different agents may end up talking to different replicas.
+The Weave Scope agent runs as a privileged container with access to the host network and Docker engine socket.

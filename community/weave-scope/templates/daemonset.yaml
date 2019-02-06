@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    {{- include "scope.labels" . | indent 4 }}
+    component: agent
+  name: {{ template "scope.fullname" . }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "scope.fullname" . }}
+      component: agent
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "scope.fullname" . }}
+        component: agent
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: {{ template "scope.serviceAccountName" . }}
+      containers:
+        - name: agent
+          securityContext:
+            privileged: true
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          {{- if .Values.basicAuth }}
+          env:
+            - name: ENABLE_BASIC_AUTH
+              value: {{ .Values.basicAuth.enabled | quote }}
+            - name: BASIC_AUTH_USERNAME
+              value: {{ .Values.basicAuth.username }}
+            - name: BASIC_AUTH_PASSWORD
+              value: {{ .Values.basicAuth.password }}
+          {{- end }}
+          args:
+            - '--no-app'
+            - '--probe.docker.bridge={{ .Values.agent.dockerBridge }}'
+            - '--probe.docker=true'
+            - '--probe.kubernetes=true'
+            - {{ template "scope.fullname" . }}:{{ .Values.frontend.service.port }}
+          resources:
+{{ toYaml .Values.agent.resources | indent 12 }}
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: scope-plugins
+              mountPath: /var/run/scope/plugins
+            - name: sys-kernel-debug
+              mountPath: /sys/kernel/debug
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+        - name: scope-plugins
+          hostPath:
+            path: /var/run/scope/plugins
+        - name: sys-kernel-debug
+          hostPath:
+            path: /sys/kernel/debug
+

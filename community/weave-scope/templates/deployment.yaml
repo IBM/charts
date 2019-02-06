@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "scope.labels" . | indent 4 }}
+    component: frontend
+  name: {{ template "scope.fullname" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "scope.fullname" . }}
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: {{ template "scope.fullname" . }}
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          {{- if .Values.basicAuth }}
+          env:
+            - name: ENABLE_BASIC_AUTH
+              value: {{ .Values.basicAuth.enabled | quote }}
+            - name: BASIC_AUTH_USERNAME
+              value: {{ .Values.basicAuth.username }}
+            - name: BASIC_AUTH_PASSWORD
+              value: {{ .Values.basicAuth.password }}
+          {{- end }}
+          args:
+            - "--no-probe"
+          ports:
+            - name: http
+              containerPort: 4040
+              protocol: TCP
+          resources:
+{{ toYaml .Values.frontend.resources | indent 12 }}

@@ -1,50 +1,50 @@
 {{/* Helm standard labels */}}
-{{- define "weave-scope.helm_std_labels" }}
-chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+{{- define "scope.labels" }}
+chart: {{ template "scope.chart" . }}
 heritage: {{ .Release.Service }}
 release: {{ .Release.Name }}
-app: {{ template "toplevel.name" . }}
+app: {{ template "scope.name" . }}
 {{- end }}
 
-{{/* Weave Scope default annotations */}}
-{{- define "weave-scope.annotations" }}
-cloud.weave.works/launcher-info: |-
-  {
-    "server-version": "master-4fe8efe",
-    "original-request": {
-      "url": "/k8s/v1.7/scope.yaml"
-    },
-    "email-address": "support@weave.works",
-    "source-app": "weave-scope",
-    "weave-cloud-component": "scope"
-  }
-{{- end }}
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "scope.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
 
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "weave-scope.name" -}}
+{{- define "scope.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
-Expand the name of the top-level chart.
+Create a default fully qualified app name.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
 */}}
-{{- define "toplevel.name" -}}
-{{- default (.Template.BasePath | split "/" )._0 .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
-{{/*
-Create a default fully qualified app name.  We truncate at 63 chars.
-*/}}
-{{- define "weave-scope.fullname" -}}
-{{- printf "%s-%s" .Chart.Name .Release.Name | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
-{{/*
-Create a fully qualified name that always uses the name of the top-level chart.
-*/}}
-{{- define "toplevel.fullname" -}}
-{{- $name := default (.Template.BasePath | split "/" )._0 .Values.nameOverride -}}
+{{- define "scope.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "scope.serviceAccountName" -}}
+{{- if .Values.agent.serviceAccount.create -}}
+    {{ default (include "scope.fullname" .) .Values.agent.serviceAccount.name }}
+{{- else -}}
+    {{ default "default" .Values.agent.serviceAccount.name }}
+{{- end -}}
 {{- end -}}
