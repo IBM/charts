@@ -55,3 +55,25 @@ The command removes all the Kubernetes components associated with the chart and 
 ## Other notes
 
 The Weave Scope agent runs as a privileged container with access to the host network and Docker engine socket.
+
+## Support
+
+We are a very friendly community and love questions, help and feedback.
+
+If you have any questions, feedback, or problems with Scope:
+
+- Docs
+  - Read [the Weave Scope docs](https://www.weave.works/docs/scope/latest/introducing/)
+  - Check out the [frequently asked questions](https://github.com/weaveworks/scope/site/faq.md)
+  - Find out how to [contribute to Scope](https://github.com/weaveworks/scope/CONTRIBUTING.md)
+  - Learn more about how the [Scope community operates](https://github.com/weaveworks/scope/GOVERNANCE.md)
+- Join the discussion
+  - Invite yourself to the <a href="https://slack.weave.works/" target="_blank">Weave community</a> Slack.
+  - Ask a question on the [#scope](https://weave-community.slack.com/messages/scope/) Slack channel.
+  - Send an email to [Scope community group](https://groups.google.com/forum/#!forum/scope-community).
+- Meetings and events:
+  - Join the [Weave User Group](https://www.meetup.com/pro/Weave/) and get invited to online talks, hands-on training and meetups in your area.
+  - Join (and read up on) the regular [Scope community meetings](https://docs.google.com/document/d/103_60TuEkfkhz_h2krrPJH8QOx-vRnPpbcCZqrddE1s/edit).
+- [File an issue](https://github.com/weaveworks/scope/issues/new).
+
+Your feedback is always welcome!
