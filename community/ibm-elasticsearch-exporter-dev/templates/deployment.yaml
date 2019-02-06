@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "elasticsearch-exporter.fullname" . }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "elasticsearch-exporter.name" . }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "elasticsearch-exporter.name" . }}
+      release: "{{ .Release.Name }}"
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "elasticsearch-exporter.name" . }}
+        release: "{{ .Release.Name }}"
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: elasticsearch-exporter
+        productID: elasticsearch-exporter_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{- if .Values.priorityClassName }}
+      priorityClassName: "{{ .Values.priorityClassName }}"
+{{- end }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["elasticsearch_exporter",
+                    "-es.uri={{ .Values.es.uri }}",
+                    "-es.all={{ .Values.es.all }}",
+                    "-es.indices={{ .Values.es.indices }}",
+                    "-es.timeout={{ .Values.es.timeout }}",
+                    {{- if .Values.es.ssl.enabled }}
+                    "-es.ca=/ssl/ca.pem",
+                    "-es.client-cert=/ssl/client.pem",
+                    "-es.client-private-key=/ssl/client.key",
+                    {{- end }}
+                    "-web.listen-address=:{{ .Values.service.httpPort }}",
+                    "-web.telemetry-path={{ .Values.web.path }}"]
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              drop:
+                - SETPCAP
+                - MKNOD
+                - AUDIT_WRITE
+                - CHOWN
+                - NET_RAW
+                - DAC_OVERRIDE
+                - FOWNER
+                - FSETID
+                - KILL
+                - SETGID
+                - SETUID
+                - NET_BIND_SERVICE
+                - SYS_CHROOT
+                - SETFCAP
+            readOnlyRootFilesystem: true
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          ports:
+            - containerPort: {{ .Values.service.httpPort }}
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+          volumeMounts:
+            {{- if .Values.es.ssl.enabled }}
+            - mountPath: /ssl
+              name: ssl
+            {{- end }}
+{{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+{{- end }}
+      volumes:
+        {{- if .Values.es.ssl.enabled }}
+        - name: ssl
+          secret:
+            secretName: {{ template "elasticsearch-exporter.fullname" . }}-cert
+        {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
