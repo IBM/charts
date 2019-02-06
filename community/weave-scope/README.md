@@ -83,9 +83,9 @@ If you have any questions, feedback, or problems with Scope:
 
 - Docs
   - Read [the Weave Scope docs](https://www.weave.works/docs/scope/latest/introducing/)
-  - Check out the [frequently asked questions](https://github.com/weaveworks/scope/site/faq.md)
-  - Find out how to [contribute to Scope](https://github.com/weaveworks/scope/CONTRIBUTING.md)
-  - Learn more about how the [Scope community operates](https://github.com/weaveworks/scope/GOVERNANCE.md)
+  - Check out the [frequently asked questions](https://github.com/weaveworks/scope/blob/master/site/faq.md)
+  - Find out how to [contribute to Scope](https://github.com/weaveworks/scope/blob/master/CONTRIBUTING.md)
+  - Learn more about how the [Scope community operates](https://github.com/weaveworks/scope/blob/master/GOVERNANCE.md)
 - Join the discussion
   - Invite yourself to the <a href="https://slack.weave.works/" target="_blank">Weave community</a> Slack.
   - Ask a question on the [#scope](https://weave-community.slack.com/messages/scope/) Slack channel.
