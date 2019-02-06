@@ -67,6 +67,22 @@ $ helm install --name my-release -f values.yaml stable/ibm-gerrit-dev
 
 > **Tip**: You can use the default `values.yaml`
 
+## Note (Cluster Image Security)
+As container image security feature is enabled, create an image policy for a namespace with the following rule for the chart to be deployed in the `default` namespace:
+
+```console
+apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
+kind: ImagePolicy
+metadata:
+  name: helm-chart
+  namespace: default
+spec:
+  repositories:
+  - name: docker.io/geissonator/ubuntu-gerrit-ppc64le:v1
+    policy:
+      va:
+        enabled: false
+```
 ## Support
 
 The helm charts are provided "as-is" and without warranty of any kind.
