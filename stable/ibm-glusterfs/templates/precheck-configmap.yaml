@@ -273,12 +273,31 @@ data:
       topology_info = json.loads(config_data["topology"])
 
       if topology_info is None:
-        msg = "Please configure Heketi Topology nodes before proceeding install"
+        msg = "Please configure Heketi Topology nodes before proceeding with the installation"
         return "fail", msg
 
-      if len(topology_info) < 3:
-        msg = "Minimum number of storage nodes in Heketi Topology must be 3"
-        return "fail", msg
+      volumeType = "{{ .Values.storageClass.volumeType }}"
+      
+      if volumeType == "none":
+        replicas = 1
+        if (replicas > len(topology_info)):
+          msg = "Number of nodes required to satisfy the topology are fewer than the replicas requested."
+          return "fail", msg
+      elif volumeType.split(':')[0] == "replicate":
+        replicas = int(volumeType.split(':')[1])
+        if (replicas <= 0 or replicas > len(topology_info)):
+          msg = "Number of nodes required to satisfy the topology are fewer than the replicas requested."
+          return "fail", msg
+      elif volumeType.split(':')[0] == "disperse":
+        replicas = int(volumeType.split(':')[2])
+        if (replicas <= 0 
+        or 
+        (replicas + int(volumeType.split(':')[1])) > len(topology_info) 
+        or 
+        (int(volumeType.split(':')[1]) % replicas) != 0):
+          msg = "Number of nodes required to satisfy a dispersed topology do not fulfill replicas count requested."
+          return "fail", msg
+
 
       return retval, msg
 
