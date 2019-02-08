@@ -56,40 +56,49 @@ data:
 
     HEKETI_DB_PATH=${HEKETI_DB_PATH:-/var/lib/heketi/heketi.db}
 
+    echo "heketi-topology-load: Started loading heketi topology"
+
     if [ -f /backupdb/heketi.db.gz ] ; then
       gunzip -c /backupdb/heketi.db.gz > "${HEKETI_DB_PATH}"
       if [ $? -ne 0 ] ; then
-        echo "Unable to copy database"
+        echo "heketi-topology-load: Unable to copy /backupdb/heketi.db.gz database"
         exit 1
       fi
-      echo "Copied backup db to ${HEKETI_DB_PATH}"
+      echo "heketi-topology-load: Copied backup db [/backupdb/heketi.db.gz] to ${HEKETI_DB_PATH}"
+
     elif [ -f /backupdb/heketi.db ] ; then
       cp /backupdb/heketi.db "${HEKETI_DB_PATH}"
       if [ $? -ne 0 ] ; then
-        echo "Unable to copy database"
+        echo "heketi-topology-load: Unable to copy /backupdb/heketi.db database"
         exit 1
       fi
-      echo "Copied backup db to ${HEKETI_DB_PATH}"
+      echo "heketi-topology-load: Copied backup db [/backupdb/heketi.db] to ${HEKETI_DB_PATH}"
     fi
 
     /usr/bin/heketi --config=/etc/heketi/heketi.json &
 
-    until curl http://localhost:8080/hello | grep "Hello from Heketi"; do echo "Heketi: Waiting for Heketi to come up"; sleep 1; done
+    until curl http://localhost:8080/hello | grep "Hello from Heketi"; do echo "heketi-topology-load: Waiting for Heketi to come up"; sleep 1; done
 
     topology_info=$(heketi-cli topology info)
-    echo "Heketi: Before loading topology. Topology Info: $topology_info | End"
+    echo "heketi-topology-load: Before loading topology. Topology Info: START | $topology_info | END"
 
     if [ -z "$topology_info" ] ; then
 
       while true
       do
-        echo "Heketi: Loading heketi topology"
+        echo "heketi-topology-load: Loading heketi topology"
         output_topo="$(heketi-cli topology load --json=/topology/heketi-topology.json 2>&1)"
 
         if [ $? -ne 0 ] || [[ "$output_topo" = *"Unable to"* ]] ; then
-          echo "Heketi: Unable to load the heketi topology. $output_topo | End"
+          echo "heketi-topology-load: Unable to load the heketi topology. |$output_topo | End"
         else
-          echo "Heketi: Successfully loaded heketi topology"
+
+          loaded_topo=$(heketi-cli topology info)
+          echo "heketi-topology-load: After loading topology. Topology Info: START | $loaded_topo | END"
+
+          sleep "{{ .Values.heketi.dbSyncupDelay }}"
+
+          echo "heketi-topology-load: Successfully loaded heketi topology"
           break
         fi
 
@@ -99,24 +108,72 @@ data:
 
       done
     else 
-      echo "Heketi: Heketi topology is already available. Skipping heketi load topology!"
+      echo "heketi-topology-load: Heketi topology is already available. Skipping heketi load topology!"
     fi
+
+  heketi-topology-verify.sh: |
+    #!/bin/bash
+
+    HEKETI_DB_PATH=${HEKETI_DB_PATH:-/var/lib/heketi/heketi.db}
+
+    echo "heketi-topology-verify: Start topology verification check"
+
+    if [ -f /backupdb/heketi.db.gz ] ; then
+
+      db_size=$(stat -c %s /backupdb/heketi.db.gz)
+      echo "heketi-topology-verify: size of heketi.db.gz is $db_size"
+
+      if [ $db_size -le 0 ] ; then
+        echo "heketi-topology-verify: heketi.db.gz size is $db_size. Topology info is not available."
+        exit 1
+      fi
+
+      gunzip -c /backupdb/heketi.db.gz > "${HEKETI_DB_PATH}"
+      if [ $? -ne 0 ] ; then
+        echo "heketi-topology-verify: Unable to copy database [/backupdb/heketi.db.gz]"
+        exit 1
+      fi
+      echo "heketi-topology-verify: Copied backup db [/backupdb/heketi.db.gz] to ${HEKETI_DB_PATH}"
+
+    elif [ -f /backupdb/heketi.db ] ; then
+      cp /backupdb/heketi.db "${HEKETI_DB_PATH}"
+      if [ $? -ne 0 ] ; then
+        echo "heketi-topology-verify: Unable to copy database [/backupdb/heketi.db]"
+        exit 1
+      fi
+      echo "heketi-topology-verify: Copied backup db [/backupdb/heketi.db] to ${HEKETI_DB_PATH}"
+    fi
+
+    /usr/bin/heketi --config=/etc/heketi/heketi.json &
+    until curl http://localhost:8080/hello | grep "Hello from Heketi"; do echo "Heketi: Waiting for Heketi to come up"; sleep 1; done
+
+    topology_info=$(heketi-cli topology info)
+    echo "heketi-topology-verify: Topology Info: START | $topology_info | END"
+
+    node_count=$(heketi-cli node list | wc -l)
+    echo "heketi-topology-verify: Storage node count: start | $node_count | End"
+    if [ $node_count -le 0 ] ; then
+      echo "heketi-topology-verify: No Storage node present in Topology. Can not proceed."
+      exit 1
+    fi
+    
+    echo "heketi-topology-verify: topology verification complete"
 
   is_gluster_daemon_up.sh: |
     #!/bin/bash
     
-    echo "Checking GlusterFS Daemonset's Readiness"
+    echo "is_gluster_daemon_up: Checking GlusterFS Daemonset's Readiness"
 
     while true
     do 
        output=$(kubectl get ds {{ include "sch.names.fullCompName" (list . $glusterfsdsName) }} -o=custom-columns=A:.status.numberReady,B:.status.desiredNumberScheduled --no-headers=true | tr -s " " | awk '$1 == $2 {print "READY"}')
 
        if [ "$output" == "READY" ]; then
-         echo "GlusterFS Daemonset is Ready."
+         echo "is_gluster_daemon_up: GlusterFS Daemonset is Ready."
          break
        fi
  
-       echo "GlusterFS Daemonset is not ready yet!"
+       echo "is_gluster_daemon_up: GlusterFS Daemonset is not ready yet!"
 
        sleep 1
     done
