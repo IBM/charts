@@ -1,4 +1,4 @@
-{{/*Copyright IBM Corporation 2018. All Rights Reserved.*/}}
+{{/*Copyright IBM Corporation 2019. All Rights Reserved.*/}}
 {{- define "override_config_map" }}
 apiVersion: v1
 kind: ConfigMap
@@ -79,7 +79,7 @@ data:
         <denyAnonymousReadAccess>true</denyAnonymousReadAccess>
       </authorizationStrategy>
 {{- if .Values.Master.LoginOpenIdConnect }}
-      <securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm" plugin="oic-auth@1.3">
+      <securityRealm class="org.jenkinsci.plugins.oic.OicSecurityRealm" plugin="oic-auth@1.5">
         <clientId>jenkins00</clientId>
         <clientSecret>SECRET</clientSecret>
         <tokenServerUrl>(IDENTITY_URL)/oidc/endpoint/OP/token</tokenServerUrl>
@@ -286,14 +286,14 @@ data:
 
     cp /var/jenkins_config/jenkins.CLI.xml /var/jenkins_home;
     cp  /var/jenkins_config/jenkins.model.JenkinsLocationConfiguration.xml /var/jenkins_home;
+{{- if .Values.Master.UseSecurity }}
     kubectl get secret {{ .Release.Name }}-ibm-microclimate -o yaml | sed  -e '/admin-api-updated-token/d' > /var/jenkins_home/secret.yaml
     kubectl delete secret {{ .Release.Name }}-ibm-microclimate
     kubectl create -f /var/jenkins_home/secret.yaml
-{{- if .Values.Master.UseSecurity }}
+    rm -rf /var/jenkins_home/users
     mkdir -p /var/jenkins_home/users/admin;
     cp  /var/jenkins_config/user_config.xml /var/jenkins_home/users/admin/config.xml;
 {{- end }}
-    cp  /var/plugins/* /var/jenkins_plugins
 {{- if .Values.Master.InstallPlugins }}
     cp /var/jenkins_config/plugins.txt /var/jenkins_home;
     rm -rf /var/jenkins_plugins/*.lock
