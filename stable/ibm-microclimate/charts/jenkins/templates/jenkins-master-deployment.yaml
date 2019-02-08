@@ -41,6 +41,9 @@ spec:
       {{- end }}
       affinity:
       {{- include "nodeaffinity" . | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
         runAsUser: {{ default 0 .Values.Master.RunAsUser }}
 {{- if and (.Values.Master.RunAsUser) (.Values.Master.FsGroup) }}
@@ -54,6 +57,13 @@ spec:
           image: "{{ .Values.Master.Image }}:{{ .Values.Master.ImageTag }}"
           imagePullPolicy: "{{ .Values.Master.ImagePullPolicy }}"
           command: [ "sh", "/var/jenkins_config/apply_config.sh" ]
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
           {{- if .Values.Master.InitContainerEnv }}
           env:
 {{ toYaml .Values.Master.InitContainerEnv | indent 12 }}
@@ -113,11 +123,6 @@ spec:
             - name: JENKINS_OPTS
               value: "{{ if .Values.Master.JenkinsUriPrefix }}--prefix={{ .Values.Master.JenkinsUriPrefix }} {{ end }}{{ default "" .Values.Master.JenkinsOpts}}"
             {{- if .Values.Master.UseSecurity }}
-            - name: ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ template "jenkins.fullname" . }}
-                  key: jenkins-admin-password
             - name: ADMIN_USER
               valueFrom:
                 secretKeyRef:
