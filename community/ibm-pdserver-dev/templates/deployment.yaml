@@ -1,0 +1,76 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "pdserver.fullname" . }}
+  labels:
+    app: {{ template "pdserver.name" . }}
+    chart: {{ template "pdserver.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "pdserver.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "pdserver.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "pdserver.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: pdserver
+        productID: pdserver{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      hostname: pdserver
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+             drop:
+             - MKNOD
+          env:
+          - name: client-urls
+            value: 'http://0.0.0.0:2379'
+          - name: peer-urls
+            value: 'http://0.0.0.0:2380'
+          args: 
+          - -client-urls=$(client-urls)
+          - -peer-urls=$(peer-urls)
+          ports:
+          - name: peer-url
+            containerPort: 2380 
+          - name: client-url
+            containerPort: 2379          
+          livenessProbe:
+            httpGet:
+              path: /v2/members
+              port: 2379
+          readinessProbe:
+            httpGet:
+              path: /v2/members
+              port: 2379
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
