@@ -26,7 +26,8 @@ The Helm chart completes the following tasks:
 ## Prerequisites
 
 - An IBM® Cloud Private Version 3.1.0 or later must be installed.
-- You must use at least three storage nodes to configure GlusterFS storage cluster. For more information about creating storage nodes, see [Deployment Scenarios](#deployment-scenarios).
+- The default configuration is to use three storage nodes to configure GlusterFS Storage cluster. However, you can use less than three storage nodes to configure GlusterFS Storage cluster. You need at least one storage to successfully install GlusterFS.
+- In storage class configuration, if you specify `volumeType` as `replicate` with more than one replica count, or if you specify `volumeType` as `disperse` with more than one redundancy count, then you must use as many storage nodes as the specified replica or redundancy count. For more information about creating storage nodes, see [Deployment Scenarios](#deployment-scenarios).
 - The storage device that is used for GlusterFS must have a capacity of at least 25 GB.
 - The storage devices that you use for GlusterFS must be raw disks. They must not be formatted, partitioned, or used for file system storage needs. You must use the symbolic link (symlink) to identify the GlusterFS storage device. For more information about creating symlinks, see [Storage Devices](#storage-devices).
 - You must install the `dm_thin_pool` kernel module on all the storage nodes. For more information, see [Configure dm_thin_pool](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/manage_cluster/prepare_nodes.html).
@@ -265,29 +266,30 @@ The following table lists the configurable parameters of the `ibm-glusterfs` cha
 | arch.ppc64le                              | Architecture preference for ppc64le node                | 2 - No preference |
 | arch.s390x                                | Architecture preference for s390x node                  | 0 - Do not use    |
 | preValidation.image.repository            | Pre-validation image to use for this deployment         | ibmcom/icp-storage-util |
-| preValidation.image.tag                   | Pre-validation image tag to use for this deployment     | 3.1.0             |
+| preValidation.image.tag                   | Pre-validation image tag to use for this deployment     | 3.1.2             |
 | preValidation.image.pullPolicy            | Pre-validation image pull policy                        | IfNotPresent      |
 | gluster.image.repository                  | GlusterFS image to use for this deployment              | ibmcom/gluster    |
-| gluster.image.tag                         | GlusterFS image tag to use for this deployment          | v4.0.2            |
+| gluster.image.tag                         | GlusterFS image tag to use for this deployment          | v4.1.5            |
 | gluster.image.pullPolicy                  | GlusterFS image pull policy                             | IfNotPresent      |
 | gluster.installType                       | GlusterFS installation type.                            | Fresh             |
 | gluster.resources.requests.cpu            | Describes the minimum amount of CPU required            | Default is 500m. See Kubernetes - [CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
 | gluster.resources.requests.memory         | Describes the minimum amount of memory required         | Default is 512Mi. See Kubernetes - [Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory)                 |
 | gluster.resources.limits.cpu              | Describes the maximum amount of CPU allowed             | Default is 1000m  |
 | gluster.resources.limits.memory           | Describes the maximum amount of memory allowed          | Default is 1Gi    |
-| heketi.image.repository                   | Heketi image to use for this deployment                 | ibmcom/heketi     |
-| heketi.image.tag                          | Heketi image tag to use for this deployment             | v8.0.0            |
+| heketi.image.repository                   | Heketi image to use for this deployment                 | ibmcom/heketi     |
+| heketi.image.tag                          | Heketi image tag to use for this deployment             | v8.0.0            |
 | heketi.image.pullPolicy                   | Heketi image pull policy                                | IfNotPresent      |
 | heketi.backupDbSecret                     | Name of the k8s secret where Heketi database is backed up to | heketi-db-backup  |
+| heketi.dbSyncupDelay                      | Delay in seconds to syncup heketi DB data with backup secret | 10                |
 | heketi.authSecret                         | Secret for password of the Heketi `admin` user          |                   |
 | heketi.maxInFlightOperations              | Maximum number of requests processed by heketi at a time| 20                |
 | heketi.resources.requests.cpu             | Describes the minimum amount of CPU required            | Default is 500m   |
 | heketi.resources.requests.memory          | Describes the minimum amount of memory required         | Default is 512Mi  |
 | heketi.resources.limits.cpu               | Describes the maximum amount of CPU allowed             | Default is 1000m  |
 | heketi.resources.limits.memory            | Describes the maximum amount of memory allowed          | Default is 1Gi    |
-| heketiTopology.k8sNodeName                | Name of the kubelet node that runs the GlusterFS pod    |                   |
-| heketiTopology.k8sNodeIp                  | Storage node's network address                          |                   |
-| heketiTopology.devices                    | Raw device list                                         |                   |
+| heketiTopology.k8sNodeName                | Name of the kubelet node that runs the GlusterFS pod    | |
+| heketiTopology.k8sNodeIp                  | Storage node's network address                          | |
+| heketiTopology.devices                    | Raw device list                                         | |
 | storageClass.create                       | GlusterFS storage class to be created                   | true              |
 | storageClass.name                         | GlusterFS storage class name                            | glusterfs         |
 | storageClass.isDefault                    | GlusterFS storage class is default                      | false             |
@@ -297,7 +299,7 @@ The following table lists the configurable parameters of the `ibm-glusterfs` cha
 | storageClass.volumeNamePrefix             | GlusterFS storage class volume name prefix              | icp               |
 | storageClass.additionalProvisionerParams  | storage class additional provisioner parameters         |                   |
 | storageClass.allowVolumeExpansion         | GlusterFS storage class volume expansion to be allowed  | true              |
-| prometheus.enabled                        | Prometheus configurations to be enabled                 | false             |
+| prometheus.enabled                        | Prometheus configurations to be enabled                 | true              |
 | prometheus.path                           | Heketi path to pull the metrics                         | /metrics          |
 | prometheus.port                           | Port that Heketi service is exposed                     | 8080              |
 | nodeSelector.key                          | Node label key for GlusterFS and Heketi pods            | hostgroup         |
