@@ -46,6 +46,10 @@ In its default configuration, this chart will create the following Kubernetes re
 
 ## Prerequisites
 - Requires kubectl v1.10+.
+- Install crds:
+```bash
+$ kubectl apply --filename https://raw.githubusercontent.com/IBM/charts/master/community/knative/all-crds.yaml
+```
 - Knative requires a Kubernetes cluster v1.10 or newer with the
 [MutatingAdmissionWebhook admission controller](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#how-do-i-turn-on-an-admission-controller)
 enabled.
