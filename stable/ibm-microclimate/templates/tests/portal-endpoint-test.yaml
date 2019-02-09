@@ -20,11 +20,28 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
 spec:
+  serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
   restartPolicy: Never
   affinity:
   {{- include "nodeaffinity" . | indent 8 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: {{ .Values.global.runAsNonRoot }}
+    runAsUser: {{ .Values.global.runAsUser }}
+    {{- if .Values.global.runAsNonRoot }}
+    fsGroup: 1000
+    {{- end }}
   containers:
     - name: "{{ .Release.Name }}-portal-endpoint-test"
       image: {{ .Values.portal.repository }}:{{ .Values.portal.tag }}
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
       command: ["curl"]
       args:  ['-k','https://{{ include "sch.names.fullName" (list .) }}:9191']

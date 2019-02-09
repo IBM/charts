@@ -1,22 +1,25 @@
 # Breaking Changes
 No breaking changes.
 
-# What’s new in Chart Version 1.10.0
+# What’s new in Chart Version 1.11.0
 
 ## Microclimate
-* Microclimate portal now has a new logging feature to help with problem determination.
+* Added support for IBM Cloud Private Version 3.1.2.
+* Added IBM Cloud Pak status. For more information, see https://github.com/IBM/cloud-pak.
+* Theia upgraded to 0.3.18. 
+* Microclimate Node.js Profiling Language Server can be used to provide code highlighting in Theia editor.
 
 # Fixes
 * Various minor bug and stability fixes.
 
 
 # Prerequisites
-- IBM Cloud Private Version 3.1.1 or later. Older versions of IBM Cloud Private are supported only by chart versions v1.5.0 and earlier. Version support information can be found in the release notes of each chart release.
+- IBM Cloud Private Version 3.1.1 or 3.1.2. Version 3.1.0 is supported in chart version 1.6.0 to 1.10.0. Version support information can be found in the release notes of each chart release.
 - Ensure [socat](http://www.dest-unreach.org/socat/doc/README) is available on all worker nodes in your cluster. Microclimate uses Helm internally, and both the Helm Tiller and client require socat for port forwarding.
 - Download the IBM Cloud Private CLI, `cloudctl`, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
 
 
-# Upgrading from 1.9.0
+# Upgrading from 1.10.0
 
 Microclimate can be upgraded from the IBM Cloud Private Helm Releases view. When performing the upgrade, ensure the `Reuse Value` option is selected.
 
@@ -36,6 +39,7 @@ For detailed installation instructions go to https://microclimate-dev2ops.github
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.11.0 | February 8, 2019 | 1.11.0  | 1902 | None | IBM Cloud Pak status, Support for ICP 3.1.2 |
 | 1.10.0 | January  11, 2019 | 1.11.0  | 1901 | None | Improved logging. Various fixes and stability improvements |
 | 1.9.0 | December 13, 2018 | 1.11.0  | 1812 | None | Added support for Linux® on Power® (ppc64le). |
 | 1.8.0 | November 16, 2018 | 1.11.0  | 1811 | None | Added support for ICP 3.1.1. Various fixes and improvements |
