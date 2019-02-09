@@ -65,11 +65,36 @@ spec:
         secret:
           secretName: "{{ .Values.global.helm.tlsSecretName }}"
       {{- end }}
-
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- if .Values.global.useSecurityContext }}
+      securityContext:
+        runAsNonRoot: {{ .Values.global.runAsNonRoot }}
+        runAsUser: {{ .Values.global.runAsUser }}
+        {{- if .Values.global.runAsNonRoot }}
+        fsGroup: 1000
+        {{- end }}
+      {{- end }}
       containers:
       - name: microclimate-portal
         image: {{ .Values.portal.repository}}:{{ .Values.portal.tag}}
         imagePullPolicy: "{{ .Values.imagePullPolicy}}"
+        {{- if .Values.global.useSecurityContext }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - AUDIT_WRITE
+            - CHOWN
+            - DAC_OVERRIDE
+            - SETUID
+            - SETGID
+        {{- end }}
         volumeMounts:
         - name: shared-workspace
           mountPath: /microclimate-workspace
@@ -111,6 +136,10 @@ spec:
           {{- if .Values.global.rbac.serviceAccountName }}
           - name: SERVICE_ACCOUNT_NAME
             value: {{ .Values.global.rbac.serviceAccountName }}
+          {{- end }}
+          {{- if .Values.global.helmHost }}
+          - name: HELM_HOST
+            value: {{ .Values.global.helmHost }}
           {{- end }}
           - name: EDITOR_IMAGE
             value: {{ .Values.theia.repository}}:{{ .Values.theia.tag}}
