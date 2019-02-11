@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "node-exporter.fullname" . }}
+  labels:
+    app: {{ template "node-exporter.name" . }}
+    chart: {{ template "node-exporter.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "node-exporter.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "node-exporter.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "node-exporter.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: node-exporter
+        productID: node-exporter_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+             drop:
+              - ALL
+          ports:
+            - name: http
+              containerPort: 9100
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
+
