@@ -1,6 +1,6 @@
 # Strongloop
 
-[Strongloop](https://strongloop.com/)Open-source solutions for the API developer community
+[Strongloop](https://strongloop.com/)Open-source solutions for the API developer community.
 
 ```console
 $ helm install stable/ibm-strongloop-dev
@@ -12,7 +12,7 @@ $ helm install stable/ibm-strongloop-dev
 - Tiller 2.7.2 or later
 
 ## Resources Required
-The chart deploys pods consuming minimum resources as specified in the resources configuration parameter (default: Memory: 200Mi, CPU: 100m)
+The chart deploys pods consuming minimum resources as specified in the resources configuration parameter (default: Memory: 200Mi, CPU: 100m).
 
 ## PodSecurityPolicy Requirements
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose predefined ibm-anyuid-psp PodSecurityPolicy.
@@ -27,7 +27,7 @@ This chart bootstraps a [Strongloop](https://github.com/strongloop) deployment o
 To install the chart with the release name `my-release`:
 
 ```console
-$ helm intall --name my-release stable/ibm-strongloop-dev
+$ helm install --name my-release stable/ibm-strongloop-dev
 ```
 
 ## Uninstalling the Chart
@@ -41,7 +41,7 @@ $ helm delete my-release
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
 ## Chart Details
-This chart bootstraps a [Strongloop](https://hub.docker.com/r/ibmcom/strongloop-ppc64le/) deployment on a [Kubernetes](http://kubernetes.io) cluster
+This chart bootstraps a [Strongloop](https://hub.docker.com/r/ibmcom/strongloop-ppc64le/) deployment on a [Kubernetes](http://kubernetes.io) cluster.
 
 
 ## Configuration
@@ -53,6 +53,8 @@ The following table lists the configurable parameters of the Strongloop chart an
 | `image`                   | The image to pull and run       | `ibmcom/strongloop-ppc64le:v6.0.3`                      |
 | `imagePullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
 | `node`                    | Specify what architecture Node  | `ppc64le`                                               |
+| `service.type`            | Kubernetes service type         | `NodePort`                                              |
+| `service.port`            | Strongloop exposed port         | `41629`                                                 |
 
 
 The above parameters map to `ibm-strongloop-dev` params.
