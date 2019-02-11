@@ -8,6 +8,8 @@
 
 Installs Kibana, a web UI to query and visualize data in existing Elasticsearch clusters.
 
+THIS CHART IS NOW DEPRECATED. On March 8th, 2019 the Helm chart for IBM Cloud Private ibm-icplogging-kibana will no longer be supported and will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart.
+
 ## Chart Details
 
 This chart includes:

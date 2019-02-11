@@ -8,6 +8,8 @@
 
 Contains a fully integrated Elasticsearch solution to securely collect logs in a Kubernetes environment.
 
+THIS CHART IS NOW DEPRECATED. On March 8th, 2019 the Helm chart for IBM Cloud Private ibm-icplogging will no longer be supported and will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart. The chart is replaced by the ibm-icplogging chart in the management repository.
+
 ## Chart Details
 
 This chart deploys:
