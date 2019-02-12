@@ -3,6 +3,8 @@
 ## Introduction
 This chart deploy Prometheus(https://prometheus.io), Grafana(https://grafana.com/) and related exporters to gather metrics from configured targets, evaluate alert rules, visuliaze the metrics in preinstalled dashboards.
 
+THIS CHART IS NOW DEPRECATED. On March 8th, 2019 the Helm chart for IBM Cloud Private ibm-icpmonitoring will no longer be supported and will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart. The chart is replaced by the ibm-icpmonitoring chart in the management repository.
+
 ## Chart Details
 This chart includes
   - Deployments of prometheus, alertmanager, grafana, kube-state-metrics exporter, collectd exporter, elasticsearch exporter and corresponding services;
