@@ -1,13 +1,7 @@
-# What’s new in Chart Version 1.9.2
+# What’s new in Chart Version 1.9.3
 ### Data Collector Enhancements
- - Static and dynamic dependency information is now collected
-### Analysis Enhancements
- - Analysis includes the relationships between Applications and Shared Libraries
- - Analysis includes the relationships between Applications and MQ QueueManagers
-### Migration Enhancements
- - Required Shared Libraries are identified during migration
- - Binaries can be sourced from a Maven repository during migration
- - Migrated applications use the latest CloudPak Liberty Helm charts
+ - Data Collector collects in English language locale to resolve locale based issues
+ - MQ producers are now detected and matched for WAS applications
 
 # Fixes
 
@@ -21,6 +15,7 @@
 # Version History
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.9.3 | Feb 11, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.3 ibmcom/transformation-advisor-server:1.9.3 ibmcom/transformation-advisor-ui:1.9.3 | None | Data Collector Patch       |
 | 1.9.2 | Feb 05, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.2 ibmcom/transformation-advisor-server:1.9.2 ibmcom/transformation-advisor-ui:1.9.2 | None | Add Shared Libs, MQManagers|
 | 1.9.1 | Dec 13, 2018| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.1 ibmcom/transformation-advisor-server:1.9.1 ibmcom/transformation-advisor-ui:1.9.1 | None | DC Enhancements            |
 | 1.9.0 | Nov 15, 2018| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.0 ibmcom/transformation-advisor-server:1.9.0 ibmcom/transformation-advisor-ui:1.9.0 | None | Improved MQ Analysis       |
