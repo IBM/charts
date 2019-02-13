@@ -3,7 +3,7 @@
 [RethinkDB](https://github.com/rethinkdb/rethinkdb) Open-source database for building realtime web applications.
 
 ```console
-$ helm install stable/ibm-rethinkdb-dev
+$ helm install community/ibm-rethinkdb-dev
 ```
 
 ## Prerequisites
@@ -26,7 +26,7 @@ This chart requires a PodSecurityPolicy to be bound to the target namespace prio
 To install the chart with the release name `my-release`:
 
 ```console
-$ helm intall --name my-release stable/ibm-rethinkdb-dev
+$ helm intall --name my-release community/ibm-rethinkdb-dev
 ```
 
 ## Uninstalling the Chart
@@ -61,7 +61,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/ibm-rethinkdb-dev
+$ helm install --name my-release -f values.yaml community/ibm-rethinkdb-dev
 ```
 
 > **Tip**: You can use the default `values.yaml`
