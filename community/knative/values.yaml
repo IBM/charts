@@ -64,13 +64,13 @@ build:
 
 eventing:
   controller:
-  name: "eventing-controller"
-  replicas: 1
-  serviceAccount:
     name: "eventing-controller"
-  image:
-    repository: "gcr.io/knative-releases/github.com/knative/eventing/cmd/controller@sha256"
-    tag: "3486cb9d337b829907532e78c8098b6680fbe3aa10a0aa81e7db327bb8980640"
+    replicas: 1
+    serviceAccount:
+      name: "eventing-controller"
+    image:
+      repository: "gcr.io/knative-releases/github.com/knative/eventing/cmd/controller@sha256"
+      tag: "3486cb9d337b829907532e78c8098b6680fbe3aa10a0aa81e7db327bb8980640"
 
   webhook:
     name: "webhook"
@@ -80,7 +80,7 @@ eventing:
     image:
       repository: "gcr.io/knative-releases/github.com/knative/eventing/cmd/webhook@sha256"
       tag: "1ec64e26ed2b8895e783e9c1a07a11376dcb244f75ad166b2b116f124b2f2d44"
-
+      
   in-memory-provisioner:
     controller:
       name: "in-memory-channel-controller"
@@ -89,7 +89,7 @@ eventing:
       image:
         repository: "gcr.io/knative-releases/github.com/knative/eventing/pkg/controller/eventing/inmemory/controller@sha256"
         tag: "85a6954a9ab118872f6826425b213e57589de8f9f2ac97d31aef5d5022104532"
-  
+      
     dispatcher:
       name: "in-memory-channel-dispatcher"
       replicas: 1
@@ -98,7 +98,7 @@ eventing:
       image:
         repository: "gcr.io/knative-releases/github.com/knative/eventing/cmd/fanoutsidecar@sha256"
         tag: "a04bdbe0ffad3c47286ebfb961648e9f1d2b366aea243e9ea1ae591e706de06d"
-  
+
   kafka-provisioner:
     controller:
       name: "kafka-channel-controller"
@@ -257,13 +257,196 @@ serving:
           definitionKnative: "grafana-dashboard-definition-knative"
           definitionIstio: "grafana-dashboard-definition-istio"
 
+      # resources for kube-controller-service
+      kubeControllerService:
+        portName: "http-metrics"
+        name: "kube-controller-manager"
+        port: 10252
+        targetPort: 10252
+        type: "ClusterIP"
+
+      # resources for kube-state-metrics-service and deployment (pod)
+      kubeState:
+        service:
+          name: "kube-state-metrics"
+          mainPort:
+            name: "https-main"
+            port: 8443
+            targetPort: https-main
+          selfPort:
+            name: "https-self"
+            port: 9443
+            targetPort: "https-self"
+        deployment:
+          name: "kube-state-metrics"
+          replicas: 1
+          proxyMainImage:
+            repository: "quay.io/coreos/kube-rbac-proxy"
+            tag: "v0.3.0"
+            pullPolicy: "IfNotPresent"
+            name: "kube-rbac-proxy-main"
+            ports:
+              containerPort: 8443
+              name: "https-main"
+            resourceLimits:
+              cpu: "20m"
+              memory: "40Mi"
+            resourceRequests:
+              cpu: "10m"
+              memory: "20Mi"
+          proxySelfImage:
+            repository: "quay.io/coreos/kube-rbac-proxy"
+            tag: "v0.3.0"
+            pullPolicy: "IfNotPresent"
+            name: "kube-rbac-proxy-self"
+            ports:
+              containerPort: 9443
+              name: "https-self"
+            resourceLimits:
+              cpu: "20m"
+              memory: "40Mi"
+            resourceRequests:
+              cpu: "10m"
+              memory: "20Mi"
+          metricsImage:
+            repository: "quay.io/coreos/kube-state-metrics"
+            tag: "v1.3.0"
+            pullPolicy: "IfNotPresent"
+            name: "kube-state-metrics"
+            container: "kube-state-metrics"
+            cpu: "100m"
+            extraCpu: "1m"
+            memory: "100Mi"
+            extraMemory: "2Mi"
+            threshold: 5
+            deployment: "kube-state-metrics"
+          resizerImage:
+            repository: "k8s.gcr.io/addon-resizer"
+            tag: "1.7"
+            pullPolicy: "IfNotPresent"
+            name: "addon-resizer"
+            resourceLimits:
+              cpu: "100m"
+              memory: "30Mi"
+            resourceRequests:
+              cpu: "100m"
+              memory: "30Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+
+      # resources for node-exporter-service
+      nodeExporterService:
+        name: "node-exporter"
+        portName: "https"
+        port: 9100
+        type: "ClusterIP"
+        image:
+          repository: "quay.io/coreos/kube-rbac-proxy"
+          tag: "v0.3.0"
+
+      # resources for prometheus-system-discovery-service
+      prometheusSystemDiscoveryService:
+        name: "prometheus-system-discovery"
+        app: "prometheus"
+        portName: "web"
+        port: 9090
+        targetPort: "web"
+        type: "ClusterIP"
+
+      # resources for:
+      # prometheus-system-np-service, prometheus-system-StatefulSet
+      prometheusSystemNp:
+        service:
+          name: "prometheus-system-np"
+          app: "prometheus"
+          port: 8080
+          targetPort: 9090
+          type: "NodePort"
+        statefulSet:
+          name: "prometheus-system"
+          podManagementPolicy: Parallel
+          replicas: 2
+          app: "prometheus"
+          image:
+            repository: "prom/prometheus"
+            tag: "v2.2.1"
+            imagePullPolicy: "IfNotPresent"
+            livenessProbe:
+              failureThreshold: 10
+              port: "web"
+              scheme: "HTTP"
+              initialDelaySeconds: 30
+              timeoutSeconds: 3
+              name: "prometheus"
+              ports:
+                containerPort: 9090
+                name: "web"
+            readinessProbe:
+              failureThreshold: 10
+              port: "web"
+              scheme: "HTTP"
+              timeoutSeconds: 3
+            requestResouceMemory: "400Mi"
+          terminationGracePeriodSeconds: 600
+          updateStrategyType: "RollingUpdate"
+
+      # resources for kube-state-metrics
+      # ClusterRoleBinding, ClusterRole, RoleBinding
+      kubeStateMetrics:
+        crb:
+          name: "kube-state-metrics"
+        cr:
+          name: "kube-state-metrics"
+        rb:
+          name: "kube-state-metrics"
+          roleName: "kube-state-metrics-resizer"
+        svcacct:
+          name: "kube-state-metrics"
+
+      # resources for node-exporter
+      # ClusterRoleBinding, ClusterRole
+      nodeExporter:
+        cr:
+          name: "node-exporter"
+        crb:
+          name: "node-exporter"
+        svcacct:
+          name: "node-exporter"
+        image:
+          repository: "quay.io/prometheus/node-exporter"
+          tag: "v0.15.2"
+
+      # resources for prometheus-system
+      # ClusterRoleBinding, ClusterRole, RoleBinding, Role
+      prometheusSystem:
+        crb:
+          name: "prometheus-system"
+        cr:
+          name: "prometheus-system"
+        rb:
+          name: "prometheus-system"
+          namespace: "default"
+        role:
+          namespace: "default"
+        svcacct:
+          name: "prometheus-system"
+
+      revision:
+        metrics:
+          requestCountName: "revisionrequestcount"
+          requestDurationName: "revisionrequestduration"
+          requestSizeName: "revisionrequestsize"
+          responseSizeName: "revisionresponsesize"
+        rule:
+          promHttpName: "revisionpromhttp"
+        prometheus:
+          promHandlerName: "revisionpromhandler"
+
     zipkin:
       name: "zipkin"
-
       port: 9411
-
       replicas: 1
-
       image:
         name: "docker.io/openzipkin/zipkin"
         tag: "2.12.1"
@@ -276,4 +459,3 @@ serving:
           port: 8001
           serviceName: "kibana-logging"
           appPath: "app/kibana#/"
-
