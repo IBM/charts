@@ -4,9 +4,9 @@ This chart installs Knative components for Build, Serving and Eventing.
 
 ## Introduction
 
-- Visit [knative build](./charts/build/README.md) for more information about Build.
-- Visit [knative eventing](./charts/eventing/README.md) for more information about Eventing.
-- Visit [knative serving](./charts/serving/README.md) for more information about Serving.
+- Visit [knative build](https://github.com/IBM/charts/blob/master/community/knative/charts/build/README.md) for more information about Build.
+- Visit [knative eventing](https://github.com/IBM/charts/blob/master/community/knative/charts/eventing/README.md) for more information about Eventing.
+- Visit [knative serving](https://github.com/IBM/charts/blob/master/community/knative/charts/serving/README.md) for more information about Serving.
 
 ## Chart Details
 
@@ -54,8 +54,6 @@ enabled.
 ```bash
 $ kubectl apply --filename https://raw.githubusercontent.com/knative/serving/v0.2.3/third_party/istio-1.0.2/istio.yaml
 ```
-or by following these steps:
-[Installing Istio](https://github.com/knative/docs/blob/master/install/Knative-with-any-k8s.md#installing-istio)
 
 - Install crds:
 
@@ -86,7 +84,7 @@ Follow [image security enforcement using ICP](https://www.ibm.com/support/knowle
 
 ## Installing the Chart
 
-Please ensure that you have reviewed the [prerequisites](#prerequisites).
+Please ensure that you have reviewed the prerequisites section.
 
 To install the chart using helm cli:
 
@@ -95,13 +93,50 @@ Install Knative
 $ helm install ./knative --name <my-release> [--tls]
 ```
 
-The command deploys Knative on the Kubernetes cluster in the default configuration.  The [configuration](#configuration) section lists the parameters that can be configured during installation.
+The command deploys Knative on the Kubernetes cluster in the default configuration.  The configuration section lists the parameters that can be configured during installation.
 
 You can use the command ```helm status <my-release> [--tls]``` to get a summary of the various Kubernetes artifacts that make up your Knative deployment.
 
 ### Configuration
 
-[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
+This chart is made up of multiple subcharts in the structure below:
+```
+knative
+├── build
+├── eventing
+│   ├── in-memory-provisioner
+│   └── kafka-provisioner
+└── serving
+    └── monitoring
+        ├── elasticsearch
+        ├── prometheus
+        └── zipkin
+```
+To enable/disable each subchart, change the following values:
+```
+global:
+  build:
+    enabled: true
+  eventing:
+    enabled: false
+    in-memory-provisioner:
+      enabled: false
+    kafka-provisioner:
+      enabled: false
+  serving:
+    enabled: true
+    monitoring:
+      enabled: false
+      elasticsearch:
+        enabled: false
+      prometheus:
+        enabled: false
+      zipkin:
+        enabled: false
+```
+Disabling a chart will disable all charts below it in the chart structure. When enabling a subset of charts note that the parent charts are prerequisites and must be installed previously or in conjunction. 
+
+[Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/values.yaml) outlines the configuration options that are supported by this chart.
 To configure the individual components, change the values located within each subchart.
 
 ### Verifying the Chart
@@ -126,6 +161,8 @@ $ kubectl delete --filename https://raw.githubusercontent.com/IBM/charts/master/
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
 ## Limitations
+- Only one instance of each knative component can exist per cluster.
+- There is no rollback or upgrade path for this chart.
 
 Look inside each subchart to view the their limitations.
 

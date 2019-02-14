@@ -32,7 +32,7 @@ or following these steps:
 
 ## Installing the Chart
 
-Please ensure that you have reviewed the [prerequisites](#prerequisites).
+Please ensure that you have reviewed the prerequisites section.
 To install the chart using helm cli:
 
 Install kafka provisioner for eventing
@@ -42,9 +42,9 @@ $ helm install ./knative/charts/eventing/charts/kafka-provisioner
 
 ### Configuration
 
-[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
+[Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/eventing/charts/kafka-provisioner/values.yaml) outlines the configuration options that are supported by this chart.
 
-If your installing Knative Eventing with a Kafka provisioner you must change `bootstrapServers: " "` to point towards an existing Kafka Broker in the [Values.yaml](./values.yaml).
+If your installing Knative Eventing with a Kafka provisioner you must change `bootstrapServers: " "` to point towards an existing Kafka Broker in the [Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/eventing/charts/kafka-provisioner/values.yaml).
 
 ### Verifying the Chart
 
