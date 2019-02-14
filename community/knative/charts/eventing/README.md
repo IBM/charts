@@ -37,20 +37,20 @@ or by following these steps:
 
 ## Installing the Chart
 
-Please ensure that you have reviewed the [prerequisites](#prerequisites).
+Please ensure that you have reviewed the prerequisites section.
 
 To install the chart using helm cli:
 
 Knative eventing provides you with an option to choose between Kafka or In memory provisioner.
 
-For in-memory-provisioner in [Values.yaml](./values.yaml) set:
+For in-memory-provisioner in [Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/eventing/values.yaml) set:
 ```bash
 in-memory-provisioner:
     enabled: true
 kafka-provisioner:
     enabled: false
 ```
-For kafka-provisioner in [Values.yaml](./values.yaml) set:
+For kafka-provisioner in [Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/eventing/values.yaml) set:
 ```bash
 in-memory-provisioner:
     enabled: false
@@ -65,9 +65,9 @@ $ helm install ./knative/eventing
 
 ### Configuration
 
-If your installing Knative Eventing with a Kafka provisioner you must change `bootstrapServers: " "` to point towards an existing Kafka Broker in the [Values.yaml](./charts/kafka-provisioner/values.yaml).
+If your installing Knative Eventing with a Kafka provisioner you must change `bootstrapServers: " "` to point towards an existing Kafka Broker in the [Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/eventing/charts/kafka-provisioner/values.yaml).
 
-[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
+[Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/eventing/values.yaml) outlines the configuration options that are supported by this chart.
 
 ### Verifying the Chart
 

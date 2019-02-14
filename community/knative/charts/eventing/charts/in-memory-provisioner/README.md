@@ -32,7 +32,7 @@ or following these steps:
 
 ## Installing the Chart
 
-Please ensure that you have reviewed the [prerequisites](#prerequisites).
+Please ensure that you have reviewed the prerequisites section.
 To install the chart using helm cli:
 
 Install In Memory provisioner for eventing
@@ -42,7 +42,7 @@ $ helm install ./knative/charts/eventing/charts/in-memory-provisioner
 
 ### Configuration
 
-[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
+[Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/eventing/charts/in-memory-provisioner/values.yaml) outlines the configuration options that are supported by this chart.
 
 ### Verifying the Chart
 
