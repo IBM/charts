@@ -146,7 +146,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `global.k8sIngressSelector` | Specifies the gateway used for legacy k9s ingress resources | `ingress` or any defined gateway | `ingress` |
 | `global.k8sIngressHttps` | Specifies whether to use the https for ingress | true/false | `false` |
 | `global.proxy.repository` | Specifies the proxy image location | valid image repository | `ibmcom/istio-proxyv2` |
-| `global.proxy.tag` | Specifies the proxy image version | valid image tag | `1.0.2` |
+| `global.proxy.tag` | Specifies the proxy image version | valid image tag | `1.0.2.1` |
 | `global.proxy.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | `{requests.cpu: 10m}` |
 | `global.proxy.concurrency` | Controls number of proxy worker threads. If set to 0 (default), then start worker thread for each CPU thread/core | valid number(>=0) | `0` |
 | `global.proxy.accessLogFile`| Specifies the access log for each sidecar, an empty string will disable access log for sidecar | valid file path or empty string | `/dev/stdout` |
@@ -160,7 +160,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `global.proxy.envoyStatsd.host` | Specifies host for the destination statsd in envoy | destination statsd host | `istio-statsd-prom-bridge` |
 | `global.proxy.envoyStatsd.port` | Specifies host port for the destination statsd in envoy | destination statsd port | `9125` |
 | `global.proxy_init.repository` | Specifies the proxy init image location | valid image repository | `ibmcom/istio-proxy_init` |
-| `global.proxy_init.tag` | Specifies the proxy init image version | valid image tag | `1.0.2` |
+| `global.proxy_init.tag` | Specifies the proxy init image version | valid image tag | `1.0.2.1` |
 | `global.imagePullPolicy` | Specifies the image pull policy | valid image pull policy | `IfNotPresent` |
 | `global.controlPlaneSecurityEnabled` | Specifies whether control plane mTLS is enabled | true/false | `false` |
 | `global.disablePolicyChecks` | Specifies whether to disables mixer policy checks | true/false | `false` |
@@ -172,7 +172,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `global.meshExpansion` | Specifies whether to support mesh expansion | true/false | `false` |
 | `global.meshExpansionILB` | Specifies whether to expose the pilot and citadel mtls and the plain text pilot ports on an internal gateway | true/false | `false` |
 | `global.kubectl.repository` | Specifies the kubectl image location | valid image repository | `ibmcom/kubectl` |
-| `global.kubectl.tag` | Specifies the kubectl image version | valid image tag | `v1.11.3` |
+| `global.kubectl.tag` | Specifies the kubectl image version | valid image tag | `v1.12.4` |
 | `global.priorityClassName` | Specify priority class, it can be 'system-cluster-critical' or 'system-node-critical' | valid priority class name | `""` |
 | `gobal.defaultResources` | Specifies resources(CPU/Memory) requests & limits applied to all deployments | valid CPU&memory settings | `{requests.cpu: 10m}` |
 | `global.crds` | Specifies whether to include the CRDS when generating the template | true/false | `true` |
@@ -273,7 +273,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `pilot.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
 | `pilot.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `5` |
 | `pilot.image.repository` | Specifies the Pilot image location | valid image repository | `ibmcom/istio-pilot` |
-| `pilot.image.tag` | Specifies the Pilot image version | valid image tag | `1.0.2` |
+| `pilot.image.tag` | Specifies the Pilot image version | valid image tag | `1.0.2.1` |
 | `pilot.sidecar` | Specifies whether to enable the envoy sidecar to Pilot | true/false | `true` |
 | `pilot.traceSampling` | Specifies the number of trace sample for Pilot | number | `100.0` |
 | `pilot.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | `{requests.cpu: 500m, requests.memory: 2048Mi}` |
@@ -295,7 +295,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `grafana.enabled` | Specifies whether enable grafana addon should be installed | true/false | `false` |
 | `grafana.replicaCount` | Specifies number of desired pods for grafana | number | `1` |
 | `grafana.image.repository` | Specifies the Grafana image location | valid image repository | `ibmcom/istio-grafana` |
-| `grafana.image.tag` | Specifies the Grafana image version | valid image tag | `1.0.2` |
+| `grafana.image.tag` | Specifies the Grafana image version | valid image tag | `1.0.2.1` |
 | `grafana.persist` | Specifies whether enable date persistence for the grafana deployment | true/false | `false` |
 | `grafana.storageClassName` | Specifies storage class name for the grafana deployment | valid storage class name | `""` |
 | `grafana.security.enabled` | Specifies security for the grafana service | true/false | `false` |
@@ -312,7 +312,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `prometheus.enabled` | Specifies whether Prometheus addon should be installed | true/false | `true` |
 | `prometheus.replicaCount` | Specifies number of desired pods for Prometheus | number | `1` |
 | `prometheus.image.repository` | Specifies the Prometheus image location | valid image repository | `ibmcom/prometheus` |
-| `prometheus.image.tag` | Specifies the Prometheus image version | valid image tag | `v2.3.1` |
+| `prometheus.image.tag` | Specifies the Prometheus image version | valid image tag | `v2.3.1-f2` |
 | `prometheus.service.annotations` | Specifies the annotation for the Prometheus service |  valid service annotations | `{}` |
 | `prometheus.service.nodePort.enabled` | Specifies whether to enable Node Port for Prometheus service |  true/false | `false` |
 | `prometheus.service.nodePort.port` | Specifies Node Port for Prometheus service | valid service Node Port | `32090` |
@@ -359,7 +359,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `kiali.enabled` | Specifies whether kiali addon should be installed | true/false | `false` |
 | `kiali.replicaCount` | Specifies number of desired pods for kiali | number | `1` |
 | `kiali.image.repository` | Specifies the kiali image location | valid image repository | `ibmcom/kiali` |
-| `kiali.image.tag` | Specifies the kiali image version | valid image tag | `0.8` |
+| `kiali.image.tag` | Specifies the kiali image version | valid image tag | `v0.8.0.1` |
 | `kiali.ingress.enabled` | Specifies whether the kiali ingress enabled | true/false | `false` |
 | `kiali.ingress.hosts` | Specify the hosts for Kiali ingress | array consists of valid hosts | [] |
 | `kiali.ingress.annotations` | Specify the annotations for Kiali ingress | object consists of valid annotations | {} |
