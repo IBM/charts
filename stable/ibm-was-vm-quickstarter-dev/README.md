@@ -250,7 +250,10 @@ The following tables lists the configurable parameters of the `ibm-was-vm-quicks
 | `migration.mountPoint`          | The directory path of the migration store on the NFS server  | |
 | `migration.serverAddress`       | The IP address or host name of the NFS server |  |
 | `image.pullPolicy`              | The pull policy for the WAS VM Quickstarter Docker images  | `Always` |
-
+| `redhatSatellite.ip`            | The IP address of the Red Hat Satellite server. | |
+| `redhatSatellite.fqdn`          | The fully qualified domain name of the Red Hat Satellite server. | |
+| `redhatSatellite.organization`  | The organization name for the Red Hat Satellite subscription. | |
+| `redhatSatellite.activationKey` | The activation key for the Red Hat Satellite subscription. | |
 
  You should create a YAML file that specifies the values for the parameters that can be used when installing the chart.  Alternatively, specify each parameter using the `--set key=value[,key=value]` argument when you run the `helm install` command.
 

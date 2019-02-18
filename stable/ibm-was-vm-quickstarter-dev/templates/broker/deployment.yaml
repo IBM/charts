@@ -121,6 +121,8 @@ spec:
               value: {{ .Values.iam.endpoint | quote }}
           {{- include "wasaas.security.container.nonroot" . | indent 10 }}
           volumeMounts:
+            - name: logs
+              mountPath: /logs
             {{- if .Values.migration.enabled }}
             - name: migrationvolume
               mountPath: /migration
@@ -143,9 +145,14 @@ spec:
             - name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
               mountPath: /opt/ibm/wlp/usr/servers/defaultServer/region.properties
               subPath: region.properties
+            - name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+              mountPath: /opt/ibm/wlp/usr/servers/defaultServer/killjava.sh
+              subPath: killjava.sh
             - name: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
               mountPath: /etc/wlp/config
       volumes:
+        - name: logs
+          emptyDir: {}
         {{- if .Values.migration.enabled }}
         - name: migrationvolume
           persistentVolumeClaim:
@@ -154,6 +161,8 @@ spec:
         - name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
           configMap:
             name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+            # must be group executable
+            defaultMode: 0750
         - name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
           configMap:
             name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
