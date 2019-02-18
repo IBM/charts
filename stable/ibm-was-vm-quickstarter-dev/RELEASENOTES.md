@@ -1,11 +1,12 @@
-# What's new in Chart Version 2.0.3
+# What's new in Chart Version 2.0.4
 
 The following changes apply only to the Helm chart. For a full list of product updates, see [What's new in VM Quickstarter](https://www.ibm.com/support/knowledgecenter/SSTF9X/about-whats-new.html).
 
 ## New features
 
-  - Identified a pre-defined `PodSecurityPolicy` and defined a custom `PodSecurityPolicy` for the chart.
-  - Updated all key containers to run as a non-root user.
+  - Added support for registering WAS VMs with the Red Hat Satellite server. Only when using Red Hat Enterprise Linux guests.
+  - Improved handling of `OutOfMemoryError` Java errors and better persistence of Java logs and dumps.
+  - Small ingress updates needed for IBM Cloud Private 3.1.2.
 
 ## Breaking Changes
   - None
@@ -24,6 +25,7 @@ The following changes apply only to the Helm chart. For a full list of product u
 
 | Chart | Date | IBM Cloud Private Required | CAM Required | Image(s) Supported |  Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 2.0.4 | Feb 18, 2019 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.4 ibmcom/wasaas-cloudsm:2.0.4 ibmcom/wasaas-wasdevaas:2.0.4 ibmcom/wasaas-console:2.0.4 ibmcom/wasaas-dashboard:2.0.4 couchdb:2.1.1 | Red Hat Satellite support. |
 | 2.0.3 | Dec 14, 2018 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.3 ibmcom/wasaas-cloudsm:2.0.3 ibmcom/wasaas-wasdevaas:2.0.3 ibmcom/wasaas-console:2.0.3 ibmcom/wasaas-dashboard:2.0.3 couchdb:2.1.1 | `PodSecurityPolicy` support and non-root updates. |
 | 2.0.2 | Nov 30, 2018 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.2 ibmcom/wasaas-cloudsm:2.0.2 ibmcom/wasaas-wasdevaas:2.0.2 ibmcom/wasaas-console:2.0.2 couchdb:2.1.1 | New administrative dashboard. |
 | 2.0.1 | | | | | skipped |
