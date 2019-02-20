@@ -3,7 +3,7 @@
 [CrateDB](https://crate.io/)A distributed SQL DBMS built atop NoSQL storage & indexing delivers the best of SQL & NoSQL in one database. 
 
 ```console
-$ helm install stable/ibm-crate-dev
+$ helm install community/ibm-crate-dev
 ```
 
 ## Prerequisites
@@ -12,7 +12,7 @@ $ helm install stable/ibm-crate-dev
 - Tiller 2.7.2 or  later
 
 ## Resources Required
-The chart deploys pods consuming minimum resources as specified in the resources configuration parameter (default: Memory: 200Mi, CPU: 100m)
+The chart deploys pods consuming minimum resources as specified in the resources configuration parameter (default: Memory: 200Mi, CPU: 100m).
 
 
 ## PodSecurityPolicy Requirements
@@ -28,7 +28,7 @@ This chart bootstraps a [CrateDB](https://github.com/crate/crate) deployment on 
 To install the chart with the release name `my-release`:
 
 ```console
-$ helm intall --name my-release stable/ibm-crate-dev
+$ helm intall --name my-release community/ibm-crate-dev
 ```
 
 ## Uninstalling the Chart
@@ -51,9 +51,25 @@ The following table lists the configurable parameters of the CrateDB chart and t
 
 |      Parameter            |          Description            |                         Default                         |
 |---------------------------|---------------------------------|---------------------------------------------------------|
-| `image`                   | The image to pull and run       | ibmcom/crate-ppc64le:1.0.5                              |
+| `image.repository`        | Container image for Crate       | `ibmcom/crate-ppc64le`                                  |
 | `imagePullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
-| `nodeSelector`            | Specify what architecture Node  | `ppc64le`                                               |
+| `imageTag`                | Container image tag for Crate   | `latest`
+| `Node Preference`         | Specify what architecture Node  | `ppc64le`                                               |
+| `ReplicaCount`            | Crate node replica count        | `1`                                                     |
+| `Service Type`            | Crate  service type             | `NodePort`                                              |
+| `HTTP Port`               | Crate  service port             | `8080`                                                  |
+| `Enable Ingress`          | If true, Crate Ingress will be created | false                                        |
+| `Annotations`             | Crate Ingress annotations       |  {}                                                     |
+| `Path`                    | Crate Ingress Path              | /                                                       |
+| `Virtual hosts`           | Crate Ingress Hostnames         | []                                                      |
+| `TLS`                     | Crate Ingress TLS configuration (YAML) | []                                               |
+| `resources.limits.cpu`    | Crate node cpu limit       |                                                              |
+| `resources.limits.memory` | Crate node memory limit    |                                                              |
+| `resources.requests.cpu`  | Crate node initial cpu request |                                                          |
+| `resources.requests.memory` | Crate node initial memory request|                                                      |
+
+
+
 
 
 The above parameters map to `ibm-crate-dev` params.
@@ -63,10 +79,22 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/ibm-crate-dev
+$ helm install --name my-release -f values.yaml community/ibm-crate-dev
 ```
 
 > **Tip**: You can use the default `values.yaml`
+
+### Persistence
+
+If `persistence` is enabled, PVC's will be used to store the web root and the db root. If a pod then is redeployed to another node, it will restart within seconds with the old state prevailing. If it is disabled, `EmptyDir` is used, which would lead to deletion of the persistent storage once the pod is moved. Also cloning a chart with `persistence` disabled will not work. Therefor persistence is enabled by default and should only be disabled in a testing environment. In environments where no PVCs are available you can use `persistence.hostPath` instead. This will store the charts persistent data on the node it is running on.
+
+| Parameter | Description | Default |
+| - | - | - |
+| `persistence.enabled` | Enables persistent volume - PV provisioner support necessary | true |
+| `persistence.accessMode` | PVC Access Mode | ReadWriteMany |
+| `persistence.size` | PVC Size | 5Gi |
+| `persistence.storageClass` | PVC Storage Class | _empty_ |
+
 
 ## Support
 
@@ -76,15 +104,16 @@ All helm charts and packages are supported through standard open source forums a
 
 Any issues found can be reported through the links below, and fixes may be proposed/submitted using standard git issues as noted below.
 
-[Submit issue to Helm Chart] ( https://github.com/ppc64le/charts/issues )
+[Submit issue to Helm Chart](https://github.com/ppc64le/charts/issues )
 
-[Submit issue to crate docker image]  ( https://github.com/ppc64le/build-scripts/issues )
+[Submit issue to crate docker image](https://github.com/ppc64le/build-scripts/issues )
 
-[Submit issue to crate open source community] ( https://github.com/crate/crate/issues )
+[Submit issue to crate open source community](https://github.com/crate/crate/issues )
 
-[ICP Support] ( https://ibm.biz/icpsupport )
+[ICP Support](https://ibm.biz/icpsupport)
 
 ## Limitations
-##NOTE
-This chart is validated on ppc64le.
+
+## NOTE
+This chart is validated on ppc64le only.
 
