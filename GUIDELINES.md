@@ -46,10 +46,10 @@ These guidelines are intended to augment the [Helm best practices](https://docs.
 | [**Chart file structure**](#chart-file-structure) | Charts must follow the standard Helm file structure: Chart.yaml, values.yaml, README.md, templates, and templates/NOTES.txt must all exist and have useful contents |
 | [**Chart version**](#chart-version) | SemVer2 numbering must be used, as per [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#version-numbers), and any update to a chart must include an updated version number, unless the changes are to the README file only.|
 | [**Chart description**](#chart-description) | All contributed charts must have a chart description in chart.yaml. This will be displayed in the ICP catalog and should be meaningful. |
-| [**Chart keywords**](#chart-keywords) | Chart keywords are used by the IBM Cloud Private user interface, and must be included in Chart.yaml. Use keyword `ICP` to indicate the chart is meant for use with IBM Cloud Private, and/or keyword `IKS` to indicate that the chart is meant for use with IBM Cloud Kubernetes Service. A chart must also include one or more keywords to indicate the hardware architectures it supports, from the set of `s390x`, `ppc64le`, and `amd64`. A list of optional keywords used for categorization in the UI follow in the section covering optional guidance. |
+| [**Required chart keywords**](#required-chart-keywords) | Chart keywords are used by the IBM Cloud Private user interface, and must be included in Chart.yaml. Use keyword `ICP` to indicate the chart is meant for use with IBM Cloud Private, and/or keyword `IKS` to indicate that the chart is meant for use with IBM Cloud Kubernetes Service. A chart must also include one or more keywords to indicate the hardware architectures it supports, from the set of `s390x`, `ppc64le`, and `amd64`. A list of optional keywords used for categorization in the UI follow in the section covering optional guidance. |
 | [**Helm lint**](#helm-lint) | The chart must pass the `helm lint` verification tool with no errors. |
 | [**License**](#license) | The chart itself be Apache 2.0 licensed, and must contain the Apache 2.0 license in the LICENSE file at the root of the chart. The chart may also package additional license files, such as the license for the product being deployed, in the LICENSES directory. Both the LICENSE file and files in the LICENSES directory will be displayed to the user for agreement when deploying through the IBM Cloud Private user interface.|
-| [**README.md**](#readme-md) | All contributed charts must contain a useful README.md file with useful information a user would need to deploy the chart. In the IBM Cloud Private GUI, the README.md file is the "front page" that a user will see after clicking on the chart in the catalog. A complete description and explanations of all input parameters are strongly suggested. It is also highly recommended to include instructions on how to add your image registry to IBM Cloud Private's list of trusted image registries, since [container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.0/manage_images/image_security.html) is enabled by default beginning with IBM Cloud Private 3.1. |
+| [**README.md**](#readme-md) | All contributed charts must contain a useful README.md file with useful information a user would need to deploy the chart. In the IBM Cloud Private GUI, the README.md file is the "front page" that a user will see after clicking on the chart in the catalog. A complete description and explanations of all input parameters are strongly suggested. The README must also contain sections for [image](#image-security) and [pod security](#pod-security). |
 | [**Support statement**](#support-statement) | The README.md must include a section labeled `Support`.  This section should provide details and/or links to where users can get support for urgent issues, get help, or submit issues. |
 | [**NOTES.txt**](#notes-txt) | Include NOTES.txt with instructions to display usage notes, next steps, &amp; relevant information. |
 | [**tillerVersion constraint**](#tillerversion-constraint) | Add a `tillerVersion` to Chart.yaml that follows the Semantic Versioning 2.0.0 format (`>=MAJOR.MINOR.PATCH`); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on. |
@@ -66,7 +66,7 @@ The following table contains guidance from IBM on how to build workloads that pr
 | **Guideline** | **Description** |
 | --- | --- |
 | [Chart icon](#chart-icon) | Providing a URL to an icon is preferred to embedding a local icon in the chart, to avoid chart size limits when using nested charts. |
-| [Chart keywords](#chart-keywords-1) | In addition to the required keywords described in the previous section, optional keywords can be used to filter your chart into a set of categories recognized by the UI |
+| [Recommended Chart keywords](#recommended-chart-keywords) | In addition to the required keywords described in the previous section, optional keywords can be used to filter your chart into a set of categories recognized by the UI |
 | [Chart version / image version](#chart-version-image-version) | Workloads should maintain image versions/tags separately from chart versions. |
 | [Images](#images) | Image URL should be parameterized, version of image(s) to be deployed should be exposed w/ the latest version as default, reference publicly available images by default when possible. |
 | [Multi-platform support](#multi-platform-support) | IBM Cloud Private supports x86-64, Power, and z hardware architectures. Workloads can reach the largest possible audience by providing images for all three platforms and using a fat manifest. |
@@ -110,9 +110,9 @@ Helm chart names should follow the [Helm chart best practices](https://github.co
 
 Charts should follow the standard Helm file structure: Chart.yaml, values.yaml, README.md, templates, and templates/NOTES.txt should all exist and have useful contents.
 
-## Chart keywords
+## Required chart keywords
 
-Chart keywords are used by the IBM Cloud Private user interface, and must be included in Chart.yaml. Use keyword `ICP` to indicate the chart is meant for use with IBM Cloud Private, and/or keyword `IKS` to indicate that the chart is meant for use with IBM Cloud Kubernetes Service. A chart must also include one or more keywords to indicate the hardware architectures it supports, from the set of `s390x`, `ppc64le`, and `amd64`. A list of optional keywords used for categorization in the UI follow in the section covering optional guidance.
+Chart keywords are used by the IBM Cloud Private user interface, and must be included in Chart.yaml. Use keyword `ICP` to indicate the chart is meant for use with IBM Cloud Private, and/or keyword `IKS` to indicate that the chart is meant for use with IBM Cloud Kubernetes Service. A chart must also include one or more keywords to indicate the hardware architectures it supports, from the set of `s390x`, `ppc64le`, and `amd64`. A list of [recommended keywords](#recommended-chart-keywords) used for categorization in the UI follow in the section covering recommended guidance.
 
 ## Chart version
 
@@ -134,7 +134,11 @@ The chart itself be Apache 2.0 licensed, and must contain the Apache 2.0 license
 
 All contributed charts must contain a useful README.md file with useful information a user would need to deploy the chart. In the IBM Cloud Private GUI, the README.md file is the "front page" that a user will see after clicking on the chart in the catalog. A complete description and explanations of all input parameters are strongly suggested.
 
-It is also highly recommended to note that a user must add your registry to IBM Cloud Private's list of trusted registries before they can deploy your chart. Include instructions (or a link) on how to add your image registry to IBM Cloud Private's list of trusted image registries in your readme, since [container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.0/manage_images/image_security.html) is enabled by default beginning with IBM Cloud Private 3.1.
+### Image security
+The README must also indicate which images need to be added to IBM Cloud Private's list of trusted image registries, since [container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html) is enabled by default beginning with IBM Cloud Private 3.1.
+
+### Pod security
+The README must also include a statement on the pod security policy required to deploy the chart. As of ICP 3.1.1 [pod security is enabled by default.](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_cluster/security.html) Charts can reference one of the [pre-defined pod security policies from ICP](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md), or describe a [custom pod security policy](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/user_management/iso_pod.html) if needed. The intent is for users to understand the required security requirements for the chart.
 
 ## Support statement
 
@@ -169,11 +173,11 @@ If the icon is an `.svg` hosted on GitHub file, append `?sanitize=true` to the e
 icon: https://raw.githubusercontent.com/ot4i/ace-helm/master/appconnect_enterprise_logo.svg?sanitize=true
 ```
 
-## Chart keywords
+## Recommended chart keywords
 
-Chart keywords are used by the IBM Cloud Private user interface, and should be included in Chart.yaml. Use keyword `ICP` to indicate the chart is meant for use with IBM Cloud Private, and/or keyword `IKS` to indicate that the chart is meant for use with IBM Cloud Kubernetes Service. A chart should also include one or more keywords to indicate the hardware architectures it supports, from the set of `s390x`, `ppc64le`, and `amd64`.
+Chart keywords are used by the IBM Cloud Private user interface, and should be included in Chart.yaml.  The ICP catalog supports chart categories and classifications that users can select to narrow the catalog view.  Consider adding category and classification keywords below to your helm chart.
 
-| **Label:** | **keywords** |
+| **Category Label:** | **keywords** |
 | --- | --- |
 | AI & Watson: | `Watson, AI` |
 | Blockchain: | `blockchain` |
@@ -189,6 +193,14 @@ Chart keywords are used by the IBM Cloud Private user interface, and should be i
 | Storage: | `Storage` |
 | Security: | `Security` |
 | Tools: | `Tools` |
+
+| **Classification Label:** | **keywords** |
+| --- | --- |
+| Beta | `Beta` |
+| Commercial Use | `Commercial` |
+| Limited Use | `Limited` |
+| Open Source | `OpenSource` |
+| Tech Preview | `Tech` |
 
 ## Chart version / image version
 
