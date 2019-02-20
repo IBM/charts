@@ -1,9 +1,9 @@
 # Strongloop
 
-[Strongloop](https://strongloop.com/)Open-source solutions for the API developer community.
+[Strongloop](https://strongloop.com/) - Open-source solutions for the API developer community.
 
 ```console
-$ helm install stable/ibm-strongloop-dev
+$ helm install community/ibm-strongloop-dev
 ```
 
 ## Prerequisites
@@ -27,7 +27,7 @@ This chart bootstraps a [Strongloop](https://github.com/strongloop) deployment o
 To install the chart with the release name `my-release`:
 
 ```console
-$ helm install --name my-release stable/ibm-strongloop-dev
+$ helm install --name my-release community/ibm-strongloop-dev
 ```
 
 ## Uninstalling the Chart
@@ -50,11 +50,26 @@ The following table lists the configurable parameters of the Strongloop chart an
 
 |      Parameter            |          Description            |                         Default                         |
 |---------------------------|---------------------------------|---------------------------------------------------------|
-| `image`                   | The image to pull and run       | `ibmcom/strongloop-ppc64le:v6.0.3`                      |
-| `imagePullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
-| `node`                    | Specify what architecture Node  | `ppc64le`                                               |
+| `Docker image pull policy`| Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
+| `Repository`              | Container image                 | `ibmcom/strongloop-ppc64le`                             |
+| `Tag`                     | Container image tag             | `v6.0.3`                                                |
+| `NodePreference           | Specify what architecture Node  | `ppc64le`                                               |
 | `service.type`            | Kubernetes service type         | `NodePort`                                              |
 | `service.port`            | Strongloop exposed port         | `41629`                                                 |
+| `replicaCount`            | Strongloop node replica count   | `1`                                                     |
+| `resources.limits.cpu`    | Strongloop node cpu limit       |                                                         |
+| `resources.limits.memory` | Strongloop node memory limit    |                                                         |
+| `resources.requests.cpu`  | Strongloop node initial cpu request |                                                     |	
+| `resources.requests.memory` | Strongloop node initial memory request|                                                 |	
+| `Service Type`            | Strongloop service type         | `NodePort`                                              |
+| `HTTP Port`               | Strongloop service port         | `41629`                                                 |
+| `Enable Ingress`          | If true, Strongloop Ingress will be created | false                                       |
+| `Annotations`             | Strongloop Ingress annotations  | {}                                                      |
+| `Path`                    | Strongloop Ingress Path         | /                                                       |
+| `Virtual hosts`           | Strongloop Ingress hostnames    | []                                                      |
+| `TLS`                     | Strongloop Ingress TLS configuration (YAML)| []                                           |
+| `Tolerations`             | Tolerations that are applied to pods for all the services | []                            |
+
 
 
 The above parameters map to `ibm-strongloop-dev` params.
@@ -64,7 +79,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/ibm-strongloop-dev
+$ helm install --name my-release -f values.yaml community/ibm-strongloop-dev
 ```
 
 > **Tip**: You can use the default `values.yaml`
@@ -77,16 +92,16 @@ All helm charts and packages are supported through standard open source forums a
 
 Any issues found can be reported through the links below, and fixes may be proposed/submitted using standard git issues as noted below.
 
-[Submit issue to Helm Chart] ( https://github.com/ppc64le/charts/issues )
+[Submit issue to Helm Chart](https://github.com/ppc64le/charts/issues )
 
-[Submit issue to strongloop docker image]  ( https://github.com/ppc64le/build-scripts/issues )
+[Submit issue to strongloop docker image](https://github.com/ppc64le/build-scripts/issues )
 
-[Submit issue to strongloop open source community] ( https://github.com/strongloop/strongloop/issues )
+[Submit issue to strongloop open source community](https://github.com/strongloop/strongloop/issues )
 
-[ICP Support] ( https://ibm.biz/icpsupport )
+[ICP Support](https://ibm.biz/icpsupport )
 
 ## Limitations
 
-##NOTE
-This chart is validated on ppc64le.
+## NOTE
+This chart is validated on ppc64le only.
 
