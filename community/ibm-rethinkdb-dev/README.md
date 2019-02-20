@@ -49,9 +49,22 @@ The following table lists the configurable parameters of the rethinkdb chart and
 
 |      Parameter            |          Description            |                         Default                         |
 |---------------------------|---------------------------------|---------------------------------------------------------|
-| `image`                   | The image to pull and run       | `ibmcom/rethinkdb-ppc64le:2.3.6`                        |
-| `imagePullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
-| `node`                    | Specify what architecture Node  | `ppc64le`                                               |
+| `image.repository`        | RethinkDB Container Image       | `ibmcom/rethinkdb-ppc64le`                              |
+| `image.tag`               | RethinkDB Container Image Tag   | `2.3.6`                                                 |
+| `image.PullPolicy`        | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
+| `Node Preference`         | Specify what architecture Node  | `ppc64le`                                               |
+| `ReplicaCount`            | RethinkDB node replica count    | `1`                                                     |
+| `Service Type`            | RethinkDB service type          | `NodePort`                                              |
+| `HTTP Port`               | RethinkDB service port          | `8080`                                                  |
+| `Enable Ingress`          | If true, RethinkDB Ingress will be created | false                                        |
+| `Annotations`             | RethinkDB Ingress annotations   |  {}                                                     |
+| `Path`                    | RethinkDB Ingress Path          | /                                                       |
+| `Virtual hosts`           | RethinkDB Ingress Hostnames     | []                                                      |
+| `TLS`                     | RethinkDB Ingress TLS configuration (YAML) | []                                           |
+| `resources.limits.cpu`    | RethinkDB node cpu limit       |                                                         |
+| `resources.limits.memory` | RethinkDB node memory limit    |                                                         |
+| `resources.requests.cpu`  | RethinkDB node initial cpu request |                                                     |
+| `resources.requests.memory` | RethinkDB node initial memory request|                                                 |
 
 
 The above parameters map to `ibm-rethinkdb-dev` params.
@@ -86,16 +99,16 @@ All helm charts and packages are supported through standard open source forums a
 
 Any issues found can be reported through the links below, and fixes may be proposed/submitted using standard git issues as noted below.
 
-[Submit issue to Helm Chart] ( https://github.com/ppc64le/charts/issues )
+[Submit issue to Helm Chart](https://github.com/ppc64le/charts/issues )
 
-[Submit issue to RethinkDB docker image]  ( https://github.com/ppc64le/build-scripts/issues )
+[Submit issue to RethinkDB docker image](https://github.com/ppc64le/build-scripts/issues )
 
-[Submit issue to RethinkDB open source community] ( https://github.com/rethinkdb/rethinkdb/issues )
+[Submit issue to RethinkDB open source community](https://github.com/rethinkdb/rethinkdb/issues )
 
-[ICP Support] ( https://ibm.biz/icpsupport )
+[ICP Support](https://ibm.biz/icpsupport )
 
 ## Limitations
 
-##NOTE
-This chart is validated on ppc64le.
+## NOTE
+This chart is validated on ppc64le only.
 
