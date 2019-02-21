@@ -138,7 +138,7 @@ All contributed charts must contain a useful README.md file with useful informat
 The README must also indicate which images need to be added to IBM Cloud Private's list of trusted image registries, since [container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html) is enabled by default beginning with IBM Cloud Private 3.1.
 
 ### Pod security
-The README must also include a statement on the pod security policy required to deploy the chart. As of ICP 3.1.1 [pod security is enabled by default.](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_cluster/security.html) Charts can reference one of the [pre-defined pod security policies from ICP](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md), or describe a [custom pod security policy](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/user_management/iso_pod.html) if needed. The intent is for users to understand the required security requirements for the chart.
+The README must also include a statement on the pod security policy required to deploy the chart. As of ICP 3.1.1, [pod security is enabled by default.](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_cluster/security.html) Charts can reference one of the [pre-defined pod security policies from ICP](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md) or describe a [custom pod security policy](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/user_management/iso_pod.html), if needed. The intent is for users to understand the required security requirements for the chart.
 
 ## Support statement
 
