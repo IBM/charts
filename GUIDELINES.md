@@ -175,7 +175,7 @@ icon: https://raw.githubusercontent.com/ot4i/ace-helm/master/appconnect_enterpri
 
 ## Recommended chart keywords
 
-Chart keywords are used by the IBM Cloud Private user interface, and should be included in Chart.yaml.  The ICP catalog supports chart categories and classifications that users can select to narrow the catalog view.  Consider adding category and classification keywords below to your helm chart.
+In addition to the previously mentioned [required keywords](#required-chart-keywords), the following category and classification keywords should be included in the Chart.yaml's keywords where applicable to grant the chart additional visibility in the IBM Cloud Private catalog UI.
 
 | **Category Label:** | **keywords** |
 | --- | --- |
