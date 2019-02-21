@@ -112,7 +112,18 @@ Charts should follow the standard Helm file structure: Chart.yaml, values.yaml, 
 
 ## Required chart keywords
 
-Chart keywords are used by the IBM Cloud Private user interface, and must be included in Chart.yaml. Use keyword `ICP` to indicate the chart is meant for use with IBM Cloud Private, and/or keyword `IKS` to indicate that the chart is meant for use with IBM Cloud Kubernetes Service. A chart must also include one or more keywords to indicate the hardware architectures it supports, from the set of `s390x`, `ppc64le`, and `amd64`. A list of [recommended keywords](#recommended-chart-keywords) used for categorization in the UI follow in the section covering recommended guidance.
+Chart keywords are used by the IBM Cloud Private user interface for categorization and filtering of charts, and some of these keywords are critical to grant a chart the proper visibility in the catalog. The Chart.yaml must include at least one of these cloud platform keywords and at least one of these architecture keywords to be accepted into this repository:
+
+Cloud Platform Keywords:  
+- `ICP` - indicates that the chart is supported for use on IBM Cloud Private  
+- `IKS` - indicates that the chart is supported for use on IBM Cloud Kubernetes Service  
+
+Architecture Keywords:  
+- `s390x`  
+- `ppc64le`  
+- `amd64`  
+
+As a supplement to the required keywords, the list of optional keywords offered in [the section on recommended chart keywords](#recommended-chart-keywords) can be leveraged to provide the chart with additional categorization and catalog visibility.
 
 ## Chart version
 
