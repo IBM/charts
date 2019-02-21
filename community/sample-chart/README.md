@@ -20,6 +20,8 @@ This chart ...
 * Simple bullet list of CPU, MEM, Storage requirements
 * Even if the chart only exposes a few resource settings, this section needs to inclusive of all / total resources of all charts and subcharts.
 * Describe any custom image policy requirements if using a non-whitelisted image repository.
+### PodSecurityPolicy Requirements
+* Describe the minimum required pod security policy to run the chart.  You can reference one of the pre-defined policies on ICP or describe a custom pod security policy.
 
 ## Resources Required
 * Describes Minimum System Resources Required
