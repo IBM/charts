@@ -66,7 +66,7 @@ The following table contains guidance from IBM on how to build workloads that pr
 | **Guideline** | **Description** |
 | --- | --- |
 | [Chart icon](#chart-icon) | Providing a URL to an icon is preferred to embedding a local icon in the chart, to avoid chart size limits when using nested charts. |
-| [Recommended Chart keywords](#recommended-chart-keywords) | In addition to the required keywords described in the previous section, optional keywords can be used to filter your chart into a set of categories recognized by the UI |
+| [Recommended Chart keywords](#recommended-chart-keywords) | In addition to the required keywords described in the previous section, optional keywords can be used to filter your chart into a set of categories recognized by the UI. |
 | [Chart version / image version](#chart-version-image-version) | Workloads should maintain image versions/tags separately from chart versions. |
 | [Images](#images) | Image URL should be parameterized, version of image(s) to be deployed should be exposed w/ the latest version as default, reference publicly available images by default when possible. |
 | [Multi-platform support](#multi-platform-support) | IBM Cloud Private supports x86-64, Power, and z hardware architectures. Workloads can reach the largest possible audience by providing images for all three platforms and using a fat manifest. |
