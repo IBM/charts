@@ -1,10 +1,10 @@
 # Tomcat
 
-[Tomcat](http://tomcat.apache.org/)Apache Tomcat, often referred to as Tomcat Server, is an open-source Java Servlet Container
+[Tomcat](http://tomcat.apache.org/) - Apache Tomcat, often referred to as Tomcat Server, is an open-source Java Servlet Container
 
 
 ```console
-$ helm install stable/ibm-tomcat-dev
+$ helm install community/ibm-tomcat-dev
 ```
 ## PodSecurityPolicy Requirements
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose predefined ibm-anyuid-psp PodSecurityPolicy.
@@ -27,7 +27,7 @@ This chart bootstraps a [Tomcat](https://hub.docker.com/_/tomcat/) deployment on
 To install the chart with the release name `my-release`:
 
 ```console
-$ helm install --name my-release stable/ibm-tomcat-dev
+$ helm install --name my-release community/ibm-tomcat-dev
 ```
 
 ## Uninstalling the Chart
@@ -41,7 +41,7 @@ $ helm delete my-release
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
 ## Chart Details
-This chart bootstraps a [Tomcat](https://hub.docker.com/_/tomcat/) deployment on a [Kubernetes](http://kubernetes.io) cluster
+This chart bootstraps a [Tomcat](https://hub.docker.com/_/tomcat/) deployment on a [Kubernetes](http://kubernetes.io) cluster.
 
 
 ## Configuration
@@ -50,9 +50,26 @@ The following table lists the configurable parameters of the Tomcat chart and th
 
 |      Parameter            |          Description            |                         Default                         |
 |---------------------------|---------------------------------|---------------------------------------------------------|
-| `image`                   | The image to pull and run       |  ppc64le/tomcat:8.0                           |
+| `image`                   | Container image                 |  tomcat                                                 |
+| `image.tag`               | Container image tag             |  9.0                                                    |
 | `imagePullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
-| `nodeSelector`            | Specify what architecture Node  | `amd64` or `ppc64le`                                    |
+| `NodePreference           | Specify what architecture Node  | `ppc64le`                                               |
+| `service.type`            | Kubernetes service type         | `NodePort`                                              |
+| `replicaCount`            | Tomcat node replica count   | `1`                                                     |
+| `resources.limits.cpu`    | Tomcat node cpu limit       |                                                         |
+| `resources.limits.memory` | Tomcat node memory limit    |                                                         |
+| `resources.requests.cpu`  | Tomcat node initial cpu request |                                                     |
+| `resources.requests.memory` | Tomcat node initial memory request|                                                 |
+| `Service Type`            | Tomcat service type         | `NodePort`                                              |
+| `HTTP Port`               | Tomcat service port         | `8080`                                                 |
+| `External HTTP Port`      | Tomcat service External Port| `8888`                                                 |
+| `Internal HTTP Port`      | Tomcat service Internal Port| `8080`                                                 |
+| `Enable Ingress`          | If true, Tomcat Ingress will be created | false                                       |
+| `Annotations`             | Tomcat  Ingress annotations  | {}                                                      |
+| `Path`                    | Tomcat Ingress Path         | /                                                       |
+| `Virtual hosts`           | Tomcat Ingress hostnames    | []                                                      |
+| `TLS`                     | Tomcat Ingress TLS configuration (YAML)| []                                           |
+| `Tolerations`             | Tolerations that are applied to pods for all the services | []                        |
 
 
 The above parameters map to `ibm-tomcat-dev` params.
@@ -62,7 +79,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/ibm-tomcat-dev
+$ helm install --name my-release -f values.yaml community/ibm-tomcat-dev
 ```
 
 
@@ -74,32 +91,21 @@ All helm charts and packages are supported through standard open source forums a
 
 Any issues found can be reported through the links below, and fixes may be proposed/submitted using standard git issues as noted below.
 
-[Submit issue to Helm Chart] ( https://github.com/ppc64le/charts/issues )
+[Submit issue to Helm Chart](https://github.com/ppc64le/charts/issues)
 
-[Submit issue to Tomcat docker image]  ( https://github.com/ppc64le/build-scripts/issues )
+[Submit issue to Tomcat docker image](https://github.com/ppc64le/build-scripts/issues)
 
-[Submit issue to Tomcat open source community] (http://tomcat.apache.org/bugreport.html )
+[Submit issue to Tomcat open source community](http://tomcat.apache.org/bugreport.html)
 
 
 
 > **Tip**: You can use the default `values.yaml`
 
-## Note (Cluster Image Security)
-As container image security feature is enabled, create an image policy for a namespace with the following rule for the chart to be deployed in the `default` namespace:
+### Trusted Registry
 
-```console
-apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
-kind: ImagePolicy
-metadata:
-  name: helm-chart
-  namespace: default
-spec:
-  repositories:
-  - name: docker.io/ppc64le/tomcat:8
-    policy:
-      va:
-        enabled: false
-```
+Container Image Security is enabled by default in ICP 3.1 and above. Hence add the following to the trusted registries so they can be pulled.
+* docker.io/ppc64le/tomcat:8
+
 
 ## Limitations
-##NOTE This chart has been validated on ppc64le.
+### NOTE: This chart has been validated on ppc64le.
