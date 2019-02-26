@@ -5,7 +5,7 @@
 The original work for this helm chart is present @ [kubernetes Charts](https://github.com/kubernetes/charts/tree/master/stable/memcached) Based on the [memcached](https://github.com/bitnami/charts/tree/master/incubator/memcached) chart from the [Bitnami Charts](https://github.com/bitnami/charts) repository.
 
 ```bash
-$ helm install stable/ibm-memcached-dev
+$ helm install community/ibm-memcached-dev
 ```
 ## Resources Required
 The chart deploys pods consuming minimum resources. 
@@ -25,7 +25,7 @@ This chart bootstraps a [Memcached](https://hub.docker.com/_/memcached/) deploym
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release stable/ibm-memcached-dev
+$ helm install --name my-release community/ibm-memcached-dev
 ```
 
 The command deploys Memcached on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -51,7 +51,7 @@ The command removes all the Kubernetes components associated with the chart and 
 To install the chart
 
 ```shell
-helm install --name <release-name> stable/ibm-memcached-dev
+helm install --name <release-name> community/ibm-memcached-dev
 ```
 ## Verifying the Chart
 
@@ -85,7 +85,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 ```bash
 $ helm install --name my-release \
   --set memcached.verbosity=v \
-    stable/ibm-memcached-dev
+    community/ibm-memcached-dev
 ```
 
 The above command sets the Memcached verbosity to `v`.
@@ -93,7 +93,7 @@ The above command sets the Memcached verbosity to `v`.
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/ibm-memcached-dev
+$ helm install --name my-release -f values.yaml community/ibm-memcached-dev
 ```
 
 > **Tip**: You can use the default `values.yaml`
@@ -106,27 +106,17 @@ All helm charts and packages are supported through standard open source forums a
 
 Any issues found can be reported through the links below, and fixes may be proposed/submitted using standard git issues as noted below.
 
-[Submit issue to Helm Chart] ( https://github.com/ppc64le/charts/issues )
+[Submit issue to Helm Chart](https://github.com/ppc64le/charts/issues)
 
-[Submit issue to Memcached docker image]  ( https://hub.docker.com/_/memcached )
+[Submit issue to Memcached docker image](https://hub.docker.com/_/memcached)
 
-[Submit issue to Memcached open source community] ( https://github.com/memcached/memcached/issues )
+[Submit issue to Memcached open source community](https://github.com/memcached/memcached/issues)
 
-[ICP Support] ( https://ibm.biz/icpsupport )
+[ICP Support](https://ibm.biz/icpsupport)
 
-## Note (Cluster Image Security)
-As container image security feature is enabled, create an image policy for a namespace with the following rule for the chart to be deployed in the `default` namespace:
 
-```console
-apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
-kind: ImagePolicy
-metadata:
-  name: helm-chart
-  namespace: default
-spec:
-  repositories:
-  - name: docker.io/memcached:1.5.11-alpine
-    policy:
-      va:
-        enabled: false
-```
+## Trusted registries
+Container Image Security is enabled by default in ICP 3.1 and above. Hence add the following to the trusted registries so they can be pulled.
+- docker.io/memcached/*
+
+
