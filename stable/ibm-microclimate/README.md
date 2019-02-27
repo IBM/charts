@@ -157,6 +157,12 @@ This is the default target namespace used by the Microclimate pipeline for deplo
 
 The following steps require the `cluster_ca_domain` certificate authority (CA) domain. During IBM Cloud Private installation, this CA domain was set in the config.yaml file. If you did not specify a CA domain name, `mycluster.icp` is the default value.
 
+You can look it up with the following command:
+```
+$ kubectl get configmap oauth-client-map -n services -o yaml | grep 'CLUSTER_CA_DOMAIN:' | sed 's/^.*: //'
+<cluster_ca_domain>.icp
+```
+
 #### Create a new ClusterImagePolicy
 
 Microclimate pipelines pull images from repositories other than `docker.io/ibmcom`. To use Microclimate pipelines, you must ensure you have a cluster image policy that permits images to be pulled from these repositories.
