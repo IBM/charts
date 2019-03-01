@@ -80,8 +80,22 @@ spec:
                 {{ end }}
       terminationGracePeriodSeconds: 10
       initContainers:
+{{- if eq .Values.global.privileged true }}
+      - name: set-volume-permissions
+        image: "{{ include "zookeeper.getImageRepo" . }}/hdm-zookeeper:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["sh", "-c", "chown -R zookeeper:zookeeper /var/lib/zookeeper/"]
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+        volumeMounts:
+        - name: {{ $zkconfigTemplateName }}
+          mountPath: /opt/zookeeper/conf
+        - name: {{ $zkdataTemplateName }}
+          mountPath: /var/lib/zookeeper/data
+{{- end }}
       - name: init-config
-        image: "{{ .Values.global.image.repository }}/hdm-zookeeper:{{ .Values.image.tag }}"
+        image: "{{ include "zookeeper.getImageRepo" . }}/hdm-zookeeper:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ['/bin/bash', '/opt/zookeeper/conf/init.sh']
         volumeMounts:
@@ -100,7 +114,7 @@ spec:
             - ALL
       containers:
       - name: {{ include "sch.names.fullCompName" (list .) | quote }}
-        image: "{{ .Values.global.image.repository }}/hdm-zookeeper:{{ .Values.image.tag }}"
+        image: "{{ include "zookeeper.getImageRepo" . }}/hdm-zookeeper:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: 2181
