@@ -158,7 +158,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -253,10 +253,47 @@
   value: ''
 - name: RBA_PDOC_OBJECTSTORAGE_PROJECTID
   value: ''
+- name: AUTH_SESSION_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-event-analytics-ui-session-secret'
+      key: session
+- name: AUTH_SESSION_TTL
+  value: '7200'
+- name: REDIS_SSH_USERNAME
+  value: none
+- name: REDIS_PASSWORD
+  value: none
+- name: REDIS_SSH_HOSTS
+  value: '[]'
+- name: REDIS_DST_HOST
+  value: '{{ include "cem.services.redishost" . }}'
+- name: REDIS_DST_PORT
+  value: '6379'
+- name: REDIS_LOCAL_HOST
+  value: 127.0.0.1
+- name: REDIS_LOCAL_PORT
+  value: '6780'
+- name: REDIS_INDEX
+  value: '0'
+- name: REDIS_KEEP_ALIVE
+  value: 'true'
+- name: REDIS_SSH_KEY
+  value: ''
+- name: SSH_READY_TIMEOUT
+  value: '30000'
+- name: REDIS_SENTINEL_HOST
+  value: '{{ include "cem.services.redissentinelsvc" . }}'
+- name: REDIS_SENTINEL_PORT
+  value: '26379'
+- name: REDIS_SENTINEL_NAME
+  value: mymaster
 - name: SERVICEMONITOR_MONITORS
   value: '{"cemusers":"{{ include "cem.services.cemusers" . }}","channelservices":"{{ include "cem.services.channelservices" . }}","eventpreprocessor":"{{ include "cem.services.eventpreprocessor" . }}","incidentprocessor":"{{ include "cem.services.incidentprocessor" . }}","normalizer":"{{ include "cem.services.normalizer" . }}","notificationprocessor":"{{ include "cem.services.notificationprocessor" . }}","integrationcontroller":"{{ include "cem.services.integrationcontroller" . }}","schedulingui":"{{ include "cem.services.schedulingui" . }}","uiserver":"{{ include "cem.services.uiserver" . }}"}'
 - name: SYSLOG_TARGETS
   value: '[]'
+- name: ICP_ADMIN_USER
+  value: '{{.Values.icpbroker.adminusername}}'
 {{- end -}}
 
 {{- define "cloudeventmanagement.cemusers.env" -}}
@@ -371,7 +408,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -420,12 +457,20 @@
   value: ''
 - name: SSH_READY_TIMEOUT
   value: '30000'
+- name: REDIS_SENTINEL_HOST
+  value: '{{ include "cem.services.redissentinelsvc" . }}'
+- name: REDIS_SENTINEL_PORT
+  value: '26379'
+- name: REDIS_SENTINEL_NAME
+  value: mymaster
 - name: AUTH_PROVIDER_MODE
-  value: icp
+  value: '{{ .Values.auth.type }}'
 - name: AUTH_REDIRECT_URIS
   value: 'https://{{ .Values.global.ingress.domain }}{{ if ne .Values.global.ingress.port 443.0 }}:{{ .Values.global.ingress.port }}{{ end }}/{{ .Values.global.ingress.prefix }}cemui,{{ include "cem.services.rba" . }},{{ include "cem.services.uiserver" . }},{{ include "cem.services.apm" . }},https://{{ .Values.global.ingress.domain }}{{ if ne .Values.global.ingress.port 443.0 }}:{{ .Values.global.ingress.port }}{{ end }}/{{ .Values.global.ingress.prefix }}apmui/auth/cemusers/redirect'
 - name: BLUEMIX_API_URL
   value: 'https://api.REGION.bluemix.net'
+- name: BLUEMIX_CONSOLE_URL
+  value: 'https://cloud.ibm.com'
 - name: BLUEMIX_MCCP_URL
   value: 'https://mccp.REGION.bluemix.net/v2/info'
 - name: BLUEMIX_LOGIN_URL
@@ -441,17 +486,27 @@
 - name: BLUEMIX_USER_PREFERENCES_API
   value: 'https://user-preferences.REGION.bluemix.net'
 - name: BLUEID_CLIENTID
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      key: blueidClientId
 - name: BLUEID_CLIENTSEC
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      key: blueidClientSecret
 - name: BLUEID_ISSUERID
-  value: 'https://prepiam.toronto.ca.ibm.com'
+  value: '{{.Values.blueid.issuer}}'
 - name: BLUEID_AUTHURL
-  value: 'https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/authorize'
+  value: '{{.Values.blueid.authorizationurl}}'
 - name: BLUEID_TOKENURL
-  value: 'https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/token'
+  value: '{{.Values.blueid.tokenurl}}'
 - name: BLUEID_INTROSPECTIONURL
-  value: 'https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/introspect'
+  value: '{{.Values.blueid.introspectionurl}}'
+- name: BLUEID_LOGOUTURLS
+  value: '["https://www-947.ibm.com/pkmslogout", "https://www-304.ibm.com/pkmslogout"]'
+- name: BLUEID_REDIRECT
+  value: '{{.Values.blueid.blueidredirect}}'
 - name: AUTH_ICP_HOST
   value: '{{ .Values.global.masterIP }}:{{ .Values.global.masterPort }}'
 - name: AUTH_ICP_CLIENT_ID
@@ -610,7 +665,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -647,6 +702,8 @@
   value: '{{.Values.email.smtphost}}'
 - name: EMAIL_SMTPPORT
   value: '{{.Values.email.smtpport}}'
+- name: EMAIL_SMTPAUTH
+  value: '{{.Values.email.smtpauth}}'
 - name: EMAIL_SMTPUSER
   valueFrom:
     secretKeyRef:
@@ -657,6 +714,8 @@
     secretKeyRef:
       name: '{{ template "releasename" . }}-cem-email-cred-secret'
       key: smtppassword
+- name: EMAIL_SMTPREJECTUNAUTHORIZED
+  value: '{{.Values.email.smtprejectunauthorized}}'
 - name: EMAIL_DEBUG
   value: 'false'
 - name: EMAIL_APIKEY
@@ -718,6 +777,12 @@
   value: ''
 - name: SSH_READY_TIMEOUT
   value: '30000'
+- name: REDIS_SENTINEL_HOST
+  value: '{{ include "cem.services.redissentinelsvc" . }}'
+- name: REDIS_SENTINEL_PORT
+  value: '26379'
+- name: REDIS_SENTINEL_NAME
+  value: mymaster
 - name: SLACK_USERNAME
   value: alertnotification
 - name: CHANNELSERVICES_BLACKLIST
@@ -782,7 +847,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -969,11 +1034,19 @@
   value: ''
 - name: SSH_READY_TIMEOUT
   value: '30000'
+- name: REDIS_SENTINEL_HOST
+  value: '{{ include "cem.services.redissentinelsvc" . }}'
+- name: REDIS_SENTINEL_PORT
+  value: '26379'
+- name: REDIS_SENTINEL_NAME
+  value: mymaster
 {{- end -}}
 
 {{- define "cloudeventmanagement.integrationcontroller.env" -}}
 - name: BLUEMIX_API_URL
   value: 'https://api.REGION.bluemix.net'
+- name: BLUEMIX_CONSOLE_URL
+  value: 'https://cloud.ibm.com'
 - name: BLUEMIX_MCCP_URL
   value: 'https://mccp.REGION.bluemix.net/v2/info'
 - name: BLUEMIX_LOGIN_URL
@@ -989,17 +1062,27 @@
 - name: BLUEMIX_USER_PREFERENCES_API
   value: 'https://user-preferences.REGION.bluemix.net'
 - name: BLUEID_CLIENTID
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      key: blueidClientId
 - name: BLUEID_CLIENTSEC
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      key: blueidClientSecret
 - name: BLUEID_ISSUERID
-  value: 'https://prepiam.toronto.ca.ibm.com'
+  value: '{{.Values.blueid.issuer}}'
 - name: BLUEID_AUTHURL
-  value: 'https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/authorize'
+  value: '{{.Values.blueid.authorizationurl}}'
 - name: BLUEID_TOKENURL
-  value: 'https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/token'
+  value: '{{.Values.blueid.tokenurl}}'
 - name: BLUEID_INTROSPECTIONURL
-  value: 'https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/introspect'
+  value: '{{.Values.blueid.introspectionurl}}'
+- name: BLUEID_LOGOUTURLS
+  value: '["https://www-947.ibm.com/pkmslogout", "https://www-304.ibm.com/pkmslogout"]'
+- name: BLUEID_REDIRECT
+  value: '{{.Values.blueid.blueidredirect}}'
 - name: LOGMET_LOG_HOST
   value: logs.opvis.bluemix.net
 - name: LOGMET_LOG_PORT
@@ -1045,7 +1128,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -1190,6 +1273,12 @@
   value: ''
 - name: SSH_READY_TIMEOUT
   value: '30000'
+- name: REDIS_SENTINEL_HOST
+  value: '{{ include "cem.services.redissentinelsvc" . }}'
+- name: REDIS_SENTINEL_PORT
+  value: '26379'
+- name: REDIS_SENTINEL_NAME
+  value: mymaster
 - name: SYSLOG_TARGETS
   value: '[]'
 {{- end -}}
@@ -1240,7 +1329,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -1339,13 +1428,23 @@
   value: ''
 - name: SSH_READY_TIMEOUT
   value: '30000'
+- name: REDIS_SENTINEL_HOST
+  value: '{{ include "cem.services.redissentinelsvc" . }}'
+- name: REDIS_SENTINEL_PORT
+  value: '26379'
+- name: REDIS_SENTINEL_NAME
+  value: mymaster
 - name: AUTH_SESSION_SECRET
   valueFrom:
     secretKeyRef:
       name: '{{ template "releasename" . }}-cem-event-analytics-ui-session-secret'
       key: session
+- name: AUTH_SESSION_TTL
+  value: '7200'
 - name: BLUEMIX_API_URL
   value: 'https://api.REGION.bluemix.net'
+- name: BLUEMIX_CONSOLE_URL
+  value: 'https://cloud.ibm.com'
 - name: BLUEMIX_MCCP_URL
   value: 'https://mccp.REGION.bluemix.net/v2/info'
 - name: BLUEMIX_LOGIN_URL
@@ -1361,17 +1460,27 @@
 - name: BLUEMIX_USER_PREFERENCES_API
   value: 'https://user-preferences.REGION.bluemix.net'
 - name: BLUEID_CLIENTID
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      key: blueidClientId
 - name: BLUEID_CLIENTSEC
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      key: blueidClientSecret
 - name: BLUEID_ISSUERID
-  value: 'https://prepiam.toronto.ca.ibm.com'
+  value: '{{.Values.blueid.issuer}}'
 - name: BLUEID_AUTHURL
-  value: 'https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/authorize'
+  value: '{{.Values.blueid.authorizationurl}}'
 - name: BLUEID_TOKENURL
-  value: 'https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/token'
+  value: '{{.Values.blueid.tokenurl}}'
 - name: BLUEID_INTROSPECTIONURL
-  value: 'https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/introspect'
+  value: '{{.Values.blueid.introspectionurl}}'
+- name: BLUEID_LOGOUTURLS
+  value: '["https://www-947.ibm.com/pkmslogout", "https://www-304.ibm.com/pkmslogout"]'
+- name: BLUEID_REDIRECT
+  value: '{{.Values.blueid.blueidredirect}}'
 - name: COMMON_SERVICEMONITOR_RETRY_INTERVAL
   value: '60'
 - name: COMMON_SERVICEMONITOR_EVENTSINK0_ENABLED
@@ -1458,7 +1567,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -1603,6 +1712,12 @@
   value: ''
 - name: SSH_READY_TIMEOUT
   value: '30000'
+- name: REDIS_SENTINEL_HOST
+  value: '{{ include "cem.services.redissentinelsvc" . }}'
+- name: REDIS_SENTINEL_PORT
+  value: '26379'
+- name: REDIS_SENTINEL_NAME
+  value: mymaster
 {{- end -}}
 
 {{- define "cloudeventmanagement.notificationprocessor.env" -}}
@@ -1759,7 +1874,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -1868,7 +1983,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -1879,6 +1994,8 @@
   value: none
 - name: CEMSLACK_CLIENTSECRET
   value: none
+- name: INCOMING_EMAIL_DOMAIN
+  value: events.mail.us-south.cloudeventmanagement.test.cloud.ibm.com
 - name: UAG_URL
   value: '{{ include "cem.services.cemusers" . }}'
 - name: UAG_USERNAME
@@ -1923,6 +2040,12 @@
   value: ''
 - name: SSH_READY_TIMEOUT
   value: '30000'
+- name: REDIS_SENTINEL_HOST
+  value: '{{ include "cem.services.redissentinelsvc" . }}'
+- name: REDIS_SENTINEL_PORT
+  value: '26379'
+- name: REDIS_SENTINEL_NAME
+  value: mymaster
 - name: OBJSTORE_URL
   value: 'https://identity.open.softlayer.com'
 - name: OBJSTORE_PROJECT
@@ -1945,6 +2068,8 @@
   value: admin
 - name: BLUEMIX_API_URL
   value: 'https://api.REGION.bluemix.net'
+- name: BLUEMIX_CONSOLE_URL
+  value: 'https://cloud.ibm.com'
 - name: BLUEMIX_MCCP_URL
   value: 'https://mccp.REGION.bluemix.net/v2/info'
 - name: BLUEMIX_LOGIN_URL
@@ -1992,11 +2117,18 @@
 - name: SYSLOG_TARGETS
   value: '[]'
 - name: WATSONWORKSPACE_APPID
-  value: '{{.Values.watsonworkspace.appid}}'
+  value: none
 - name: WATSONWORKSPACE_APPSECRET
-  value: '{{.Values.watsonworkspace.appsecret}}'
+  value: none
 - name: WATSONWORKSPACE_SHARETOKEN
-  value: '{{.Values.watsonworkspace.sharetoken}}'
+  value: none
+- name: DOWNLOAD_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "releasename" . }}-cem-download-secret'
+      key: keyvalue
+- name: DOWNLOAD_TIMEOUT
+  value: '300000'
 {{- end -}}
 
 {{- define "cloudeventmanagement.schedulingui.env" -}}
@@ -2145,7 +2277,7 @@
 - name: CEMAPI_URL
   value: '{{ include "cem.services.cemapi" . }}'
 - name: FRAMEANCESTORS_URL
-  value: self
+  value: '''self'''
 - name: METRICREST_URL
   value: '{{ include "cem.services.metricrest" . }}'
 - name: NOTIFICATIONPROCESSOR_URL
@@ -2194,6 +2326,12 @@
   value: ''
 - name: SSH_READY_TIMEOUT
   value: '30000'
+- name: REDIS_SENTINEL_HOST
+  value: '{{ include "cem.services.redissentinelsvc" . }}'
+- name: REDIS_SENTINEL_PORT
+  value: '26379'
+- name: REDIS_SENTINEL_NAME
+  value: mymaster
 - name: SYSLOG_TARGETS
   value: '[]'
 - name: BSS_INTERVAL

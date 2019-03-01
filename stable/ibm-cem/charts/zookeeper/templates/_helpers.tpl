@@ -7,3 +7,9 @@
     {{- end -}}
   {{- end -}}
 {{- end -}}
+
+{{- define "zookeeper.getImageRepo" -}}
+{{- if .Values.global.image.repository -}}
+{{- printf "%s" ( trimSuffix "/" .Values.global.image.repository ) }}
+{{- end -}}
+{{- end -}}

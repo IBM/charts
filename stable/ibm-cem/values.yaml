@@ -34,47 +34,44 @@ commonimages:
   ##
   brokers:
     image:
-      tag: 1.3.0-20181207T170749Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190213T101231Z-L-PPAN-B9CFBV
   cemusers:
     image:
-      tag: 1.3.0-20181206T205554Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190215T173844Z-L-PPAN-B9CFBV
   channelservices:
     image:
-      tag: 1.3.0-20181206T213516Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190213T094409Z-L-PPAN-B9CFBV
   datalayer:
     image:
-      tag: 1.3.0-20181207T003320Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190213T094415Z-L-PPAN-B9CFBV
   eventanalyticsui:
     image:
-      tag: 1.3.0-20181206T205613Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190215T142257Z-L-PPAN-B9CFBV
   eventpreprocessor:
     image:
-      tag: 1.3.0-20181206T205620Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190214T170047Z-L-PPAN-B9CFBV
   incidentprocessor:
     image:
-      tag: 1.3.0-20181206T205629Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190214T164825Z-L-PPAN-B9CFBV
   notificationprocessor:
     image:
-      tag: 1.3.0-20181206T205651Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190212T202733Z-L-PPAN-B9CFBV
   integrationcontroller:
     image:
-      tag: 1.3.0-20181206T205635Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190214T164149Z-L-PPAN-B9CFBV
   normalizer:
     image:
-      tag: 1.3.0-20181206T210900Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190218T143931Z-L-PPAN-B9CFBV
   schedulingui:
     image:
-      tag: 1.3.0-20181206T210810Z-TryBuy-TKAI-B6XHUQ
+      tag: 1.4.0-20190213T230507Z-L-PPAN-B9CFBV
   rba:
     rbs:
       image:
-        tag: 1.14.0-20181207T192700Z-L-TryBuy-TKAI-B6XHUQ
+        tag: 1.15.0-20190215T210009Z-L-PPAN-B9CFBV
     as:
       image:
-        tag: 1.14.0-20181207T192700Z-L-TryBuy-TKAI-B6XHUQ
-  cemhelmtests:
-    image:
-      tag: 0.2.0-20181206T230222Z-TryBuy-TKAI-B6XHUQ
+        tag: 1.15.0-20190215T210009Z-L-PPAN-B9CFBV
 # <-CEM-common-images
 #/********************************************************** {COPYRIGHT-TOP} ****
 #* Licensed Materials - Property of IBM
@@ -95,6 +92,7 @@ productName: "IBM Cloud Event Management Community Edition"
 license: 'not accepted'
 arch:   # list of supported arch s390x ppc64le amd64
   - amd64
+  - ppc64le
 
 # CEM microservices
 brokers:
@@ -105,6 +103,7 @@ channelservices:
   clusterSize: 1
 datalayer:
   clusterSize: 1
+  socketReadTimeout: 120000
 eventanalyticsui:
   clusterSize: 1
 eventpreprocessor:
@@ -120,6 +119,13 @@ notificationprocessor:
   clusterSize: 1
 schedulingui:
   clusterSize: 1
+
+# Authentication (IKS (DEVELOPMENT / TESTING only)
+auth:
+  type: "icp"   # icp / cf
+  # Used when running within IKS (cf)
+  blueidClientID: ""
+  blueidClientSecret: ""
 
 # RBA dependency (rbs/as)
 rba:
@@ -176,8 +182,8 @@ couchdb:
 # Redis dependency
 redis:
   replicas:
-    servers: 3
-    sentinels: 3
+    servers: 1
+    sentinels: 1
 # <-CEM-kub-config
 
 global: # Properties in here can be accessed by the main chart and by all subcharts
@@ -187,11 +193,14 @@ global: # Properties in here can be accessed by the main chart and by all subcha
     pullSecret: ''
   masterIP: ''
   masterPort: 8443
+  privileged: false  # Required for block storage on IKS
   environmentSize: "size0"
   # Controls the resource sizes the value can be either 'size1' or 'size0'.
   # Size0 is a minimal spec for evaluation or development purposes.
 # <-CEM-global
   cassandraNodeReplicas: 1
+  kafka:
+    kafkaRestInsecurePort: 8080
   persistence:
     enabled: true
     supplementalGroups: []  # this is required for NFS storage
@@ -219,6 +228,10 @@ global: # Properties in here can be accessed by the main chart and by all subcha
     # requires a DNS entry, for testing /etc/hosts on any client host may be
     # updated.
     domain: ''
+    # DEVELOPMENT / TESTING only. In some cases such as when running within IKS,
+    # the two ingress resources must reside on seperate domains. If this
+    # property is set, then use this as the domain for the ingress api resource.
+    apidomain: ''
     # If global.ingress.tlsSecret is the empty string CEM will use the default
     # TLS certificate installed on the ingress controller. If this certificate
     # does not match the value of global.ingress.domain browsers and other
@@ -246,6 +259,20 @@ global: # Properties in here can be accessed by the main chart and by all subcha
 cemservicebroker:
   # Appended to names and ids in catalog to allow multiple brokers to be registered.
   suffix: ''
+blueid:
+  # DEVELOPMENT / TESTING only. Obtain when registering IBMid client
+  issuer: 'https://idaas.iam.ibm.com'
+  # DEVELOPMENT / TESTING only. Obtain when registering IBMid client
+  authorizationurl: 'https://idaas.iam.ibm.com/idaas/oidc/endpoint/default/authorize'
+  # DEVELOPMENT / TESTING only. Obtain when registering IBMid client
+  tokenurl: 'https://idaas.iam.ibm.com/idaas/oidc/endpoint/default/token'
+  # DEVELOPMENT / TESTING only. Obtain when registering IBMid client
+  introspectionurl: 'https://idaas.iam.ibm.com/idaas/oidc/endpoint/default/introspect'
+  # DEVELOPMENT / TESTING only. IBMid final redirect url, should match issuer
+  blueidredirect: 'https://idaas.iam.ibm.com/pkmslogout'
+icpbroker:
+  # The cluster administrator user name.
+  adminusername: admin
 email:
   # Set this property to the Email address that should be shown as the sender (From) of the message.
   mail: noreply-your-company-notification@your-company.com
@@ -258,10 +285,15 @@ email:
   smtphost: ''
   # When "type" is set to "smtp", set this to the port number used by the smtp server specified by the "smtphost" value.
   smtpport: ''
+  # User authentication required for SMTP connection. Set this to true if the SMTP server requires authentication.
+  smtpauth: true
   # When "type" is set to "smtp", set this to a valid user name for the smtp server specified by the "smtphost" value.
   smtpuser: ''
   # When "type" is set to "smtp", set this to the password for the user name defined by the "smtpuser" value.
   smtppassword: ''
+  # When "type" is set to "smtp", set this to false to allow self signed certificates when connecting via TLS.
+  # By default this is set to true to enforce TLS authorization checking.
+  smtprejectunauthorized: true
   # When "type" is set to "api", set this value to the API key required by the Sendgrid API. (Send mail authorization is required).
   apikey: ''
 nexmo:
@@ -282,11 +314,4 @@ nexmo:
   # Numbers from countries to which messages must not be sent
   # Enter as a comma separated list of strings
   countryblacklist: '[]'
-watsonworkspace:
-  # CEM app ID defined by IBM
-  appid: APPID
-  # CEM app secret defined by IBM
-  appsecret: APPSECRET
-  # CEM share token defined by IBM
-  sharetoken: SHARETOKEN
 # <-CEM-autocompiled-config

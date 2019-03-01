@@ -43,7 +43,11 @@ http://{{ include "sch.names.fullCompName" (list . "brokers") }}.{{ .Release.Nam
 
 {{/* The API URL is only used for external reference */}}
 {{ define "cem.services.cemapi" -}}
+{{- if ne .Values.global.ingress.apidomain "" -}}
+https://{{ .Values.global.ingress.apidomain }}/api
+{{- else -}}
 https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}api
+{{- end }}
 {{- end }}
 
 {{ define "cem.services.cemusers" -}}
@@ -81,11 +85,7 @@ http://{{ include "sch.names.fullCompName" (list . "incidentprocessor") }}.{{ .R
 {{- end }}
 
 {{ define "cem.services.kafkaadmin" -}}
-{{ if (or (eq .Values.productName "IBM Cloud App Management") (eq .Values.productName "IBM Cloud App Management Advanced")) -}}
-http://{{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc:80
-{{- else -}}
-http://{{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc:8080
-{{- end }}
+http://{{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc:{{ .Values.global.kafka.kafkaRestInsecurePort }}
 {{- end }}
 
 {{ define "cem.services.normalizer" -}}
@@ -114,6 +114,10 @@ http://{{ include "sch.names.fullCompName" (list . "rba-rbs") }}.{{ .Release.Nam
 
 {{ define "cem.services.rbaas" -}}
 http://{{ include "sch.names.fullCompName" (list . "rba-as") }}.{{ .Release.Namespace }}.svc:3080
+{{- end }}
+
+{{ define "cem.services.redissentinelsvc" -}}
+{{ template "releasename" . }}-redis-sentinel.{{ .Release.Namespace }}.svc
 {{- end }}
 
 {{ define "cem.services.redishost" -}}
@@ -146,24 +150,24 @@ Ingress rule for a single host, used below
 Use the ingress rule above for each service attached to ingress.
 */}}
 {{ define "ingress-rules" -}}
-{{ include "ingress-rule" (list . "users" "cem-users" 6002) }}
-{{ include "ingress-rule" (list . "chanl" "channelservices" 3091) }}
-{{ include "ingress-rule" (list . "cemui" "event-analytics-ui" 3201) }}
-{{ include "ingress-rule" (list . "integ" "integration-controller" 6004) }}
-{{ include "ingress-rule" (list . "norml" "normalizer" 3901) }}
-{{ include "ingress-rule" (list . "notif" "notificationprocessor" 6008) }}
-{{ include "ingress-rule" (list . "sched" "scheduling-ui" 3191) }}
-{{ include "ingress-rule" (list . "rbarb" "rba-rbs" 3005) }}
+{{ include "ingress-rule" (list . "users/" "cem-users" 6002) }}
+{{ include "ingress-rule" (list . "chanl/" "channelservices" 3091) }}
+{{ include "ingress-rule" (list . "cemui/" "event-analytics-ui" 3201) }}
+{{ include "ingress-rule" (list . "integ/" "integration-controller" 6004) }}
+{{ include "ingress-rule" (list . "norml/" "normalizer" 3901) }}
+{{ include "ingress-rule" (list . "notif/" "notificationprocessor" 6008) }}
+{{ include "ingress-rule" (list . "sched/" "scheduling-ui" 3191) }}
+{{ include "ingress-rule" (list . "rbarb/" "rba-rbs" 3005) }}
 {{- end }}
 {{ define "api-rules" -}}
-{{ include "ingress-rule" (list . "api/eventPolicies" "eventpreprocessor" 3051) }}
-{{ include "ingress-rule" (list . "api/eventPoliciesSpecification" "eventpreprocessor" 3051) }}
-{{ include "ingress-rule" (list . "api/events" "eventpreprocessor" 3051) }}
-{{ include "ingress-rule" (list . "api/incidentPolicies" "incidentprocessor" 6006) }}
-{{ include "ingress-rule" (list . "api/incidentquery" "incidentprocessor" 6006) }}
-{{ include "ingress-rule" (list . "api/spec/incidentPolicies" "incidentprocessor" 6006) }}
-{{ include "ingress-rule" (list . "api/v1/rba" "rba-rbs" 3005) }}
-{{ include "ingress-rule" (list . "api-gateway" "rba-rbs" 3005) }}
+{{ include "ingress-rule" (list . "api/eventPolicies/" "eventpreprocessor" 3051) }}
+{{ include "ingress-rule" (list . "api/eventPoliciesSpecification/" "eventpreprocessor" 3051) }}
+{{ include "ingress-rule" (list . "api/events/" "eventpreprocessor" 3051) }}
+{{ include "ingress-rule" (list . "api/incidentPolicies/" "incidentprocessor" 6006) }}
+{{ include "ingress-rule" (list . "api/incidentquery/" "incidentprocessor" 6006) }}
+{{ include "ingress-rule" (list . "api/spec/incidentPolicies/" "incidentprocessor" 6006) }}
+{{ include "ingress-rule" (list . "api/v1/rba/" "rba-rbs" 3005) }}
+{{ include "ingress-rule" (list . "api-gateway/" "rba-rbs" 3005) }}
 {{- end }}
 
 {{/*
