@@ -71,9 +71,28 @@ spec:
                 {{- range $arch := .Values.arch }}
                   - {{ $arch -}}
                 {{ end }}
+{{- if eq .Values.global.privileged true }}
+      initContainers:
+      - name: set-volume-permissions
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["sh", "-c", "mkdir -p /opt/ibm/cassandra/data /opt/ibm/cassandra/logs ; chown -R cassandra:cassandra /opt/ibm/cassandra/data /opt/ibm/cassandra/logs"]
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+        volumeMounts:
+        - name: {{ $dataTemplateName }}
+          mountPath: /opt/ibm/cassandra/data
+        {{ if ne .Values.global.persistence.storageClassOption.cassandrabak "none" }}
+        - name: {{ $backTemplateName }}
+          mountPath: /opt/ibm/cassandra/data/backup_tar
+        {{ end }}
+        - name: {{ .Release.Name }}-cassandralogs
+          mountPath: /opt/ibm/cassandra/logs
+{{- end }}
       containers:
         - name: {{ include "sch.names.fullCompName" (list .) | quote }}
-          image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.image.name }}{{ if eq .Capabilities.KubeVersion.Platform "linux/ppc64le" }}-ppc64le{{ end }}:{{ .Values.image.tag }}"
+          image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             privileged: false

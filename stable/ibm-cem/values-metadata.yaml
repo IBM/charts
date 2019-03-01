@@ -141,14 +141,6 @@ commonimages:
             description: "rba-as image tag. DO NOT EDIT"
             type: "string"
             immutable: true
-  cemhelmtests:
-    image:
-      tag:
-        __metadata:
-          label: "CEM Helm Tests"
-          description: "cemhelmtests image tag. DO NOT EDIT"
-          type: "string"
-          immutable: true
 
 
 productName:
@@ -226,6 +218,12 @@ datalayer:
       label: "Replica Count"
       type: "number"
       description: "Number of pod replicas. For production, the recommended replica count is 4 or greater. "
+      required: true
+  socketReadTimeout:
+    __metadata:
+      label: "Cassandra Client Read Timeout (setupdb)"
+      type: "number"
+      description: "Number of milliseconds for cassandra client read timeout for setupdb."
       required: true
 eventanalyticsui:
   __metadata:
@@ -321,7 +319,7 @@ rba:
         required: true
     updateStrategy:
       __metadata:
-        label: "Update strategy during migration"
+        label: "Runbook update strategy during migration"
         description: "In case of release upgrades a migration task might require downtime to prevent inconsistencies (select Recreate). If no data is migrated, no downtime is necessary (select RollingUpdate)"
         type: "string"
         required: true
@@ -340,7 +338,7 @@ rba:
         required: true
     updateStrategy:
       __metadata:
-        label: "Update strategy during migration"
+        label: "Automation update strategy during migration"
         description: "In case of release upgrades a migration task might require downtime to prevent inconsistencies (select Recreate). If no data is migrated, no downtime is necessary (select RollingUpdate)"
         type: "string"
         required: true
@@ -466,7 +464,7 @@ couchdb:
         This is equivalent to the 'q' parameter in the '[cluster]' section in
         default.ini and specifies the number of shards. See the [cluster]
         section documentation in the Couchdb document for details on this
-        parameter. You are recomended to leave it as default unless you
+        parameter. You are recommended to leave it as default unless you
         increase the number of stateful set replicas to 3 or more.
         Cloud Event Management uses the default sharding value of 8 shards.
         This allows up to 8 replicas. Consult couchdb documentation for details
@@ -493,6 +491,86 @@ couchdb:
       type: "string"
       hidden: true
       immutable: true
+
+# Authentication (IKS DEVELOPMENT / TESTING only)
+auth:
+  __metadata:
+    label: "Authentication"
+    description: "Authentication"
+    hidden: true
+  type:
+    __metadata:
+      label: "type"
+      description: >
+        DEVELOPMENT / TESTING only. Authentication provider type to used when
+        running in ICP vs IKS.
+      type: "string"
+      required: true
+      hidden: true
+  blueidClientID:
+    __metadata:
+      label: "BlueID Client ID"
+      description: >
+        DEVELOPMENT / TESTING only. Blue ID client id created and registered
+        with the Blue ID SSO for your application.
+      type: "string"
+      required: false
+      hidden: true
+  blueidClientSecret:
+    __metadata:
+      label: "BlueID Client Secret"
+      description: >
+        DEVELOPMENT / TESTING only. Blue ID client secret created and registered
+        with the Blue ID SSO for your application.
+      type: "string"
+      required: false
+      hidden: true
+blueid:
+  __metadata:
+    label: "Blue ID"
+    description: "Blue ID detailed configuration section"
+    hidden: true
+  issuer:
+    __metadata:
+      label: "Issuer ID"
+      description: >
+        DEVELOPMENT / TESTING only. Obtain when registering blueID client
+      type: "string"
+      required: false
+      hidden: true
+  authorizationurl:
+    __metadata:
+      label: "Authorization URL"
+      description: >
+        DEVELOPMENT / TESTING only. Obtain when registering blueID client
+      type: "string"
+      required: false
+      hidden: true
+  tokenurl:
+    __metadata:
+      label: "Token URL"
+      description: >
+        DEVELOPMENT / TESTING only. Obtain when registering blueID client
+      type: "string"
+      required: false
+      hidden: true
+  introspectionurl:
+    __metadata:
+      label: "Introspection URL"
+      description: >
+        DEVELOPMENT / TESTING only. Obtain when registering blueID client
+      type: "string"
+      required: false
+      hidden: true
+  blueidredirect:
+    __metadata:
+      label: "Final Redirection URL"
+      description: >
+        DEVELOPMENT / TESTING only. Blue ID final redirect url, should match
+        issuer
+      type: "string"
+      required: false
+      hidden: true
 
 # Redis dependency
 redis:
@@ -558,6 +636,21 @@ email:
       description: >
         When "type" is set to "smtp", set this to the port number used by the smtp server specified by the "smtphost" value.
       type: "string"
+  # User authentication required for SMTP connection. Set this to true if the SMTP server requires authentication.
+  smtpauth:
+    __metadata:
+      label: "SMTP Authentication"
+      description: >
+        User authentication required for SMTP connection. Set this to true if the SMTP server requires authentication.
+      type: boolean
+  # When "type" is set to "smtp", set this to false to allow self signed certificates when connecting via TLS.
+  # By default this is set to true to enforce TLS authorization checking.
+  smtprejectunauthorized:
+    __metadata:
+      label: "SMTP Reject Unauthorized"
+      description: >
+        Reject unauthorized tls connections for SMTP connection. Set this to false if the SMTP server requires a self-signed certificate.
+      type: boolean
   # When "type" is set to "smtp", set this to a valid user name for the smtp server specified by the "smtphost" value.
   smtpuser:
     __metadata:
@@ -667,6 +760,13 @@ global: # Properties in here can be accessed by the main chart and by all subcha
       description: "ICP - Master Port"
       type: "number"
       required: true
+  privileged:
+    __metadata:
+      label: "Priviledged mode"
+      description: "DEVELOPMENT / TEST ONLY. Required for block storage on IKS."
+      type: "boolean"
+      hidden: true
+      required: false
   environmentSize:
     __metadata:
       label: "Environment size"
@@ -686,6 +786,13 @@ global: # Properties in here can be accessed by the main chart and by all subcha
       label: "Cassandra Node Replicas"
       description: "cassandra - node replicas"
       type: "number"
+  kafka:
+    kafkaRestInsecurePort:
+      __metadata:
+        label: "Rest Insecure Port Number"
+        description: "Used to configure the kafkarest insecure port number"
+        hidden: true
+        type: "number"
   persistence:
     enabled:
       __metadata:
@@ -720,7 +827,7 @@ global: # Properties in here can be accessed by the main chart and by all subcha
         __metadata:
           label: "Cassandra Data Storage Class"
           description: >
-            Cassandra data Storage Class Type. This can be disabled by not
+            Cassandra data storage class option. This can be disabled by not
             specifying any option.
           type: "string"
           required: false
@@ -784,6 +891,20 @@ global: # Properties in here can be accessed by the main chart and by all subcha
           updated.
         type: "string"
         required: true
+    # DEVELOPMENT / TESTING only. In some cases such as when running within IKS,
+    # the two ingress resources must reside on seperate domains. If this
+    # property is set, then use this as the domain for the ingress api resource.
+    apidomain:
+      __metadata:
+        label: "Ingress API Domain"
+        description: >
+          DEVELOPMENT / TESTING only. In some cases such as when running within
+          IKS, the two ingress resources must reside on seperate domains. If
+          this property is set, then use this as the domain for the ingress api
+          resource.
+        type: "string"
+        required: false
+        hidden: true
     # If global.ingress.tlsSecret is the empty string CEM will use the default
     # TLS certificate installed on the ingress controller. If this certificate
     # does not match the value of global.ingress.domain browsers and other
@@ -835,36 +956,6 @@ global: # Properties in here can be accessed by the main chart and by all subcha
           that is different than the default (443), then the port number can be
           specified here. Normally, this port should be the default value.
         type: "number"
-watsonworkspace:
-  __metadata:
-    label: "Watson Workspace Outgoing Integration"
-    description: "Watson Workspace Outgoing Integration Configuration"
-  # Watson Workspace App ID
-  appid:
-    __metadata:
-      label: "Application ID"
-      description: >
-        After creating a Watson Workspace application that CEM can integrate with,
-        provide the Watson Workspace application ID to send outgoing notifications.
-      type: "string"
-  # Watson Workspace App Secret
-  appsecret:
-    __metadata:
-      label: "Application Secret"
-      description: >
-        After creating a Watson Workspace application that CEM can integrate with,
-        provide the Watson Workspace application secret to send outgoing
-        notifications.
-      type: "string"
-  # Watson Workspace Share Token
-  sharetoken:
-    __metadata:
-      label: "Application Share Token"
-      description: >
-        After creating a Watson Workspace application that CEM can integrate with,
-        provide the Watson Workspace application share token to send outgoing
-        notifications.
-      type: "string"
 
 # CEM-autocompiled-config->
 # Config related to microservice container configuration
@@ -884,5 +975,16 @@ cemservicebroker:
         service broker can be registered within a single ICp environment.
         If not specified, no suffix will be added to the cluster service
         broker registered service.
+      type: "string"
+icpbroker:
+  __metadata:
+    label: "ICP"
+    description: "ICP configuration"
+  adminusername:
+    __metadata:
+      label: "Cluster administrator user."
+      description: >
+        The name of the cluster administrator user.  This is the name that
+        will be added to subscriptions  (required for MCM).
       type: "string"
 # <-CEM-autocompiled-config

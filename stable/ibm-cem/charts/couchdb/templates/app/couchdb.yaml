@@ -71,6 +71,20 @@ spec:
                 {{- range $arch := .Values.arch }}
                   - {{ $arch -}}
                 {{ end }}
+{{- if eq .Values.global.privileged true }}
+      initContainers:
+      - name: set-volume-permissions
+        image: "{{ include "couchdb.getImageRepo" . }}/hdm-couchdb:{{ .Values.image.tag }}"
+        command: ["sh", "-c", "chown -R couchdb:couchdb /opt/couchdb/data"]
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+        volumeMounts:
+        - name: {{ $cdbDataTemplateName }}
+          mountPath: /opt/couchdb/data
+        - name: {{ $cdbConfigTemplateName }}
+          mountPath: /opt/couchdb/etc/default.d
+{{- end }}
       containers:
         - name: couchdb
           image: "{{ include "couchdb.getImageRepo" . }}/hdm-couchdb:{{ .Values.image.tag }}"
