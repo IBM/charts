@@ -1,6 +1,6 @@
 ###############################################################################
 # Licensed Materials - Property of IBM.
-# Copyright IBM Corporation 2018. All Rights Reserved.
+# Copyright IBM Corporation 2018, 2019. All Rights Reserved.
 # U.S. Government Users Restricted Rights - Use, duplication or disclosure
 # restricted by GSA ADP Schedule Contract with IBM Corp.
 #
@@ -22,9 +22,23 @@ spec:
   affinity:
         {{- include "nodeaffinity" . | indent 6 }}
   hostNetwork: true
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
   containers:
     - name: "{{ template "fullname" . }}-test"
-      image: ubuntu
+      image: alpine:3.9
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 100
+        capabilities:
+          drop:
+           - ALL
       env:
         - name: SIP_HOST
           valueFrom:
@@ -33,5 +47,5 @@ spec:
               fieldPath: status.hostIP
         - name: SIP_PORT
           value: "{{ .Values.sipOrchestratorEnvVariables.sipPort }}"
-      command: ["sh", "-c", 'apt-get update && apt-get -qqy install netcat; nc -vz $SIP_HOST $SIP_PORT; echo $?'] 
+      command: ["sh", "-c", 'nc -vz $SIP_HOST $SIP_PORT; echo $?'] 
   restartPolicy: Never
