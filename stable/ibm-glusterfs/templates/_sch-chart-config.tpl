@@ -47,4 +47,6 @@ sch:
         name: "storageclass-job"
       sccm:
         name: "storageclass-cm"
+      glustersshdcm:
+        name: "gluster-sshd-cm"        
 {{- end -}}
