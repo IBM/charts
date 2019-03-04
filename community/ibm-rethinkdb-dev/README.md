@@ -51,16 +51,16 @@ The following table lists the configurable parameters of the rethinkdb chart and
 |---------------------------|---------------------------------|---------------------------------------------------------|
 | `image.repository`        | RethinkDB Container Image       | `ibmcom/rethinkdb-ppc64le`                              |
 | `image.tag`               | RethinkDB Container Image Tag   | `2.3.6`                                                 |
-| `image.PullPolicy`        | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
-| `Node Preference`         | Specify what architecture Node  | `ppc64le`                                               |
-| `ReplicaCount`            | RethinkDB node replica count    | `1`                                                     |
-| `Service Type`            | RethinkDB service type          | `NodePort`                                              |
-| `HTTP Port`               | RethinkDB service port          | `8080`                                                  |
-| `Enable Ingress`          | If true, RethinkDB Ingress will be created | false                                        |
-| `Annotations`             | RethinkDB Ingress annotations   |  {}                                                     |
-| `Path`                    | RethinkDB Ingress Path          | /                                                       |
-| `Virtual hosts`           | RethinkDB Ingress Hostnames     | []                                                      |
-| `TLS`                     | RethinkDB Ingress TLS configuration (YAML) | []                                           |
+| `image.pullPolicy`        | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
+| `node`                    | Specify what architecture Node  | `ppc64le`                                               |
+| `replicaCount`            | RethinkDB node replica count    | `1`                                                     |
+| `service.type`            | RethinkDB service type          | `NodePort`                                              |
+| `service.port`               | RethinkDB service port          | `8080`                                                  |
+| `ingress.enabled`          | If true, RethinkDB Ingress will be created | false                                        |
+| `ingress.annotations`             | RethinkDB Ingress annotations   |  {}                                                     |
+| `ingress.path`                    | RethinkDB Ingress Path          | /                                                       |
+| `ingress.hosts`           | RethinkDB Ingress Hostnames     | []                                                      |
+| `ingress.tls`                     | RethinkDB Ingress TLS configuration (YAML) | []                                           |
 | `resources.limits.cpu`    | RethinkDB node cpu limit       |                                                         |
 | `resources.limits.memory` | RethinkDB node memory limit    |                                                         |
 | `resources.requests.cpu`  | RethinkDB node initial cpu request |                                                     |
