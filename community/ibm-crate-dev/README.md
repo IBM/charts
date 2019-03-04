@@ -52,22 +52,22 @@ The following table lists the configurable parameters of the CrateDB chart and t
 |      Parameter            |          Description            |                         Default                         |
 |---------------------------|---------------------------------|---------------------------------------------------------|
 | `image.repository`        | Container image for Crate       | `ibmcom/crate-ppc64le`                                  |
-| `imagePullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
-| `imageTag`                | Container image tag for Crate   | `latest`
-| `Node Preference`         | Specify what architecture Node  | `ppc64le`                                               |
-| `ReplicaCount`            | Crate node replica count        | `1`                                                     |
-| `Service Type`            | Crate  service type             | `NodePort`                                              |
-| `HTTP Port`               | Crate  service port             | `8080`                                                  |
-| `Enable Ingress`          | If true, Crate Ingress will be created | false                                        |
-| `Annotations`             | Crate Ingress annotations       |  {}                                                     |
-| `Path`                    | Crate Ingress Path              | /                                                       |
-| `Virtual hosts`           | Crate Ingress Hostnames         | []                                                      |
-| `TLS`                     | Crate Ingress TLS configuration (YAML) | []                                               |
+| `image.pullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
+| `image.tag`                | Container image tag for Crate   | `latest`
+| `node`                    | Specify what architecture Node  | `ppc64le`                                               |
+| `replicaCount`            | Crate node replica count        | `1`                                                     |
+| `service.type`            | Crate  service type             | `NodePort`                                              |
+| `service.port`               | Crate  service port             | `8080`                                               |
+| `ingress.enabled`          | If true, Crate Ingress will be created | false                                           |
+| `ingress.annotations`             | Crate Ingress annotations       |  {}                                             |
+| `ingress.path`                    | Crate Ingress Path              | /                                               |
+| `ingress.hosts`           | Crate Ingress Hostnames         | []                                                      |
+| `ingress.tls`                     | Crate Ingress TLS configuration (YAML) | []                                       |
 | `resources.limits.cpu`    | Crate node cpu limit       |                                                              |
 | `resources.limits.memory` | Crate node memory limit    |                                                              |
 | `resources.requests.cpu`  | Crate node initial cpu request |                                                          |
 | `resources.requests.memory` | Crate node initial memory request|                                                      |
-
+| `tolerations`               | Tolerations that are applied to pods for all the services| []                           |
 
 
 
