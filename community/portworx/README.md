@@ -16,7 +16,6 @@ Container Image Security is enabled by default in ICP 3.1 and above. Hence add t
 * docker.io/openstorage/*
 * gcr.io/google-containers/*
 * docker.io/lachlanevenson/*
-* docker.io/hrishi/*
 * quay.io/k8scsi/*
 
 ## Limitations
