@@ -4,7 +4,7 @@
 
 
 ```console
-$ helm install stable/ibm-geode-dev
+$ helm install community/ibm-geode-dev
 ```
 
 ## Prerequisites
@@ -28,7 +28,7 @@ This chart bootstraps a [Geode](https://hub.docker.com/r/ppc64le/geode ) deploym
 To install the chart with the release name `my-release`:
 
 ```console
-$ helm install --name my-release stable/ibm-geode-dev
+$ helm install --name my-release community/ibm-geode-dev
 ```
 
 ## Default Credentials
@@ -53,11 +53,28 @@ This chart bootstraps a [Geode](https://hub.docker.com/r/ppc64le/geode ) deploym
 
 The following table lists the configurable parameters of the Geode chart and their default values.
 
+
 |      Parameter            |          Description            |                         Default                         |
 |---------------------------|---------------------------------|---------------------------------------------------------|
-| `image`                   | The image to pull and run       | ppc64le/geode:v1.2.1                                    |
+| `image.repository`        | Container image                 |  ibmcom/geode-ppc64le                                   |
+| `image.tag`               | Container image tag             |  1.8.0                                                  |
 | `imagePullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
-| `nodeSelector`            | Specify what architecture Node  | `ppc64le`                                               |
+| `node`                    | Specify what architecture Node  | `ppc64le`                                               |
+| `service.type`            | Kubernetes service type         | `NodePort`                                              |
+| `service.port`            | Geode  exposed port             | `8080`                                                  |
+| `replicaCount`            | Geode  node replica count       | `1`                                                     |
+| `resources.limits.cpu`    | Geode  node cpu limit           |                                                         |
+| `resources.limits.memory` | Geode  node memory limit        |                                                         |
+| `resources.requests.cpu`  | Geode  node initial cpu request |                                                         |
+| `resources.requests.memory` | Geode node initial memory request|                                                      |
+| `service.type`            | Geode service type              | `NodePort`                                              |
+| `service.port`            | Geode service port              | `8080`                                                  |
+| `ingress.enabled          | If true, Geode Ingress will be created | false                                            |
+| `ingress.annotations`     | Geode  Ingress annotations      | {}                                                      |
+| `ingress.path`            | Geode Ingress Path              | /                                                       |
+| `ingress.hosts`           | Geode Ingress hostnames         | []                                                      |
+| `ingress.tls`             | Geode Ingress TLS configuration (YAML)| []                                                |
+| `Tolerations`             | Tolerations that are applied to pods for all the services | []                            |
 
 
 The above parameters map to `ibm-geode-dev` params.
@@ -67,7 +84,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/ibm-geode-dev
+$ helm install --name my-release -f values.yaml community/ibm-geode-dev
 ```
 
 > **Tip**: You can use the default `values.yaml`
@@ -80,35 +97,16 @@ All helm charts and packages are supported through standard open source forums a
 
 Any issues found can be reported through the links below, and fixes may be proposed/submitted using standard git issues as noted below.
 
-[Submit issue to Helm Chart] ( https://github.com/ppc64le/charts/issues )
+[Submit issue to Helm Chart](https://github.com/ppc64le/charts/issues)
 
-[Submit issue to Geode docker image]  ( https://github.com/ppc64le/build-scripts/issues )
+[Submit issue to Geode docker image](https://github.com/ppc64le/build-scripts/issues)
 
-[Submit issue to Geode open source community] ( https://issues.apache.org/jira/projects/GEODE/issues/GEODE-6152?filter=allopenissues )
-
-
-
-## Note (Cluster Image Security)
-As container image security feature is enabled, create an image policy for a namespace with the following rule for the chart to be deployed in the `default` namespace:
-
-```console
-apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
-kind: ImagePolicy
-metadata:
-  name: helm-chart
-  namespace: default
-spec:
-  repositories:
-  - name: docker.io/ibmcom/geode-ppc64le:v1.2.1
-    policy:
-      va:
-        enabled: false
-```
+[Submit issue to Geode open source community](https://issues.apache.org/jira/projects/GEODE/issues/GEODE-6152?filter=allopenissues)
 
 
 
 ## Limitations
 
-##NOTE
+### NOTE
 This chart is validated on ppc64le.
 
