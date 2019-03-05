@@ -50,25 +50,24 @@ The following table lists the configurable parameters of the Tomcat chart and th
 
 |      Parameter            |          Description            |                         Default                         |
 |---------------------------|---------------------------------|---------------------------------------------------------|
-| `image`                   | Container image                 |  tomcat                                                 |
+| `image.repository`        | Container image                 |  tomcat                                                 |
 | `image.tag`               | Container image tag             |  9.0                                                    |
 | `imagePullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
-| `NodePreference           | Specify what architecture Node  | `ppc64le`                                               |
+| `node`                    | Specify what architecture Node  | `ppc64le`                                               |
 | `service.type`            | Kubernetes service type         | `NodePort`                                              |
 | `replicaCount`            | Tomcat node replica count   | `1`                                                     |
 | `resources.limits.cpu`    | Tomcat node cpu limit       |                                                         |
 | `resources.limits.memory` | Tomcat node memory limit    |                                                         |
 | `resources.requests.cpu`  | Tomcat node initial cpu request |                                                     |
 | `resources.requests.memory` | Tomcat node initial memory request|                                                 |
-| `Service Type`            | Tomcat service type         | `NodePort`                                              |
-| `HTTP Port`               | Tomcat service port         | `8080`                                                 |
-| `External HTTP Port`      | Tomcat service External Port| `8888`                                                 |
-| `Internal HTTP Port`      | Tomcat service Internal Port| `8080`                                                 |
-| `Enable Ingress`          | If true, Tomcat Ingress will be created | false                                       |
-| `Annotations`             | Tomcat  Ingress annotations  | {}                                                      |
-| `Path`                    | Tomcat Ingress Path         | /                                                       |
-| `Virtual hosts`           | Tomcat Ingress hostnames    | []                                                      |
-| `TLS`                     | Tomcat Ingress TLS configuration (YAML)| []                                           |
+| `service.port`            | Tomcat service port         | `8080`                                                 |
+| `service.externalPort`    | Tomcat service External Port| `8888`                                                 |
+| `service.internalPort`    | Tomcat service Internal Port| `8080`                                                 |
+| `ingress.enabled          | If true, Tomcat Ingress will be created | false                                       |
+| `ingress.annotations`     | Tomcat  Ingress annotations  | {}                                                      |
+| `ingress.path`            | Tomcat Ingress Path         | /                                                       |
+| `ingress.hosts`           | Tomcat Ingress hostnames    | []                                                      |
+| `ingress.tls              | Tomcat Ingress TLS configuration (YAML)| []                                           |
 | `Tolerations`             | Tolerations that are applied to pods for all the services | []                        |
 
 
