@@ -50,9 +50,9 @@ The following table lists the configurable parameters of the Open Liberty chart 
 
 |      Parameter            |          Description            |                         Default                         |
 |---------------------------|---------------------------------|---------------------------------------------------------|
-| `image`                   | Container image                 |  tomee                                                 |
+| `image.repository`        | Container image                 |  tomee                                                 |
 | `image.tag`               | Container image tag             |  8-jre-1.7.5-webprofile                                 |
-| `imagePullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
+| `image.pullPolicy`         | Image pull policy               | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
 | `NodePreference           | Specify what architecture Node  | `ppc64le`                                               |
 | `service.type`            | Kubernetes service type         | `NodePort`                                              |
 | `service.port`            | Tomee  exposed port             | `8080`                                                 |
@@ -61,13 +61,13 @@ The following table lists the configurable parameters of the Open Liberty chart 
 | `resources.limits.memory` | Tomee  node memory limit    |                                                         |
 | `resources.requests.cpu`  | Tomee  node initial cpu request |                                                     |
 | `resources.requests.memory` | Tomee node initial memory request|                                                 |
-| `Service Type`            | Tomee service type         | `NodePort`                                              |
-| `HTTP Port`               | Tomee service port         | `8080`                                                 |
-| `Enable Ingress`          | If true, Tomee Ingress will be created | false                                       |
-| `Annotations`             | Tomee  Ingress annotations  | {}                                                      |
-| `Path`                    | Tomee Ingress Path         | /                                                       |
-| `Virtual hosts`           | Tomee Ingress hostnames    | []                                                      |
-| `TLS`                     | Tomee Ingress TLS configuration (YAML)| []                                           |
+| `service.type`            | Tomee service type         | `NodePort`                                              |
+| `service.port`            | Tomee service port         | `8080`                                                 |
+| `ingress.enabled`         | If true, Tomee Ingress will be created | false                                       |
+| `ingress.annotations`     | Tomee  Ingress annotations  | {}                                                      |
+| `ingress.path`            | Tomee Ingress Path         | /                                                       |
+| `ingress.hosts`           | Tomee Ingress hostnames    | []                                                      |
+| `ingress.tls              | Tomee Ingress TLS configuration (YAML)| []                                           |
 | `Tolerations`             | Tolerations that are applied to pods for all the services | []                        |
 
 
