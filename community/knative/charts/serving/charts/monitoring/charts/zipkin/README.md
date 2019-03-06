@@ -28,7 +28,7 @@ $ kubectl apply --filename https://raw.githubusercontent.com/knative/serving/v0.
 
 ## Installing the Chart
 
-Please ensure that you have reviewed the [prerequisites](#prerequisites).
+Please ensure that you have reviewed the prerequisites section.
 
 To install the chart using helm cli:
 
@@ -39,7 +39,7 @@ $ helm install ./knative/serving/charts/monitoring/charts/zipkin
 
 ### Configuration
 
-[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
+[Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/serving/charts/monitoring/charts/zipkin/values.yaml) outlines the configuration options that are supported by this chart.
 
 ### Verifying the Chart
 

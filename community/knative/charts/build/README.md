@@ -31,7 +31,7 @@ enabled.
 
 ## Installing the Chart
 
-Please ensure that you have reviewed the [prerequisites](#prerequisites).
+Please ensure that you have reviewed the prerequisites section.
 
 To install the chart using helm cli:
 
@@ -40,13 +40,13 @@ Install Knative Build
 $ helm install ./knative/charts/build --name <my-release> [--tls]
 ```
 
-The command deploys Knative Build on the Kubernetes cluster in the default configuration.  The [configuration](#configuration) section lists the parameters that can be configured during installation.
+The command deploys Knative Build on the Kubernetes cluster in the default configuration.  The configuration section lists the parameters that can be configured during installation.
 
 You can use the command ```helm status <my-release> [--tls]``` to get a summary of the various Kubernetes artifacts that make up your Knative Build deployment.
 
 ### Configuration
 
-[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
+[Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/build/values.yaml) outlines the configuration options that are supported by this chart.
 
 ### Verifying the Chart
 
