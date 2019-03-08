@@ -1,18 +1,15 @@
-# What's new in Chart Version 2.0.4
+# What's new in Chart Version 2.0.5
 
 The following changes apply only to the Helm chart. For a full list of product updates, see [What's new in VM Quickstarter](https://www.ibm.com/support/knowledgecenter/SSTF9X/about-whats-new.html).
 
 ## New features
-
-  - Added support for registering WAS VMs with the Red Hat Satellite server. Only when using Red Hat Enterprise Linux guests.
-  - Improved handling of `OutOfMemoryError` Java errors and better persistence of Java logs and dumps.
-  - Small ingress updates needed for IBM Cloud Private 3.1.2.
+  - None
 
 ## Breaking Changes
   - None
 
 ## Fixes
-  - None
+  - Updated `cloudsm-frontend` pod configuration to archive destroyed resources and subscriptions.
 
 # Prerequisites
   - Refer to [Prerequisities of WAS Quickstarter](http://ibm.biz/WASQuickstarterPrerequisites)
@@ -25,6 +22,7 @@ The following changes apply only to the Helm chart. For a full list of product u
 
 | Chart | Date | IBM Cloud Private Required | CAM Required | Image(s) Supported |  Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 2.0.5 | March 8, 2019 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.5 ibmcom/wasaas-cloudsm:2.0.5 ibmcom/wasaas-wasdevaas:2.0.5 ibmcom/wasaas-console:2.0.5 ibmcom/wasaas-dashboard:2.0.5 couchdb:2.1.1 | Bug fixes. |
 | 2.0.4 | Feb 18, 2019 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.4 ibmcom/wasaas-cloudsm:2.0.4 ibmcom/wasaas-wasdevaas:2.0.4 ibmcom/wasaas-console:2.0.4 ibmcom/wasaas-dashboard:2.0.4 couchdb:2.1.1 | Red Hat Satellite support. |
 | 2.0.3 | Dec 14, 2018 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.3 ibmcom/wasaas-cloudsm:2.0.3 ibmcom/wasaas-wasdevaas:2.0.3 ibmcom/wasaas-console:2.0.3 ibmcom/wasaas-dashboard:2.0.3 couchdb:2.1.1 | `PodSecurityPolicy` support and non-root updates. |
 | 2.0.2 | Nov 30, 2018 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.2 ibmcom/wasaas-cloudsm:2.0.2 ibmcom/wasaas-wasdevaas:2.0.2 ibmcom/wasaas-console:2.0.2 couchdb:2.1.1 | New administrative dashboard. |
