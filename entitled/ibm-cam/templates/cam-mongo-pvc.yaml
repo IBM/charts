@@ -1,0 +1,40 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+## Conditionally create first PersistentVolumeClaim based on persistence setting
+  {{ if and .Values.database.bundled (and .Values.camMongoPV.persistence.enabled (not .Values.camMongoPV.persistence.existingClaimName)) -}}
+  kind: PersistentVolumeClaim
+  apiVersion: v1
+  metadata:
+    name: {{ .Values.camMongoPV.name }}
+    annotations:
+      "helm.sh/resource-policy": keep
+    labels:
+      app: {{ template "fullname" . }}
+      chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+    namespace: {{ .Values.service.namespace }}
+  spec:
+    {{- if .Values.camMongoPV.persistence.useDynamicProvisioning }}
+    storageClassName: {{ default nil .Values.camMongoPV.persistence.storageClassName | quote }}
+    {{- else }}
+    ## disable dynamic provisioning
+    storageClassName: ""
+    selector:
+      matchLabels:
+        type: cam-mongo
+    {{- end }}
+    accessModes:
+      - {{ .Values.camMongoPV.persistence.accessMode | quote }}
+    resources:
+      requests:
+        storage: {{ .Values.camMongoPV.persistence.size | quote }}
+  {{- end }}
