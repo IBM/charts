@@ -1,0 +1,208 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if .Values.camBPDUI.bundled  }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cam-bpd-mds
+  labels:
+    name: cam-bpd-mds
+    app: {{ template "fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  namespace: {{ .Values.service.namespace }}
+spec:
+  replicas: {{ .Values.camBPDMDS.replicaCount }}
+  selector:
+    matchLabels:
+      name: cam-bpd-mds
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  revisionHistoryLimit: 3
+  template:
+    metadata:
+      labels:
+        name: cam-bpd-mds
+        app: {{ template "fullname" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: "Cloud Automation Manager"
+        productID: "{{ .Values.global.id.productID }}"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostname: cam-bpd-mds
+      containers:
+        - name: cam-bpd-mds
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - MKNOD
+          image: "{{ .Values.image.repository }}icam-bpd-mds:{{ .Values.image.tag }}{{ template "platform" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: liveness-port
+              containerPort: 7578
+          envFrom:
+          - configMapRef:
+              name: common-config
+          env:
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: mongoDbPassword
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: mongoDbUrl
+            - name: LICENSE
+              value: "accept"
+            - name: CAM_ENABLED
+              value: {{ default "false" .Values.camBPDUI.bundled | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: LOG_LEVEL
+              value: {{ .Values.camLoggingPolicies.logLevel }}
+{{- if .Values.proxy.useProxy }}
+            - name: HTTPS_PROXY
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: httpsProxy          
+            - name: https_proxy
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: httpsProxy  
+            - name: HTTP_PROXY
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: httpProxy  
+            - name: http_proxy
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: httpProxy  
+            - name: NO_PROXY
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: noProxy  
+            - name: no_proxy
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.secureValues.secretName }}
+                  name: {{ .Values.secureValues.secretName }}
+                  {{- else }}
+                  name: cam-secure-values-secret
+                  {{- end }}
+                  key: noProxy  
+{{- end }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: liveness-port
+            initialDelaySeconds: 300
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: liveness-port
+            initialDelaySeconds: 300
+            periodSeconds: 20
+          resources:
+{{ toYaml .Values.camBPDMDS.resources | indent 12 }}
+          volumeMounts:
+            - name: cam-cert
+              mountPath: /usr/src/app/certs
+              readOnly: true
+            - name:  {{ .Values.camLogsPV.name }}
+              mountPath: /var/camlog
+      volumes:
+        - name: cam-cert
+          secret:
+            secretName: {{ .Values.camAPI.certificate.certName }}
+        - name:  {{ .Values.camLogsPV.name }}
+        {{- if .Values.camLogsPV.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.camLogsPV.persistence.existingClaimName }}
+            claimName: {{ .Values.camLogsPV.persistence.existingClaimName }}
+          {{- else }}
+            claimName:  {{ .Values.camLogsPV.name }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+       - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+{{- end }}
