@@ -8,32 +8,36 @@
 #  IBM Corporation - initial API and implementation
 ###############################################################################
 
-{{- if .Values.database.bundled  }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cam-mongo
+  name: cam-provider-bpm
   labels:
-    name: cam-mongo
+    name: cam-provider-bpm
     app: {{ template "fullname" . }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
   namespace: {{ .Values.service.namespace }}
+  annotations:
+    productName: "Cloud Automation Manager"
+    productID: "{{ .Values.global.id.productID }}"
+    productVersion: "{{ .Chart.AppVersion }}"
 spec:
-  replicas: 1
+  replicas: {{ .Values.camBpmProvider.replicaCount }}
   selector:
     matchLabels:
-      name: cam-mongo
+      name: cam-provider-bpm
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 0
+      maxSurge: 1
       maxUnavailable: 1
+  revisionHistoryLimit: 3
   template:
     metadata:
       labels:
-        name: cam-mongo
+        name: cam-provider-bpm
         app: {{ template "fullname" . }}
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
         release: "{{ .Release.Name }}"
@@ -48,7 +52,7 @@ spec:
       hostIPC: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 999
+        runAsUser: 1000
         fsGroup: 1000
         supplementalGroups:
           - 1000
@@ -61,18 +65,18 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
-      hostname: cam-mongo
+      hostname: cam-provider-bpm
       volumes:
       - name: cam-cert
         secret:
           secretName: {{ .Values.camAPI.certificate.certName }}
-      - name: {{ .Values.camMongoPV.name }}
-      {{- if .Values.camMongoPV.persistence.enabled }}
+      - name: {{ .Values.camLogsPV.name }}
+      {{- if .Values.camLogsPV.persistence.enabled }}
         persistentVolumeClaim:
-        {{- if .Values.camMongoPV.persistence.existingClaimName }}
-          claimName: {{ .Values.camMongoPV.persistence.existingClaimName }}
+        {{- if .Values.camLogsPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camLogsPV.persistence.existingClaimName }}
         {{- else }}
-          claimName: {{ .Values.camMongoPV.name }}
+          claimName:  {{ .Values.camLogsPV.name }}
         {{- end }}
       {{- else }}
         emptyDir: {}
@@ -80,11 +84,11 @@ spec:
       {{- if .Values.global.image.secretName }}
       {{- if ne .Values.global.image.secretName "default"}}
       imagePullSecrets:
-      - name: {{ .Values.global.image.secretName }}
+      - name: {{ .Values.global.image.secretName}}
       {{- end }}
       {{- end }}
       containers:
-      - name: cam-mongo
+      - name: cam-provider-bpm
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -92,22 +96,37 @@ spec:
           capabilities:
             drop:
             - MKNOD
-        image: "{{ .Values.image.repository }}icam-mongo:{{ .Values.image.tag }}{{ template "platform" . }}"
+        image: "{{ .Values.image.repository }}icam-provider-bpm:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: liveness-port
+          containerPort: 7030
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: liveness-port
+            scheme: HTTPS
+          initialDelaySeconds: 300
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: liveness-port
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 20
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+          - name: cam-cert
+            mountPath: /usr/src/app/certs
+            readOnly: true
+          - name: {{ .Values.camLogsPV.name }}
+            mountPath: /var/camlog
+        envFrom:
+        - configMapRef:
+            name: common-config
         env:
-        - name: MONGO_INITDB_ROOT_USERNAME
-          value: 'root'
-        - name: MONGO_INITDB_ROOT_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              {{- if .Values.secureValues.secretName }}
-              name: {{ .Values.secureValues.secretName }}
-              {{- else }}
-              name: cam-secure-values-secret
-              {{- end }}
-              key: mongoDbPassword
-        - name: MONGODB_USERNAME
-          value: 'camuser'
         - name: MONGODB_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -117,31 +136,41 @@ spec:
               name: cam-secure-values-secret
               {{- end }}
               key: mongoDbPassword
-        - name: MONGODB_DATABASE
-          value: 'cam'
-        - name: MONGODB_SSL
-          value: 'true'
-        - name: CA_CERT
-          value: "/usr/src/app/certs/tls.crt"
-        ports:
-        - name: mongo
-          containerPort: 27017
-        livenessProbe:
-          tcpSocket:
-            port: mongo
-          initialDelaySeconds: 10
-          periodSeconds: 20
-        readinessProbe:
-          tcpSocket:
-            port: mongo
-          initialDelaySeconds: 5
-          periodSeconds: 20
-        resources:
-{{ toYaml .Values.resources | indent 10 }}
-        volumeMounts:
-          - name: cam-cert
-            mountPath: /usr/src/app/certs
-            readOnly: true
-          - name: "{{ .Values.camMongoPV.name }}"
-            mountPath: /data/db
-{{- end }}
+        - name: DB_URL
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mongoDbUrl
+        - name: CAM_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.camAPI.camSecret.secretName }}
+              key: token
+        - name: ICP_MASTER_IP
+          valueFrom:
+            configMapKeyRef:
+              name: oauth-client-map
+              key: MASTER_IP
+        - name: ICP_PROXY_IP
+          valueFrom:
+            configMapKeyRef:
+              name: oauth-client-map
+              key: PROXY_IP
+        - name: ICP_ENDPOINT
+          value: https://$(ICP_MASTER_IP):8443
+        - name: ORPHEUS_IDENTITY_API_URL
+          value: $(ICP_ENDPOINT)/idprovider
+        - name: ORPHEUS_IDENTITY_URL
+          value: $(ICP_ENDPOINT)/idprovider
+        - name: BLUEMIX_HOME
+          value: /helmuser_common/.bluemix
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: LOG_LEVEL
+          value: {{ .Values.camLoggingPolicies.logLevel }}

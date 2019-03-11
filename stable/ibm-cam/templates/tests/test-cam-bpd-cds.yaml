@@ -12,13 +12,38 @@ metadata:
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
 spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    supplementalGroups:
+      - 1000
   {{- if .Values.global.image.secretName }}
   imagePullSecrets:
   - name: {{ .Values.global.image.secretName }}
   {{- end }}
+  affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
   containers:
   - name: {{ .Release.Name }}-cam-bpd-cds-test
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - MKNOD
     image: "{{ .Values.image.repository }}icam-iaas:{{ .Values.image.tag }}{{ template "platform" . }}"
     imagePullPolicy: {{ .Values.image.pullPolicy }}
-    command: ["sh", "-c", "wget -O - http://cam-bpd-cds:7575"]
+    command: ["sh", "-c", "wget --ca-certificate=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt -O - http://cam-bpd-cds:7575"]
   restartPolicy: Never
