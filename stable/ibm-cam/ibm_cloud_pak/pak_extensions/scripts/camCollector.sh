@@ -2,7 +2,7 @@
 #
 #Licensed Materials - Property of IBM
 #5737-E67
-#(C) Copyright IBM Corporation 2016, 2017 All Rights Reserved.
+#(C) Copyright IBM Corporation 2016-2019 All Rights Reserved.
 #US Government Users Restricted Rights - Use, duplication or
 #disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 #
@@ -25,7 +25,7 @@ collectDiagnosticsData() {
       u="admin"
     fi
 
-    result=$(curl -s -k -H "Content-Type: application/x-www-form-urlencoded;charset=UTF-8" -d "grant_type=password&username=${u}&password=${p}&scope=openid" https://$t:8443/idprovider/v1/auth/identitytoken --write-out "\n%{http_code}" --silent)
+    result=$(curl -s -k -H "Content-Type: application/x-www-form-urlencoded;charset=UTF-8" -d "grant_type=password&username=${u}&scope=openid" --data-urlencode password=${p} https://$t:8443/idprovider/v1/auth/identitytoken --write-out "\n%{http_code}" --silent)
     status="${result##*$'\n'}"
     response="${result%$'\n'*}"
     if [ "$status" -eq 200 ] 

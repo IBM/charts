@@ -2,7 +2,7 @@
 #
 #Licensed Materials - Property of IBM
 #5737-E67
-#(C) Copyright IBM Corporation 2016, 2018 All Rights Reserved.
+#(C) Copyright IBM Corporation 2016-2019 All Rights Reserved.
 #US Government Users Restricted Rights - Use, duplication or
 #disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 #
@@ -90,7 +90,6 @@ DEPLOYMENT_IAAS=cam-iaas
 DEPLOYMENT_PT=cam-provider-terraform
 DEPLOYMENT_MONGODB=cam-mongo
 DEPLOYMENT_MARIADB=cam-bpd-mariadb
-DEPLOYMENT_REDIS=redis
 
 
 #
@@ -147,10 +146,9 @@ else
 fi
 
 
-# Check if mongo, mariadb and redis are bundled or not
+# Check if mongo and mariadb are bundled or not
 BUNDLED_MONGODB=true
 BUNDLED_MARIADB=true
-BUNDLED_REDIS=true
 
 kubectl -n $NAMESPACE get deploy -l release=$camRelease -l name=$DEPLOYMENT_MONGODB | grep -q $DEPLOYMENT_MONGODB
 if [ $? -ne 0 ]; then
@@ -163,13 +161,6 @@ if [ $? -ne 0 ]; then
   BUNDLED_MARIADB=false
 fi
 echo "MariaDB bundled: $BUNDLED_MARIADB"
-
-kubectl -n $NAMESPACE get deploy -l release=$camRelease -l name=$DEPLOYMENT_REDIS | grep -q $DEPLOYMENT_REDIS
-if [ $? -ne 0 ]; then
-  BUNDLED_REDIS=false
-fi
-echo "Redis bundled: $BUNDLED_REDIS"
-
 
 #
 # Figure out which parts we will do and display
@@ -333,18 +324,6 @@ if [ "$CHANGE_ENCRYPTION" = true ]; then
       exit 1
     fi
     sleep 30
-  fi
-
-  # Need redis up to run these migrations
-  if [ "$BUNDLED_REDIS" = true ]; then
-    echo "Starting bundled redis container ..."
-    kubectl scale -n $NAMESPACE deployment $DEPLOYMENT_REDIS --replicas=1
-    if [ $? -ne 0 ]; then
-      echo "Error, unable to start bundled redis container before migration. Exiting."
-      rollback1
-      exit 1
-    fi
-    sleep 20
   fi
 
   # start iaas to run cipher migration
