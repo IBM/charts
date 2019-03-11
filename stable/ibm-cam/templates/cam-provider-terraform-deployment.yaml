@@ -43,6 +43,15 @@ spec:
         productID: "{{ .Values.global.id.productID }}"
         productVersion: "{{ .Chart.AppVersion }}"
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1111
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -54,6 +63,9 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-provider-terraform
       volumes:
+      - name: cam-cert
+        secret:
+          secretName: {{ .Values.camAPI.certificate.certName }}
       - name: {{ .Values.camLogsPV.name }}
       {{- if .Values.camLogsPV.persistence.enabled }}
         persistentVolumeClaim:
@@ -84,6 +96,13 @@ spec:
       {{- end }}
       containers:
       - name: cam-provider-terraform
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - MKNOD
         image: "{{ .Values.image.repository }}icam-provider-terraform:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
@@ -93,28 +112,30 @@ spec:
           httpGet:
             path: /api/health
             port: liveness-port
+            scheme: HTTPS
           initialDelaySeconds: 300
           periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /api/health
             port: liveness-port
+            scheme: HTTPS
           initialDelaySeconds: 5
           periodSeconds: 20
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: cam-cert
+            mountPath: /usr/src/app/certs
+            readOnly: true
           - name: {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
-            subPath: cam-provider-terraform
           - name: {{ .Values.camTerraformPV.name }}
             mountPath: /home/terraform
             subPath: cam-provider-terraform
         envFrom:
         - configMapRef:
             name: common-config
-        - configMapRef:
-            name: redis-config
         env:
         - name: MONGODB_PASSWORD
           valueFrom:
@@ -188,6 +209,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        - name: LOG_LEVEL
+          value: {{ .Values.camLoggingPolicies.logLevel }}
 {{- if .Values.proxy.useProxy }}
         - name: HTTPS_PROXY
           valueFrom:
@@ -244,22 +267,3 @@ spec:
               {{- end }}
               key: noProxy  
 {{- end }}
-      initContainers:
-      - name: cam-provider-terraform-init
-        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
-        imagePullPolicy:  {{ .Values.image.pullPolicy }}
-        securityContext:
-          runAsUser: 0
-        command: ["/bin/sh", "-c"]
-        args:
-          - mkdir -p /var/camlog/cam-provider-terraform/${POD_NAME} && touch /var/camlog/cam-provider-terraform/${POD_NAME}/cam_out.log && touch /var/camlog/cam-provider-terraform/${POD_NAME}/cam_err.log && chown -R 1000:1000 /var/camlog/cam-provider-terraform && mkdir -p /home/terraform/cam-provider-terraform && chown -R 1111:1111 /home/terraform/cam-provider-terraform && chmod -R g+w /home/terraform/cam-provider-terraform;
-        volumeMounts:
-        - name: {{ .Values.camLogsPV.name }}
-          mountPath: /var/camlog
-        - name: {{ .Values.camTerraformPV.name }}
-          mountPath: /home/terraform
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name

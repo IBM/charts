@@ -43,6 +43,15 @@ spec:
         productID: "{{ .Values.global.id.productID }}"
         productVersion: "{{ .Chart.AppVersion }}"
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -55,6 +64,13 @@ spec:
       hostname: cam-bpd-cds
       containers:
         - name: cam-bpd-cds
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - MKNOD
           image: "{{ .Values.image.repository }}icam-bpd-cds:{{ .Values.image.tag }}{{ template "platform" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
@@ -71,6 +87,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: LOG_LEVEL
+              value: {{ .Values.camLoggingPolicies.logLevel }}
           livenessProbe:
             httpGet:
               path: /
@@ -85,14 +103,19 @@ spec:
           resources:
 {{ toYaml .Values.camBPDCDS.resources | indent 12 }}
           volumeMounts:
+            - name: cam-cert
+              mountPath: /usr/src/app/certs
+              readOnly: true
             {{- if .Values.camBPDCDS.options.customSettingsFile }}
             - name: settings-file
               mountPath: /custom_settings
             {{- end }}
             - name:  {{ .Values.camLogsPV.name }}
               mountPath: /var/camlog
-              subPath: cam-bpd-cds
       volumes:
+        - name: cam-cert
+          secret:
+            secretName: {{ .Values.camAPI.certificate.certName }}
         {{- if .Values.camBPDCDS.options.customSettingsFile }}
         - name: settings-file
           configMap:
@@ -116,15 +139,3 @@ spec:
       {{- end }}
       {{- end }}
 {{- end }}
-      initContainers:
-      - name: cam-bpd-cds-init
-        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
-        imagePullPolicy:  {{ .Values.image.pullPolicy }}
-        securityContext:
-          runAsUser: 0
-        command: ["/bin/sh", "-c"]
-        args:
-          - mkdir -p /var/camlog/cam-bpd-cds && chown -R 1000:1000 /var/camlog/cam-bpd-cds;
-        volumeMounts:
-        - name: {{ .Values.camLogsPV.name }}
-          mountPath: /var/camlog

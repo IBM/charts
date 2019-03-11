@@ -43,6 +43,15 @@ spec:
         productID: "{{ .Values.global.id.productID }}"
         productVersion: "{{ .Chart.AppVersion }}"
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -54,6 +63,9 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-ui-basic
       volumes:
+      - name: cam-cert
+        secret:
+          secretName: {{ .Values.camAPI.certificate.certName }}
 {{- if .Values.global.audit }}
       - name: shared
         emptyDir: {}
@@ -86,14 +98,36 @@ spec:
       {{- else }}
         emptyDir: {}
       {{- end }}
-      {{- if .Values.global.image.secretName }}
-      {{- if ne .Values.global.image.secretName "default"}}
+      {{- if ne .Values.global.image.secretName "default" }}
       imagePullSecrets:
-      - name: {{ .Values.global.image.secretName }}
+      {{- else }}
+        {{- if ne .Values.auditService.image.pullSecret "" }}
+          {{- if .Values.global.audit }}
+      imagePullSecrets:
+          {{- end }}
+        {{- end }}
       {{- end }}
+      {{- if .Values.global.image.secretName }}
+        {{- if ne .Values.global.image.secretName "default" }}
+      - name: {{ .Values.global.image.secretName }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.auditService.image.pullSecret }}
+        {{- if ne .Values.auditService.image.pullSecret "" }}
+          {{- if .Values.global.audit }}
+      - name: {{ .Values.auditService.image.pullSecret }}
+          {{- end }}
+        {{- end }}
       {{- end }}
       containers:
       - name: cam-ui-basic
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - MKNOD
         image: "{{ .Values.image.repository }}icam-ui-basic:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
@@ -103,20 +137,24 @@ spec:
           httpGet:
             path: /ui/health
             port: liveness-port
+            scheme: HTTPS
           initialDelaySeconds: 300
           periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /ui/health
             port: liveness-port
+            scheme: HTTPS
           initialDelaySeconds: 5
           periodSeconds: 20
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: cam-cert
+            mountPath: /usr/src/app/certs
+            readOnly: true
           - name:  {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
-            subPath: cam-ui-basic
 {{- if .Values.global.audit }}
           - name: shared
             mountPath: /var/audit
@@ -124,8 +162,6 @@ spec:
         envFrom:
         - configMapRef:
             name: common-config
-        - configMapRef:
-            name: redis-config
         env:
         - name: MONGODB_PASSWORD
           valueFrom:
@@ -197,6 +233,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: LOG_LEVEL
+          value: {{ .Values.camLoggingPolicies.logLevel }}
         - name: SERVICE_NAME
           value: cam-ui-basic
         - name: AUDIT_ENABLED
@@ -207,6 +245,9 @@ spec:
       - name: cam-ui-basic-audit
         image: "{{ .Values.auditService.image.repository }}icp-audit-service:{{ .Values.auditService.image.tag }}"
         imagePullPolicy: {{ .Values.auditService.image.pullPolicy }}
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
         resources:
 {{ toYaml .Values.auditService.resources | indent 10 }}
         env:
@@ -214,10 +255,11 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
+          - name: LOG_LEVEL
+            value: {{ .Values.camLoggingPolicies.logLevel }}
         volumeMounts:
           - name:  {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
-            subPath: cam-iaas
           - name: shared
             mountPath: "/var/log/audit"
           - name: journal
@@ -245,15 +287,3 @@ spec:
           initialDelaySeconds: 5
           timeoutSeconds: 1
 {{- end }}
-      initContainers:
-      - name: cam-ui-basic-init
-        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
-        imagePullPolicy:  {{ .Values.image.pullPolicy }}
-        securityContext:
-          runAsUser: 0
-        command: ["/bin/sh", "-c"]
-        args:
-          - mkdir -p /var/camlog/cam-ui-basic && chown -R 1000:1000 /var/camlog/cam-ui-basic;
-        volumeMounts:
-        - name: {{ .Values.camLogsPV.name }}
-          mountPath: /var/camlog

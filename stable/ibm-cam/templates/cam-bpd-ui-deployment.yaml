@@ -43,6 +43,15 @@ spec:
         productID: "{{ .Values.global.id.productID }}"
         productVersion: "{{ .Chart.AppVersion }}"
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -55,23 +64,30 @@ spec:
       hostname: cam-bpd-ui
       containers:
       - name: cam-bpd-ui
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - MKNOD
         image: "{{ .Values.image.repository }}icam-bpd-ui:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
-        - containerPort: 8080
+        - containerPort: 8443
         livenessProbe:
           httpGet:
             path: /landscaper/login
-            port: 8080
-            scheme: HTTP
+            port: 8443
+            scheme: HTTPS
           initialDelaySeconds: 180
           periodSeconds: 5
           timeoutSeconds: 10
         readinessProbe:
           httpGet:
             path: /landscaper/login
-            port: 8080
-            scheme: HTTP
+            port: 8443
+            scheme: HTTPS
           initialDelaySeconds: 5
         env:
         {{- if not .Values.camBPDDatabase.bundled }}
@@ -136,6 +152,8 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
+          - name: LOG_LEVEL
+            value: {{ .Values.camLoggingPolicies.logLevel }}
           - name: ICP_MASTER_IP
             valueFrom:
               configMapKeyRef:
@@ -223,6 +241,9 @@ spec:
                 key: noProxy  
 {{- end }}
         volumeMounts:
+          - name: cam-cert
+            mountPath: /usr/src/app/certs
+            readOnly: true
           {{- if not .Values.camBPDDatabase.bundled }}
           - name: ext-lib
             mountPath: "/opt/ibm-ucd-patterns/ext_lib"
@@ -235,7 +256,6 @@ spec:
             subPath: repositories
           - name:  {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
-            subPath: cam-bpd-ui
         resources:
 {{ toYaml .Values.camBPDResources | indent 12 }}
       {{- if .Values.global.image.secretName }}
@@ -245,6 +265,9 @@ spec:
       {{- end }}
       {{- end }}
       volumes:
+      - name: cam-cert
+        secret:
+          secretName: {{ .Values.camAPI.certificate.certName }}
       {{- if not .Values.camBPDDatabase.bundled }}
       - name: ext-lib
         persistentVolumeClaim:
@@ -273,15 +296,3 @@ spec:
         emptyDir: {}
       {{- end }}
 {{- end }}
-      initContainers:
-      - name: cam-bpd-ui-init
-        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
-        imagePullPolicy:  {{ .Values.image.pullPolicy }}
-        securityContext:
-          runAsUser: 0
-        command: ["/bin/sh", "-c"]
-        args:
-          - mkdir -p /var/camlog/cam-bpd-ui && chown -R 1000:1000 /var/camlog/cam-bpd-ui;
-        volumeMounts:
-        - name: {{ .Values.camLogsPV.name }}
-          mountPath: /var/camlog
