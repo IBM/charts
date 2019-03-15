@@ -392,7 +392,7 @@ restProxy.cfg: |
     exit
     
     %endif%
-{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}    
+{{ if .Values.crypto.frontsideSecret }}
     crypto
       certificate "restProxy_cert" "cert:///cert.pem"
     exit
