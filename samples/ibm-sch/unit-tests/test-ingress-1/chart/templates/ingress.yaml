@@ -1,0 +1,31 @@
+{{- include "sch.config.init" (list . "test-01.sch.chart.config.values") }}
+{{- $compName := .sch.chart.components.common.name }}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: test-ingress-1
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+{{- include "sch.metadata.annotations.nginx.ingress" (list . .sch.chart.nginx.ingress) | indent 4 }}
+spec:
+{{- if .Values.ingress.tls }}
+  tls:
+  {{- range .Values.ingress.tls }}
+    - hosts:
+      {{- range .hosts }}
+        - {{ . }}
+      {{- end }}
+      secretName: {{ .secretName }}
+  {{- end }}
+{{- end }}
+  rules:
+  {{- range .Values.ingress.hosts }}
+    - host: {{ . }}
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: http
+              servicePort: http
+  {{- end }}

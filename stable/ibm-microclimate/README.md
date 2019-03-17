@@ -23,7 +23,7 @@ Installing the chart will:
 - Create service accounts, roles, and bindings if service account names are specified (advised for installations into a non-default namespace)
 
 ## Prerequisites
-- IBM Cloud Private version 3.1.0 or later. Older versions of IBM Cloud Private are supported by chart versions v1.5.0 and earlier only. Version support information can be found in the release notes of each chart release.
+- IBM Cloud Private version 3.1. Older versions of IBM Cloud Private are supported by chart versions v1.5.0 and earlier only. Version support information can be found in the release notes of each chart release.
 - An IBM Cloud Private cluster with worker nodes that have x86-64 or ppc64le architecture.
 - Ensure [socat](http://www.dest-unreach.org/socat/doc/README) is available on all worker nodes in your cluster. Microclimate uses Helm internally and both the Helm Tiller and client require socat for port forwarding.
 - Download the IBM Cloud Private CLI, cloudctl, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
@@ -157,11 +157,6 @@ This is the default target namespace used by the Microclimate pipeline for deplo
 
 The following steps require the `cluster_ca_domain` certificate authority (CA) domain. During IBM Cloud Private installation, this CA domain was set in the config.yaml file. If you did not specify a CA domain name, `mycluster.icp` is the default value.
 
-You can determine your CA domain with the following command:
-```
-printf "$(kubectl get configmap oauth-client-map -n services -o jsonpath="{.data.CLUSTER_CA_DOMAIN}")\n"
-```
-
 #### Create a new ClusterImagePolicy
 
 Microclimate pipelines pull images from repositories other than `docker.io/ibmcom`. To use Microclimate pipelines, you must ensure you have a cluster image policy that permits images to be pulled from these repositories.
@@ -275,11 +270,6 @@ If the name of your proxy node is a string instead of an IP address, the proxy n
 
 When installing the chart, you must ensure sufficient persistent storage is provided to the Microclimate installation. For more information, see **Configuration**.
 
-#### Setting Security Contexts
-
-By default Microclimate uses pre-defined security contexts only available on IBM Cloud Private 3.1.1 or later. When installing Microclimate on IBM Cloud Private 3.1.0, you must set the `global.useSecurityContext` flag to false or the installation will fail.
-
-
 ## Installing from the command line
 
 When the above prerequisities are satisfied and you are confident each resource has been created in the target namespace, you can proceed with the installation process.
@@ -291,10 +281,6 @@ Before installing the chart, you must add the IBM charts repo to your Helm repos
 You can then install the chart using the ingressDomain and service account name:  
 
 `helm install --name microclimate --namespace <target namespace> --set global.rbac.serviceAccountName=micro-sa,jenkins.rbac.serviceAccountName=pipeline-sa,global.ingressDomain=<icp-proxy>.nip.io ibm-charts/ibm-microclimate --tls`.
-
-Or if you're installing on IBM Cloud Private 3.1.0, make sure to also set `global.useSecurityContext=false`:
-
-`helm install --name microclimate --namespace <target namespace> --set global.rbac.serviceAccountName=micro-sa,jenkins.rbac.serviceAccountName=pipeline-sa,global.ingressDomain=<icp-proxy>.nip.io,global.useSecurityContext=false ibm-charts/ibm-microclimate --tls`.
 
 This command deploys Microclimate on the Kubernetes cluster in the default configuration. For more information, see **Set the Ingress domain name**.
 
@@ -342,14 +328,6 @@ Microclimate attempts to create its own persistent volume claim by using the `pe
 **Warning:** Microclimate stores any projects that are created by users in whichever Persistent Volume to which it gets mounted. Uninstalling Microclimate might cause data to be lost if the `PersistentVolume` and `PersistentVolumeClaim` are not configured correctly. To avoid losing data, we recommend that you have the correct Reclaim Policy set in a provided `PersistentVolumeClaim` or, if you are using Dynamic Provisioning, in the provided `StorageClass`. The same practice should be applied to the Jenkins persistent volume.
 
 **Warning:** Avoid using hostPath persistent volumes. A hostPath volume sets up a file system on a single node of a cluster. The portal, file-watcher, and editor pods need access to the same file system, and these pods can start on different nodes. If the pods start on different nodes, pods that are started on one node are unable to access the hostPath volume that is created on a different node.
-
-**Warning:** Set adequate permissions for the directories of the Persistent Volumes that you will use for Microclimate, especially if you use a Network File System (NFS) server. Microclimate containers run as non-root. For example, the Jenkins container that Microclimate uses runs as `jenkins`. 
-
-As part of the Microclimate initialization process, a number of files need to be written to disk in the Persistent Volume. Thus, you need to ensure that the directories can be modified.
-
-For example, if you created the directory to be owned by the user `root`, make sure that other users, such as `jenkins`, are able to write into it, typically by using a `chmod` command or by creating groups on the system. Also, for security reasons, whitelist only the IP addresses of your worker nodes.
-
-Example settings to use for the NFS exports are `rw`, `sync`, `no_subtree_check`, `insecure`, and `no_root_squash`.
 
 For more information about creating Persistent Storage and enabling Dynamic Provisioning, see [Cluster Storage](https://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0/manage_cluster/cluster_storage.html),
 [Working with storage](https://www.ibm.com/developerworks/community/blogs/fe25b4ef-ea6a-4d86-a629-6f87ccf4649e/entry/Working_with_storage), and
@@ -419,7 +397,7 @@ If using the command line, the option can be specified as follows:
 | `global.rbac.serviceAccountName`    | Name of a service account to create for Microclimate's Portal and File Watcher components to use | `"default"` |
 | `global.gitOption`    | An extra Git configuration option to be used for Microclimate | `""` |
 | `global.applyPodSecurityPolicy`    | Automatically apply the ibm-anyuid-hostpath-psp policy to the namespace Microclimate is installed into | `true` |
-| `global.useSecurityContext`     | Use security contexts for the Portal and Atrium pods. Set to false if installing on IBM Cloud Private 3.1.0 | `true` |
+| `global.useSecurityContexts`     | Use security contexts for the Portal and Atrium pods | `true` |
 | `global.helmHost`     | Hostname and port of the Helm tiller, if using its NodePort configuration. | `""` |
 
 Jenkins also has a number of other configurable options not listed here. These can be viewed in the chart's `values.yaml` file or in your cluster's dashboard page for this chart.

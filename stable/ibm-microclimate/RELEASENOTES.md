@@ -1,13 +1,13 @@
 # Breaking Changes
 No breaking changes.
 
-# What’s new in Chart Version 1.12.0
+# What’s new in Chart Version 1.11.0
 
 ## Microclimate
-* Added support for creating a new template from an existing project or importing a template from public Git.
-* Added support for using the DevOps pipeline in an offline configuration.
-* Added improvements to the IBM Cloud Private installation, DevOps pipeline deployment status in the UI, and Git project creation
-
+* Added support for IBM Cloud Private Version 3.1.2.
+* Added IBM Cloud Pak status. For more information, see https://github.com/IBM/cloud-pak.
+* Theia upgraded to 0.3.18. 
+* Microclimate Node.js Profiling Language Server can be used to provide code highlighting in Theia editor.
 
 # Fixes
 * Various minor bug and stability fixes.
@@ -19,7 +19,7 @@ No breaking changes.
 - Download the IBM Cloud Private CLI, `cloudctl`, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
 
 
-# Upgrading from 1.11.0
+# Upgrading from 1.10.0
 
 Microclimate can be upgraded from the IBM Cloud Private Helm Releases view. When performing the upgrade, ensure the `Reuse Value` option is selected.
 
@@ -32,7 +32,6 @@ You can then perform the upgrade with the following command:
 `helm upgrade <release-name> <path-to-microclimate-chart> -f values.yaml`
 
 
-
 # Documentation
 For detailed installation instructions go to https://microclimate-dev2ops.github.io/installicp
 
@@ -40,9 +39,7 @@ For detailed installation instructions go to https://microclimate-dev2ops.github
 
 | Chart | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
-| 1.12.0 | March 15, 2019 | 1.12.0  | 1903 | None | New method for craetion templates. Offline use of devops pipleine. |
 | 1.11.0 | February 8, 2019 | 1.11.0  | 1902 | None | IBM Cloud Pak status, Support for ICP 3.1.2 |
-| 1.11.0 | February 8, 2019 | 1.11.0  | 1902 | None | To be decided |
 | 1.10.0 | January  11, 2019 | 1.11.0  | 1901 | None | Improved logging. Various fixes and stability improvements |
 | 1.9.0 | December 13, 2018 | 1.11.0  | 1812 | None | Added support for Linux® on Power® (ppc64le). |
 | 1.8.0 | November 16, 2018 | 1.11.0  | 1811 | None | Added support for ICP 3.1.1. Various fixes and improvements |
