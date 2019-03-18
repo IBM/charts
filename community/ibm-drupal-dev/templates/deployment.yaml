@@ -1,0 +1,146 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "drupal.fullname" . }}
+  labels:
+    app: {{ template "drupal.fullname" . }}
+    chart: {{ template "drupal.chart" . }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "drupal.fullname" . }}
+      release: "{{ .Release.Name }}"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "drupal.fullname" . }}
+        chart: {{ template "drupal.chart" . }}
+        release: "{{ .Release.Name }}"
+        name: tiller
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: drupal
+        productID: drupal_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+  {{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+  {{- end }}
+    spec:
+      hostAliases:
+      - ip: "127.0.0.1"
+        hostnames:
+        - "status.localhost"
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      initContainers:
+      - name: "wait-for-db"
+        image: "alpine:3.6"
+        command:
+        - 'sh'
+        - '-c'
+        - >
+      {{- if .Values.mariadb.enabled }}
+          until nc -z -w 2 {{ template "drupal.mariadb.fullname" . }} {{ .Values.mariadb.service.port }} && echo database ok; do
+      {{- else }}
+        {{- if and .Values.externalDatabase.host .Values.externalDatabase.port }}
+          until nc -z -w 2 {{ .Values.externalDatabase.host }} {{ .Values.externalDatabase.port }} && echo database ok; do
+        {{- else }}
+          until true; do
+        {{- end }}
+      {{- end }}
+            sleep 2;
+          done;
+      containers:
+      - name: drupal
+        image: {{ template "drupal.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            drop:
+            - MKNOD
+        env:
+        - name: MARIADB_HOST
+        {{- if .Values.mariadb.enabled }}
+          value: {{ template "drupal.mariadb.fullname" . }}
+        {{- else }}
+          value: {{ default "" .Values.externalDatabase.host | quote }}
+        {{- end }}
+        - name: MARIADB_PORT_NUMBER
+        {{- if .Values.mariadb.enabled }}
+          value: {{ default "" .Values.mariadb.service.port | quote }}
+        {{- else }}
+          value: {{ default "" .Values.externalDatabase.port | quote }}
+        {{- end }}
+        - name: DRUPAL_DATABASE_NAME
+        {{- if .Values.mariadb.enabled }}
+          value: {{ default "" .Values.mariadb.database.name | quote }}
+        {{- else }}
+          value: {{ default "" .Values.externalDatabase.database | quote }}
+        {{- end }}
+        - name: DRUPAL_DATABASE_USER
+        {{- if .Values.mariadb.enabled }}
+          value: {{ default "" .Values.mariadb.database.user | quote }}
+        {{- else }}
+          value: {{ default "" .Values.externalDatabase.user | quote }}
+        {{- end }}
+        - name: DRUPAL_DATABASE_PASSWORD
+        {{- if .Values.mariadb.enabled }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "drupal.mariadb.fullname" . }}
+              key: password
+        {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ printf "%s-%s" .Release.Name "externaldb" }}
+              key: db-password
+        {{- end }}
+        ports:
+        - name: http
+          containerPort: 80
+        livenessProbe:
+{{ toYaml .Values.livenessProbe | indent 10 }}
+        readinessProbe:
+{{ toYaml .Values.readinessProbe | indent 10 }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+        - name: drupal-data
+          mountPath: {{ .Values.volumeMounts.drupal.mountPath }}
+        {{- if .Values.volumeMounts.apache.mountPath }}
+        - name: apache-data
+          mountPath: {{ .Values.volumeMounts.apache.mountPath }}
+        {{- end }}
+      volumes:
+      - name: drupal-data
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.drupal.existingClaim | default (printf "%s-drupal" (include "drupal.fullname" .)) }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      {{- if .Values.volumeMounts.apache.mountPath }}
+      - name: apache-data
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "drupal.fullname" . }}-apache
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      {{- end }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+      {{- with .Values.tolerations }}
+      tolerations:
+      {{ toYaml . | indent 8 }}
+      {{- end }}
+
