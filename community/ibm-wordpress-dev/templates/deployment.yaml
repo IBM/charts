@@ -1,0 +1,153 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "wordpress.fullname" . }}
+  labels:
+    app: "{{ template "wordpress.fullname" . }}"
+    chart: "{{ template "wordpress.chart" . }}"
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+spec:
+  selector:
+    matchLabels:
+      app: "{{ template "wordpress.fullname" . }}"
+      release: {{ .Release.Name | quote }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: "{{ template "wordpress.fullname" . }}"
+        chart: "{{ template "wordpress.chart" . }}"
+        release: {{ .Release.Name | quote }}
+        heritage: {{ .Release.Service | quote }}
+      annotations:
+        productName: wordpress
+        productID: wordpress_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+      {{- if .Values.podAnnotations }}
+        {{ toYaml .Values.podAnnotations | indent 8 }}
+      {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      hostAliases:
+      - ip: "127.0.0.1"
+        hostnames:
+        - "status.localhost"
+      initContainers:
+      - name: "wait-for-db"
+        image: "alpine:3.6"
+        command:
+        - 'sh'
+        - '-c'
+        - >
+      {{- if .Values.mariadb.enabled }}
+          until nc -z -w 2 {{ template "mariadb.fullname" . }} {{ .Values.mariadb.service.port }} && echo database ok; do
+      {{- else }}
+        {{- if and .Values.externalDatabase.host .Values.externalDatabase.port }}
+          until nc -z -w 2 {{ .Values.externalDatabase.host }} {{ .Values.externalDatabase.port }} && echo database ok; do
+        {{- else }}
+          until true; do
+        {{- end }}
+      {{- end }}
+            sleep 2;
+          done;
+      containers:
+      - name: wordpress
+        image: {{ template "wordpress.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            drop:
+            - MKNOD
+        livenessProbe:
+          httpGet:
+            path: /wp-login.php
+            port: http
+{{ toYaml .Values.livenessProbe | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /wp-login.php
+            port: http
+{{ toYaml .Values.readinessProbe | indent 10 }}
+        env:
+        - name: WORDPRESS_DB_HOST
+        {{- if .Values.mariadb.enabled }}
+          value: "{{ template "mariadb.fullname" . }}:{{ .Values.mariadb.service.port }}"
+        {{- else }}
+          value: "{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}"
+        {{- end }}
+
+        - name: WORDPRESS_DB_NAME
+        {{- if .Values.mariadb.enabled }}
+          value: {{ .Values.mariadb.database.name | quote }}
+        {{- else }}
+          value: {{ .Values.externalDatabase.database | quote }}
+        {{- end }}
+
+        - name: WORDPRESS_DB_USER
+        {{- if .Values.mariadb.enabled }}
+          value: {{ .Values.mariadb.database.user | quote }}
+        {{- else }}
+          value: {{ .Values.externalDatabase.user | quote }}
+        {{- end }}
+
+        - name: WORDPRESS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+            {{- if .Values.mariadb.enabled }}
+              name: {{ template "mariadb.fullname" . }}
+              key: password
+            {{- else }}
+              name: {{ printf "%s-%s" .Release.Name "externaldb" }}
+              key: db-password
+            {{- end }}
+
+        - name: WORDPRESS_TABLE_PREFIX
+          value: {{ .Values.wordpressTablePrefix | quote }}
+
+        ports:
+        - name: http
+          containerPort: 80
+        - name: https
+          containerPort: 443
+        volumeMounts:
+        - mountPath: /bitnami/apache
+          name: wordpress-data
+          subPath: apache
+        - mountPath: /bitnami/wordpress
+          name: wordpress-data
+          subPath: wordpress
+        - mountPath: /bitnami/php
+          name: wordpress-data
+          subPath: php
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+      volumes:
+      - name: wordpress-data
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.existingClaim | default (include "wordpress.fullname" .) }}
+      {{- else }}
+        emptyDir: {}
+      {{ end }}
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end -}}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      affinity:
+{{- include "nodeaffinity" . | indent 6 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
