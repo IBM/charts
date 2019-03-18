@@ -1,0 +1,162 @@
+{{- if or .Values.mariadb.enabled .Values.externalDatabase.host -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "joomla.fullname" . }}
+  labels:
+    app: {{ template "joomla.fullname" . }}
+    chart: {{ template "joomla.chart" . }}
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "joomla.fullname" . }}
+      release: "{{ .Release.Name }}"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "joomla.fullname" . }}
+        name: mariadb
+        chart: {{ template "joomla.chart" . }}
+        release: {{ .Release.Name | quote }}
+        heritage: {{ .Release.Service | quote }}
+      annotations:
+        productName: joomla
+        productID: joomla_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+  {{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+  {{- end }}
+    spec:
+      hostAliases:
+      - ip: "127.0.0.1"
+        hostnames:
+        - "status.localhost"
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      initContainers:
+      - name: "wait-for-db"
+        image: "alpine:3.6"
+        command:
+        - 'sh'
+        - '-c'
+        - >
+      {{- if .Values.mariadb.enabled }}
+          until nc -z -w 2 {{ template "mariadb.fullname" . }} {{ .Values.mariadb.service.port }} && echo database ok; do
+      {{- else }}
+        {{- if and .Values.externalDatabase.host .Values.externalDatabase.port }}
+          until nc -z -w 2 {{ .Values.externalDatabase.host }} {{ .Values.externalDatabase.port }} && echo database ok; do
+        {{- else }}
+          until true; do
+        {{- end }}
+      {{- end }}
+            sleep 2;
+          done;
+      containers:
+      - name: joomla
+        image: {{ template "joomla.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            drop:
+            - MKNOD
+        env:
+        {{- if .Values.mariadb.enabled }}
+        - name: JOOMLA_DB_HOST
+          value: "{{ template "joomla.mariadb.fullname" . }}:{{ .Values.mariadb.service.port }}"
+        - name: MYSQL_PORT_3306_TCP
+          value: "tcp://{{ template "joomla.mariadb.fullname" . }}:{{ .Values.mariadb.service.port }}"
+        - name: JOOMLA_DB_NAME
+          value: {{ .Values.mariadb.database.name | quote }}
+        - name: JOOMLA_DB_USER
+          value: {{ .Values.mariadb.database.user | quote }}
+        - name: JOOMLA_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "joomla.mariadb.fullname" . }}
+              key: password
+        {{- else }}
+        - name: JOOMLA_DB_HOST
+          value: "{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}"
+        - name: MYSQL_PORT_3306_TCP
+          value: "tcp://{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}"
+        - name: JOOMLA_DB_NAME
+          value: {{ .Values.externalDatabase.database | quote }}
+        - name: JOOMLA_DB_USER
+          value: {{ .Values.externalDatabase.user | quote }}
+        - name: JOOMLA_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ printf "%s-%s" .Release.Name "externaldb" }}
+              key: db-password
+        {{- end }}
+        ports:
+        - name: http
+          containerPort: 80
+        {{- if .Values.livenessProbe.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /index.php
+            port: http
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        {{- end }}
+        {{- if .Values.readinessProbe.enabled }}
+        readinessProbe:
+          httpGet:
+            path: /index.php
+            port: http
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        {{- end }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+        - name: joomla-data
+          mountPath: /bitnami/joomla
+        - name: apache-data
+          mountPath: /bitnami/apache
+      volumes:
+      - name: joomla-data
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "joomla.fullname" . }}-joomla
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: apache-data
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "joomla.fullname" . }}-apache
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end -}}
+      {{- with .Values.affinity }}
+      affinity:
+       {{ toYaml . | indent 8 }}
+      {{- end }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+      {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- end }}
