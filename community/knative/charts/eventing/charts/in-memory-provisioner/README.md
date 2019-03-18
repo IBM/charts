@@ -27,12 +27,10 @@ enabled.
 ```bash
 $ kubectl apply --filename https://raw.githubusercontent.com/knative/serving/v0.2.3/third_party/istio-1.0.2/istio.yaml
 ```
-or following these steps:
-[Installing istio](https://github.com/knative/docs/blob/master/install/Knative-with-any-k8s.md#installing-istio)
 
 ## Installing the Chart
 
-Please ensure that you have reviewed the [prerequisites](#prerequisites).
+Please ensure that you have reviewed the prerequisites section.
 To install the chart using helm cli:
 
 Install In Memory provisioner for eventing
@@ -42,7 +40,7 @@ $ helm install ./knative/charts/eventing/charts/in-memory-provisioner
 
 ### Configuration
 
-[Values.yaml](./values.yaml) outlines the configuration options that are supported by this chart.
+[Values.yaml](https://github.com/IBM/charts/blob/master/community/knative/charts/eventing/charts/in-memory-provisioner/values.yaml) outlines the configuration options that are supported by this chart.
 
 ### Verifying the Chart
 

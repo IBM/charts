@@ -80,6 +80,24 @@ spec:
                 {{ end }}
       terminationGracePeriodSeconds: 10
       initContainers:
+{{- if eq .Values.global.privileged true }}
+      - name: set-volume-permissions
+        image: "{{ include "kafka.getImageRepo" . }}/hdm-kafka:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["sh", "-c", "chown -R kafka:kafka /var/lib/kafka/"]
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+        volumeMounts:
+        - name: {{ $kkConfigTemplateName }}
+          mountPath: /etc/kafka
+{{ if .Values.ssl.enabled }}
+        - name: {{ $kkKeystoreTemplateName }}
+          mountPath: /etc/keystore
+{{ end }}
+        - name: {{ $kkDataTemplateName }}
+          mountPath: /var/lib/kafka/data
+{{- end }}
       - name: waitforzookeeper
         image: "{{ include "kafka.getImageRepo" . }}/hdm-kafka:{{ .Values.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ template "kafka.releasename" . }}-zookeeper.{{ .Release.Namespace }}.svc; do echo waiting for zookeeper $i;i=$((i+1)); sleep 2; done;"]
@@ -228,13 +246,18 @@ spec:
             {{- if .Values.kafkarest.enablePrivilegedPorts }}
             runAsNonRoot: false
             runAsUser: 0
+            capabilities:
+               add:
+               - NET_BIND_SERVICE
+               drop:
+               - ALL
             {{- else }}
             runAsNonRoot: true
             runAsUser: 1001
-            {{- end }}
             capabilities:
               drop:
               - ALL
+            {{- end }}
           ports:
             - containerPort: 8080
               name: rest-client
@@ -249,6 +272,10 @@ spec:
               value: "9092"
             - name: LOG_LEVEL
               value: "INFO"
+            {{- if .Values.kafkarest.enablePrivilegedPorts }}
+            - name: RUN_AS_ROOT
+              value: "true"
+            {{- end }}
             - name: ZOOKEEPER_URL
               value: "{{ template "kafka.releasename" . }}-zookeeper:2181"
             - name: TOPIC_REPLICATION_FACTOR
@@ -261,6 +288,10 @@ spec:
               value: {{ .Values.defaultTopicPartitions | quote }}
             - name: JVM_ARGS
               value: {{ include "kafka.comp.size.data" (list . "kafkarest" "jvmArgs") | quote }}
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
           resources:
 {{ include "kafka.comp.size.data" (list . "kafkarest" "resources") | indent 12 }}
           livenessProbe:
@@ -281,14 +312,10 @@ spec:
             - name: {{ $kkConfigTemplateName }}
               mountPath: /opt/kafka/config/shared
               readOnly: true
-            - name: class-cache
-              mountPath: /opt/ibm/wlp/usr/servers/.classCache
             - name: logs
-              mountPath: /opt/generic-kafka/logs
+              mountPath: /var/log/kafkarest
 {{ end }}
       volumes:
-      - name: class-cache
-        emptyDir: {}
       - name: logs
         emptyDir: {}
       - name: tmp

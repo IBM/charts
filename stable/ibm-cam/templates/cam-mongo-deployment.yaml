@@ -43,6 +43,15 @@ spec:
         productID: "{{ .Values.global.id.productID }}"
         productVersion: "{{ .Chart.AppVersion }}"
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -54,6 +63,9 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-mongo
       volumes:
+      - name: cam-cert
+        secret:
+          secretName: {{ .Values.camAPI.certificate.certName }}
       - name: {{ .Values.camMongoPV.name }}
       {{- if .Values.camMongoPV.persistence.enabled }}
         persistentVolumeClaim:
@@ -73,10 +85,15 @@ spec:
       {{- end }}
       containers:
       - name: cam-mongo
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - MKNOD
         image: "{{ .Values.image.repository }}icam-mongo:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        securityContext:
-          runAsUser: 0
         env:
         - name: MONGO_INITDB_ROOT_USERNAME
           value: 'root'
@@ -102,6 +119,10 @@ spec:
               key: mongoDbPassword
         - name: MONGODB_DATABASE
           value: 'cam'
+        - name: MONGODB_SSL
+          value: 'true'
+        - name: CA_CERT
+          value: "/usr/src/app/certs/tls.crt"
         ports:
         - name: mongo
           containerPort: 27017
@@ -118,10 +139,9 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: cam-cert
+            mountPath: /usr/src/app/certs
+            readOnly: true
           - name: "{{ .Values.camMongoPV.name }}"
             mountPath: /data/db
-        lifecycle:
-            postStart:
-                exec:
-                    command: ["bash", "-c", "sleep 20 && /createusers.sh 2>&1 >> /data/db/postStart.log"]
 {{- end }}

@@ -43,6 +43,15 @@ spec:
         productID: "{{ .Values.global.id.productID }}"
         productVersion: "{{ .Chart.AppVersion }}"
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -54,6 +63,9 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-ui-connections
       volumes:
+      - name: cam-cert
+        secret:
+          secretName: {{ .Values.camAPI.certificate.certName }}
       - name:  {{ .Values.camLogsPV.name }}
       {{- if .Values.camLogsPV.persistence.enabled }}
         persistentVolumeClaim:
@@ -73,6 +85,13 @@ spec:
       {{- end }}
       containers:
       - name: cam-ui-connections
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - MKNOD
         image: "{{ .Values.image.repository }}icam-ui-connections:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
@@ -82,25 +101,27 @@ spec:
           httpGet:
             path: /connections/health
             port: liveness-port
+            scheme: HTTPS
           initialDelaySeconds: 300
           periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /connections/health
             port: liveness-port
+            scheme: HTTPS
           initialDelaySeconds: 5
           periodSeconds: 20
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: cam-cert
+            mountPath: /usr/src/app/certs
+            readOnly: true
           - name:  {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
-            subPath: cam-ui-connections
         envFrom:
         - configMapRef:
             name: common-config
-        - configMapRef:
-            name: redis-config
         env:
         - name: MONGODB_PASSWORD
           valueFrom:
@@ -164,15 +185,5 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-      initContainers:
-      - name: cam-ui-connections-init
-        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
-        imagePullPolicy:  {{ .Values.image.pullPolicy }}
-        securityContext:
-          runAsUser: 0
-        command: ["/bin/sh", "-c"]
-        args:
-          - mkdir -p /var/camlog/cam-ui-connections && chown -R 1000:1000 /var/camlog/cam-ui-connections;
-        volumeMounts:
-        - name: {{ .Values.camLogsPV.name }}
-          mountPath: /var/camlog
+        - name: LOG_LEVEL
+          value: {{ .Values.camLoggingPolicies.logLevel }}

@@ -1,6 +1,6 @@
 [//]: # (Licensed Materials - Property of IBM)
 [//]: # (5737-E67)
-[//]: # (\(C\) Copyright IBM Corporation 2016-2018 All Rights Reserved.)
+[//]: # (\(C\) Copyright IBM Corporation 2016-2019 All Rights Reserved.)
 [//]: # (US Government Users Restricted Rights - Use, duplication or)
 [//]: # (disclosure restricted by GSA ADP Schedule Contract with IBM Corp.)
 
@@ -29,19 +29,19 @@ IBM Cloud Automation Manager is only supported to run in IBM Cloud Private.
 ## Resources Required
 
 * The minimum hardware requirements for IBM Cloud Automation Manager is a single worker node with at least 4 vCPU and 16GB of memory.
-For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_requirements.html
+For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_requirements.html
 
-* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_create_pv.html
+* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_create_pv.html
 
-* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_requirements.html
+* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_requirements.html
 
 ## Installing the Chart
 
-This chart supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_planning.html
+This chart supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_planning.html
 
 ## Configuration
 
-For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.0.0/cam_installation_parameters.html
+For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_installation_parameters.html
 
 ## Limitations
 
@@ -54,3 +54,7 @@ For the full list of configuration options supported by this chart see: https://
 For version-wise installation instructions and detailed documentation of IBM Cloud Automation Manager (CAM), go to its Knowledge Center at https://www.ibm.com/support/knowledgecenter/SS2L37/product_welcome_cloud_automation_manager.html.
 
 Select your version from the drop-down list and search for your topics from within the version.
+
+## PodSecurityPolicy Requirements
+
+The Pod security policy control is enabled by default on IBM Cloud Private 3.1.2 see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_prereq.html

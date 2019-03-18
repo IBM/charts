@@ -43,6 +43,15 @@ spec:
         productID: "{{ .Values.global.id.productID }}"
         productVersion: "{{ .Chart.AppVersion }}"
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -54,6 +63,9 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-orchestration
       volumes:
+      - name: cam-cert
+        secret:
+          secretName: {{ .Values.camAPI.certificate.certName }}
       - name:  {{ .Values.camLogsPV.name }}
       {{- if .Values.camLogsPV.persistence.enabled }}
         persistentVolumeClaim:
@@ -73,6 +85,13 @@ spec:
       {{- end }}
       containers:
       - name: cam-orchestration
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - MKNOD
         image: "{{ .Values.image.repository }}icam-orchestration:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
@@ -82,25 +101,27 @@ spec:
           httpGet:
             path: /api/v1/health
             port: liveness-port
+            scheme: HTTPS
           initialDelaySeconds: 300
           periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /api/v1/health
             port: liveness-port
+            scheme: HTTPS
           initialDelaySeconds: 5
           periodSeconds: 20
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: cam-cert
+            mountPath: /usr/src/app/certs
+            readOnly: true
           - name:  {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
-            subPath: cam-orchestration
         envFrom:
         - configMapRef:
             name: common-config
-        - configMapRef:
-            name: redis-config
         env:
         - name: MONGODB_PASSWORD
           valueFrom:
@@ -130,6 +151,70 @@ spec:
             configMapKeyRef:
               name: oauth-client-map
               key: MASTER_IP
+{{- if .Values.proxy.useProxy }}
+        - name: useProxy
+          value: "true"
+        - name: HTTPS_PROXY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpsProxy          
+        - name: https_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpsProxy  
+        - name: HTTP_PROXY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpProxy  
+        - name: http_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpProxy  
+        - name: NO_PROXY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: noProxy  
+        - name: no_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: noProxy  
+{{- end }}              
+        - name: IAAS_POLLING_INTERVAL
+          value: 20s
+        - name: IAAS_POLLING_ON_ERROR_INTERVAL
+          value: 30s
+        - name: IAAS_DEFAULT_POLLING_TIMEOUT
+          value: 12h
         - name: ICP_ENDPOINT
           value: https://$(ICP_MASTER_IP):8443
         - name: ORPHEUS_IDENTITY_API_URL
@@ -140,15 +225,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-      initContainers:
-      - name: cam-orchestration-init
-        image: "{{ .Values.image.repository }}icam-busybox:{{ .Values.image.tag }}{{ template "platform" . }}"
-        imagePullPolicy:  {{ .Values.image.pullPolicy }}
-        securityContext:
-          runAsUser: 0
-        command: ["/bin/sh", "-c"]
-        args:
-          - mkdir -p /var/camlog/cam-orchestration && chown -R 1000:1000 /var/camlog/cam-orchestration;
-        volumeMounts:
-        - name: {{ .Values.camLogsPV.name }}
-          mountPath: /var/camlog
+        - name: LOG_LEVEL
+          value: {{ .Values.camLoggingPolicies.logLevel }}
+        # LOG_DIR is used by service blueprint provider
+        - name: LOG_DIR
+          value: /var/camlog/cam-orchestration

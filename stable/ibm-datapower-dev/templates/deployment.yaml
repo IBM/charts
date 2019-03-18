@@ -26,6 +26,9 @@ spec:
       annotations:
         productName: 'IBM DataPower Gateway Virtual Edition for Developers'
         productID: 'IBMDataPowerGatewayVirtualEdition_{{ .Values.datapower.image.tag }}_Developers'
+        productChargedContainers: ""
+        productFlexpointBundle: {{ quote .Values.datapower.flexpointBundle }}
+        productMetric: "PROCESSOR_VALUE_UNIT"
         productVersion: "{{ .Values.datapower.image.tag }}"
         prometheus.io/scrape: 'true'
         prometheus.io/path: '/snmp'
@@ -89,11 +92,11 @@ spec:
           httpGet:
             path: /
             port: service
-{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}
+{{- if .Values.crypto.frontsideSecret }}
             scheme: HTTPS
-{{ else }}
+{{- else }}
             scheme: HTTP
-{{ end }}
+{{- end }}
           initialDelaySeconds: 120
           timeoutSeconds: 5
           periodSeconds: 10
@@ -101,11 +104,11 @@ spec:
           httpGet:
             path: /
             port: service
-{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}
+{{- if .Values.crypto.frontsideSecret }}
             scheme: HTTPS
-{{ else }}
+{{- else }}
             scheme: HTTP
-{{ end }}
+{{- end }}
           initialDelaySeconds: 120
           timeoutSeconds: 5
           periodSeconds: 10
@@ -115,7 +118,7 @@ spec:
         volumeMounts:
             - mountPath: "/drouter/config"
               name: {{ template "fullname" . }}-config-volume
-{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}
+{{- if .Values.crypto.frontsideSecret }}
             - mountPath: "/drouter/secure/usrcerts/{{ .Values.patternName }}"
               name: {{ template "fullname" . }}-secret-volume
 {{- end }}
@@ -131,15 +134,10 @@ spec:
             - key: auto-startup.cfg
               path: "auto-startup.cfg"
 
-{{ if and .Values.crypto.frontsideKey .Values.crypto.frontsideCert }}
+{{- if .Values.crypto.frontsideSecret }}
         - name: {{ template "fullname" . }}-secret-volume
           secret:
-            secretName: {{ template "fullname" . }}-secret
-            items:
-            - key: key.pem
-              path: "key.pem"
-            - key: cert.pem
-              path: "cert.pem"
+            secretName: {{ .Values.crypto.frontsideSecret }}
 {{- end }}
       affinity:
         nodeAffinity:

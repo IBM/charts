@@ -15,7 +15,7 @@ This chart deploys a single IBM DataPower Gateway node with a default pattern in
 
 ## Chart Details
 Deploys IBM DataPower Gateway Virtual Edition for Developers.
-Only works with DataPower version 7.7.1.1 and above.
+Only works with DataPower version 2018.4.1.3 and above.
 
 ## Prerequisites
 helm and kubectl must be installed and configured on your system.
@@ -29,10 +29,12 @@ Minimum resources per pod: 2 CPU and 4 GB RAM
 ## Installing the Chart
 To install the chart with the release name `my-release` and default pattern (See .Values.patternName below):
  ```bash
-$ helm install --name my-release -f <mycrypto.yaml> stable/ibm-datapower-dev --tls
+$ helm install --name my-release -f <myvalues.yaml> stable/ibm-datapower-dev --tls
 ```
 
-Where `<mycrypto.yaml>` is a yaml file that contains the parameters `crypto.frontsideCert` and `crypto.frontsideKey` and their respective base64-encoded values. These values are the base64-encoding of the raw key and certificate file with all whitespace removed.
+Where `<myvalues.yaml>` is a yaml file that contains all values you want to override.
+
+To deploy with HTTPS you must define `crypto.frontsideSecret`, which is the name of the Kubernetes secret containing data key.pem and cert.pem. These files are in the standard key and cert format. Create this secret prior to deploying. Create secret using `kubectl create secret generic <mycryptosecret> --from-file=key.pem --from-file=cert.pem`. Without `crypto.frontsideSecret` defined, the gateway will use HTTP.
 
 To uninstall/delete the `my-release` deployment:
 ```bash
@@ -71,12 +73,12 @@ The helm chart has the following Values that can be overriden using the install 
 | `datapower.xmlManagementPort`         | XML Management port                           | 5550                |
 | `datapower.snmpState`                 | SNMP admin state                              | enabled             |
 | `datapower.snmpPort`                  | SNMP interface port                           | 1161                |
+| `datapower.flexpointBundle`           | ILMT Flexpoint Bundle type                    | N/A                 |
 | `service.name`                        | Name to add to service                        | datapower           |
 | `patternName`                         | The name of the datapower pattern to load     | restProxy           |
 | `restProxy.backendURL`                | The backend URL datapower will proxy          | https://www.ibm.com |
 | `restProxy.containerPort`             | The backend URL datapower will proxy          | 8443                |
-| `crypto.frontsideCert`                | base64 encoded certificate                    | N/A                 |
-| `crypto.frontsideKey`                 | base64 encoded key                            | N/A                 |
+| `crypto.frontsideSecret`              | Secret containing key and cert data           | N/A                 |
 
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,

@@ -87,15 +87,17 @@ data:
 
     #Check registration
     echo "Checking registration..."
-    REG_CHECK_RESULT="$(curl -k -X GET -u oauthadmin:$OIDC_CREDENTIALS -H "Content-Type: application/json" https://{{ .Values.global.masterIP }}:9443/oidc/endpoint/OP/registration/$AUTH_ICP_CLIENT_ID)"
+    REG_CHECK_RESULT="$(curl -k -X GET -u oauthadmin:$OIDC_CREDENTIALS -H "Content-Type: application/json" https://platform-auth-service.kube-system:9443/oidc/endpoint/OP/registration/$AUTH_ICP_CLIENT_ID)"
 
     echo
     #echo REG_CHECK_RESULT:
     #echo $REG_CHECK_RESULT
     #echo
 
+    RETVAL=1
+
     if [[ $REG_CHECK_RESULT = *"access_denied"* ]]; then
-      echo "✖ Authentication failed, must be a admin"
+      echo "✖ Authentication failed, must be an admin"
       echo
     fi
 
@@ -103,16 +105,26 @@ data:
       echo "✔ Client exists..."
       #Update registration
       echo "Updating registration..."
-      curl -k -X PUT -u oauthadmin:$OIDC_CREDENTIALS -H "Content-Type: application/json" --data @/tmp/OIDC_PAYLOAD_TEMP https://{{ .Values.global.masterIP }}:9443/oidc/endpoint/OP/registration/$AUTH_ICP_CLIENT_ID >/dev/null
+      RESPCODE=`curl --silent --output /dev/null --write-out %{http_code} -k -X PUT -u oauthadmin:$OIDC_CREDENTIALS -H "Content-Type: application/json" --data @/tmp/OIDC_PAYLOAD_TEMP https://platform-auth-service.kube-system:9443/oidc/endpoint/OP/registration/$AUTH_ICP_CLIENT_ID`
       echo
+      if [ "$RESPCODE" = "200" ]; then
+        RETVAL=0
+      else
+        echo "Unable to perform client registration with response code of $RESPCODE"
+      fi
     fi
 
     if [[ $REG_CHECK_RESULT = *"invalid_client"* ]]; then
       echo "✖ Client does not exist..."
       #Create registration
       echo "Registering client..."
-      curl -k -X POST -u oauthadmin:$OIDC_CREDENTIALS -H "Content-Type: application/json" --data @/tmp/OIDC_PAYLOAD_TEMP https://{{ .Values.global.masterIP }}:9443/oidc/endpoint/OP/registration >/dev/null
+      RESPCODE=`curl --silent --output /dev/null --write-out %{http_code} -k -X POST -u oauthadmin:$OIDC_CREDENTIALS -H "Content-Type: application/json" --data @/tmp/OIDC_PAYLOAD_TEMP https://platform-auth-service.kube-system:9443/oidc/endpoint/OP/registration`
       echo
+      if [ "$RESPCODE" = "201" ]; then
+        RETVAL=0
+      else
+        echo "Unable to perform client registration with response code of $RESPCODE"
+      fi
     fi
 
     #Cleanup - delete the temp payload file with variables replaced
@@ -120,3 +132,4 @@ data:
 
     echo
     echo Done.
+    exit $RETVAL
