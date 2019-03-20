@@ -60,7 +60,7 @@ The following table lists the configurable parameters of the Jetty chart and the
 | `resources.limits.cpu`    | Jetty  node cpu limit       |                                                         |
 | `resources.limits.memory` | Jetty  node memory limit    |                                                         |
 | `resources.requests.cpu`  | Jetty  node initial cpu request |                                                     |
-| `resources.requests.memory` | Tomee node initial memory request|                                                 |
+| `resources.requests.memory` | Jetty node initial memory request|                                                 |
 | `service.type`            | Jetty service type         | `NodePort`                                              |
 | `service.port`            | Jetty service port         | `8080`                                                 |
 | `ingress.enabled`         | If true, Jetty Ingress will be created | false                                       |
