@@ -1,6 +1,6 @@
-#!/bin/sh
-    sh /tests/wait-for-url.sh $ODMSERVER:9060/DecisionRunner
-    sh /tests/wait-for-url.sh $ODMSERVER:9060/DecisionService resAdmin resAdmin
-    sh /tests/wait-for-url.sh $ODMSERVER:9060/decisioncenter/t
-    sh /tests/wait-for-url.sh $ODMSERVER:9060/teamserver
-    sh /tests/wait-for-url.sh $ODMSERVER:9060/res
+#!/bin/bash
+    bash /tests/wait-for-url.sh $ODMSERVER:9060/DecisionRunner
+    bash /tests/wait-for-url.sh $ODMSERVER:9060/DecisionService resAdmin resAdmin
+    bash /tests/wait-for-url.sh $ODMSERVER:9060/decisioncenter/t
+    bash /tests/wait-for-url.sh $ODMSERVER:9060/teamserver
+    bash /tests/wait-for-url.sh $ODMSERVER:9060/res
