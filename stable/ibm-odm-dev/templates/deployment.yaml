@@ -48,15 +48,26 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.image.arch }}
-      {{- if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) }}
       volumes:
+      {{- if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) }}
       - name: {{ template "fullname" . }}-volume
         persistentVolumeClaim:
           claimName: {{ template "odm.persistenceclaim.fullname" . }}
       {{- end }}
+      {{- if not (empty (.Values.customization.baiEmitterSecretRef)) }}
+      - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" . }}
+        secret:
+          secretName: {{ .Values.customization.baiEmitterSecretRef }}
+      {{- end}}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ template "odm.repository.name" . }}/odm:{{ .Values.image.tag }}_{{ .Chart.Version }}{{ template "platform" . }}
+          securityContext:
+            runAsUser: 1001
+            runAsNonRoot: true
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
           - name: LICENSE
@@ -89,11 +100,18 @@ spec:
             value: "{{ .Values.decisionCenter.persistenceLocale }}"
           ports:
           - containerPort: 9060
-          {{- if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) }}
+    #      {{- if or (not (empty (.Values.customization.baiEmitterSecretRef))) (and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName)) }}
           volumeMounts:
+          {{- if and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName) }}
           - name: {{ template "fullname" . }}-volume
             mountPath: /config/dbdata/
           {{- end }}
+          {{- if not (empty (.Values.customization.baiEmitterSecretRef)) }}
+          - name: {{ template "odm-baiemitterconfig-secret-volume.fullname" . }}
+            readOnly: true
+            mountPath: {{ template "odm-baiemitterconfig-dir" . }}
+          {{- end}}
+    #      {{- end}}
           readinessProbe:
             httpGet:
               scheme: HTTP
