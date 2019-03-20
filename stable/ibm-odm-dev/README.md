@@ -6,13 +6,13 @@ The [IBM® Operational Decision Manager](https://www.ibm.com/hr-en/marketplace/o
 
 ## Introduction
 
-ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.0/welcome/kc_welcome_odmV.html).
+ODM is a tool for capturing, automating, and governing repeatable business decisions. You identify situations about your business and then automate the actions to take as a result of the insight you gained about your policies and customers. For more information, see [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/welcome/kc_welcome_odmV.html).
 
 ## Chart Details
 
 The `ibm-odm-dev` Helm chart is a package of preconfigured Kubernetes resources that bootstrap an ODM deployment on a Kubernetes cluster. Configuration parameters are available to customize some aspects of the deployment. However, the chart is designed to get you up and running as quickly as possible, with appropriate default values. If you accept the default values, sample data is added to the database as part of the installation, and you can begin exploring rules in ODM immediately.
 
-If you choose not to use the default values, be sure to review the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.0/com.ibm.odm.icp/topics/ref_parameters_dev.html) and understand the impact of changes before you start the installation process.
+If you choose not to use the default values, be sure to review the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/ref_parameters_dev.html) and understand the impact of changes before you start the installation process.
 
 The `ibm-odm-dev` chart deploys a single container of five ODM services:
 - Decision Center Business Console
@@ -43,9 +43,14 @@ Ensure you have a good understanding of the underlying concepts and technologies
 - Helm commands
 - Kubernetes command line tool
 
-Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.0/com.ibm.odm.icp/topics/ref_parameters_dev.html).
+Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/ref_parameters_dev.html).
 
-If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-rule-designer).
+If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8101-rule-designer).
+
+### PodSecurityPolicy Requirements
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement, a specific cluster and namespace might have to be scoped.
+The predefined PodSecurityPolicy name [ibm-restricted-psp](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md) has been verifed for this chart. If your target namespace is bound to this PodSecurityPolicy, you can proceed to install the chart.
 
 ## Resources Required
 
@@ -105,7 +110,7 @@ The release is an instance of the `ibm-odm-dev` chart: all the ODM components ar
 
 **Note:** The persistence locale for Decision Center is set to English (United States), which means that the project can be viewed only in English.
 
-Now you want to execute the sample decision service to request a loan. Follow the procedure described here [Try out the Business console](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.0/com.ibm.odm.icp/topics/tsk_test_loan_valid.html)
+Now you want to execute the sample decision service to request a loan. Follow the procedure described here [Try out the Business console](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/tsk_test_loan_valid.html)
 
 ### Uninstalling the chart
 
@@ -131,7 +136,7 @@ $ kubectl delete pvc <release_name>-odm-pvclaim -n <namespace>
 
 ## Configuration
 
-To configure the `ibm-odm-dev` chart, check out the list of available [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.0/com.ibm.odm.icp/topics/ref_parameters_dev.html).
+To configure the `ibm-odm-dev` chart, check out the list of available [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/ref_parameters_dev.html).
 
 ## Storage
 
@@ -153,8 +158,8 @@ Uses cases for H2 as an internal database:
 
 ## Limitations
 
-The following ODM on premises features are not supported: [Features not included in this platform.](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.0/com.ibm.odm.icp/topics/con_limitations.html)
+The following ODM on premises features are not supported: [Features not included in this platform.](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/con_limitations.html)
 
 ## Documentation
 
-See [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.0/welcome/kc_welcome_odmV.html).
+See [ODM in knowledge center](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/welcome/kc_welcome_odmV.html).
