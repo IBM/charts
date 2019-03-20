@@ -1,0 +1,66 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "jetty.fullname" . }}
+  labels:
+    app: {{ template "jetty.name" . }}
+    chart: {{ template "jetty.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "jetty.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "jetty.name" . }}
+        chart: "{{ .Chart.Name }}"
+        heritage: "{{ .Release.Service }}"
+        release: {{ .Release.Name }}
+      annotations:
+        productName: jetty
+        productID: jetty_{{ .Chart.Version }}
+        productVersion: {{ .Chart.Version }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["java","-jar", "/usr/local/jetty/start.jar"]
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+             drop:
+              - ALL
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if .Values.node }}
+      affinity:
+        {{- include "nodeaffinity" . | indent 6 }}
+{{- end }}
