@@ -1,6 +1,6 @@
 # Release Notes
 
-## What's new in Chart Version 1.0
+## What's new in Chart Version 0.1.0
 
 - Initial Release
 
@@ -20,4 +20,4 @@
 
 | Chart | Date     | Kubernetes Version Required | Details |
 | ----- | -------- | --------------------------- | ------- |
-| 0.1.0 |Sept 2018 | >= 1.7+                     |         |
+| 0.1.0 |Sept 12, 2018 | >= 1.7+                     |         |
