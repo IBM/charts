@@ -1,97 +1,105 @@
+{{- include "sch.config.init" (list . "ibm-spectrum-symphony.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+{{- $role := "master" -}}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" -}}
 apiVersion: apps/v1beta2
+{{- else -}}
+apiVersion: apps/v1beta1
+{{- end }}
 kind: Deployment
 metadata:
-  name: {{ template "fullname" . }}-master
+  name: {{ $fullName }}-{{ $role }}
   labels:
-    app: {{ template "name" . }}
-    release: {{ .Release.Name }}
-    role: master
-    chart: "{{ .Chart.Name }}"
-    heritage: "{{ .Release.Service }}"
+    role: {{ $role }}
+{{ toYaml .sch.chart.labels | indent 4 }}
 spec:
-  replicas: {{ .Values.master.replicaCount }}
+  replicas: 1
   selector:
     matchLabels:
-      app: {{ template "name" . }}
-      release: {{ .Release.Name }}
-      role: master
-      chart: "{{ .Chart.Name }}"
-      heritage: "{{ .Release.Service }}"
+      role: {{ $role }}
+{{ toYaml .sch.chart.labels | indent 6 }}
   template:
     metadata:
       labels:
-        app: {{ template "name" . }}
-        release: "{{ .Release.Name }}"
-        chart: "{{ .Chart.Name }}"
-        heritage: "{{ .Release.Service }}"
-        role: master
+        role: {{ $role }}
+{{ toYaml .sch.chart.labels | indent 8 }}
       annotations:
-        productName: "IBM Spectrum Symphony CE"
-        productID: "IBMSpectrumSymphony_5725G86_CE"
-        productVersion: {{ .Values.cluster.productVersion }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
-     affinity:
-     {{- include "nodeaffinity" . | indent 6 }}
-     containers:
+{{ toYaml .sch.chart.specSecurity | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          tty: true
+{{ toYaml .sch.chart.image | indent 10 }}
           resources:
 {{ toYaml .Values.master.resources | indent 12 }}
           env:
-            - name: LICENSE
-              value: "accept"
-            {{- if .Values.master.logsOnShared }}
-            - name: LOGS_ON_SHARED
-              value: "Y"
-            {{- end }}
-            - name: CLUSTER_NAME
-              value: "{{ .Values.cluster.clusterName }}"
-            {{- if .Values.master.regenSSLCert }}
+{{ toYaml .sch.chart.env | indent 12 }}
             - name: GENERATE_SSL_CERT
               value: "Y"
-            {{- end }}
-            {{- if .Values.cluster.enableSSHD }}
-            - name: START_SSHD
-              value: "Y"
-            {{- if .Values.cluster.generateClusterAdminPassword }}
-            - name: GENERATE_PASSWORD
-              value: "Y"
-            {{- end }}
-            {{- end }}
           securityContext:
-            capabilities:
-              add:
-                - LEASE
-                - NET_ADMIN
-                - NET_BIND_SERVICE
-                - NET_BROADCAST
-                - SETGID
-                - SETUID
-                - SYS_ADMIN
-                - SYS_CHROOT
-                - SYS_NICE
-                - SYS_RESOURCE
-                - SYS_TIME
+{{ toYaml .sch.chart.containerSecurity  | indent 12 }}
           volumeMounts:
             - name: persistdir
               mountPath: /shared
+            {{- if .Values.cluster.enableSSHD }}
+            {{- if .Values.cluster.sshKeysSecretName }}
+            - name: ssh
+              mountPath: /opt/ibm/spectrumcomputing/scripts/ssh
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.cluster.scriptsSecretName }}
+            - name: config
+              mountPath: /opt/ibm/spectrumcomputing/scripts/config
+              readOnly: true
+            {{- end }}
+            {{- if .Values.master.entitlementSecretName }}
+            - name: entitlement
+              mountPath: /opt/ibm/spectrumcomputing/scripts/secret
+              readOnly: true
+            {{- end }}
           livenessProbe:
             exec:
-              command:
-              - /bin/true
+              command: [ "/bin/bash", "-c", "</dev/tcp/localhost/17870"]
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 30
           readinessProbe:
             exec:
-              command:
-              - /bin/true
-     volumes:
-       - name: persistdir
-         persistentVolumeClaim:
-         {{- if .Values.cluster.pvc.existingClaimName }}
-           claimName: {{ .Values.cluster.pvc.existingClaimName }}
-         {{- else }}
-           claimName: {{ template "fullname" . }}
-         {{- end }}
-     restartPolicy: Always
-     terminationGracePeriodSeconds: 30
+              command: [ "/bin/bash", "-c", "</dev/tcp/localhost/17870"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 30
+      volumes:
+        - name: persistdir
+          persistentVolumeClaim:
+          {{- if .Values.cluster.pvc.existingClaimName }}
+            claimName: {{ .Values.cluster.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ $fullName }}
+          {{- end }}
+        {{- if .Values.master.entitlementSecretName }}
+        - name: entitlement
+          secret:
+            secretName: {{ .Values.master.entitlementSecretName }}
+        {{- end }}
+        {{- if .Values.cluster.enableSSHD }}
+        {{- if .Values.cluster.sshKeysSecretName }}
+        - name: ssh
+          secret:
+            secretName: {{ .Values.cluster.sshKeysSecretName }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.cluster.scriptsSecretName }}
+        - name: config
+          secret:
+            secretName: {{ .Values.cluster.scriptsSecretName }}
+        {{- end }}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
