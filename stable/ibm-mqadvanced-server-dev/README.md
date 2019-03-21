@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This chart deploys a single IBM® MQ Advanced for Developers version 9.1.1 server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
+This chart deploys a single IBM® MQ Advanced for Developers version 9.1.2 server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
 
 ## Chart Details
 
@@ -15,82 +15,121 @@ This chart will do the following:
 ## Prerequisites
 
 * Kubernetes 1.9 or greater, with beta APIs enabled
-* If persistence is enabled (see [configuration](#configuration)), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
+* If persistence is enabled (see the **configuration** section), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
 * If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191)
 
 ### PodSecurityPolicy Requirements
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation.  Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
-* Predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp)
-* Custom PodSecurityPolicy definition:
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre-install actions that need to occur.
 
-> Note: This PodSecurityPolicy only needs to be created once. If it already exist, skip this step.
+The predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp) has been verified for this chart, if your target namespace is bound to this PodSecurityPolicy you can proceed to install the chart.
 
-```
-apiVersion: extensions/v1beta1
-kind: PodSecurityPolicy
-metadata:
-  name: ibm-mq-psp
-spec:
-  allowPrivilegeEscalation: true
-  fsGroup:
-    rule: RunAsAny
-  requiredDropCapabilities:
-  - MKNOD
-  allowedCapabilities:
-  - SETPCAP
-  - AUDIT_WRITE
-  - CHOWN
-  - NET_RAW
-  - DAC_OVERRIDE
-  - FOWNER
-  - FSETID
-  - KILL
-  - SETUID
-  - SETGID
-  - NET_BIND_SERVICE
-  - SYS_CHROOT
-  - SETFCAP
-  runAsUser:
-    rule: RunAsAny
-  seLinux:
-    rule: RunAsAny
-  supplementalGroups:
-    rule: RunAsAny
-  volumes:
-  - secret
-  - persistentVolumeClaim
-  forbiddenSysctls:
-  - '*'
-```
+This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the IBM Cloud Private user interface or the supplied scripts in the `pak_extensions` pre-install directory.
 
-* Custom ClusterRole for the custom PodSecurityPolicy:
+- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
 
-```
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: ibm-mq-psp-clusterrole
-rules:
-- apiGroups:
-  - extensions
-  resourceNames:
-  - ibm-mq-psp
-  resources:
-  - podsecuritypolicies
-  verbs:
-  - use
+  - Custom PodSecurityPolicy definition:
+    ```
+    apiVersion: extensions/v1beta1
+    kind: PodSecurityPolicy
+    metadata:
+      name: ibm-mq-dev-psp
+    spec:
+      allowPrivilegeEscalation: true
+      fsGroup:
+        rule: RunAsAny
+      requiredDropCapabilities:
+      - MKNOD
+      allowedCapabilities:
+      - CHOWN
+      - FOWNER
+      - SETGID
+      - SETUID
+      - AUDIT_WRITE
+      runAsUser:
+        rule: RunAsAny
+      seLinux:
+        rule: RunAsAny
+      supplementalGroups:
+        rule: RunAsAny
+      volumes:
+      - secret
+      - persistentVolumeClaim
+      forbiddenSysctls:
+      - '*'
+      ```
 
-```
+  - Custom ClusterRole for the custom PodSecurityPolicy:
+      ```
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: ibm-mq-dev-clusterrole
+      rules:
+      - apiGroups:
+        - extensions
+        resourceNames:
+        - ibm-mq-dev-psp
+        resources:
+        - podsecuritypolicies
+        verbs:
+        - use
+      ```
 
-The cluster admin can either paste the above PSP and ClusterRole definitions into the create resource screen in the UI or run the following two commands:
+- From the command line, you can run the setup scripts included under [pak_extensions](https://github.com/IBM/charts/tree/master/stable/ibm-mqadvanced-server-dev/ibm_cloud_pak/pak_extensions/)
 
-- `kubectl create -f <PSP yaml file>`
-- `kubectl create clusterrole ibm-mq-psp-clusterrole --verb=use --resource=podsecuritypolicy --resource-name=ibm-mq-psp`
+  As a cluster admin the pre-install script is located at:
+  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
 
-In ICP 3.1, you also need to create the RoleBinding:
+  As team admin the namespace scoped pre-install script is located at:
+  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
 
-- `kubectl create rolebinding ibm-mq-psp-rolebinding --clusterrole=ibm-mq-psp-clusterrole --serviceaccount=<namespace>:default --namespace=<namespace>`
+### Red Hat OpenShift SecurityContextConstraints Requirements
+
+This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre-install actions that need to occur.
+
+The predefined SecurityContextConstraints name: `privileged` has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+
+This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart.
+
+  - Custom SecurityContextConstraints definition:
+    ```
+    apiVersion: security.openshift.io/v1
+    kind: SecurityContextConstraints
+    metadata:
+      name: ibm-mq-scc
+    allowHostDirVolumePlugin: false
+    allowHostIPC: false
+    allowHostNetwork: false
+    allowHostPID: false
+    allowHostPorts: false
+    allowPrivilegedContainer: false
+    allowedCapabilities:
+    - CHOWN
+    - FOWNER
+    - SETGID
+    - SETUID
+    - AUDIT_WRITE
+    - DAC_OVERRIDE
+    allowedFlexVolumes: []
+    defaultAddCapabilities: []
+    fsGroup:
+      type: RunAsAny
+    readOnlyRootFilesystem: false
+    requiredDropCapabilities:
+    - MKNOD
+    runAsUser:
+      type: RunAsAny
+    seLinuxContext:
+      type: RunAsAny
+    supplementalGroups:
+      type: RunAsAny
+    volumes:
+    - secret
+    - persistentVolumeClaim
+    users: []
+    priority: 0
+    ```
 
 ## Resources Required
 
@@ -100,7 +139,7 @@ This chart uses the following resources by default:
 * 0.5 Gi memory
 * 2 Gi persistent volume.
 
-See the [configuration](#configuration) section for how to configure these values.
+See the **configuration** section for how to configure these values.
 
 ## Installing the Chart
 
@@ -112,7 +151,7 @@ helm install --name foo mylocal-repo/ibm-mqadvanced-server-dev --set license=acc
 
 This example assumes that you have a local Helm repository configured, called `mylocal-repo`.  You could alternatively reference a local directory containing the Helm chart code.
 
-This command accepts the [IBM MQ Advanced for Developers license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-AVCJ4S) and deploys an MQ Advanced for Developers server on the Kubernetes cluster. The [configuration](#configuration) section lists the parameters that can be configured during installation.
+This command accepts the [IBM MQ Advanced for Developers license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-AVCJ4S) and deploys an MQ Advanced for Developers server on the Kubernetes cluster. The **configuration** section lists the parameters that can be configured during installation.
 
 > **Tip**: See all the resources deployed by the chart using `kubectl get all -l release=foo`
 
@@ -121,7 +160,7 @@ This command accepts the [IBM MQ Advanced for Developers license](http://www14.s
 You can uninstall/delete the `foo` release as follows:
 
 ```sh
-helm delete foo
+helm delete foo --tls
 ```
 
 The command removes all the Kubernetes components associated with the chart, except any Persistent Volume Claims (PVCs).  This is the default behavior of Kubernetes, and ensures that valuable data is not deleted.
@@ -133,13 +172,13 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | Parameter                       | Description                                                     | Default                                    |
 | ------------------------------- | --------------------------------------------------------------- | ------------------------------------------ |
 | `license`                       | Set to `accept` to accept the terms of the IBM license          | `"not accepted"`                           |
-| `image.repository`              | Image full name including repository                            | `ibmcom/mq`                |
-| `image.tag`                     | Image tag                                                       | `9.1.0.0`         |
+| `image.repository`              | Image full name including repository                            | `ibmcom/mq`                                |
+| `image.tag`                     | Image tag                                                       | `9.1.2.0`                                  |
 | `image.pullPolicy`              | Image pull policy                                               | `IfNotPresent`                             |
 | `image.pullSecret`              | Image pull secret, if you are using a private Docker registry   | `nil`                                      |
-| `arch.amd64`                  | Preference for installation on worker nodes with the `amd64` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler       |
-| `arch.ppc64le`                  | Preference for installation on worker nodes with the `ppc64le` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler       |
-| `arch.s390x`                  | Preference for installation on worker nodes with the `s390x` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler       |
+| `arch.amd64`                    | Preference for installation on worker nodes with the `amd64` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler |
+| `arch.ppc64le`                  | Preference for installation on worker nodes with the `ppc64le` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler |
+| `arch.s390x`                    | Preference for installation on worker nodes with the `s390x` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler |
 | `persistence.enabled`           | Use persistent volumes for all defined volumes                  | `true`                                     |
 | `persistence.useDynamicProvisioning` | Use dynamic provisioning (storage classes) for all volumes | `true`                                     |
 | `dataPVC.name`                  | Suffix for the PVC name                                         | `"data"`                                   |
@@ -147,39 +186,33 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `dataPVC.size`                  | Size of volume for main MQ data (under `/var/mqm`)              | `2Gi`                                      |
 | `service.type`                  | Kubernetes service type exposing ports, e.g. `NodePort`         | `ClusterIP`                                |
 | `metrics.enabled`               | Enable Prometheus metrics for the Queue Manager                 | `true`                                     |
-| `resources.limits.cpu`          | Kubernetes CPU limit for the Queue Manager container | `500m`                                                   |
-| `resources.limits.memory`       | Kubernetes memory limit for the Queue Manager container | `512Mi`                                              |
-| `resources.requests.cpu`        | Kubernetes CPU request for the Queue Manager container | `500m`                                                 |
-| `resources.requests.memory`     | Kubernetes memory request for the Queue Manager container | `512Mi`                                            |
+| `resources.limits.cpu`          | Kubernetes CPU limit for the Queue Manager container            | `500m`                                     |
+| `resources.limits.memory`       | Kubernetes memory limit for the Queue Manager container         | `512Mi`                                    |
+| `resources.requests.cpu`        | Kubernetes CPU request for the Queue Manager container          | `500m`                                     |
+| `resources.requests.memory`     | Kubernetes memory request for the Queue Manager container       | `512Mi`                                    |
 | `security.serviceAccountName`   | Name of the service account to use                              | `default`                                  |
-| `queueManager.name`              | MQ Queue Manager name                           | Helm release name                                          |
-| `queueManager.dev.adminPassword` | Developer defaults - administrator password     | Random generated string.  See the notes that appear when you install for how to retrieve this.                            |
-| `queueManager.dev.appPassword`   | Developer defaults - app password   | `nil` (no password required to connect an MQ client)                  |
+| `security.context.fsGroup`      | File system group ID (if required by storage provider)          | `nil`                                      |
+| `security.context.supplementalGroups` | List of supplemental groups (if required by storage provider) | `nil`                                  |
+| `security.initVolumeAsRoot`     | Whether or not storage provider requires root permissions to initialize | `false`                            |
+| `queueManager.name`             | MQ Queue Manager name                                           | Helm release name                          |
+| `queueManager.dev.adminPassword` | Developer defaults - administrator password                    | Random generated string.  See the notes that appear when you install for how to retrieve this. |
+| `queueManager.dev.appPassword`  | Developer defaults - app password                               | `nil` (no password required to connect an MQ client) |
 | `nameOverride`                  | Set to partially override the resource names used in this chart | `ibm-mq`                                   |
 | `livenessProbe.initialDelaySeconds` | The initial delay before starting the liveness probe. Useful for slower systems that take longer to start the Queue Manager. | 60 |
-| `livenessProbe.periodSeconds` | How often to run the probe | 10 |
-| `livenessProbe.timeoutSeconds` | Number of seconds after which the probe times out | 5 |
-| `livenessProbe.failureThreshold` | Minimum consecutive failures for the probe to be considered failed after having succeeded | 1 |
-| `readinessProbe.initialDelaySeconds` | The initial delay before starting the readiness probe | 10 |
-| `readinessProbe.periodSeconds` | How often to run the probe | 5 |
-| `readinessProbe.timeoutSeconds` | Number of seconds after which the probe times out | 3 |
-| `readinessProbe.failureThreshold` | Minimum consecutive failures for the probe to be considered failed after having succeeded | 1 |
-| `log.format`                    | Error log format on container's console.  Either `json` or `basic` | `basic`                          |
+| `livenessProbe.periodSeconds`   | How often to run the probe                                      | 10                                         |
+| `livenessProbe.timeoutSeconds`  | Number of seconds after which the probe times out               | 5                                          |
+| `livenessProbe.failureThreshold` | Minimum consecutive failures for the probe to be considered failed after having succeeded | 1               |
+| `readinessProbe.initialDelaySeconds` | The initial delay before starting the readiness probe      | 10                                         |
+| `readinessProbe.periodSeconds`  | How often to run the probe                                      | 5                                          |
+| `readinessProbe.timeoutSeconds` | Number of seconds after which the probe times out               | 3                                          |
+| `readinessProbe.failureThreshold` | Minimum consecutive failures for the probe to be considered failed after having succeeded | 1              |
+| `log.format`                    | Error log format on container's console.  Either `json` or `basic` | `basic`                                 |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
-
-## Offline "air gap" installation
-
-If you have performed an offline "air gap" installation, then you will need to specify the following configurable parameters:
-
-- **Image tag** must be set to `9.1.0.0-x86_64`, `9.1.0.0-ppc64le` or `9.1.0.0-s390x`
-- The **architecture scheduling preferences** must be set appropriately; such that the target worker node has the same architecture as the image
-
-> **Warning**: If you have performed an offline "air gap" installation and use the default image tag `9.1.0.0`, then your deployment will fail
 
 ## Storage
 
@@ -205,4 +238,4 @@ The MQ Advanced for Developers image includes the MQ web server.  The web server
 
 ## Copyright
 
-© Copyright IBM Corporation 2017, 2018
+© Copyright IBM Corporation 2017, 2019

@@ -1,5 +1,19 @@
-MQ can be accessed via port 1414 on the following DNS name from within your cluster:
-{{ include "sch.names.fullName" (list .) }}.{{ .Release.Namespace }}.svc.cluster.local
+{{- include "sch.config.init" (list . "ibm-mq.sch.chart.config.values") }}
+{{- $platform := include "ibm-mq.chart.config.platform" . -}}
+{{- if and (eq .Values.service.type "NodePort") (eq $platform "icp") -}}
+Get the MQ Console URL by running these commands:
+  export CONSOLE_PORT=$(kubectl get services {{ include "sch.names.fullName" (list .) }} -n {{ .Release.Namespace }} -o jsonpath="{.spec.ports[?(@.port=="9443")].nodePort}")
+  export CONSOLE_IP=$(kubectl get configmap ibmcloud-cluster-info -n kube-public -o jsonpath="{.data.proxy_address}")
+  echo https://$CONSOLE_IP:$CONSOLE_PORT/ibmmq/console
+
+Get the MQ connection information for clients outside the cluster by running these commands:
+  export MQ_PORT=$(kubectl get services {{ include "sch.names.fullName" (list .) }} -n {{ .Release.Namespace }} -o jsonpath="{.spec.ports[?(@.port=="1414")].nodePort}")
+  export MQ_IP=$(kubectl get configmap ibmcloud-cluster-info -n kube-public -o jsonpath="{.data.proxy_address}")
+  echo $MQ_IP:$MQ_PORT
+
+{{ end -}}
+The MQ connection information for clients inside the cluster is as follows:
+  {{ include "sch.names.fullName" (list .) }}.{{ .Release.Namespace }}.svc.cluster.local:1414
 
 To get your admin password run:
 

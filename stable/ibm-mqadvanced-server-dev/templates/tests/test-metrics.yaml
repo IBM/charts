@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2018
+# © Copyright IBM Corporation 2018, 2019
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
 
 # This test tries to open port 9157 every second.  It keeps trying until it works,
 # or `livenessProbe.initialDelaySeconds` have passed.
-{{- if .Values.metrics.enabled }}
+{{- $helmTest := default "disabled" .Values.helmTestOverride }}
+{{- if and (ne $helmTest "disabled") (.Values.metrics.enabled) }}
 {{- include "sch.config.init" (list . "ibm-mq.sch.chart.config.values") }}
 apiVersion: v1
 kind: Pod
@@ -29,11 +30,23 @@ metadata:
     "helm.sh/hook": test-success
 spec:
   affinity:
-  {{- include "nodeaffinity" . | indent 2 }}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
   containers:
     - name: {{ include "sch.names.fullName" (list .) }}-metrics-test
       # Use Alpine Linux, because it includes netcat (`nc`) by default
       image: alpine:3.8
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 1001
+        privileged: false
+        capabilities:
+          drop:
+          - ALL
       command:
         - "sh"
       args:
