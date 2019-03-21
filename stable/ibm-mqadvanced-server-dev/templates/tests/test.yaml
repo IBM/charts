@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2017, 2018
+# © Copyright IBM Corporation 2017, 2019
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
 
 # This test tries to open port 1414 every second.  It keeps trying until it works,
 # or `livenessProbe.initialDelaySeconds` have passed.
+{{- $helmTest := default "disabled" .Values.helmTestOverride }}
+{{- if ne $helmTest "disabled" }}
 {{- include "sch.config.init" (list . "ibm-mq.sch.chart.config.values") }}
 apiVersion: v1
 kind: Pod
@@ -28,14 +30,27 @@ metadata:
     "helm.sh/hook": test-success
 spec:
   affinity:
-  {{- include "nodeaffinity" . | indent 2 }}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
   containers:
     - name: {{ include "sch.names.fullName" (list .) }}-test
       # Use Alpine Linux, because it includes netcat (`nc`) by default
       image: alpine:3.8
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 1001
+        privileged: false
+        capabilities:
+          drop:
+          - ALL
       command:
         - "sh"
       args:
         - "-c"
         - "timeout -t {{ .Values.livenessProbe.initialDelaySeconds }} /bin/sh -c \"until nc -v -w1 -z {{ include "sch.names.fullName" (list .) }} 1414; do sleep 1; done\""
   restartPolicy: Never
+  {{- end }}
