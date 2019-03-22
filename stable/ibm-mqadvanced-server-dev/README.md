@@ -46,6 +46,7 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
       - SETGID
       - SETUID
       - AUDIT_WRITE
+      - DAC_OVERRIDE
       runAsUser:
         rule: RunAsAny
       seLinux:
