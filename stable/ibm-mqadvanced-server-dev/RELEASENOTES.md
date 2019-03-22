@@ -2,7 +2,7 @@
 
 - On IBM Cloud Kubernetes Service you need to set `security.initVolumeAsRoot` to `true`
 
-# What’s new in the MQ Advanced for Developers Chart, Version 3.0.0
+# What’s new in the MQ Advanced for Developers Chart, Version 3.0.x
 
 - Updated to IBM MQ 9.1.2
 - Improved security (including running as non-root)
@@ -12,7 +12,8 @@
 
 # Fixes
 
-- Kibana dashboard fix
+- V3.0.1: Fix capabilities when running init volume as root 
+- V3.0.0: Kibana dashboard fix
 
 # Prerequisites
 
@@ -26,6 +27,7 @@
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 3.0.1 | March 2019 | >= 1.9 | = MQ 9.1.2.0 | None | Fix capabilities when running init volume as root |
 | 3.0.0 | March 2019 | >= 1.9 | = MQ 9.1.2.0 | Set initVolumeAsRoot on IKS | Updated to IBM MQ 9.1.2; Improved security (including running as non-root); Additional IBM Cloud Pak content; Added ILMT annotations; README updates; Kibana dashboard fix |
 | 2.2.0 | November 2018 | >= 1.9 | = MQ 9.1.1.0 | None | Updated to IBM MQ 9.1.1 |
 | 2.1.0 | September 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Declaration of securityContext; Configurable service account name; New IBM Cloud Pak content |
