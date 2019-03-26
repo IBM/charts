@@ -94,7 +94,7 @@ If `persistence` is enabled, PVC's will be used to store the web root and the db
 | `persistence.accessMode` | PVC Access Mode | ReadWriteMany |
 | `persistence.size` | PVC Size | 5Gi |
 | `persistence.storageClass` | PVC Storage Class | _empty_ |
-
+| `persistence.name` | PVC Name | "crate-pv" |
 
 ## Support
 
