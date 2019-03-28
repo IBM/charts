@@ -2,7 +2,9 @@
 #
 # Licensed Materials - Property of IBM
 #
-# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
 #
 # US Government Users Restricted Rights - Use, duplication or
 # disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
@@ -12,6 +14,7 @@
 #  to allow log-ins to the Event Streams Admin UI
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.essential.certGenJob.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 # Component is 'essential'
@@ -22,6 +25,8 @@
 {{ $imagePullSecretName := include "sch.names.fullCompName" (list . $imagePullSecret) -}}
 {{ $proxySecretNamePrefix := .sch.chart.components.proxy.secret.name -}}
 {{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecretNamePrefix ) -}}
+{{ $jmxSecretNamePrefix := .sch.chart.components.kafka.jmxSecret.name -}}
+{{ $jmxSecretName := include "sch.names.fullCompName" (list . $jmxSecretNamePrefix ) -}}
 # Validation of user supplied input
 {{- if eq .Values.tls.type  "provided"}}
   # user has supplied their own certificate details
@@ -68,7 +73,7 @@ metadata:
     # This needs to run before we deploy, as UI component installs
     # depend on the secrets existing already, and will fail to start
     # otherwise.
-    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook": pre-install, pre-upgrade, pre-rollback
     # We don't delete this if it fails, as the logs may be useful to
     # diagnose a failed install
     "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
@@ -81,8 +86,9 @@ spec:
       namespace: kube-system
       labels:
 {{ $labels | indent 8 }}
+        job: "pre-install-cert-gen"
     spec:
-      {{ if .Values.global.image.pullSecret }}
+      {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
         - name: {{ $imagePullSecretName | quote }}
       {{- end }}
@@ -97,17 +103,17 @@ spec:
       restartPolicy: Never
       containers:
         - name: "cert-generator"
-          image: {{ include "eventstreams.image" (list . "eventstreams-certs" .Values.global.image.imageTags.certGenTag "true") | quote }}
+          image: {{ include "eventstreams.image" (list . "eventstreams-certs" .Values.global.image.imageTags.certGenTag) | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           securityContext:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
             runAsNonRoot: true
-            runAsUser: 1001
+            runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
-              - all
+              - ALL
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
             - name: "ES_NAMESPACE"
@@ -119,7 +125,7 @@ spec:
             {{- if eq (empty .Values.proxy.externalEndpoint) false}}
             - name: "ES_CNAME"
               value: {{ .Values.proxy.externalEndpoint }}
-            {{ end -}}
+            {{- end }}
             {{- if eq .Values.tls.type  "provided"}}
             - name: "ES_CERT"
               value: {{ .Values.tls.cert }}
@@ -127,6 +133,10 @@ spec:
               value: {{ .Values.tls.key }}
             - name: "ES_CACERT"
               value: {{ .Values.tls.cacert }}
-            {{ end -}}
+            {{- end }}
+            - name: "GENERATE_JMX_SECRET"
+              value: {{ .Values.kafka.openJMX | quote }}
+            - name: "ES_JMX_SECRET_NAME"
+              value: {{ $jmxSecretName | quote }}
 {{ end -}}
 
