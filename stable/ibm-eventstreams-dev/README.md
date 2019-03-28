@@ -1,29 +1,32 @@
 # IBM Event Streams Community Edition
 
-[IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, pub-sub technology for building event-driven applications. It's built on top of [Apache Kafka®](https://kafka.apache.org/) version 2.0.1.
+[IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, pub-sub technology for building event-driven applications. It's built on top of [Apache Kafka®](https://kafka.apache.org/) version 2.1.1.
 
 ## Introduction
 
-This chart deploys Apache Kafka® and supporting infrastructure such as Apache ZooKeeper™. Further information about IBM Event Streams can be found [here](
+This chart deploys Apache Kafka® and supporting infrastructure such as Apache ZooKeeper™. For more information about IBM Event Streams, see the [product documentation](
 https://ibm.github.io/event-streams/about/overview/).
 
 ## Chart Details
 
 This Helm chart will install the following:
 
-- An Apache Kafka® cluster using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with a configurable number of replicas (default 3)
+- An Apache Kafka® cluster using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with a configurable number of replicas (default is 3)
 - An Apache ZooKeeper™ ensemble using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with 3 replicas
 - An administration user interface using a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 - An administration server using a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to support the administration tools
-- A network proxy as a [Service](https://kubernetes.io/docs/concepts/services-networking/service/) to enable connection by clients
+- A REST producer server using a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to support the sending of messages to IBM Event Streams by using a HTTP POST request
+- A REST proxy as a [Service](https://kubernetes.io/docs/concepts/services-networking/service/) to enable connection by REST clients
+- A network proxy as a [Service](https://kubernetes.io/docs/concepts/services-networking/service/) to enable connection by kafka clients
 - Pod network access rules as a [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies) to control how pods are allowed to communicate
 - An access controller as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to support Kafka authorization
 - An Elasticsearch cluster using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with 2 replicas to support the user interface
 - An index manager as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to provide access to the Elasticsearch nodes
+- A Collector as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to provide monitoring metrics to Prometheus
 
 ## Prerequisites
 
-If you prefer to install from the command prompt, you will need:
+To install using the command line, ensure you have the following:
 
 - The `cloudctl`, `kubectl` and `helm` commands available
 - Your environment configured to connect to the target cluster
@@ -33,6 +36,77 @@ The installation environment has the following prerequisites:
 - Kubernetes 1.11
 - A namespace dedicated for use by IBM Event Streams (see "Create a Namespace" below)
 - PersistentVolume support in the underlying infrastructure if `persistence.enabled=true` (See "Create Persistent Volumes" below)
+### PodSecurityPolicy Requirements
+
+To install the Event Streams chart, you must have the [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp) PodSecurityPolicy selected for the target namespace.
+
+You can define the PodSecurityPolicy when creating the namespace for your installation.
+
+Custom PodSecurityPolicy definition:
+
+```
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  annotations:
+    kubernetes.io/description: "This policy is the most restrictive,
+      requiring pods to run with a non-root UID, and preventing pods from accessing the host."
+    #apparmor.security.beta.kubernetes.io/allowedProfileNames: runtime/default
+    #apparmor.security.beta.kubernetes.io/defaultProfileName: runtime/default
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: docker/default
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: docker/default
+  name: ibm-restricted-psp
+spec:
+  allowPrivilegeEscalation: false
+  forbiddenSysctls:
+  - '*'
+  fsGroup:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  volumes:
+  - configMap
+  - emptyDir
+  - projected
+  - secret
+  - downwardAPI
+  - persistentVolumeClaim
+```
+
+Custom ClusterRole:
+
+```
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+  name: ibm-restricted-clusterrole
+rules:
+- apiGroups:
+  - extensions
+  resourceNames:
+  - ibm-restricted-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+```
+
+Event Streams applies network policies to control the traffic within the namespace where it is deployed, limiting the traffic to that required by Event Streams. For more information about the network policies and the the traffic they permit, see the [product documentation](https://ibm.github.io/event-streams/security/network-policies/).
+
+For more information about PodSecurityPolicy definitions, see the [IBM Cloud Private documentation](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.2/manage_cluster/security.html).
 
 ## Resources Required
 
@@ -44,12 +118,16 @@ The following table lists the resource requirements of the IBM Event Streams Hel
 | ZooKeeper             | 3                   | 0.1*               | 1*
 | Administration UI     | 1                   | 1                  | 1
 | Administration server | 1                   | 4.5                | 2.5
+| REST producer server  | 1                   | 4                  | 2
+| REST proxy            | 1                   | unlimited          | unlimited
+| Collector             | 1                   | 1                  | 1
 | Network proxy         | 2                   | unlimited          | unlimited
 | Access controller     | 1                   | 0.1                | 0.25
 | Index manager         | 1                   | unlimited          | unlimited
 | Elasticsearch         | 2                   | unlimited          | 4
 
 The settings marked with an asterisk (*) can be configured.
+
 
 The CPU and memory limits for the network proxy are not limited by the chart, so will inherit the resource limits for the namespace that the chart is being installed into. If there are no resource limits set for the namespace, the network proxy pod will run with unbounded CPU and memory limits.
 
@@ -63,32 +141,6 @@ sudo sysctl -w vm.max_map_count=262144
 echo "vm.max_map_count=262144" | tee -a /etc/sysctl.conf
 ```
 
-## PodSecurityPolicy Requirements
-
-Any active PodSecurityPolicy must allow the following capabilities. If any of these are blocked, Event Streams will not operate correctly or may be unable to start.
-
-- Access to the following volume types:
-  - configMapName
-  - emptyDir
-  - persistentVolumeClaim
-  - projected
-
-- fsGroup support for the following group ids:
-  - 1000
-  - 1001
-
-- runAsUser support for the following user ids:
-  - 1000
-  - 1001
-  - 65534
-
-- readOnlyRootFilesystem must be false
-
-- Retain default settings for the following capabilities:
-  - SELinux
-  - AppArmor
-  - seccomp
-  - sysctl
 
 ## Installing the Chart
 
@@ -103,7 +155,9 @@ There are four steps to install IBM Event Streams in your environment:
 
 You must use a [namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/) dedicated for use by IBM Event Streams to ensure that the network access policies created by the chart are only applied to the Event Streams installation. Installation to the default namespace is not supported.
 
-To create a namespace, you must have the Cluster administrator role. Choose a name for your namespace and run this command using your chosen name:
+To create a namespace, you must have the Cluster Administrator role. Ensure that the namespace has the correct [PodSecurityPolicy set](#podsecuritypolicy-requirements).
+
+Choose a name for your namespace and run this command using your chosen name:
 
 ```
 kubectl create namespace <namespace_name>
@@ -115,7 +169,7 @@ Persistence is not enabled by default so no persistent volumes are required. If 
 
 Enable persistence if you want messages sent to topics and configuration to be retained in the event of a restart. If persistence is enabled, one physical volume will be required for each Kafka broker and ZooKeeper server.
 
-To create physical volumes, you must have the Cluster administrator role.
+To create physical volumes, you must have the Cluster Administrator role.
 
 You can find more information about storage requirements below.
 
@@ -125,7 +179,7 @@ For volumes that support ownership management, specify the group ID of the group
 
 You can override the default values for Kafka static configuration using a ConfigMap. These values are then supplied to the Kafka brokers using their `server.properties` files. This mechanism enables you to make changes to Kafka's read-only configuration properties.
 
-To create a ConfigMap, you must have the Operator, Administrator or Cluster administrator role. Create a ConfigMap from an existing Kafka `server.properties` file by running the following command:
+To create a ConfigMap, you must have the Operator, Administrator or Cluster Administrator role. Create a ConfigMap from an existing Kafka `server.properties` file by running the following command:
 
 ```
 kubectl -n <namespace_name> create configmap <configmap_name> --from-env-file=<path/to/server.properties>
@@ -147,9 +201,9 @@ helm upgrade --reuse-values --set kafka.configMapName=<configmap_name> <release_
 
 ### Install IBM Event Streams
 
-To install the chart, your user id must have the Cluster administrator role.
+To install the chart, your user id must have the Cluster Administrator role.
 
-Add the IBM Cloud Private internal Helm repository called `local-charts` to the Helm CLI as an external repository, as described [here](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.0/app_center/add_int_helm_repo_to_cli.html).
+Add the IBM Cloud Private internal Helm repository called `local-charts` to the Helm CLI as an external repository, as described in the [IBM Cloud Private documentation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/app_center/add_int_helm_repo_to_cli.html).
 
 Install the chart, specifying the release name and namespace with the following command:
 
@@ -167,16 +221,16 @@ The Configuration section lists the parameters that can be overridden during ins
 --set key=value[,key=value]
 ```
 
-## Verifying the Chart
+### Verifying the Chart
 
 See the NOTES.txt file associated with this chart for verification instructions.
 
-## Uninstalling the Chart
+### Uninstalling the Chart
 
 To uninstall IBM Event Streams:
 
 ```
-helm delete <release_name> --purge --tls
+helm delete <release_name> --purge --tls
 ```
 
 This command removes all the Kubernetes components associated with the chart, except any persistent volume claims (PVCs). This is the default behavior of Kubernetes, and ensures that valuable data is not deleted. In order to delete the Kafka and ZooKeeper data, you can delete the PVC using the following command:
@@ -217,6 +271,7 @@ The following tables list the configurable parameters of the `ibm-eventstreams-d
 | `kafka.resources.requests.memory`               | Memory request for Kafka brokers                                                              | `2Gi`                           |
 | `kafka.brokers`                                 | Number of brokers in the Kafka cluster, minimum 3                                             | `3`                             |
 | `kafka.configMapName`                           | Optional ConfigMap used to apply static configuration to brokers in the cluster               | `nil`                           |
+| `kafka.openJMX`                                 | Open each Kafka broker's JMX port for secure connections from inside the IBM Cloud Private cluster | `false`                    |
 
 ### Kafka persistent storage settings
 
@@ -259,8 +314,14 @@ The following tables list the configurable parameters of the `ibm-eventstreams-d
 
 | Parameter                                       | Description                                                                                   | Default                         |
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `messageIndexing.messageIndexingEnabled`        | Enable message indexing to enhance browsing the messages on topics                            | `true`                          |
+| `messageIndexing.messageIndexingEnabled`        | Enable message indexing to enhance browsing the messages on topics                            | `true`                        |
 | `messageIndexing.resources.limits.memory`       | Memory limits for Index Manager nodes                                                         | `2Gi`                           |
+
+### External monitoring settings
+
+| Parameter                                       | Description                                                                                   | Default                         |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
+| `externalMonitoring.datadog.<check_template>`   | JSON string for the required Datadog® Autodiscovery check template used for Kafka monitoring   | `nil`                           |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
@@ -268,7 +329,7 @@ Alternatively, you can use a YAML file to specify the values for the parameters.
 
 ## Storage
 
-If persistence is enabled, each Kafka broker and ZooKeeper server requires one Physical Volume. You either need to create a
+If persistence is enabled, each Kafka broker and ZooKeeper server requires one Physical Volume. The number of Kafka brokers and ZooKeeper servers depends on your setup. For default requirements, see the [resource requirements table](#resources-required). You either need to create a
 [persistent volume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#static) for each Kafka broker and ZooKeeper server, or specify a
 storage class that supports [dynamic provisioning](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#dynamic). Kafka and ZooKeeper can
 use different storage classes to control how physical volumes are allocated.
@@ -277,12 +338,11 @@ If these persistent volumes are to be created manually, this must be done by the
 
 If these persistent volumes are to be created automatically at the time of installation, the system administrator must enable support for this prior to installing the Helm chart. For automatic creation 'dynamic provisioning' should be enabled in the Helm chart when it is installed and storage class names provided to define which types of Persistent Volume get allocated to the deployment.
 
-More information about persistent volumes and the system administration steps required can be found [here](https://kubernetes.io/docs/concepts/storage/persistent-volumes/).
+More information about persistent volumes and the system administration steps required can be found in the [Kubernetes documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes/).
 
 ## Limitations
-
 - The chart must be deployed into a namespace dedicated for use by IBM Event Streams.
-- The chart can be deployed by an Administrator or Cluster administrator.
+- The chart can only be deployed by a Cluster Administrator.
 - Linux on Power (ppc64le) is not supported.
 - Mixed worker node architecture deployments are not supported.
 

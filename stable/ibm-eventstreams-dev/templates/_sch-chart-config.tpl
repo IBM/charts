@@ -11,7 +11,7 @@ sch:
     # This user should also be the one created and used in the dockerfile
     # If an alternate user is required in the dockerfile, the security context user in the container should be changed to reflect this
     # The user in the security context of the chart (level above container) should be left as default as it will be overriden by the containers user
-    defaultUser: 1000
+    defaultUser: 5000
 
   restrictedNamespaces:
     - kube-system
@@ -36,12 +36,17 @@ sch:
       prod: "IBM Event Streams"
       foundation-prod: "IBM Event Streams Foundation Edition"
       cip-prod: "IBM Event Streams Cloud Integration Platform Edition"
+      prerelease-prod: "IBM Event Streams pre-release"
 
-    productVersion: 2018.3.1
+    productVersion: 2019.1.1
 
-    # EDITION_START
+    # Use the old convention for standard Kubernetes labels, as switching
+    # to the new labels would break upgrades
+    labelType: non-prefixed
+
     edition: dev
-    # EDITION_END
+
+    platform: icp
 
     #
     # Names given to the Kubernetes components that make up Event Streams
@@ -83,7 +88,20 @@ sch:
           name: "cert-gen-job"
         oauthJobDeleterJob:
           name: "oauth-jobdeleter-job"
-
+        releaseConfigMap:
+          name: "release-cm"
+        releaseCreateJob:
+          name: "release-cm-creater-job"
+        releasePatcherJob:
+          name: "release-cm-patcher-job"
+        releaseDeleteJob:
+          name: "release-cm-deleter-job"
+        releaseRole:
+          name: "release-cm-role"
+        releaseRoleBinding:
+          name: "release-cm-rolebinding"
+        releaseServiceAccount:
+          name: "release-cm-sa"
 
 
       #
@@ -92,6 +110,8 @@ sch:
       kafka:
         # component label for all the Kafka-related resources
         compName: "kafka"
+        kafkaVersion: "2.1.1"
+        kafkaInternalVersion: "2.1"
         networkPolicy: "kafka-access"
         # all of the resources deployed by the Kafka charts
         statefulSet:
@@ -108,6 +128,8 @@ sch:
           name: "pod-manager-rolebinding"
         serviceAccount:
           name: "kafka-sa"
+        jmxSecret:
+          name: "jmx-secret"
 
       #
       # Components relating to the Kafka metrics proxy
@@ -146,6 +168,21 @@ sch:
           name: "indexmgr-deploy"
         serviceAccount:
           name: "indexmgr-sa"
+
+      #
+      # Components relating to the collector
+      #
+      collector:
+        # component label for all the collector-related resources
+        compName: "collector"
+        networkPolicy: "collector-access"
+        # all of the resources deployed by the collector component
+        service:
+          name: "collector-svc"
+        deployment:
+          name: "collector-deploy"
+        serviceAccount:
+          name: "collector-sa"
 
       #
       # Components relating to the ZooKeeper nodes
@@ -241,8 +278,30 @@ sch:
         # component label for all the ui-proxy-related resources
         compName: "restproxy"
         # all of the resources deployed by the rest-proxy charts
+        externalservice:
+          name: "rest-proxy-external-svc"
+        internalservice:
+          name: "rest-proxy-internal-svc"
+        deployment:
+          name: "rest-proxy-deploy"
+        networkPolicy: "rest-proxy-access"
+        serviceAccount:
+          name: "rest-proxy-sa"
+
+      #
+      # Components relating to the REST Producer API
+      #
+      restproducer:
+        # component label for all the REST Producer API-related resources
+        compName: "restproducer"
+        networkPolicy: "rest-producer-access"
+        # all of the resources deployed by the REST Producer API charts
         service:
-          name: "rest-proxy-svc"
+          name: "rest-producer-svc"
+        deployment:
+          name: "rest-producer-deploy"
+        serviceAccount:
+          name: "rest-producer-sa"
 
       #
       # Components relating to hosting the admin UI
@@ -266,12 +325,6 @@ sch:
           name: "oauth-secret"
         serviceAccount:
           name: "ui-sa"
-      #
-      # Components relating to hosting the admin ui-proxy
-      #
-      uiproxy:
-        # component label for all the ui-proxy-related resources
-        compName: "uiproxy"
 
       #
       # Components relating to ICP IAM Security
@@ -309,5 +362,21 @@ sch:
           name: "telemetry-hook"
         serviceAccount:
           name: "telemetry-sa"
+
+      #
+      # Components relating to the Schema Registry
+      #
+      schemaregistry:
+        # component label for all the Schema Registry resources
+        compName: "schemaregistry"
+        networkPolicy: "schemaregistry-access"
+        # resources deployed by the schemaregistry chart
+        statefulSet:
+          name: "schemaregistry-sts"
+        serviceAccount:
+          name: "schemaregistry-sa"
+        service:
+          name: "schemaregistry-svc"
+
 
 {{- end -}}

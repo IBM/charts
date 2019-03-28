@@ -2,7 +2,9 @@
 #
 # Licensed Materials - Property of IBM
 #
-# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
 #
 # US Government Users Restricted Rights - Use, duplication or
 # disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
@@ -11,6 +13,7 @@
 # Runs a container that registers the IBM Event Streams Security URL
 # security endpoints to Role mappings
 ###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") | trim -}}
 {{ $namePrefix := .sch.chart.components.security.roleMappings.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 # Component is 'security'
@@ -35,7 +38,6 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ $name | quote }}
-  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
   annotations:
@@ -50,6 +52,7 @@ spec:
       namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
       labels:
 {{ $labels | indent 8 }}
+        job: "security-role-mappings"
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
       {{- if .Values.global.image.pullSecret }}
@@ -67,7 +70,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: "security-role-mapping"
-          image: {{ include "eventstreams.image" (list . "eventstreams-role-mappings" .Values.global.image.imageTags.roleMappingsTag "true") | quote }}
+          image: {{ include "eventstreams.image" (list . "eventstreams-role-mappings" .Values.global.image.imageTags.roleMappingsTag) | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           securityContext:
             privileged: false
@@ -77,7 +80,7 @@ spec:
             runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
-              - all
+              - ALL
           env:
             {{- include "license.accept.env.ref" . | indent 10 }}
             - name: "NAMESPACE"

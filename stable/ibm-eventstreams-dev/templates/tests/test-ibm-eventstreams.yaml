@@ -2,7 +2,9 @@
 #
 # Licensed Materials - Property of IBM
 #
-# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
 #
 # US Government Users Restricted Rights - Use, duplication or
 # disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
@@ -15,11 +17,15 @@
 {{- $namePrefix := "service-test" -}}
 {{- $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
 {{ $compName := "service-test" -}}
-{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $networkPolicyLabel := "kafka" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $networkPolicyLabel) -}}
 {{ $kafkaHeadless := .sch.chart.components.kafka.headless.name -}}
 {{ $kafkaHeadlessName :=  (include "sch.names.fullCompName" (list . $kafkaHeadless)) -}}
+{{ $zookeeperConfig := include "sch.config.init" (list . "zookeeper.sch.chart.config.values" ) -}}
 {{ $zookeeperHeadless := .sch.chart.components.zookeeper.headless.name -}}
 {{ $zookeeperHeadlessName :=  (include "sch.names.fullCompName" (list . $zookeeperHeadless)) }}
+{{ $zookeeperReplicas := int .sch.config.zookeeper.replicas -}}
+{{ $kafkaReplicas := int .Values.kafka.brokers -}}
 # Default user for security context
 {{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: v1
@@ -30,6 +36,7 @@ metadata:
     "helm.sh/hook": test-success
   labels:
 {{ $labels | indent 4 }}
+    serviceSelector: {{ $namePrefix | quote }}
 spec:
   {{- if .Values.global.image.pullSecret }}
   imagePullSecrets:
@@ -47,7 +54,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: "helm-test"
-      image: {{ include "eventstreams.image" (list . "eventstreams-alpine" .Values.global.image.imageTags.alpineTag "ibmcom") | quote }}
+      image: {{ include "eventstreams.image" (list . "eventstreams-base" .Values.global.image.imageTags.baseTag) | quote }}
       imagePullPolicy: {{ .Values.global.image.pullPolicy }}
       securityContext:
         privileged: false
@@ -57,14 +64,18 @@ spec:
         runAsUser: 405
         capabilities:
           drop:
-          - all
+          - ALL
+      env:
+        {{- include "license.accept.env.ref" . | indent 6 }}
+        - name: kafkaReplicas
+          value: {{ $kafkaReplicas | quote }}
+        - name: zookeeperReplicas
+          value: {{ $zookeeperReplicas | quote }}
       command:
         - /bin/sh
         - -c
-        - "echo Connecting to Kafka headless service port {{ $kafkaHeadlessName }} 9092; \
-          nc -w2 -v {{ $kafkaHeadlessName }} 9092; \
-          echo Connecting to Kafka metrics endpoint http://{{ $kafkaHeadlessName }}:8081/metrics ; \
-          wget http://{{ $kafkaHeadlessName }}:8081/metrics; \
-          echo Connecting to ZooKeeper headless service port {{ $zookeeperHeadlessName }} 2181; \
-          nc -w2 -v {{ $zookeeperHeadlessName }} 2181; \
+        - "echo checking Kafka and ZooKeeper services are accessible; \
+          set -e; \
+          for i in `seq 0 $(($kafkaReplicas-1))`; do nc -w2 -v {{ .Release.Name }}-ibm-es-kafka-broker-svc-${i} 9092; done; \
+          for i in `seq 0 $(($zookeeperReplicas-1))`; do nc -w2 -v {{ .Release.Name }}-ibm-es-zookeeper-fixed-ip-svc-${i} 2181; done; \
           echo Test complete"

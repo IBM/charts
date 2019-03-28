@@ -2,7 +2,9 @@
 #
 # Licensed Materials - Property of IBM
 #
-# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
 #
 # US Government Users Restricted Rights - Use, duplication or
 # disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
@@ -31,11 +33,13 @@
 {{ $ports := .sch.config.ports }}
 # Default user for security context
 {{ $defaultUser := .sch.securityContext.defaultUser -}}
+# length chewcked pvc name
+{{ $shortPvcName := include "sch.names.volumeClaimTemplateName" (list . .Values.dataPVC.name $statefulSetName) -}}
+
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ $statefulSetName | quote }}
-  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
 spec:
@@ -106,17 +110,22 @@ spec:
         #  requested in the Kafka stateful set definition
       containers:
         - name: "zookeeper"
-          image: {{ include "eventstreams.image" (list . "eventstreams-zookeeper" .Values.global.image.imageTags.zookeeperTag "true") | quote }}
+          image: {{ include "eventstreams.image" (list . "eventstreams-zookeeper" .Values.global.image.imageTags.zookeeperTag) | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           securityContext:
             privileged: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
             runAsNonRoot: true
+            {{- if eq .sch.chart.platform "icp" }}
+            # Running as user 65534
             runAsUser: 65534
+            {{- else }}
+            runAsUser: {{ $defaultUser }}
+            {{- end }}
             capabilities:
               drop:
-              - all
+              - ALL
           resources:
             limits:
               cpu: {{ .Values.resources.limits.cpu }}
@@ -175,7 +184,7 @@ spec:
             failureThreshold: 10
           volumeMounts:
           {{- if .Values.persistence.enabled }}
-            - name: {{ .Values.dataPVC.name }}
+            - name: {{ $shortPvcName }}
               mountPath: /var/lib/zookeeper
           {{- else }}
             - name: "tempdir"
@@ -184,7 +193,7 @@ spec:
 {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
-        name: {{include "sch.names.volumeClaimTemplateName" (list . .Values.dataPVC.name $statefulSetName)}}
+        name: {{ $shortPvcName }}
         labels:
 {{ $labels | indent 10 }}
       spec:

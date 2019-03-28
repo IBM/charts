@@ -16,8 +16,8 @@ sch:
         healthcheck: 7070
         # Port opened by the kafka-metrics-reporter container
         metrics: 8081
-        #local host port for metrics
-        metricsLocalHost: 9999
+        #Port for JMX connections
+        jmx: 9999
 
       #ports used for security
       security:
@@ -27,7 +27,7 @@ sch:
         accessController: 8443
         # ICP Platform Identity Provider
         platformIdentityProvider: 4300
-     
+
 
       # ports used by zookeeper
       zookeeper:
@@ -53,6 +53,10 @@ sch:
         # api for rest server to call
         api: 9080
 
+      collector:
+        # metrics sent from kafka pod by metrics proxy
+        api: 7888
+
       replicator:
         # Port number for the Kafka Connect REST API on individual replicator pods
         api: 8083
@@ -64,6 +68,18 @@ sch:
         server: 9080
         # Port number that the proxy container will listen on, this will be wired to a randomly generated node port
         proxy: 32000
+
+      restproxy:
+        # Port number that the Service uses to securely expose the REST proxy externally
+        https: 32000
+        # Port number that the Service uses to expose the REST proxy internally
+        http: 9080
+        # Port number that the proxy container will listen on, used for liveness checks
+        health: 32010
+
+      restproducer:
+        # Port number that the Service uses to expose the REST Producer API in the cluster
+        server: 8080
 
       codegen:
         # port for code generation
@@ -78,10 +94,11 @@ sch:
       ui:
         # Port number that the Service uses to expose the UI web server within the cluster
         webserver: 3000
-        # Port number that the Service uses to expose the UI web server within the cluster
-        proxy: 32000
         # health and liveness endpoint
         health: 8080
+
+      schemaregistry:
+        server: 3000
 
       elasticsearch:
         # rest api endpoint
