@@ -118,6 +118,7 @@ The Helm chart has the following values that can be overridden by using `--set n
 |           | `lifecycle`        | Handlers for the PostStart and PreStop lifecycle events of container. | YAML object of lifecycle handlers |
 |           | `serverOverridesConfigMapName`        | Name of the ConfigMap that contains server configuration overrides (within key 'server-overrides.xml') to configure your Liberty server at deployment. | Name of ConfigMap |
 |           | `extraVolumeMounts`  | Additional `volumeMounts` for server pods | YAML array of `volumeMounts` definitions |
+|           | `security`  | Configure the security attributes of the image | YAML object of security attributes |
 | `resourceNameOverride` |     | This name will be appended to the release name to form the name of resources created by the chart. By default, this is set to the chart name. |  |
 | `deployment`     | `annotations` | Additional annotations to be added to Deployment (or StatefulSet if persistence is enabled) | YAML object of annotations |
 |                  | `labels`     | Additional labels to be added to Deployment (or StatefulSet if persistence is enabled)  | YAML object of labels |
@@ -126,6 +127,7 @@ The Helm chart has the following values that can be overridden by using `--set n
 |           | `extraInitContainers` | Additional Init Containers which are run before the containers are started | YAML array of `initContainers` definitions |
 |           | `extraContainers`     | Additional containers to be added to the server pods | YAML array of `containers` definitions |
 |           | `extraVolumes`        | Additional volumes for server pods | YAML array of `volume` definitions |
+|           | `security`  | Configure the security attributes of the pod | YAML object of security attributes |
 | `service` | `enabled`    | Specifies whether the `HTTP` port service is enabled or not.  |  |
 |           | `name`       | The service metadata name and DNS A record.  | |
 |           | `port`       | The port that this container exposes.  |   |
@@ -189,6 +191,11 @@ The Helm chart has the following values that can be overridden by using `--set n
 |              | `hazelcast.image.tag` | Docker image tag | `3.10.6` |
 |              | `hazelcast.image.pullPolicy` | Image Pull Policy | `IfNotPresent` |
 | `rbac`      | `install`             | Install RBAC. Set to `true` if using a namespace with RBAC. | `true` |
+| `oidcClient`| `enabled`         | Set to `true` to enable security using OpenId Connect. |   `false` (default) or `true`  |
+|                | `clientId`     | The client ID that has been obtained from the OpenId Connect Provider. |  a string  |
+|                | `clientSecretName` | The Kubernetes secret containing the client secret that has been obtained from the OpenId Connect Provider. The key inside this secret must be named `clientSecret`. |  a string  |
+|                | `discoveryURL` | The discovery URL of the OpenId Connect Provider. |  a URL  |
+
 
 ### Configuring Liberty
 
@@ -283,7 +290,7 @@ Note: For volumes that support ownership management, specify the group ID of the
 
 Logging in JSON format is enabled by default. Log events are forwarded to Elasticsearch automatically. In 18.0.0.3+, audit events can also be forwarded to Elasticsearch. Audit events may contain sensitive data. Make sure you have enabled security in the logging stack if you are deploying your chart into IBM Cloud Private.
 
-Use Kibana to monitor and analyze the log events. Sample Kibana dashboards are provided in the Helm chart's [dashboards](https://github.com/IBM/charts/tree/master/stable/ibm-websphere-liberty/ibm_cloud_pak/pak_extensions/dashboards) directory.
+Use Kibana to monitor and analyze the log events. Sample Kibana dashboards are provided in the Helm chart's [dashboards](https://github.com/IBM/charts/tree/master/stable/ibm-websphere-liberty/ibm_cloud_pak/pak_extensions/dashboards) directory.  Ensure Liberty log events exist in Elasticsearch before creating an index pattern and importing dashboards in Kibana.
 
 For more information, see [Analyzing Liberty messages in IBM Cloud Private](https://www.ibm.com/support/knowledgecenter/en/SSEQTP_liberty/com.ibm.websphere.wlp.doc/ae/twlp_icp_json_logging.html) in the Knowledge Center.
 
@@ -329,11 +336,23 @@ The option to enable session caching in the ibm-websphere-liberty helm chart has
 
 #### Monitoring
 
-Monitoring is disabled by default. To use monitoring, the HTTP service must be enabled. Also, in the Liberty server configuration, features `mpMetrics-1.1` and `monitor-1.0` must be enabled and metrics endpoint `/metrics` must be configured without authentication.
+Monitoring is disabled by default. To use monitoring, the HTTP service must be enabled. Also, in the Liberty server configuration, features `mpMetrics-1.1` and `monitor-1.0` must be enabled and metrics endpoint `/metrics` must be configured without authentication.  `mpMetrics-1.1` works with Java EE 7 features.
 
 When SSL is enabled, an additional service (ClusterIP type) is created using port 9080 to provide metrics data to prometheus. This also means the applications and other endpoints can also be accessed within the cluster on port 9080. When SSL is not enabled, the user-specified port of the HTTP service is used. If the service is exposed outside of the cluster then the unauthenticated metrics endpoint `/metrics` will be exposed as well.
 
 Metrics are collected by Prometheus automatically. Use Grafana to monitor and analyze the metrics.
+
+#### OpenID Connect 
+Liberty can function as an OpenID Connect Client, to secure applications using OpenID Connect. In this case, user authentication to access secured applications is performed remotely by an OpenID Connect Provider, and the result is returned to Liberty. First you must obtain a client ID, client secret, and discovery URL from the provider you intend to use. The process for obtaining these values is provider-specific. Please refer to documentation of the OpenID Connect Provider you intend to use.
+
+Create a Kubernetes secret resource containing a key named `clientSecret` with client secret value you obtained from the OpenID Connect Provider. See [Creating your own Secrets](https://kubernetes.io/docs/concepts/configuration/secret/#creating-your-own-secrets) for more information. The name of the secret you created should be passed to `oidcClient.clientSecretName` parameter.
+
+When your Docker image contains secured applications, you can specify your provider's client parameters, then user authentication will be performed using OpenID Connect. 
+
+For additional information about configuring and using OpenID Connect, see  [Using OpenID Connect](https://www.ibm.com/support/knowledgecenter/SSEQTP_liberty/com.ibm.websphere.wlp.doc/ae/rwlp_using_oidc.html).
+
+To use additional features beyond what are supported in this chart, your Docker image build can replace /opt/ibm/helpers/build/configuration_snippets/oidc-config.xml with a modified copy. 
+
 
 #### Resource Reference
 
@@ -366,6 +385,9 @@ The helm chart augments the Liberty container with the following environmental v
 | `KEYSTORE_REQUIRED` | Determines whether keystore is generated. |
 | `MB_KEYSTORE_PASSWORD` | Namespace scope JKS keystore password. |
 | `MB_TRUSTSTORE_PASSWORD` | Namespace scope JKS truststore password. |
+| `OIDC_CLIENT_ID`  | OpenID Connect client ID. |
+| `OIDC_CLIENT_SECRET` | OpenID Connect client secret. |
+| `OIDC_DISCOVERY_URL ` | OpenID Connect provider discovery URL. |
 
 
 ## More information
