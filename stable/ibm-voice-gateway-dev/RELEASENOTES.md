@@ -1,13 +1,8 @@
 # Breaking Changes
-* Will need to recreate the tenant configuration secret using the updated command
-* Will need to create the metering API Key secret before upgrading
+* None
 
-# What's new in 2.1.0
-* Updated voice gateway images to 1.0.0.8d
-* Added support for storing persistent logs
-* Added support for configuring SSL and TLS encryption
-* Added support for setting up Mutual Authentication
-* Added support for configuring MRCPv2
+# What's new in 2.1.1
+* Updated voice gateway images to 1.0.1.0
 * [What's new](https://www.ibm.com/support/knowledgecenter/SS4U29/whatsnew.html)
 
 # Fixes
@@ -23,7 +18,7 @@ None
 ## Upgrade
 
 - Upgradable from version 2.0.0 and above
-- If upgrading from version 2.0.0 or 2.0.1 to 2.1.0, you will need to recreate the tenant configuration secret before upgrading:
+- If upgrading from version 2.0.0 or 2.0.1 to 2.1.0 and above, you will need to recreate the tenant configuration secret before upgrading:
   - Delete old tenant configuration secret:
     ```
     kubectl delete secret vgw-tenantconfig-secret -n <namespace>
@@ -32,7 +27,7 @@ None
     ```
     kubectl create secret generic vgw-tenantconfig-secret --from-file=tenantConfig=tenantConfig.json -n <namespace>
     ```
-- If upgrading from version 2.0.0 or 2.0.1 to 2.1.0, you will need to create the metering API Key secret before upgrading:
+- If upgrading from version 2.0.0 or 2.0.1 to 2.1.0 and above, you will need to create the metering API Key secret before upgrading:
   - Add the metering API Key in a text file `metering-api-key.txt` (Make sure there are no extra spaces or new lines in the text file)
   - Create secret for the metering API Key:
     ```
@@ -43,6 +38,7 @@ None
 
 | Chart | Date        | Kubernetes Required | Image(s) Supported | Details |
 | ----- | ----------- | ----------- | ------------------ | ------- |
+| 2.1.1 | Mar 29, 2019 | >= 1.11    | ibmcom/voice-gateway-so:1.0.1.0 and ibmcom/voice-gateway-mr:1.0.1.0 | Updated images to version 1.0.1.0 |
 | 2.1.0 | Mar 01, 2019 | >= 1.11    | ibmcom/voice-gateway-so:1.0.0.8d and ibmcom/voice-gateway-mr:1.0.0.8d | Updated images to version 1.0.0.8d, added support for storing persistent logs, configuring SSL, mutual authentication and MRCPv2 |
 | 2.0.1 | Oct 26, 2018 | >= 1.11    | ibmcom/voice-gateway-so:1.0.0.7a and ibmcom/voice-gateway-mr:1.0.0.7a | Updated images to version 1.0.0.7a |
 | 2.0.0 | Sep 28, 2018 | >= 1.11    | ibmcom/voice-gateway-so:1.0.0.7 and ibmcom/voice-gateway-mr:1.0.0.7 | Updated images to version 1.0.0.7, added support for for JSON based configuration, added node selector feature, added metering support |

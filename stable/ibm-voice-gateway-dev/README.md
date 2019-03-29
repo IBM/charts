@@ -16,11 +16,9 @@ This chart will deploy IBM Voice Gateway (Developer Trial).
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
 
 #### Predefined PodSecurityPolicy
-
 The predefined PodSecurityPolicy [`ibm-anyuid-hostaccess-psp`](https://ibm.biz/cpkspec-psp) has been verified for this chart, if your target namespace is bound to this PodSecurityPolicy you can proceed to install the chart.
 
 #### Custom PodSecurityPolicy
-
 To set up a custom PodSecurityPolicy, the cluster administrator can either manually create the following resources, or use the configuration scripts to create and delete the resources.
 
 - Custom PodSecurityPolicy definition:
@@ -59,7 +57,7 @@ To set up a custom PodSecurityPolicy, the cluster administrator can either manua
     - 'projected'
   ```
 - Custom ClusterRole for the custom PodSecurityPolicy:
-  ```
+  ```yaml
   apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRole
   metadata:
@@ -182,10 +180,10 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `tenantConfigSecretName`           | Tenant Config secret name             | `vgw-tenantconfig-secret`                                                      |
 | `image.sipOrchestrator.repository`           | Sip Orchestrator repository             | `ibmcom/voice-gateway-so`                                                      |
 | `image.sipOrchestrator.containerName`           | Sip Orchestrator container name             | `vgw-sip-orchestrator`                                                      |
-| `image.sipOrchestrator.tag`           | Sip Orchestrator docker image tag             | `1.0.0.8d`                                                      |
+| `image.sipOrchestrator.tag`           | Sip Orchestrator docker image tag             | `1.0.1.0`                                                      |
 | `image.mediaRelay.repository`           | Media Relay repository             | `ibmcom/voice-gateway-mr`                                                      |
 | `image.mediaRelay.containerName`           | Media Relay container name             | `vgw-media-relay`                                                      |
-| `image.mediaRelay.tag`           | Media Relay docker image tag             | `1.0.0.8d`                                                      |
+| `image.mediaRelay.tag`           | Media Relay docker image tag             | `1.0.1.0`                                                      |
 | `image.pullPolicy`           | Image pull policy             | `Always`                                                      |
 | `image.imagePullSecrets`           | Docker repository image pull secret             | `n/a`                                                      |
 | `persistence.useDynamicProvisioning`           | Dynamic provisioning setup             | `false`                                                      |
@@ -297,20 +295,22 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
     ```
     kubectl create secret generic ssl-client-passphrase-secret --from-file=sslClientPassphrase=ssl_client_passphrase.txt -n <namespace>
     ```
+  - Enable option `Enable Mutual Authentication` in the Media Relay configuration before deployment
 
 #### Configuring secrets for proxy password for the Sip Orchestrator and the Media Relay:
 - You can create the secret separately for the Sip Orchestrator and the Media Relay or use the same one.
 - Create an individual text file with the Sip Orchestrator and the Media Relay proxy password. For example: `so_proxy_password.txt` and `mr_proxy_password.txt` (Make sure there are no extra spaces or new lines in the text file)
 - To create the secret use one of the two ways:
+  - Create separate secrets for each container:
   ```bash
   kubectl create secret generic so-proxy-password --from-file=soProxyPassword=so_proxy_password.txt -n <namespace>
   kubectl create secret generic mr-proxy-password --from-file=mrProxyPassword=mr_proxy_password.txt -n <namespace>
   ```
-    
+  - Create one secret for both containers:
   ```bash
   kubectl create secret generic proxy-password --from-file=soProxyPassword=so_proxy_password.txt --from-file=mrProxyPassword=mr_proxy_password.txt -n <namespace>
   ```
-- Enter the secret name in the `proxyPasswordSecret` field of the respective container or you can set the mediaRelayEnvVariables.proxyPasswordSecret and sipOrchestratorEnvVariables.proxyPasswordSecret variables during installation using Helm CLI.
+- Enter the secret name in the `Proxy Password secret name` field of the respective container or you can set the mediaRelayEnvVariables.proxyPasswordSecret and sipOrchestratorEnvVariables.proxyPasswordSecret variables during installation using Helm CLI.
 
 ## Storage
 - A PersistentVolume needs to be pre-created prior to installing the chart if you want to enable persistent recording or persistent logs and no dynamic provisioning has been set up. 
