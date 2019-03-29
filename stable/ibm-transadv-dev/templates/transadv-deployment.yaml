@@ -48,8 +48,8 @@ spec:
       hostNetwork: false
       hostPID: false
       securityContext:
-        runAsNonRoot: false
-        runAsUser: 0
+        runAsNonRoot: true 
+        runAsUser: 1001
       affinity:
         {{- include "nodeAffinity" . | indent 6 }}
       serviceAccountName: {{ .Values.security.serviceAccountName  | default "default" }}
@@ -87,6 +87,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            - name:  TA_PUBLIC_ACCESSIBLE_API_SERVER_URL
+              value: "{{ .Values.transadv.publicUrl }}"
             - name:  TA_LA_CLUSTER_HOST
               value: http://$(TA_LA_HOST_IP)
             - name: TA_API_SERVER_INGRESS_PATH
@@ -130,8 +132,8 @@ spec:
           securityContext:
             allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false
-            runAsNonRoot: false
-            runAsUser: 0
+            runAsNonRoot: true 
+            runAsUser: 1001
             privileged: false
             capabilities:
               drop:
@@ -161,9 +163,10 @@ spec:
               - bash
               - -c
               - curl -s -k localhost:9080 | grep "WebSphere Liberty"
-            initialDelaySeconds: 60
-            timeoutSeconds: 5
-            failureThreshold: 6
+            initialDelaySeconds: {{ .Values.transadv.livenessProbe.initialDelaySeconds }} 
+            timeoutSeconds: {{ .Values.transadv.livenessProbe.timeoutSeconds }}
+            periodSeconds: {{ .Values.transadv.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.transadv.livenessProbe.failureThreshold }}
           # set readiness probe to determine if container is ready to accept traffic
           # - command, http, or tcp
           # looks for short durations of non-responsiveness to identify as unavail to accept traffic
@@ -174,6 +177,7 @@ spec:
               - bash
               - -c
               - curl -s -k localhost:9080 | grep "WebSphere Liberty"
-            initialDelaySeconds: 5
-            timeoutSeconds: 3
-            periodSeconds: 5
+            initialDelaySeconds: {{ .Values.transadv.readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.transadv.readinessProbe.timeoutSeconds }}
+            periodSeconds: {{ .Values.transadv.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.transadv.readinessProbe.failureThreshold }}

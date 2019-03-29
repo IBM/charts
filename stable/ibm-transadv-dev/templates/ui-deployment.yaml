@@ -48,8 +48,8 @@ spec:
       hostNetwork: false
       hostPID: false
       securityContext:
-        runAsNonRoot: false
-        runAsUser: 0
+        runAsNonRoot: true
+        runAsUser: 1001
       affinity:
         {{- include "nodeAffinity" . | indent 6 }}
       serviceAccountName: {{ .Values.security.serviceAccountName  | default "default" }}
@@ -71,6 +71,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            - name:  TA_PUBLIC_ACCESSIBLE_API_SERVER_URL
+              value: "{{ .Values.transadv.publicUrl }}"
             - name:  TA_LA_CLUSTER_HOST
               value: http://$(TA_LA_HOST_IP)
             - name:  TA_LA_NODE_PORT
@@ -126,8 +128,8 @@ spec:
           securityContext:
             allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false
-            runAsNonRoot: false
-            runAsUser: 0
+            runAsNonRoot: true
+            runAsUser: 1001
             privileged: false
             capabilities:
               drop:
@@ -161,9 +163,10 @@ spec:
               {{- else }}
               - curl -s -k localhost:3000 | grep "IBM Transformation Advisor"
               {{- end }}
-            initialDelaySeconds: 60
-            timeoutSeconds: 5
-            failureThreshold: 6
+            initialDelaySeconds: {{ .Values.transadvui.livenessProbe.initialDelaySeconds }} 
+            timeoutSeconds: {{ .Values.transadvui.livenessProbe.timeoutSeconds }}
+            periodSeconds: {{ .Values.transadvui.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.transadvui.livenessProbe.failureThreshold }}
           # set readiness probe to determine if container is ready to accept traffic
           # - command, http, or tcp
           # looks for short durations of non-responsiveness to identify as unavail to accept traffic
@@ -178,6 +181,7 @@ spec:
               {{- else }}
               - curl -s -k localhost:3000 | grep "IBM Transformation Advisor"
               {{- end }}
-            initialDelaySeconds: 60
-            timeoutSeconds: 3
-            periodSeconds: 5
+            initialDelaySeconds: {{ .Values.transadvui.readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.transadvui.readinessProbe.timeoutSeconds }}
+            periodSeconds: {{ .Values.transadvui.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.transadvui.readinessProbe.failureThreshold }}
