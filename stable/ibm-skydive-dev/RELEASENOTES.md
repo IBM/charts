@@ -1,3 +1,15 @@
+# What's new in Chart Version 1.1.1
+
+* Expose ports of Skydive; ElasticSearch; ETCD 
+* ICP: support docker image repo skydive/skydive 
+* IKS: add runC container runtime probe 
+* IKS: fix k8s on IKS with default RBAC
+* IKS versions 1.11, 1.12, 1.13 are supported
+
+## Breaking Changes
+
+None
+
 # What's new in Chart Version 1.1.0
 
 * New skydive image 0.21.0
@@ -41,6 +53,7 @@ None
 
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- | 
+| 1.1.1 | Mar 29, 2019| >= 2.1.0.3 | ibmcom/skydive:0.21.0 | None | +ppc64le, +s390x |
 | 1.1.0 | Jan 24, 2019| >= 2.1.0.3 | ibmcom/skydive:0.21.0 | None | +ppc64le, +s390x |
 | 1.0.3 | Jul 23, 2018| >=2.1.0.3 | ibmcom/skydive:0.18 | None | |
 | 1.0.2 | Jun 17, 2018| >=2.1.0.1 | ibmcom/skydive:0.18 | None | |
