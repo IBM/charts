@@ -1,6 +1,6 @@
 ###############################################################################
 # Licensed Materials - Property of IBM.
-# Copyright IBM Corporation 2018. All Rights Reserved.
+# Copyright IBM Corporation 2018,2019. All Rights Reserved.
 # U.S. Government Users Restricted Rights - Use, duplication or disclosure
 # restricted by GSA ADP Schedule Contract with IBM Corp.
 #
@@ -47,9 +47,12 @@ spec:
       annotations:
         productName: "PowerAI"
         productID: "5765-PAI"
-        productVersion: "1.5.4"
+        productVersion: "1.6.0"
 
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 2051
@@ -95,7 +98,7 @@ spec:
         {{- printf "host=$(hostname);[ ${host: -2} = '-0' ] && %s;" .Values.command }}
         {{- end }}
         {{- end }}
-        args: [ "{{ template "makeArgs" . }}tail -f /dev/null;" ]
+        args: [ "{{ template "makeArgs" . }} tini; tail -f /dev/null;" ]
         securityContext:
           privileged: false
           allowPrivilegeEscalation: true
@@ -185,10 +188,8 @@ spec:
             {{- end }}
           {{- end }}
         volumeMounts:
-        {{- if or .Values.ddl.useInfiniBand .Values.paiDistributed.useInfiniBand }}
         - mountPath: /dev/shm
           name: dshm
-        {{- end }}
         - name: "{{ template "fullname" . }}-{{ .Values.poweraiPVC.name }}"
           mountPath: /powerai/data
         {{- if or .Values.ddl.enabled .Values.paiDistributed.mode }}
@@ -199,11 +200,9 @@ spec:
           mountPath: "/powerai/config"
         {{- end }}
       volumes:
-      {{- if or .Values.ddl.useInfiniBand .Values.paiDistributed.useInfiniBand }}
       - name: dshm
         emptyDir:
           medium: Memory
-      {{- end }}
       - name: "{{ template "fullname" . }}-{{ .Values.poweraiPVC.name }}"
       {{- if .Values.persistence.enabled }}
         persistentVolumeClaim:
