@@ -1,0 +1,67 @@
+#ibmcloud-object-storage-plugin deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-object-storage-plugin.name" . }}
+  namespace: {{ template "ibm-object-storage-plugin.namespace" . }}
+  labels:
+    app: {{ template "ibm-object-storage-plugin.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  strategy:
+    type: RollingUpdate
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-object-storage-plugin.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-object-storage-plugin.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productID: "IBMCloudObjectStoragePlugin_{{ .Chart.AppVersion }}_Apache02_00000"
+        productName: "ibmcloud-object-storage-plugin"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      tolerations:
+      - operator: "Exists"
+      serviceAccountName: ibmcloud-object-storage-plugin
+      containers:
+        - name: {{ template "ibm-object-storage-plugin.name" . }}-container
+          {{- if contains "ICP" (.Capabilities.KubeVersion | quote | upper) }}
+          image: "{{ .Values.image.pluginImage.publicRegistry }}:{{ .Values.image.pluginBuild }}"
+          {{- else }}
+          image: "{{ .Values.image.pluginImage.ibmContainerRegistry }}:{{ .Values.image.pluginBuild }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - ps aux | grep "provisioner=ibm.io/ibmc-s3fs" | grep -v grep > /dev/null
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 1
+          args:
+            - "-provisioner=ibm.io/ibmc-s3fs"
+          env:
+          - name: DEBUG_TRACE
+            value: 'false'
