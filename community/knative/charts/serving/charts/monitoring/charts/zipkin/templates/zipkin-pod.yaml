@@ -1,21 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.name | quote }}
-  namespace: {{ .Values.global.istio.namespace | quote }}
-  labels: {{ include "labels" . | nindent 4 }}
-    app: {{ .Values.name | quote }}
+  labels:
+    serving.knative.dev/release: devel
+  name: zipkin
+  namespace: istio-system
 spec:
-  replicas: {{ .Values.replicas }}
+  replicas: 1
   selector:
     matchLabels:
-      app: {{ .Values.name | quote }}
+      app: zipkin
   template:
     metadata:
       annotations:
-        sidecar.istio.io/inject: "false"
-      labels: {{ include "noVersionlabels" . | nindent 8 }}
-        app: {{ .Values.name | quote }}
+        sidecar.istio.io/inject: 'false'
+      labels:
+        app: zipkin
+        serving.knative.dev/release: devel
     spec:
       containers:
       - env:
@@ -24,18 +25,19 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        {{- if .Values.global.serving.monitoring.elasticsearch.enabled }}
         - name: STORAGE_TYPE
           value: elasticsearch
         - name: ES_HOSTS
-          value: "elasticsearch-logging.knative-monitoring.svc.cluster.local:9200"
+          value: elasticsearch-logging.knative-monitoring.svc.cluster.local:9200
         - name: ES_INDEX
-          value: {{ .Values.elasticsearch.index | quote }}
+          value: zipkin
         - name: ZIPKIN_UI_LOGS_URL
-          value: "http://{{ .Values.elasticsearch.kibana.host }}:{{ .Values.elasticsearch.kibana.port }}/api/v1/namespaces/knative-monitoring/services/{{ .Values.elasticsearch.kibana.serviceName }}/proxy/{{ .Values.elasticsearch.kibana.appPath }}"
-        {{- end }}
-        image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
-        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
-        name: {{ .Values.name | quote }}
+          value: http://localhost:8001/api/v1/namespaces/knative-monitoring/services/kibana-logging/proxy/app/kibana#/
+        image: docker.io/openzipkin/zipkin:latest
+        imagePullPolicy: IfNotPresent
+        name: zipkin
         ports:
-        - containerPort: {{ .Values.port }}
+        - containerPort: 9411
+        resources:
+          limits:
+            memory: 1000Mi

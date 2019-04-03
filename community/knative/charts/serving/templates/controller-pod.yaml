@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    serving.knative.dev/release: devel
+  name: controller
+  namespace: knative-serving
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: controller
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: 'false'
+      labels:
+        app: controller
+    spec:
+      containers:
+      - env:
+        - name: SYSTEM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CONFIG_LOGGING_NAME
+          value: config-logging
+        image: gcr.io/knative-releases/github.com/knative/serving/cmd/controller@sha256:25af5f3adad8b65db3126e0d6e90aa36835c124c24d9d72ffbdd7ee739a7f571
+        name: controller
+        ports:
+        - containerPort: 9090
+          name: metrics
+        resources:
+          limits:
+            cpu: {{ .Values.controller.limits.cpu }}
+            memory: 1000Mi
+          requests:
+            cpu: {{ .Values.controller.requests.cpu }}
+            memory: 100Mi
+        volumeMounts:
+        - mountPath: /etc/config-logging
+          name: config-logging
+      serviceAccountName: controller
+      volumes:
+      - configMap:
+          name: config-logging
+        name: config-logging

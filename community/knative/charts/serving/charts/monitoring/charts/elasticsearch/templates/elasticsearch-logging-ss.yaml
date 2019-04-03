@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+    app: elasticsearch-logging
+    kubernetes.io/cluster-service: 'true'
+    version: v5.6.4
+  name: elasticsearch-logging
+  namespace: knative-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: elasticsearch-logging
+      version: v5.6.4
+  serviceName: elasticsearch-logging
+  template:
+    metadata:
+      labels:
+        app: elasticsearch-logging
+        kubernetes.io/cluster-service: 'true'
+        version: v5.6.4
+    spec:
+      containers:
+      - env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: k8s.gcr.io/elasticsearch:v5.6.4
+        name: elasticsearch-logging
+        ports:
+        - containerPort: 9200
+          name: db
+          protocol: TCP
+        - containerPort: 9300
+          name: transport
+          protocol: TCP
+        resources:
+          limits:
+            cpu: {{ .Values.elasticsearchLogging.limits.cpu }}
+          requests:
+            cpu: {{ .Values.elasticsearchLogging.requests.cpu }}
+        volumeMounts:
+        - mountPath: /data
+          name: elasticsearch-logging
+      initContainers:
+      - command:
+        - /sbin/sysctl
+        - -w
+        - vm.max_map_count=262144
+        image: alpine:3.6
+        name: elasticsearch-logging-init
+        securityContext:
+          privileged: true
+      serviceAccountName: elasticsearch-logging
+      volumes:
+      - emptyDir: {}
+        name: elasticsearch-logging

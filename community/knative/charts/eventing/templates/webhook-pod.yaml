@@ -1,31 +1,43 @@
----
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.webhook.name | quote }}
-  namespace: "knative-eventing"
-  labels: {{ include "labels" . | nindent 4 }}
-    app: {{ .Values.webhook.name | quote }}
+  name: webhook
+  namespace: knative-eventing
 spec:
-  replicas: {{ .Values.webhook.replicas }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webhook
+      role: webhook
   template:
     metadata:
       annotations:
-        sidecar.istio.io/inject: "false"
-      labels: {{ include "noVersionlabels" . | nindent 8 }}
-        app: {{ .Values.webhook.name | quote}} 
+        sidecar.istio.io/inject: 'false'
+      labels:
+        app: webhook
         role: webhook
     spec:
       containers:
-      - image: {{ .Values.webhook.image.repository }}:{{ .Values.webhook.image.tag }}
-        name: {{ .Values.webhook.name | quote }}
+      - env:
+        - name: SYSTEM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CONFIG_LOGGING_NAME
+          value: config-logging
+        - name: WEBHOOK_NAME
+          value: webhook
+        image: gcr.io/knative-releases/github.com/knative/eventing/cmd/webhook@sha256:3c0f22b9f9bd9608f804c6b3b8cbef9cc8ebc54bb67d966d3e047f377feb4ccb
+        name: webhook
+        resources:
+          limits:
+            memory: 1000Mi
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /etc/config-logging
           name: config-logging
-      serviceAccountName: {{ .Values.controller.serviceAccount.name | quote }}
+      serviceAccountName: eventing-webhook
       volumes:
       - configMap:
           name: config-logging
         name: config-logging
----

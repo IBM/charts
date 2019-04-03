@@ -1,32 +1,29 @@
----
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
   name: node-exporter
-  namespace: "knative-monitoring"
-  labels: {{ include "labels" . | nindent 4 }}
-    app: node-exporter
+  namespace: knative-monitoring
 spec:
   template:
     metadata:
-      labels: {{ include "noVersionlabels" . | nindent 8 }}
-        app: node-exporter 
+      labels:
+        app: node-exporter
       name: node-exporter
-      namespace: "knative-monitoring"
+      namespace: knative-monitoring
     spec:
       containers:
       - args:
         - --web.listen-address=127.0.0.1:9101
         - --path.procfs=/host/proc
         - --path.sysfs=/host/sys
-        image: "{{ .Values.nodeExporter.image.repository }}:{{ .Values.nodeExporter.image.tag }}"
+        image: quay.io/prometheus/node-exporter:v0.15.2
         name: node-exporter
         resources:
           limits:
-            cpu: 200m
+            cpu: {{ .Values.nodeExporter.limits.cpu }}
             memory: 50Mi
           requests:
-            cpu: 100m
+            cpu: {{ .Values.nodeExporter.requests.cpu }}
             memory: 30Mi
         volumeMounts:
         - mountPath: /host/proc
@@ -36,27 +33,27 @@ spec:
           name: sys
           readOnly: true
       - args:
-        - --secure-listen-address=:{{ .Values.nodeExporterService.port }}
+        - --secure-listen-address=:9100
         - --upstream=http://127.0.0.1:9101/
-        image: "{{ .Values.nodeExporterService.image.repository }}:{{ .Values.nodeExporterService.image.tag }}"
+        image: quay.io/coreos/kube-rbac-proxy:v0.3.0
         name: kube-rbac-proxy
         ports:
-        - containerPort: {{ .Values.nodeExporterService.port }}
-          hostPort: {{ .Values.nodeExporterService.port }}
+        - containerPort: 9100
+          hostPort: 9100
           name: https
         resources:
           limits:
-            cpu: 20m
+            cpu: {{ .Values.nodeExporter.kubeRbacProxy.limits.cpu }}
             memory: 40Mi
           requests:
-            cpu: 10m
+            cpu: {{ .Values.nodeExporter.kubeRbacProxy.requests.cpu }}
             memory: 20Mi
       hostNetwork: true
       hostPID: true
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
-      serviceAccountName: {{ .Values.nodeExporter.svcacct.name | quote }}
+      serviceAccountName: node-exporter
       tolerations:
       - effect: NoSchedule
         operator: Exists
@@ -71,4 +68,3 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
     type: RollingUpdate
----

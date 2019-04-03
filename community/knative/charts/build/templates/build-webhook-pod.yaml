@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: build-webhook
+  namespace: knative-build
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: build-webhook
+  template:
+    metadata:
+      labels:
+        app: build-webhook
+        role: build-webhook
+    spec:
+      containers:
+      - args:
+        - -logtostderr
+        - -stderrthreshold
+        - INFO
+        env:
+        - name: SYSTEM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: gcr.io/knative-releases/github.com/knative/build/cmd/webhook@sha256:488920f65763374a2886860e3b06c3b614ee685b68ec4fdbbcd08d849bb84b71
+        name: build-webhook
+        resources:
+          limits:
+            memory: 1000Mi
+        volumeMounts:
+        - mountPath: /etc/config-logging
+          name: config-logging
+      serviceAccountName: build-controller
+      volumes:
+      - configMap:
+          name: config-logging
+        name: config-logging
