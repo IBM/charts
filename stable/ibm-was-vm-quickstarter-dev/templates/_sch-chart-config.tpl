@@ -42,6 +42,6 @@ sch:
         secretGeneratorName: "secret-generator"
     metering:
       productName: "IBM WebSphere Application Server for IBM Cloud Private VM Quickstarter"
-      productID: "IBMWASQuickStarter_5737E67_2000_ILAN_00000"
-      productVersion: "2.0.0.0"
+      productID: "IBMWASQuickStarter_5737E67_3000_ILAN_00000"
+      productVersion: "3.0.0.0"
 {{- end -}}
