@@ -1,18 +1,27 @@
+{{- $helmTest := default "disabled" .Values.helmTestOverride }}
+{{- if ne $helmTest "disabled" }}
+{{- include "sch.config.init" (list . "ibm-spectrum-symphony.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+{{- $role := "test" -}}
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ template "fullname" . }}-test"
+  name: {{ $fullName }}-{{ $role }}
   annotations:
     "helm.sh/hook": test-success
   labels:
-    app: {{ template "name" . }}
-    release: {{ .Release.Name }}
-    chart: "{{ .Chart.Name }}"
-    heritage: "{{ .Release.Service }}"
-    role: test
+    role: {{ $role }}
+{{ toYaml .sch.chart.labels | indent 4 }}
 spec:
+{{ toYaml .sch.chart.specSecurity | indent 2 }}
   containers:
-  - name: "{{ template "fullname" . }}-test"
-    image: alpine
-    command: ['true']
+  - name: {{ $fullName }}-{{ $role }}
+    image: alpine:3.8
+    command: ['wget']
+    args: ["-O/dev/null", "-q", "--no-check-certificate", "https://{{ $fullName }}-master:8443"]
+    securityContext:
+{{ toYaml .sch.chart.containerSecurity  | indent 6 }}
   restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+{{- end }}

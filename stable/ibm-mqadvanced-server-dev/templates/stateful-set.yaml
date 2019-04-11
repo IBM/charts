@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2017, 2018
+# © Copyright IBM Corporation 2017, 2019
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,16 +36,26 @@ spec:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
     spec:
       affinity:
-      {{- include "nodeaffinity" . | indent 6 }}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
       {{- if .Values.image.pullSecret }}
       imagePullSecrets:
         - name: {{ .Values.image.pullSecret }}
       {{- end }}
       serviceAccountName: {{ .Values.security.serviceAccountName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        fsGroup: {{ .Values.security.context.fsGroup }}
+        supplementalGroups:
+        {{- range $group := .Values.security.context.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
       containers:
         - name: qmgr
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          terminationMessagePath: "/run/termination-log"
           ports:
           - containerPort: 1414
           - containerPort: 9443
@@ -77,11 +87,21 @@ spec:
             name: {{ $volumeClaimTemplateName }}
           {{- end }}
           securityContext:
+            seLinuxOptions:
+              type: spc_t
             allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false
-            runAsNonRoot: false
-            runAsUser: 0
+            runAsNonRoot: true
+            runAsUser: 999
             privileged: false
+            capabilities:
+              add:
+                - CHOWN
+                - SETGID
+                - SETUID
+                - AUDIT_WRITE
+              drop:
+                - ALL
           # Set liveness probe to determine if the queue manager is running
           livenessProbe:
             exec:
@@ -105,6 +125,42 @@ spec:
 {{ toYaml .Values.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.resources.requests | indent 14 }}
+      {{- if .Values.security.initVolumeAsRoot }}
+      initContainers:
+        - name: qmgr-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          terminationMessagePath: "/run/termination-log"
+          command: ["runmqserver"]
+          args: ["-i"]
+          env:
+          - name: LICENSE
+            value: {{ .Values.license }}
+          - name: MQ_QMGR_NAME
+            value: {{ .Values.queueManager.name | default .Release.Name | replace "-" "" }}
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "basic" }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+          - mountPath: "/mnt/mqm"
+            name: {{ $volumeClaimTemplateName }}
+          {{- end }}
+          securityContext:
+            seLinuxOptions:
+              type: spc_t
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            privileged: false
+            capabilities:
+              add:
+                - CHOWN
+                - FOWNER
+                - DAC_OVERRIDE
+              drop:
+                - ALL
+      {{- end }}
   volumeClaimTemplates:
   {{- if .Values.persistence.enabled }}
   - metadata:

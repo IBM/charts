@@ -1,150 +1,34 @@
 # Breaking Changes
 
-- None
+- On IBM Cloud Kubernetes Service you need to set `security.initVolumeAsRoot` to `true`
 
-# What’s new in the MQ Advanced for Developers Chart, Version 2.2.0
+# What’s new in the MQ Advanced for Developers Chart, Version 3.0.x
 
-- Upgrade IBM MQ version to 9.1.1
+- Updated to IBM MQ 9.1.2
+- Improved security (including running as non-root)
+- Additional IBM Cloud Pak content
+- Added ILMT annotations
+- README updates
 
 # Fixes
+
+- V3.0.1: Fix capabilities when running init volume as root 
+- V3.0.0: Kibana dashboard fix
+
+# Prerequisites
 
 - None
 
 # Documentation
 
-- [What's new and changed in IBM MQ Version 9.1.0](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.1.0/com.ibm.mq.pro.doc/q113110_.htm)
-
-## Upgrading to Version 2.2.0 from Versions <= 1.3.0
-
-### Prerequisites
-
-Note: if you have already attempted to upgrade from Version 1.3.0 or earlier (without following these instructions), then you will need to perform additional steps to complete a successful upgrade.
-
-- If your attempted upgrade failed, then you can follow the upgrade instructions to upgrade your release.
-
-- If your attempted upgrade succeeded, then a new PersistentVolumeClaim (PVC) and PersistentVolume (PV) will have been created that does not contain your existing queue manager data. To reuse your existing queue manager data, follow the upgrade instructions and perform the additional step (below) after completing step 6 and before step 7.
-
-    ```sh
-    export NEW_PVC_NAME=$(kubectl get pvc -l release=$RELEASE --namespace=$NAMESPACE | tail -n1 | awk '{print $1}')
-    kubectl delete pvc $NEW_PVC_NAME
-    ```
-
-### Upgrade instructions
-
-To perform these instructions you will need to have permissions to modify the PersistentVolume (PV) for your release. This is required to update the “Reclaim Policy” and "Claim Reference" in steps 2, 7 and 12.
-
-Note: You may experience upgrade issues if you have a long release name (25+ characters). In this case you should choose a new shorter release name for your upgrade and use this new release name in steps 7, 8 and 10.
-
-1. Run the following commands to set the required environment values for your release
-
-  ```sh
-  export RELEASE=[RELEASE]
-  export NAMESPACE=[NAMESPACE]
-  export REVISION=$(helm history $RELEASE | grep DEPLOYED | tail -n1 | awk '{print $1}')
-  export APP_LABEL=$(helm get $RELEASE --revision $REVISION | grep app: | head -n1 | awk '{print $2}' | tr -d '"')
-  export PVC_NAME=$(kubectl get pvc -l app=$APP_LABEL --namespace=$NAMESPACE | tail -n1 | awk '{print $1}')
-  export PV_NAME=$(kubectl get pvc -l app=$APP_LABEL --namespace=$NAMESPACE | tail -n1 | awk '{print $3}')
-  export PV_POLICY=$(kubectl get pv $PV_NAME | tail -n1 | awk '{print $4}')
-  ```
-
-  > Where [RELEASE] is your release name and [NAMESPACE] is the namespace where your release is deployed.
-
-2. Update the “Reclaim Policy” of the PersistentVolume (PV) to “Retain”
-
-  ```sh
-  kubectl patch pv $PV_NAME -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
-  ```
-
-3. Get details of the PersistentVolumeClaim (PVC)
-
-  ```sh
-  kubectl get pvc $PVC_NAME -o yaml > pvc-details.yaml
-  ```
-
-4. Get user-supplied values for the release
-
-  ```sh
-  helm get values $RELEASE > user-supplied-values.yaml
-  ```
-
-5. Delete your release
-
-  ```sh
-  helm delete --purge $RELEASE
-  ```
-
-  > This command will remove all the Kubernetes components associated with the chart, except the PersistentVolumeClaim (PVC) and the PersistentVolume (PV) that contains the queue manager data.
-
-6. Delete the PersistentVolumeClaim (PVC)
-
-  ```sh
-  kubectl delete pvc $PVC_NAME
-  ```
-
-7. Update the "Claim Reference" of the PersistentVolume (PV)
-
-  ```sh
-  kubectl patch pv $PV_NAME -p '{"spec":{"claimRef":{"uid":"","name":"data-'$RELEASE'-ibm-mq-0"}}}'
-  ```
-
-8. Update details of the PersistentVolumeClaim (PVC)
-
-  Create a new file called `pvc-new.yaml` that contains the following:
-
-  ```yaml
-  apiVersion: v1
-  kind: PersistentVolumeClaim
-  metadata:
-    labels:
-      app: ibm-mq
-      chart: ibm-mqadvanced-server-dev
-      heritage: Tiller
-      release: [RELEASE]
-    name: data-[RELEASE]-ibm-mq-0
-    namespace: [NAMESPACE]
-  spec:
-    accessModes:
-    - [USE-OLD-VALUE]
-    resources:
-      requests:
-        storage: [USE-OLD-VALUE]
-    storageClassName: [USE-OLD-VALUE]
-    volumeName: [USE-OLD-VALUE]
-  ```
-
-> Where:
-> - [RELEASE] is your release name.
-> - [NAMESPACE] is the namespace where your release is deployed.
-> - `accessModes`, `storage`, `storageClassName` & `volumeName` values should be copied from the file `pvc-details.yaml` that was created in step 3. *Note:* If a value does not exist in `pvc-details.yaml` then it is not required.
-
-9. Create the updated PersistentVolumeClaim (PVC) using the file created in step 8
-
-  ```sh
-  kubectl create -f pvc-new.yaml
-  ```
-
-10. Install the Version 2.2.0 Chart
-
-  ```sh
-  helm install --name $RELEASE -f user-supplied-values.yaml [CHART]
-  ```
-
-  > Where [CHART] is the Version 2.2.0 chart in your Helm repository.
-
-11. Validate upgrade
-
-  Check that your queue manager is running and persistent data is available.
-
-12. Reset the “Reclaim Policy” of the PersistentVolume (PV) back to original value
-
-  ```sh
-  kubectl patch pv $PV_NAME -p '{"spec":{"persistentVolumeReclaimPolicy":"'$PV_POLICY'"}}'
-  ```
+- [What's new and changed in IBM MQ Version 9.1.x](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.1.0/com.ibm.mq.pro.doc/q113110_.htm)
 
 # Version History
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 3.0.1 | March 2019 | >= 1.9 | = MQ 9.1.2.0 | None | Fix capabilities when running init volume as root |
+| 3.0.0 | March 2019 | >= 1.9 | = MQ 9.1.2.0 | Set initVolumeAsRoot on IKS | Updated to IBM MQ 9.1.2; Improved security (including running as non-root); Additional IBM Cloud Pak content; Added ILMT annotations; README updates; Kibana dashboard fix |
 | 2.2.0 | November 2018 | >= 1.9 | = MQ 9.1.1.0 | None | Updated to IBM MQ 9.1.1 |
 | 2.1.0 | September 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Declaration of securityContext; Configurable service account name; New IBM Cloud Pak content |
 | 2.0.2 | August 2018 | >= 1.9 | = MQ 9.1.0.0  | None | Fixed error in service selector for helm tests |

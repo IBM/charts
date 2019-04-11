@@ -18,6 +18,7 @@ IBM Cloud Transformation Advisor can scan and analyze the following on-premises 
 - WebSphere Application Server v7+ (application-only scanning v6.1+)
 - Oracle tm WebLogic v6.x+
 - Redhat tm JBoss v4.x+
+- Apache Tomcat v6.x+
 - Java applications directly 
 
 **Messaging**
@@ -201,7 +202,23 @@ kubectl -n ta create rolebinding ta-sa:psp:unprivileged \
     
 ### Secret
 
-As of TA 1.8.0, you need to create a secret on ICP. e.g. on ICP version 2.1.0.2, go to left menu side bar > Configuration > Secrets > Create Secret.
+As of TA 1.8.0, you need to create a secret on ICP. Here are two examples:
+
+#### Create Secret from Command Line
+
+Here is an example command to create a secret:
+```bash
+kubectl -n ta create secret generic transformation-advisor-secret --from-literal=db_username='plain-text-username' --from-literal=secret='plain-text-password'
+```
+
+Note: 
+
+1. Please avoid equal sign (i.e. =) in plain text values. Your _secret_ may not start with -hashed- in plain text value.
+2. `-n ta` refers to the namespace where the secret is to be created. The secret needs to be created in the same namespace as the TA deployment. 
+
+#### Create Secret from UI
+
+on ICP version 2.1.0.2, go to left menu side bar > Configuration > Secrets > Create Secret.
 
 In the Secret, 
 1. You need to enter a name, which will be asked in the TA helm installation page. e.g. you can create a name called `transformation-advisor-secret`
@@ -218,10 +235,7 @@ echo -n "this-will-be-my-secret-without-space" | base64
 # Please you user own secret value
 ```
 
-Here is an example command to create a secret:
-```bash
-kubectl -n ta create secret generic transformation-advisor-secret --from-literal=db_username='admin' --from-literal=secret='password'
-```
+Note: You need base64 encoded values if you create the secret from ICP UI.
 
 ## Installing the Chart
 
@@ -244,6 +258,10 @@ The command deploys `ibm-transadv-dev` on the Kubernetes cluster in the default 
 - From Menu navigate to Tools
 - Click "Transformation"
 
+## Backup and restore data
+
+Please follow instruction in [here](https://transformationadvisor.github.io/doc/db_backup) to backup/restore your data.
+
 ## Configuration
 
 The following tables lists the configurable parameters of the Transformation Advisor helm chart and their default values.
@@ -262,7 +280,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | authentication.oidc.clientSecret                    | a OIDC registry will be created with this secret             | 94b6cbce793d0606c0df9e8d656a159f0c06631b                |
 | security.serviceAccountName                         | name of the service account to use                           | default                                                 |
 | couchdb.image.repository                            | couchdb image repository                                     | ibmcom/transformation-advisor-db                        |
-| couchdb.image.tag                                   | couchdb image tag                                            | 1.9.3                                                   |
+| couchdb.image.tag                                   | couchdb image tag                                            | 1.9.4                                                   |
 | couchdb.image.pullPolicy                            | couchdb image pull policy                                    | IfNotPresent                                            |
 | couchdb.resources.requests.memory                   | requests memory                                              | 2Gi                                                     |
 | couchdb.resources.requests.cpu                      | requests cpu                                                 | 1000m                                                   |
@@ -276,7 +294,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | couchdb.persistence.existingClaim                   | existing pv claim                                            | ""                                                      |
 | couchdb.persistence.storageClassName                | couchdb storage class name                                   | ""                                                      |
 | transadv.image.repository                           | transadv server image                                        | ibmcom/transformation-advisor-server                    |
-| transadv.image.tag                                  | transadv server image tag                                    | 1.9.3                                                   |
+| transadv.image.tag                                  | transadv server image tag                                    | 1.9.4                                                   |
 | transadv.image.pullPolicy                           | image pull policy                                            | IfNotPresent                                            |
 | transadv.resources.requests.memory                  | requests memory                                              | 2Gi                                                     |
 | transadv.resources.requests.cpu                     | requests cpu                                                 | 1000m                                                   |
@@ -284,7 +302,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadv.resources.limits.cpu                       | limits cpu                                                   | 16000m                                                  |
 | transadv.service.nodePort                           | transadv sevice node port                                    | 30111                                                   |
 | transadvui.image.repository                         | transadv ui image                                            | ibmcom/transformation-advisor-ui                        |
-| transadvui.image.tag                                | transadv ui image tag                                        | 1.9.3                                                   |
+| transadvui.image.tag                                | transadv ui image tag                                        | 1.9.4                                                   |
 | transadvui.image.pullPolicy                         | image pull policy                                            | IfNotPresent                                            |
 | transadvui.resources.requests.memory                | requests memory                                              | 2Gi                                                     |
 | transadvui.resources.requests.cpu                   | requests cpu                                                 | 1000m                                                   |

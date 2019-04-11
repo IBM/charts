@@ -1,0 +1,122 @@
+# ServiceAccount for ibmcloud-object-storage-plugin
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ibmcloud-object-storage-plugin
+  namespace: {{ template "ibm-object-storage-plugin.namespace" . }}
+  labels:
+    app: {{ template "ibm-object-storage-plugin.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{- if contains "IKS" (.Capabilities.KubeVersion | quote | upper) }}
+imagePullSecrets:
+  - name: bluemix-default-secret
+  - name: bluemix-default-secret-regional
+  - name: bluemix-default-secret-international
+{{- end }}
+---
+#ClusterRole with minimum permissions required for ibmcloud-object-storage-plugin
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ibmcloud-object-storage-plugin
+  labels:
+    app: {{ template "ibm-object-storage-plugin.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list", "watch", "update", "create", "delete"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["list", "watch", "create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["cluster-info"]
+  verbs: ["get"]
+---
+#ClusterRole for giving read secrets permission to ibmcloud-object-storage-plugin
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ibmcloud-object-storage-secret-reader
+  labels:
+    app: {{ template "ibm-object-storage-plugin.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  #resourceNames: [""]
+  verbs: ["get"]
+---
+#ClusterRoleBinding for binding ClusterRole "ibmcloud-object-storage-plugin"
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ibmcloud-object-storage-plugin
+  labels:
+    app: {{ template "ibm-object-storage-plugin.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+subjects:
+- kind: ServiceAccount
+  name: ibmcloud-object-storage-plugin
+  namespace: {{ template "ibm-object-storage-plugin.namespace" . }}
+roleRef:
+  kind: ClusterRole
+  name: ibmcloud-object-storage-plugin
+  apiGroup: rbac.authorization.k8s.io
+---
+#ClusterRoleBinding for binding ClusterRole "ibmcloud-object-storage-secret-reader"
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ibmcloud-object-storage-secret-reader
+  labels:
+    app: {{ template "ibm-object-storage-plugin.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+subjects:
+- kind: ServiceAccount
+  name: ibmcloud-object-storage-plugin
+  namespace: {{ template "ibm-object-storage-plugin.namespace" . }}
+roleRef:
+  kind: ClusterRole
+  name: ibmcloud-object-storage-secret-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# In ICP, create RoleBinding to bind "ibm-privileged-clusterrole" PSP
+# to "ibmcloud-object-storage-plugin" ServiceAccount, when using privileged PSP
+{{- if and (contains "ICP" (.Capabilities.KubeVersion | quote | upper)) (not .Values.useCustomPSP) }}
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ibmcloud-object-storage-plugin-privileged
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "ibm-object-storage-plugin.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+roleRef:
+  kind: ClusterRole
+  name: ibm-privileged-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: ibmcloud-object-storage-plugin
+  namespace: {{ .Release.Namespace }}
+{{- end }}

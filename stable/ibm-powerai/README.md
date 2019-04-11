@@ -1,6 +1,6 @@
 [//]: # (Licensed Materials - Property of IBM)
 [//]: # (5737-E67)
-[//]: # (\(C\) Copyright IBM Corporation 2018 All Rights Reserved.)
+[//]: # (\(C\) Copyright IBM Corporation 2018,2019 All Rights Reserved.)
 [//]: # (US Government Users Restricted Rights - Use, duplication or)
 [//]: # (disclosure restricted by GSA ADP Schedule Contract with IBM Corp.)
 
@@ -24,7 +24,7 @@ IBM PowerAI incorporates some of the most popular deep learning frameworks along
 ## Prerequisites
 
 - Kubernetes v1.11.3 or later with GPU scheduling enabled, and Tiller v2.7.2 or later
-- The application must run on *Power System ppc64le* nodes with *supported GPUs* [see PowerAI V1.5.4 release notes](https://developer.ibm.com/linuxonpower/deep-learning-powerai/releases/).  
+- The application must run on *Power System ppc64le* nodes with *supported GPUs* [see PowerAI V1.6.0 release notes](https://developer.ibm.com/linuxonpower/deep-learning-powerai/releases/).  
 - Helm 2.7.2 and later version
 - If you wish to leverage persistent storage for data sets and/or runtime code, you should enable `persistence.enabled=true` and create your persistent volume prior to deploying the chart (unless you use `dynamic provisioning`).  It can be created by using the IBM Cloud private UI or via a yaml file as in the following example:
 Note: accessModes can be ReadWriteOnce/ReadWriteMany/ReadOnlyMany
@@ -214,7 +214,7 @@ The following table lists the configurable parameters of the `ibm-powerai` chart
 | -------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
 | `license`                        | Set `license=accept` to accept the terms of the license | `Not accepted`                                     |
 | `image.repository`               | PowerAI image repository.          | `docker.io/ibmcom/powerai`                       |
-| `image.tag`                      | Docker Image tag. To get the tag of other images, visit "hub.docker.com/r/ibmcom/powerai"                                    | `1.5.4-all-ubuntu18.04`                                                        |
+| `image.tag`                      | Docker Image tag. To get the tag of other images, visit "hub.docker.com/r/ibmcom/powerai"                                    | `1.6.0-all-ubuntu18.04-ppc64le_cloud`                                                        |
 | `image.pullPolicy`               | Docker Image pull policy (Options - IfNotPresent, Always, Never)                              | `IfNotPresent`                                             |
 | `global.image.secretName`               | Docker Image pull secret, if you are using a private Docker registry | `nil`                                        |
 | `service.type`                   | Kubernetes service type for exposing ports (Options - ClusterIP, None)       | `nil`                                  |

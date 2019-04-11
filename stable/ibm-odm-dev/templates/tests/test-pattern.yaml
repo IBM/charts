@@ -10,13 +10,26 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
 spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- if .Values.image.arch }}
+            - {{ .Values.image.arch }}
+            {{- else }}
+            - {{ template "arch" . }}
+            {{- end }}
   containers:
   - name: {{ template "odm.test.fullname" . }}
-    image: "radial/busyboxplus:curl"
+    image: "ibmcom/curl{{ template "platform" . }}:4.2.0-f2"
     env:
       - name: ODMSERVER
         value: {{ template "fullname" . }}
-    command: ["sh", "-c", "/tests/suite.sh"]
+    command: ["/bin/bash", "-c", "/tests/suite.sh"]
     volumeMounts:
       - name: tests
         mountPath: /tests

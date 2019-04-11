@@ -2,7 +2,9 @@
 #
 # Licensed Materials - Property of IBM
 #
-# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
 #
 # US Government Users Restricted Rights - Use, duplication or
 # disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
@@ -12,6 +14,7 @@
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
 {{- if .Values.messageIndexing.messageIndexingEnabled }}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.indexmgr.deployment.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 {{ $compName := .sch.chart.components.indexmgr.compName -}}
@@ -34,7 +37,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: "{{ $name }}"
-  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
     node: "0"
@@ -54,8 +56,6 @@ spec:
 {{ include "metering" (list . ) | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
-      hostname: indexmgr
-      subdomain: {{ $serviceName }}
       {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
         - name: {{ .Values.global.image.pullSecret }}
@@ -72,7 +72,7 @@ spec:
 {{ include "customNodeaffinity"  (list .) | indent 8 }}
       containers:
         - name: index-manager
-          image: {{ include "eventstreams.image" (list . "eventstreams-index-manager" .Values.global.image.imageTags.indexmgrTag "true") | quote }}
+          image: {{ include "eventstreams.image" (list . "eventstreams-index-manager" .Values.global.image.imageTags.indexmgrTag) | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           securityContext:
             privileged: false
@@ -82,7 +82,7 @@ spec:
             runAsUser: {{ $defaultUser }}
             capabilities:
               drop:
-              - all
+              - ALL
           ports:
             - name: api
               containerPort: {{ $ports.indexmgr.api }}

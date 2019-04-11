@@ -6,6 +6,10 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "odm-baiemitterconfig-dir" -}}
+"/config/baiemitterconfig/"
+{{- end -}}
+
 {{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
@@ -18,6 +22,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- define "odm.secret.fullname" -}}
 {{- $name := default "odm-secret" .Values.nameOverride -}}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "odm-baiemitterconfig-secret-volume.fullname" -}}
+{{- printf "%s-%s" .Release.Name "odm-baiemitterconfig-secret-volume" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "odm.test.fullname" -}}

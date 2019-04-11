@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ template "ibm-object-storage-plugin.drivername" . }}-test
+  namespace: {{ template "ibm-object-storage-plugin.namespace" . }}
+  labels:
+    app: {{ template "ibm-object-storage-plugin.drivername" . }}-test
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
+  tolerations:
+  - operator: "Exists"
+  serviceAccountName: ibmcloud-object-storage-driver
+  containers:
+    - name: {{ template "ibm-object-storage-plugin.drivername" . }}-test
+      {{- if contains "ICP" (.Capabilities.KubeVersion | quote | upper) }}
+      image: "{{ .Values.image.driverImage.publicRegistry }}:{{ .Values.image.driverBuild }}"
+      {{- else }}
+      image: "{{ .Values.image.driverImage.ibmContainerRegistry }}:{{ .Values.image.driverBuild }}"
+      {{- end }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command: ["sh", "-c", 'version1=$(cat /home/s3-dep/version.txt | head -n 2 | tail -n 1);
+        version2=$(/host/kubernetes/kubelet-plugins/volume/exec/ibm~ibmc-s3fs/ibmc-s3fs version);
+        if [[ "$version1" == "$version2" ]]; then exit 0; else exit 1; fi']
+      securityContext:
+        capabilities:
+          drop: ["ALL"]
+      volumeMounts:
+         - mountPath: /host/kubernetes
+           name: kube-driver
+  restartPolicy: Never
+  volumes:
+    - name: kube-driver
+      hostPath:
+         path: /usr/libexec/kubernetes
