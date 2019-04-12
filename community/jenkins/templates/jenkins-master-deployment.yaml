@@ -1,16 +1,13 @@
-{{- if .Capabilities.APIVersions.Has "apps/v1" }}
 apiVersion: apps/v1
-{{- else }}
-apiVersion: apps/v1beta1
-{{- end }}
 kind: Deployment
 metadata:
   name: {{ template "jenkins.fullname" . }}
   labels:
-    heritage: {{ .Release.Service | quote }}
-    release: {{ .Release.Name | quote }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    component: "{{ .Release.Name }}-{{ .Values.Master.Name }}"
+    app: {{ template "jenkins.fullname" . }}
+    heritage: {{.Release.Service | quote }}
+    release: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    component: "{{.Release.Name}}-{{.Values.Master.Component}}"
     {{- range $key, $val := .Values.Master.DeploymentLabels }}
     {{ $key }}: {{ $val | quote }}
     {{- end}}
@@ -37,6 +34,9 @@ spec:
         {{ $key }}: {{ $val | quote }}
         {{- end}}
       annotations:
+        productName: "Jenkins (dev)"
+        productID: "jenkins-100"
+        productVersion: "1.0.0"
         checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
         {{- if .Values.Master.PodAnnotations }}
 {{ toYaml .Values.Master.PodAnnotations | indent 8 }}
@@ -217,14 +217,14 @@ spec:
           livenessProbe:
             httpGet:
               path: "{{ default "" .Values.Master.JenkinsUriPrefix }}/login"
-              port: {{.Values.Master.NodePort}}
+              port: "http"
             initialDelaySeconds: {{ .Values.Master.HealthProbesLivenessTimeout }}
             timeoutSeconds: 5
             failureThreshold: {{ .Values.Master.HealthProbeLivenessFailureThreshold }}
           readinessProbe:
             httpGet:
               path: "{{ default "" .Values.Master.JenkinsUriPrefix }}/login"
-              port: {{.Values.Master.NodePort}}
+              port: "http"
             initialDelaySeconds: {{ .Values.Master.HealthProbesReadinessTimeout }}
             periodSeconds: {{ .Values.Master.HealthProbeReadinessPeriodSeconds }}
 {{- end }}
