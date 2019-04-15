@@ -246,3 +246,16 @@ And deploy the Chart with both of them:
 $ helm install --name my-release -f custom-app-checks.yaml -f values.yaml stable/sysdig
 ```
 
+## Support
+
+For getting support from the Sysdig team, you should refer to the official
+[Sysdig Support page](https://sysdig.com/support).
+
+In addition to this, you can browse the documentation for the different
+components of the Sysdig Platform:
+
+* [Sysdig Monitor](https://app.sysdigcloud.com)
+* [Sysdig Secure](https://secure.sysdig.com)
+* [Platform Documentation](https://sysdigdocs.atlassian.net/wiki/spaces/Platform)
+* [Monitor Documentation](https://sysdigdocs.atlassian.net/wiki/spaces/Monitor)
+* [Secure Documentation](https://sysdigdocs.atlassian.net/wiki/spaces/Secure)
