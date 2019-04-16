@@ -1,0 +1,39 @@
+{{- $helmTest := default "enabled" .Values.helmTestOverride }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-sanity-test
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "ibm_storage_enabler_for_containers.helmLabels" . | indent 4 }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+                  - ppc64le
+                  - s390x
+  containers:
+    - name: sanity-test
+{{ include "ibm_storage_enabler_for_containers.securityContext" . | indent 6 }}
+      image: "{{ .Values.ubiquityHelmUtils.image.repository }}:{{ .Values.ubiquityHelmUtils.image.tag }}"
+      imagePullPolicy: {{ .Values.ubiquityHelmUtils.image.pullPolicy }}
+      {{- if ne $helmTest "disabled" }}
+      command: ['/usr/bin/hook-executor', 'sanity']
+      {{- end }}
+      env:
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+        - name: STORAGE_CLASS
+          value: {{ template "ibm_storage_enabler_for_containers.ubiquityDbStorageClass" . }}
+  restartPolicy: Never
+  serviceAccountName: ubiquity-helm-hook

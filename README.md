@@ -12,11 +12,22 @@ The `community` directory contains Helm chart source only provided by the wider 
 
 Both the `repo/stable` and `repo/community` directories are Helm repositories, and their index.yaml file is built automatically based on the `MASTER` branch.  As of IBM Cloud Private version 3.1.1, both the `repo/stable` and `repo/community` repositories are part of the default configuration of IBM Cloud Private, and as such, all charts in those repository will be displayed by default in the IBM Cloud Private catalog.
 
-## Development 
+## Getting Started
 
-## Configure the `kubernetes` command line interface for IBM® Cloud private®
+### IBM Cloud Kubernetes Service
+If you are new to the IBM Cloud Kubernetes Service platform, information on how to deploy can be found in [this tutorial.](https://cloud.ibm.com/docs/containers?topic=containers-getting-started#getting-started)
 
-To access the kubernetes `apiserver`, you will need an authorization token and the `kubectl` as the access client. In IBM® Cloud private®, authorization tokens can be requested via the dashboard or the REST API.
+### IBM Cloud Private
+There are a number of ways to start using IBM Cloud Private today, including these offerings:
+- [IBM Cloud Private Hosted Trial](https://www.ibm.com/cloud/garage/dte/tutorial/ibm-cloud-private-hosted-trial)
+- [A Two-Week Trial on IBM Power Development Cloud](https://developer.ibm.com/linuxonpower/ibm-cloud-private-on-power/)
+- [IBM Cloud Private on AWS Quick Start](https://aws.amazon.com/quickstart/architecture/ibm-cloud-private/)
+- [Deploy IBM Cloud Private CE Using Vagrant](https://github.com/IBM/deploy-ibm-cloud-private/blob/master/docs/deploy-vagrant.md)
+- [IBM Cloud Private with OpenShift](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/supported_environments/openshift/overview.html)
+
+## Configure the `kubernetes` command line interface for IBM Cloud Private
+
+To access the kubernetes `apiserver`, you will need an authorization token and the `kubectl` as the access client. In IBM Cloud Private, authorization tokens can be requested via the dashboard or the REST API.
 
 - Dashboard: [Get authorization tokens via Dashboard](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_2.1.0/manage_cluster/cfc_cli.html)
 

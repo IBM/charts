@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ubiquity-k8s-provisioner
+  labels:
+    product: ibm-storage-enabler-for-containers
+{{ include "ibm_storage_enabler_for_containers.helmLabels" . | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ubiquity-k8s-provisioner
+      product: ibm-storage-enabler-for-containers
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ubiquity-k8s-provisioner
+        product: ibm-storage-enabler-for-containers
+{{ include "ibm_storage_enabler_for_containers.podLabels" . | indent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/ubiquity-configmap.yaml") . | sha256sum }}
+{{ include "ibm_storage_enabler_for_containers.productAnnotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+                      - ppc64le
+                      - s390x
+      serviceAccountName: ubiquity-k8s-provisioner      # In order to get the server API token from the service account.
+      containers:
+      - name: ubiquity-k8s-provisioner
+{{ include "ibm_storage_enabler_for_containers.securityContext" . | indent 8 }}
+        image: "{{ .Values.ubiquityK8sProvisioner.image.repository }}:{{ .Values.ubiquityK8sProvisioner.image.tag }}"
+        imagePullPolicy: {{ .Values.ubiquityK8sProvisioner.image.pullPolicy }}
+        {{- with .Values.ubiquityK8sProvisioner.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+        {{- end }}
+        readinessProbe:
+          exec:
+            command: ["./health_check.sh"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command: ["./health_check.sh"]
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        env:
+          - name: UBIQUITY_ADDRESS  # Ubiquity hostname, should point to the ubiquity service name
+            value: "ubiquity"
+          - name: UBIQUITY_PORT     # Ubiquity port, should point to the ubiquity service port
+            value: "9999"
+          - name: RETRIES          # number of retries on failure
+            value: "1"
+          - name: LOG_PATH         # provisioner log file directory
+            value: "/tmp"
+          - name: BACKENDS         # "IBM Storage Enabler for Containers" supports "scbe" (IBM Spectrum Connect) as its backend.
+            value: "scbe"
+          - name: LOG_LEVEL       # debug / info / error
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: LOG-LEVEL
+
+{{- if eq .Values.backend "spectrumConnect" }} # TODO consider to check if the secret exist instead
+          - name: UBIQUITY_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.scbeCredentials" . }}
+                key: username
+
+          - name: UBIQUITY_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.scbeCredentials" . }}
+                key: password
+{{- end }}
+
+          - name: UBIQUITY_PLUGIN_SSL_MODE   # require / verify-full
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SSL-MODE
+
+
+{{- if (eq .Values.globalConfig.sslMode "verify-full") }}
+        volumeMounts:
+          - name: ubiquity-public-certificates
+            mountPath: /var/lib/ubiquity/ssl/public
+            readOnly: true
+      volumes:
+        - name: ubiquity-public-certificates
+          configMap:
+            name: ubiquity-public-certificates
+            items:
+              - key: ubiquity-trusted-ca.crt
+                path: ubiquity-trusted-ca.crt
+{{- end }}
