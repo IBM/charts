@@ -42,3 +42,21 @@ Generate private key for jenkins CLI
 jenkins-admin-private-key: {{ $key | b64enc | quote }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "jenkins.chart" -}}
+  {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+  Secret name for jenkins admin user and password
+*/}}
+{{- define "jenkins.getsecret" -}}
+{{- if not .Values.Master.ExistingSecret -}}
+{{ template "jenkins.fullname" . }}
+{{- else -}}
+{{- .Values.Master.ExistingSecret -}}
+{{- end -}}
+{{- end -}}
