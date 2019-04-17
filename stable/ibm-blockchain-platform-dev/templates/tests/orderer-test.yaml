@@ -24,6 +24,13 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
 spec:
+  hostIPC: false
+  hostNetwork: false
+  hostPID: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 2000
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -37,12 +44,21 @@ spec:
   containers:
     - name: {{ .Release.Name }}-orderer-helmtest
       {{- if .Values.global.multiarch }}
-      image: {{ .Values.orderer.app.arch }}/busybox
+      image: "{{ .Values.ca.image.initimage }}:{{ .Values.ca.image.inittag }}"
       {{- else }}
-      image: {{ .Values.orderer.app.arch }}/busybox
+      image: "{{ .Values.ca.image.initimage }}-{{ .Values.ca.app.arch }}:{{ .Values.ca.image.inittag }}"
       {{- end }}
       {{- if .Values.orderer.enabled }}
       command: ["sh", "-c", "nc -vz {{ .Release.Name }}-orderer 7050"]
       {{- else }}
       command: ["sh", "-c", "exit 0"]
       {{- end }}
+      securityContext:	
+        runAsNonRoot: true
+        runAsUser: 1000
+        privileged: false
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:	
+          drop:	
+          - ALL

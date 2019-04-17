@@ -16,20 +16,27 @@
 {{- $labels := include "sch.metadata.labels.standard" (list . $compName) }}
 {{- $annotations := include "sch.metadata.annotations.metering" (list . .sch.chart.metering) }}
 
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Release.Name }}-orderer
   labels:
 {{ $labels | indent 4 }}
+    container: orderer
   annotations:
     helm.sh/created: {{ .Release.Time.Seconds | quote }}
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      app: {{ include "sch.names.appName" (list .) }}
+      component: {{ $compName }}
   template:
     metadata:
       labels:
 {{ $labels | indent 8 }}
+        container: orderer
       annotations:
 {{- $annotations | indent 8 }}
     spec:
@@ -67,14 +74,16 @@ spec:
       - name: orderer-msp
         emptyDir:
           medium: Memory
-      {{- if .Values.app.config }}
       - name: orderer-config
         configMap: 
           name: {{ .Release.Name }}-orderer-config
-      {{- end }}
       - name: init-temp
         emptyDir:
           medium: Memory
+      {{- if .Values.image.imagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.imagePullSecret }}
+      {{- end }}
       initContainers:
       - name: init
 {{- if .Values.global.multiarch }}
@@ -98,7 +107,7 @@ spec:
         - name: orderer-msp
           mountPath: /certs
         - name: init-temp
-          mountPath: /opt       
+          mountPath: /opt
         env:
         {{- include "license.accept.env.ref" . | indent 8 }}
         - name: TYPE
@@ -107,10 +116,12 @@ spec:
           value: /secret/secret.json
         - name: ORDERER_GENERAL_LOCALMSPDIR
           value: /certs/msp
+        - name: FABRIC_CFG_PATH
+          value: /etc/hyperledger/fabric/
         - name: MSP_SECRET_NAME
           value: {{ .Release.Name }}-orderer-mspsecret
-        - name: GENERATE_GENESIS_BLOCK
-          value: "true"
+        - name: GENERATE_GENESIS
+          value: "false"
         - name: ORDERER1_URL
           value: {{ .Release.Name }}-orderer:7050
         - name: ORDERERORG1_NAME
@@ -144,24 +155,32 @@ spec:
         env:
         {{- include "license.accept.env.ref" . | indent 8 }}
         ports:
-        - containerPort: 7050
+        - name: orderer
+          containerPort: 7050
+        - name: operations
+          containerPort: 8443
         livenessProbe:
-          tcpSocket:
-            port: 7050
-          initialDelaySeconds: 90
+          httpGet:
+            path: /healthz
+            port: operations
+            scheme: HTTPS
+          initialDelaySeconds: 30
           timeoutSeconds: 5
           failureThreshold: 6
         readinessProbe:
-          tcpSocket:
-            port: 7050
-          initialDelaySeconds: 90
+          httpGet:
+            path: /healthz
+            port: operations
+            scheme: HTTPS
+          initialDelaySeconds: 30
           timeoutSeconds: 5
-          failureThreshold: 6
+          periodSeconds: 5
         resources:
 {{ toYaml .Values.resources | indent 12 }}
         volumeMounts:
         - name: orderer-data
           mountPath: /data
+          subPath: data
         - name: configtx-yaml
           mountPath: /etc/hyperledger/fabric/configtx.yaml
           subPath: configtx.yaml
@@ -172,3 +191,71 @@ spec:
           mountPath: /etc/hyperledger/fabric/orderer.yaml
           subPath: orderer.yaml
         {{- end }}
+      - name: proxy
+{{- if .Values.global.multiarch }}
+        image: "{{ .Values.image.grpcwebimage }}:{{ .Values.image.grpcwebtag }}"
+{{- else }}
+        image: "{{ .Values.image.grpcwebimage }}-{{ .Values.app.arch }}:{{ .Values.image.grpcwebtag }}"
+{{- end }}
+        imagePullPolicy: Always
+        env:
+        {{- include "license.accept.env.ref" . | indent 8 }}
+        - name: BACKEND_ADDRESS
+          value: "127.0.0.1:7050"
+        - name: SERVER_TLS_CERT_FILE
+          value: "/certs/tls/signcerts/cert.pem"
+        - name: SERVER_TLS_KEY_FILE
+          value: "/certs/tls/keystore/key.pem"
+        - name: SERVER_TLS_CLIENT_CA_FILES
+          value: "/certs/tls/cacerts/cacert.pem"
+        - name: SERVER_BIND_ADDRESS
+          value: "0.0.0.0"
+        - name: SERVER_HTTP_DEBUG_PORT
+          value: "8080"
+        - name: SERVER_HTTP_TLS_PORT
+          value: "7443"
+        - name: BACKEND_TLS
+          value: "true"
+        - name: SERVER_HTTP_MAX_WRITE_TIMEOUT
+          value: "5m"
+        - name: SERVER_HTTP_MAX_READ_TIMEOUT
+          value: "5m"
+        - name: EXTERNAL_ADDRESS
+          value: "127.0.0.1:7050"
+        - name: USE_WEBSOCKETS
+          value: "true"
+        resources:
+{{ toYaml .Values.proxyResources | indent 12 }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: https
+          containerPort:  7443
+        livenessProbe:
+          httpGet:
+            path: /settings
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /settings
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: orderer-msp
+          mountPath: /certs

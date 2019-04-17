@@ -17,9 +17,10 @@ kind: Job
 metadata:
   name: "{{.Release.Name}}-peer-delsecret"
   labels:
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
   annotations:
     # This is what defines this resource as a hook. Without this line, the
     # job is considered part of the release.
@@ -30,10 +31,19 @@ spec:
     metadata:
       name: "{{.Release.Name}}"
       labels:
-        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-        app.kubernetes.io/instance: {{.Release.Name | quote }}
-        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        app: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        container: "pre-delete"
     spec:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -45,10 +55,27 @@ spec:
                   - {{ .Values.app.arch }}
       serviceAccountName: {{ .Values.global.serviceAccountName }}
       restartPolicy: Never
+      {{- if .Values.app.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.app.imagePullSecret }}
+      {{- end }}
       containers:
       - name: pre-delete
+        {{- if .Values.global.multiarch }}
+        image: "{{ .Values.app.initimage }}:{{ .Values.app.inittag }}"
+        {{- else }}
         image: "{{ .Values.app.initimage }}-{{ .Values.app.arch }}:{{ .Values.app.inittag }}"
+        {{- end }}
         command: ["sh","-c", "kubectl delete secret ${MSP_SECRET_NAME} --ignore-not-found"]
         env:
         - name: MSP_SECRET_NAME
           value: {{ .Release.Name }}-peer-mspsecret
+        securityContext:	
+          runAsNonRoot: true
+          runAsUser: 1000
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:	
+            drop:	
+            - ALL
