@@ -34,9 +34,7 @@ spec:
   template:
     metadata:
       annotations:
-        productName: {{ .Values.global.productName }}
-        productID: {{ .Values.global.productID }}
-        productVersion: {{ .Chart.Version }}
+{{- $annotations | indent 8 }}
       labels:
         app: {{ .Release.Name }}
         chart: {{ .Chart.Name }}
@@ -71,7 +69,11 @@ spec:
                   operator: In
                   values:
                   - {{ .Values.env.orgMSP }}
-              topologyKey: kubernetes.io/hostname                  
+              topologyKey: kubernetes.io/hostname  
+      {{- if .Values.app.imagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.app.imagePullSecret }}
+      {{- end }}
       initContainers:
       - name: "init"
 {{- if .Values.global.multiarch }}
@@ -81,9 +83,9 @@ spec:
 {{- end }}
         imagePullPolicy: Always
         securityContext:	
-          privileged: false	
-          allowPrivilegeEscalation: false	
-          readOnlyRootFilesystem: false	
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
           capabilities:	
             drop:	
             - ALL
@@ -91,9 +93,9 @@ spec:
         - name: certs-secret
           mountPath: /secret
         - name: peer-msp
-          mountPath: /certs        
+          mountPath: /certs    
         - name: init-temp
-          mountPath: /opt        
+          mountPath: /opt
         env:
         {{- include "license.accept.env.ref" . | indent 8 }}
         - name: TYPE
@@ -127,22 +129,12 @@ spec:
             - NET_BIND_SERVICE
         env:
         {{- include "license.accept.env.ref" . | indent 8 }}
-        # - name: CORE_PEER_ADDRESSAUTODETECT
-        #   value: "false"
-        # - name: CORE_PEER_ADDRESS
-        #   value: "0.0.0.0:7051"
-        # - name: CORE_PEER_LISTENADDRESS
-        #   value: "0.0.0.0:7051"
-        # - name: CORE_PEER_EVENTS_ADDRESS
-        #   value: "0.0.0.0:7052"
-        # - name: CORE_PEER_CHAINCODELISTENADDRESS
-        #   value: "0.0.0.0:7053"
-        # - name: CORE_PEER_GOSSIP_BOOTSTRAP
-        #   value: ""
-        # - name: CORE_PEER_GOSSIP_ORGLEADER
-        #   value: ""
-        # - name: CORE_PEER_PROFILE_ENABLED
-        #   value: "true"
+        - name: CORE_PEER_LISTENADDRESS
+          value: 0.0.0.0:7051
+        - name: CORE_PEER_CHAINCODELISTENADDRESS
+          value: 0.0.0.0:7052
+        #- name: CORE_PEER_GOSSIP_EXTERNALENDPOINT
+        #  value: {{ .Values.app.peerExternalEndpoint }}
         - name: CORE_VM_ENDPOINT
           value: "localhost:2375"
         - name: CORE_CHAINCODE_GOLANG_RUNTIME
@@ -157,8 +149,6 @@ spec:
           value: "bridge"
         - name: CORE_PEER_MSPCONFIGPATH
           value: "/certs/msp"
-        - name: CORE_LOGGING_LEVEL
-          value: "debug"
         - name: CORE_PEER_FILESYSTEMPATH
           value: "/data/peer/"
         # - name: CORE_PEER_ID
@@ -210,30 +200,25 @@ spec:
           value: pass-temp
         {{- else }}
         - name: CORE_LEDGER_STATE_STATEDATABASE
-          value: ""
-        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS
-          value: ""
-        - name: COUCHDB_USER
-          value: ""
-        - name: COUCHDB_PASSWORD
-          value: ""
-        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME
-          value: ""
-        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD
-          value: ""
-        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_MAXRETRIESONSTARTUP
-          value: ""
-        - name: ADD_MORE_USERS
-          value: ""
-        - name: NUM_USERS
-          value: ""
-        - name: COUCHDB1_USER
-          value: ""
-        - name: COUCHDB1_PASSWORD
-          value: ""
+          value: "goleveldb"
         {{- end }}
         - name: FABRIC_CFG_PATH
           value: "/etc/hyperledger/fabric/"
+        # 1.4 
+        - name: CORE_OPERATIONS_LISTENADDRESS
+          value: 0.0.0.0:9443
+        - name: CORE_OPERATIONS_TLS_ENABLED
+          value: "true"
+        - name: CORE_OPERATIONS_TLS_CERT_FILE
+          value: "/certs/tls/signcerts/cert.pem"
+        - name: CORE_OPERATIONS_TLS_KEY_FILE
+          value: "/certs/tls/keystore/key.pem"
+        - name: CORE_OPERATIONS_TLS_CLIENTAUTHREQUIRED
+          value: "false"
+        - name: CORE_OPERATIONS_TLS_CLIENTROOTCAS_FILES
+          value: "/certs/tls/cacerts/cacert.pem"
+        - name: CORE_METRICS_PROVIDER
+          value: {{ .Values.app.metrics }}
         - name: GROUP_ID
           value: "0"
         - name: USER_ID
@@ -241,26 +226,34 @@ spec:
         - name: USERNAME
           value: root
         ports:
-        - containerPort: 7051
-        - containerPort: 7052
-        - containerPort: 7053
+        - name: peer
+          containerPort: 7051
+        - name: chaincodelisten
+          containerPort: 7052
+        - name: operations
+          containerPort: 9443
         livenessProbe:
-          tcpSocket:
-            port: 7051
-          initialDelaySeconds: 120
+          httpGet:
+            path: /healthz
+            port: operations
+            scheme: HTTPS
+          initialDelaySeconds: 30
           timeoutSeconds: 5
           failureThreshold: 6
         readinessProbe:
-          tcpSocket:
-            port: 7051
-          initialDelaySeconds: 120
+          httpGet:
+            path: /healthz
+            port: operations
+            scheme: HTTPS
+          initialDelaySeconds: 30
           timeoutSeconds: 5
           periodSeconds: 5
         resources:
-{{ toYaml .Values.peerResources | indent 10 }}           
+{{ toYaml .Values.peerResources | indent 10 }}
         volumeMounts:
         - mountPath: /data
           name: fabric-peer-0
+          subPath: peer
         - name: peer-msp
           mountPath: /certs
     {{- if eq .Values.peerinfo.stateDb "couchdb" }}
@@ -303,23 +296,26 @@ spec:
         livenessProbe:
           tcpSocket:
             port: 5984
-          initialDelaySeconds: 120
+          initialDelaySeconds: 30
           timeoutSeconds: 5
           failureThreshold: 6
         readinessProbe:
           tcpSocket:
             port: 5984
-          initialDelaySeconds: 120
+          initialDelaySeconds: 30
           timeoutSeconds: 5
           periodSeconds: 5
         resources:
-{{ toYaml .Values.couchdbResources | indent 10 }}           
+{{ toYaml .Values.couchdbResources | indent 10 }}       
         volumeMounts:
         - mountPath: /opt/couchdb/data
           name: db-data
+          # TODO it will break people already using couchdb
+          # subPath: data
     {{- else }}
         - mountPath: /mnt/data/peer/ledgersData/stateLeveldb
-          name: db-data   
+          name: db-data
+          # subPath: data   
     {{- end }}
       - name: "dind" 
 {{- if .Values.global.multiarch }}
@@ -329,23 +325,26 @@ spec:
 {{- end }}
         imagePullPolicy: Always
         env:
-        {{- include "license.accept.env.ref" . | indent 8 }}
+{{- include "license.accept.env.ref" . | indent 8 }}
         ports:
         - containerPort: 2375
         livenessProbe:
           tcpSocket:
             port: 2375
-          initialDelaySeconds: 120
+          initialDelaySeconds: 30
           timeoutSeconds: 5
           failureThreshold: 6
         readinessProbe:
           tcpSocket:
             port: 2375
-          initialDelaySeconds: 120
+          initialDelaySeconds: 30
           timeoutSeconds: 5
           periodSeconds: 5
+        resources:
+{{ toYaml .Values.resources.dind | indent 10 }}
         securityContext: 
             privileged: true 
+            allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false	
             runAsNonRoot: false	
             runAsUser: 0	
@@ -354,6 +353,75 @@ spec:
               - ALL	
               add:	
               - NET_BIND_SERVICE
+      - name: proxy
+{{- if .Values.global.multiarch }}
+        image: "{{ .Values.app.grpcwebimage }}:{{ .Values.app.grpcwebtag }}"
+{{- else }}
+        image: "{{ .Values.app.grpcwebimage }}-{{ .Values.app.arch }}:{{ .Values.app.grpcwebtag }}"
+{{- end }}
+        imagePullPolicy: Always
+        env:
+        {{- include "license.accept.env.ref" . | indent 8 }}
+        - name: BACKEND_ADDRESS
+          value: "127.0.0.1:7051"
+        - name: EXTERNAL_ADDRESS
+          value: "127.0.0.1:7051"
+          # TODO change the values to peer external endpoint
+        - name: SERVER_TLS_CERT_FILE
+          value: "/certs/tls/signcerts/cert.pem"
+        - name: SERVER_TLS_KEY_FILE
+          value: "/certs/tls/keystore/key.pem"
+        - name: SERVER_TLS_CLIENT_CA_FILES
+          value: "/certs/tls/cacerts/cacert.pem"
+        - name: SERVER_BIND_ADDRESS
+          value: "0.0.0.0"
+        - name: SERVER_HTTP_DEBUG_PORT
+          value: "8080"
+        - name: SERVER_HTTP_TLS_PORT
+          value: "7443"
+        - name: BACKEND_TLS
+          value: "true"
+        - name: SERVER_HTTP_MAX_WRITE_TIMEOUT
+          value: "5m"
+        - name: SERVER_HTTP_MAX_READ_TIMEOUT
+          value: "5m"
+        - name: USE_WEBSOCKETS
+          value: "true"
+        securityContext: 
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: https
+          containerPort:  7443
+        livenessProbe:
+          httpGet:
+            path: /settings
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /settings
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: peer-msp
+          mountPath: /certs    
+        resources:
+{{ toYaml .Values.resources.proxy | indent 10 }}
       volumes:
       - name: fabric-peer-0
       {{- if .Values.persistence.enabled }}
