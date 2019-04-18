@@ -18,7 +18,7 @@ This chart will do the following:
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release stable/jenkins
+$ helm install --name my-release community/jenkins
 ```
 
 ## Configuration
@@ -139,7 +139,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/jenkins
+$ helm install --name my-release -f values.yaml community/jenkins
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
@@ -171,7 +171,7 @@ the DefaultDeny namespace annotation. Note: this will enforce policy for _all_ p
 
 Install helm chart with network policy enabled:
 
-    $ helm install stable/jenkins --set NetworkPolicy.Enabled=true
+    $ helm install community/jenkins --set NetworkPolicy.Enabled=true
 
 ## Adding customized securityRealm
 
@@ -229,6 +229,7 @@ It is possible to mount several volumes using `Persistence.volumes` and `Persist
 | `Persistence.SubPath`       | SubPath for jenkins-home mount  | `nil`           |
 | `Persistence.volumes`       | Additional volumes              | `nil`           |
 | `Persistence.mounts`        | Additional mounts               | `nil`           |
+| `Persistence.useDynamicProvisioning` | Enable dynamic provisioning of PVC | `false` |
 
 #### Existing PersistentVolumeClaim
 
@@ -237,7 +238,7 @@ It is possible to mount several volumes using `Persistence.volumes` and `Persist
 3. Install the chart
 
 ```bash
-$ helm install --name my-release --set Persistence.ExistingClaim=PVC_NAME stable/jenkins
+$ helm install --name my-release --set Persistence.ExistingClaim=PVC_NAME community/jenkins
 ```
 
 ## Configuration as Code
@@ -292,7 +293,7 @@ You can instead grant this permission via the UI. When this is done, you can set
 
 If running upon a cluster with RBAC enabled you will need to do the following:
 
-* `helm install stable/jenkins --set rbac.install=true`
+* `helm install community/jenkins --set rbac.install=true`
 * Create a Jenkins credential of type Kubernetes service account with service account name provided in the `helm status` output.
 * Under configure Jenkins -- Update the credentials config in the cloud section to use the service account credential you created in the step above.
 
@@ -442,5 +443,5 @@ and provide the file `templates/config.tpl` in your parent chart for your use ca
 {{ end }}
 ```
 ## Support
-Participate and contribute
+
 There are many ways to engage with the Jenkins project and community. Visit [Jenkins Community Page](https://jenkins.io/participate/) to get you started. Welcome aboard!
