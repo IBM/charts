@@ -21,6 +21,11 @@ The guidance in this document is meant to help you build charts that meet the st
 
 &nbsp;
 
+# Verifying Developed Charts
+IBM provides trial and Community Edition-based offerings for IBM Cloud Private in case you do not have access to the paid version. Links to information regarding these offerings is available from [the "Getting Started" section in the README.md.](https://github.com/IBM/charts/blob/master/README.md#getting-started) 
+
+&nbsp;
+
 # Contributing to the IBM Community charts repository
 
 Rules for contributing to the IBM Community charts repository are covered in [CONTRIBUTING.md](https://github.com/IBM/charts/blob/master/CONTRIBUTING.md), which is hosted in the GitHub repository itself.
@@ -53,7 +58,7 @@ These guidelines are intended to augment the [Helm best practices](https://docs.
 | [**Support statement**](#support-statement) | The README.md must include a section labeled `Support`.  This section should provide details and/or links to where users can get support for urgent issues, get help, or submit issues. |
 | [**NOTES.txt**](#notes-txt) | Include NOTES.txt with instructions to display usage notes, next steps, &amp; relevant information. |
 | [**tillerVersion constraint**](#tillerversion-constraint) | Add a `tillerVersion` to Chart.yaml that follows the Semantic Versioning 2.0.0 format (`>=MAJOR.MINOR.PATCH`); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on. |
-| [**Deployment validation**](#deployment-validation) | Charts must be validated to deploy successfully and work as expected on the latest version of IBM Cloud Private using both the Helm CLI and the IBM Cloud Private GUI.  Keep in mind ICP environments are typically air-gapped, without access to the public internet.  [Deploy IBM Cloud Private using Vagrant](https://github.com/IBM/deploy-ibm-cloud-private/blob/master/docs/deploy-vagrant.md) to quickly bring up an environment to verify your chart. |
+| [**Deployment validation**](#deployment-validation) | Charts must be validated to deploy successfully and work as expected on the latest version of IBM Cloud Private using both the Helm CLI and the IBM Cloud Private GUI. Available trial and Community Edition install options are listed in [the "Getting Started" section in the README.md.](https://github.com/IBM/charts/blob/master/README.md#getting-started)|
 
 &nbsp;
 
@@ -165,8 +170,8 @@ Add a tillerVersion to Chart.yaml that follows the Semantic Versioning 2.0.0 for
 
 ## Deployment validation
 
-Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the latest version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.  Keep in mind ICP environments are typically air-gapped, without access to the public internet.  Any configurations supported by the command line install of the helm chart must also be supported via the UI installation.  In addition, if there are any versions of IBM Cloud Private known to not work with the chart, those details should be clearly specified in the README.md under a section such as `Limitations`.  For example: `This chart is only supported on IBM Cloud Private version 3.1.0 and above.`
-You can [deploy IBM Cloud Private using Vagrant](https://github.com/IBM/deploy-ibm-cloud-private/blob/master/docs/deploy-vagrant.md) to quickly bring up an environment to verify your chart.
+Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the latest version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.  Keep in mind ICP environments are typically air-gapped, without access to the public internet.  Any configurations supported by the command line install of the helm chart must also be supported via the UI installation.  In addition, if there are any versions of IBM Cloud Private known to not work with the chart, those details should be clearly specified in the README.md under a section such as `Limitations`.  For example: `This chart is only supported on IBM Cloud Private version 3.1.0 and above.`  
+For a list of the available trial and Community Edition-based offerings, refer to [the "Getting Started" section in the README.md.](https://github.com/IBM/charts/blob/master/README.md#getting-started)
 
 &nbsp;
 
