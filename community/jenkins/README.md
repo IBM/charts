@@ -38,13 +38,14 @@ The following tables list the configurable parameters of the Jenkins chart and t
 | `Master.Component`                | k8s selector key                     | `jenkins-master`                                                             |
 | `Master.NumExecutors`             | Set Number of executors              | 0                                                                             |
 | `Master.UseSecurity`              | Use basic security                   | `true`                                                                       |
+| `Master.ExistingSecret`           | Provide an existing secret containing jenkins admin user and password | Not set                                    |
 | `Master.SecurityRealm`            | Custom Security Realm                | Not set                                                                      |
 | `Master.AuthorizationStrategy`    | Jenkins XML job config for AuthorizationStrategy | Not set                                                                      |
 | `Master.DeploymentLabels`         | Custom Deployment labels             | Not set                                                                      |
 | `Master.ServiceLabels`            | Custom Service labels                | Not set                                                                      |
 | `Master.PodLabels`                | Custom Pod labels                    | Not set                                                                      |
-| `Master.AdminUser`                | Admin username (and password) created as a secret if useSecurity is true | `admin`                                  |
-| `Master.AdminPassword`            | Admin password (and user) created as a secret if useSecurity is true | Random value                                  |
+| `Master.AdminUser`                | Admin username (and password) created as a secret if useSecurity is true and existing secret is not provided | `admin`                                  |
+| `Master.AdminPassword`            | Admin password (and user) created as a secret if useSecurity is true and existing secret is not provided | Random value                                  |
 | `Master.JenkinsAdminEmail`        | Email address for the administrator of the Jenkins instance | Not set                                               |
 | `Master.resources`                | Resources allocation (Requests and Limits) | `{requests: {cpu: 50m, memory: 256Mi}, limits: {cpu: 2000m, memory: 2048Mi}}`|
 | `Master.InitContainerEnv`         | Environment variables for Init Container                                 | Not set                                  |
