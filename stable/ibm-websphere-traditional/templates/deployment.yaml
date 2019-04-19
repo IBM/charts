@@ -16,10 +16,10 @@ apiVersion: apps/v1
 kind: Deployment
 {{- end }}
 metadata:
-  name: {{ template "fullname" . }}
+  name: {{ template "ibm-websphere-traditional.fullname" . }}
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    app: {{ template "fullname" . }}
+    app: {{ template "ibm-websphere-traditional.fullname" . }}
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
 {{- with .Values.deployment.labels }}
@@ -31,19 +31,19 @@ metadata:
 {{- end }}   
 spec:
   {{- if $stateful }}
-  serviceName: {{ template "fullname" . }}
+  serviceName: {{ template "ibm-websphere-traditional.fullname" . }}
   {{- end }}
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      app: {{ template "fullname" . }}
+      app: {{ template "ibm-websphere-traditional.fullname" . }}
   template:
     metadata:
       labels:
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-        app: {{ template "fullname" . }}
+        app: {{ template "ibm-websphere-traditional.fullname" . }}
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
 {{- with .Values.pod.labels }}
@@ -52,7 +52,7 @@ spec:
       annotations:
         productName: "WebSphere Application Server"
         productID: "53fb55e5e6f145e5ac5a6f79fd263f4f"
-        productVersion: "9.0.0.10"
+        productVersion: "9.0.0.11"
 {{- with .Values.pod.annotations }}
 {{ toYaml . | indent 8 }}
 {{- end }}        
@@ -69,7 +69,7 @@ spec:
 {{- end -}}
       {{- end }}
       affinity:
-      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "ibm-websphere-traditional.nodeaffinity" . | indent 6 }}
       {{/* Prefer horizontal scaling */}}
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -80,23 +80,30 @@ spec:
                 - key: app
                   operator: In
                   values:
-                  - {{ template "fullname" . }}
+                  - {{ template "ibm-websphere-traditional.fullname" . }}
                 - key: release
                   operator: In
                   values:
                   - {{ .Release.Name | quote }}
               topologyKey: kubernetes.io/hostname
+{{- with .Values.pod.security }}
+{{ toYaml . | indent 6 }}
+{{- else }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000 
+        runAsUser: 1001
         fsGroup: {{ .Values.persistence.fsGroupGid }}
+{{- end }}
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{- with .Values.image.security }}
+{{ toYaml . | indent 8 }}
+{{- else }}
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -104,6 +111,7 @@ spec:
           capabilities:
             drop:
             - ALL
+{{- end }}
         readinessProbe:
           {{- if .Values.readinessProbe.httpGet.enabled }}  
           httpGet:
@@ -163,7 +171,7 @@ spec:
       name: {{ .Values.persistence.name | trunc 63 | lower | trimSuffix "-"  | quote }}
       labels:
         chart: "{{ .Chart.Name }}"
-        app: {{ template "fullname" . }}
+        app: {{ template "ibm-websphere-traditional.fullname" . }}
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
     spec:
@@ -188,3 +196,5 @@ spec:
         requests:
           storage: {{ .Values.persistence.size | quote }}
   {{- end }}
+
+
