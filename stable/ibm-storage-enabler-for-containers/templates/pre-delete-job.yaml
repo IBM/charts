@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pre-delete
+  annotations:
+    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+  labels:
+{{ include "ibm_storage_enabler_for_containers.helmLabels" . | indent 4 }}
+spec:
+  template:
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+                      - ppc64le
+                      - s390x
+      containers:
+        - name: pre-delete-hook
+{{ include "ibm_storage_enabler_for_containers.securityContext" . | indent 10 }}
+          image: "{{ .Values.ubiquityHelmUtils.image.repository }}:{{ .Values.ubiquityHelmUtils.image.tag }}"
+          imagePullPolicy: {{ .Values.ubiquityHelmUtils.image.pullPolicy }}
+          command: ["/usr/bin/hook-executor"]
+          args: ["predelete"]
+          env:
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: UBIQUITY_DB_PV_NAME
+              value: {{ .Values.ubiquityDb.persistence.pvName | quote }}
+            - name: UBIQUITY_DB_STORAGECLASS
+              value: {{ template "ibm_storage_enabler_for_containers.ubiquityDbStorageClass" . }}
+      restartPolicy: Never
+      serviceAccountName: ubiquity-helm-hook
+  backoffLimit: 1

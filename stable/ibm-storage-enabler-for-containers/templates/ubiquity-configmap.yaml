@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+# IBM Storage Enabler for Containers Kubernetes daemonset and deployments settings.
+  name: ubiquity-configmap
+  labels:
+    product: ibm-storage-enabler-for-containers
+{{ include "ibm_storage_enabler_for_containers.helmLabels" . | indent 4 }}
+data:
+   # The keys below are used by ubiquity deployment
+   # -----------------------------------------------
+{{- if eq .Values.backend "spectrumConnect" }}
+   # IP or FQDN of Spectrum Connect(previously known as SCBE) server.
+   {{- if .Values.spectrumConnect.connectionInfo.fqdn }}
+   SCBE-MANAGEMENT-IP: {{ .Values.spectrumConnect.connectionInfo.fqdn | quote }}
+   {{- end }}
+   # Communication port of Spectrum Connect server. Optional parameter with default value set at 8440.
+   SCBE-MANAGEMENT-PORT: {{ .Values.spectrumConnect.connectionInfo.port | quote }}
+
+   # Default Spectrum Connect storage service to be used, if not specified by the plugin.
+   {{- if .Values.spectrumConnect.backendConfig.defaultStorageService }}
+   SCBE-DEFAULT-SERVICE: {{ .Values.spectrumConnect.backendConfig.defaultStorageService | quote }}
+   {{- end }}
+   # The size for a new volume if not specified by the user when creating a new volume. Optional parameter with default value set at 1GB.
+   DEFAULT-VOLUME-SIZE: {{ .Values.spectrumConnect.backendConfig.newVolumeDefaults.size | quote }}
+
+   # A prefix for any new volume created on the storage system. Default value is None.
+   {{- if .Values.spectrumConnect.backendConfig.instanceName }}
+   UBIQUITY-INSTANCE-NAME: {{ .Values.spectrumConnect.backendConfig.instanceName | quote }}
+   {{- end }}
+   # File system type. Optional parameter with two allowed values: ext4 or xfs. Default value is ext4.
+   DEFAULT-FSTYPE: {{ .Values.spectrumConnect.backendConfig.newVolumeDefaults.fsType | quote }}
+
+   # Default Ubiquity Backend
+   DEFAULT-BACKEND: scbe
+{{- end }}
+
+
+
+{{- if eq .Values.backend "spectrumScale" }}
+   # IP or FQDN of Spectrum Scale Management API server(GUI).
+   SPECTRUMSCALE-MANAGEMENT-IP: {{ .Values.spectrumScale.connectionInfo.fqdn | quote }}
+
+   # Communication port of Spectrum Scale Management API server(GUI).
+   SPECTRUMSCALE-MANAGEMENT-PORT: {{ .Values.spectrumScale.connectionInfo.port | quote }}
+
+   # Default Filesystem for creating pvc
+   SPECTRUMSCALE-DEFAULT-FILESYSTEM-NAME: {{ .Values.spectrumScale.backendConfig.defaultFilesystemName | quote }}
+
+   # Default Ubiquity Backend
+   DEFAULT-BACKEND: spectrum-scale
+{{- end }}
+
+   # DB pv name.
+   IBM-UBIQUITY-DB-PV-NAME: {{ .Values.ubiquityDb.persistence.pvName | quote }}
+
+
+
+   # The following keys are used by ubiquity, ubiquity-k8s-provisioner deployments, And ubiquity-k8s-flex daemon-set
+   # ----------------------------------------------------------------------------------------------------------------------------
+   # Flex log path. Allow to configure it, just make sure the the new path exist on all the minons and update the hostpath in the Flex daemonset
+   FLEX-LOG-DIR: {{ .Values.ubiquityK8sFlex.flexLogDir | quote  }}
+
+   # Maxlog size(MB) for rotate
+   FLEX-LOG-ROTATE-MAXSIZE: "50"
+
+   # Log level. Allowed values: debug, info, error.
+   LOG-LEVEL: {{ .Values.globalConfig.logLevel | quote }}
+
+   # The following keys are used by the ubiquity-k8s-flex daemonset
+   # ----------------------------------------------------------------------------------------------------------------
+   # SSL verification mode. Allowed values: require (no validation is required) and verify-full (user-provided certificates).
+   SSL-MODE: {{ .Values.globalConfig.sslMode | quote }}
