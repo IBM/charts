@@ -1,15 +1,19 @@
+{{- $helmTest := default "disabled" .Values.helmTestOverride }}
+{{- if ne $helmTest "disabled" }}
 {{- $values := index .Values .Values.patternName }}
 apiVersion: v1
 kind: Pod
 metadata:
   name: {{ .Release.Name }}-{{ .Values.patternName | lower }}-test
   labels:
-    app: {{ .Release.Name }}-{{ .Chart.Name }}-test
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/name: {{ .Release.Name }}-{{ .Chart.Name }}-test
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
   annotations:
     "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": test-succeeded
 spec:
   affinity:
     nodeAffinity:
@@ -31,6 +35,7 @@ spec:
     securityContext:
       privileged: false
       allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
       runAsNonRoot: true
       runAsUser: 101
       capabilities:
@@ -45,3 +50,4 @@ spec:
     command: ["sh", "-c", "curl -k http://{{ .Release.Name }}-{{ .Chart.Name }}:$DP_PORT"]
 {{- end }}
   restartPolicy: Never
+{{- end }}

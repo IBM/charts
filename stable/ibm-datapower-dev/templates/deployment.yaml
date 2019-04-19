@@ -2,27 +2,29 @@
 # values.yaml. For example, if patternName is "webApplicationProxy" it will pick
 # the webApplicationProxy config options from the map structure in values.yaml.
 {{- $values := index .Values .Values.patternName }}
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ template "fullname" . }}
+  name: {{ template "ibm-datapower-dev.fullname" . }}
   labels:
-    chart: {{ .Chart.Name}}-{{ .Chart.Version | replace "+" "_" }}
-    app: {{ template "fullname" . }}
+    app.kubernetes.io/name: {{ template "ibm-datapower-dev.fullname" . }}
+    helm.sh/chart: {{ .Chart.Name}}-{{ .Chart.Version | replace "+" "_" }}
     release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
 spec:
   replicas: {{ .Values.datapower.replicaCount }}
   selector:
     matchLabels:
-      app: {{ template "fullname" . }}
+      app.kubernetes.io/name: {{ template "ibm-datapower-dev.fullname" . }}
   template:
     metadata:
       labels:
-        chart: {{ .Chart.Name}}-{{ .Chart.Version | replace "+" "_" }}
+        helm.sh/chart: {{ .Chart.Name}}-{{ .Chart.Version | replace "+" "_" }}
         release: "{{ .Release.Name }}"
-        heritage: "{{ .Release.Service }}"
-        app: {{ template "fullname" . }}
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ template "ibm-datapower-dev.fullname" . }}
       annotations:
         productName: 'IBM DataPower Gateway Virtual Edition for Developers'
         productID: 'IBMDataPowerGatewayVirtualEdition_{{ .Values.datapower.image.tag }}_Developers'
@@ -36,11 +38,9 @@ spec:
         prometheus.io/target: '127.0.0.1:{{ .Values.datapower.snmpPort }}'
         prometheus.io/module: 'dpStatusMIB'
     spec:
-{{- if .Values.datapower.image.pullSecrets }}
+{{- if .Values.datapower.image.pullSecret }}
       imagePullSecrets:
-      {{- range .Values.datapower.image.pullSecrets }}
-      - name: {{ .name }}
-      {{- end }}
+      - name: {{ .Values.datapower.image.pullSecret }}
 {{- end }}
       hostNetwork: false
       hostPID: false
@@ -61,12 +61,26 @@ spec:
         tty: true
         securityContext:
           privileged: false
+          readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
+# Dynamically increase the user permissions of the DataPower container when SSH is enabled.
+{{- if eq .Values.datapower.gatewaySshState "enabled" }}
+          runAsNonRoot: false
+          runAsUser: 0
+{{- else }}
           runAsNonRoot: true
           runAsUser: 101
+{{- end }}
           capabilities:
             drop:
             - ALL
+# Add capabilities needed for SSH only when SSH is enabled
+{{- if eq .Values.datapower.gatewaySshState "enabled" }}
+            add:
+            - SETGID
+            - SETUID
+            - SYS_CHROOT
+{{- end }}
         resources:
           limits:
             cpu: {{ .Values.datapower.resources.limits.cpu }}
@@ -89,43 +103,39 @@ spec:
 {{- end }}
 {{- if ne .Values.patternName "none"}}
         livenessProbe:
-          httpGet:
-            path: /
-            port: service
-{{- if .Values.crypto.frontsideSecret }}
-            scheme: HTTPS
-{{- else }}
-            scheme: HTTP
-{{- end }}
-          initialDelaySeconds: 120
+          exec:
+            command:
+            - pgrep
+            - drouter
+          initialDelaySeconds: 5
           timeoutSeconds: 5
-          periodSeconds: 10
+          periodSeconds: 5
         readinessProbe:
           httpGet:
-            path: /
-            port: service
-{{- if .Values.crypto.frontsideSecret }}
-            scheme: HTTPS
-{{- else }}
+            path: /health
+            port: health
             scheme: HTTP
-{{- end }}
           initialDelaySeconds: 120
           timeoutSeconds: 5
           periodSeconds: 10
         ports:
         - name: service
           containerPort: {{ $values.containerPort }}
+        - name: health
+          containerPort: 7878
         volumeMounts:
             - mountPath: "/drouter/config"
-              name: {{ template "fullname" . }}-config-volume
+              name: {{ template "ibm-datapower-dev.fullname" . }}-config-volume
+            - mountPath: "/drouter/local/health"
+              name: {{ template "ibm-datapower-dev.fullname" . }}-health
 {{- if .Values.crypto.frontsideSecret }}
             - mountPath: "/drouter/secure/usrcerts/{{ .Values.patternName }}"
-              name: {{ template "fullname" . }}-secret-volume
+              name: {{ template "ibm-datapower-dev.fullname" . }}-secret-volume
 {{- end }}
       volumes:
-        - name: {{ template "fullname" . }}-config-volume
+        - name: {{ template "ibm-datapower-dev.fullname" . }}-config-volume
           configMap:
-            name: {{ template "fullname" . }}-config
+            name: {{ template "ibm-datapower-dev.fullname" . }}-config
             items:
             - key: {{ .Values.patternName }}.cfg
               path: "{{ .Values.patternName }}/{{ .Values.patternName }}.cfg"
@@ -133,9 +143,14 @@ spec:
               path: "auto-user.cfg"
             - key: auto-startup.cfg
               path: "auto-startup.cfg"
+            - key: health-check.cfg
+              path: "health-check.cfg"
+        - name: {{ template "ibm-datapower-dev.fullname" . }}-health
+          configMap:
+            name: {{ template "ibm-datapower-dev.fullname" . }}-static-health
 
 {{- if .Values.crypto.frontsideSecret }}
-        - name: {{ template "fullname" . }}-secret-volume
+        - name: {{ template "ibm-datapower-dev.fullname" . }}-secret-volume
           secret:
             secretName: {{ .Values.crypto.frontsideSecret }}
 {{- end }}

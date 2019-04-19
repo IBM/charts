@@ -1,7 +1,19 @@
 {{/* DataPower Configuration for default domain */}}
-{{- define "defaultDomainConfig" }}
+{{- define "ibm-datapower-dev.defaultDomainConfig" }}
 auto-startup.cfg: |
     top; configure terminal;
+
+    %if% available "include-config"
+
+    include-config "healthCheck"
+      config-url "config:///health-check.cfg
+      auto-execute
+      no interface-detection
+    exit
+
+    %endif%
+
+    exec "config:///health-check.cfg"
 
 {{- if .Values.datapower.gatewaySshState }}
 {{- if eq .Values.datapower.gatewaySshState "enabled" }}
@@ -23,7 +35,7 @@ auto-startup.cfg: |
 {{- if eq .Values.datapower.restManagementState "enabled" }}
     rest-mgmt
       admin-state {{ .Values.datapower.restManagementState }}
-      local-address {{ .Values.datapower.restManagementLocalAddress }} 
+      local-address {{ .Values.datapower.restManagementLocalAddress }}
       port {{ .Values.datapower.restManagementPort }}
       ssl-config-type server
     exit
@@ -34,9 +46,9 @@ auto-startup.cfg: |
 {{- if eq .Values.datapower.webGuiManagementState "enabled" }}
     web-mgmt
       admin-state {{ .Values.datapower.webGuiManagementState }}
-      local-address {{ .Values.datapower.webGuiManagementLocalAddress }} 
+      local-address {{ .Values.datapower.webGuiManagementLocalAddress }}
       port {{ .Values.datapower.webGuiManagementPort }}
-      save-config-overwrite 
+      save-config-overwrite
       idle-timeout 9000
       ssl-config-type server
     exit
@@ -84,12 +96,12 @@ auto-startup.cfg: |
       base-dir {{ .Values.patternName }}:
       config-file {{ .Values.patternName }}.cfg
       visible-domain default
-      url-permissions "http+https" 
-      file-permissions "CopyFrom+CopyTo+Delete+Display+Exec+Subdir" 
-      file-monitoring "Audit+Log" 
+      url-permissions "http+https"
+      file-permissions "CopyFrom+CopyTo+Delete+Display+Exec+Subdir"
+      file-monitoring "Audit+Log"
       config-mode local
       import-format ZIP
-      local-ip-rewrite 
+      local-ip-rewrite
       maxchkpoints 3
     exit
 auto-user.cfg: |
