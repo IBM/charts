@@ -24,10 +24,13 @@ If you prefer to install from the command prompt, you will need:
 
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
 
-* Predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)
-* Custom PodSecurityPolicy definition:
+#### Predefined PodSecurityPolicy
 
-> Note: This PodSecurityPolicy only needs to be created once. If it already exist, skip this step.
+* Predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)
+
+#### Custom PodSecurityPolicy
+
+* Custom PodSecurityPolicy definition:
 
 ```
 apiVersion: extensions/v1beta1
@@ -86,6 +89,8 @@ rules:
   - use
 
 ```
+> Note: This PodSecurityPolicy only needs to be created once. If it already exist, skip this step.
+
 The cluster admin can either paste the above PSP and ClusterRole definitions into the create resource screen in the UI or run the following two commands:
 
 - `kubectl create -f <PSP yaml file>`

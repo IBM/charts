@@ -1,5 +1,5 @@
 {{/* DataPower Configuration for the restProxy Pattern */}}
-{{- define "restProxyConfig" }}
+{{- define "ibm-datapower-dev.restProxyConfig" }}
 restProxy.cfg: |
     top; configure terminal;
     
