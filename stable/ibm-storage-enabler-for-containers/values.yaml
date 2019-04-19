@@ -1,0 +1,171 @@
+# ---------------------------------------------------------
+# Helm chart to install IBM Storage Enabler for Containers.
+# Enables IBM Storage with Kubernetes by implementing Kubernetes Dynamic Provisioner and FlexVolume.
+#
+# IBM Storage Enabler for Containers includes the following main images:
+#   - deployment/ubiquity                 : A mediator between IBM Storage and k8s FlexVolume \ Dynamic Provisioner.
+#   - deployment/ubiquity-db              : Stores meta-data for the dynamic provisioned volumes.
+#   - deamonset/ubiquity-k8s-flex         : Implements k8s FlexVolume driver.
+#   - deployment/ubiquity-k8s-provisioner : Implements k8s Dynamic Provisioner
+# ---------------------------------------------------------
+
+
+# Backend for Provisioner and Flex volume.
+# IBM Storage Enabler for Containers supports one of the following backend types: spectrumConnect OR spectrumScale.
+backend: spectrumConnect
+
+
+# IBM Storage Enabler for Containers supports one of the following backend types: spectrumConnect OR spectrumScale.
+# Select a backend that you intend to use and comment out the other backend section.
+spectrumConnect:
+  connectionInfo:
+    # IP\FQDN and port of Spectrum Connect server.
+    fqdn:
+    port: 8440
+
+    # Set this param with an existing spectrum connect secret object if one exist.
+    existingSecret:
+
+  backendConfig:
+    # A prefix for any new volume created on the storage system.
+    instanceName:
+    # Default Spectrum Connect storage service to be used, if not specified by the storage class.
+    defaultStorageService:
+    newVolumeDefaults:
+      # The fstype of a new volume if not specified by the user in the storage class.
+      # File system type. Allowed values: ext4 or xfs.
+      fsType: ext4
+      # The default volume size (in GB) if not specified by the user when creating a new volume.
+      size: 1
+
+  ## storageClass parameters for ubiquity-db PVC
+  storageClass:
+    # Storage Class profile parameter must point to the Spectrum Connect storage service name.
+    storageService:
+    # Storage Class filesystem type. Allowed values: ext4 or xfs.
+    fsType: ext4
+
+
+# IBM Storage Enabler for Containers supports one of the following backend types: spectrumConnect OR spectrumScale.
+# Select a backend that you intend to use and comment out the other backend section.
+spectrumScale:
+  connectionInfo:
+    # IP\FQDN and port of Spectrum Scale RESTful API server.
+    fqdn:
+    port: 443
+
+    # Set this param with an existing Spectrum Scale secret object if one exist.
+    existingSecret:
+
+  backendConfig:
+    # Default Spectrum Scale filesystem to be used.
+    defaultFilesystemName:
+
+
+ubiquityDb:
+  image:
+    repository: ibmcom/ibm-storage-enabler-for-containers-db
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+  resources: {}
+  nodeSelector: {}
+  dbCredentials:
+    # Set this param with an existing secret object if one exist. . Note: Do not use the "postgres" username, because it already exists.
+    existingSecret:
+
+  # The Helm installation has automatic boot strap of the ubiquity-db volume (PVC named ibm-ubiquity-db).
+  # The boot strap creates a storage class (see details below) and the PVC.
+  persistence:
+
+    # Set this param to true if you want to use an existing PV as Ubiquity database PV.
+    # Use it only when you want to upgrade Ubiquity from old version installed by script to the latest version.
+    useExistingPv: false
+
+    # Ubiquity database PV name. For Spectrum Virtualize, Spectrum Accelerate and Spectrum Scale, use default value "ibm-ubiquity-db".
+    # For DS8000 Family, use "ibmdb" instead and make sure UBIQUITY_INSTANCE_NAME_VALUE value length does not exceed 8 chars.
+    pvName: ibm-ubiquity-db
+    pvSize: 20Gi
+
+    storageClass:
+
+      # Parameters to create the first storage class that is also to be used by Ubiquity for ibm-ubiquity-db PVC.
+      # Note: The default reclaimPolicy is Delete. Can be changed manually if needed.
+      storageClassName:
+
+      # Set this param with an existing storageclass object if one exist.
+      existingStorageClass:
+
+      # Set StorageClass as the default StorageClass. Ignored if storageClass.create is false.
+      defaultClass: false
+
+
+ubiquity:
+  image:
+    repository: ibmcom/ibm-storage-enabler-for-containers
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+  resources: {}
+
+
+ubiquityK8sFlex:
+  image:
+    repository: ibmcom/ibm-storage-flex-volume-for-kubernetes
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+  resources: {}
+
+  # By default, the toleration is set to run the Flex DeamonSet on all worker and master nodes. To define a different toleration, uncomment and apply the relevant toleration value.
+  tolerations: {}
+
+  # Flex log directory. If the default value is changed, make sure that the new path exists on all the nodes and update the Flex DaemonSet hostpath accordingly.
+  flexLogDir: /var/log
+
+
+ubiquityK8sFlexInitContainer:
+  resources: {}
+
+
+ubiquityK8sFlexSidecar:
+  image:
+    repository: ibmcom/ibm-storage-flex-volume-sidecar-for-kubernetes
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+  resources: {}
+
+
+ubiquityK8sProvisioner:
+  # RBAC and service account are set automatically for the Provisioner.
+  image:
+    repository: ibmcom/ibm-storage-dynamic-provisioner-for-kubernetes
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+  resources: {}
+
+
+ubiquityHelmUtils:
+  image:
+    repository: ibmcom/ibm-storage-enabler-for-containers-helm-utils
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+
+
+# Custom pod security policy. If specified, it is applied to all pods in the chart.
+# New policies cannot be defined. Configure a policy in advance or use existing ones. Then, attach one or more policies
+# to a role or clusterRole, and provide the name for the role or clusterRole.
+# Currently, only clusterRole is supported. It will be bound to all serviceAccounts under the current namespace.
+customPodSecurityPolicy:
+  # The name of clusterRole that has the required policies attached.
+  # Default value for ICP 3.1.1+ is ibm-anyuid-hostpath-clusterrole
+  enabled: false
+  clusterRole: ibm-anyuid-hostpath-clusterrole
+
+
+globalConfig:
+  # Log level. Allowed values: debug, info, error.
+  logLevel: info
+
+  # SSL verification mode. Allowed values: require (no validation is required) and verify-full (user-provided certificates).
+  # SSL mode is set for all communication paths between [flex||provisioner]<->ubiquity<->[SpectrumConnect||SpectrumScale].
+  sslMode: require
+
+  imagePullSecret:

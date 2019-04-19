@@ -1,0 +1,261 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ubiquity
+  labels:
+    product: ibm-storage-enabler-for-containers
+{{ include "ibm_storage_enabler_for_containers.helmLabels" . | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ubiquity
+      product: ibm-storage-enabler-for-containers
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ubiquity
+        product: ibm-storage-enabler-for-containers
+{{ include "ibm_storage_enabler_for_containers.podLabels" . | indent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/ubiquity-configmap.yaml") . | sha256sum }}
+{{ include "ibm_storage_enabler_for_containers.productAnnotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+                      - ppc64le
+                      - s390x
+      serviceAccountName: ubiquity
+      containers:
+      - name: ubiquity
+{{ include "ibm_storage_enabler_for_containers.securityContext" . | indent 8 }}
+        image: "{{ .Values.ubiquity.image.repository }}:{{ .Values.ubiquity.image.tag }}"
+        imagePullPolicy: {{ .Values.ubiquity.image.pullPolicy }}
+        readinessProbe:
+          tcpSocket:
+            port: 9999
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 9999
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        ports:
+        - containerPort: 9999
+          name: ubiquity-port
+        {{- with .Values.ubiquity.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+        {{- end }}
+        env:
+{{- if eq .Values.backend "spectrumConnect" }}
+          ### Spectrum Connect(previously known as SCBE) connectivity parameters:
+          #############################################
+          - name: SCBE_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.scbeCredentials" . }}
+                key: username
+
+          - name: SCBE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.scbeCredentials" . }}
+                key: password
+
+          - name: SCBE_SSL_MODE            # Values : require/verify-full
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SSL-MODE
+
+          - name: SCBE_MANAGEMENT_IP
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SCBE-MANAGEMENT-IP
+
+          - name: SCBE_MANAGEMENT_PORT
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SCBE-MANAGEMENT-PORT
+
+
+
+          ### Ubiquity Spectrum Connect(previously known as SCBE) backend parameters:
+          #####################################
+          - name: SCBE_DEFAULT_SERVICE
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SCBE-DEFAULT-SERVICE
+
+          - name: DEFAULT_VOLUME_SIZE
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: DEFAULT-VOLUME-SIZE
+
+          - name: UBIQUITY_INSTANCE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: UBIQUITY-INSTANCE-NAME
+
+          - name: DEFAULT_FSTYPE    # ext4 or xfs
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: DEFAULT-FSTYPE
+{{- end }}
+
+
+{{- if eq .Values.backend "spectrumScale" }}
+
+          ### Ubiquity Spectrum Scale backend parameters:
+          #####################################
+          - name: SPECTRUMSCALE_REST_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.spectrumscaleCredentials" . }}
+                key: username
+
+          - name: SPECTRUMSCALE_REST_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.spectrumscaleCredentials" . }}
+                key: password
+
+          - name: SPECTRUMSCALE_MANAGEMENT_IP
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SPECTRUMSCALE-MANAGEMENT-IP
+
+          - name: SPECTRUMSCALE_MANAGEMENT_PORT
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SPECTRUMSCALE-MANAGEMENT-PORT
+
+          - name: SPECTRUMSCALE_DEFAULT_FILESYSTEM_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SPECTRUMSCALE-DEFAULT-FILESYSTEM-NAME
+
+          - name: SPECTRUMSCALE_FORCE_DELETE
+            value: "true"
+
+          - name: SPECTRUMSCALE_SSL_MODE
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SSL-MODE
+{{- end }}
+
+          ### Ubiquity generic parameters:
+          ################################
+          - name: IBM_UBIQUITY_DB_PV_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: IBM-UBIQUITY-DB-PV-NAME
+
+          - name: LOG_LEVEL         # debug / info / error
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: LOG-LEVEL
+
+          - name: PORT              # Ubiquity port
+            value: "9999"
+          - name: LOG_PATH          # Ubiquity log file directory
+            value: "/tmp"
+          - name: DEFAULT_BACKEND   # "IBM Storage Enabler for Containers" supports "scbe" (Spectrum Connect) as its backend.
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: DEFAULT-BACKEND
+
+
+          ### Ubiquity DB parameters:
+          ###########################
+          - name: UBIQUITY_DB_PSQL_HOST   # Ubiquity DB hostname, should point to the ubiquity-db service name
+            value: "ubiquity-db"
+          - name: UBIQUITY_DB_PSQL_PORT   # Ubiquity DB port, should point to the ubiquity-db port
+            value: "5432"
+          - name: UBIQUITY_DB_CONNECT_TIMEOUT
+            value: "3"
+
+          - name: UBIQUITY_DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.ubiquityDbCredentials" . }}
+                key: username
+
+          - name: UBIQUITY_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.ubiquityDbCredentials" . }}
+                key: password
+
+          - name: UBIQUITY_DB_NAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.ubiquityDbCredentials" . }}
+                key: dbname
+
+          - name: UBIQUITY_DB_SSL_MODE         # Values : require/verify-full. The default is disable
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SSL-MODE
+
+{{- if (eq .Values.globalConfig.sslMode "verify-full") }}
+        volumeMounts:
+        - name: ubiquity-private-certificate
+          mountPath: /var/lib/ubiquity/ssl/private
+          readOnly: true
+        - name: ubiquity-public-certificates
+          mountPath: /var/lib/ubiquity/ssl/public
+          readOnly: true
+
+      volumes:
+      - name: ubiquity-private-certificate
+        secret:
+          secretName: ubiquity-private-certificate
+          items:
+          - key: ubiquity.crt
+            path: ubiquity.crt
+            mode: 0600
+          - key: ubiquity.key
+            path: ubiquity.key
+            mode: 0600
+      - name: ubiquity-public-certificates
+        configMap:
+          name: ubiquity-public-certificates
+          items:
+          - key: ubiquity-db-trusted-ca.crt
+            path: ubiquity-db-trusted-ca.crt
+  {{- if eq .Values.backend "spectrumConnect" }}
+          - key: scbe-trusted-ca.crt
+            path: scbe-trusted-ca.crt
+  {{- end }}
+  {{- if eq .Values.backend "spectrumScale" }}
+          - key: spectrumscale-trusted-ca.crt
+            path: spectrumscale-trusted-ca.crt
+  {{- end }}
+{{- end }}
