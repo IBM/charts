@@ -1,9 +1,10 @@
 
-# What’s new in Chart Version 1.1.0
+# What’s new in Chart Version 1.2.0
 
-1. Added various extension points across different resources. Now it is possible to declare extra environment variables, volume mounts, labels and annotations for various Kubernetes resources.
-1. Added Kibana dashboards that take advantage of the logging in JSON format.
-1. Updated minimum `kubeVersion` of chart to ensure patch for [CVE-2018-1002105](https://github.com/kubernetes/kubernetes/issues/71411) is installed.
+1. Added support for ingress hosts.
+1. Added support for securing ingress by specifying a secret that contains a TLS private key and certificate.
+1. Added security extension points for pod and image.
+1. Updated Kibana dashboards.
 
 ## Breaking Changes
 
@@ -39,11 +40,20 @@ Please refer to README.md
   
 ## Known Issues
 
-* None
+* Upgrading to version 1.2.0:
+   
+  Currently provided Docker images are run using user with UID of `1001` (was) and GID of `0` (root). To avoid other issues please make sure you are using latest version of base image.
+
+  When 1.1.0 version of Helm chart is used, container is forced to run as user `1000` and `persistence.fsGroupID` is `1000`. It is recommened to set `persistence.fsGroupID` to `""` when upgrading.
+  
+  If persistence of logs is enabled in previous helm release and you encounter errors such as `java.io.FileNotFoundException: /opt/IBM/WebSphere/AppServer/profiles/AppSrv01/logs/server1/logViewer.pos (Permission denied)` after upgrade then set `pod.security.securityContext.runAsUser` to `1000` in order to be able to access persistent files.
+
+  If your pod fails to start after upgrade and your Docker image is still running as UID `1000` then set `pod.security.securityContext.runAsUser` to `1000` during upgrade.
 
 ## Version History
 
 | Chart | Date          | IBM Cloud Private Supported | Details                      |
 | ----- | ------------- | --------------------------- | ---------------------------- |
+| 1.2.0 | APR 19, 2019   | >=3.1.0                     | Added support for ingress hosts and secret name; Updated Kibana dashboards; Added security extension points for pod and image |
 | 1.1.0 | JAN 31, 2019   | >=3.1.0                     | Added support for more configurable parameters; Added Kibana dashboards |
 | 1.0.0 | NOV 16, 2018   | >=3.1.0                     | Initial release              |
