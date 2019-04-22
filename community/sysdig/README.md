@@ -15,7 +15,7 @@ This chart adds the Sysdig agent for [Sysdig Monitor](https://sysdig.com/product
 To install the chart with the release name `my-release`, retrieve your Sysdig Monitor Access Key from your [Account Settings](https://app.sysdigcloud.com/#/settings/agentInstallation) and run:
 
 ```bash
-$ helm install --name my-release --set sysdig.accessKey=YOUR-KEY-HERE stable/sysdig
+$ helm install --name my-release --set sysdig.accessKey=YOUR-KEY-HERE community/sysdig
 ```
 
 After a few seconds, you should see hosts and containers appearing in Sysdig Monitor and Sysdig Secure.
@@ -65,13 +65,13 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 ```bash
 $ helm install --name my-release \
     --set sysdig.accessKey=YOUR-KEY-HERE,sysdig.settings.tags="role:webserver,location:europe" \
-    stable/sysdig
+    community/sysdig
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/sysdig
+$ helm install --name my-release -f values.yaml community/sysdig
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
@@ -97,7 +97,7 @@ $ helm install --name my-release \
     --set sysdig.settings.collector=42.32.196.18 \
     --set sysdig.settings.collector_port=6443 \
     --set sysdig.settings.ssl_verify_certificate=false \
-    stable/sysdig
+    community/sysdig
 ```
 
 ## Using private Docker image registry
@@ -131,7 +131,7 @@ Finally, set the accessKey value and you are ready to deploy the Sysdig agent
 using the Helm chart:
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/sysdig
+$ helm install --name my-release -f values.yaml community/sysdig
 ```
 
 You can read more details about this in [Kubernetes Documentation](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/).
@@ -152,7 +152,7 @@ sysdig:
 ```
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/sysdig
+$ helm install --name my-release -f values.yaml community/sysdig
 ```
 
 ## Upgrading Sysdig agent configuration
@@ -173,7 +173,7 @@ sysdig:
 And then, upgrade Helm chart with:
 
 ```bash
-$ helm upgrade my-release -f values.yaml stable/sysdig
+$ helm upgrade my-release -f values.yaml community/sysdig
 ```
 
 ## Adding custom AppChecks
@@ -208,7 +208,7 @@ The first section, dumps the AppCheck in a Kubernetes configmap and makes it ava
 Once the values YAML file is ready, we will deploy the Chart like before:
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/sysdig
+$ helm install --name my-release -f values.yaml community/sysdig
 ```
 
 ### Automating the generation of custom-app-checks.yaml file
@@ -236,14 +236,14 @@ You can generate an additional values YAML file with the custom AppChecks:
 
 ```bash
 $ git clone https://github.com/kubernetes/charts.git
-$ cd stable/sysdig
+$ cd community/sysdig
 $ ./scripts/appchecks2helm appChecks/solr.py appChecks/traefik.py appChecks/nats.py > custom-app-checks.yaml
 ```
 
 And deploy the Chart with both of them:
 
 ```bash
-$ helm install --name my-release -f custom-app-checks.yaml -f values.yaml stable/sysdig
+$ helm install --name my-release -f custom-app-checks.yaml -f values.yaml community/sysdig
 ```
 
 ## Support
