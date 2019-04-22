@@ -213,3 +213,9 @@ Use the workaround below to upgrade from versions previous to 5.0.0. The followi
 ```console
 $ kubectl delete statefulset opencart-mariadb --cascade=false
 ```
+
+## Support
+
+MariaDB Server is open source software and free to use as stated in the General Public License.
+[The MariaDB Foundation](https://mariadb.org/about/) is all about ensuring continuity and open collaboration – we do not provide any support or guarantees regarding the use of MariaDB to individual users.
+For anybody using MariaDB in a commercial setting we strongly recommend getting commercial products and services from any of the companies listed at https://mariadb.org/about/service-providers/.
