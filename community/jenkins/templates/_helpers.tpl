@@ -25,7 +25,7 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 
 {{- define "jenkins.kubernetes-version" -}}
-  {{- range .Values.Master.InstallPlugins -}}
+  {{- range .Values.master.installPlugins -}}
     {{ if hasPrefix "kubernetes:" . }}
       {{- $split := splitList ":" . }}
       {{- printf "%s" (index $split 1 ) -}}
@@ -37,26 +37,30 @@ If release name contains chart name it will be used as a full name.
 Generate private key for jenkins CLI
 */}}
 {{- define "jenkins.gen-key" -}}
-{{- if not .Values.Master.AdminSshKey -}}
+{{- if not .Values.master.adminSshKey -}}
 {{- $key := genPrivateKey "rsa" -}}
 jenkins-admin-private-key: {{ $key | b64enc | quote }}
 {{- end -}}
 {{- end -}}
 
 {{/*
-Create chart name and version as used by the chart label.
+Create the name of the service account to use
 */}}
-{{- define "jenkins.chart" -}}
-  {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- define "jenkins.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}
+    {{ default (include "jenkins.fullname" .) .Values.serviceAccount.name }}
+{{- else -}}
+    {{ default "default" .Values.serviceAccount.name }}
+{{- end -}}
 {{- end -}}
 
 {{/*
   Secret name for jenkins admin user and password
 */}}
 {{- define "jenkins.getsecret" -}}
-{{- if not .Values.Master.ExistingSecret -}}
+{{- if not .Values.master.existingSecret -}}
 {{ template "jenkins.fullname" . }}
 {{- else -}}
-{{- .Values.Master.ExistingSecret -}}
+{{- .Values.master.existingSecret -}}
 {{- end -}}
 {{- end -}}
