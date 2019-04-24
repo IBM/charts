@@ -18,7 +18,7 @@ This chart will do the following:
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release stable/jenkins
+$ helm install --name my-release community/jenkins
 ```
 
 ## Configuration
@@ -150,7 +150,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/jenkins
+$ helm install --name my-release -f values.yaml community/jenkins
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
@@ -182,7 +182,7 @@ the DefaultDeny namespace annotation. Note: this will enforce policy for _all_ p
 
 Install helm chart with network policy enabled:
 
-    $ helm install stable/jenkins --set networkPolicy.enabled=true
+    $ helm install community/jenkins --set networkPolicy.enabled=true
 
 ## Adding customized securityRealm
 
@@ -250,7 +250,7 @@ It is possible to mount several volumes using `persistence.volumes` and `persist
 3. Install the chart
 
 ```bash
-$ helm install --name my-release --set persistence.existingClaim=PVC_NAME stable/jenkins
+$ helm install --name my-release --set persistence.existingClaim=PVC_NAME community/jenkins
 ```
 
 ## Configuration as Code
@@ -305,7 +305,7 @@ You can instead grant this permission via the UI. When this is done, you can set
 
 RBAC is enabled by default if you want to disable it you will need to do the following:
 
-* `helm install stable/jenkins --set rbac.create=false`
+* `helm install community/jenkins --set rbac.create=false`
 
 ## Backup
 
