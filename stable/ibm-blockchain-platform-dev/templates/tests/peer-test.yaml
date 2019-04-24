@@ -23,6 +23,13 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
 spec:
+  hostIPC: false
+  hostNetwork: false
+  hostPID: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 2000
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -35,9 +42,22 @@ spec:
   restartPolicy: Never
   containers:
     - name: {{ .Release.Name }}-test-peer
-      image: {{ .Values.peer.app.arch }}/busybox
+      {{- if .Values.global.multiarch }}
+      image: "{{ .Values.ca.image.initimage }}:{{ .Values.ca.image.inittag }}"
+      {{- else }}
+      image: "{{ .Values.ca.image.initimage }}-{{ .Values.ca.app.arch }}:{{ .Values.ca.image.inittag }}"
+      {{- end }}
       {{- if .Values.peer.enabled }}
-      command: ["sh", "-c", "nc -vz {{ .Release.Name }} 7051 && nc -vz {{ .Release.Name }} 7052 && nc -vz {{ .Release.Name }} 7053"]
+      command: ["sh", "-c", "nc -vz {{ .Release.Name }} 7051 && nc -vz {{ .Release.Name }} 7052"]
       {{- else }}
       command: ["sh", "-c", "exit 0"]
       {{- end }}
+      securityContext:	
+        runAsNonRoot: true
+        runAsUser: 1000
+        privileged: false
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:	
+          drop:	
+          - ALL

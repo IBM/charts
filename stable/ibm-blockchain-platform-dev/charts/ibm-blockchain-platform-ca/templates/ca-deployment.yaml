@@ -53,12 +53,16 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.app.arch }}
+      {{- if .Values.image.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.imagePullSecret }}
+      {{- end }}
       initContainers:
-        - name: ca-init
+        - name: init
 {{- if .Values.global.multiarch }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.initimage }}:{{ .Values.image.inittag }}"
 {{- else }}
-          image: "{{ .Values.image.repository }}-{{ .Values.app.arch }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.initimage }}-{{ .Values.app.arch }}:{{ .Values.image.inittag }}"
 {{- end }}
           imagePullPolicy: Always
           securityContext:
@@ -73,6 +77,8 @@ spec:
               name: {{ .Release.Name }}-ca-configmap
           env:
           {{- include "license.accept.env.ref" . | indent 10 }}
+          - name: TYPE
+            value: ca
           - name: FABRIC_CA_HOME
             value: /etc/hyperledger/fabric-ca-server
           {{- if eq "mysql" .Values.db.type }}
@@ -97,8 +103,8 @@ spec:
               secretKeyRef:
                 name: {{ .Values.ca.caAdminSecret }}
                 key: ca-admin-password
+{{- if eq "mysql" .Values.db.type }}
           command:
-          {{- if eq "mysql" .Values.db.type }}
           - sh
           - -c
           - |
@@ -109,17 +115,15 @@ spec:
             if $(ping -c 1 ${MYSQL_SERVER_HOSTNAME}>/dev/null); then
               fabric-ca-server init -b ${CA_ADMIN_NAME}:${CA_ADMIN_PW} -d --db.type mysql --db.datasource ${MYSQL_USER_NAME}:${MYSQL_USER_PASSWORD}@tcp\(${MYSQL_SERVER_HOSTNAME}:3306\)/fabric_ca?parseTime=true             
             fi
-          {{- else }}
-          - sh
-          - -c
-          - |
-            fabric-ca-server init -b ${CA_ADMIN_NAME}:${CA_ADMIN_PW}
-          {{- end }}
+{{- end }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           volumeMounts:
           - name: {{ .Release.Name }}-fabric-ca
             mountPath: /etc/hyperledger/fabric-ca-server
+            subPath: fabric-ca-server
+          - name: tlsca-config
+            mountPath: /etc/hyperledger/tlsca_config
       containers:
         - name: ca
 {{- if .Values.global.multiarch }}
@@ -145,7 +149,7 @@ spec:
           - name: FABRIC_CA_HOME
             value: /etc/hyperledger/fabric-ca-server
           - name: SERVICE_HOST
-            value: {{ include "sch.names.fullName" (list .) }}
+            value: {{ .Release.Name }}-ca
           - name: HOST_IP
             valueFrom:
               fieldRef:
@@ -176,12 +180,7 @@ spec:
           command:
           - sh
           - -c
-          - |
-            cd /etc/hyperledger/fabric-ca-server &&            
-            mkdir -p ca &&
-            mkdir -p ca/tls &&
-            cp /etc/hyperledger/tlsca_config/tlsca-config.yaml ca/tls/fabric-ca-config.yaml &&
-            fabric-ca-server start --cafiles /etc/hyperledger/fabric-ca-server/ca/tls/fabric-ca-config.yaml --csr.hosts $(SERVICE_HOST) --csr.hosts localhost --csr.hosts $PROXY_IP --csr.hosts $HOST_IP
+          - fabric-ca-server start --cafiles /etc/hyperledger/fabric-ca-server/ca/tls/fabric-ca-config.yaml --csr.hosts $(SERVICE_HOST) --csr.hosts localhost --csr.hosts $PROXY_IP --csr.hosts $HOST_IP
           {{- end }}
           ports:
             - containerPort: 7054
@@ -202,6 +201,7 @@ spec:
           volumeMounts:
           - name: {{ .Release.Name }}-fabric-ca
             mountPath: /etc/hyperledger/fabric-ca-server
+            subPath: fabric-ca-server
           - name: tlsca-config
             mountPath: /etc/hyperledger/tlsca_config
       volumes:
@@ -218,4 +218,4 @@ spec:
       {{- end }} 
       - name: tlsca-config
         configMap:
-          name: {{ .Release.Name }}-tlsca-config   
+          name: {{ .Release.Name }}-tlsca-config

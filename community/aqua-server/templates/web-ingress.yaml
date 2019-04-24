@@ -1,0 +1,33 @@
+{{- if .Values.web.ingress.enabled -}}
+{{- $fullname := .Release.Name -}}
+{{- $servicePort := .Values.web.service.externalPort -}}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-console-ingress
+  labels:
+    app: {{ .Release.Name }}-console-ingress
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{- if .Values.web.ingress.annotations }}
+  annotations:
+{{ toYaml .Values.web.ingress.annotations | indent 4 }}
+{{- end }}
+spec:
+  rules:
+    {{- range $host := (required "A valid .Values.web.ingress.hosts entry required!" .Values.web.ingress.hosts) }}
+      - host: {{ $host }}
+        http:
+          paths:
+            - path: /
+              backend:
+                serviceName: {{ .Release.Name }}-console-svc
+                servicePort: {{ $servicePort }}
+    {{- end -}}
+  {{- if .Values.web.ingress.tls }}
+  tls:
+{{ toYaml .Values.web.ingress.tls | indent 4 }}
+  {{- end -}}
+{{- end -}}

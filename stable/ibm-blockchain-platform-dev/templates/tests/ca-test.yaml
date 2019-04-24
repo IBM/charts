@@ -1,5 +1,4 @@
-# © Copyright IBM Corporation 2018
-#
+# © Copyright IBM Corporation 2018#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,7 +10,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 apiVersion: v1
 kind: Pod
 metadata:
@@ -23,10 +21,14 @@ metadata:
     heritage: "{{ .Release.Service }}"
   annotations:
     "helm.sh/hook": test-success
-    productName: {{ .Values.global.productName }}
-    productID: {{ .Values.global.productID }}
-    productVersion: {{ .Chart.Version }}
 spec:
+  hostIPC: false
+  hostNetwork: false
+  hostPID: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 2000
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -41,12 +43,22 @@ spec:
   containers:
     - name: {{ .Release.Name }}-ca-test
       {{- if .Values.global.multiarch }}
-      image: {{ .Values.peer.app.arch }}/busybox 
+      image: "{{ .Values.ca.image.initimage }}:{{ .Values.ca.image.inittag }}"
       {{- else }}
-      image: {{ .Values.peer.app.arch }}/busybox 
+      image: "{{ .Values.ca.image.initimage }}-{{ .Values.ca.app.arch }}:{{ .Values.ca.image.inittag }}"
       {{- end }}
       {{- if .Values.ca.enabled }}
       command: ["sh", "-c", "nc -vz {{ .Release.Name }}-ca 7054"]
       {{- else }}
       command: ["sh", "-c", "exit 0"]
       {{- end }}
+      securityContext:	
+        runAsNonRoot: true
+        runAsUser: 1000
+        privileged: false
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop:
+          - ALL
+

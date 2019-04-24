@@ -1,0 +1,68 @@
+{{- if .Values.rbac.enabled -}}
+{{- if not .Values.rbac.roleRef }}
+---
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+    name: {{ .Release.Name }}-psp
+    labels:
+    app: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  privileged: {{ .Values.privileged }}
+  hostPID: true
+  allowedCapabilities:
+  - '*'
+  fsGroup:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - '*'
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-cluster-role
+  labels:
+    app: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+rules:
+- apiGroups: ["extensions"]
+  resourceNames: [{{ .Release.Name }}-psp]
+  resources: ["podsecuritypolicies"]
+  verbs: ["use"]
+{{- end }}
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-role-binding
+  namespace: aqua
+  labels:
+    app: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-sa
+    namespace: aqua
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  {{- if .Values.rbac.roleRef }}
+  name: {{ .Values.rbac.roleRef }}
+  {{- else }}
+  name: {{ .Release.Name }}-cluster-role
+  {{- end }}
+{{- end }}

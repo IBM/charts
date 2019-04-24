@@ -194,14 +194,16 @@ The following tables lists the configurable parameters of the IBM WebSphere Appl
 | `replicaCount`             | The number of desired replica pods that run simultaneously                   | `1`                                                        |
 | `image.repository`         | Docker image repository                         | `ibmcom/websphere-traditional`                             |
 | `image.pullPolicy`         | Docker image pull policy. Defaults to `Always` when the latest tag is specified.                             | `IfNotPresent`                                             |
-| `image.tag`                | Docker image tag                                | `9.0.0.10`                                          |
+| `image.tag`                | Docker image tag                                | `9.0.0.11`                                          |
 | `image.extraEnvs`          | Additional Environment Variables                | `[]`                                                       |
 | `image.extraVolumeMounts`  | Extra Volume Mounts                             | `[]`                                                       |
+| `image.security`           | Configure the security attributes of the image  | `{}`
 | `deployment.annotations`   | Custom deployment annotations                   | `{}`                                                       |
 | `deployment.labels`        | Custom deployment labels                        | `{}`                                                       |
 | `pod.annotations`          | Custom pod annotations                          | `{}`                                                       |
 | `pod.labels`               | Custom pod labels                               | `{}`                                                       |
 | `pod.extraVolumes`         | Additional Volumes for server pods.             | `{}`                                                       |
+| `pod.security`             | Configure the security attributes of the pod    | `{}`
 | `service.type`             | Kubernetes service type exposing ports| `NodePort`                                                 |
 | `service.name`             | Kubernetes service name for HTTP                                | `https-was`                                                |
 | `service.port`             | The abstracted service port for HTTP, which other pods use to access this service                     | `9443`                                                    |
@@ -213,6 +215,8 @@ The following tables lists the configurable parameters of the IBM WebSphere Appl
 | `ingress.path`             | Specifies path for the Ingress HTTP rule        | `/`                                                        |
 | `ingress.annotations`      | Kubernetes ingress custom annotations |        `{}`                                                 |
 | `ingress.labels`           | Kubernetes ingress custom labels      |        `{}`                                                      |
+| `ingress.hosts`             | Specifies an array of fully qualified domain names of Ingress, as defined by RFC 3986. | `[]` |
+| `ingress.secretName`       | Specifies the name of the Kubernetes secret that contains [Ingress'](https://kubernetes.io/docs/concepts/services-networking/ingress/#tls) TLS certificate and key.   | `""` |
 | `configProperties.configMapName`      | Name of the [ConfigMap](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#create-a-configmap) that contains one or more [configuration properties](https://www.ibm.com/support/knowledgecenter/SSEQTP_9.0.0/com.ibm.websphere.base.doc/ae/txml_config_prop.html) files to configure your WebSphere Application Server traditional environment | `""`         |
 | `readinessProbe.initialDelaySeconds`| Number of seconds after the container has started before readiness probe is initiated | `30`        |
 | `readinessProbe.periodSeconds`| How often (in seconds) to perform the readiness probe. Minimum value is 1  | `5`                                                        |
@@ -236,7 +240,7 @@ The following tables lists the configurable parameters of the IBM WebSphere Appl
 | `arch.s390x`               | Architecture preference for s390x worker node   | `0 - Do not use`                                           |
 | `persistence.name`         | A prefix for the name of the persistence volume claim (PVC). A PVC will not be created unless `logs.persistLogs` is set to `true` | `pvc` |
 | `persistence.size`         | Size of the volume to hold all the persisted data | `1Gi`                                                    |
-| `persistence.fsGroupGid`             | The group ID added to the containers with persistent storage to allow access. Volumes that support ownership management must be owned and writable by this group ID | `1000`                        |
+| `persistence.fsGroupGid`             | The group ID added to the containers with persistent storage to allow access. Volumes that support ownership management must be owned and writable by this group ID | `nil`                        |
 | `persistence.useDynamicProvisioning` | If `true`, the persistent volume claim will use the `storageClassName` to bind the volume. Otherwise, the selector will be used for the binding process | `true` |
 | `persistence.storageClassName`       | Specifies a StorageClass pre-created by the Kubernetes sysadmin. When set to `""`, then the PVC is bound to the default StorageClass setup by kube Administrator | `""` |
 | `persistence.selector.label`         | When matching a PV, the label is used to find a match on the key. See Kubernetes - [Labels and Selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) | `""` |
