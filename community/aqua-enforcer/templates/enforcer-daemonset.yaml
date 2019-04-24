@@ -1,0 +1,134 @@
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: {{ .Release.Name }}-ds
+  labels:
+    app: {{ .Release.Name }}-ds
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    metadata:
+      annotations:
+      {{- if and (.Values.tolerations) (semverCompare "<1.6-0" .Capabilities.KubeVersion.GitVersion) }}
+        scheduler.alpha.kubernetes.io/tolerations: '{{ toJson .Values.tolerations }}'
+      {{- end }}
+      labels:
+        app: {{ .Release.Name }}-ds
+      name: {{ .Release.Name }}-ds
+    spec:
+      serviceAccount: {{ .Release.Name }}-sa
+      hostPID: true
+      containers:
+      - name: enforcer
+        image: "{{ .Values.imageCredentials.repositoryUriPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+        {{- if .Values.privileged }}
+        securityContext:
+          privileged: true
+        {{- else }}
+        securityContext:
+          privileged: false
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - NET_ADMIN
+              - NET_RAW
+              - SYS_PTRACE
+              - KILL
+              - MKNOD
+              - SETGID
+              - SETUID
+              - SYS_MODULE
+              - AUDIT_CONTROL
+              - SYSLOG
+              - SYS_CHROOT
+        {{- end }}
+        env:
+        {{- if .Values.enforcerTokenSecretName }}
+        - name: AQUA_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.enforcerTokenSecretName }}
+              key: {{ .Values.enforcerTokenSecretKey }}
+        {{- else }}
+        - name: AQUA_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-token
+              key: token
+        {{- end }}
+        - name: AQUA_SERVER
+          value: {{ .Values.gate.host | default "csp-gateway-svc" }}:{{ .Values.gate.port | default "3622" }}
+        - name: AQUA_INSTALL_PATH
+          value: /var/lib/aquasec
+        - name: AQUA_LOGICAL_NAME
+          value: {{ .Release.Name }}-helm
+        - name: AQUA_NETWORK_CONTROL
+          value: "1"
+        - name: RESTART_CONTAINERS
+          value: "no"
+        - name: AQUA_HOST_RUN_PATH
+          value: {{ .Values.hostRunPath }}
+        - name: AQUA_RUNC_INTERCEPTION
+          value: "{{ .Values.runcInterception }}"
+        - name: SENDING_HOST_IMAGES_DISABLED
+          value: "{{ .Values.sendingHostImagesDisables }}"
+        volumeMounts:
+        - mountPath: /var/run
+          name: var-run
+        - mountPath: /dev
+          name: dev
+        - mountPath: /host/sys
+          name: sys
+          readOnly: true
+        - mountPath: /host/proc
+          name: proc
+          readOnly: true
+        - mountPath: /host/etc
+          name: etc
+          readOnly: true
+        - mountPath: /host/opt/aquasec
+          name: aquasec
+          readOnly: true
+        - mountPath: /opt/aquasec/tmp
+          name: aquasec-tmp
+        - mountPath: /opt/aquasec/audit
+          name: aquasec-audit
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+      volumes:
+      - name: var-run
+        hostPath:
+          path: {{ .Values.hostRunPath }}
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: etc
+        hostPath:
+          path: /etc
+      - name: aquasec
+        hostPath:
+          path: /var/lib/aquasec
+      - name: aquasec-tmp
+        hostPath:
+          path: /var/lib/aquasec/tmp
+      - name: aquasec-audit
+        hostPath:
+          path: /var/lib/aquasec/audit
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end }}
+      {{- if and (.Values.tolerations) (semverCompare "^1.6-0" .Capabilities.KubeVersion.GitVersion) }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- end }}
