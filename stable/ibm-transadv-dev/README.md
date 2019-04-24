@@ -110,7 +110,7 @@ Click the hamburger menu on the left upper corner in the ICP console > Workloads
 
 ## PodSecurityPolicy Requirements 
 
-NOTE: ICP 3.1.1+ provides a pre-defined set of PodSecurityPolicies:
+NOTE: ICP 3.1.1+ provides a pre-defined set of PodSecurityPolicies ( [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp) ):
 * ibm-restricted-psp (default PSP, most-restrictive)
 * ibm-anyuid-psp
 * ibm-anyuid-hostpath-psp
@@ -145,7 +145,7 @@ In case of a custom PSP being required:
 
 > **Note**: If you are deploying to an IBM Cloud Private environment that does not support these security settings by default. Follow these [instructions](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/app_center/nd_helm.html) to enable your deployment.
 
-Here is an example setup for a non-default namespace installation:
+Custom PodSecurityPolicy definition:
 ```bash
 kubectl create namespace ta
 
@@ -280,7 +280,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | authentication.oidc.clientSecret                    | a OIDC registry will be created with this secret             | 94b6cbce793d0606c0df9e8d656a159f0c06631b                |
 | security.serviceAccountName                         | name of the service account to use                           | default                                                 |
 | couchdb.image.repository                            | couchdb image repository                                     | ibmcom/transformation-advisor-db                        |
-| couchdb.image.tag                                   | couchdb image tag                                            | 1.9.4                                                   |
+| couchdb.image.tag                                   | couchdb image tag                                            | 1.9.5                                                   |
 | couchdb.image.pullPolicy                            | couchdb image pull policy                                    | IfNotPresent                                            |
 | couchdb.resources.requests.memory                   | requests memory                                              | 2Gi                                                     |
 | couchdb.resources.requests.cpu                      | requests cpu                                                 | 1000m                                                   |
@@ -294,7 +294,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | couchdb.persistence.existingClaim                   | existing pv claim                                            | ""                                                      |
 | couchdb.persistence.storageClassName                | couchdb storage class name                                   | ""                                                      |
 | transadv.image.repository                           | transadv server image                                        | ibmcom/transformation-advisor-server                    |
-| transadv.image.tag                                  | transadv server image tag                                    | 1.9.4                                                   |
+| transadv.image.tag                                  | transadv server image tag                                    | 1.9.5                                                   |
 | transadv.image.pullPolicy                           | image pull policy                                            | IfNotPresent                                            |
 | transadv.resources.requests.memory                  | requests memory                                              | 2Gi                                                     |
 | transadv.resources.requests.cpu                     | requests cpu                                                 | 1000m                                                   |
@@ -302,7 +302,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadv.resources.limits.cpu                       | limits cpu                                                   | 16000m                                                  |
 | transadv.service.nodePort                           | transadv sevice node port                                    | 30111                                                   |
 | transadvui.image.repository                         | transadv ui image                                            | ibmcom/transformation-advisor-ui                        |
-| transadvui.image.tag                                | transadv ui image tag                                        | 1.9.4                                                   |
+| transadvui.image.tag                                | transadv ui image tag                                        | 1.9.5                                                   |
 | transadvui.image.pullPolicy                         | image pull policy                                            | IfNotPresent                                            |
 | transadvui.resources.requests.memory                | requests memory                                              | 2Gi                                                     |
 | transadvui.resources.requests.cpu                   | requests cpu                                                 | 1000m                                                   |

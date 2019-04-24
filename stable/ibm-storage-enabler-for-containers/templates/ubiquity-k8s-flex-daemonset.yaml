@@ -1,0 +1,195 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ubiquity-k8s-flex
+  labels:
+    product: ibm-storage-enabler-for-containers
+{{ include "ibm_storage_enabler_for_containers.helmLabels" . | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ubiquity-k8s-flex
+      product: ibm-storage-enabler-for-containers
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ubiquity-k8s-flex
+        product: ibm-storage-enabler-for-containers
+{{ include "ibm_storage_enabler_for_containers.podLabels" . | indent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/ubiquity-configmap.yaml") . | sha256sum }}
+{{ include "ibm_storage_enabler_for_containers.productAnnotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+                      - ppc64le
+                      - s390x
+      tolerations:   # Create flex Pods also on master nodes (even if there are NoScheduled nodes)
+      {{- if .Values.ubiquityK8sFlex.tolerations }}
+{{ toYaml .Values.ubiquityK8sFlex.tolerations | indent 6}}
+      {{- else }}
+      # Some k8s versions use dedicated key for toleration of the master and some use node-role.kubernetes.io/master key.
+      - key: dedicated
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      {{- end }}
+
+      serviceAccountName: ubiquity-k8s-flex
+      initContainers:
+      - name: ubiquity-k8s-flex-init-container
+{{ include "ibm_storage_enabler_for_containers.securityContext" . | indent 8 }}
+        image: "{{ .Values.ubiquityK8sFlex.image.repository }}:{{ .Values.ubiquityK8sFlex.image.tag }}"
+        imagePullPolicy: {{ .Values.ubiquityK8sFlex.image.pullPolicy }}
+        {{- with .Values.ubiquityK8sFlexInitContainer.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+        {{- end }}
+
+        env:
+          - name: UBIQUITY_PORT     # Ubiquity port, should point to the ubiquity service port
+            value: "9999"
+
+          - name: UBIQUITY_BACKEND         # "IBM Storage Enabler for Containers" supports "scbe" (IBM Spectrum Connect) as its backend.
+            value: "scbe"
+
+          - name: FLEX_LOG_DIR    # /var/log default
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: FLEX-LOG-DIR
+
+          - name: FLEX_LOG_ROTATE_MAXSIZE # 50MB default
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: FLEX-LOG-ROTATE-MAXSIZE
+
+          - name: LOG_LEVEL       # debug / info / error
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: LOG-LEVEL
+
+{{- if eq .Values.backend "spectrumConnect" }}
+          - name: UBIQUITY_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.scbeCredentials" . }}
+                key: username
+
+          - name: UBIQUITY_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm_storage_enabler_for_containers.scbeCredentials" . }}
+                key: password
+
+{{- end }}
+          - name: UBIQUITY_PLUGIN_SSL_MODE   # require / verify-full
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: SSL-MODE
+
+        command:
+          - ./setup_flex.sh
+        args:
+          - --generate_flex_conf
+
+        volumeMounts:
+        - name: host-k8splugindir
+          mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+      containers:
+      - name: ubiquity-k8s-flex-sidecar
+{{ include "ibm_storage_enabler_for_containers.securityContext" . | indent 8 }}
+        image: "{{ .Values.ubiquityK8sFlexSidecar.image.repository }}:{{ .Values.ubiquityK8sFlexSidecar.image.tag }}"
+        imagePullPolicy: {{ .Values.ubiquityK8sFlexSidecar.image.pullPolicy }}
+        {{- with .Values.ubiquityK8sFlexSidecar.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+        {{- end }}
+        readinessProbe:
+          exec:
+            command: ["./health_check.sh"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command: ["./health_check.sh"]
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        env:
+          - name: NAMESPACE
+            value: {{ .Release.Namespace }}
+
+        command: ["./flex-sidecar"]
+        volumeMounts:
+        - name: host-k8splugindir
+          mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+
+      - name: ubiquity-k8s-flex
+{{ include "ibm_storage_enabler_for_containers.securityContext" . | indent 8 }}
+        image: "{{ .Values.ubiquityK8sFlex.image.repository }}:{{ .Values.ubiquityK8sFlex.image.tag }}"
+        imagePullPolicy: {{ .Values.ubiquityK8sFlex.image.pullPolicy }}
+        {{- with .Values.ubiquityK8sFlex.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+        {{- end }}
+        readinessProbe:
+          exec:
+            command: ["./health_check.sh"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command: ["./health_check.sh"]
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        env:
+          - name: FLEX_LOG_DIR    # /var/log default
+            valueFrom:
+              configMapKeyRef:
+                name: ubiquity-configmap
+                key: FLEX-LOG-DIR
+
+        command: ["./setup_flex.sh"]
+        volumeMounts:
+        - name: host-k8splugindir
+          mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+
+        - name: flex-log-dir
+          mountPath: {{ .Values.ubiquityK8sFlex.flexLogDir | quote  }}
+{{- if (eq .Values.globalConfig.sslMode "verify-full") }}
+        - name: ubiquity-public-certificates
+          mountPath: /var/lib/ubiquity/ssl/public
+          readOnly: true
+{{- end }}
+      volumes:
+      - name: host-k8splugindir
+        hostPath:
+          path: /usr/libexec/kubernetes/kubelet-plugins/volume/exec  # This directory must exist on the host
+
+      - name: flex-log-dir
+        hostPath:
+          path: {{ .Values.ubiquityK8sFlex.flexLogDir | quote  }}  # This directory must exist on the host
+{{- if (eq .Values.globalConfig.sslMode "verify-full") }}
+      - name: ubiquity-public-certificates
+        configMap:
+          name: ubiquity-public-certificates
+          items:
+            - key: ubiquity-trusted-ca.crt
+              path: ubiquity-trusted-ca.crt
+{{- end }}

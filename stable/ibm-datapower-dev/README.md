@@ -20,6 +20,64 @@ Only works with DataPower version 2018.4.1.3 and above.
 ## Prerequisites
 helm and kubectl must be installed and configured on your system.
 
+### PodSecurityPolicy Requirements
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
+
+* Predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp)
+
+The predefined PodSecurityPolicy name: ibm-anyuid-psp has been verified for this chart, if your target namespace is bound to this PodSecurityPolicy you can proceed to install the chart.
+
+This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the ICP user interface or the supplied instructions/scripts in the pak_extension pre-install directory.
+
+- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
+
+  - Custom PodSecurityPolicy definition:
+    ```
+    apiVersion: extensions/v1beta1
+    kind: PodSecurityPolicy
+    metadata:
+      annotations:
+        kubernetes.io/description: "This policy allows pods to run with 
+          any UID and GID, but preventing access to the host."
+      name: ibm-datapower-psp
+    spec:
+      allowPrivilegeEscalation: true
+      fsGroup:
+        rule: RunAsAny
+      requiredDropCapabilities: 
+      - MKNOD
+      allowedCapabilities:
+      - SETPCAP
+      - AUDIT_WRITE
+      - CHOWN
+      - NET_RAW
+      - DAC_OVERRIDE
+      - FOWNER
+      - FSETID
+      - KILL
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
+      - SYS_CHROOT
+      - SETFCAP 
+      runAsUser:
+        rule: RunAsAny
+      seLinux:
+        rule: RunAsAny
+      supplementalGroups:
+        rule: RunAsAny
+      volumes:
+      - configMap
+      - emptyDir
+      - projected
+      - secret
+      - downwardAPI
+      - persistentVolumeClaim
+      forbiddenSysctls: 
+      - '*' 
+    ```
+
 [//]: # (Resources Required Start)
 ## Resources Required
 Minimum resources per pod: 2 CPU and 4 GB RAM
@@ -36,6 +94,10 @@ Where `<myvalues.yaml>` is a yaml file that contains all values you want to over
 
 To deploy with HTTPS you must define `crypto.frontsideSecret`, which is the name of the Kubernetes secret containing data key.pem and cert.pem. These files are in the standard key and cert format. Create this secret prior to deploying. Create secret using `kubectl create secret generic <mycryptosecret> --from-file=key.pem --from-file=cert.pem`. Without `crypto.frontsideSecret` defined, the gateway will use HTTP.
 
+### Verifying the Chart
+See NOTES.txt associated with this chart for verification instructions
+
+### Uninstalling the Chart
 To uninstall/delete the `my-release` deployment:
 ```bash
 $ helm delete my-release --tls
@@ -57,7 +119,7 @@ The helm chart has the following Values that can be overriden using the install 
 | `datapower.image.repository`          | The image to use for this deployment          | ibmcom/datapower    |
 | `datapower.image.tag`                 | The image tag to use for this deployment      | latest              |
 | `datapower.image.pullPolicy`          | Determines when the image should be pulled    | IfNotPresent        |
-| `datapower.image.pullSecrets`         | Range of kubernetes pull secrets              | N/A                 |
+| `datapower.image.pullSecret`          | Secret used for pulling images                | N/A                 |
 | `datapower.env.workerThreads`         | Number of DataPower worker threads            | 4                   |
 | `datapower.resources.limits.cpu`      | Container CPU limit                           | 8                   |
 | `datapower.resources.limits.memory`   | Container memory limit                        | 64Gi                |

@@ -11,15 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.orderer.compName }}
+{{- $labels := include "sch.metadata.labels.standard" (list . $compName) }}
 
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: "{{.Release.Name}}-orderer-delsecret"
   labels:
+{{ $labels | indent 4 }}
     app.kubernetes.io/managed-by: {{.Release.Service | quote }}
     app.kubernetes.io/instance: {{.Release.Name | quote }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
   annotations:
     # This is what defines this resource as a hook. Without this line, the
     # job is considered part of the release.
@@ -30,10 +33,17 @@ spec:
     metadata:
       name: "{{.Release.Name}}"
       labels:
+{{ $labels | indent 8 }}
         app.kubernetes.io/managed-by: {{.Release.Service | quote }}
         app.kubernetes.io/instance: {{.Release.Name | quote }}
-        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
     spec:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -45,10 +55,27 @@ spec:
                 - {{ .Values.app.arch }}
       serviceAccountName: {{ .Values.global.serviceAccountName }}
       restartPolicy: Never
+      {{- if .Values.image.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.imagePullSecret }}
+      {{- end }}
       containers:
       - name: pre-delete
+        {{- if .Values.global.multiarch }}
+        image: "{{ .Values.image.initimage }}:{{ .Values.image.inittag }}"
+        {{- else }}
         image: "{{ .Values.image.initimage }}-{{ .Values.app.arch }}:{{ .Values.image.inittag }}"
+        {{- end }}
         command: ["sh","-c", "kubectl delete secret ${MSP_SECRET_NAME} --ignore-not-found"]
         env:
         - name: MSP_SECRET_NAME
           value: {{ .Release.Name }}-orderer-mspsecret
+        securityContext:	
+          privileged: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:	
+            drop:
+            - ALL
