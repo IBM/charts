@@ -1,25 +1,13 @@
-# What’s new in Chart Version 1.9.4
-### Analysis Enhancements
- - Analysis now displays relationships between Applications and Shared Libraries/MQ QueueManagers even if these targets have not been scanned
-
+# What’s new in Chart Version 1.9.5
 ### Data Collector Enhancements
- - Support for collection of Apache Tomcat installations and applications
- - Support for collection on AIX systems without the need for bash to be installed
- - Enhanced support for WAS ND configurations:
-   - Notification when shared libraries are referenced by applications but do not exist on the machine being scanned
-   - Notification when a managed node is being scanned to ensure that it is the most appropriate location for the scan
- - Prompting for username/password if these are not provided (no need to specify them on the command line)
- - Support for the --exclude-files parameter to exclude irrelevant large files that are impacting performance
- - Support for the --verbose parameter to help trouble shoot any scanning issues
- - Defaulting to the Java that traditional WebSphere uses when it is appropriate to do so
- - Data Collector now uses the binaryScanner v19.0.0.2
+ - Improved robustness when shared library classpath references are missing
+ - Prevention of command arguments being written to the log
 
 ### Migration Enhancements
- - Liberty Helm charts are now configured automatically to use Ingress in ICP when the original application has only a single context route
- - Instructions are provided for migrating to traditional WebSphere base running on containers
+ - Prevent the inclusion of conflicting servlet features in the server.xml feature list
 
-### Configuration Enhancements
- - Transformation Advisor now supports the definition of a public facing proxy with private masters and nodes in ICP
+### CloudPak Enhancements
+ - Revalidation of CloudPak status for Transformation Advisor
 
 # Fixes
 
@@ -33,6 +21,7 @@
 # Version History
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.9.5 | Apr 24, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.5 ibmcom/transformation-advisor-server:1.9.5 ibmcom/transformation-advisor-ui:1.9.5 | None | Functional Enhancements    |
 | 1.9.4 | Mar 29, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.4 ibmcom/transformation-advisor-server:1.9.4 ibmcom/transformation-advisor-ui:1.9.4 | None | Apache Tomcat Analysis     |
 | 1.9.3 | Feb 11, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.3 ibmcom/transformation-advisor-server:1.9.3 ibmcom/transformation-advisor-ui:1.9.3 | None | Data Collector Patch       |
 | 1.9.2 | Feb 05, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.2 ibmcom/transformation-advisor-server:1.9.2 ibmcom/transformation-advisor-ui:1.9.2 | None | Add Shared Libs, MQManagers|
