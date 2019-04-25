@@ -1,0 +1,29 @@
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+{{- if .Values.persistence.annotations }}
+  annotations:
+{{ toYaml .Values.persistence.annotations | indent 4 }}
+{{- end }}
+metadata:
+  name: {{ template "jenkins.fullname" . }}
+  labels:
+    "app.kubernetes.io/name": '{{ template "jenkins.name" .}}'
+    "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    "app.kubernetes.io/managed-by": "{{ .Release.Service }}"
+    "app.kubernetes.io/instance": "{{ .Release.Name }}"
+    "app.kubernetes.io/component": "{{ .Values.master.componentName }}"
+    release: "{{ .Release.Name }}"
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | quote }}
+{{- if .Values.persistence.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.persistence.storageClass | quote }}
+{{- else }}
+  storageClassName: {{ default "" .Values.persistence.storageClass | quote }}
+{{- end }}
+{{- end }}
