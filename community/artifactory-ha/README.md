@@ -5,6 +5,12 @@
 * Kubernetes 1.8+
 * Artifactory HA license
 
+## PodSecurityPolicy Requirements
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
+
+Predefined PodSecurityPolicy
+Predefined PodSecurityPolicy name: ibm-anyuid-psp
+
 ## Chart Details
 This chart will do the following:
 
