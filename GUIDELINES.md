@@ -70,6 +70,7 @@ The following table contains guidance from IBM on how to build workloads that pr
 
 | **Guideline** | **Description** |
 | --- | --- |
+| [Shared Configurable Helpers (SCH)](#shared-configurable-helpers-%28sch%29) | Make use of these helper templates to more easily incorporate IBM's required and recommended chart development practices. |
 | [Chart icon](#chart-icon) | Providing a URL to an icon is preferred to embedding a local icon in the chart, to avoid chart size limits when using nested charts. |
 | [Recommended Chart keywords](#recommended-chart-keywords) | In addition to the required keywords described in the previous section, optional keywords can be used to filter your chart into a set of categories recognized by the UI. |
 | [Chart version / image version](#chart-version-image-version) | Workloads should maintain image versions/tags separately from chart versions. |
@@ -178,6 +179,10 @@ For a list of the available trial and Community Edition-based offerings, refer t
 # Recommended chart features
 
 This section contains a list of suggestions that will provide your end users with added value on IBM Cloud Private, by taking advantage of the features and services provided by the platform. They are not required for contributions to the IBM Community charts repository, but implementing them is strongly recommended, as they will provide an enhanced experience similar to that provided in charts developed by IBM.
+
+## Shared Configurable Helpers (SCH)
+
+IBM now officially provides the Helm template helpers used for its content standardization practices for inclusion in your charts. More information on how teams can take advantage of these helpers can be found on [SCH's README in the IBM/charts repo.](https://github.com/IBM/charts/tree/master/samples/ibm-sch)
 
 ## Chart icon
 

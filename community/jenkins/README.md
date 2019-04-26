@@ -20,6 +20,7 @@ To install the chart with the release name `my-release`:
 ```bash
 $ helm install --name my-release community/jenkins
 ```
+<<<<<<< HEAD
 ### Image Security Policies
 
 If the cluster has image security policies enforced, jenkins docker image should be added to it 
@@ -34,6 +35,8 @@ spec:
    - name: docker.io/jenkins/*
 ```
 For documentation on managing image policies refer [Enforcing container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html)
+=======
+>>>>>>> upstream/master
 
 ## Configuration
 
