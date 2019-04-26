@@ -1,7 +1,7 @@
 {{- if .Values.nginx.enabled -}}
 {{- $serviceName := include "artifactory-ha.fullname" . -}}
 {{- $servicePort := .Values.artifactory.externalPort -}}
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "artifactory-ha.nginx.fullname" . }}
@@ -23,9 +23,9 @@ spec:
       labels:
         app: {{ template "artifactory-ha.name" . }}
         component: {{ .Values.nginx.name }}
-        release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
         chart: {{ template "artifactory-ha.chart" . }}
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
     spec:
       serviceAccountName: {{ template "artifactory-ha.serviceAccountName" . }}
     {{- if .Values.imagePullSecrets }}
@@ -33,7 +33,7 @@ spec:
       - name: {{ .Values.imagePullSecrets }}
     {{- end }}
       initContainers:
-    {{- if .Values.nginx.persistence.enabled }}
+    {{- if and .Values.nginx.persistence.enabled (eq (int .Values.nginx.replicaCount) 1) }}
       - name: "remove-lost-found"
         image: "{{ .Values.initContainerImage }}"
         imagePullPolicy: {{ .Values.nginx.image.pullPolicy }}
@@ -68,14 +68,12 @@ spec:
               - '/bin/sh'
               - '-c'
               - >
-                {{- if .Values.nginx.customConfigMap }}
-                cp -Lrf /tmp/nginx.conf /etc/nginx/nginx.conf;
-                {{- end }}
                 {{- if .Values.nginx.customArtifactoryConfigMap }}
                 cp -Lrf /tmp/conf.d/artifactory*.conf /etc/nginx/conf.d/artifactory.conf;
                 {{- else }}
+                until [ -f /etc/nginx/conf.d/artifactory.conf ]; do sleep 1 ; done;
                 if ! grep -q 'upstream' /etc/nginx/conf.d/artifactory.conf; then
-                sed -i -e 's,proxy_pass .*,proxy_pass     http://{{ $serviceName }}:{{ $servicePort }}/artifactory/;,g' \
+                sed -i -e 's,proxy_pass.*http://artifactory.*/artifactory/\(.*\);,proxy_pass       http://{{ $serviceName }}:{{ $servicePort }}/artifactory/\1;,g' \
                     -e 's,server_name .*,server_name ~(?<repo>.+)\\.{{ $serviceName }} {{ $serviceName }};,g' \
                     /etc/nginx/conf.d/artifactory.conf;
                 fi;
@@ -87,7 +85,6 @@ spec:
                 rm -rf /var/opt/jfrog/nginx/ssl/example.*;
                 cp -fv /tmp/ssl/* /var/opt/jfrog/nginx/ssl;
                 fi;
-                until [ -f /etc/nginx/conf.d/artifactory.conf ]; do sleep 1; done;
                 sleep 5; nginx -s reload; touch /var/log/nginx/conf.done
         env:
         - name: ART_BASE_URL
@@ -125,7 +122,8 @@ spec:
         {{- end }}
         {{- if .Values.nginx.customConfigMap }}
         - name: nginx-config
-          mountPath: "/tmp/"
+          mountPath: "/etc/nginx/nginx.conf"
+          subPath: "nginx.conf"
         {{- end }}
         {{- if .Values.nginx.customArtifactoryConfigMap }}
         - name: artifactory-nginx-config
@@ -136,7 +134,7 @@ spec:
         {{- if .Values.nginx.readinessProbe.enabled }}
         readinessProbe:
           httpGet:
-            path: '/artifactory/webapp/#/login'
+            path: {{ .Values.nginx.readinessProbe.path }}
             port: 80
           initialDelaySeconds: {{ .Values.nginx.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.nginx.readinessProbe.periodSeconds }}
@@ -147,7 +145,7 @@ spec:
         {{- if .Values.nginx.livenessProbe.enabled }}
         livenessProbe:
           httpGet:
-            path: '/artifactory/webapp/#/login'
+            path: {{ .Values.nginx.livenessProbe.path }}
             port: 80
           initialDelaySeconds: {{ .Values.nginx.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.nginx.livenessProbe.periodSeconds }}
@@ -155,6 +153,22 @@ spec:
           failureThreshold: {{ .Values.nginx.livenessProbe.failureThreshold }}
           successThreshold: {{ .Values.nginx.livenessProbe.successThreshold }}
         {{- end }}
+      {{- $image := .Values.logger.image.repository }}
+      {{- $tag := .Values.logger.image.tag }}
+      {{- $mountPath := .Values.nginx.persistence.mountPath }}
+      {{- range .Values.nginx.loggers }}
+      - name: {{ . | replace "_" "-" | replace "." "-" }}
+        image: {{ $image }}
+        tag: {{ $tag }}
+        command:
+        - tail
+        args:
+        - "-F"
+        - "{{ $mountPath }}/logs/{{ . }}"
+        volumeMounts:
+        - name: nginx-volume
+          mountPath: {{ $mountPath }}
+      {{- end }}
     {{- with .Values.nginx.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
@@ -184,7 +198,7 @@ spec:
           name: {{ .Values.nginx.customArtifactoryConfigMap }}
       {{- end}}
       - name: nginx-volume
-      {{- if .Values.nginx.persistence.enabled }}
+  {{- if and .Values.nginx.persistence.enabled (eq (int .Values.nginx.replicaCount) 1) }}
         persistentVolumeClaim:
           claimName: {{ .Values.nginx.persistence.existingClaim | default (include "artifactory-ha.nginx.fullname" .) }}
       {{- else }}
