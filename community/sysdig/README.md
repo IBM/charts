@@ -10,6 +10,16 @@ This chart adds the Sysdig agent for [Sysdig Monitor](https://sysdig.com/product
 
 - Kubernetes 1.2+ with Beta APIs enabled
 
+### Installing on IBM Private Cloud
+
+If you are going to use this Helm Chart you must take account of Sysdig needs to be run as privileged pod.
+
+Supposing you are going to install the chart under the sysdig namespace, use the following commmand for granting those privileges:
+
+```bash
+kubectl -n sysdig create rolebinding ibm-privileged-clusterrole-rolebinding --clusterrole=ibm-privileged-clusterrole --group=system:serviceaccounts:sysdig
+```
+
 ## Installing the Chart
 
 To install the chart with the release name `my-release`, retrieve your Sysdig Monitor Access Key from your [Account Settings](https://app.sysdigcloud.com/#/settings/agentInstallation) and run:
