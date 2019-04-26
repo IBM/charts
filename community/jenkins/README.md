@@ -35,6 +35,21 @@ spec:
 ```
 For documentation on managing image policies refer [Enforcing container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html)
 
+# Uninstalling the Chart
+
+To uninstall/delete the `my-release` deployment:
+
+```bash
+$ helm delete my-release --purge
+```
+
+The command removes the Kubernetes objects associated with the chart and deletes the release. If secret is created by chart, you must
+manually remove the secret. To remove the secret for release `my-release`:
+
+```bash
+kubectl delete secret my-release
+```
+
 ## Configuration
 
 The following tables list the configurable parameters of the Jenkins chart and their default values.
