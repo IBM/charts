@@ -19,8 +19,8 @@ sch:
         name: "nodejs"
     metering:
       productName: "Node.js Sample Application"
-      productID: "Node.js_Sample_Application_1.2.1_perpetual_00000"
-      productVersion: "1.2.1"
+      productID: "Node.js_Sample_Application_2.0.0_perpetual_00000"
+      productVersion: "2.0.0"
     nodeAffinity:
       nodeAffinityRequiredDuringScheduling:
         operator: In
