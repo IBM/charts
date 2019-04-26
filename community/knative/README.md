@@ -53,14 +53,14 @@ Please ensure that you have reviewed the [prerequisites](#prerequisites).
 
 1. Install Knative crds
 ```bash
-$ kubectl delete -f knative/all-crds.yaml
+$ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/community/knative/all-crds.yaml
 ```
 
 2. Install the chart using helm cli:
 
 ```bash
-$ helm repo add incubator http://storage.googleapis.com/kubernetes-charts-incubator
-$ helm install incubator/knative --name <my-release> [--tls]
+$ helm repo add ibm-community-charts https://raw.githubusercontent.com/IBM/charts/master/repo/community
+$ helm install ibm-community-charts/knative --name <my-release> [--tls]
 ```
 
 The command deploys Knative on the Kubernetes cluster in the default configuration.  The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -176,7 +176,7 @@ $ helm delete <my-release> --purge [--tls]
 
 To uninstall/delete the crds:
 ```bash
-$ kubectl delete -f knative/all-crds.yaml
+$ kubectl delete -f https://raw.githubusercontent.com/IBM/charts/master/community/knative/all-crds.yaml
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
