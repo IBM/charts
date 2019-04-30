@@ -1,15 +1,12 @@
 # What’s new... 
 
-## Latest: Chart Version 1.7.0
+## Latest: Chart Version 1.9.0
 
-1. The value service.name is now used as the service metadata name and DNS A record. If unspecified, it will default to the generated `fullname`. The DNS SRV port name will be assigned as `http` or `https` respectively if ssl is enabled.
-1. Removed the value jmsService.name. The DNS SRV port name will be assigned as `jms` or `jmss` respectively if ssl is enabled.
-1. Removed the value iiopService.name. The DNS SRV port name will be assigned as `iiop` or `iiops` respectively if ssl is enabled.
-1. Defined the most restrictive PodSecurityPolicy for the chart and provided scripts to create the required Kubernetes resources.
-1. Added more configurable parameters to values.yaml, such as environment variables, ingress annotations, readiness and liveness probes.
-1. Updated minimum `kubeVersion` of chart to ensure patch for [CVE-2018-1002105](https://github.com/kubernetes/kubernetes/issues/71411) is installed.
-1. Unlinked visualizations from liberty all search, and set default time range (15 minutes) for efficiency.
-1. Sort dashboard searches by @timestamp to avoid timeout error, include searches sorted by Sequence for proper ordering.
+1. Added security extension points for pod and image
+1. Added support to specify imagePullSecret to access private registry
+1. Updated Kibana dashboards
+1. A self-signed certificate for ingress is no longer generated. User should provide their own certificate using `ingress.secretName`. Otherwise, the default certificate of the ingress controller is used.
+1. Updated minimum required version of tiller to 2.8.0
 
 ## Breaking Changes
 
@@ -21,7 +18,7 @@
 
 ## Prerequisites
 
-* Tiller v2.7.0
+* Tiller v2.8.0
 * For all others, refer to prerequisites in [README.md](https://github.com/IBM/charts/tree/master/stable/ibm-open-liberty/README.md).
 
 ## Documentation
@@ -37,6 +34,7 @@ Please refer to [README.md](https://github.com/IBM/charts/tree/master/stable/ibm
 1. If you enable ingress during deployment _and_ specify a host value, the Launch button will return error 404. 
 1. If deploying to the IBM Kubernetes Service on the IBM Public Cloud, you can only create one ingress resource per host. 
 1. The createClusterSSLConfiguration option is not supported on z/Linux. To use the useClusterSSLConfiguration option for a deployment targeting z/Linux, you must first do a deployment on a non-z/Linux node in the same cluster, specifying the createClusterSSLConfiguration option in order to establish the cluster-scope SSL configuration.
+1. When upgrading the helm chart release on ICP 3.1.x with helm cli v2.9.1, the following [issue](https://github.com/helm/helm/issues/4337) may be encountered.
 
 ## Limitations 
 
@@ -46,6 +44,8 @@ The chart does not yet provide an out of the box secure configuration for the /m
 
 | Chart | Date         | IBM Cloud Private Supported | Details                      |
 | ----- | ------------ | --------------------------- | ---------------------------- |
+| 1.9.0 | Apr 26, 2019 | >=2.1.0.2                   | Added security extension points for pod and image; Updated Kibana dashboards; Changes to ingress certificate; Added support to specify imagePullSecret     |
+| 1.8.0 | N/A          | N/A                         | Skipped this release                                         |
 | 1.7.0 | Jan 31, 2019 | >=2.1.0.2                   | Defined the most restrictive PodSecurityPolicy; Added support for more configurable parameters; Changed HTTP, JMS and IIOP service names     |
 | 1.6.0 | Sep 28, 2018 | >=2.1.0.2                   | Added support to serve `/metrics` on HTTP port; New and updated Grafana and Kibana dashboards; IBM Certified Cloud Pak manifest     |
 | 1.5.1 | AUG 22, 2018 | >=2.1.0.2                   | Added metering annotations                                  |

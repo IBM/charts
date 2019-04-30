@@ -32,7 +32,7 @@ fi
 namespace=$1
 
 # Replace the NAMESPACE tag with the namespace specified in a temporary yaml file.
-sed 's/{{ NAMESPACE }}/'$namespace'/g' ../../pre-install/namespaceAdministration/ibm-open-liberty-rb.yaml > ../../pre-install/namespaceAdministration/$namespace-ibm-websphere-liberty-rb.yaml
+sed 's/{{ NAMESPACE }}/'$namespace'/g' ../../pre-install/namespaceAdministration/ibm-open-liberty-rb.yaml > ../../pre-install/namespaceAdministration/$namespace-ibm-open-liberty-rb.yaml
 
 # Delete the role binding for all service accounts in the current namespace
 kubectl delete -f ../../pre-install/namespaceAdministration/$namespace-ibm-open-liberty-rb.yaml -n $namespace
