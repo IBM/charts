@@ -14,7 +14,7 @@ IBM Cloud Automation Manager uses open source Terraform to manage and deliver cl
 
 The Cloud Automation Manager content library comes pre-populated with sample templates to help you get started quickly. Use the sample templates as is or customize them as needed.  A Chef runtime environment can also be deployed using CAM for more advanced application configuration and deployment.
 
-With Cloud Automation Manager, you can provision cloud infrastructure and accelerate application delivery into IBM Cloud, Amazon EC2, VMware vSphere, VMware NSXv, Google Cloud, Microsoft Azure, IBM PureApplication and OpenStack cloud environments with a single user experience.
+With Cloud Automation Manager, you can provision cloud infrastructure and accelerate application delivery into IBM Cloud, Amazon EC2, VMware vSphere, VMware NSXv, VMware NSX-T, Google Cloud, Microsoft Azure, IBM PureApplication, OpenStack and Huawei cloud environments with a single user experience.
 
 You can spend more time building applications and less time building environments when cloud infrastructure is delivered with automation. You are able to get started fast with pre-built infrastructure from the Cloud Automation Manager library.
 
@@ -26,9 +26,87 @@ This chart deploys IBM Cloud Automation Manager as a number of deployments, serv
 
 IBM Cloud Automation Manager is only supported to run in IBM Cloud Private.
 
+### PodSecurityPolicy Requirements
+
+This chart must be deployed to the `services` namespace and requires a PodSecurityPolicy to be bound to that namespace.
+
+The predefined PodSecurityPolicy name: [`ibm-anyuid-hostpath-psp`](https://ibm.biz/cpkspec-psp) has been verified for this chart. This policy is bound to the `services` namespace by default in IBM Cloud Private.
+
+This chart also defines a custom PodSecurityPolicy which is used to finely control the permissions/capabilities needed to deploy this chart.
+
+- Custom PodSecurityPolicy definition:
+```
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  labels:
+    name: cam-services-ps
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  name: cam-services-psp
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  hostPID: false
+  hostIPC: false
+  hostNetwork: false
+  allowedCapabilities:
+  - SETPCAP
+  - AUDIT_WRITE
+  - CHOWN
+  - NET_RAW
+  - DAC_OVERRIDE
+  - FOWNER
+  - FSETID
+  - KILL
+  - SETGID
+  - SETUID
+  - NET_BIND_SERVICE
+  - SYS_CHROOT
+  - SETFCAP
+  requiredDropCapabilities:
+  - MKNOD
+  readOnlyRootFilesystem: false
+{{- if .Values.global.audit }}
+  allowedHostPaths:
+    - pathPrefix: {{ .Values.auditService.config.journalPath }}
+      readOnly: false
+  runAsUser:
+    rule: RunAsAny
+{{- else }}
+  runAsUser:
+    ranges:
+    - max: 1111
+      min: 999
+    rule: MustRunAs
+{{- end }}
+  fsGroup:
+    ranges:
+    - max: 1111
+      min: 999
+    rule: MustRunAs
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    ranges:
+      - max: 1111
+        min: 999
+    rule: MustRunAs
+  volumes:
+    - configMap
+    - emptyDir
+    - secret
+    - persistentVolumeClaim
+    - nfs
+    - downwardAPI
+    - projected
+  ```
+
 ## Resources Required
 
-* The minimum hardware requirements for IBM Cloud Automation Manager is a single worker node with at least 4 vCPU and 16GB of memory.
+* The minimum hardware requirements for IBM Cloud Automation Manager is a single worker node with at least 12 vCPU and 30GB of memory.
 For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_requirements.html
 
 * Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_create_pv.html
@@ -54,7 +132,3 @@ For the full list of configuration options supported by this chart see: https://
 For version-wise installation instructions and detailed documentation of IBM Cloud Automation Manager (CAM), go to its Knowledge Center at https://www.ibm.com/support/knowledgecenter/SS2L37/product_welcome_cloud_automation_manager.html.
 
 Select your version from the drop-down list and search for your topics from within the version.
-
-## PodSecurityPolicy Requirements
-
-The Pod security policy control is enabled by default on IBM Cloud Private 3.1.2 see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_prereq.html

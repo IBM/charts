@@ -31,6 +31,9 @@ Check if tag contains specific platform suffix and if not set based on kube plat
   {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
     {{- printf "-%s" "ppc64le" }}
   {{- end -}}
+  {{- if (eq "linux/s390x" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "-%s" "s390x" }}
+  {{- end -}}
 {{- else -}}
   {{- if eq .Values.arch "amd64" }}
     {{- printf "-%s" "x86_64" }}
@@ -49,5 +52,8 @@ Return arch based on kube platform
   {{- end -}}
   {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
     {{- printf "%s" "ppc64le" }}
+  {{- end -}}
+  {{- if (eq "linux/s390x" .Capabilities.KubeVersion.Platform) }}
+    {{- printf "%s" "s390x" }}
   {{- end -}}
 {{- end -}}
