@@ -1,0 +1,22 @@
+{{- if and (or (.Files.Glob "files/conf.d/*.conf") .Values.postgresqlExtendedConf) (not .Values.extendedConfConfigMap)}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "postgresql.fullname" . }}-extended-configuration
+  labels:
+    "app.kubernetes.io/name": {{ template "postgresql.name" . }}
+    "helm.sh/chart": {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    "app.kubernetes.io/managed-by": "{{ $.Release.Service }}"
+    "app.kubernetes.io/instance": "{{ $.Release.Name }}"
+    release: "{{ .Release.Name }}"
+data:
+{{- with .Files.Glob "files/conf.d/*.conf" }}
+{{ .AsConfig | indent 2 }}
+{{- end }}
+{{ with .Values.postgresqlExtendedConf }}
+  override.conf: |
+{{- range $key, $value := . }}
+    {{ $key | snakecase }}={{ $value }}
+{{- end }}
+{{- end }}
+{{- end }}
