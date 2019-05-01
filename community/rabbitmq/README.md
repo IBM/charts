@@ -133,7 +133,7 @@ rules:
 
 - Create a RoleBinding
 
-Bind the PSP to all service accounts in the namespace](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/user_management/create_namespace_pspbind.html).
+[Bind the PSP to all service accounts in the namespace](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/user_management/create_namespace_pspbind.html).
 
 ```bash
 $ kubectl create rolebinding rabbitmq-rolebinding --role=rabbitmq-role --group=system:serviceaccounts:<namespace> --namespace=<namespace>
