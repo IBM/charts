@@ -34,16 +34,6 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 
 {{/*
-Generate private key for jenkins CLI
-*/}}
-{{- define "jenkins.gen-key" -}}
-{{- if not .Values.master.adminSshKey -}}
-{{- $key := genPrivateKey "rsa" -}}
-jenkins-admin-private-key: {{ $key | b64enc | quote }}
-{{- end -}}
-{{- end -}}
-
-{{/*
 Create the name of the service account to use
 */}}
 {{- define "jenkins.serviceAccountName" -}}
@@ -62,5 +52,15 @@ Create the name of the service account to use
 {{ template "jenkins.fullname" . }}
 {{- else -}}
 {{- .Values.master.existingSecret -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Generate private key for jenkins CLI
+*/}}
+{{- define "jenkins.gen-key" -}}
+{{- if not .Values.master.adminSshKey -}}
+{{- $key := genPrivateKey "rsa" -}}
+jenkins-admin-private-key: {{ $key | b64enc | quote }}
 {{- end -}}
 {{- end -}}
