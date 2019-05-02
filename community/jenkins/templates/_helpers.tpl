@@ -54,3 +54,13 @@ Create the name of the service account to use
 {{- .Values.master.existingSecret -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Generate private key for jenkins CLI
+*/}}
+{{- define "jenkins.gen-key" -}}
+{{- if not .Values.master.adminSshKey -}}
+{{- $key := genPrivateKey "rsa" -}}
+jenkins-admin-private-key: {{ $key | b64enc | quote }}
+{{- end -}}
+{{- end -}}
