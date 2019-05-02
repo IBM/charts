@@ -20,6 +20,25 @@ To install the chart with the release name `my-release`:
 ```bash
 $ helm install --name my-release community/jenkins
 ```
+
+### Create a secret
+Secure and recommended approach to provide sensitive data like passwords is to generate a secret containing the sensitive data and providing the pre-created secret name during chart deployment.
+
+You can provide an existing secret containing `jenkins-admin-password` and if JCasC is enabled `jenkins-admin-private-key`.
+The existing secret can be provided as a value to `master.existingSecret`.
+
+If creating a secret, it is recommended to name the secret as `release-name`-`secret-name`. For example:  MyRelease-MySecret
+
+This allows the secrets to be affiliated with the release, but not directly included with the release.
+Use below command to create a secret:
+```
+kubectl create secret generic my-release-<secret_name> \
+  --from-literal='jenkins-admin-password=XXXX' \
+  --from-literal='jenkins-admin-private-key=XXXX' \
+  --from-literal='jenkins-admin-user=XXXX' \
+  --namespace namespace_name
+```
+
 ### Image Security Policies
 
 If the cluster has image security policies enforced, jenkins docker image should be added to it
