@@ -1,0 +1,33 @@
+{{- if .Values.networkPolicy.enabled }}
+kind: NetworkPolicy
+apiVersion: {{ template "postgresql.networkPolicy.apiVersion" . }}
+metadata:
+  name: {{ template "postgresql.fullname" . }}
+  labels:
+    "app.kubernetes.io/name": {{ template "postgresql.name" . }}
+    "helm.sh/chart": {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    "app.kubernetes.io/managed-by": "{{ $.Release.Service }}"
+    "app.kubernetes.io/instance": "{{ $.Release.Name }}"
+    release: "{{ .Release.Name }}"
+spec:
+  podSelector:
+    matchLabels:
+      "app.kubernetes.io/name": {{ template "postgresql.name" . }}
+      "helm.sh/chart": {{ $.Chart.Name }}-{{ $.Chart.Version }}
+      "app.kubernetes.io/managed-by": "{{ $.Release.Service }}"
+      "app.kubernetes.io/instance": "{{ $.Release.Name }}"
+      release: "{{ .Release.Name }}"
+  ingress:
+    # Allow inbound connections
+    - ports:
+      - port: 5432
+    {{- if not .Values.networkPolicy.allowExternal }}
+      from:
+      - podSelector:
+          matchLabels:
+            {{ template "postgresql.fullname" . }}-client: "true"
+    {{- end }}
+    # Allow prometheus scrapes
+    - ports:
+      - port: 9187
+{{- end }}
