@@ -54,21 +54,6 @@ spec:
 ```
 For documentation on managing image policies refer [Enforcing container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html)
 
-### Create a secret
-Secure and recommended approach to provide sensitive data like passwords is to generate a secret containing the sensitive data and providing the pre-created secret name during chart deployment.
-You can provide an existing secret containing `jenkins-admin-password`, `jenkins-admin-user` and if JCasC is enabled `jenkins-admin-private-key`.
-The existing secret name can be provided as a value for `master.existingSecret`.
-If creating a secret, it is recommended to name the secret as `release-name`-`secret-name`. For example:  MyRelease-MySecret
-This allows the secrets to be affiliated with the release, but not directly included with the release.
-Use below command to create a secret:
-```
-kubectl create secret generic my-release-<secret_name> \
-  --from-literal='jenkins-admin-password=XXXX' \
-  --from-literal='jenkins-admin-user=XXXX' \
-  --from-literal='jenkins-admin-private-key=XXXX' \
-  --namespace namespace_name
-```
-
 ## Uninstalling the Chart
 
 To uninstall/delete the `my-release` deployment:
