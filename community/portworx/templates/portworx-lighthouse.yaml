@@ -4,28 +4,55 @@ kind: ServiceAccount
 metadata:
   name: px-lh-account
   namespace: kube-system
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 ---
-kind: Role
+kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-   name: px-lh-role
-   namespace: kube-system
+  name: px-lh-role
+  namespace: kube-system
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 rules:
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get", "create", "update"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update"]
+  - apiGroups: [""]
+    resources: ["nodes", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["stork.libopenstorage.org"]
+    resources: ["clusterpairs","migrations","groupvolumesnapshots"]
+    verbs: ["get", "list", "create", "update", "delete"] 
 ---
-kind: RoleBinding
+kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: px-lh-role-binding
   namespace: kube-system
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 subjects:
 - kind: ServiceAccount
   name: px-lh-account
   namespace: kube-system
 roleRef:
-  kind: Role
+  kind: ClusterRole
   name: px-lh-role
   apiGroup: rbac.authorization.k8s.io
 ---
@@ -36,15 +63,18 @@ metadata:
   namespace: kube-system
   labels:
     tier: px-web-console
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 spec:
   type: NodePort
   ports:
     - name: http
       port: 80
-      nodePort: 32678
     - name: https
       port: 443
-      nodePort: 32679
   selector:
     tier: px-web-console
 ---
@@ -55,6 +85,11 @@ metadata:
   namespace: kube-system
   labels:
     tier: px-web-console
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 spec:
   strategy:
     rollingUpdate:
@@ -69,10 +104,15 @@ spec:
     metadata:
       labels:
         tier: px-web-console
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
     spec:
       initContainers:
       - name: config-init
-        image: "{{ template "px.getk8sImages" . }}/lh-config-sync:0.2"
+        image: "{{ template "px.getLighthouseImages" . }}/lh-config-sync:{{.Values.lighthouseSyncVersion}}"
         imagePullPolicy: Always
         args:
         - "init"
@@ -81,8 +121,9 @@ spec:
           mountPath: /config/lh
       containers:
       - name: px-lighthouse
-        image: "{{ template "px.getk8sImages" . }}/px-lighthouse:{{ required "A valid lighthouse image version is required" .Values.lighthouseVersion}}"
+        image: "{{ template "px.getLighthouseImages" . }}/px-lighthouse:{{ required "A valid lighthouse image version is required" .Values.lighthouseVersion}}"
         imagePullPolicy: Always
+        args: [ "-kubernetes", "true" ]
         ports:
         - containerPort: 80
         - containerPort: 443
@@ -90,13 +131,16 @@ spec:
         - name: config
           mountPath: /config/lh
       - name: config-sync
-        image: "{{ template "px.getk8sImages" . }}/lh-config-sync:0.2"
+        image: "{{ template "px.getLighthouseImages" . }}/lh-config-sync:{{.Values.lighthouseSyncVersion}}"
         imagePullPolicy: Always
         args:
         - "sync"
         volumeMounts:
         - name: config
           mountPath: /config/lh
+      - name: stork-connector
+        image: "{{ template "px.getLighthouseImages" . }}/lh-stork-connector:{{.Values.lighthouseStorkConnectorVersion}}"
+        imagePullPolicy: Always
       serviceAccountName: px-lh-account
       volumes:
       - name: config
