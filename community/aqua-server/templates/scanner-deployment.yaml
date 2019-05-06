@@ -1,0 +1,68 @@
+{{- if .Values.scanner.enabled }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-scanner
+  labels:
+    app: {{ .Release.Name }}-scanner
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.scanner.replicaCount }}
+  template:
+    metadata:
+      annotations:
+      {{- if and (.Values.scanner.tolerations) (semverCompare "<1.6-0" .Capabilities.KubeVersion.GitVersion) }}
+        scheduler.alpha.kubernetes.io/tolerations: '{{ toJson .Values.scanner.tolerations }}'
+      {{- end }}
+      labels:
+        app: {{ .Release.Name }}-scanner
+      name: {{ .Release.Name }}-scanner
+    spec:
+      serviceAccount: {{ .Release.Name }}-sa
+      containers:
+      - name: scanner
+        image: "{{ .Values.imageCredentials.repositoryUriPrefix }}/{{ .Values.scanner.image.repository }}:{{ .Values.scanner.image.tag }}"
+        imagePullPolicy: "{{ .Values.scanner.image.pullPolicy }}"
+        args:
+        - "daemon"
+        - "--user"
+        - "{{ required "Please specify a username associated with the Scanner role!" .Values.scanner.user }}"
+        - "--password"
+        - "{{ required "Please specify a password for a user associated with the Scanner role!" .Values.scanner.password }}"
+        - "--host"
+        - "http://{{ .Release.Name }}-console-svc:{{ .Values.web.service.externalPort }}"
+        volumeMounts:
+        - mountPath: /var/run/docker.sock
+          name: docker-socket-mount
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+{{- with .Values.scanner.livenessProbe }}
+        livenessProbe:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.scanner.readinessProbe }}
+        readinessProbe:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        resources:
+{{ toYaml .Values.scanner.resources | indent 12 }}
+      {{- with .Values.scanner.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with .Values.scanner.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- if and (.Values.scanner.tolerations) (semverCompare "^1.6-0" .Capabilities.KubeVersion.GitVersion) }}
+      tolerations:
+{{ toYaml .Values.scanner.tolerations | indent 6 }}
+      {{- end }}
+      volumes:
+      - name: docker-socket-mount
+        hostPath:
+          path: {{ .Values.docker.socket.path }}
+{{- end }}

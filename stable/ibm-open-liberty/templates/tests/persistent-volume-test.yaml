@@ -14,7 +14,7 @@
 # limitations under the License.
 ###############################################################################
 {{- include "slt.config.init" (list . "slt.chart.config.values") -}}
-{{ if .Values.logs.persistLogs }}
+{{ if and .Values.logs.persistLogs (contains "icp" .Capabilities.KubeVersion.GitVersion) }}
 {{- $name := include "slt.utils.name" (list .) -}}
 {{- $fullname := include "slt.utils.fullname" (list .) }}
 apiVersion: v1
@@ -28,13 +28,14 @@ metadata:
     app: {{ $name }}
   annotations:
     "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
 spec:
   affinity:
 {{- include "slt.affinity.nodeaffinity" (list .) | indent 2 }}
 {{- include "slt.security.context.pod" (list .) | indent 2 }}
   containers:
   - name: "{{ $fullname }}-pv-test"
-    image: radial/busyboxplus:curl
+    image: alpine:3.8
 {{- include "slt.security.context.container" (list .) | indent 4 }}
     command: ["sh", "-c", 'ls -R /tmp/nfs/wlp/ && ls /tmp/nfs/wlp/logs/messages.log']
     volumeMounts:

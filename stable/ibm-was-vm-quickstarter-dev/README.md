@@ -215,7 +215,7 @@ The command deploys `ibm-was-vm-quickstarter-dev` on the Kubernetes cluster in t
 
 ### Verifying the Chart
 
-Verify that your Kubernetes pods were deployed successfully.
+Verify that your Kubernetes pods were deployed successfully. See the instruction after the Helm installation completes. The instruction can also be displayed by viewing the installed Helm release under Menu -> Workloads -> Helm Releases or by running the command: `helm status <release> --tls`.
 
 ### Uninstalling the Chart
 
