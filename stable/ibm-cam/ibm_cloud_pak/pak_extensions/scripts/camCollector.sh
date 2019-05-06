@@ -15,6 +15,7 @@ collectDiagnosticsData() {
 
     services_ns="services"
     kubesystem_ns="kube-system"
+    podLogsLocation="/var/camlog"
 
     export CLUSTER_NAME=mycluster.icp
 
@@ -179,10 +180,12 @@ collectDiagnosticsData() {
     while read camPodName; do
         echo "Downloading logs from pod ${camPodName}"
         if [[ $camPodName = *"mongo"* ]] || [[ $camPodName = *"redis"* ]]; then
-            kubectl cp ${camPodName}:/var/log/ ${cam_diagnostic_data_folder}/${camPodName} --namespace=$services_ns 2>&1
+            kubectl cp ${camPodName}:/var/log/mongodb ${cam_diagnostic_data_folder}/${camPodName} --namespace=$services_ns 2>&1
         elif [[ $camPodName = "cam-"* ]]; then
-            kubectl cp ${camPodName}:/var/camlog/${camPodName} ${cam_diagnostic_data_folder}/${camPodName} --namespace=$services_ns 2>&1
-        fi        
+            podHostname=$(kubectl exec ${camPodName} hostname)
+            echo "pod Hostname is: $podHostname"
+            kubectl cp ${camPodName}:${podLogsLocation}/${podHostname}/${camPodName} ${cam_diagnostic_data_folder}/${camPodName} --namespace=$services_ns 2>&1
+        fi
         echo "Successfully downloaded logs from pod ${camPodName}"
     done
     echo -e "\n"
@@ -232,8 +235,14 @@ while getopts "t:p:u:" o; do
 done
 shift $((OPTIND-1))
 
-if [ -z "${t}" ] || [ -z "${p}" ]; then
+if [ -z "${t}" ]; then
     usage
+fi
+
+if [ -z "${p}" ]; then
+    read -s -p "Admin password for ICP: " icppassword
+    p=${icppassword}
+    echo ""
 fi
 
 echo "**********************************************************"

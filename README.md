@@ -2,13 +2,19 @@
 
 ## Overview
 
-The `IBM/charts` repository provides [Helm](https://github.com/kubernetes/helm) charts provided for use with IBM Cloud Private.
+The `IBM/charts` repository provides [Helm](https://github.com/kubernetes/helm) charts for use with IBM Cloud Private.
 
-The repository is organized as follows:
+This repository is organized as follows:
 
-The `stable` directory contains Helm chart source only provided by IBM, while the `repo/stable` directory contains the packaged Helm chart binaries.
+The `stable` directory contains Helm chart source provided by IBM, while the `repo/stable` directory contains the packaged Helm chart binaries.  To add the stable repo to local repository list run the following command : 
+```
+helm repo add stable https://raw.githubusercontent.com/IBM/charts/master/repo/stable
+```
 
-The `community` directory contains Helm chart source only provided by the wider community, while the `repo/community` directory contains the packaged Helm chart binaries.
+The `community` directory contains Helm chart source provided by the wider community, while the `repo/community` directory contains the packaged Helm chart binaries.  To add the community repo to local repository list run the following command : 
+```
+helm repo add community https://raw.githubusercontent.com/IBM/charts/master/repo/community
+```
 
 Both the `repo/stable` and `repo/community` directories are Helm repositories, and their index.yaml file is built automatically based on the `MASTER` branch.  As of IBM Cloud Private version 3.1.1, both the `repo/stable` and `repo/community` repositories are part of the default configuration of IBM Cloud Private, and as such, all charts in those repository will be displayed by default in the IBM Cloud Private catalog.
 

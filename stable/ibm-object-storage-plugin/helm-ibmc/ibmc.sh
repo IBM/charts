@@ -22,7 +22,7 @@ Available Flags:
     -u, --update                  (Optional) Update this plugin to the latest version
 
 Example Usage:
-    helm ibmc install ibm/ibm-object-storage-plugin --name ibm-object-storage-plugin
+    helm ibmc install iks-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin
 EOF
 }
 
@@ -94,7 +94,13 @@ if [ "$UPDATE" == "TRUE" ]; then
       mkdir -p $HELM_HOME/cache/plugins/
     fi
     cd $HELM_HOME/cache/plugins
-    helm fetch --untar ibm/ibm-object-storage-plugin
+    
+    # Pull latest chart for upgrading ibmc helm plugin
+    helm repo add ibmc-upgrade https://registry.bluemix.net/helm/iks-charts
+    helm repo update
+    helm fetch --untar ibmc-upgrade/ibm-object-storage-plugin
+    helm repo remove ibmc-upgrade
+    
     cp -r $HELM_HOME/cache/plugins/ibm-object-storage-plugin/helm-ibmc $HELM_HOME/cache/plugins/
     rm -rf $HELM_HOME/cache/plugins/ibm-object-storage-plugin
     PLUGIN_LOCATION=$(ls -l $HELM_PLUGIN_DIR | awk -F ' -> ' '{print $2}')
