@@ -7,6 +7,12 @@ kind: ConfigMap
 metadata:
   name: stork-config
   namespace: kube-system
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 data:
   policy.cfg: |-
     {
@@ -56,15 +62,27 @@ kind: ServiceAccount
 metadata:
   name: stork-account
   namespace: kube-system
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 ---
 kind: ClusterRole
 apiVersion: {{ template "rbac.apiVersion" . }}
 metadata:
-   name: stork-role
+  name: stork-role
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 rules:
   - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "delete"]
+    resources: ["pods", "pods/exec"]
+    verbs: ["get", "list", "delete", "create", "watch"]
   - apiGroups: [""]
     resources: ["persistentvolumes"]
     verbs: ["get", "list", "watch", "create", "delete"]
@@ -77,9 +95,15 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["stork.libopenstorage.org"]
+    resources: ["rules"]
+    verbs: ["get", "list"]
+  - apiGroups: ["stork.libopenstorage.org"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "update", "patch", "create", "delete"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
-    verbs: ["create", "list", "watch", "delete"]
+    verbs: ["create", "get"]
   - apiGroups: ["volumesnapshot.external-storage.k8s.io"]
     resources: ["volumesnapshots"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -101,11 +125,20 @@ rules:
   - apiGroups: ["*"]
     resources: ["statefulsets", "statefulsets/extensions"]
     verbs: ["list", "get", "watch", "patch", "update", "initialize"]
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["list", "get"]
 ---
 kind: ClusterRoleBinding
 apiVersion: {{ template "rbac.apiVersion" . }}
 metadata:
   name: stork-role-binding
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 subjects:
 - kind: ServiceAccount
   name: stork-account
@@ -120,6 +153,12 @@ apiVersion: v1
 metadata:
   name: stork-service
   namespace: kube-system
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 spec:
   selector:
     name: stork
@@ -135,6 +174,11 @@ metadata:
     scheduler.alpha.kubernetes.io/critical-pod: ""
   labels:
     tier: control-plane
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
   name: stork
   namespace: kube-system
 spec:
@@ -151,6 +195,11 @@ spec:
       labels:
         name: stork
         tier: control-plane
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
     spec:
       {{- if not (eq $registrySecret "none") }}
       imagePullSecrets:
@@ -185,6 +234,12 @@ kind: StorageClass
 apiVersion: storage.k8s.io/v1
 metadata:
   name: stork-snapshot-sc
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 provisioner: stork-snapshot
 ---
 apiVersion: v1
@@ -192,11 +247,23 @@ kind: ServiceAccount
 metadata:
   name: stork-scheduler-account
   namespace: kube-system
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 ---
 kind: ClusterRole
 apiVersion: {{ template "rbac.apiVersion" . }}
 metadata:
   name: stork-scheduler-role
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 rules:
   - apiGroups: [""]
     resources: ["endpoints"]
@@ -229,7 +296,7 @@ rules:
   - apiGroups: [""]
     resources: ["replicationcontrollers", "services"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["app", "extensions"]
+  - apiGroups: ["apps", "extensions"]
     resources: ["replicasets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
@@ -249,6 +316,12 @@ kind: ClusterRoleBinding
 apiVersion: {{ template "rbac.apiVersion" . }}
 metadata:
   name: stork-scheduler-role-binding
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 subjects:
 - kind: ServiceAccount
   name: stork-scheduler-account
@@ -264,6 +337,11 @@ metadata:
   labels:
     component: scheduler
     tier: control-plane
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
   name: stork-scheduler
   namespace: kube-system
 spec:
@@ -273,6 +351,11 @@ spec:
       labels:
         component: scheduler
         tier: control-plane
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
       name: stork-scheduler
     spec:
       containers:

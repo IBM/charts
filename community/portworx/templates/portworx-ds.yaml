@@ -23,7 +23,8 @@
 {{- $etcdCA := .Values.etcd.ca | default "none" }}
 {{- $etcdCert := .Values.etcd.cert | default "none" }}
 {{- $etcdKey := .Values.etcd.key | default "none" }}
-{{- $etcdEndPoints := .Values.etcdEndPoint }}
+{{- $consulToken := .Values.consul.token | default "none" }}
+{{- $etcdEndPoints := .Values.kvdb }}
 {{- $misc := .Values.misc | default "" | split " " }}
 
 apiVersion: extensions/v1beta1
@@ -31,6 +32,15 @@ kind: DaemonSet
 metadata:
   name: portworx
   namespace: kube-system
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+    app.kubernetes.io/instance: {{.Release.Name | quote }}
+    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+  annotations:
+    portworx.com/install-source: helm/{{.Release.Service}}-r{{.Release.Revision}}
+    portworx.com/helm-vars: chart="{{.Chart.Name}}-{{.Chart.Version}}"{{range $k, $v := .Values }}{{if $v}},{{ $k }}="{{ $v }}"{{end}}{{end}}
 spec:
   minReadySeconds: 0
   updateStrategy:
@@ -39,7 +49,14 @@ spec:
       maxUnavailable: 1
   template:
     metadata:
+      annotations:
+        helm.sh/charts: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
       labels:
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+        app.kubernetes.io/instance: {{.Release.Name | quote }}
+        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
         app: portworx
         name: portworx
         # {{- include "px.labels" . | indent 8 }}
@@ -91,21 +108,21 @@ spec:
                 {{- end -}}
               {{- end -}}
 
-              {{- if eq $internalKVDB true }}
-              "-b",
-              {{- end -}}
-
               {{- if ne $journalDevice "none" }}
               "-j", "{{ $journalDevice }}",
               {{- end -}}
 
               {{- if empty $etcdEndPoints }}
-                {{- if eq $internalKVDB false }}
-                  "{{ required "A valid ETCD url in the format etcd:http://<your-etcd-endpoint> is required. Verify that the key is correct and there isnt any typo in specifying that, also ensure it is accessible from all node of your kubernetes cluster" .etcdEndPoint}}"
-                {{- end -}}
+              "-b",
               {{- else }}
-              "-k", "{{ regexReplaceAllLiteral "(;)" .etcdEndPoint "," }}",
+              {{- if eq $internalKVDB true }}
+              "-b",
+              {{- else -}}
+              "-k", "{{ regexReplaceAllLiteral "(;)" .kvdb "," }}",
               {{ end -}}
+              {{ end -}}
+
+
 
               "-c", "{{ required "Clustername cannot be empty" .clusterName }}",
 
@@ -139,6 +156,10 @@ spec:
 
               {{- if ne $etcdKey "none" }}
               "-key", "{{ $etcdKey }}",
+              {{- end -}}
+
+              {{- if ne $consulToken "none" }}
+              "-acltoken", "{{ $consulToken }}",
               {{- end -}}
 
               {{- if .misc }}
@@ -222,16 +243,16 @@ spec:
               mountPath: /opt/pwx
             - name: sysdmount
               mountPath: /etc/systemd/system
+            - name: journalmount1
+              mountPath: /var/run/log
+              readOnly: true
+            - name: journalmount2
+              mountPath: /var/log
+              readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
-          {{- if (.Values.openshiftInstall) and (eq .Values.openshiftInstall true)}}
-            - name: proc1nsmount
-              mountPath: /host_proc
-          {{- else }}
-            - name: proc1nsmount
-              mountPath: /host_proc/1/ns
-          {{- end }}
-
+            - name: hostproc
+              mountPath: /host_proc              
           {{- else if eq (.Values.deploymentType | upper | lower) "docker" }}
             - name: dev
               mountPath: /dev
@@ -262,7 +283,7 @@ spec:
               mountPropagation: "Bidirectional"
           {{- else }}
             - name: kubelet
-              mountPath: /var/lib/kubelet:shared
+              mountPath: /var/lib/kubelet
               mountPropagation: "Bidirectional"
           {{- end }}
 
@@ -332,32 +353,26 @@ spec:
             path: /etc/pwx
         - name: cores
           hostPath:
-            path: /var/cores
+            path: {{if eq $pksInstall true }}/var/vcap/store/cores{{else}}/var/cores{{end}}
         {{- if eq (.Values.deploymentType | upper | lower) "oci" }}
-        {{- if eq $pksInstall true }}
         - name: optpwx
           hostPath:
-            path: /var/vcap/store/opt/pwx
-        {{- else }}
-        - name: optpwx
-          hostPath:
-            path: /opt/pwx
-        {{- end }}
-        - name: dbusmount
-          hostPath:
-            path: /var/run/dbus
-        {{- if (.Values.openshiftInstall) and (eq .Values.openshiftInstall true) }}
-        - name: proc1nsmount
-          hostPath:
-            path: /proc
-        {{- else }}
-        - name: proc1nsmount
-          hostPath:
-            path: /proc/1/ns
-        {{- end }}
+            path: {{if eq $pksInstall true }}/var/vcap/store/opt/pwx{{else}}/opt/pwx{{end}}
         - name: sysdmount
           hostPath:
             path: /etc/systemd/system
+        - name: journalmount1
+          hostPath:
+            path: /var/run/log
+        - name: journalmount2
+          hostPath:
+            path: /var/log
+        - name: dbusmount
+          hostPath:
+            path: /var/run/dbus
+        - name: hostproc
+          hostPath:
+            path: /proc
         {{- else if eq (.Values.deploymentType | upper | lower) "docker" }}
         - name: libosd
           hostPath:
