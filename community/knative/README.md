@@ -11,7 +11,8 @@ This chart installs Knative components for Build, Serving, Eventing and Eventing
 
 ## Chart Details
 
-This chart is comprised of multiple subcharts which is illustrated in the structure below:
+This chart is comprised of multiple subcharts which is illustrated in the structure below. 
+Disabling a chart will disable all charts below it in the chart structure. When enabling a subset of charts note that the parent charts are prerequisites and must be installed previously or in conjunction.
 ```
 knative                         (default)
 ├── build                       (default)
