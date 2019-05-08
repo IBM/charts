@@ -1,0 +1,81 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels: {{ include "labels" . | nindent 4 }} {{ cat "app:" .Chart.Name | nindent 4 }}
+  name: kube-state-metrics
+  namespace: knative-monitoring
+spec:
+  replicas: {{ .Values.kubeStateMetrics.replicas }}
+  template:
+    metadata:
+      labels: {{ include "noVersionlabels" . | nindent 8 }} {{ "app: \"kube-state-metrics\"" | nindent 8 }}
+    spec:
+      containers:
+      - args:
+        - --secure-listen-address=:8443
+        - --upstream=http://127.0.0.1:8081/
+        image: "{{ .Values.kubeStateMetrics.kubeRbacProxyMain.image.repository }}:{{ .Values.kubeStateMetrics.kubeRbacProxyMain.image.tag }}"
+        name: kube-rbac-proxy-main
+        ports:
+        - containerPort: 8443
+          name: https-main
+        resources:
+          limits:
+            cpu: 20m
+            memory: 40Mi
+          requests:
+            cpu: 10m
+            memory: 20Mi
+      - args:
+        - --secure-listen-address=:9443
+        - --upstream=http://127.0.0.1:8082/
+        image: "{{ .Values.kubeStateMetrics.kubeRbacProxySelf.image.repository }}:{{ .Values.kubeStateMetrics.kubeRbacProxySelf.image.tag }}"
+        name: kube-rbac-proxy-self
+        ports:
+        - containerPort: 9443
+          name: https-self
+        resources:
+          limits:
+            cpu: 20m
+            memory: 40Mi
+          requests:
+            cpu: 10m
+            memory: 20Mi
+      - args:
+        - --host=127.0.0.1
+        - --port=8081
+        - --telemetry-host=127.0.0.1
+        - --telemetry-port=8082
+        image: "{{ .Values.kubeStateMetrics.image.repository }}:{{ .Values.kubeStateMetrics.image.tag }}"
+        name: kube-state-metrics
+      - command:
+        - /pod_nanny
+        - --container=kube-state-metrics
+        - --cpu=100m
+        - --extra-cpu=1m
+        - --memory=100Mi
+        - --extra-memory=2Mi
+        - --threshold=5
+        - --deployment=kube-state-metrics
+        env:
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: MY_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: "{{ .Values.kubeStateMetrics.addonResizer.image.repository }}:{{ .Values.kubeStateMetrics.addonResizer.image.tag }}"
+        name: addon-resizer
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 30Mi
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      serviceAccountName: kube-state-metrics

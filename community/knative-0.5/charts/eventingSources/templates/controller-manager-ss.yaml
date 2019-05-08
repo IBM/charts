@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels: {{ include "labels" . | nindent 4 }} {{ "control-plane: \"controller-manager\"" | nindent 4 }} {{ cat "app:" .Chart.Name | nindent 4 }}
+  name: controller-manager
+  namespace: knative-sources
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  serviceName: controller-manager
+  template:
+    metadata:
+      labels: {{ include "noVersionlabels" . | nindent 8 }} {{ "control-plane: \"controller-manager\"" | nindent 8 }} {{ cat "app:" .Chart.Name | nindent 8 }}
+    spec:
+      containers:
+      - env:
+        - name: K8S_RA_IMAGE
+          value: "{{ .Values.kuberneteseventsource.image.repository }}:{{ .Values.kuberneteseventsource.image.tag }}"
+        - name: GH_RA_IMAGE
+          value: "{{ .Values.githubReceiveAdapter.image.repository }}:{{ .Values.githubReceiveAdapter.image.tag }}"
+        - name: CRONJOB_RA_IMAGE
+          value: "{{ .Values.cronjobReceiveAdapter.image.repository }}:{{ .Values.cronjobReceiveAdapter.image.tag }}"
+        image: "{{ .Values.controllerManager.manager.image.repository }}:{{ .Values.controllerManager.manager.image.tag }}"
+        name: manager
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+      serviceAccountName: controller-manager
+      terminationGracePeriodSeconds: 10

@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "labels" . | nindent 4 }} {{ cat "app:" .Chart.Name | nindent 4 }}
+  name: webhook
+  namespace: knative-eventing
+spec:
+  replicas: {{ .Values.webhook.replicas }}
+  selector:
+    matchLabels:
+      app: webhook
+      role: webhook
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: 'false'
+      labels: {{ include "noVersionlabels" . | nindent 8 }} {{ "app: \"webhook\"" | nindent 8 }} {{ "role: \"webhook\"" | nindent 8 }}
+    spec:
+      containers:
+      - env:
+        - name: SYSTEM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CONFIG_LOGGING_NAME
+          value: config-logging
+        - name: WEBHOOK_NAME
+          value: webhook
+        image: "{{ .Values.webhook.image.repository }}:{{ .Values.webhook.image.tag }}"
+        name: webhook
+        resources:
+          limits:
+            memory: 1000Mi
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /etc/config-logging
+          name: config-logging
+      serviceAccountName: eventing-webhook
+      volumes:
+      - configMap:
+          name: config-logging
+        name: config-logging

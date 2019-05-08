@@ -1,0 +1,70 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  labels: {{ include "labels" . | nindent 4 }} {{ cat "app:" .Chart.Name | nindent 4 }}
+  name: node-exporter
+  namespace: knative-monitoring
+spec:
+  template:
+    metadata:
+      labels: {{ include "noVersionlabels" . | nindent 8 }} {{ "app: \"node-exporter\"" | nindent 8 }}
+      name: node-exporter
+      namespace: knative-monitoring
+    spec:
+      containers:
+      - args:
+        - --web.listen-address=127.0.0.1:9101
+        - --path.procfs=/host/proc
+        - --path.sysfs=/host/sys
+        image: "{{ .Values.nodeExporter.image.repository }}:{{ .Values.nodeExporter.image.tag }}"
+        name: node-exporter
+        resources:
+          limits:
+            cpu: 200m
+            memory: 50Mi
+          requests:
+            cpu: 100m
+            memory: 30Mi
+        volumeMounts:
+        - mountPath: /host/proc
+          name: proc
+          readOnly: true
+        - mountPath: /host/sys
+          name: sys
+          readOnly: true
+      - args:
+        - --secure-listen-address=:{{ .Values.nodeExporter.kubeRbacProxy.https.hostPort }}
+        - --upstream=http://127.0.0.1:9101/
+        image: "{{ .Values.nodeExporter.kubeRbacProxy.image.repository }}:{{ .Values.nodeExporter.kubeRbacProxy.image.tag }}"
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: {{ .Values.nodeExporter.kubeRbacProxy.https.hostPort }}
+          hostPort: {{ .Values.nodeExporter.kubeRbacProxy.https.hostPort }}
+          name: https
+        resources:
+          limits:
+            cpu: 20m
+            memory: 40Mi
+          requests:
+            cpu: 10m
+            memory: 20Mi
+      hostNetwork: true
+      hostPID: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      serviceAccountName: node-exporter
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      volumes:
+      - hostPath:
+          path: /proc
+        name: proc
+      - hostPath:
+          path: /sys
+        name: sys
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
