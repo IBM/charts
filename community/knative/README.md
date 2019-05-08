@@ -14,25 +14,24 @@ This chart installs Knative components for Build, Serving, Eventing and Eventing
 This chart is comprised of multiple subcharts which is illustrated in the structure below. 
 Disabling a chart will disable all charts below it in the chart structure. When enabling a subset of charts note that the parent charts are prerequisites and must be installed previously or in conjunction.
 ```
-knative                         (default)
-├── build                       (default)
+knative                         
+├── build                       
 ├── eventing
-|   ├── gcpPubSubProvisioner
-│   ├── inMemoryProvisioner
-|   ├── kafkaProvisioner
-│   └── natssProvisioner
-├── serving                     (default)
-│   └── monitoring              (default)
-│       ├── elasticsearch       (default)
-│       ├── prometheus          (default)
-|       ├── zipkin
-│       └── zipkinInMem         (default)
+|   ├── gcpPubSubProvisioner            (Requires: eventing enabled)
+│   ├── inMemoryProvisioner             (Requires: eventing enabled)
+|   ├── kafkaProvisioner                (Requires: eventing enabled)
+│   └── natssProvisioner                (Requires: eventing enabled)
+├── serving                     
+│   └── monitoring                      (Requires: serving enabled)
+│       ├── elasticsearch               (Requires: monitoring enabled)
+│       ├── prometheus                  (Requires: monitoring enabled)
+|       ├── zipkin                      (Requires: monitoring enabled)
+│       └── zipkinInMem                 (Requires: monitoring enabled)
 └── eventingSources
-    ├── camel
-    ├── eventDisplay
-    └── gcpPubSub
+    ├── camel                           (Requires: eventingSources enabled)
+    ├── eventDisplay                    (Requires: eventingSources enabled)
+    └── gcpPubSub                       (Requires: eventingSources enabled)
 ```
-Disabling a chart will disable all charts below it in the chart structure. When enabling a subset of charts note that the parent charts are prerequisites and must be installed previously or in conjunction.
 
 ## Prerequisites
 - Requires kubectl v1.10+.
