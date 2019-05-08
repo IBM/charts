@@ -11,27 +11,27 @@ This chart installs Knative components for Build, Serving, Eventing and Eventing
 
 ## Chart Details
 
-This chart is comprised of multiple subcharts which is illustrated in the structure below:
-```
-knative                         (default)
-├── build                       (default)
-├── eventing
-|   ├── gcpPubSubProvisioner
-│   ├── inMemoryProvisioner
-|   ├── kafkaProvisioner
-│   └── natssProvisioner
-├── serving                     (default)
-│   └── monitoring              (default)
-│       ├── elasticsearch       (default)
-│       ├── prometheus          (default)
-|       ├── zipkin
-│       └── zipkinInMem         (default)
-└── eventingSources
-    ├── camel
-    ├── eventDisplay
-    └── gcpPubSub
-```
+This chart is comprised of multiple subcharts which is illustrated in the structure below. 
 Disabling a chart will disable all charts below it in the chart structure. When enabling a subset of charts note that the parent charts are prerequisites and must be installed previously or in conjunction.
+```
+knative                         
+├── build                       
+├── eventing
+|   ├── gcpPubSubProvisioner            (Requires: eventing enabled)
+│   ├── inMemoryProvisioner             (Requires: eventing enabled)
+|   ├── kafkaProvisioner                (Requires: eventing enabled)
+│   └── natssProvisioner                (Requires: eventing enabled)
+├── serving                     
+│   └── monitoring                      (Requires: serving enabled)
+│       ├── elasticsearch               (Requires: monitoring enabled)
+│       ├── prometheus                  (Requires: monitoring enabled)
+|       ├── zipkin                      (Requires: monitoring enabled)
+│       └── zipkinInMem                 (Requires: monitoring enabled)
+└── eventingSources
+    ├── camel                           (Requires: eventingSources enabled)
+    ├── eventDisplay                    (Requires: eventingSources enabled)
+    └── gcpPubSub                       (Requires: eventingSources enabled)
+```
 
 ## Prerequisites
 - Requires kubectl v1.10+.
@@ -46,6 +46,25 @@ $ kubectl apply --filename https://github.com/knative/serving/releases/download/
 or by following these steps:
 [Installing Istio](https://www.knative.dev/docs/install/knative-with-any-k8s/#installing-istio)
 
+### Container image security requirements
+
+If Container Image Security is enabled, you will not be able to download non-trusted container images. If this is the case, please add the following to the trusted registries at the cluster level, so that knative container images can be pulled during chart installation:
+
+- gcr.io/knative-releases/github.com/knative/*
+- gcr.io/cloud-builders/gcs-fetcher:*
+- k8s.gcr.io/fluentd-elasticsearch:*
+- k8s.gcr.io/elasticsearch:*
+- k8s.gcr.io/addon-resizer:*
+- quay.io/coreos/kube-rbac-proxy:*
+- quay.io/coreos/kube-state-metrics:*
+- quay.io/coreos/hyperkube:*
+- quay.io/coreos/monitoring-grafana:*
+- quay.io/prometheus/node-exporter:*
+- docker.io/prom/prometheus:*
+- docker.io/openzipkin/zipkin:*
+- docker.io/istio/proxyv2:*
+
+Follow [image security enforcement using ICP](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/manage_images/image_security.html) for more information.
 
 ## Installing the Chart
 
