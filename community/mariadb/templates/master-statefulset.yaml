@@ -1,4 +1,4 @@
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ template "master.fullname" . }}
@@ -12,9 +12,9 @@ metadata:
 spec:
   selector:
     matchLabels:
-      release: "{{ .Release.Name }}"
-      component: "master"
-      app: "{{ template "mariadb.name" . }}"
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+      app.kubernetes.io/component: "master"
+      app.kubernetes.io/name: "{{ template "mariadb.name" . }}"
   serviceName: "{{ template "master.fullname" . }}"
   replicas: 1
   updateStrategy:
@@ -31,11 +31,12 @@ spec:
         {{- end }}
       {{- end }}
       labels:
-        app: "{{ template "mariadb.name" . }}"
-        component: "master"
+        app.kubernetes.io/name: "{{ template "mariadb.name" . }}"
+        app.kubernetes.io/component: "master"
+        helm.sh/chart: "{{ template "mariadb.chart" . }}"
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
         release: "{{ .Release.Name }}"
-        chart: "{{ template "mariadb.chart" . }}"
-        heritage: {{ .Release.Service | quote }}
     spec:
       serviceAccountName: "{{ template "mariadb.serviceAccountName" . }}"
       {{- if .Values.securityContext.enabled }}
@@ -88,6 +89,17 @@ spec:
       - name: "mariadb"
         image: {{ template "mariadb.image" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        {{- if .Values.securityContext.enabled }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: {{ .Values.securityContext.runAsUser }}
+          capabilities:
+            drop:
+            - ALL
+        {{- end }}
         env:
         {{- if .Values.image.debug}}
         - name: BITNAMI_DEBUG
@@ -225,10 +237,10 @@ spec:
     - metadata:
         name: data
         labels:
-          app: "{{ template "mariadb.name" . }}"
-          component: "master"
-          release: {{ .Release.Name | quote }}
-          heritage: {{ .Release.Service | quote }}
+          app.kubernetes.io/name: "{{ template "mariadb.name" . }}"
+          app.kubernetes.io/component: "master"
+          app.kubernetes.io/instance: {{ .Release.Name | quote }}
+          app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
       spec:
         accessModes:
         {{- range .Values.master.persistence.accessModes }}
@@ -237,7 +249,7 @@ spec:
         resources:
           requests:
             storage: {{ .Values.master.persistence.size | quote }}
-      {{- if .Values.master.persistence.storageClass }}
+      {{- if and .Values.master.persistence.useDynamicProvisioning .Values.master.persistence.storageClass }}
       {{- if (eq "-" .Values.master.persistence.storageClass) }}
         storageClassName: ""
       {{- else }}

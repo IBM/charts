@@ -33,6 +33,39 @@ The command deploys MariaDB on the Kubernetes cluster in the default configurati
 
 > **Tip**: List all releases using `helm list`
 
+### Create a secret
+Secure and recommended approach to provide sensitive data like passwords is to generate a secret containing the sensitive data and providing the pre-created secret name during chart deployment.
+
+You can provide an existing secret containing `mariadb-password` and `mariadb-root-password` and if replication is enabled `mariadb-replication-password`.
+The existing secret can be provided as a value to `existingSecret`.
+
+If creating a secret, it is recommended to name the secret as `release-name`-`secret-name`. For example:  MyRelease-MySecret
+
+This allows the secrets to be affiliated with the release, but not directly included with the release.
+Use below command to create a secret:
+```
+kubectl create secret generic my-release-<secret_name> \
+  --from-literal='mariadb-root-password=XXXX' \
+  --from-literal='mariadb-password=XXXX' \
+  --from-literal='mariadb-replication-password=XXXX' \
+  --namespace namespace_name
+```
+
+### Image Security Policies
+
+If the cluster has image security policies enforced, bitnami docker image should be added to it
+
+```
+apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
+kind: ClusterImagePolicy
+metadata:
+name: ibmcloud-default-cluster-image-policy
+spec:
+ repositories:
+   - name: docker.io/bitnami/*
+```
+For documentation on managing image policies refer [Enforcing container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html)
+
 ## Uninstalling the Chart
 
 To uninstall/delete the `my-release` deployment:
@@ -83,7 +116,8 @@ The following table lists the configurable parameters of the MariaDB chart and t
 | `master.antiAffinity`                     | Master pod anti-affinity policy                     | `soft`                                                            |
 | `master.tolerations`                      | List of node taints to tolerate (master)            | `[]`                                                              |
 | `master.updateStrategy`                   | Master statefulset update strategy policy           | `RollingUpdate`                                                   |
-| `master.persistence.enabled`              | Enable persistence using PVC                        | `true`                                                            |
+| `master.persistence.enabled`              | Enable persistence using PVC                        | `true`                                                            |        
+| `master.persistence.useDynamicProvisioning`| Enable dynamic provisioning of PVC                 | `false`                                                           |
 | `master.persistence.existingClaim`        | Provide an existing `PersistentVolumeClaim`         | `nil`                                                             |
 | `master.persistence.mountPath`            | Path to mount the volume at                         | `/bitnami/mariadb`                                                |
 | `master.persistence.annotations`          | Persistent Volume Claim annotations                 | `{}`                                                              |
@@ -116,6 +150,7 @@ The following table lists the configurable parameters of the MariaDB chart and t
 | `slave.tolerations`                       | List of node taints to tolerate for (slave)         | `[]`                                                              |
 | `slave.updateStrategy`                    | Slave statefulset update strategy policy            | `RollingUpdate`                                                   |
 | `slave.persistence.enabled`               | Enable persistence using a `PersistentVolumeClaim`  | `true`                                                            |
+| `slave.persistence.useDynamicProvisioning`| Enable dynamic provisioning of PVC                  | `false`                                                           |
 | `slave.persistence.annotations`           | Persistent Volume Claim annotations                 | `{}`                                                              |
 | `slave.persistence.storageClass`          | Persistent Volume Storage Class                     | ``                                                                |
 | `slave.persistence.accessModes`           | Persistent Volume Access Modes                      | `[ReadWriteOnce]`                                                 |
@@ -152,7 +187,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 ```bash
 $ helm install --name my-release \
   --set rootUser.password=secretpassword,db.user=app_database \
-    stable/mariadb
+    community/mariadb
 ```
 
 The above command sets the MariaDB `root` account password to `secretpassword`. Additionally it creates a database named `my_database`.
@@ -160,7 +195,7 @@ The above command sets the MariaDB `root` account password to `secretpassword`. 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install --name my-release -f values.yaml stable/mariadb
+$ helm install --name my-release -f values.yaml community/mariadb
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
@@ -200,7 +235,7 @@ master:
 It's necessary to set the `rootUser.password` parameter when upgrading for readiness/liveness probes to work properly. When you install this chart for the first time, some notes will be displayed providing the credentials you must use under the 'Administrator credentials' section. Please note down the password and run the command below to upgrade your chart:
 
 ```bash
-$ helm upgrade my-release stable/mariadb --set rootUser.password=[ROOT_PASSWORD]
+$ helm upgrade my-release community/mariadb --set rootUser.password=[ROOT_PASSWORD]
 ```
 
 | Note: you need to substitute the placeholder _[ROOT_PASSWORD]_ with the value obtained in the installation notes.
