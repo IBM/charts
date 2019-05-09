@@ -38,7 +38,12 @@ knative
 - Knative requires a Kubernetes cluster v1.11 or newer with the
 [MutatingAdmissionWebhook admission controller](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#how-do-i-turn-on-an-admission-controller)
 enabled.
-- Istio - You should have Istio installed on your Kubernetes cluster. If you do not have it installed already you can do so by running the following commands:
+- Istio:
+  You may use an existing `ibm-istio` intance or install it through the catalog. To use `ibm-istio` with Knative you must apply the following command:
+```
+$ kubectl apply -f https://raw.githubusercontent.com/knative/serving/master/third_party/istio-1.0.7/istio-knative-extras.yaml
+```
+Alternatively, you may install istio supplied by Knative using the following commands:
 ```bash
 $ kubectl apply --filename https://github.com/knative/serving/releases/download/v0.5.2/istio-crds.yaml \
 --filename https://github.com/knative/serving/releases/download/v0.5.2/istio.yaml
