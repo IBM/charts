@@ -252,7 +252,7 @@ If the server fails and restarts, then to persist the transaction logs (preserve
     waitForRecovery="true" />
 ```
 
-For more information about the transaction element and its attributes, see [transaction - Transaction Manager](https://www.ibm.com/support/knowledgecenter/en/SSAW57_liberty/com.ibm.websphere.liberty.autogen.nd.doc/ae/rwlp_config_transaction.html) in the Liberty documentation.
+For more information about the transaction element and its attributes, see [transaction - Transaction Manager](https://www.ibm.com/support/knowledgecenter/SSAW57_liberty/com.ibm.websphere.liberty.autogen.nd.doc/ae/rwlp_config_transaction.html) in the Liberty documentation.
 
 #### Persisting logs
 
@@ -292,7 +292,7 @@ Logging in JSON format is enabled by default. Log events are forwarded to Elasti
 
 Use Kibana to monitor and analyze the log events. Sample Kibana dashboards are provided in the Helm chart's [dashboards](https://github.com/IBM/charts/tree/master/stable/ibm-websphere-liberty/ibm_cloud_pak/pak_extensions/dashboards) directory.  Ensure Liberty log events exist in Elasticsearch before creating an index pattern and importing dashboards in Kibana.
 
-For more information, see [Analyzing Liberty messages in IBM Cloud Private](https://www.ibm.com/support/knowledgecenter/en/SSEQTP_liberty/com.ibm.websphere.wlp.doc/ae/twlp_icp_json_logging.html) in the Knowledge Center.
+For more information, see [Analyzing Liberty messages in IBM Cloud Private](https://www.ibm.com/support/knowledgecenter/SSEQTP_liberty/com.ibm.websphere.wlp.doc/ae/twlp_icp_json_logging.html) in the Knowledge Center.
 
 #### SSL Configuration
 
@@ -391,5 +391,5 @@ The helm chart augments the Liberty container with the following environmental v
 
 
 ## More information
-See the [WebSphere Liberty documentation](https://www.ibm.com/support/knowledgecenter/en/SSAW57_liberty/as_ditamaps/was900_welcome_liberty_ndmp.html) for configuration options for deploying the Liberty server.
+See the [WebSphere Liberty documentation](https://www.ibm.com/support/knowledgecenter/SSAW57_liberty) for configuration options for deploying the Liberty server.
 
