@@ -5,9 +5,9 @@ A Helm plugin that installs or upgrades Helm charts in IBM K8S Service
 * https://docs.helm.sh/helm/#helm-ibmc
 
 ## Installation
-  * `helm repo add ibm https://registry.bluemix.net/helm/ibm`
+  * `helm repo add iks-charts https://registry.bluemix.net/helm/iks-charts`
   * `helm repo update`
-  * `helm fetch --untar ibm/ibm-object-storage-plugin`
+  * `helm fetch --untar iks-charts/ibm-object-storage-plugin`
   * `helm plugin install ./ibm-object-storage-plugin/helm-ibmc`
   * `helm ibmc --help`
 
@@ -18,7 +18,7 @@ A Helm plugin that installs or upgrades Helm charts in IBM K8S Service
 
 ### Install IBM Cloud Object Storage plug-in chart
   * `helm ibmc install <chart repo>/<chart name> [flags]`
-  * `helm ibmc install ibm/ibm-object-storage-plugin --name ibm-object-storage-plugin`
+  * `helm ibmc install iks-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin`
 
 ### Example
 ```
@@ -38,11 +38,11 @@ Available Flags:
     -u, --update                  (Optional) Update this plugin to the latest version
 
 Example Usage:
-    helm ibmc install ibm/ibm-object-storage-plugin --name ibm-object-storage-plugin
+    helm ibmc install iks-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin
 ```
 
 ```
-Mayank-Macbooks-MacBook-Pro:~ mayank-macbook$ helm ibmc install ibm/ibm-object-storage-plugin --verbos --name ibm-object-storage-plugin
+Mayank-Macbooks-MacBook-Pro:~ mayank-macbook$ helm ibmc install iks-charts/ibm-object-storage-plugin --verbos --name ibm-object-storage-plugin
 PARAMS
 --name ibm-object-storage-plugin
  .........................
@@ -50,11 +50,11 @@ Helm kubeconfig = /Users/mayank-macbook/.bluemix/plugins/container-service/clust
 Helm home = /Users/mayank-macbook/.helm
 Helm plugin = /Users/mayank-macbook/.helm/plugins
 Helm plugin dir = /Users/mayank-macbook/.helm/plugins/helm-ibmc
-PASSTHRU = install ibm/ibm-object-storage-plugin
+PASSTHRU = install iks-charts/ibm-object-storage-plugin
 FLAGS = --name ibm-object-storage-plugin
 Installing the Helm chart
 DC: dal10
-Chart: ibm/ibm-object-storage-plugin
+Chart: iks-charts/ibm-object-storage-plugin
 NAME:   ibm-object-storage-plugin
 LAST DEPLOYED: Wed Mar 20 11:21:14 2019
 NAMESPACE: default

@@ -193,10 +193,10 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
 
    **Tip:** If no service account is shown in your CLI output, run `kubectl apply -f https://raw.githubusercontent.com/IBM-Cloud/kube-samples/master/rbac/serviceaccount-tiller.yaml` to create the service account. Then, run `helm init --service-account tiller` to initialize Helm.  
 
-2. Add the IBM Cloud Helm repository `ibm` to your cluster.
+2. Add the IBM Cloud Helm repository `iks-charts` to your cluster.
    
    ```
-   helm repo add ibm https://registry.bluemix.net/helm/ibm
+   helm repo add iks-charts https://registry.bluemix.net/helm/iks-charts
    ```
 
 3. Update the Helm repo to retrieve the latest version of all Helm charts in this repo.
@@ -208,7 +208,7 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
 4. Download the Helm chart and unpack the chart in your current directory. Then, navigate to the `ibm-object-storage-plugin` directory.  
  
    ```
-   helm fetch --untar ibm/ibm-object-storage-plugin && cd ibm-object-storage-plugin
+   helm fetch --untar iks-charts/ibm-object-storage-plugin && cd ibm-object-storage-plugin
    ```
 5. To limit the IBM Cloud Object Storage plug-in access to Kubernetes secrets, go to **Optional: Limit secret access** ; otherwise, if there is no limitation to be set, continue with next step.
 
@@ -234,7 +234,7 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
     Example: Install chart from helm registry, without any limitation to access specific Kubernetes secrets:
       
     ```
-     helm ibmc install ibm/ibm-object-storage-plugin --name ibm-object-storage-plugin
+     helm ibmc install iks-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin
     ```
   
     Example: Install chart from local path, with a limitation to access the Cloud Object Storage's secrets only, as described in the `Optional: Limit secret access` section at the bottom:
@@ -444,7 +444,9 @@ Review the parameters that you can configure for IBM Cloud Private during the IB
 |`cos.storageClass`|The name of the storage class which refers to `Location + Storage Class` / `LocationConstraint` as discussed [here](https://cloud.ibm.com/docs/services/cloud-object-storage/basics/classes.html#locationconstraint) |`standard`| `<StorageClass>`|
 
 ## Limitations
-- **`fsGroup`**: To run your app pods with a non-root user, specify the [security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) for your pod by defining the non-root user without setting the `fsGroup` in your deployment YAML at the same time. Setting `fsGroup` triggers the IBM Cloud Object Storage plug-in to update the group permissions for all files in a bucket when the pod is deployed. Updating the permissions is a write operation and impacts performance. Depending on how many files you have, updating the permissions might prevent your pod from coming up and getting into a `Running` state.
+- `runAsUser` and `fsGroup` IDs should be same to provide non-root user access to COS volume mount.
+- With RedHat / CentOS, use TLS Cipher `ecdhe_rsa_aes_128_gcm_sha_256`. You can set it from PVC using
+`ibm.io/tls-cipher-suite: "ecdhe_rsa_aes_128_gcm_sha_256"` under `annotations` section.
 - **Platform support:** This Helm chart is validated to run in:
   - IBM Cloud Kubernetes Service
   - IBM Cloud Private with local Cloud Object Storage

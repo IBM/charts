@@ -1,15 +1,16 @@
-# What's new in Chart Version 3.0.0
+# What's new in Chart Version 3.0.1
 
 The following changes apply only to the Helm chart. For a full list of product updates, see [What's new in VM Quickstarter](https://www.ibm.com/support/knowledgecenter/SSTF9X/about-whats-new.html).
 
 ## New features
-  - Removed dependencies on extraneous Docker images to help with off-line installation.
+  - Added `manifest.yaml` for creating offline archives.
+  - Improved readiness and liveness probes of various pods.
 
 ## Breaking Changes
-  - None
+  - None.
 
 ## Fixes
-  - Updated `cloudsm-frontend` pod configuration to archive destroyed resources and subscriptions.
+  - None.
 
 # Prerequisites
   - Refer to [Prerequisities of WAS Quickstarter](http://ibm.biz/WASQuickstarterPrerequisites)
@@ -21,6 +22,7 @@ The following changes apply only to the Helm chart. For a full list of product u
 
 | Chart | Date | IBM Cloud Private Required | CAM Required | Image(s) Supported |  Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 3.0.1 | May 6, 2019  | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:3.0.1 ibmcom/wasaas-cloudsm:3.0.1 ibmcom/wasaas-wasdevaas:3.0.1 ibmcom/wasaas-console:3.0.1 couchdb:2.1.1 ibmcom/wasaas-dashboard:3.0.1 | Manifest for offline archives, improved readiness and liveness probes. |
 | 3.0.0 | April 8, 2019  | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:3.0.0 ibmcom/wasaas-cloudsm:3.0.0 ibmcom/wasaas-wasdevaas:3.0.0 ibmcom/wasaas-console:3.0.0 couchdb:2.1.1 ibmcom/wasaas-dashboard:3.0.0 | Removed dependencies on extraneous Docker images. |
 | 2.0.5 | March 8, 2019 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.5 ibmcom/wasaas-cloudsm:2.0.5 ibmcom/wasaas-wasdevaas:2.0.5 ibmcom/wasaas-console:2.0.5 ibmcom/wasaas-dashboard:2.0.5 couchdb:2.1.1 | Bug fixes. |
 | 2.0.4 | Feb 18, 2019 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:2.0.4 ibmcom/wasaas-cloudsm:2.0.4 ibmcom/wasaas-wasdevaas:2.0.4 ibmcom/wasaas-console:2.0.4 ibmcom/wasaas-dashboard:2.0.4 couchdb:2.1.1 | Red Hat Satellite support. |
