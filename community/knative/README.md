@@ -39,7 +39,8 @@ knative
 [MutatingAdmissionWebhook admission controller](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#how-do-i-turn-on-an-admission-controller)
 enabled.
 - Istio:
-  You may use an existing `ibm-istio` intance or install it through the catalog. To use `ibm-istio` with Knative you must apply the following command:
+  You may use an existing `ibm-istio` intance or install it through the ICP catalog. 
+  Once you have installed `ibm-istio`, you need to add knative extras to make your istio installation work with Knative. Please use the below command to add the extras:
 ```
 $ kubectl apply -f https://raw.githubusercontent.com/knative/serving/master/third_party/istio-1.0.7/istio-knative-extras.yaml
 ```
