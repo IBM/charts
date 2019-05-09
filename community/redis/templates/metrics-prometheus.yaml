@@ -1,0 +1,31 @@
+{{- if and (.Values.metrics.enabled) (.Values.metrics.serviceMonitor.enabled) }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "redis.fullname" . }}
+  {{- if .Values.metrics.serviceMonitor.namespace }}
+  namespace: {{ .Values.metrics.serviceMonitor.namespace }}
+  {{- end }}
+  labels:
+    "app.kubernetes.io/name": {{ template "redis.name" . }}
+    "helm.sh/chart": {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    "app.kubernetes.io/managed-by": "{{ $.Release.Service }}"
+    "app.kubernetes.io/instance": "{{ $.Release.Name }}"
+    release: "{{ .Release.Name }}"
+    {{- range $key, $value := .Values.metrics.serviceMonitor.selector }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  endpoints:
+  - port: metrics
+    {{- if .Values.metrics.serviceMonitor.interval }}
+    interval: {{ .Values.metrics.serviceMonitor.interval }}
+    {{- end }}
+  selector:
+    matchLabels:
+      app: {{ template "redis.name" . }}
+      release: {{ .Release.Name }}
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.Namespace }}
+{{- end -}}
