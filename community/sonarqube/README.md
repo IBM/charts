@@ -10,7 +10,7 @@ This chart bootstraps a SonarQube instance with a PostgreSQL database.
 
 - Kubernetes 1.6+
 
-## Installing the chart:
+## Installing the chart
 
 To install the chart :
 
@@ -21,6 +21,28 @@ $ helm install stable/sonarqube
 The above command deploys Sonarqube on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
 The default login is admin/admin.
+
+### Image Security Policies
+
+If the cluster has image security policies enforced, the following repositories should be added to it.
+
+```yaml
+apiVersion: securityenforcement.admission.cloud.ibm.com/v1beta1
+kind: ClusterImagePolicy
+metadata:
+name: sonarqube-image-policy
+spec:
+ repositories:
+   - name: docker.io/sonarqube:*
+```
+
+Optionally include `docker.io/bitnami/postgresql:*` or `docker.io/mysql:*` if you are deploying a database with this chart.
+
+For documentation on managing image policies refer to [Enforcing container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html).
+
+### Pod Security Policies
+
+This chart requires the namespace being used to have the `ibm-anyuid-psp` pod security policy set on it.
 
 ## Uninstalling the chart
 
@@ -90,7 +112,10 @@ The following table lists the configurable parameters of the Sonarqube chart and
 | `plugins.deleteDefaultPlugins`              | Remove default plugins and use plugins.install list | `[]`                             |
 | `podLabels`                                 | Map of labels to add to the pods          | `{}`                                       |
 
+You can also configure values for the PostgreSQL / MySQL database via the Postgresql [README.md](https://github.com/kubernetes/charts/blob/master/stable/postgresql/README.md) / MySQL [README.md](https://github.com/kubernetes/charts/blob/master/stable/mysql/README.md).
 
-You can also configure values for the PostgreSQL / MySQL database via the Postgresql [README.md](https://github.com/kubernetes/charts/blob/master/stable/postgresql/README.md) / MySQL [README.md](https://github.com/kubernetes/charts/blob/master/stable/mysql/README.md)
+For overriding variables see: [Customizing the chart](https://docs.helm.sh/using_helm/#customizing-the-chart-before-installing).
 
-For overriding variables see: [Customizing the chart](https://docs.helm.sh/using_helm/#customizing-the-chart-before-installing)
+## Support
+
+To engage in the SonarQube forums, browse online documentation, or just to stay connected; please visit the [SonarQube Community page](https://www.sonarqube.org/community/).
