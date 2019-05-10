@@ -4,15 +4,15 @@
 [//]: # (US Government Users Restricted Rights - Use, duplication or)
 [//]: # (disclosure restricted by GSA ADP Schedule Contract with IBM Corp.)
 
-# What’s new in Chart Version 3.1.2
+# What’s new in Chart Version 3.1.3
 
-The 3.1.2 version of the Chart installs version 3.1.2.0 of IBM Cloud Automation Manager.  For a complete list of what's new in this release go to https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_whatisnew.html
+The 3.1.3 version of the Chart installs version 3.1.2.1 of IBM Cloud Automation Manager.  For a complete list of what's new in this release go to https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.1/cam_whatisnew.html
 
 # Prerequisites
 1. IBM Cloud Automation Manager is required to run on IBM Cloud Private
 
 # Documentation
-For detailed upgrade instructions go to https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.0/cam_upgrade_cam.html
+For detailed upgrade instructions go to https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.1/cam_upgrade_cam.html
 
 # Fixes
 Various bug fixes
@@ -24,6 +24,7 @@ None
 
 | Chart | Date | IBM Cloud Automation Manager version | Kubernetes Required | Details |
 | ----- | ---- | ------------------------------------ | ------------------- | ------- | 
+| 3.1.3 | May 10, 2019| 3.1.2.1 | >=1.11.0 | 2Q19 release |
 | 3.1.2 | April 30, 2019| 3.1.2.0 | >=1.11.0 | s390x z/Linux support |
 | 3.1.1 | Mar 8, 2019| 3.1.2.0 | >=1.11.0 | 1Q19 release |
 | 3.1.0 | Sept 28, 2018| 3.1.0.0 | >=1.9.0 | 3Q18 release |
