@@ -16,7 +16,7 @@ This chart deploys a single IBM App Connect Enterprise for Developers Integratio
 
 ## Prerequisites
 
-* Kubernetes 1.9 or greater, with beta APIs enabled
+* Kubernetes 1.11.1 or greater, with beta APIs enabled
 * A user with operator role is required to install the chart
 * If persistence is enabled (see configuration), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster
 * If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191)
@@ -177,6 +177,10 @@ The configuration section lists the parameters that can be configured during ins
 
 > **Tip**: See all the resources deployed by the chart using kubectl get all -l release=ace-server-dev
 
+## Verifying the Chart
+
+See the instruction (from NOTES.txt within chart) after the helm installation completes for chart verification. The instruction can also be viewed by running the command: helm status my-release --tls.
+
 ## Uninstalling the Chart
 
 To uninstall/delete the `ace-server-dev` release:
@@ -195,7 +199,7 @@ The following table lists the configurable parameters of the `ibm-ace-server-dev
 | `license`                        | Set to `accept` to accept the terms of the IBM license  | `Not accepted`                                     |
 | `contentServerURL`               | URL provided by the ACE dashboard to pull resources from | `nil`                                                |
 | `queueManagerEnabled`            | Boolean toggle for whether to run a StatefulSet with an MQ Queue Manager associated with the ACE Integration Server, or a Deployment without an MQ Queue Manager| `false` |
-| `image.tag`                      | Image tag                                       | `11.0.0.3`                                                 |
+| `image.tag`                      | Image tag                                       | `11.0.0.4`                                                 |
 | `image.pullPolicy`               | Image pull policy                               | `IfNotPresent`                                             |
 | `image.pullSecret`               | Image pull secret, if you are using a private Docker registry | `nil`                                        |
 | `arch`                           | Architecture scheduling preference for worker node (only amd64 supported) - read only | `amd64`              |
@@ -221,6 +225,7 @@ The following table lists the configurable parameters of the `ibm-ace-server-dev
 | `replicaCount`                   | When running without a Queue Manager, set how many replicas of the deployment pod to run | `3`               |
 | `queueManager.name`              | MQ Queue Manager name                           | Helm release name                                          |
 | `integrationServer.name`         | ACE Integration Server name                     | Helm release name                                          |
+| `integrationServer.defaultAppName`         | Allows you to specifiy a name for the default application for the deployment of independent resources                     | `nil`     
 | `configurationSecret`            | The name of the secret to create or to use that contains the server configuration | `nil`                    |
 | `log.format`                     | Output log format on container's console. Either `json` or `basic` | `json`                                  |
 | `metrics.enabled`                | Enable Prometheus metrics for the Queue Manager and Integration Server | `true`                              |
@@ -231,8 +236,6 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
 
-> **Tip**: You can use the default [values.yaml](values.yaml)
-
 ## Storage
 
 When Queue Manager is enabled, the chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) for the storage of MQ configuration data and messages.  By using a Persistent Volume based on network-attached storage, Kubernetes can re-schedule the MQ server onto a different worker node. You should not use "hostPath" or "local" volumes, because this will not allow moving between nodes. The default size of the persistent volume claim is 2Gi.
@@ -240,6 +243,8 @@ When Queue Manager is enabled, the chart mounts a [Persistent Volume](http://kub
 Performance requirements will vary widely based on workload, but as a guideline, use a Storage Class which allows for at least 200 IOPS (based on 16 KB block size with a 50/50 read/write mix).
 
 For volumes that support onwership management, specify the group ID of the group owning the persistent volumes' file systems using the `fsGroupGid` parameter.
+
+**If not using Dynamic Provisioning:** The only requirement is to have an available Persistent Volume (a PV that is not already bound). No Persistent Volume Claim (PVC) needs to be created, the installation of this chart will automatically create it and bind it to an available PV. The name entered in `dataPVC.name` will become part of the final name of the PVC created by the chart. Supply a `dataPVC.size` no bigger than the size of the Persistent Volume created previously so the volume is claimed by the PVC.
 
 ## Resources Required
 
@@ -264,7 +269,7 @@ The `log.format` value controls whether the format of the output logs is:
 
 This Chart can run only on amd64 architecture type.
 
-## Useful Links
+## Documentation
 
 [View the IBM App Connect Enterprise Dockerfile repository on Github](https://github.com/ot4i/ace-docker)
 
@@ -275,7 +280,3 @@ This Chart can run only on amd64 architecture type.
 [Learn more about IBM App Connect Enterprise and Docker](https://www.ibm.com/support/knowledgecenter/en/SSTTDS_11.0.0/com.ibm.etools.mft.doc/bz91300_.htm)
 
 [Learn more about IBM App Connect Enterprise and Lightweight Integration](https://ibm.biz/LightweightIntegrationLinks)
-
-_Copyright IBM Corporation 2018. All Rights Reserved._
-
-_The IBM App Connect Enterprise logo is copyright IBM. You will not use the IBM App Connect Enterprise logo in any way that would diminish the IBM or IBM App Connect Enterprise image. IBM reserves the right to end your privilege to use the logo at any time in the future at our sole discretion. Any use of the IBM App Connect Enterprise logo affirms that you agree to adhere to these conditions._
