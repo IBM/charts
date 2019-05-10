@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2018
+# © Copyright IBM Corporation 2019
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,5 +30,5 @@ sch:
     metering:
       productName: IBM App Connect Enterprise for Developers (Free)
       productID: IBMAppConnectEnterprise_f9e7010beec748fe98ff292138860707
-      productVersion: "11.0.0.3"
+      productVersion: "11.0.0.4"
 {{- end -}}
