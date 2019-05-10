@@ -1,7 +1,7 @@
 {{- /*
-affinity helpers for SCH (Shared Configurable Helpers)
+security helpers for SCH (Shared Configurable Helpers)
 
-sch/security.tpl contains shared configurable helper templates for 
+sch/_security.tpl contains shared configurable helper templates for 
 specifying securityContext resources.
 
 Usage of "sch.security.*" requires the following line be included at
@@ -36,8 +36,7 @@ __Parameters input as an list of values:__
 - config values map of securityContext (required)
 
 __Usage:__
-example chart config values. See _config.tpl for the default values if you do
-not define sch.chart.nodeAffinity
+example chart config values
 ```
 {{- define "sch.chart.config.values" -}}
 sch:

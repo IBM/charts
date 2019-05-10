@@ -32,6 +32,9 @@ sch:
   chart:
     appName: ""
     labelType: non-prefixed
+    secretGen:
+      suffix: "generated"
+      secrets: []
   names:
     fullName:
       maxLength: 63
@@ -135,4 +138,37 @@ or
      {{- end -}}
    {{- end -}}
 {{- end -}}
+{{- end -}}
+
+
+{{- define "sch.secretGen.config.init" -}}
+  {{- $params := . -}}
+  {{- $root := first $params -}}
+  {{- $configName := (include "sch.utils.getItem" (list $params 1 "secretGen.config.default.values")) -}}
+  {{- $config := fromYaml (include $configName $root) -}}
+  {{- $_ := set $config "initSecrets" (list) -}}
+  {{- range $secret := $config.secretGen.secrets }}
+    {{- if $secret.create -}}
+      {{- $_ := unset $secret "create" -}}
+      {{- $_ := set $config "initSecrets" (append $config.initSecrets $secret) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $_ := set $config.secretGen "secrets" $config.initSecrets -}}
+  {{- $_ := unset $config "initSecrets" -}}
+  {{- $_ := merge $root $config -}}
+{{- end -}}
+
+{{- define "sch.secretGen.config.default.values" -}}
+secretGen:
+  suffix: "generated"
+  secrets: []
+{{- end -}}
+
+{{- define "sch.secretGen.name" -}}
+{{ include "sch.names.fullCompName" (list . .secretGen.suffix) }}
+{{- end -}}
+
+{{- define "sch.secretGen.root.nameOverride" -}}
+Values:
+  nameOverride: ""
 {{- end -}}

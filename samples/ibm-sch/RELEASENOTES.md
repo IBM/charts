@@ -1,8 +1,8 @@
-# What's new in Chart Version 1.2.8
-* Bug fixes
+# What's new in Chart Version 1.2.9
+* Added secret generation support
 
 # Fixes
-* Fixed issue with resolving appName and shortName from \_sch-chart-config.tpl
+* No additional fixes beyond adding secret generation support.
 
 # Prerequisites
 * Kubernetes version 1.9 or greater
@@ -16,6 +16,7 @@
 # Version History
 | Chart | Date     | Kubernetes Required | Details |
 |-------|----------|---------------------|---------|
+| 1.2.9 | 05/10/19 | >=1.9.0 | Added secret generation support |
 | 1.2.8 | 03/14/19 | >=1.9.0 | Bug fixes |
 | 1.2.7 | 02/18/19 | >=1.9.0 | Added ingress rules, pod affinity/anti-affinity rules, ilmt annotations, and security context rules |
 | 1.2.6 | 11/26/18 | >=1.9.0 | Bug fixes. Include release label with new standard labels |

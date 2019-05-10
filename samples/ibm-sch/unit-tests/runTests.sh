@@ -17,13 +17,16 @@ TESTDIRS=($SCRIPTDIR/test-*)
 for TESTDIR in "${TESTDIRS[@]}"
 do
   echo "Executing:" $(basename $TESTDIR)
-  (cd $TESTDIR/chart/templates && ln -s ../../../../templates $TESTDIR/chart/templates/sch-template)
+  mkdir -p $TESTDIR/chart/charts/ibm-sch/templates
+  cp -R $TESTDIR/../../templates/* $TESTDIR/chart/charts/ibm-sch/templates
+  cp -R $TESTDIR/../../Chart.yaml $TESTDIR/chart/charts/ibm-sch/Chart.yaml
+  cp -R $TESTDIR/../../values.yaml $TESTDIR/chart/charts/ibm-sch/values.yaml
   helm template $TESTDIR/chart -f $TESTDIR/chart/values.yaml | sed '/---/d' | sed '/^$/d' | sed '/# Source/d' > $TESTDIR/output.yaml
   $SCRIPTDIR/compareyaml -expected=$TESTDIR/expected.yaml -actual=$TESTDIR/output.yaml
   if [ $? != 0 ]; then
     FAIL=true
   fi
-  rm -rf $TESTDIR/chart/templates/sch-template
+  rm -rf $TESTDIR/chart/charts
 done
 
 rm compareyaml
