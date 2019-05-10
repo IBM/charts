@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2018
+# © Copyright IBM Corporation 2019
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
 {{- $deploymentName := include "sch.names.fullName" (list .) }}
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "ace-dashboard")) }}
 {{- $serverChartName := .sch.chart.serverChartName }}
-apiVersion: extensions/v1beta1
+{{- $pvcName := "dataPVC" }}
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $deploymentName }}
@@ -29,6 +29,9 @@ spec:
       maxUnavailable: 1
       maxSurge: 1
   replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ $labels | indent 6 }}
   template:
     metadata:
       annotations:
@@ -59,7 +62,7 @@ spec:
         runAsUser: 1000
         fsGroup: {{ default 1000 .Values.fsGroupGid }}
       containers:
-        - name: {{ $deploymentName }}-content-server
+        - name: {{ include "sch.names.fullCompName" (list . "content-server") }}
           image: "{{ .Values.image.contentServer }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
@@ -112,7 +115,7 @@ spec:
 {{ toYaml .Values.contentServer.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.contentServer.resources.requests | indent 14 }}
-        - name: {{ $deploymentName }}-control-ui
+        - name: {{ include "sch.names.fullCompName" (list . "control-ui") }}
           image: "{{ .Values.image.controlUI }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
@@ -221,7 +224,7 @@ spec:
             claimName: {{ .Values.persistence.existingClaimName}}
         {{- else if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ $deploymentName }}
+            claimName: {{ include "sch.names.persistentVolumeClaimName" (list . $pvcName) }}
         {{- else }}
           emptyDir: {}
         {{- end }}

@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2018
+# © Copyright IBM Corporation 2019
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{ $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
 {{ $secretName := .Values.configurationSecret | default (printf "%s-%s" $deploymentName "configuration") }}
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $deploymentName }}
@@ -36,6 +36,9 @@ spec:
       maxUnavailable: 1
       maxSurge: 1
   replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
   template:
     metadata:
       annotations:
@@ -111,6 +114,8 @@ spec:
                    name: {{ $secretName }}
                    optional: true
                    key: truststorePassword
+            - name: ACE_DEFAULT_APPLICATION_NAME
+              value: {{ .Values.integrationServer.defaultAppName | quote }}
           volumeMounts:
             {{- if .Values.contentServerURL }}
             - name: webusers
@@ -157,6 +162,8 @@ spec:
               - NET_BIND_SERVICE
               - SYS_CHROOT
               - SETFCAP
+              drop:
+              - ALL
           # Set liveness probe to determine if the Integration Server is running
           livenessProbe:
             exec:
