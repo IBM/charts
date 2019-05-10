@@ -416,4 +416,4 @@ In order to improve the performance in case of slave failure, we added persisten
 This version also allows enabling Redis Sentinel containers inside of the Redis Pods (feature disabled by default). In case the master crashes, a new Redis node will be elected as master. In order to query the current master (no redis master service is exposed), you need to query first the Sentinel cluster. Find more information [in this section](#master-slave-with-sentinel).
 
 ## Support
-Redis has a wide variety of community and commercial support options available for users. Visit [Redis COmmunity Support Page](https://redis.io/community) for details.
+Redis has a wide variety of community and commercial support options available for users. Visit [Redis Community Support Page](https://redis.io/community) for details.
