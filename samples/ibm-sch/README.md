@@ -18,6 +18,33 @@ The goal of the Shared Configurable Helpers chart is to provide a set of Helm te
 
 ## Documentation
 
+### Including ibm-sch in your chart
+
+There are two ways to include ibm-sch with your chart:
+
+1. Include ibm-sch in your chart's requirements.yaml and use helm to download it
+
+   Format of entry in requirements.yaml:
+
+   ```
+   dependencies:
+   - name: ibm-sch
+     repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
+     version: "^1.2.9"
+     alias: sch
+     condition: global.sch.enabled
+   ```
+
+   Explanation of parameters:
+   - Set the alias to `sch` to guarantee that all functions will work successfully.
+   - Set the version to `^1.2.9` to download the latest `1.x.x` version of ibm-sch.
+   - Use a condition parameter to only install ibm-sch when intended. For example, if your chart is able to be installed standalone and as a subchart, then you want ibm-sch to be enabled when your chart is installed standalone, but you want to use the parent chart's ibm-sch when it is installed as a subchart. To achieve this, you would set `global.sch.enabled` to true in the subchart and false in the parent chart.
+
+1. Download the source and copy it into your charts directory
+
+   - You will want to delete the unit-tests and ibm_cloud_pak directories from ibm-sch or add them to the parent .helmignore file to avoid the 1 MB chart size limit from Helm.
+   - The entry in requirements.yaml will still need to be created in this scenario for everything to function correctly.
+
 ### Configuration
 
 The default configuration and initiation helpers for SCH (Shared Configurable Helpers) is defined in `templates/_config.tpl`. A given chart should specify additional values and/or override values via defined yaml structure passed during `"sch.config.init"` ([see below](#initialization)).
@@ -120,6 +147,7 @@ __Example__
 - [Metadata](#metadata)
 - [Affinity](#affinity)
 - [Security](#security)
+- [Secrets](#secrets)
 <!-- /TOC -->
 
 ### Naming
@@ -453,7 +481,7 @@ The following are affinity templates:
 
 `"sch.affinity.nodeAffinity"` constrains your pod to only be able to run on particular nodes based on specified rules. Specify one or both of `nodeAffinityRequiredDuringScheduling` and `nodeAffinityPreferredDuringScheduling` to set your node affinity. The `operator` supports the following options: `In`, `NotIn`, `Exists`, `DoesNotExist`, `Gt`, `Lt`. The `key` defaults to `beta.kubernetes.io/arch` if not specified.
 
-Alternatively, set your node affinity in your values.yaml using the arch parameter to allow the chart deployer to specify which platform they would like to deploy on. If arch is specified in values.yaml, then it will override what has been specified in \_sch-chart-config.tpl. See the examples below for more information on using the arch parameter.
+Alternatively, set your node affinity in your values.yaml using the arch parameter to allow the chart deployer to specify which platform they would like to deploy on. If arch is specified in values.yaml, then it will override what has been specified in _sch-chart-config.tpl. See the examples below for more information on using the arch parameter.
 
 For more information, see https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
 
@@ -651,7 +679,7 @@ The following are security templates:
 needs to be evaluated at a container level for their security requirements, but often there is a set of
 attributes that is common to a number of pods within your deployment.
 
-Specify one or more securityContexts in your \_sch-chart-config.tpl and pass one to the `sch.security.securityContext`
+Specify one or more securityContexts in your _sch-chart-config.tpl and pass one to the `sch.security.securityContext`
 definition to include a securityContext in your chart yaml.
 
 __Values Used__
@@ -715,4 +743,218 @@ spec:
   template:
     spec:
 {{- include "sch.security.securityContext" (list . .sch.chart.securityContext2) | indent 6 }}
+```
+
+### Secrets
+
+secret helpers for SCH (Shared Configurable Helpers)
+
+sch/_secrets.tpl contains shared configurable helper templates for generating and deleting secrets.
+
+#### Prerequisites
+
+The secret generation code creates a Job resource that uses a container image to interact with Kubernetes. For this reason, using this function requires additional prerequisites beyond the typical items.
+
+1. The ibm-sch subchart must be aliased as `sch` in requirements.yaml:
+```
+dependencies:
+  - name: ibm-sch
+    repository: "@sch"
+    version: "^1.2.9"
+    alias: sch
+```
+
+2. The container image used by the secret generator must be added to ibm_cloud_pak/manifest.yaml:
+
+```
+- image: ibmcom/kubectl:v1.12.4
+  references:
+  - repository: ibmcom/kubectl:v1.12.4
+```
+
+3. PodSecurityPolicy Requirements
+
+  This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement, there may be cluster-scoped as well as namespace-scoped actions that you must do before and after installation.
+
+  The predefined PodSecurityPolicy name ibm-restricted-psp has been verified for this chart. If your target namespace is bound to this PodSecurityPolicy, you can proceed to install the chart.
+
+4. Role-Based Access Control settings
+
+  The following RBAC resources are required for the secret generation code to create and delete secrets. The ibm_cloud_pak/pak_extensions/pre-install/namespace-administration/setupNamespace.sh script has been provided to assist with the creation of these resources.
+
+  To ease integration, the service account name can be specified in _sch-chart-config.yaml which allows for the role to be merged with an existing role that is bound to a chart's existing service account rather than needing to create all of these resources separately.
+
+  1. ServiceAccount:
+
+  ```
+  apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: ibm-sch-secret-gen
+    namespace: "{{ NAMESPACE }}" #Replace {{ NAMESPACE }} with the namespace you are deploying to
+  ```
+
+  2. Role:
+
+  ```
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: Role
+  metadata:
+    name: ibm-sch-secret-gen
+  rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["list", "create", "delete"]
+  ```
+
+  3. RoleBinding:
+
+  ```
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    name: ibm-sch-secret-gen
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: ibm-sch-secret-gen
+  subjects:
+  - kind: ServiceAccount
+    name: ibm-sch-secret-gen
+    namespace: "{{ NAMESPACE }}"
+  ```
+
+#### Create Secret
+
+`"sch.secretGen.job.create"` generates a Kubernetes Job resource to create one or more secrets.
+
+Supported secret types:
+- generic
+- tls
+
+Specify a list of secrets to be generated in the `sch.chart.secretGen` parameter in your _sch-chart-config.tpl. The yaml file containing the job will contain an import request to `sch.config.init` and an import request to `sch.secretGen.job.create`.
+
+The TLS secret generated is a self-signed CA certificate.
+
+In the event that a generic secret needs to generated in a different manner, the function used to generate the secret can be overridden. See the second example below for more information.
+
+__Values Used__
+- None
+
+__Config Values Used:__
+- `sch.chart.secretGen`
+
+__Parameters input as an list of values:__
+- the root context (required)
+
+__Usage:__
+Example 1: Create a generic secret and a secret containing a self-signed CA certificate. Use the chart's service account vs. the default
+```
+{{- define "sch.chart.config.values" -}}
+sch:
+  chart:
+    secretGen:
+      suffix: default-suffix
+      overwriteExisting: false
+      serviceAccountName: mychart-serviceaccount  # Set this to your service account name or remove it to use ibm-sch-secret-gen
+      secrets:
+      - name: passwords  # this will include the suffix in the format of <name>-<suffix>
+        create: true
+        type: generic
+        values:
+        - name: MYSQL_ROOT_PASSWORD
+          length: 30
+        - name: MYSQL_PASSWORD
+          length: 30
+      - name: mysql.myhost.com # this will include the suffix in the format of <name>-<suffix>
+        create: {{ empty .Values.tlsSecret }}
+        type: tls
+        cn: mysql.myhost.com
+{{- end -}}
+```
+
+Example 2: Create a generic secret and specify the generation code
+
+Define the generation function:
+```
+{{- define "mysql.secrets.generator.basicAuth" -}}
+  $(echo "Basic $(openssl rand -hex 20):$(openssl rand -hex 20)" | base64 |  tr -d '\n')
+{{- end -}}
+```
+Set the generator value for the corresponding secret:
+```
+{{- define "test.secretGen.values" -}}
+sch:
+  chart:
+    secretGen:
+      suffix: default-suffix
+      overwriteExisting: false
+      serviceAccountName: mychart-serviceaccount  # Set this to your service account name or remove it to use ibm-sch-secret-gen
+      secrets:
+      - name: passwords  # this will include the suffix in the format of <name>-<suffix>
+        create: true
+        type: generic
+        values:
+        - name: MYSQL_ROOT_PASSWORD
+          generator: "mychart.secrets.generator.basicAuth"
+        - name: MYSQL_PASSWORD
+          length: 30
+{{- end -}}
+```
+
+used in template as follows:
+```
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.secretGen.job.create" (list .) -}}
+```
+or, to override the suffix:
+```
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.secretGen.job.create"  (list . (include "sch.names.appName" (list .))) -}}
+```
+
+#### Delete Secret
+
+`"sch.secretGen.job.delete"` generates a Kubernetes Job resource to delete one or more secrets when your Helm chart is deleted.
+
+Specify a list of secrets to be deleted in the `sch.chart.secretGen` parameter in your _sch-chart-config.tpl. This should match the secrets that you created with `sch.secretGen.job.create`. The yaml file containing the job will contain an import request to `sch.config.init` and an import request to `sch.secretGen.job.create`.
+
+__Values Used__
+- None
+
+__Config Values Used:__
+- `sch.chart.secretGen`
+
+__Parameters input as an list of values:__
+- the root context (required)
+
+__Usage:__
+Delete two secrets with the tls being conditional
+```
+{{- define "sch.chart.config.values" -}}
+sch:
+  chart:
+    secretGen:
+      suffix: default-suffix
+      overwriteExisting: false
+      serviceAccountName: mychart-serviceaccount  # Set this to your service account name or remove it to use ibm-sch-secret-gen
+      secrets:
+      - name: passwords  # this will include the suffix in the format of <name>-<suffix>
+        create: true
+        type: generic
+        values:
+        - name: MYSQL_ROOT_PASSWORD
+          length: 30
+        - name: MYSQL_PASSWORD
+          length: 30
+      - name: mysql.myhost.com # this will include the suffix in the format of <name>-<suffix>
+        create: {{ empty .Values.tlsSecret }}
+        type: tls
+        cn: mysql.myhost.com
+{{- end -}}
+```
+used in template as follows:
+```
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.secretGen.job.delete" . -}}
 ```
