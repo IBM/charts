@@ -7,7 +7,7 @@ MariaDB is developed as open source software and as a relational database it pro
 ## TL;DR
 
 ```bash
-$ helm install stable/mariadb
+$ helm install community/mariadb
 ```
 
 ## Introduction
@@ -26,7 +26,7 @@ Bitnami charts can be used with [Kubeapps](https://kubeapps.com/) for deployment
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --name my-release stable/mariadb
+$ helm install --name my-release community/mariadb
 ```
 
 The command deploys MariaDB on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
