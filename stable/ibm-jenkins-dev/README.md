@@ -2,6 +2,8 @@
 
 [Jenkins](https://jenkins.io/) is the leading open source automation server. Jenkins provides hundreds of plugins to support building, deploying and automating any project.
 
+THIS CHART IS NOW DEPRECATED. On May 10th, 2019 this version of the Helm chart for IBM jenkins will no longer be supported. The dev chart is replaced by a community chart available at https://github.com/IBM/charts/tree/master/community/jenkins. This chart will be removed on June 11th, 2019.
+
 ## Introduction
 
 This chart bootstraps a [Jenkins](https://jenkins.io/) deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager. The Jenkins [Kubernetes Plugin](https://wiki.jenkins.io/display/JENKINS/Kubernetes+Plugin) is used to provision pods with Jenkins agents on them to perform work.
@@ -10,24 +12,29 @@ This chart bootstraps a [Jenkins](https://jenkins.io/) deployment on a [Kubernet
 
 - Kubernetes 1.7 or later
 - Tiller 2.6.0 or later
-- To persist data, a PersistentVolume needs to be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using the IBM Cloud Private UI or with the CLI. Create a `pv.yaml` file with the following content:
-  ```bash
-  apiVersion: v1
-  kind: PersistentVolume
-  metadata:
-    name: my-release-jenkins
-  spec:
-    accessModes:
-      - ReadWriteOnce
-    capacity:
-      storage: 1Gi
-    hostPath:
-      path: /var/data/my-release-jenkins
-  ```
-  From shell, run the following:
-  ```bash
-  $ kubectl create -f pv.yaml
-  ```
+- To persist data, a PersistentVolume needs to be created one of two ways-
+  1. You can choose to dynamically provision if `persistance.enabled=true` and `persistence.dynamicProvisioning=true` (default values, see [persistence](#persistence) section).
+  2. It can be pre-created prior to installing the chart if `persistance.enabled=true` and `persistence.dynamicProvisioning=false` (default values, see [persistence](#persistence) section). It can be created by using a `pv.yaml` file with the following content, as an example:
+    ```bash
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      name: <persistent volume name>
+    spec:
+      capacity:
+        storage: 1Gi
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: <optional - must match PVC>
+      nfs:
+        server: <NFS Server IP>
+        path: <NFS PATH>      
+    ```
+      
+    From shell, run the following:
+    ```bash
+    $ kubectl create -f pv.yaml
+    ```
 
 ## Installing the Chart
 
@@ -106,6 +113,8 @@ The following tables lists the configurable parameters of the Jenkins chart and 
 | `rbac.apiVersion`         | Kubernetes RBAC API version (currently either v1beta1 or v1alpha1) | `v1beta1`                                      |
 | `rbac.roleRef`            | Cluster role reference.                                  | `cluster-admin`                                          |
 
+## Chart Details
+
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
 ```bash
@@ -138,6 +147,13 @@ The chart mounts a [Persistent Volume](kubernetes.io/docs/user-guide/persistent-
     ```bash
     $ helm install --set homePVC.existingClaimName=PVC_NAME stable/ibm-jenkins-dev
     ```
+
+## Resources Required
+
+The chart deploys pods consuming minimum resources as specified in the resources configuration parameter (default: Memory: 256Mi, CPU: 200m)
+
+## Limitations
+ Refer to section [RBAC] (#RBAC)
 
 ## Copyright
 © Copyright IBM Corporation 2018. All Rights Reserved.
