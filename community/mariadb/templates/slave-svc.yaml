@@ -1,0 +1,44 @@
+{{- if .Values.replication.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "slave.fullname" . }}
+  labels:
+    app.kubernetes.io/name: "{{ template "mariadb.name" . }}"
+    helm.sh/chart: "{{ template "mariadb.chart" . }}"
+    app.kubernetes.io/component: "slave"
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    release: {{ .Release.Name | quote }}
+{{- if .Values.metrics.enabled }}
+  annotations:
+{{ toYaml .Values.metrics.annotations | indent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if eq .Values.service.type "ClusterIP" }}
+  {{- if .Values.service.clusterIp }}
+  clusterIP: {{ .Values.service.clusterIp }}
+  {{- end }}
+  {{- end }}
+  ports:
+  - name: mysql-slave
+    port: {{ .Values.service.port }}
+    targetPort: mysql
+{{- if (eq .Values.service.type "NodePort") }}
+{{- if .Values.service.nodePort }}
+{{- if .Values.service.nodePort.slave }}
+    nodePort: {{ .Values.service.nodePort.slave }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if .Values.metrics.enabled }}
+  - name: metrics
+    port: 9104
+    targetPort: metrics
+{{- end }}
+  selector:
+    app.kubernetes.io/name: "{{ template "mariadb.name" . }}"
+    app.kubernetes.io/component: "slave"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+{{- end }}

@@ -1,0 +1,27 @@
+{{- if and (or (.Files.Glob "files/docker-entrypoint-initdb.d/*.{sh,sql,sql.gz}") .Values.initdbScripts) (not .Values.initdbScriptsConfigMap) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "master.fullname" . }}-init-scripts
+  labels:
+    app.kubernetes.io/name: "{{ template "mariadb.name" . }}"
+    helm.sh/chart: "{{ template "mariadb.chart" . }}"
+    app.kubernetes.io/component: "master"
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    release: {{ .Release.Name | quote }}
+{{- if and (.Files.Glob "files/docker-entrypoint-initdb.d/*.sql.gz") (not .Values.initdbScriptsConfigMap) }}
+binaryData:
+{{- $root := . }}
+{{- range $path, $bytes := .Files.Glob "files/docker-entrypoint-initdb.d/*.sql.gz" }}
+  {{ base $path }}: {{ $root.Files.Get $path | b64enc | quote }}
+{{- end }}
+{{- end }}
+data:
+{{- if and (.Files.Glob "files/docker-entrypoint-initdb.d/*.{sh,sql}") (not .Values.initdbScriptsConfigMap) }}
+{{ (.Files.Glob "files/docker-entrypoint-initdb.d/*.{sh,sql}").AsConfig | indent 2 }}
+{{- end }}
+{{- with .Values.initdbScripts }}
+{{ toYaml . | indent 2 }}
+{{- end }}
+{{ end }}
