@@ -1,10 +1,21 @@
+# What's new in Chart Version 1.1.2
+
+* New skydive image 0.22.0
+* IBM Cloud Kubernetes Service: fix DNS of analyzer
+* IBM Cloud Kubernetes Service: fix k8s RBAC to support all platforms
+* IBM Cloud Private/IBM Cloud Kubernetes Service: enable configuration of agent.topology.probes
+
+## Breaking Changes
+
+None
+
 # What's new in Chart Version 1.1.1
 
 * Expose ports of Skydive; ElasticSearch; ETCD 
 * ICP: support docker image repo skydive/skydive 
 * IKS: add runC container runtime probe 
 * IKS: fix k8s on IKS with default RBAC
-* IKS versions 1.11, 1.12, 1.13 are supported
+* IKS: versions 1.11, 1.12, 1.13 are supported
 
 ## Breaking Changes
 
@@ -53,6 +64,7 @@ None
 
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- | 
+| 1.1.2 | Apr 30, 2019| >= 2.1.0.3 | ibmcom/skydive:0.22.0 | None | +ppc64le, +s390x |
 | 1.1.1 | Mar 29, 2019| >= 2.1.0.3 | ibmcom/skydive:0.21.0 | None | +ppc64le, +s390x |
 | 1.1.0 | Jan 24, 2019| >= 2.1.0.3 | ibmcom/skydive:0.21.0 | None | +ppc64le, +s390x |
 | 1.0.3 | Jul 23, 2018| >=2.1.0.3 | ibmcom/skydive:0.18 | None | |

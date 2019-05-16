@@ -77,7 +77,7 @@ The following tables lists the configurable parameters of skydive chart and thei
 | Parameter                            | Description                                     | Default                                                    |
 | ----------------------------------   | ---------------------------------------------   | ---------------------------------------------------------- |
 | `image.repository`                   | Skydive image repository                        | `ibmcom/skydive`                                           |
-| `image.tag`                          | Image tag                                       | `0.21.0`                                                   |
+| `image.tag`                          | Image tag                                       | `0.22.0`                                                   |
 | `image.secretName`                   | Image secret for private repository             | Empty                                                      |
 | `image.imagePullPolicy`              | Image pull policy                               | `IfNotPresent`                                             |
 | `resources`                          | CPU/Memory resource requests/limits             | Memory: `8192Mi`, CPU: `2000m`                             |
