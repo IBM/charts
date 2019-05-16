@@ -15,12 +15,22 @@ This chart bootstraps a SonarQube instance with a PostgreSQL database.
 To install the chart :
 
 ```bash
-$ helm install stable/sonarqube
+$ helm install community/sonarqube
 ```
 
 The above command deploys Sonarqube on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
 The default login is admin/admin.
+
+### Secrets
+
+The secure and recommended approach to provide sensitive data like passwords is to generate a secret containing the sensitive data and providing the pre-created secret name during chart deployment.
+
+If you are using an external database, you should provide an existing secret containing the external database password. The existing secret can be provided as a value to `postgresql.postgresPasswordSecret` or `mysql.mysqlPasswordSecret`.
+
+If creating a secret, it is recommended to name the secret as release-name-secret-name. For example: MyRelease-MySecret
+
+This allows the secrets to be affiliated with the release, but not directly included with the release.
 
 ### Image Security Policies
 
@@ -68,12 +78,21 @@ The following table lists the configurable parameters of the Sonarqube chart and
 | `command`                                   | command to run in the container           | `nil` (need to be set prior to 6.7.6, and 7.4)      |
 | `securityContext.fsGroup`                   | Group applied to mounted directories/files|  `999`                                     |
 | `ingress.enabled`                           | Flag for enabling ingress                 | false                                      |
+| `ingress.annotations`                       | Ingress additional annotations            | `{}`                                       |
 | `ingress.labels`                            | Ingress additional labels                 | `{}`                                       |
 | `ingress.hosts[0].name`                     | Hostname to your SonarQube installation   | `sonar.organization.com`                   |
 | `ingress.hosts[0].path`                     | Path within the URL structure             | /                                          |
+| `livenessProbe.initialDelaySeconds`         | Initial delay in seconds for livenessProbe | 60                                        |
+| `livenessProbe.periodSeconds`               | Period in seconds between probes          | 30                                         |
 | `livenessProbe.sonarWebContext`             | SonarQube web context for livenessProbe   | /                                          |
+| `readinessProbe.initialDelaySeconds`        | Initial delay in seconds for livenessProbe  | 60                                       |
+| `readinessProbe.periodSeconds`              | Period in seconds between probes          | 30                                         |
+| `readinessProbe.failureThreshold`           | Failure threshold before being marked unready  | 6                                     |
 | `readinessProbe.sonarWebContext`            | SonarQube web context for readinessProbe  | /                                          |
+| `service.name`                              | Kubernetes service name                   | `sonarqube`                                |
 | `service.type`                              | Kubernetes service type                   | `LoadBalancer`                             |
+| `service.externalPort`                      | Kubernetes service externalPort           | 9000                                       |
+| `service.internalPort`                      | Kubernetes service internalPort           | 9000                                       |
 | `service.labels`                            | Kubernetes service labels                 | None                                       |
 | `service.annotations`                       | Kubernetes service annotations            | None                                       |
 | `service.loadBalancerSourceRanges`          | Kubernetes service LB Allowed inbound IP addresses | 0.0.0.0/0                            |
@@ -81,7 +100,7 @@ The following table lists the configurable parameters of the Sonarqube chart and
 | `persistence.enabled`                       | Flag for enabling persistent storage      | false                                      |
 | `persistence.existingClaim`                 | Do not create a new PVC but use this one  | None                                       |
 | `persistence.storageClass`                  | Storage class to be used                  | "-"                                        |
-| `persistence.accessMode`                    | Volumes access mode to be set             | `ReadWriteOnce`                            |
+| `persistence.accessMode`                    | Volumes access mode to be set             | `ReadWriteMany`                            |
 | `persistence.size`                          | Size of the volume                        | None                                     |
 | `sonarProperties`                           | Custom `sonar.properties` file            | None                                       |
 | `sonarSecretKey`                            | Name of existing secret used for settings encryption | None                            |
@@ -101,6 +120,7 @@ The following table lists the configurable parameters of the Sonarqube chart and
 | `mysql.mysqlDatabase`                       | Mysql database name                       | `sonarDB`                                  |
 | `mysql.mysqlParams`                         | Mysql parameters for JDBC connection string     | `{}`                                 |
 | `mysql.service.port`                        | Mysql port                                | `3306`                                     |
+| `extraEnv`                                  | Extra env variables                       | `{}`                                       |
 | `resources`                                 | Sonarqube Pod resource requests & limits  | `{}`                                       |
 | `affinity`                                  | Node / Pod affinities                     | `{}`                                       |
 | `nodeSelector`                              | Node labels for pod assignment            | `{}`                                       |
@@ -115,6 +135,22 @@ The following table lists the configurable parameters of the Sonarqube chart and
 You can also configure values for the PostgreSQL / MySQL database via the Postgresql [README.md](https://github.com/kubernetes/charts/blob/master/stable/postgresql/README.md) / MySQL [README.md](https://github.com/kubernetes/charts/blob/master/stable/mysql/README.md).
 
 For overriding variables see: [Customizing the chart](https://docs.helm.sh/using_helm/#customizing-the-chart-before-installing).
+
+## Persistence
+
+The [SonarQube](https://github.com/SonarSource/docker-sonarqube) image stores its data at the `/opt/sonarqube/` path of the container.
+
+The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) at this location. By default, the volume is created using dynamic volume provisioning. An existing PersistentVolumeClaim can also be defined using the `persistence.existingClaim` value.
+
+### Existing PersistentVolumeClaims
+
+1. Create the PersistentVolume
+1. Create the PersistentVolumeClaim
+1. Install the chart
+
+```bash
+helm install --name my-release --set persistence.existingClaim=PVC_NAME community/sonarqube
+```
 
 ## Support
 
