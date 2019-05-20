@@ -1,6 +1,6 @@
 # Tekton Pipelines
 
-This chart installs Tekton Pipelines.
+This chart installs Tekton Pipelines v0.3.1.
 
 ## Introduction
 
