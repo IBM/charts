@@ -1,13 +1,13 @@
 # Knative
 
-This chart installs Knative components for Build, Serving, Eventing and Eventing-Sources.
+This chart installs Knative components for Build v0.5.0, Serving v0.5.2, Monitoring v0.5.2, Eventing v0.5.0 and Eventing-Sources v0.5.0.
 
 ## Introduction
 
 - Visit [Knative Build](https://github.com/knative/build/blob/master/README.md) for more information about Build.
 - Visit [Knative Eventing](https://github.com/knative/eventing/blob/master/README.md) for more information about Eventing.
 - Visit [Knative Eventing Sources](https://github.com/knative/eventing-sources/blob/master/README.md) for more information about Eventing Sources.
-- Visit [Knative Serving](https://github.com/knative/serving/blob/master/README.md) for more information about Serving.
+- Visit [Knative Serving](https://github.com/knative/serving/blob/master/README.md) for more information about Serving and Monitoring.
 
 ## Chart Details
 
