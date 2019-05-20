@@ -52,7 +52,7 @@ This chart requires the following PodSecurityPolicy before you deploy both Rook 
   apiVersion: extensions/v1beta1
   kind: PodSecurityPolicy
   metadata:
-    name: rook-privileged
+    name: privileged
   spec:
     fsGroup:
       rule: RunAsAny
@@ -118,7 +118,7 @@ Create a `ClusterRole` object.
     resources:
     - podsecuritypolicies
     resourceNames:
-    - rook-privileged
+    - privileged
     verbs:
     - use  
   ```
@@ -132,14 +132,14 @@ Create a `ClusterRoleBinding` object
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: rook-agent-psp
+  name: rook-ceph-system-psp
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: privileged-psp-user
 subjects:
 - kind: ServiceAccount
-  name: rook-agent
+  name: rook-ceph-system
   namespace: <Rook Ceph Operator chart namespace>
 ```
 
