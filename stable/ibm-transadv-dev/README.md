@@ -16,8 +16,8 @@ IBM Cloud Transformation Advisor can scan and analyze the following on-premises 
 
 **Java EE application servers**
 - WebSphere Application Server v7+ (application-only scanning v6.1+)
-- Oracle tm WebLogic v6.x+
-- Redhat tm JBoss v4.x+
+- Oracle (&trade;) WebLogic v6.x+
+- Redhat (&trade;) JBoss v4.x+
 - Apache Tomcat v6.x+
 - Java applications directly 
 
@@ -218,12 +218,12 @@ Note:
 
 #### Create Secret from UI
 
-on ICP version 2.1.0.2, go to left menu side bar > Configuration > Secrets > Create Secret.
+In ICP admin console, go to left menu side bar > Configuration > Secrets > Create Secret.
 
 In the Secret, 
-1. You need to enter a name, which will be asked in the TA helm installation page. e.g. you can create a name called `transformation-advisor-secret`
-2. Select the namespace to the same one which your TA will be installed to. You may need to create a namespace of your choice first.
-3. Add two entries of data with names called `db_username` and `secret` respectively. The value of these values must be base64 encoded, and the raw values must have no space.
+1. In the "General" section - you need to enter a name, which will be asked in the TA helm installation page. e.g. you can create a name called `transformation-advisor-secret`
+2. In the "General" section - select the namespace to the same one which your TA will be installed to. You may need to create a namespace of your choice first.
+3. In the "Data" section - add two entries of data with names called `db_username` and `secret` respectively. The value of these values must be base64 encoded, and the raw values must have no space.
 There are many ways to get base64 encoded. e.g. In bash
 
 ```bash
@@ -280,7 +280,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | authentication.oidc.clientSecret                    | a OIDC registry will be created with this secret             | 94b6cbce793d0606c0df9e8d656a159f0c06631b                |
 | security.serviceAccountName                         | name of the service account to use                           | default                                                 |
 | couchdb.image.repository                            | couchdb image repository                                     | ibmcom/transformation-advisor-db                        |
-| couchdb.image.tag                                   | couchdb image tag                                            | 1.9.5                                                   |
+| couchdb.image.tag                                   | couchdb image tag                                            | 1.9.6                                                   |
 | couchdb.image.pullPolicy                            | couchdb image pull policy                                    | IfNotPresent                                            |
 | couchdb.resources.requests.memory                   | requests memory                                              | 2Gi                                                     |
 | couchdb.resources.requests.cpu                      | requests cpu                                                 | 1000m                                                   |
@@ -294,7 +294,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | couchdb.persistence.existingClaim                   | existing pv claim                                            | ""                                                      |
 | couchdb.persistence.storageClassName                | couchdb storage class name                                   | ""                                                      |
 | transadv.image.repository                           | transadv server image                                        | ibmcom/transformation-advisor-server                    |
-| transadv.image.tag                                  | transadv server image tag                                    | 1.9.5                                                   |
+| transadv.image.tag                                  | transadv server image tag                                    | 1.9.6                                                   |
 | transadv.image.pullPolicy                           | image pull policy                                            | IfNotPresent                                            |
 | transadv.resources.requests.memory                  | requests memory                                              | 2Gi                                                     |
 | transadv.resources.requests.cpu                     | requests cpu                                                 | 1000m                                                   |
@@ -302,7 +302,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadv.resources.limits.cpu                       | limits cpu                                                   | 16000m                                                  |
 | transadv.service.nodePort                           | transadv sevice node port                                    | 30111                                                   |
 | transadvui.image.repository                         | transadv ui image                                            | ibmcom/transformation-advisor-ui                        |
-| transadvui.image.tag                                | transadv ui image tag                                        | 1.9.5                                                   |
+| transadvui.image.tag                                | transadv ui image tag                                        | 1.9.6                                                   |
 | transadvui.image.pullPolicy                         | image pull policy                                            | IfNotPresent                                            |
 | transadvui.resources.requests.memory                | requests memory                                              | 2Gi                                                     |
 | transadvui.resources.requests.cpu                   | requests cpu                                                 | 1000m                                                   |
@@ -311,6 +311,53 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadvui.service.nodePort                         | transadv sevice node port                                    | 30222                                                   |
 | transadvui.inmenu                                   | add to Tools menu                                            | true                                                    |
 
+## Requirements for Transformation Advisor Deployments to Liberty on IBM Cloud Private
+
+Transformation Advisor enables you to quickly deploy suitable applications to Liberty on IBM Cloud Private with the push of a button. TA will create the necessary artifacts for a successful deployment to Liberty on IBM Cloud Private. Transformation Advisor uses the Liberty Helm charts for its deployments, and those charts have pre-requisites. 
+
+*Note:* The following instructions are a one time operation per target namespace. So for example, complete the following steps for your first deployment to the default microclimate pipeline namespace (called ```microclimate-pipeline-deployments```) and you do not need to carry out these steps for subsequent deployments to that same namespace.
+
+
+### 1. Prerequisites for Libert Helm Charts
+
+The chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. There are configuration scripts that must be run in order to create this configuration in ICP. The scripts are available in the deployment artifacts that Transformation Advisor produces as part of the the migration plan. Download and unpack the "Helm Charts" item in the migration plan. The scripts can be found in the following location:
+```<unpacked location>/ibm_cloud_pak/pak_extensions/pre-install```
+
+#### Configuration scripts can be used to create the required resources
+
+The pre-install instructions are located at ```clusterAdministration/createSecurityClusterPrereqs.sh``` for cluster admins to create the PodSecurityPolicy and ClusterRole for all releases of this chart.
+
+The namespace scoped instructions are located at ```namespaceAdministration/createSecurityNamespacePrereqs.sh``` for team admin/operator to create the RoleBinding for the namespace. This script takes one argument; the name of a pre-existing namespace where the chart will be installed.
+        Example usage: ```./createSecurityNamespacePrereqs.sh myNamespace```
+
+#### Configuration scripts can be used to clean up resources created
+
+Clean up scripts can be found in this location:
+```<unpacked location>/ibm_cloud_pak/pak_extensions//post-delete```
+
+The post-delete instructions are located at ```clusterAdministration/deleteSecurityClusterPrereqs.sh``` for cluster admins to delete the PodSecurityPolicy and ClusterRole for all releases of this chart.
+
+The namespace scoped instructions are located at namespaceAdministration/deleteSecurityNamespacePrereqs.sh for team admin/operator to delete the RoleBinding for the namespace. This script takes one argument; the name of the namespace where the chart was installed.
+        Example usage: ```./deleteSecurityNamespacePrereqs.sh myNamespace```
+
+
+### 2. Image Pull Secret
+
+The target namespace for your deployments need the following image pull secret to be defined: sa-`<target namespace>`. For example, if your target namespace is the default pipeline for microclimate deployments (called ```microclimate-pipeline-deployments```) then you need the following secret to be defined in that namespace: ```sa-microclimate-pipeline-deployments```.
+
+You can define this secret in the following way:
+
+```
+kubectl create secret docker-registry sa-microclimate-pipeline-deployments \
+  --docker-server=<cluster_ca_domain>:8500 \
+  --docker-username=<account-username> \
+  --docker-password=<account-password> \
+  --docker-email=<account-email> \
+  --namespace=microclimate-pipeline-deployments
+```
+
+Without this secret, you may see an error of that type ``` Failed to pull image ... ``` in the Events for your application pod.
+ 
 ## Limitations
 
 - Prior to TA 1.8, Transformation Advisor must be deployed in to the ```default``` namespace.
