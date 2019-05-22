@@ -111,18 +111,18 @@ spec:
               {{- if ne $journalDevice "none" }}
               "-j", "{{ $journalDevice }}",
               {{- end -}}
-
-              {{- if empty $etcdEndPoints }}
-              "-b",
-              {{- else }}
+  
               {{- if eq $internalKVDB true }}
-              "-b",
+                "-b",
+              {{ end -}}
+              
+              {{- if empty $etcdEndPoints }}
+                {{- if eq $internalKVDB false }}
+                  {{ required "A valid ETCD url in the format etcd:http://<your-etcd-endpoint> is required. Verify that the key is correct and there isnt any typo in specifying that, also ensure it is accessible from all node of your kubernetes cluster" $etcdEndPoints }}
+                {{- end -}}
               {{- else -}}
-              "-k", "{{ regexReplaceAllLiteral "(;)" .kvdb "," }}",
+                "-k", "{{ regexReplaceAllLiteral "(;)" .kvdb "," }}",
               {{ end -}}
-              {{ end -}}
-
-
 
               "-c", "{{ required "Clustername cannot be empty" .clusterName }}",
 
@@ -168,7 +168,8 @@ spec:
                 {{- end }}
               {{ end -}}
 
-              "-x", "kubernetes"
+              "-x", "kubernetes",
+              "-metadata", "{{ printf "size=%d" (int64 .storage.metadataSize) }}"
              ]
            {{- end }}
           env:
