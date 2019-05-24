@@ -12,9 +12,7 @@
 {{- $managementInterface := .Values.network.managementInterface | default "none" }}
 
 {{- $envVars := .Values.envVars | default "none" }}
-{{- $isCoreOS := .Values.isTargetOSCoreOS | default false }}
 
-{{- $pksInstall := .Values.pksInstall | default false }}
 {{- $internalKVDB := .Values.internalKVDB | default false }}
 {{- $csi := .Values.csi | default false }}
 
@@ -196,11 +194,6 @@ spec:
                   name: "{{ $registrySecret }}"
             {{- end }}
 
-            {{- if eq $pksInstall true }}
-            - name: "PRE-EXEC"
-              value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
-            {{- end }}
-
             {{- if eq $csi true }}
             - name: CSI_ENDPOINT
               value: unix:///var/lib/kubelet/plugins/com.openstorage.pxd/csi.sock
@@ -289,14 +282,8 @@ spec:
           {{- end }}
 
           {{- end }}
-
-          {{- if eq $isCoreOS true}}
-            - name: src
-              mountPath: /lib/modules
-          {{- else }}
             - name: src
               mountPath: /usr/src
-          {{- end }}
           {{- end }}
 
           {{- if eq $csi true }}
@@ -339,10 +326,10 @@ spec:
           {{- end}}
         - name: dockersock
           hostPath:
-            path: {{if eq $pksInstall true}}/var/vcap/sys/run/docker/docker.sock{{else}}/var/run/docker.sock{{end}}
+            path: /var/run/docker.sock
         - name: containerdsock
           hostPath:
-            path: {{if eq $pksInstall true}}/var/vcap/sys/run/containerd{{else}}/run/containerd{{end}}
+            path: /run/containerd
           {{- if eq $csi true}}
         - name: csi-driver-path
           hostPath:
@@ -354,11 +341,11 @@ spec:
             path: /etc/pwx
         - name: cores
           hostPath:
-            path: {{if eq $pksInstall true }}/var/vcap/store/cores{{else}}/var/cores{{end}}
+            path: /var/cores
         {{- if eq (.Values.deploymentType | upper | lower) "oci" }}
         - name: optpwx
           hostPath:
-            path: {{if eq $pksInstall true }}/var/vcap/store/opt/pwx{{else}}/opt/pwx{{end}}
+            path: /opt/pwx
         - name: sysdmount
           hostPath:
             path: /etc/systemd/system
@@ -393,16 +380,10 @@ spec:
           hostPath:
             path: /var/lib/kubelet
         {{- end }}
-        {{- if eq $isCoreOS true}}
-        - name: src
-          hostPath:
-            path: /lib/modules
-        {{- else }}
-        - name: src
+         - name: src
           hostPath:
             path: /usr/src
-        {{- end }}
-        - name: dockerplugins
+         - name: dockerplugins
           hostPath:
             path: /run/docker/plugins
         - name: hostproc
