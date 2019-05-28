@@ -1,22 +1,8 @@
-# What’s new in IBM Netcool Probe for Kubernetes Chart (Limited Use) Version 2.0.0
+# What’s new in IBM Netcool Probe for Kubernetes Chart (Limited Use) Version 2.0.1
 
-With IBM Netcool Probe for Kubernetes Chart (Limited Use) Version 2.0.0, the following changes were included:
+This IBM Netcool Probe for Kubernetes Chart (Limited Use) is now deprecated.
 
-* New probe image version used.
-  * Internal improvements in Message Bus 8.0 Webhook transport.
-* Helm upgrade with a change in the probe configmap will trigger a rolling update.
-
-## Breaking Changes
-
-This chart version has the following changes which breaks upgrade.
-
-* Chart code re-factorization. The `image.repository` parameter does not include the image name. New `image.name` parameter is introduced and fixed to `netcool-probe-messagebus`. The `image.repository` value is used to pull the probe image and `image.testRepository` is used to pull `busybox:1.28.4` image for helm test.
-* Default probe service type is now set to `ClusterIP` from `NodePort` to conform to best practices and reduce security concerns.
-* Default `netcool.primaryServer`,`netcool.primaryHost` and `netcool.primaryPort` is set to `nil`. Users will have to enter the correct values for the probe to connect successfully.
-
-## Fixes
-
-* Message Bus 8.0 fixes an issue when a payload larger than 1kB causes an error to be logged.
+On May 28th, 2019 the helm chart for IBM Tivoli Netcool/OMNIbus - Probe for monitoring Kubernetes (Limited Use) will no longer be supported and will be removed from IBM's public helm repository on github.com on June 28th, 2019. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart. The [commercial version](https://www.ibm.com/support/knowledgecenter/en/SSSHTQ/omnibus/helms/kubernetes/wip/concept/kub_intro.html) of this chart is still maintained and users should use the commercial version to get new updates. The commercial chart is available on [IBM PASSPORT ADVANTAGE](https://www-01.ibm.com/software/passportadvantage/) and requires an entitlement to Netcool Operations Insight.
 
 ## Prerequisites
 
@@ -32,6 +18,7 @@ This chart version has the following changes which breaks upgrade.
 
 | Chart | Date | ICP Required | Image(s) Supported | Details |
 | ----- | ---- | ------------ | ------------------ | ------- |
+| 2.0.1 | May 28, 2019| >=2.1.0.2 | ibmcom/netcool-probe-messagebus:8.0 | Deprecate Limited Use chart version. Commercial version still maintained. See IBM Knowledge Center [page](https://www.ibm.com/support/knowledgecenter/en/SSSHTQ/omnibus/helms/kubernetes/wip/concept/kub_intro.html) |
 | 2.0.0 | July 27, 2018| >=2.1.0.2 | ibmcom/netcool-probe-messagebus:8.0 | Upgrade default probe image version.  |
 | 1.1.1 | June 22, 2018| >=2.1.0.2 | ibmcom/netcool-probe-messagebus:7.0 | Fix icon issue.  |
 | 1.1.0 | June 12, 2018| >=2.1.0.2 | ibmcom/netcool-probe-messagebus:7.0 | Update to use SCH 1.2.1 sub-chart  |

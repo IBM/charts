@@ -1,4 +1,6 @@
-# IBM Tivoli Netcool/OMNIbus Integration - Probe for monitoring Kubernetes (Limited Use)
+# IBM Tivoli Netcool/OMNIbus Integration - Probe for monitoring Kubernetes (Limited Use) - Deprecated
+
+**THIS CHART IS NOW DEPRECATED.** On May 28th, 2019 the helm chart for IBM Tivoli Netcool/OMNIbus - Probe for monitoring Kubernetes (Limited Use) will no longer be supported and will be removed from IBM's public helm repository on github.com on June 28th, 2019. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart. The [commercial version](https://www.ibm.com/support/knowledgecenter/en/SSSHTQ/omnibus/helms/kubernetes/wip/concept/kub_intro.html) of this chart is still maintained and users should use the commercial version to get new updates. The commercial chart is available on [IBM PASSPORT ADVANTAGE](https://www-01.ibm.com/software/passportadvantage/) and requires an entitlement to Netcool Operations Insight.
 
 This Helm chart deploys IBM Netcool/OMNIbus Probe for Message Bus
 onto Kubernetes. This probe processes events and alerts from
