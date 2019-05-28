@@ -34,6 +34,10 @@ spec:
   - name: docker.io/hazelcast/*
 ```
 
+### PodSecurityPolicy Requirements
+
+This chart requires a `PodSecurityPolicy` to be bound to the target namespace prior to installation. Choose predefined `ibm-restricted-psp` `PodSecurityPolicy`.
+
 ## Installing the Chart
 
 To install the chart with the release name `my-release`:
@@ -210,3 +214,18 @@ jet:
           </metrics>
       </hazelcast-jet>
 ```
+
+## Support
+
+### Commercial Support
+
+Get professional support from the same people who built the software. Learn more on [Hazelcast Jet Annual Subscription Plans](https://hazelcast.com/pricing/hazelcast-jet-annual-subscription-plans/)
+
+### Community Support
+
+The hub of the Hazelcast Jet community, where you can ask questions and contribute your knowledge:
+
+- [Gitter](https://gitter.im/hazelcast/hazelcast) (Chat with community members in real-time)
+- [Stack Overflow](http://stackoverflow.com/questions/tagged/hazelcast-jet) (Usage questions and troubleshooting)
+- [Google Groups](https://groups.google.com/forum/#!forum/hazelcast-jet) (General discussion and feature proposals)
+
