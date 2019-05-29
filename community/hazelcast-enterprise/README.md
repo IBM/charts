@@ -29,6 +29,12 @@ spec:
   - name: docker.io/hazelcast/*
 ```
 
+## PodSecurityPolicy Requirements
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement, there may be cluster-scoped as well as namespace-scoped actions that you must do before and after installation.
+
+The predefined PodSecurityPolicy name ibm-restricted-psp has been verified for this chart. If your target namespace is bound to this PodSecurityPolicy, you can proceed to install the chart.
+
 ## Installing the Chart
 
 To install the chart with the release name `my-release`:
