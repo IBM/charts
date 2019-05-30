@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-{{- if .Values.gcsgateway.enabled }}
-apiVersion: v1
-kind: Secret
+{{ if and (.Values.tls.enabled) (ne .Values.tls.type  "provided") }}
+{{- $cn := include "minio.fullname" . -}}
+{{- $altName2 := printf "*.%s.%s.svc.%s" $cn .Release.Namespace  .Values.tls.clusterDomain }}
+{{- $altName3 := printf "*%s.%s.svc.%s" $cn .Release.Namespace  .Values.tls.clusterDomain }}
+
+apiVersion: certmanager.k8s.io/v1alpha1
+kind: Certificate
 metadata:
   name: {{ template "minio.fullname" . }}
   labels:
@@ -22,7 +26,13 @@ metadata:
     chart: {{ template "minio.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
-type: Opaque
-data:
-  gcs_key.json: {{ .Values.gcsgateway.gcsKeyJson | b64enc }}
-{{- end }}
+spec:
+  secretName: {{ template "minio.fullname" . }}-tls-secret
+  issuerRef:
+    name: {{ .Values.tls.issuerRef.name }}
+    kind: {{ .Values.tls.issuerRef.kind }}
+  commonName:  "{{ $cn }}"
+  dnsNames:
+  -  "{{ $altName2 }}" 
+  -  "{{ $altName3 }}"
+{{ end }}
