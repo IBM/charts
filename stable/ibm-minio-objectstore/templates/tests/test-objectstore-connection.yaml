@@ -17,6 +17,7 @@ metadata:
     heritage: "{{ .Release.Service }}"
   annotations:
     "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": "before-hook-creation"
 spec:
   affinity:
 {{- include "nodeaffinity" . | indent 4 }}
@@ -44,10 +45,38 @@ spec:
       value: "false"
 {{- end }}
     volumeMounts:
+      - name: mc-config-dir
+        mountPath: {{ .Values.configPathmc }}
       - name: {{ template "minio.fullname" . }}-test
         mountPath: "/test"
+      {{- if .Values.tls.enabled }}
+      - name: cert-secret-volume-mc
+        mountPath: {{ .Values.configPathmc }}/certs
+      {{ end }}
+  securityContext:
+    runAsUser: 5001
+    runAsGroup: 5001
+    fsGroup: 5001
+    runAsNonRoot: true
   volumes:
+    - name: mc-config-dir
+      emptyDir: {}
     - name: {{ template "minio.fullname" . }}-test
       configMap:
         name: {{ template "minio.fullname" . }}-test-config
-        defaultMode: 0744
+        defaultMode: 0754
+        {{- if .Values.tls.enabled }}
+    - name: cert-secret-volume-mc
+      secret:
+        {{- if or (eq .Values.tls.type  "selfsigned") (eq .Values.tls.type  "cert-manager-generated") }}
+        secretName: {{ template "minio.fullname" . }}-tls-secret
+        items:
+        - key: tls.crt
+          path: CAs/public.crt
+        {{- else if eq .Values.tls.type  "provided" }}
+        secretName: {{ .Values.tls.minioTlsSecret }}
+        items:
+        - key: ca.crt
+          path: CAs/public.crt
+        {{ end }}
+    {{ end }}

@@ -1,10 +1,10 @@
-{{- if .Values.defaultBucket.enabled }}
+{{- if or .Values.defaultBucket.enabled .Values.buckets }}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ template "minio.fullname" . }}-make-bucket-job
   labels:
-    app: {{ template "minio.name" . }}
+    app: {{ template "minio.name" . }}-make-bucket-job
     chart: {{ template "minio.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -15,15 +15,36 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "minio.name" . }}
+        app: {{ template "minio.name" . }}-make-bucket-job
+        chart: {{ template "minio.chart" . }}
         release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+{{- with .Values.podAnnotations }}
+      annotations:
+{{ toYaml . | indent 8 }}
+{{- end }}
     spec:
       restartPolicy: OnFailure
 {{- if .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
 {{- end }}
+      affinity:
+{{- include "nodeaffinity" . | indent 8 }}
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+{{- with .Values.tolerations }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+      securityContext:
+        runAsUser: 5001
+        runAsGroup: 5001
+        fsGroup: 5001
+        runAsNonRoot: true
       volumes:
+        - name: mc-config-dir
+          emptyDir: {}
         - name: minio-configuration
           projected:
             sources:
@@ -31,6 +52,21 @@ spec:
                 name: {{ template "minio.fullname" . }}
             - secret:
                 name: {{ .Values.minioAccessSecret }}
+        {{- if .Values.tls.enabled }}
+        - name: cert-secret-volume-mc
+          secret:
+            {{- if or (eq .Values.tls.type  "selfsigned") (eq .Values.tls.type  "cert-manager-generated") }}
+            secretName: {{ template "minio.fullname" . }}-tls-secret
+            items:
+            - key: tls.crt
+              path: CAs/public.crt
+            {{- else if eq .Values.tls.type  "provided" }}
+            secretName: {{ .Values.tls.minioTlsSecret }}
+            items:
+            - key: ca.crt
+              path: CAs/public.crt
+            {{ end }}
+        {{ end }}
       containers:
       - name: minio-mc
         image: "{{ .Values.mcImage.repository }}:{{ .Values.mcImage.tag }}"
@@ -42,6 +78,12 @@ spec:
           - name: MINIO_PORT
             value: {{ .Values.service.port | quote }}
         volumeMounts:
+          - name: mc-config-dir
+            mountPath: {{ .Values.configPathmc }}
           - name: minio-configuration
             mountPath: /config
+          {{- if .Values.tls.enabled }}
+          - name: cert-secret-volume-mc
+            mountPath: {{ .Values.configPathmc }}/certs
+          {{ end }}
 {{- end }}

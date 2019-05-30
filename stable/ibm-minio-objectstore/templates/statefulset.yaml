@@ -10,14 +10,14 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
+  updateStrategy:
+    type: {{ .Values.statefulSetUpdate.updateStrategy }}
   serviceName: {{ template "minio.fullname" . }}
   replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
       app: {{ template "minio.name" . }}
       release: {{ .Release.Name }}
-  updateStrategy:
-    type: RollingUpdate
   template:
     metadata:
       name: {{ template "minio.fullname" . }}
@@ -31,6 +31,9 @@ spec:
         productID: "Minio_{{ .Values.image.tag }}_free_00000"
         productVersion: "{{ .Values.image.tag }}"
         scheduler.alpha.kubernetes.io/critical-pod: ""
+{{- with .Values.podAnnotations }}
+{{ toYaml . | indent 8 }}
+{{- end }}
     spec:
       {{- if .Values.priorityClassName }}
       {{- if and ( eq .Values.priorityClassName "system-cluster-critical" ) ( not ( ( eq  .Release.Namespace "kube-system"))) }}
@@ -42,39 +45,33 @@ spec:
         - name: {{ .Chart.Name }}
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-{{- if .Values.tls.enabled }}
-          command: [ "/bin/sh", 
-          "-ce", 
-          "cp /tmp/config.json {{ .Values.configPath }} &&
-          /usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} server
+          {{- if .Values.tls.enabled }}
+          command: [ "/bin/sh",
+          "-ce",
+          "/usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} server
           {{- range $i := until $nodeCount }}
           https://{{ template `minio.fullname` $ }}-{{ $i }}.{{ template `minio.fullname` $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.tls.clusterDomain }}{{ $.Values.mountPath }}
           {{- end }}" ]
-{{ else }}
+          {{ else }}
           command: [ "/bin/sh",
           "-ce",
-          "cp /tmp/config.json {{ .Values.configPath }} &&
-          /usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} server
+          "/usr/bin/docker-entrypoint.sh minio -C {{ .Values.configPath }} server
           {{- range $i := until $nodeCount }}
           http://{{ template `minio.fullname` $ }}-{{ $i }}.{{ template `minio.fullname` $ }}.{{ $.Release.Namespace }}.svc.{{ $.Values.tls.clusterDomain }}{{ $.Values.mountPath }}
           {{- end }}" ]
-
-{{- end }}
+          {{- end }}
           volumeMounts:
-{{- if .Values.tls.enabled }}
-            - name: secret-volume
-              mountPath: {{ .Values.configPath }}/certs
-{{- end }}
             - name: export
               mountPath: {{ .Values.mountPath }}
               {{- if and .Values.persistence.enabled .Values.persistence.subPath }}
               subPath: "{{ .Values.persistence.subPath }}"
               {{- end }}
-            - name: minio-server-config
-              mountPath: "/tmp/config.json"
-              subPath: config.json
             - name: minio-config-dir
               mountPath: {{ .Values.configPath }}
+            {{- if .Values.tls.enabled }}
+            - name: secret-volume
+              mountPath: {{ .Values.configPath }}/certs
+            {{- end }}
           ports:
             - name: service
               containerPort: 9000
@@ -89,6 +86,24 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.minioAccessSecret }}
                   key: secretkey
+            {{- range $index, $val := .Values.environment }}
+            - name: {{ $val.name }}
+              value: {{ $val.value | quote }}
+            {{- end}}
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: service
+              {{- if .Values.tls.enabled }}
+              scheme: HTTPS
+              {{ else }}
+              scheme: HTTP
+              {{- end }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
     {{- with .Values.nodeSelector }}
@@ -103,19 +118,30 @@ spec:
 {{- with .Values.tolerations }}
 {{ toYaml . | indent 8 }}
     {{- end }}
+      securityContext:
+        runAsUser: 5001
+        runAsGroup: 5001
+        fsGroup: 5001
+        runAsNonRoot: true
       volumes:
 {{- if .Values.tls.enabled }}
         - name: secret-volume
           secret:
-{{- if eq .Values.tls.type  "selfsigned" }}
-            secretName: {{ template "minio.fullname" . }}
-{{- end }}
-{{- if eq .Values.tls.type  "provided" }}
-{{- if empty .Values.tls.minioTlsSecret }}
-{{ fail "Configuration error: Please enter name of secret containing  TLS certificate and key." }}
-{{- end }}
+          {{- if or (eq .Values.tls.type  "selfsigned") (eq .Values.tls.type  "cert-manager-generated") }}
+            secretName: {{ template "minio.fullname" . }}-tls-secret
+            defaultMode: 420
+            items:
+            - key: tls.crt
+              path: public.crt
+            - key: tls.key
+              path: private.key
+            - key: tls.crt
+              path: CAs/ca.crt
+          {{- else if eq .Values.tls.type  "provided" }}
+            {{- if empty .Values.tls.minioTlsSecret }}
+              {{ fail "Configuration error: Please enter name of secret containing TLS certificate and key." }}
+            {{- end }}
             secretName: {{ .Values.tls.minioTlsSecret }}
-{{- end }}
             defaultMode: 420
             items:
             - key: public.crt
@@ -123,7 +149,8 @@ spec:
             - key: private.key
               path: private.key
             - key: ca.crt
-              path: CAs/public.crt
+              path: CAs/ca.crt
+          {{- end }}
 {{- end }}
         - name: minio-user
           secret:
