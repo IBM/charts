@@ -1,15 +1,17 @@
 #!/bin/sh
 set -e ; # Have script exit in the event of a failed command.
 
+CONFIG_MC_PATH={{ .Values.configPathmc }}
 # connectToMinio
 # Use a check-sleep-check loop to wait for Minio service to be available
 connectToMinio() {
+  SCHEME=$1
   ATTEMPTS=0 ; LIMIT=29 ; # Allow 30 attempts
   set -e ; # fail if we can't read the keys.
   ACCESS=$(cat /config/accesskey) ; SECRET=$(cat /config/secretkey) ;
   set +e ; # The connections to minio are allowed to fail.
-  echo "Connecting to Minio server: http://$MINIO_ENDPOINT:$MINIO_PORT" ;
-  MC_COMMAND="mc config host add myminio http://$MINIO_ENDPOINT:$MINIO_PORT $ACCESS $SECRET" ;
+  echo "Connecting to Minio server: $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT" ;
+  MC_COMMAND="mc -C $CONFIG_MC_PATH  config host add myminio $SCHEME://$MINIO_ENDPOINT:$MINIO_PORT $ACCESS $SECRET --insecure" ;
   $MC_COMMAND ;
   STATUS=$? ;
   until [ $STATUS = 0 ]
@@ -31,7 +33,7 @@ connectToMinio() {
 # Check if the bucket exists, by using the exit code of `mc ls`
 checkBucketExists() {
   BUCKET=$1
-  CMD=$(/usr/bin/mc ls myminio/$BUCKET > /dev/null 2>&1)
+  CMD=$(/usr/bin/mc -C $CONFIG_MC_PATH  ls myminio/$BUCKET --insecure > /dev/null 2>&1)
   return $?
 }
 
@@ -46,9 +48,8 @@ createBucket() {
   # Since PURGE is user input, check explicitly for `true`
   if [ $PURGE = true ]; then
     if checkBucketExists $BUCKET ; then
-      echo "Purging bucket '$BUCKET'."
       set +e ; # don't exit if this fails
-      /usr/bin/mc rm -r --force myminio/$BUCKET
+      /usr/bin/mc -C $CONFIG_MC_PATH rm -r --force myminio/$BUCKET  --insecure
       set -e ; # reset `e` as active
     else
       echo "Bucket '$BUCKET' does not exist, skipping purge."
@@ -58,7 +59,7 @@ createBucket() {
   # Create the bucket if it does not exist
   if ! checkBucketExists $BUCKET ; then
     echo "Creating bucket '$BUCKET'"
-    /usr/bin/mc mb myminio/$BUCKET
+    /usr/bin/mc -C $CONFIG_MC_PATH mb myminio/$BUCKET --insecure
   else
     echo "Bucket '$BUCKET' already exists."
   fi
@@ -66,10 +67,29 @@ createBucket() {
   # At this point, the bucket should exist, skip checking for existence
   # Set policy on the bucket
   echo "Setting policy of bucket '$BUCKET' to '$POLICY'."
-  /usr/bin/mc policy $POLICY myminio/$BUCKET
+  /usr/bin/mc -C $CONFIG_MC_PATH policy $POLICY myminio/$BUCKET --insecure
 }
 
 # Try connecting to Minio instance
-connectToMinio
+{{- if .Values.tls.enabled }}
+scheme=https
+{{- else }}
+scheme=http
+{{- end }}
+connectToMinio $scheme
+
+{{- if or .Values.defaultBucket.enabled }}
 # Create the bucket
 createBucket {{ .Values.defaultBucket.name }} {{ .Values.defaultBucket.policy }} {{ .Values.defaultBucket.purge }}
+{{- else if .Values.buckets }}
+# Create the buckets
+{{- range $index,$val := .Values.buckets }}
+{{- if $val.name }}
+{{- if $val.policy }}
+ createBucket {{ $val.name }} {{ $val.policy }} {{ $val.purge }}
+{{- else }}
+ createBucket {{ $val.name }} "none" {{ $val.purge }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
