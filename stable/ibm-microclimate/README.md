@@ -10,7 +10,7 @@ Visit the [Microclimate landing page](https://microclimate-dev2ops.github.io/) t
 
 For more information about what's new in the latest chart, see [Release notes](https://github.com/IBM/charts/blob/master/stable/ibm-microclimate/RELEASENOTES.md).
 
-## Chart details
+## Chart Details
 Installing the chart will:
 
 - Create the specified target namespace for deployments created by using Microclimate's pipelines
@@ -29,20 +29,20 @@ Installing the chart will:
 - Download the IBM Cloud Private CLI, cloudctl, from your cluster at the `https://<your-cluster-ip>:8443/console/tools/cli` URL.
 - Before you install Microclimate, decide whether you want to deploy to the IBM Cloud Kubernetes Service. If you want to deploy to the IBM Cloud Kubernetes Service, when you install Microclimate, specify a Docker registry location on the `jenkins.Pipeline.Registry.URL` property. Both Microclimate and the IBM Cloud Kubernetes Service need to access this registry.
 
-### Pod Security Policies
+### PodSecurityPolicy Requirements
 Microclimate requires a `PodSecurityPolicy` to be bound to the target namespace prior to installation.
 
-The predefined `PodSecurityPolicy`, `ibm-anyuid-hostpath-psp`, is verified for this chart. If your target namespace does not already have this policy applied, Microclimate applies the policy during the installation. For details about the `PodSecurityPolicy` and the `ClusterRole` that is applied, see the following code.
+The predefined `PodSecurityPolicy`, [`ibm-anyuid-hostpath-psp`](https://ibm.biz/cpkspec-psp), is verified for this chart. If your target namespace does not already have this policy applied, Microclimate applies the policy during the installation. For details about the `PodSecurityPolicy` and the `ClusterRole` that is applied, see the following code.
 
-The following code shows the predefined `PodSecurityPolicy`, `ibm-anyuid-hostpath-psp`:
+The following code shows the predefined `PodSecurityPolicy`, `ibm-anyuid-hostpath-psp`. Custom PodSecurityPolicy definition:
 ```
 apiVersion: extensions/v1beta1
 kind: PodSecurityPolicy
 metadata:
   annotations:
     kubernetes.io/description: "This policy allows pods to run with
-      any UID and GID and any volume, including the host path.  
-      WARNING:  This policy allows hostPath volumes.  
+      any UID and GID and any volume, including the host path.
+      WARNING:  This policy allows hostPath volumes.
       Use with caution."
   name: ibm-anyuid-hostpath-psp
 spec:
@@ -131,6 +131,8 @@ These steps are detailed below and should be completed in order.
 
 *NOTE:* A number of these instructions require the name of your cluster Certificate Authentication (CA) domain which by default is set to `mycluster.icp`. This might have been set to a different name by your cluster administrator when installing IBM Cloud Private and so you should contact your cluster administrator to confirm this. If this value has been changed, use the actual value instead of `mycluster.icp` where necessary.
 
+*NOTE:* If you install the chart on IBM Cloud Private 3.1.0, 3.1.1, or 3.1.2, set the `global.icpTarget` value to match the version that you selected. Valid values are `310`, `311`, and `312`. The default value is `320`. You also need to set the `Pipeline.Template.Version: 19.03` value for the pipeline deployments to work with the previous versions of Helm releases.
+
 #### Prepare for a non-default namespace installation
 
 Create a non-default namespace with the following command. Make sure that your namespace name follows the [Kubernetes resource naming conventions](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names).
@@ -157,7 +159,7 @@ This is the default target namespace used by the Microclimate pipeline for deplo
 
 The following steps require the `cluster_ca_domain` certificate authority (CA) domain. During IBM Cloud Private installation, this CA domain was set in the config.yaml file. If you did not specify a CA domain name, `mycluster.icp` is the default value.
 
-You can determine your CA domain with the following command:
+You can find your CA domain with the following command:
 ```
 printf "$(kubectl get configmap oauth-client-map -n services -o jsonpath="{.data.CLUSTER_CA_DOMAIN}")\n"
 ```
@@ -192,9 +194,9 @@ Use the following code to create a Docker registry secret:
 ```
 kubectl create secret docker-registry microclimate-registry-secret \
   --docker-server=<cluster_ca_domain>:8500 \
-  --docker-username=<account-username> \
-  --docker-password=<account-password> \
-  --docker-email=<account-email>
+  --docker-username=<icp-account-username> \
+  --docker-password=<icp-account-password> \
+  --docker-email=<your-email>
 ```
 
 Verify that the secret was created successfully and exists in the target namespace for Microclimate before you continue. This secret does not need to be patched to a service account because the Microclimate installation manages this step.
@@ -225,9 +227,9 @@ Microclimate needs a second secret to allow the pipeline to deploy applications 
 ```
 kubectl create secret docker-registry microclimate-pipeline-secret \
   --docker-server=<cluster_ca_domain>:8500 \
-  --docker-username=<account-username> \
-  --docker-password=<account-password> \
-  --docker-email=<account-email> \
+  --docker-username=<icp-account-username> \
+  --docker-password=<icp-account-password> \
+  --docker-email=<your-email>
   --namespace=microclimate-pipeline-deployments
 ```
 
@@ -288,7 +290,7 @@ Before installing the chart, you must add the IBM charts repo to your Helm repos
 
 `helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable/`
 
-You can then install the chart using the ingressDomain and service account name:  
+You can then install the chart using the ingressDomain and service account name:
 
 `helm install --name microclimate --namespace <target namespace> --set global.rbac.serviceAccountName=micro-sa,jenkins.rbac.serviceAccountName=pipeline-sa,global.ingressDomain=<icp-proxy>.nip.io ibm-charts/ibm-microclimate --tls`.
 
@@ -343,7 +345,7 @@ Microclimate attempts to create its own persistent volume claim by using the `pe
 
 **Warning:** Avoid using hostPath persistent volumes. A hostPath volume sets up a file system on a single node of a cluster. The portal, file-watcher, and editor pods need access to the same file system, and these pods can start on different nodes. If the pods start on different nodes, pods that are started on one node are unable to access the hostPath volume that is created on a different node.
 
-**Warning:** Set adequate permissions for the directories of the Persistent Volumes that you will use for Microclimate, especially if you use a Network File System (NFS) server. Microclimate containers run as non-root. For example, the Jenkins container that Microclimate uses runs as `jenkins`. 
+**Warning:** Set adequate permissions for the directories of the Persistent Volumes that you will use for Microclimate, especially if you use a Network File System (NFS) server. Microclimate containers run as non-root. For example, the Jenkins container that Microclimate uses runs as `jenkins`.
 
 As part of the Microclimate initialization process, a number of files need to be written to disk in the Persistent Volume. Thus, you need to ensure that the directories can be modified.
 
@@ -351,9 +353,9 @@ For example, if you created the directory to be owned by the user `root`, make s
 
 Example settings to use for the NFS exports are `rw`, `sync`, `no_subtree_check`, `insecure`, and `no_root_squash`.
 
-For more information about creating Persistent Storage and enabling Dynamic Provisioning, see [Cluster Storage](https://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0/manage_cluster/cluster_storage.html),
-[Working with storage](https://www.ibm.com/developerworks/community/blogs/fe25b4ef-ea6a-4d86-a629-6f87ccf4649e/entry/Working_with_storage), and
-[Dynamic Provisioning](https://www.ibm.com/support/knowledgecenter/SSBS6K_2.1.0/installing/storage_class_all.html).
+For more information about creating persistent storage and enabling dynamic provisioning, see [Storage guide](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.2/manage_cluster/cluster_storage.html),
+[Working with storage](https://www.ibm.com/developerworks/community/blogs/fe25b4ef-ea6a-4d86-a629-6f87ccf4649e/entry/Working_with_storage?lang=en), and
+[Dynamic storage provisioning](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.2/manage_cluster/sc_land.html).
 
 #### Configuring Microclimate
 Microclimate provides a number of configuration options to customise its installation. The following list describes the configurable parameters.
@@ -492,10 +494,6 @@ To ensure that you install the chart with the correct pipeline registry URL, per
   microclimate-ibm-microclimate-devops-55d6c67f49-tgncz             1/1       Running   0          3m
   microclimate-jenkins-b6fd6d5b8-dz2q9                              1/1       Running   0          3m
   ```
-
-## PodSecurityPolicy Requirements
-
-We bundle the role binding for the `ibm-anyuid-hostpath-psp` as part of the chart, so these are installed alongside Microclimate without requiring user intervention.
 
 ## Limitations
 
