@@ -15,7 +15,7 @@ This chart bootstraps a [Hazelcast Enterprise](https://github.com/hazelcast/haze
 ## Prerequisites
 
 - Kubernetes 1.9+
-- [Container Image Security](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html) is enabled by default in ICP 3.1+. Therefore, Docker Hub container registry `docker.io/hazelcast/*` must be added to the list of trusted registries.
+- [Container Image Security](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html) is enabled by default in IBM Cloud Private 3.1+. Therefore, Docker Hub container registry `docker.io/hazelcast/*` must be added to the list of trusted registries.
 
 An example cluster image policy as below :
 
