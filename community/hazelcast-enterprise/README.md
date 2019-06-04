@@ -2,13 +2,6 @@
 
 [Hazelcast IMDG Enterprise](https://hazelcast.com/products/enterprise/) is the most widely used in-memory data grid with hundreds of thousands of installed clusters around the world. It offers caching solutions ensuring that data is in the right place when it’s needed for optimal performance.
 
-## Quick Start
-
-```bash
-$ kubectl create secret generic hz-enterprise-license-key --from-literal=key=LICENSE-KEY
-$ helm install community/hazelcast-enterprise
-```
-
 ## Introduction
 
 This chart bootstraps a [Hazelcast Enterprise](https://github.com/hazelcast/hazelcast-docker/tree/master/hazelcast-enterprise-kubernetes) and [Management Center](https://github.com/hazelcast/management-center-docker) deployments on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
@@ -30,21 +23,76 @@ spec:
   - name: docker.io/hazelcast/*
 ```
 
-## PodSecurityPolicy Requirements
+### PodSecurityPolicy Requirements
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement, there may be cluster-scoped as well as namespace-scoped actions that you must do before and after installation.
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
 
-The predefined PodSecurityPolicy name ibm-restricted-psp has been verified for this chart. If your target namespace is bound to this PodSecurityPolicy, you can proceed to install the chart.
+* Predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)
+* Custom PodSecurityPolicy definition:
 
-## Installing the Chart
+```yaml
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: hazelcast-enterprise-psp
+spec:
+  allowPrivilegeEscalation: false
+  forbiddenSysctls:
+  - '*'
+  fsGroup:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  volumes:
+  - configMap
+  - emptyDir
+  - secret
+  - persistentVolumeClaim
+```
 
-To install the chart, you need to first create a secret with the Hazelcast Enterprise License Key:
+* Custom ClusterRole for the custom PodSecurityPolicy:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hazelcast-enterprise-clusterrole
+rules:
+- apiGroups:
+  - extensions
+  resourceNames:
+  - hazelcast-enterprise-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+  ```
+
+### Hazelcast Enterprise License Key
+
+You need to create a secret with the Hazelcast Enterprise License Key:
 
 ```bash
 $ kubectl create secret generic hz-enterprise-license-key --from-literal=key=LICENSE-KEY
 ```
 
-Then, to install the chart with the release name `my-release`:
+If you don't have a valid Hazelcast Enterprise license, you can contact sales@hazelcast.com for a trial license key.
+
+## Installing the Chart
+
+To install the chart with the release name `my-release`:
 
 ```bash
 $ helm install --name my-release community/hazelcast-enterprise
@@ -141,8 +189,6 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 ```bash
 $ helm install --name my-release -f values.yaml community/hazelcast-enterprise
 ```
-
-> **Tip**: You can use the default [values.yaml](values.yaml) with the `hazelcast.license` filled in
 
 ## Custom Hazelcast configuration
 
