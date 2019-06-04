@@ -176,3 +176,9 @@ hazelcast:
         <!-- Custom Configuration Placeholder -->
       </hazelcast>
 ```
+
+## Support
+Hazelcast has a wide variety of community and commercial support options available for users:
+* [Hazelcast Commercial Support](https://hazelcast.zendesk.com/hc/en-us)
+* [Hazelcast StackOverflow](https://stackoverflow.com/questions/tagged/hazelcast)
+* [Hazelcast Google Group](https://groups.google.com/forum/#!forum/hazelcast)
