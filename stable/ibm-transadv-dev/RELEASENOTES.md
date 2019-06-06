@@ -1,13 +1,6 @@
-# What’s new in Chart Version 1.9.6
-### Transformation Advisor Local
- - IBM Cloud Transformation Advisor Local Beta can now be installed on laptops 
-
-### Data Collector Enhancements
- - Data Collection can be executed against a list of specific applications within a WebSphere profile
- - Data Collection can be executed against specified profiles without the need to provide credentials
-
-### Analysis Enhancements
- - Shared Libraries are now accessible as a convenient tab alongside applications that use them  
+# What’s new in Chart Version 1.9.7
+### IBM Cloud Private Enhancements 
+ - Transformation Advisor now working with IBM Cloud Private 3.2 
 
 # Fixes
 
@@ -21,6 +14,7 @@
 # Version History
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.9.7 | Jun 10, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.7 ibmcom/transformation-advisor-server:1.9.7 ibmcom/transformation-advisor-ui:1.9.7 | None | Ingress fix for ICP 3.2    |
 | 1.9.6 | May 20, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.6 ibmcom/transformation-advisor-server:1.9.6 ibmcom/transformation-advisor-ui:1.9.6 | None | TA Local, DC Enhancements  |
 | 1.9.5 | Apr 24, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.5 ibmcom/transformation-advisor-server:1.9.5 ibmcom/transformation-advisor-ui:1.9.5 | None | Functional Enhancements    |
 | 1.9.4 | Mar 29, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.4 ibmcom/transformation-advisor-server:1.9.4 ibmcom/transformation-advisor-ui:1.9.4 | None | Apache Tomcat Analysis     |
