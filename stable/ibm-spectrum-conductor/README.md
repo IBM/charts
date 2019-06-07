@@ -1,6 +1,8 @@
 [![IBM Spectrum Conductor](https://developer.ibm.com/storage/wp-content/uploads/sites/91/2018/01/conductor.jpg)](https://www.ibm.com/developerworks/community/groups/service/html/communitystart?communityUuid=46ecec34-bd69-43f7-a627-7c469c1eddf8)
 # IBM Spectrum Conductor 2.3 - Beta
 
+THIS CHART IS NOW DEPRECATED. Here’s what you need to know: On May 25th, 2019 the helm chart for IBM Spectrum Conductor 2.3 will no longer be supported and will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart. 
+
 ## Introduction
 IBM Spectrum Conductor helps you deploy Apache Spark applications efficiently and effectively. As an end-to-end solution for deploying and managing Spark applications, it is designed to address the requirements of organizations that adopt Spark technology for their big data analytics requirements. IBM Spectrum Conductor can support multiple instances of Apache Spark, maximizing resource utilization, and increasing performance and scale.
 
