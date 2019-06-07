@@ -24,15 +24,25 @@ spec:
         productID: grafana_{{ .Chart.Version }}_apachev2_00000
         productVersion: {{ .Chart.Version }}
     spec:
+      securityContext:
+        runAsUser: 472
+        fsGroup: 472
 {{- if .Values.global.priorityClassName }}
       priorityClassName: "{{ .Values.global.priorityClassName }}"
+{{- end }}
+      imagePullSecrets:
+        - name: sa-{{ .Release.Namespace }}
+{{- if .Values.global.imagePullSecrets }}
+{{- range .Values.global.imagePullSecrets }}
+        - name: {{ . }}
+{{- end }}
 {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
-            - containerPort: 3000
+          - containerPort: 3000
           readinessProbe:
             httpGet:
               path: /login
@@ -57,7 +67,7 @@ spec:
           - name: GF_SECURITY_ADMIN_PASSWORD
             valueFrom:
               secretKeyRef:
-                name:  {{ .Values.security.secretName }}
+                name: {{ .Values.security.secretName }}
                 key: {{ .Values.security.passphraseKey }}
           - name: GF_AUTH_BASIC_ENABLED
             value: "true"
@@ -84,17 +94,42 @@ spec:
           volumeMounts:
           - name: data
             mountPath: /data/grafana
-      nodeSelector:
-{{- include "grafana.nodeselector" . | indent 6 }}
-      tolerations:
-{{- include "grafana.tolerations" . | indent 6 }}
+          {{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}
+          {{- $filename := trimSuffix (ext $path) (base $path) }}
+          - name: dashboards-istio-{{ $filename }}
+            mountPath: "/var/lib/grafana/dashboards/istio/{{ base $path }}"
+            subPath: {{ base $path }}
+            readOnly: true
+          {{- end }}
+          - name: config
+            mountPath: "/etc/grafana/provisioning/datasources/datasources.yaml"
+            subPath: datasources.yaml
+          - name: config
+            mountPath: "/etc/grafana/provisioning/dashboards/dashboardproviders.yaml"
+            subPath: dashboardproviders.yaml
       affinity:
-{{- include "nodeaffinity" . | indent 6 }}
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- else if .Values.global.defaultTolerations }}
+      tolerations:
+{{ toYaml .Values.global.defaultTolerations | indent 6 }}
+      {{- end }}
       volumes:
+      - name: config
+        configMap:
+          name: istio-grafana
       - name: data
 {{- if .Values.persist }}
         persistentVolumeClaim:
           claimName: istio-grafana-pvc
 {{- else }}
         emptyDir: {}
+{{- end }}
+{{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}
+{{- $filename := trimSuffix (ext $path) (base $path) }}
+      - name: dashboards-istio-{{ $filename }}
+        configMap:
+          name:  istio-grafana-configuration-dashboards-{{ $filename }}
 {{- end }}

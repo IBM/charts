@@ -34,6 +34,7 @@ spec:
 {{- end }}
       containers:
       - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: "{{ .Values.global.imagePullPolicy }}"
         name: kiali
         command:
         - "/opt/kiali/kiali"
@@ -51,31 +52,19 @@ spec:
             secretKeyRef:
               name: {{ .Values.dashboard.secretName }}
               key: {{ .Values.dashboard.usernameKey }}
+              optional: true
         - name: SERVER_CREDENTIALS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ .Values.dashboard.secretName }}
               key: {{ .Values.dashboard.passphraseKey }}
+              optional: true
         - name: PROMETHEUS_SERVICE_URL
-          value: http://prometheus:9090
-{{- if .Values.dashboard.grafanaURL }}
-        - name: GRAFANA_URL
-          value: {{ .Values.dashboard.grafanaURL }}
-{{- end }}
-        - name: GRAFANA_DASHBOARD
-          value: istio-service-dashboard
-        - name: GRAFANA_VAR_SERVICE_SOURCE
-          value: var-service
-        - name: GRAFANA_VAR_SERVICE_DEST
-          value: var-service
-{{- if .Values.dashboard.jaegerURL }}
-        - name: JAEGER_URL
-          value: {{ .Values.dashboard.jaegerURL }}
-{{- end }}
+          value: {{ .Values.prometheusAddr }}
 {{- if .Values.contextPath }}
         - name: SERVER_WEB_ROOT
           value: {{ .Values.contextPath }}
-{{- end }} 
+{{- end }}
         livenessProbe:
           exec:
             command:
@@ -99,9 +88,12 @@ spec:
       - name: kiali-configuration
         configMap:
           name: kiali
-      nodeSelector:
-{{- include "kiali.nodeselector" . | indent 6 }}
-      tolerations:
-{{- include "kiali.tolerations" . | indent 6 }}
       affinity:
-{{- include "nodeaffinity" . | indent 6 }}
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- else if .Values.global.defaultTolerations }}
+      tolerations:
+{{ toYaml .Values.global.defaultTolerations | indent 6 }}
+      {{- end }}

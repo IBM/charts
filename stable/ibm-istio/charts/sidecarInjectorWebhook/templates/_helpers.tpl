@@ -2,7 +2,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "sidecarInjectorWebhook.name" -}}
+{{- define "sidecar-injector.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
@@ -11,7 +11,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "sidecarInjectorWebhook.fullname" -}}
+{{- define "sidecar-injector.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -27,29 +27,6 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "sidecarInjectorWebhook.chart" -}}
+{{- define "sidecar-injector.chart" -}}
 {{- .Chart.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
-
-{{- define "sidecarInjectorWebhook.nodeselector" -}}
-  {{- if contains "icp" .Capabilities.KubeVersion.GitVersion -}}
-  {{- if eq .Values.nodeRole "proxy" }}
-  proxy: "true"
-  {{- end -}}
-  {{- if eq .Values.nodeRole "management" }}
-  management: "true"
-  {{- end -}}
-  {{- end -}}
-{{- end }}
-
-{{- define "sidecarInjectorWebhook.tolerations" -}}
-{{- if contains "icp" .Capabilities.KubeVersion.GitVersion -}}
-{{- if or (eq .Values.nodeRole "proxy") (eq .Values.nodeRole "management") }}
-- key: "dedicated"
-  operator: "Exists"
-  effect: "NoSchedule"
-- key: CriticalAddonsOnly
-  operator: Exists
-{{- end -}}
-{{- end -}}
-{{- end }}

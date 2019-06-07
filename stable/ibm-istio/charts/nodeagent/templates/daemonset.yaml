@@ -1,0 +1,57 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: istio-nodeagent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "nodeagent.name" . }}
+    chart: {{ template "nodeagent.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    istio: nodeagent
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "nodeagent.name" . }}
+        chart: {{ template "nodeagent.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        istio: nodeagent
+      annotations:
+        sidecar.istio.io/inject: "false"
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+        productName: istio-nodeagent
+        productID: istio-nodeagent_{{ .Chart.Version }}_apachev2_00000
+        productVersion: {{ .Chart.Version }}
+    spec:
+      serviceAccountName: istio-nodeagent-service-account
+      containers:
+      - name: nodeagent
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        volumeMounts:
+        - mountPath: /var/run/sds
+          name: sdsudspath
+        env:
+        {{- if .Values.env }}
+        {{- range $key, $val := .Values.env }}
+        - name: {{ $key }}
+          value: "{{ $val }}"
+        {{- end }}
+        {{- end }}
+        - name: "Trust_Domain"
+          value: "{{ .Values.global.trustDomain }}"
+      volumes:
+      - name: sdsudspath
+        hostPath:
+          path: /var/run/sds
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- else if .Values.global.defaultTolerations }}
+      tolerations:
+{{ toYaml .Values.global.defaultTolerations | indent 6 }}
+      {{- end }}

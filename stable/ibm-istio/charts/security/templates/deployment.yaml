@@ -12,6 +12,10 @@ metadata:
     istio: citadel
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
@@ -40,7 +44,8 @@ spec:
             - --grpc-port=8060
             - --grpc-hostname=citadel
             - --citadel-storage-namespace={{ .Release.Namespace }}
-            - --custom-dns-names=istio-pilot-service-account.{{ .Release.Namespace }}:istio-pilot.{{ .Release.Namespace }},istio-ingressgateway-service-account.{{ .Release.Namespace }}:istio-ingressgateway.{{ .Release.Namespace }}
+            - --custom-dns-names=istio-pilot-service-account.{{ .Release.Namespace }}:istio-pilot.{{ .Release.Namespace }}
+            - --monitoring-port={{ .Values.global.monitoringPort }}
           {{- if .Values.selfSigned }}
             - --self-signed-ca=true
           {{- else }}
@@ -50,20 +55,21 @@ spec:
             - --root-cert=/etc/cacerts/root-cert.pem
             - --cert-chain=/etc/cacerts/cert-chain.pem
           {{- end }}
+          {{- if .Values.global.trustDomain }}
+            - --trust-domain={{ .Values.global.trustDomain }}
+          {{- end }}
           livenessProbe:
-            exec:
-              command:
-                - /usr/local/bin/istio_ca
-                - -h
-            initialDelaySeconds: 30
-            periodSeconds: 30
+            httpGet:
+              path: /version
+              port: {{ .Values.global.monitoringPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
           readinessProbe:
-            exec:
-              command:
-                - /usr/local/bin/istio_ca
-                - -h
-            initialDelaySeconds: 30
-            periodSeconds: 30
+            httpGet:
+              path: /version
+              port: {{ .Values.global.monitoringPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
           resources:
 {{- if .Values.resources }}
 {{ toYaml .Values.resources | indent 12 }}
@@ -81,9 +87,12 @@ spec:
          secretName: cacerts
          optional: true
 {{- end }}
-      nodeSelector:
-{{- include "security.nodeselector" . | indent 6 }}
-      tolerations:
-{{- include "security.tolerations" . | indent 6 }}
       affinity:
-{{- include "nodeaffinity" . | indent 6 }}
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- else if .Values.global.defaultTolerations }}
+      tolerations:
+{{ toYaml .Values.global.defaultTolerations | indent 6 }}
+      {{- end }}
