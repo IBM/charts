@@ -1,0 +1,100 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+      annotations:
+        productName: ibm-kerify
+        productID: ibm-kerify_{{ .Chart.Version }}_apachev2_00000
+        productVersion: {{ .Chart.Version }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-service-account
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+      containers:
+        - name: ibm-kerify
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - SETPCAP
+              - AUDIT_WRITE
+              - CHOWN
+              - NET_RAW
+              - DAC_OVERRIDE
+              - FOWNER
+              - FSETID
+              - KILL
+              - SETUID
+              - SETGID
+              - NET_BIND_SERVICE
+              - SYS_CHROOT
+              - SETFCAP
+          livenessProbe:
+            exec:
+              command:
+                - ls
+                - /run.sh
+            initialDelaySeconds: 40
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+                - ls
+                - /run.sh
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          env:
+            - name: GROUPLIST
+              value: "01-kubernetes,cloudctl,network-connectivity,00-basic-check"
+            - name: OUTPUT_FORMAT
+              value: junit
+
+          volumeMounts:
+            - mountPath: /var/run
+              name: docker-sock
+          resources:
+{{ toYaml .Values.resources | indent 14 }}
+      nodeSelector:
+{{ toYaml .Values.defaultNodeSelector | indent 8 }}
+      volumes:
+      - name: docker-sock
+        #hostPath:
+        #    path: /var/run
+      affinity:
+      {{- include "nodeaffinity" . | indent 8 }}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
