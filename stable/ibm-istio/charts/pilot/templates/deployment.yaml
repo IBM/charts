@@ -13,7 +13,20 @@ metadata:
   annotations:
     checksum/config-volume: {{ template "istio.configmap.checksum" . }}
 spec:
+{{- if not .Values.autoscaleEnabled }}
+{{- if .Values.replicaCount }}
   replicas: {{ .Values.replicaCount }}
+{{- else }}
+  replicas: 1
+{{- end }}
+{{- end }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      istio: pilot
   template:
     metadata:
       labels:
@@ -39,14 +52,27 @@ spec:
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           args:
           - "discovery"
+          - --monitoringAddr=:{{ .Values.global.monitoringPort }}
+          - --domain
+          - {{ .Values.global.proxy.clusterDomain }}
 {{- if .Values.global.oneNamespace }}
           - "-a"
           - {{ .Release.Namespace }}
 {{- end }}
-{{- if not .Values.sidecar }}
+{{- if $.Values.global.controlPlaneSecurityEnabled}}
+    {{- if not .Values.sidecar }}
           - --secureGrpcAddr
           - ":15011"
+    {{- end }}
+{{- else }}
+          - --secureGrpcAddr
+          - ""
 {{- end }}
+{{- if .Values.global.trustDomain }}
+          - --trust-domain={{ .Values.global.trustDomain }}
+{{- end }}
+          - --keepaliveMaxServerConnectionAge
+          - "{{ .Values.keepaliveMaxServerConnectionAge }}"
           ports:
           - containerPort: 8080
           - containerPort: 15010
@@ -78,8 +104,6 @@ spec:
               fieldRef:
                 apiVersion: v1
                 fieldPath: metadata.namespace
-          - name: PILOT_CACHE_SQUASH
-            value: "5"
           {{- if .Values.env }}
           {{- range $key, $val := .Values.env }}
           - name: {{ $key }}
@@ -90,6 +114,8 @@ spec:
           - name: PILOT_TRACE_SAMPLING
             value: "{{ .Values.traceSampling }}"
 {{- end }}
+          - name: PILOT_DISABLE_XDS_MARSHALING_TO_ANY
+            value: "1"
           resources:
 {{- if .Values.resources }}
 {{ toYaml .Values.resources | indent 12 }}
@@ -113,6 +139,8 @@ spec:
           - containerPort: 15011
           args:
           - proxy
+          - --domain
+          - $(POD_NAMESPACE).svc.{{ .Values.global.proxy.clusterDomain }}
           - --serviceCluster
           - istio-pilot
           - --templateFile
@@ -123,6 +151,9 @@ spec:
         {{- else }}
           - --controlPlaneAuthPolicy
           - NONE
+        {{- end }}
+        {{- if .Values.global.trustDomain }}
+          - --trust-domain={{ .Values.global.trustDomain }}
         {{- end }}
           env:
           - name: POD_NAME
@@ -143,15 +174,15 @@ spec:
           livenessProbe:
             exec:
               command:
-                - ls
-                - /etc/certs
+              - ls
+              - /etc/istio/proxy/envoy.yaml
             initialDelaySeconds: 30
             periodSeconds: 30
           readinessProbe:
             exec:
               command:
-                - ls
-                - /etc/certs
+              - ls
+              - /etc/istio/proxy/envoy.yaml
             initialDelaySeconds: 30
             periodSeconds: 30
           resources:
@@ -172,10 +203,13 @@ spec:
       - name: istio-certs
         secret:
           secretName: istio.istio-pilot-service-account
-          optional: true   
-      nodeSelector:
-{{- include "pilot.nodeselector" . | indent 6 }}
-      tolerations:
-{{- include "pilot.tolerations" . | indent 6 }}
+          optional: true
       affinity:
-{{- include "nodeaffinity" . | indent 6 }}
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- else if .Values.global.defaultTolerations }}
+      tolerations:
+{{ toYaml .Values.global.defaultTolerations | indent 6 }}
+      {{- end }}

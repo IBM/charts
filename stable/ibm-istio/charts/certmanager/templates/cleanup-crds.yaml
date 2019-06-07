@@ -7,8 +7,9 @@
 
 apiVersion: v1
 kind: ServiceAccount
-{{- if .Values.global.imagePullSecrets }}
 imagePullSecrets:
+  - name: sa-{{ .Release.Namespace }}
+{{- if .Values.global.imagePullSecrets }}
 {{- range .Values.global.imagePullSecrets }}
   - name: {{ . }}
 {{- end }}
@@ -105,13 +106,17 @@ spec:
           - /bin/sh
           - -c
           - >
-              kubectl delete crd clusterissuers.certmanager.k8s.io;
-              kubectl delete crd issuers.certmanager.k8s.io;
-              kubectl delete crd certificates.certmanager.k8s.io;
+              kubectl get crd | grep "certmanager.k8s.io" |  while read -r entry; do
+                name=$(echo $entry | awk '{print $1}');
+                kubectl delete crd $name;
+              done
       restartPolicy: OnFailure
-      nodeSelector:
-{{- include "certmanager.nodeselector" . | indent 6 }}
-      tolerations:
-{{- include "certmanager.tolerations" . | indent 6 }}
       affinity:
 {{- include "nodeaffinity" . | indent 6 }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- else if .Values.global.defaultTolerations }}
+      tolerations:
+{{ toYaml .Values.global.defaultTolerations | indent 6 }}
+      {{- end }}

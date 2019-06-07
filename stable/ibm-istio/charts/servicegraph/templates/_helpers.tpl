@@ -30,26 +30,3 @@ Create chart name and version as used by the chart label.
 {{- define "servicegraph.chart" -}}
 {{- .Chart.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
-
-{{- define "servicegraph.nodeselector" -}}
-  {{- if contains "icp" .Capabilities.KubeVersion.GitVersion -}}
-  {{- if eq .Values.nodeRole "proxy" }}
-  proxy: "true"
-  {{- end -}}
-  {{- if eq .Values.nodeRole "management" }}
-  management: "true"
-  {{- end -}}
-  {{- end -}}
-{{- end }}
-
-{{- define "servicegraph.tolerations" -}}
-{{- if contains "icp" .Capabilities.KubeVersion.GitVersion -}}
-{{- if or (eq .Values.nodeRole "proxy") (eq .Values.nodeRole "management") }}
-- key: "dedicated"
-  operator: "Exists"
-  effect: "NoSchedule"
-- key: CriticalAddonsOnly
-  operator: Exists
-{{- end -}}
-{{- end -}}
-{{- end }}
