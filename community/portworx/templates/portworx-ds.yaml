@@ -5,6 +5,7 @@
 {{- $usedrivesAndPartitions := .Values.storage.usedrivesAndPartitions | default false }}
 {{- $secretType := .Values.secretType | default "none" }}
 {{- $journalDevice := .Values.storage.journalDevice | default "none" }}
+{{- $metadataSize := .Values.storage.metadataSize | default 64 }}
 {{- $customRegistryURL := .Values.customRegistryURL | default "none" }}
 {{- $registrySecret := .Values.registrySecret | default "none" }}
 
@@ -25,7 +26,7 @@
 {{- $etcdEndPoints := .Values.kvdb }}
 {{- $misc := .Values.misc | default "" | split " " }}
 
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: portworx
@@ -35,7 +36,8 @@ metadata:
     release: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{.Release.Service | quote }}
     app.kubernetes.io/instance: {{.Release.Name | quote }}
-    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app.kubernetes.io/name: {{ template "name" . }}
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
   annotations:
     portworx.com/install-source: helm/{{.Release.Service}}-r{{.Release.Revision}}
     portworx.com/helm-vars: chart="{{.Chart.Name}}-{{.Chart.Version}}"{{range $k, $v := .Values }}{{if $v}},{{ $k }}="{{ $v }}"{{end}}{{end}}
@@ -54,7 +56,8 @@ spec:
         release: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{.Release.Service | quote }}
         app.kubernetes.io/instance: {{.Release.Name | quote }}
-        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        app.kubernetes.io/name: {{ template "name" . }}
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
         app: portworx
         name: portworx
         # {{- include "px.labels" . | indent 8 }}
@@ -167,7 +170,7 @@ spec:
               {{ end -}}
 
               "-x", "kubernetes",
-              "-metadata", "{{ printf "size=%d" (int64 .storage.metadataSize) }}"
+              "-metadata", "{{ printf "size=%d" (int64 $metadataSize) }}"
              ]
            {{- end }}
           env:
