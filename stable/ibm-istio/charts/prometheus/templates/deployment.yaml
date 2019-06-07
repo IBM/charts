@@ -32,12 +32,22 @@ spec:
 {{- if .Values.global.priorityClassName }}
       priorityClassName: "{{ .Values.global.priorityClassName }}"
 {{- end }}
+{{- if .Values.security.enabled }}
+      initContainers:
+      - name: prom-init
+        image: "{{ .Values.promInit.image.repository }}:{{ .Values.promInit.image.tag }}"
+        command: ['sh', '-c', 'counter=0; until [ "$counter" -ge 30 ]; do if [ -f /etc/istio-certs/key.pem ]; then exit 0; else echo waiting for istio certs && sleep 1 && counter=$((counter+1)); fi; done; exit 1;']
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        volumeMounts:
+          - mountPath: /etc/istio-certs
+            name: istio-certs
+{{- end }}
       containers:
         - name: prometheus
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           args:
-            - '--storage.tsdb.retention=6h'
+            - '--storage.tsdb.retention={{ .Values.retention }}'
             - '--config.file=/etc/prometheus/prometheus.yml'
           ports:
             - containerPort: 9090
@@ -59,13 +69,23 @@ spec:
           volumeMounts:
           - name: config-volume
             mountPath: /etc/prometheus
+          - mountPath: /etc/istio-certs
+            name: istio-certs
       volumes:
       - name: config-volume
         configMap:
           name: prometheus
-      nodeSelector:
-{{- include "prometheus.nodeselector" . | indent 6 }}
-      tolerations:
-{{- include "prometheus.tolerations" . | indent 6 }}
+      - name: istio-certs
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: istio.default
       affinity:
-{{- include "nodeaffinity" . | indent 6 }}
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- else if .Values.global.defaultTolerations }}
+      tolerations:
+{{ toYaml .Values.global.defaultTolerations | indent 6 }}
+      {{- end }}

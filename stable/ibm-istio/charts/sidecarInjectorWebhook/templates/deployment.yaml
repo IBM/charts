@@ -4,18 +4,22 @@ metadata:
   name: istio-sidecar-injector
   namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ template "sidecarInjectorWebhook.name" . }}
-    chart: {{ template "sidecarInjectorWebhook.chart" . }}
+    app: {{ template "sidecar-injector.name" . }}
+    chart: {{ template "sidecar-injector.chart" . }}
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
     istio: sidecar-injector
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
-        app: {{ template "sidecarInjectorWebhook.name" . }}
-        chart: {{ template "sidecarInjectorWebhook.chart" . }}
+        app: {{ template "sidecar-injector.name" . }}
+        chart: {{ template "sidecar-injector.chart" . }}
         heritage: {{ .Release.Service }}
         release: {{ .Release.Name }}
         istio: sidecar-injector
@@ -27,7 +31,7 @@ spec:
         productVersion: {{ .Chart.Version }}
     spec:
       serviceAccountName: istio-sidecar-injector-service-account
- {{- if .Values.global.priorityClassName }}
+{{- if .Values.global.priorityClassName }}
       priorityClassName: "{{ .Values.global.priorityClassName }}"
 {{- end }}
       containers:
@@ -89,9 +93,12 @@ spec:
           items:
           - key: config
             path: config
-      nodeSelector:
-{{- include "sidecarInjectorWebhook.nodeselector" . | indent 6 }}
-      tolerations:
-{{- include "sidecarInjectorWebhook.tolerations" . | indent 6 }}
       affinity:
-{{- include "nodeaffinity" . | indent 6 }}
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- else if .Values.global.defaultTolerations }}
+      tolerations:
+{{ toYaml .Values.global.defaultTolerations | indent 6 }}
+      {{- end }}

@@ -27,6 +27,13 @@ spec:
 {{- if .Values.global.priorityClassName }}
       priorityClassName: "{{ .Values.global.priorityClassName }}"
 {{- end }}
+      imagePullSecrets:
+        - name: sa-{{ .Release.Namespace }}
+{{- if .Values.global.imagePullSecrets }}
+{{- range .Values.global.imagePullSecrets }}
+        - name: {{ . }}
+{{- end }}
+{{- end }}
       containers:
         - name: servicegraph
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -34,7 +41,7 @@ spec:
           ports:
             - containerPort: 8088
           args:
-          - --prometheusAddr={{ .Values.prometheusAddr }}
+          - --prometheusAddr={{- .Values.prometheusAddr }}
           livenessProbe:
             httpGet:
               path: /graph
@@ -49,9 +56,12 @@ spec:
 {{- else }}
 {{ toYaml .Values.global.defaultResources | indent 12 }}
 {{- end }}
-      nodeSelector:
-{{- include "servicegraph.nodeselector" . | indent 6 }}
-      tolerations:
-{{- include "servicegraph.tolerations" . | indent 6 }}
       affinity:
-{{- include "nodeaffinity" . | indent 6 }}
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 6 }}
+      {{- else if .Values.global.defaultTolerations }}
+      tolerations:
+{{ toYaml .Values.global.defaultTolerations | indent 6 }}
+      {{- end }}
