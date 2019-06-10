@@ -2,6 +2,8 @@
 
 [RabbitMQ](https://www.rabbitmq.com/) is an open source message broker software that implements the Advanced Message Queuing Protocol (AMQP).
 
+THIS CHART IS NOW DEPRECATED. On June 7th, 2019 this version of the Helm chart for IBM RabbitMQ will no longer be supported. The dev chart is replaced by a community chart available at https://github.com/IBM/charts/tree/master/community/rabbitmq. This chart will be removed on July 12th, 2019. 
+
 ## Introduction
 
 This chart bootstraps a [RabbitMQ](https://www.rabbitmq.com/) deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.

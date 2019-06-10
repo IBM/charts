@@ -2,6 +2,8 @@
 
 [Redis](https://redis.io) is an open source (BSD licensed), in-memory data structure store, used as a database, cache and message broker.
 
+THIS CHART IS NOW DEPRECATED. On June 7th, 2019 this version of the Helm chart for IBM Redis-ha will no longer be supported. The dev chart is replaced by a community chart available at https://github.com/IBM/charts/tree/master/community/redis. This chart will be removed on July 12th, 2019.
+
 ## Introduction
 
 This chart bootstraps a high availability [Redis](https://redis.io) deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
