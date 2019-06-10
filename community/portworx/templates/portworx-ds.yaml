@@ -5,6 +5,7 @@
 {{- $usedrivesAndPartitions := .Values.storage.usedrivesAndPartitions | default false }}
 {{- $secretType := .Values.secretType | default "none" }}
 {{- $journalDevice := .Values.storage.journalDevice | default "none" }}
+{{- $metadataSize := .Values.storage.metadataSize | default 64 }}
 {{- $customRegistryURL := .Values.customRegistryURL | default "none" }}
 {{- $registrySecret := .Values.registrySecret | default "none" }}
 
@@ -12,9 +13,7 @@
 {{- $managementInterface := .Values.network.managementInterface | default "none" }}
 
 {{- $envVars := .Values.envVars | default "none" }}
-{{- $isCoreOS := .Values.isTargetOSCoreOS | default false }}
 
-{{- $pksInstall := .Values.pksInstall | default false }}
 {{- $internalKVDB := .Values.internalKVDB | default false }}
 {{- $csi := .Values.csi | default false }}
 
@@ -27,7 +26,7 @@
 {{- $etcdEndPoints := .Values.kvdb }}
 {{- $misc := .Values.misc | default "" | split " " }}
 
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: portworx
@@ -37,7 +36,8 @@ metadata:
     release: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{.Release.Service | quote }}
     app.kubernetes.io/instance: {{.Release.Name | quote }}
-    chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    app.kubernetes.io/name: {{ template "name" . }}
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
   annotations:
     portworx.com/install-source: helm/{{.Release.Service}}-r{{.Release.Revision}}
     portworx.com/helm-vars: chart="{{.Chart.Name}}-{{.Chart.Version}}"{{range $k, $v := .Values }}{{if $v}},{{ $k }}="{{ $v }}"{{end}}{{end}}
@@ -56,7 +56,8 @@ spec:
         release: {{ .Release.Name }}
         app.kubernetes.io/managed-by: {{.Release.Service | quote }}
         app.kubernetes.io/instance: {{.Release.Name | quote }}
-        chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+        app.kubernetes.io/name: {{ template "name" . }}
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
         app: portworx
         name: portworx
         # {{- include "px.labels" . | indent 8 }}
@@ -111,18 +112,18 @@ spec:
               {{- if ne $journalDevice "none" }}
               "-j", "{{ $journalDevice }}",
               {{- end -}}
-
-              {{- if empty $etcdEndPoints }}
-              "-b",
-              {{- else }}
+  
               {{- if eq $internalKVDB true }}
-              "-b",
+                "-b",
+              {{ end -}}
+              
+              {{- if empty $etcdEndPoints }}
+                {{- if eq $internalKVDB false }}
+                  {{ required "A valid ETCD url in the format etcd:http://<your-etcd-endpoint> is required. Verify that the key is correct and there isnt any typo in specifying that, also ensure it is accessible from all node of your kubernetes cluster" $etcdEndPoints }}
+                {{- end -}}
               {{- else -}}
-              "-k", "{{ regexReplaceAllLiteral "(;)" .kvdb "," }}",
+                "-k", "{{ regexReplaceAllLiteral "(;)" .kvdb "," }}",
               {{ end -}}
-              {{ end -}}
-
-
 
               "-c", "{{ required "Clustername cannot be empty" .clusterName }}",
 
@@ -168,7 +169,8 @@ spec:
                 {{- end }}
               {{ end -}}
 
-              "-x", "kubernetes"
+              "-x", "kubernetes",
+              "-metadata", "{{ printf "size=%d" (int64 $metadataSize) }}"
              ]
            {{- end }}
           env:
@@ -193,11 +195,6 @@ spec:
                   key: ".dockercfg"
                 {{- end }}
                   name: "{{ $registrySecret }}"
-            {{- end }}
-
-            {{- if eq $pksInstall true }}
-            - name: "PRE-EXEC"
-              value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
             {{- end }}
 
             {{- if eq $csi true }}
@@ -288,14 +285,8 @@ spec:
           {{- end }}
 
           {{- end }}
-
-          {{- if eq $isCoreOS true}}
-            - name: src
-              mountPath: /lib/modules
-          {{- else }}
             - name: src
               mountPath: /usr/src
-          {{- end }}
           {{- end }}
 
           {{- if eq $csi true }}
@@ -338,10 +329,10 @@ spec:
           {{- end}}
         - name: dockersock
           hostPath:
-            path: {{if eq $pksInstall true}}/var/vcap/sys/run/docker/docker.sock{{else}}/var/run/docker.sock{{end}}
+            path: /var/run/docker.sock
         - name: containerdsock
           hostPath:
-            path: {{if eq $pksInstall true}}/var/vcap/sys/run/containerd{{else}}/run/containerd{{end}}
+            path: /run/containerd
           {{- if eq $csi true}}
         - name: csi-driver-path
           hostPath:
@@ -353,11 +344,11 @@ spec:
             path: /etc/pwx
         - name: cores
           hostPath:
-            path: {{if eq $pksInstall true }}/var/vcap/store/cores{{else}}/var/cores{{end}}
+            path: /var/cores
         {{- if eq (.Values.deploymentType | upper | lower) "oci" }}
         - name: optpwx
           hostPath:
-            path: {{if eq $pksInstall true }}/var/vcap/store/opt/pwx{{else}}/opt/pwx{{end}}
+            path: /opt/pwx
         - name: sysdmount
           hostPath:
             path: /etc/systemd/system
@@ -392,16 +383,10 @@ spec:
           hostPath:
             path: /var/lib/kubelet
         {{- end }}
-        {{- if eq $isCoreOS true}}
-        - name: src
-          hostPath:
-            path: /lib/modules
-        {{- else }}
-        - name: src
+         - name: src
           hostPath:
             path: /usr/src
-        {{- end }}
-        - name: dockerplugins
+         - name: dockerplugins
           hostPath:
             path: /run/docker/plugins
         - name: hostproc
