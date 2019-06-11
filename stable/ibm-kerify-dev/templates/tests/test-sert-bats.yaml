@@ -1,0 +1,88 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ template "name" . }}-{{ .Release.Name }}-test"
+  labels:
+    app: {{ template "name" . }}-test
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  annotations:
+    helm.sh/hook: test-success
+    helm.sh/hook-delete-policy: "hook-succeeded"
+spec:
+  serviceAccountName: {{ .Release.Name }}-service-account
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: false
+    runAsUser: 0
+  containers:
+    - name: "{{ template "name" . }}-container"
+      image: ibmcom/kubectl:v1.13.5
+      imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+      command:
+        - kubectl
+        - get
+        - pods
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: false
+        runAsUser: 0
+        capabilities:
+          drop:
+          - ALL
+          add:
+          - SETPCAP
+          - AUDIT_WRITE
+          - CHOWN
+          - NET_RAW
+          - DAC_OVERRIDE
+          - FOWNER
+          - FSETID
+          - KILL
+          - SETUID
+          - SETGID
+          - NET_BIND_SERVICE
+          - SYS_CHROOT
+          - SETFCAP
+      resources:
+{{ toYaml .Values.resources | indent 8 }}
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+          weight: 2
+        - preference:
+            matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - ppc64le
+          weight: 2
+        - preference:
+            matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - s390x
+          weight: 2
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+                  - ppc64le
+                  - s390x
+  restartPolicy: Never
