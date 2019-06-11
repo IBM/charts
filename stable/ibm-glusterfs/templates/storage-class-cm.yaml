@@ -19,13 +19,19 @@ metadata:
 {{ include "sch.metadata.labels.standard" (list . $sccmName) | indent 4 }}
     glusterfs-sc: "sc-cm"
   annotations:
-    "helm.sh/hook": post-install
+    "helm.sh/hook": post-install, post-upgrade, post-rollback
     "helm.sh/hook-weight": "-3"
     "helm.sh/hook-delete-policy": hook-succeeded, hook-failed, before-hook-creation
 data:
 
   storage_class.sh: |
     #!/bin/bash
+
+    # Storage class parameters can not be updated, hence deleting the storage class and re-creating.
+    # Release.IsUpgrade: This is set to true if the current operation is an upgrade or rollback.
+    if [ {{ .Release.IsUpgrade }} == true ]; then
+      kubectl delete storageclasses {{ .Values.storageClass.name }}
+    fi
 
     heketi_ip_port=$(kubectl get service {{ include "sch.names.fullCompName" (list . $heketisvcName) | quote }} -o=jsonpath='{.spec.clusterIP}:{.spec.ports[0].port}')
 
@@ -38,7 +44,7 @@ data:
          annotations:
             storageclass.beta.kubernetes.io/is-default-class: {{ .Values.storageClass.isDefault | quote }}
       parameters:
-        resturl: "http://${heketi_ip_port}"
+        resturl: "https://${heketi_ip_port}"
         restuser: admin
         secretName: {{ .Values.heketi.authSecret }}
         secretNamespace: {{ .Release.Namespace }}

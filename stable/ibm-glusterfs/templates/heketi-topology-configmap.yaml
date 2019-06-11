@@ -77,9 +77,9 @@ data:
 
     /usr/bin/heketi --config=/etc/heketi/heketi.json &
 
-    until curl http://localhost:8080/hello | grep "Hello from Heketi"; do echo "heketi-topology-load: Waiting for Heketi to come up"; sleep 1; done
+    until curl --insecure https://localhost:8080/hello | grep "Hello from Heketi"; do echo "heketi-topology-load: Waiting for Heketi to come up"; sleep 1; done
 
-    topology_info=$(heketi-cli topology info)
+    topology_info=$(heketi-cli --insecure-tls topology info)
     echo "heketi-topology-load: Before loading topology. Topology Info: START | $topology_info | END"
 
     if [ -z "$topology_info" ] ; then
@@ -87,7 +87,7 @@ data:
       while true
       do
         echo "heketi-topology-load: Loading heketi topology"
-        output_topo="$(heketi-cli topology load --json=/topology/heketi-topology.json 2>&1)"
+        output_topo="$(heketi-cli --insecure-tls topology load --json=/topology/heketi-topology.json 2>&1)"
 
         if [ $? -ne 0 ] || [[ "$output_topo" = *"Unable to"* ]] ; then
           echo "heketi-topology-load: Unable to load the heketi topology. |$output_topo | End"
@@ -107,9 +107,10 @@ data:
         sleep 2
 
       done
-    else 
+    else
       echo "heketi-topology-load: Heketi topology is already available. Skipping heketi load topology!"
     fi
+
 
   heketi-topology-verify.sh: |
     #!/bin/bash
@@ -145,34 +146,34 @@ data:
     fi
 
     /usr/bin/heketi --config=/etc/heketi/heketi.json &
-    until curl http://localhost:8080/hello | grep "Hello from Heketi"; do echo "Heketi: Waiting for Heketi to come up"; sleep 1; done
+    until curl --insecure https://localhost:8080/hello | grep "Hello from Heketi"; do echo "heketi-topology-verify: Waiting for Heketi to come up"; sleep 1; done
 
-    topology_info=$(heketi-cli topology info)
+    topology_info=$(heketi-cli --insecure-tls topology info)
     echo "heketi-topology-verify: Topology Info: START | $topology_info | END"
 
-    node_count=$(heketi-cli node list | wc -l)
+    node_count=$(heketi-cli --insecure-tls node list | wc -l)
     echo "heketi-topology-verify: Storage node count: start | $node_count | End"
     if [ $node_count -le 0 ] ; then
       echo "heketi-topology-verify: No Storage node present in Topology. Can not proceed."
       exit 1
     fi
-    
+
     echo "heketi-topology-verify: topology verification complete"
 
   is_gluster_daemon_up.sh: |
     #!/bin/bash
-    
+
     echo "is_gluster_daemon_up: Checking GlusterFS Daemonset's Readiness"
 
     while true
-    do 
+    do
        output=$(kubectl get ds {{ include "sch.names.fullCompName" (list . $glusterfsdsName) }} -o=custom-columns=A:.status.numberReady,B:.status.desiredNumberScheduled --no-headers=true | tr -s " " | awk '$1 == $2 {print "READY"}')
 
        if [ "$output" == "READY" ]; then
          echo "is_gluster_daemon_up: GlusterFS Daemonset is Ready."
          break
        fi
- 
+
        echo "is_gluster_daemon_up: GlusterFS Daemonset is not ready yet!"
 
        sleep 1

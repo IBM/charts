@@ -1,0 +1,64 @@
+###############################################################################
+# Licensed Materials - Property of IBM
+# 5737-E67
+# (C) Copyright IBM Corporation 2016, 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+################################################################################
+
+{{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
+{{- $heketicertcmName :=  .sch.chart.components.heketicertcm.name }}
+{{- $heketicertName :=  .sch.chart.components.heketicert.name }}
+{{- $heketisvcName :=  .sch.chart.components.heketisvc.name }}
+{{- $heketideployName :=  .sch.chart.components.heketideploy.name }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $heketicertcmName) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $heketicertcmName) | indent 4 }}
+    glusterfs-heketicert: "heketicert-cm"
+data:
+
+  heketicert_job.sh: |
+    #!/bin/bash
+
+    # This job patchs the Certification to update Heketi Service IP.
+    # As the patch causes Heketi deployment Pod to terminate and restart another POD,
+    # we want to scale down the deplyment and then bring it up again after patching it.
+    #
+    echo "heketi-certificate-job: Scaling down heketi deployment"
+    kubectl scale --replicas=0 deployment {{ include "sch.names.fullCompName" (list . $heketideployName) }}
+    # 
+    # wait until heketi service is available
+    while true
+    do
+      out=$((kubectl get service {{ include "sch.names.fullCompName" (list . $heketisvcName) }} ) 2>&1)
+
+      if [[ $out =~ "Error from server (NotFound):" ]];then
+        echo "heketi-certificate-job: Waiting for heketi service to come up"
+      else
+        heketi_ip=$(kubectl get service {{ include "sch.names.fullCompName" (list . $heketisvcName) | quote }} -o=jsonpath='{.spec.clusterIP}')
+        echo "heketi-certificate-job: Heketi service is available. Service IP [$heketi_ip]."
+        break
+      fi
+    done
+
+    # wait until heketi cert object is available
+    while true
+    do
+      out=$((kubectl get certificates {{ include "sch.names.fullCompName" (list . $heketicertName) }} ) 2>&1)
+
+      if [[ $out =~ "Error from server (NotFound):" ]];then
+        echo "heketi-certificate-job: Waiting for heketi cert object to come up"
+      else
+        kubectl patch certificates {{ include "sch.names.fullCompName" (list . $heketicertName) }}  --type json  -p='[{"op": "add", "path": "/spec/ipAddresses", "value": ['$heketi_ip'] }]'
+        echo "heketi-certificate-job: Certificate has been patched with Heketi service IP [$heketi_ip]."
+        break
+      fi
+    done
+
+    echo "heketi-certificate-job: Scaling up heketi deployment again."
+    kubectl scale --replicas=1 deployment {{ include "sch.names.fullCompName" (list . $heketideployName) }}
