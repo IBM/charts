@@ -8,9 +8,10 @@
 
 {{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
 {{- $glusterfsdsName :=  .sch.chart.components.glusterfsds.name }}
+{{- $glusterfscfgcmName :=  .sch.chart.components.glusterfscfgcm.name }}
 
 kind: DaemonSet
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 metadata:
   name: {{ include "sch.names.fullCompName" (list . $glusterfsdsName) }}
   namespace: {{ .Release.Namespace }}
@@ -59,6 +60,12 @@ spec:
         - image: "{{ .Values.gluster.image.repository }}:{{ .Values.gluster.image.tag }}"
           imagePullPolicy: "{{ .Values.gluster.image.pullPolicy }}"
           name: glusterfs
+
+          {{- if not (eq (.Values.gluster.sshdPort|quote) "\"2222\"") }}
+          command: ["/config/sgx-config.sh"]
+          args: ["/usr/sbin/init"]
+          {{- end }}
+
           volumeMounts:
             - name: glusterfs-heketi
               mountPath: "/var/lib/heketi"
@@ -76,6 +83,8 @@ spec:
               mountPath: "/dev"
             - name: glusterfs-cgroup
               mountPath: "/sys/fs/cgroup"
+            - name: glusterfs-custom-cfg
+              mountPath: "/config"
           securityContext:
             capabilities: {}
             privileged: true
@@ -120,6 +129,10 @@ spec:
         - name: glusterfs-cgroup
           hostPath:
             path: "/sys/fs/cgroup"
+        - name: glusterfs-custom-cfg
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $glusterfscfgcmName) }}
+            defaultMode: 0744
       nodeSelector:
         {{ .Values.nodeSelector.key }}: {{ .Values.nodeSelector.value }}
       affinity:

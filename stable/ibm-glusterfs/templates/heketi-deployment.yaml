@@ -10,9 +10,10 @@
 {{- $heketideployName :=  .sch.chart.components.heketideploy.name }}
 {{- $heketitopocmName :=  .sch.chart.components.heketitopocm.name }}
 {{- $heketicfgcmName :=  .sch.chart.components.heketicfgcm.name }}
+{{- $heketicertsecretName :=  .sch.chart.components.heketicertsecret.name }}
 
 kind: Deployment
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 metadata:
   name: {{ include "sch.names.fullCompName" (list . $heketideployName) }}
   namespace: {{ .Release.Namespace }}
@@ -45,6 +46,7 @@ spec:
         productID: "Heketi_{{ .Values.heketi.image.tag }}_free_00000"
         productVersion: "{{ .Values.heketi.image.tag }}"
 
+        prometheus.io/scheme: "https"
         prometheus.io/scrape: "{{ .Values.prometheus.enabled }}"
         prometheus.io/path: "{{ .Values.prometheus.path }}"
         prometheus.io/port: "{{ .Values.prometheus.port }}"
@@ -84,6 +86,8 @@ spec:
               value: "true"
             - name: HEKETI_KUBE_DB_SECRET_NAME
               value: "{{ .Values.heketi.backupDbSecret }}"
+            - name: HEKETI_CLI_SERVER
+              value: "https://localhost:8080"
           ports:
             - containerPort: 8080
           volumeMounts:
@@ -93,6 +97,8 @@ spec:
               mountPath: "/etc/heketi"
             - name: topology
               mountPath: "/topology"
+            - name: heketi-tls-cert
+              mountPath: "/tls-cert"
 
         - image: "{{ .Values.heketi.image.repository }}:{{ .Values.heketi.image.tag }}"
           imagePullPolicy: "{{ .Values.heketi.image.pullPolicy }}"
@@ -112,6 +118,8 @@ spec:
               value: "true"
             - name: HEKETI_KUBE_DB_SECRET_NAME
               value: "{{ .Values.heketi.backupDbSecret }}"
+            - name: HEKETI_CLI_SERVER
+              value: "https://localhost:8080"
           ports:
             - containerPort: 8080
           volumeMounts:
@@ -121,6 +129,8 @@ spec:
               mountPath: "/etc/heketi"
             - name: topology
               mountPath: "/topology"
+            - name: heketi-tls-cert
+              mountPath: "/tls-cert"
 
       containers:
         - image: "{{ .Values.heketi.image.repository }}:{{ .Values.heketi.image.tag }}"
@@ -138,6 +148,8 @@ spec:
               value: "y"
             - name: HEKETI_IGNORE_STALE_OPERATIONS
               value: "true"
+            - name: HEKETI_CLI_SERVER
+              value: "https://localhost:8080"
             - name: HEKETI_MAX_INFLIGHT_OPERATIONS
               value: "{{ .Values.heketi.maxInFlightOperations }}"
             - name: HEKETI_ADMIN_KEY
@@ -155,18 +167,22 @@ spec:
               subPath: heketi.db.gz
             - name: config
               mountPath: "/etc/heketi"
+            - name: heketi-tls-cert
+              mountPath: "/tls-cert"
           readinessProbe:
             timeoutSeconds: 3
             initialDelaySeconds: 10
             httpGet:
               path: "/hello"
               port: 8080
+              scheme: HTTPS
           livenessProbe:
             timeoutSeconds: 3
             initialDelaySeconds: 30
             httpGet:
               path: "/hello"
               port: 8080
+              scheme: HTTPS
           resources:
 {{ toYaml .Values.heketi.resources| indent 12 }}
       volumes:
@@ -185,6 +201,19 @@ spec:
             items:
             - key: heketi.json
               path: heketi.json
+        - name: heketi-tls-cert
+          secret:
+            defaultMode: 420
+            {{- if .Values.heketi.tls.generate }}
+            secretName: {{ include "sch.names.fullCompName" (list . $heketicertsecretName) }}
+            {{- else }}
+            secretName: {{ .Values.heketi.tls.secretName }}
+            {{- end }}
+            items:
+            - key: tls.key
+              path: tls.key
+            - key: tls.crt
+              path: tls.crt
 
       nodeSelector:
         {{ .Values.nodeSelector.key }}: {{ .Values.nodeSelector.value }}

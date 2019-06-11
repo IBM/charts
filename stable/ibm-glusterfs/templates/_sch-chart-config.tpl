@@ -23,6 +23,8 @@ sch:
     components:
       glusterfsds:
         name: "daemonset"
+      glusterfscfgcm:
+        name: "config"
       heketicfgcm:
         name: "heketi-config"
       heketisvc:
@@ -31,6 +33,10 @@ sch:
         name: "heketi-deployment"
       heketitopocm:
         name: "heketi-topology"
+      heketicert:
+        name: "heketi-cert"
+      heketicertsecret:
+        name: "heketi-cert-secret"
       precheckresultscm:
         name: "precheck-results-cm"
       precheckcm:
@@ -47,4 +53,8 @@ sch:
         name: "storageclass-job"
       sccm:
         name: "storageclass-cm"
+      heketicertjob:
+        name: "heketicert-job"
+      heketicertcm:
+        name: "heketicert-cm"
 {{- end -}}

@@ -7,32 +7,28 @@
 ################################################################################
 
 {{- include "sch.config.init" (list . "glusterfs.sch.chart.config.values") }}
-{{- $scjobName :=  .sch.chart.components.scjob.name }}
-{{- $sccmName :=  .sch.chart.components.sccm.name }}
+{{- $heketicertjobName :=  .sch.chart.components.heketicertjob.name }}
+{{- $heketicertcmName :=  .sch.chart.components.heketicertcm.name }}
 
-{{- if .Values.storageClass.create }}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "sch.names.fullCompName" (list . $scjobName) }}
+  name: {{ include "sch.names.fullCompName" (list . $heketicertjobName) }}
   namespace: {{ .Release.Namespace }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . $scjobName) | indent 4 }}
-    glusterfs-sc: "job"
+{{ include "sch.metadata.labels.standard" (list . $heketicertjobName) | indent 4 }}
+    glusterfs-heketicert: "job"
   annotations:
-    description: Defines how to create glusterfs storage class
-    "helm.sh/hook": post-install, post-upgrade, post-rollback
-    "helm.sh/hook-weight": "-1"
-    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed, before-hook-creation
+    description: Defines how to get heketi service IP and patch the same to heketi cert
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 300
   template:
     metadata:
-      name: {{ include "sch.names.fullCompName" (list . $scjobName) }}
+      name: {{ include "sch.names.fullCompName" (list . $heketicertjobName) }}
       labels:
-{{ include "sch.metadata.labels.standard" (list . $scjobName) | indent 8 }}
-        glusterfs-sc: "pod"
+{{ include "sch.metadata.labels.standard" (list . $heketicertjobName) | indent 8 }}
+        glusterfs-heketicert: "pod"
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
@@ -41,20 +37,20 @@ spec:
       priorityClassName: "{{ .Values.podPriorityClass }}"
       {{- end }}
       containers:
-        - name: glusterfs-sc-job
+        - name: glusterfs-heketicert-job
           image: "{{ .Values.preValidation.image.repository }}:{{ .Values.preValidation.image.tag }}"
           imagePullPolicy: "{{ .Values.preValidation.image.pullPolicy }}"
 
-          command: ["/sc/storage_class.sh"]
+          command: ["/heketicert/heketicert_job.sh"]
 
           volumeMounts:
-            - name: storage-class
-              mountPath: "/sc"
+            - name: glusterfs-heketicert
+              mountPath: "/heketicert"
 
       volumes:
-        - name: storage-class
+        - name: glusterfs-heketicert
           configMap:
-            name: {{ include "sch.names.fullCompName" (list . $sccmName) }}
+            name: {{ include "sch.names.fullCompName" (list . $heketicertcmName) }}
             defaultMode: 0777
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
@@ -63,4 +59,3 @@ spec:
           operator: Exists
         - key: CriticalAddonsOnly
           operator: Exists
-{{- end }}
