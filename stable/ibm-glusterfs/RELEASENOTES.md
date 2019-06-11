@@ -1,14 +1,15 @@
-# What’s new in GlusterFS Storage cluster Version 1.3.0
+# What’s new in GlusterFS Storage cluster Version 1.4.0
 
 With GlusterFS Storage cluster chart, the following new
 features are available:
 
-* New GlusterFS image
-* New storage-util image
-* Removed minimum three GlusterFS storage nodes restriction
+* TLS support for Heketi
+* IBM® Z architecture support
+* New images
 
 # Breaking Changes
-* The GlusterFS docker image has been upgraded
+* The `icp-storage-util`, `gluster` and `heketi` images have been upgraded
+* Communication to Heketi is now encrypted by TLS. 
 
 # Fixes
 * Bug Fixes
@@ -25,11 +26,16 @@ features are available:
 9. Pre create a secret for the Heketi authentication
 
 # Documentation
+Check the README file provided with the chart for detailed installation instructions.
 
 # Version History
 
 | Chart | Date           | ICP Required |        Image(s) Supported       | Details       |
 | ----- | -------------- | ------------ | ------------------------------- | ------------- |
+| 1.4.0 | May 2019       | >=3.2.0      | ibmcom/gluster:v4.1.5.1         | New Images    |
+|       |                |              | ibmcom/heketi:v8.0.0.1          | TLS support for Heketi     |
+|       |                |              | ibmcom/icp-storage-util:3.2.0   | IBM® Z architecture support |
+|       |                |              |                                 |               |
 | 1.3.0 | February 2019  | >=3.1.0      | ibmcom/gluster:v4.1.5           | New Images    |
 |       |                |              | ibmcom/heketi:v8.0.0            | Bug Fixes     |
 |       |                |              | ibmcom/icp-storage-util:3.1.2   |               |

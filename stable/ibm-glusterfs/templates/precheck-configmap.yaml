@@ -42,7 +42,8 @@ data:
 
     precheck_cm = {{ include "sch.names.fullCompName" (list . $precheckresultscmName) | quote }}
 
-    glusterfs_ports = [2222, 24007, 24008]
+    glusterfs_ports = [ {{ .Values.gluster.sshdPort }} , 24007, 24008]
+
     glusterfs_client_port_start = 49152
     glusterfs_client_port_end = 49251
 
@@ -277,7 +278,7 @@ data:
         return "fail", msg
 
       volumeType = "{{ .Values.storageClass.volumeType }}"
-      
+
       if volumeType == "none":
         replicas = 1
         if (replicas > len(topology_info)):
@@ -290,10 +291,10 @@ data:
           return "fail", msg
       elif volumeType.split(':')[0] == "disperse":
         replicas = int(volumeType.split(':')[2])
-        if (replicas <= 0 
-        or 
-        (replicas + int(volumeType.split(':')[1])) > len(topology_info) 
-        or 
+        if (replicas <= 0
+        or
+        (replicas + int(volumeType.split(':')[1])) > len(topology_info)
+        or
         (int(volumeType.split(':')[1]) % replicas) != 0):
           msg = "Number of nodes required to satisfy a dispersed topology do not fulfill replicas count requested."
           return "fail", msg
@@ -418,6 +419,20 @@ data:
       return retval, msg
 
 
+    def validate_tls_secret(config_data):
+
+      retval = "success"
+      msg = "Validation Success"
+
+      tls_secret = config_data["tlssecret"]
+
+      if ({{ .Values.heketi.tls.generate | quote }} == "false") and (tls_secret.strip() in (None, "") ):
+        msg = "Heketi TLS secret is not configured. Please configure."
+        retval = "fail"
+
+      return retval, msg
+
+
     def check_configmap():
 
       retval = "success"
@@ -521,7 +536,8 @@ data:
         "scname" : {{ .Values.storageClass.name | quote }},
         "backupdbsecret" : {{ .Values.heketi.backupDbSecret | quote }},
         "authsecret" : {{ .Values.heketi.authSecret | quote }},
-        "installtype" : {{ .Values.gluster.installType | quote }}
+        "installtype" : {{ .Values.gluster.installType | quote }},
+        "tlssecret" : {{ .Values.heketi.tls.secretName | quote }}
       }
 
       validation_methods_list = [
@@ -529,7 +545,8 @@ data:
         validate_kubelet_nodes,
         validate_name,
         validate_heketi_auth_secret,
-        validate_heketi_db_secret
+        validate_heketi_db_secret,
+        validate_tls_secret
       ]
 
       for method in validation_methods_list:

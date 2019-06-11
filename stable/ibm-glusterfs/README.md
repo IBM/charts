@@ -22,16 +22,18 @@ The Helm chart completes the following tasks:
 ## Limitations
 - The chart supports the installation of only a new storage cluster under kube-system namespace.
 - The chart supports creation of only one GlusterFS storage cluster in an IBM® Cloud Private cluster.
+- Upgrade from previous versions of this chart to current version must be done after IBM Cloud Private cluster is upgraded to
+  Version 3.2.0.
 
 ## Prerequisites
 
-- An IBM® Cloud Private Version 3.1.0 or later must be installed.
+- An IBM® Cloud Private Version 3.2.0 or later must be installed.
 - The default configuration is to use three storage nodes to configure GlusterFS Storage cluster. However, you can use less than three storage nodes to configure GlusterFS Storage cluster. You need at least one storage to successfully install GlusterFS.
 - In storage class configuration, if you specify `volumeType` as `replicate` with more than one replica count, or if you specify `volumeType` as `disperse` with more than one redundancy count, then you must use as many storage nodes as the specified replica or redundancy count. For more information about creating storage nodes, see [Deployment Scenarios](#deployment-scenarios).
 - The storage device that is used for GlusterFS must have a capacity of at least 25 GB.
 - The storage devices that you use for GlusterFS must be raw disks. They must not be formatted, partitioned, or used for file system storage needs. You must use the symbolic link (symlink) to identify the GlusterFS storage device. For more information about creating symlinks, see [Storage Devices](#storage-devices).
-- You must install the `dm_thin_pool` kernel module on all the storage nodes. For more information, see [Configure dm_thin_pool](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/manage_cluster/prepare_nodes.html).
-- You must install the GlusterFS client on the nodes in your cluster that might use a GlusterFS volume. For more information, see [Install GlusterFS client](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/manage_cluster/prepare_nodes.html)
+- You must install the `dm_thin_pool` kernel module on all the storage nodes. For more information, see [Configure dm_thin_pool](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.2.0/manage_cluster/prepare_nodes.html).
+- You must install the GlusterFS client on the nodes in your cluster that might use a GlusterFS volume. For more information, see [Install GlusterFS client](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.2.0/manage_cluster/prepare_nodes.html)
 - The GlusterFS client version must be the same as the version of the GlusterFS server that is installed.
 - You must pre-create a secret with a password for the Heketi user 'admin' and provide the secret name in the `heketi.authSecret` parameter. Follow these steps to create the secret:
   1. Encode the new password in `base64` and update the `admin_password` section with the new base64-encoded password.
@@ -62,13 +64,20 @@ The Helm chart completes the following tasks:
 
 ## PodSecurityPolicy Requirements
 
+The `ibm-glusterfs-chart` chart requires a pod security policy to be bound to the target namespace
+before installation. You may either choose the predefined pod security policy or create your own pod security policy.
+
+* For IBM Cloud Private, the predefined pod security policy name is [`ibm-privileged-psp`](https://ibm.biz/cpkspec-psp).
+* If you want to create your own pod security policy, make sure the security policy you create has same privileges as
+provided by `ibm-privileged-psp`.
+
 ## Deployment Scenarios
 
 GlusterFS storage cluster can be deployed on dedicated storage host group nodes or on worker nodes.
 
 ### Dedicated GlusterFS storage nodes
 
-Define a custom host group with at least three nodes. For more information about defining a host group, see [Defining custom host groups](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/installing/hosts.html#hostgroup). This custom host group automatically labels the nodes and taints them to make the nodes dedicated for GlusterFS Storage. If you enabled firewall in your cluster, you need to open all the ports that are used by GlusterFS daemon and bricks.
+Define a custom host group with at least three nodes. For more information about defining a host group, see [Defining custom host groups](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.2.0/installing/hosts.html#hostgroup). This custom host group automatically labels the nodes and taints them to make the nodes dedicated for GlusterFS Storage. If you enabled firewall in your cluster, you need to open all the ports that are used by GlusterFS daemon and bricks.
 
 ### Worker nodes as GlusterFS storage nodes
 
@@ -84,7 +93,7 @@ Ensure that you use at least three worker nodes to configure GlusterFS. You have
 
 - Configure GlusterFS on dedicated nodes 
 
-  1. Configure a custom host group with the dedicated GlusterFS storage nodes. For more information about how to add a host group, see [Adding a host group](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/installing/add_node.html#host_group).
+  1. Configure a custom host group with the dedicated GlusterFS storage nodes. For more information about how to add a host group, see [Adding a host group](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.2.0/installing/add_node.html#host_group).
 
      Following is an example configuration of a host group with dedicated GlusterFS storage nodes. You add this configuration in the /<installation_directory>/cluster/hosts file.
 
@@ -248,7 +257,7 @@ The GlusterFS and Heketi containers have the following resource requests and lim
 
 ## Installing GlusterFS cluster
 
-### Installing the chart
+### Installing the Chart
 
 To install `ibm-glusterfs` chart from the command line with release name `my-release`:
 
@@ -264,12 +273,12 @@ The following table lists the configurable parameters of the `ibm-glusterfs` cha
 |-------------------------------------------|---------------------------------------------------------|-------------------|
 | arch.amd64                                | Architecture preference for amd64 node                  | 2 - No preference |
 | arch.ppc64le                              | Architecture preference for ppc64le node                | 2 - No preference |
-| arch.s390x                                | Architecture preference for s390x node                  | 0 - Do not use    |
+| arch.s390x                                | Architecture preference for s390x node                  | 2 - No preference |
 | preValidation.image.repository            | Pre-validation image to use for this deployment         | ibmcom/icp-storage-util |
-| preValidation.image.tag                   | Pre-validation image tag to use for this deployment     | 3.1.2             |
+| preValidation.image.tag                   | Pre-validation image tag to use for this deployment     | 3.2.0             |
 | preValidation.image.pullPolicy            | Pre-validation image pull policy                        | IfNotPresent      |
 | gluster.image.repository                  | GlusterFS image to use for this deployment              | ibmcom/gluster    |
-| gluster.image.tag                         | GlusterFS image tag to use for this deployment          | v4.1.5            |
+| gluster.image.tag                         | GlusterFS image tag to use for this deployment          | v4.1.5.1          |
 | gluster.image.pullPolicy                  | GlusterFS image pull policy                             | IfNotPresent      |
 | gluster.installType                       | GlusterFS installation type.                            | Fresh             |
 | gluster.resources.requests.cpu            | Describes the minimum amount of CPU required            | Default is 500m. See Kubernetes - [CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
@@ -277,7 +286,7 @@ The following table lists the configurable parameters of the `ibm-glusterfs` cha
 | gluster.resources.limits.cpu              | Describes the maximum amount of CPU allowed             | Default is 1000m  |
 | gluster.resources.limits.memory           | Describes the maximum amount of memory allowed          | Default is 1Gi    |
 | heketi.image.repository                   | Heketi image to use for this deployment                 | ibmcom/heketi     |
-| heketi.image.tag                          | Heketi image tag to use for this deployment             | v8.0.0            |
+| heketi.image.tag                          | Heketi image tag to use for this deployment             | v8.0.0.1          |
 | heketi.image.pullPolicy                   | Heketi image pull policy                                | IfNotPresent      |
 | heketi.backupDbSecret                     | Name of the k8s secret where Heketi database is backed up to | heketi-db-backup  |
 | heketi.dbSyncupDelay                      | Delay in seconds to syncup heketi DB data with backup secret | 10                |
@@ -287,6 +296,10 @@ The following table lists the configurable parameters of the `ibm-glusterfs` cha
 | heketi.resources.requests.memory          | Describes the minimum amount of memory required         | Default is 512Mi  |
 | heketi.resources.limits.cpu               | Describes the maximum amount of CPU allowed             | Default is 1000m  |
 | heketi.resources.limits.memory            | Describes the maximum amount of memory allowed          | Default is 1Gi    |
+| heketi.tls.generate                       | Whether to create a certificate using the ICP Certificate Authority and save it in the secret named below, or whether the secret already exists                                                | true              |
+| heketi.tls.issuer                         | Name of the issuer                                      | icp-ca-issuer     |
+| heketi.tls.issuerKind                     | Kind of the issuer                                      | ClusterIssuer     |
+| heketi.tls.secretName                     | Specifies the name of the secret for the certificate that has to be used in heketi server. The name of the key and the certificate must be `tls.key` and `tls.crt`.                                                                                                      |                   |
 | heketiTopology.k8sNodeName                | Name of the kubelet node that runs the GlusterFS pod    | |
 | heketiTopology.k8sNodeIp                  | Storage node's network address                          | |
 | heketiTopology.devices                    | Raw device list                                         | |
