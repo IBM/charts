@@ -19,6 +19,17 @@
 # This script can be run after all releases are deleted from the cluster.
 #
 
+. ../../common/kubhelper.sh
+
 # Delete the PodSecurityPolicy and ClusterRole for all releases of this chart.
-kubectl delete -f ../../pre-install/clusterAdministration/ibm-open-liberty-spring-psp.yaml
-kubectl delete -f ../../pre-install/clusterAdministration/ibm-open-liberty-spring-cr.yaml
+
+if supports_scc; then
+  echo "Removing the SCC..."
+  kubectl delete -f ../../pre-install/clusterAdministration/ibm-open-liberty-spring-scc.yaml
+fi
+
+if supports_psp; then
+    echo "Removing the PSP and ClusterRole..."
+    kubectl delete -f ../../pre-install/clusterAdministration/ibm-open-liberty-spring-psp.yaml
+    kubectl delete -f ../../pre-install/clusterAdministration/ibm-open-liberty-spring-cr.yaml
+fi
