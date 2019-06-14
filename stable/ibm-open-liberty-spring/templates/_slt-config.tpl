@@ -32,7 +32,7 @@ slt:
   product:
     id: "OpenLiberty_67365423789_18002_151_00000"
     name: "Open Liberty"
-    version: "19.0.0.4"
+    version: "19.0.0.5"
   kube:
     provider: Any
   parentChart: "open-liberty-spring"

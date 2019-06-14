@@ -19,6 +19,17 @@
 # You need to run this script once prior to installing the chart.
 #
 
-# Create the PodSecurityPolicy and ClusterRole for all releases of this chart.
-kubectl apply -f ibm-open-liberty-psp.yaml
-kubectl apply -f ibm-open-liberty-cr.yaml
+. ../../common/kubhelper.sh
+
+if supports_scc; then 
+  # Create the custom SCC for OpenShift
+  echo "Creating SecurityContextConstraints..."
+  kubectl apply -f ibm-open-liberty-scc.yaml --validate=false
+fi
+
+if supports_psp; then 
+  # Create the PodSecurityPolicy and ClusterRole for all releases of this chart.
+  echo "Creating the PodSecurityPolicy..."
+  kubectl apply -f ibm-open-liberty-psp.yaml
+  kubectl apply -f ibm-open-liberty-cr.yaml
+fi
