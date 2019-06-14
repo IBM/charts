@@ -24,6 +24,9 @@
 #     ./createSecurityNamespacePrereqs.sh myNamespace
 #
 
+. ../../common/kubhelper.sh
+
+
 if [ "$#" -lt 1 ]; then
 	echo "Usage: createSecurityNamespacePrereqs.sh NAMESPACE"
   exit 1
@@ -31,11 +34,29 @@ fi
 
 namespace=$1
 
-# Replace the NAMESPACE tag with the namespace specified in a temporary yaml file.
-sed 's/{{ NAMESPACE }}/'$namespace'/g' ibm-open-liberty-spring-rb.yaml > $namespace-ibm-open-liberty-spring-rb.yaml
+kubectl get namespace $namespace &> /dev/null
+if [ $? -ne 0 ]; then
+  echo "ERROR: Namespace $namespace does not exist."
+  exit 1
+fi
 
-# Create the role binding for all service accounts in the current namespace
-kubectl create -f $namespace-ibm-open-liberty-spring-rb.yaml -n $namespace
+if supports_scc; then
+  echo "Adding all namespace users to SCC..."
+  if command -v oc >/dev/null 2>&1 ; then
+    oc adm policy add-scc-to-group ibm-open-liberty-spring-scc system:serviceaccounts:$namespace
+  else
+    echo "ERROR:  The OpenShift CLI is not available..." 
+  fi
+fi
 
-# Clean up - delete the temporary yaml file.
-rm $namespace-ibm-open-liberty-spring-rb.yaml
+if supports_psp; then
+  # Replace the NAMESPACE tag with the namespace specified in a temporary yaml file.
+  sed 's/{{ NAMESPACE }}/'$namespace'/g' ibm-open-liberty-spring-rb.yaml > $namespace-ibm-open-liberty-spring-rb.yaml
+
+  echo "Adding a RoleBinding for all namespace users to the PSP..."
+  # Create the role binding for all service accounts in the current namespace
+  kubectl create -f $namespace-ibm-open-liberty-spring-rb.yaml -n $namespace
+
+  # Clean up - delete the temporary yaml file.
+  rm $namespace-ibm-open-liberty-spring-rb.yaml
+fi;
