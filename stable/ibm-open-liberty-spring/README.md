@@ -25,9 +25,11 @@ A persistent volume is required, if you plan on using the transaction service wi
 
 ### Open Liberty Docker image requirements
 
-Our Docker images are publicly available from our [Docker Hub page](https://hub.docker.com/_/open-liberty), using the tags `springBoot1` and `springBoot2` depending on the version of Spring Boot your app depends on. Within the `Using springBoot images` section, you’ll also learn how to achieve an optimized application image where the layer containing Spring libraries has been pushed between Open Liberty’s layer and your application’s layer – allowing for a much faster continuous development and build flow.
+Open Liberty Docker images based on Universal Base Images (UBI), with tags `springBoot1-ubi-min` and `springBoot2-ubi-min`, are publicly available from [Docker hub](https://hub.docker.com/r/openliberty/open-liberty). Our Docker images for Ubuntu are also publicly available from our [Docker Hub page](https://hub.docker.com/_/open-liberty), using the tags `springBoot1` and `springBoot2` depending on the version of Spring Boot your app depends on. Ensure your Kubernetes environment has set the image enforcement policy appropriately to allow access to those repositories. See [Enforcing container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.2.0/manage_images/image_security.html) for more information.
 
-We have also pre-packaged the popular [Spring Pet Clinic](http://projects.spring.io/spring-petclinic/) application as a sample that is ready to be used! You can check out [how we built it](https://github.com/OpenLiberty/ci.docker/tree/master/community/samples/spring-petclinic) or run it right away via `docker run -d --name springApp -p 8080:9080 openliberty/samples:springPetClinic`
+Within the `Using springBoot images` section, you’ll also learn how to achieve an optimized application image where the layer containing Spring libraries has been pushed between Open Liberty’s layer and your application’s layer – allowing for a much faster continuous development and build flow.
+
+We have also pre-packaged the popular [Spring Pet Clinic](http://projects.spring.io/spring-petclinic/) application as a sample that is ready to be used! You can check out [how we built it](https://github.com/OpenLiberty/ci.docker/tree/master/community/samples/spring-petclinic) or run it right away via `docker run -d --name springApp -p 8080:9080 openliberty/samples:springPetClinic`. Ensure your Kubernetes environment has set the image enforcement policy appropriately to allow access to the sample application.
 
 The Helm chart requires the Docker image to have certain directories linked. The `open-liberty` image from Docker Hub will already have the expected links. If you are not using that image, either directly or as parent image, then you must add the following to your Dockerfile:
 
@@ -122,6 +124,70 @@ Download the following scripts located at [/ibm_cloud_pak/pak_extensions/post-de
 * The namespace scoped instructions are located at `namespaceAdministration/deleteSecurityNamespacePrereqs.sh` for team admin/operator to delete the RoleBinding for the namespace. This script takes one argument; the name of the namespace where the chart was installed.
   * Example usage: `./deleteSecurityNamespacePrereqs.sh myNamespace`
 
+### Red Hat OpenShift SecurityContextConstraints Requirements
+
+This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+
+The predefined `SecurityContextConstraints` name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this `SecurityContextConstraints` resource you can proceed to install the chart.
+
+#### Creating the required resources
+
+This chart defines a custom `SecurityContextConstraints` which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom `SecurityContextConstraints` resource using the supplied instructions or scripts in the `pak_extensions/pre-install` directory.
+
+* From the user interface, you can copy and paste the following snippets to enable the custom `SecurityContextConstraints`
+  * Custom `SecurityContextConstraints` definition:
+
+  ```yaml
+  apiVersion: security.openshift.io/v1
+  kind: SecurityContextConstraints
+  metadata:
+    annotations:
+    name: ibm-open-liberty-spring-scc
+  allowHostDirVolumePlugin: false
+  allowHostIPC: false
+  allowHostNetwork: false
+  allowHostPID: false
+  allowHostPorts: false
+  allowPrivilegedContainer: false
+  allowedCapabilities: []
+  allowedFlexVolumes: []
+  defaultAddCapabilities: []
+  fsGroup:
+    type: MustRunAs
+    ranges:
+    - max: 65535
+      min: 1
+  readOnlyRootFilesystem: false
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    type: MustRunAsNonRoot
+  seccompProfiles:
+  - docker/default
+  seLinuxContext:
+    type: RunAsAny
+  supplementalGroups:
+    type: MustRunAs
+    ranges:
+    - max: 65535
+      min: 1
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+  priority: 0
+  ```
+
+* From the command line, you can run the setup scripts included under `pak_extensions/pre-install`
+  As a cluster admin the pre-install instructions are located at:
+  * `pre-install/clusterAdministration/createSecurityClusterPrereqs.sh`
+
+  As team admin the namespace scoped instructions are located at:
+  * `pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh`
+
 ### Limitations
 
 See [RELEASENOTES.md](https://github.com/IBM/charts/tree/master/stable/ibm-open-liberty-spring/RELEASENOTES.md)
@@ -136,6 +202,8 @@ For example, to deploy the sample Spring Pet Clinic application run the followin
 *    `helm install --name my-release --set image.repository=openliberty/samples --set image.tag=springPetClinic ibm-charts/ibm-open-liberty-spring --tls`
 
 To get the application URL, run the commands provided in the `NOTES` section from the output of running above commands.
+
+Resource constraints can be enabled using `resources.constraints.enabled` parameter. Required resource can be configured using `resources.requests.cpu` and `resources.requests.memory` parameters. Resource limits can be configured using `resources.limits.cpu` and `resources.limits.memory` parameters. Review the default values specified by the chart and adjust according to your needs. It is recommended not to use `Xmx` or `Xms`. Use `–XX:MaxRAMPercentage` and `–XX:InitialRAMPercentage` for any fine tuning, such as if there are other processes set to run in the same container.
 
 ### Verifying the Chart
 
@@ -195,12 +263,12 @@ Note: You can use `kubectl get pvc` to see the list of available PVCs.
 |           | `useClusterSSLConfiguration`    | Set to true if you want to use the SSL ConfigMap and secrets generated by the createClusterSSLConfiguration option. Set to false if the Docker image already has SSL configured. | `false` (default) or `true` |
 |           | `createClusterSSLConfiguration` | Specifies whether to automatically generate SSL ConfigMap and secrets. The generated ConfigMap is: liberty-config.  The generated secrets are: `mb-keystore`, `mb-keystore-password`, `mb-truststore`, and `mb-truststore-password`.  Only generate the SSL configuration one time. If you generate the configuration a second time, errors might occur. | `false` (default) or `true` |
 | `ingress` | `enabled`        | Specifies whether to use ingress.        |  `false` (default) or `true`  |
-|           | `rewriteTarget`  | Specifies the target URI where the traffic must be redirected. | See Kubernetes - Annotation `ingress.kubernetes.io/rewrite-target` - [Rewrite Target](https://github.com/kubernetes/ingress-nginx/tree/master/docs/examples/rewrite)  |
-|           | `path`           | Specifies the path for the Ingress HTTP rule.    |  See Kubernetes - [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/)  |
-|           | `host`           | Specifies a fully qualified domain names of Ingress, as defined by RFC 3986. |  See [Ingress configuration](#ingress-configuration) for more info on this. |
-|           | `secretName`     | Specifies the name of the Kubernetes secret that contains Ingress' TLS certificate and key.   |  See [Ingress configuration](#ingress-configuration) for more info on this. |
-|           | `labels`         | Specifies custom labels.         |  YAML object of labels  |
-|           | `annotations`    | Specifies custom annotations.    |  YAML object of annotations  |
+|           | `rewriteTarget`  | Specifies the target URI where the traffic must be redirected. | See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this. |
+|           | `path`           | Specifies the path for the Ingress HTTP rule.    |  See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this. |
+|           | `host`           | Specifies a fully qualified domain names of Ingress, as defined by RFC 3986. |  See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this. |
+|           | `secretName`     | Specifies the name of the Kubernetes secret that contains Ingress' TLS certificate and key.   |  See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this. |
+|           | `labels`         | Specifies custom labels.         |  YAML object of labels. See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this.  |
+|           | `annotations`    | Specifies custom annotations.    |  YAML object of annotations. See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this.  |
 | `persistence` | `name`                   | Descriptive name that will be used as a prefix for the generated persistence volume claim. A volume is only bound if either `logs.persistTransactionLog` or `logs.persistLogs` is set to `true`. | |
 |             | `useDynamicProvisioning` | If `true`, the persistent volume claim will use the storageClassName to bind the volume. If `storageClassName` is not set then it will use the default StorageClass setup by kube Administrator.  If `false`, the selector will be used for the binding process. | `true` (default) or `false` |
 |             | `fsGroupGid`             | Defines file system group ID for volumes that support ownership management. This value is added to the container’s supplemental groups.  | `nil` |
@@ -220,8 +288,8 @@ Note: You can use `kubectl get pvc` to see the list of available PVCs.
 |             | `maxReplicas`                    | Upper limit for the number of pods that can be set by the autoscaler.  Cannot be lower than `minReplicas`.   |  `Positive integer` (default to `10`)  |
 |             | `targetCPUUtilizationPercentage` | Target average CPU utilization (represented as a percentage of requested CPU) over all the pods.  |  `Integer between `1` and `100` (default to `50`)  |
 | `resources` | `constraints.enabled` | Specifies whether the resource constraints specified in this Helm chart are enabled.   | `false` (default) or `true`  |
-|           | `limits.cpu`          | Describes the maximum amount of CPU allowed. | Default is `500m`. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
-|           | `limits.memory`       | Describes the maximum amount of memory allowed. | Default is `512Mi`. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+|           | `limits.cpu`          | Describes the maximum amount of CPU allowed. | Default is `4000m`. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
+|           | `limits.memory`       | Describes the maximum amount of memory allowed. | Default is `2Gi`. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
 |           | `requests.cpu`        | Describes the minimum amount of CPU required. If not specified, the CPU amount will default to the limit (if specified) or implementation-defined value. | Default is 500m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
 |           | `requests.memory`     | Describes the minimum amount of memory required. If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value. | Default is 512Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
 | `arch`    | `amd64` | Architecture preference for amd64 worker node.   | `0 - Do not use`, `1 - Least preferred`, `2 - No preference` (default) or `3 - Most preferred`  |
@@ -229,7 +297,8 @@ Note: You can use `kubectl get pvc` to see the list of available PVCs.
 |           | `s390x`       | Architecture preference for s390x worker node. | `0 - Do not use`, `1 - Least preferred`, `2 - No preference` (default) or `3 - Most preferred` |
 | `env`       | `jvmArgs`             | Specifies the `JVM_ARGS` environmental variable for the Liberty runtime. | |
 | `rbac`      | `install`             | Install RBAC. Set to `true` if using a namespace with RBAC. | `true` |
-
+| `app`      | `autoCreate`             | Adds `prism.app.auto-create` annotation for integration with Application Navigator. | `true` |
+|            | `version`             | Adds `prism.app.auto-create.version` annotation. | `1.0.0` |
 ### Configuring Open Liberty
 
 #### ConfigMap
@@ -294,7 +363,7 @@ You can also create a PV from IBM Cloud Private dashboard by following these ste
 2.  Copy and paste the PV template.
 3.  Click Create.
 
-Note: For volumes that support ownership management, specify the group ID of the group owning the persistent volumes' file systems using the `persistence.fsGroupGid` parameter.
+Note: For volumes that support ownership management, specify the group ID of the group owning the persistent volumes' file systems using the `persistence.fsGroupGid` parameter. Some storage management solutions automatically add persistent volumes' GID to the supplementary groups. If this is not setup properly, the Liberty server fails to write to the log files and the following error appears in the container logs: `TRAS0036E: The system could not create file /logs/messages.log because of the following exception: java.security.PrivilegedActionException: java.io.IOException: Permission denied`.
 
 #### Analyzing Liberty messages
 
@@ -311,18 +380,9 @@ To turn off SSL:
 1. Set `ssl.enabled` to `false`.
 2. Change `service.port` and `service.targetPort` to non-secure port. By convention, the default port number for non-secure mode is `9080` (HTTPS).
 
-#### Ingress configuration
+#### Ingress Configuration
 
-If you are deploying your chart into IBM Cloud Private:
-
-* `ingress.host` can be provided and set to a fully-qualified domain name that resolves to the IP address of your cluster’s proxy node. For example `example.com` resolved to the proxy node. When a domain name is not available, the service [`nip.io`](http://nip.io) can be used to provide a resolution based on an IP address. For example, `liberty.<IP>.nip.io` where `<IP>` would be replaced with the IP address of your cluster’s proxy node. The IP address of your cluster’s proxy node can be found by using the following command: `kubectl get nodes -l proxy=true`. Users can also leave this parameter as empty.
-
-* `ingress.secretName` set to the name of the secret containing Ingress TLS certificate and key. If this is not provided, the default certificate of the ingress controller is used.
-
-If the chart is deployed into IBM Cloud Kubernetes Service:
-
-* `ingress.host` must be provided and set to the IBM-provided Ingress _subdomain_ or your custom domain. See [Select an app domain and TLS termination](https://cloud.ibm.com/docs/containers/cs_ingress.html#public_inside_2) for more info on how to get this value in IBM Cloud Kubernetes Service.
-* `ingress.secretName` must be provided. If you are using the IBM-provided Ingress domain, set this parameter to the name of the IBM-provided Ingress secret. However, if you are using a custom domain, set this parameter to the secret that you created earlier that holds your custom TLS certificate and key. See [IBM Cloud Kubernetes Service documentation](https://cloud.ibm.com/docs/containers/cs_ingress.html#public_inside_2) for more info on how to get these value in an IBM Cloud Kubernetes Service cluster.
+For information on how to setup Ingress, See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs).
 
 #### Configure Liveness and Readiness Probes
 
