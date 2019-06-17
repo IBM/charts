@@ -4,22 +4,35 @@ kind: ConfigMap
 metadata:
   name: {{ template "fullname" . }}-tests
   namespace: {{ $.Release.Namespace }}
+  labels:
+{{ include "gitlab.standardLabels" . | indent 4 }}
 data:
   test_login: |
     set -e
     echo 'Start Test'
     endpoint="{{ template "gitlab.gitlab.url" . }}"
+    ls -al /tmp
     cookie_read="-c /tmp/test_login.cookie"
     cookie_readwrite="$cookie_read -b /tmp/test_login.cookie"
 
     signin_url="$endpoint/users/sign_in"
     echo "Login to create a session: $signin_url"
-    csrf=$(curl $signin_url --fail -s $cookie_read | grep -Po '<meta.*name="csrf-token".*content="\K[a-zA-Z0-9\+=\-\/]*')
-    curl --fail -X POST $signin_url -s $cookie_readwrite -F "authenticity_token=$csrf" -F 'user[login]=root' -F "user[password]=$(cat /initial_root_password)"
+    echo 'SSL cert issue with next command but -k fixes it'
+    csrf=$(curl $signin_url --fail -s -vS $cookie_read | grep -Po '<meta.*name="csrf-token".*content="\K[a-zA-Z0-9\+=\-\/]*')
+    echo "csrf is: $csrf"
+    echo "***cookie start***"
+    cat /tmp/test_login.cookie
+    echo "***cookie end***"
+    echo "init pwd: $(cat /initial_root_password)"
+    curl --fail -X POST $signin_url -s -vS $cookie_readwrite -F "authenticity_token=$csrf" -F 'user[login]=root' -F "user[password]=$(cat /initial_root_password)"
+    echo "Last curl exit code: $?"
+    ls -al /tmp
 
     profile_url="$endpoint/profile"
     echo "Confirm session valid: $profile_url"
-    profile_status=$(curl -s -o /tmp/profile_output -w "%{http_code}" $cookie_readwrite $profile_url)
+    profile_status=$(curl -s -vS -o /tmp/profile_output -w "%{http_code}" $cookie_readwrite $profile_url)
+    echo "profile_status: $profile_status"
+    ls -al /tmp
 
     if [ "$profile_status" != "200" ]; then
       echo "Error: Session Invalid"
