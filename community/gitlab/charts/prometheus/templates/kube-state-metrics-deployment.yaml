@@ -1,5 +1,5 @@
 {{- if .Values.kubeStateMetrics.enabled -}}
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -11,6 +11,11 @@ metadata:
   name: {{ template "prometheus.kubeStateMetrics.fullname" . }}
 spec:
   replicas: {{ .Values.kubeStateMetrics.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "prometheus.name" . }}
+      component: "{{ .Values.kubeStateMetrics.name }}"
+      release: {{ .Release.Name }}
   template:
     metadata:
     {{- if .Values.kubeStateMetrics.podAnnotations }}
@@ -21,6 +26,8 @@ spec:
         app: {{ template "prometheus.name" . }}
         component: "{{ .Values.kubeStateMetrics.name }}"
         release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        heritage: {{ .Release.Service }}
     spec:
       serviceAccountName: {{ if .Values.rbac.create }}{{ template "prometheus.kubeStateMetrics.fullname" . }}{{ else }}"{{ .Values.kubeStateMetrics.serviceAccountName }}"{{ end }}
       containers:
