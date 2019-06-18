@@ -96,7 +96,7 @@ The command removes the Kubernetes objects associated with the chart and deletes
 
 ## Support
 
-#TODO: DLG: add support section here
+Contact [support for GitLab](https://about.gitlab.com/support/).
 
 
 
@@ -114,24 +114,14 @@ Some of the key benefits of this chart and [corresponding containers](https://gi
 
 ## Detailed documentation
 
-See the [repository documentation](doc/index.md) for how to install GitLab and
+See the [repository documentation](https://gitlab.com/charts/gitlab/tree/8cd44f7ebde44adfda32513b9905976382a1caeb/doc/index.md) for how to install GitLab and
 other information on charts, tools, and advanced configuration.
 
 ## Architecture and goals
 
-See [architecture documentation](doc/architecture/index.md) for an overview
+See [architecture documentation](https://gitlab.com/charts/gitlab/tree/8cd44f7ebde44adfda32513b9905976382a1caeb/doc/architecture/index.md) for an overview
 of this project goals and architecture.
 
 ## Known issues and limitations
 
-See [limitations](doc/index.md#limitations).
-
-## Release Notes
-
-Check the [releases documentation](doc/releases/index.md) for information on important releases,
-and see the [changelog](CHANGELOG.md) for the full details on any release.
-
-## Contributing
-
-See the [contribution guidelines](CONTRIBUTING.md) and then check out the
-[development styleguide](doc/development/index.md).
+See [limitations](https://gitlab.com/charts/gitlab/tree/8cd44f7ebde44adfda32513b9905976382a1caeb/doc/index.md#limitations).
