@@ -9,7 +9,6 @@ This repository hosts helm charts intended for use with IBM(R) Cloud Private.
 To contribute a chart:
  - Create your own fork of this repository.
  - Ensure that your chart meets the required standards for contributions, as described in [GUIDELINES.md](GUIDELINES.md).
- - OPTIONAL: If you are trying to achieve CloudPak status for your chart, also ensure the chart meets these additional requirements: [cloud-pak.md](https://github.com/IBM/cloud-pak/blob/master/community/cloud-pak.md)
  - Add your chart source to the `community` directory.
  - Add a `.tgz` archive of your chart (created using `helm package`) to the `repo/community` directory.
  - Be sure to include your developer sign-off (described below) in your commit message.
