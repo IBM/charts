@@ -1,6 +1,6 @@
 # ODM for developers Helm chart (ibm-odm-dev)
 
-The [IBM® Operational Decision Manager](https://www.ibm.com/hr-en/marketplace/operational-decision-manager) (ODM) chart `ibm-odm-dev` is used to deploy an ODM evaluation cluster in IBM  Kubernetes environments.
+The [IBM® Operational Decision Manager](https://www.ibm.com/us-en/marketplace/operational-decision-manager) (ODM) chart `ibm-odm-dev` is used to deploy an ODM evaluation cluster in IBM  Kubernetes environments.
 
 
 
@@ -11,8 +11,6 @@ ODM is a tool for capturing, automating, and governing repeatable business decis
 ## Chart Details
 
 The `ibm-odm-dev` Helm chart is a package of preconfigured Kubernetes resources that bootstrap an ODM deployment on a Kubernetes cluster. Configuration parameters are available to customize some aspects of the deployment. However, the chart is designed to get you up and running as quickly as possible, with appropriate default values. If you accept the default values, sample data is added to the database as part of the installation, and you can begin exploring rules in ODM immediately.
-
-If you choose not to use the default values, be sure to review the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/ref_parameters_dev.html) and understand the impact of changes before you start the installation process.
 
 The `ibm-odm-dev` chart deploys a single container of five ODM services:
 - Decision Center Business Console
@@ -33,8 +31,8 @@ By default, the `internalDatabase.populateSampleData` parameter is set to `true`
 
 ## Prerequisites
 
-- Kubernetes 1.10+ with Beta APIs enabled
-- Helm 2.7.2 and later version
+- Kubernetes 1.11+ with Beta APIs enabled
+- Helm 2.9.1 and later version
 - One PersistentVolume needs to be created prior to installing the chart if internalDatabase.persistence.enabled=true and internalDatabase.persistence.dynamicProvisioning=false
 
 Ensure you have a good understanding of the underlying concepts and technologies:
@@ -45,12 +43,130 @@ Ensure you have a good understanding of the underlying concepts and technologies
 
 Before you install ODM for developers, you need to gather all the configuration information that you will use for your release. For more details, refer to the [ODM for developers configuration parameters](https://www.ibm.com/support/knowledgecenter/SSQP76_8.10.x/com.ibm.odm.icp/topics/ref_parameters_dev.html).
 
-If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8101-rule-designer).
+If you want to create your own decision services from scratch, you need to install Rule Designer from the [Eclipse Marketplace](https://marketplace.eclipse.org/content/ibm-operational-decision-manager-developers-v-8102-rule-designer).
 
 ### PodSecurityPolicy Requirements
 
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement, a specific cluster and namespace might have to be scoped.
 The predefined PodSecurityPolicy name [ibm-restricted-psp](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md) has been verifed for this chart. If your target namespace is bound to this PodSecurityPolicy, you can proceed to install the chart.
+
+
+This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the ICP user interface.
+
+From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
+* Custom PodSecurityPolicy definition:
+
+  ```yaml
+  apiVersion: extensions/v1beta1
+  kind: PodSecurityPolicy
+  metadata:
+    name: ibm-odm-psp
+  spec:
+    allowPrivilegeEscalation: false
+    forbiddenSysctls:
+    - '*'
+    fsGroup:
+      ranges:
+      - max: 65535
+        min: 1
+      rule: MustRunAs
+    requiredDropCapabilities:
+    - ALL
+    runAsUser:
+      rule: MustRunAsNonRoot
+    seLinux:
+      rule: RunAsAny
+    supplementalGroups:
+      ranges:
+      - max: 65535
+        min: 1
+      rule: MustRunAs
+    volumes:
+    - configMap
+    - emptyDir
+    - projected
+    - secret
+    - downwardAPI
+    - persistentVolumeClaim
+  ```
+
+* Custom ClusterRole for the custom PodSecurityPolicy:
+
+  ```yaml
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: ibm-odm-clusterrole
+  rules:
+  - apiGroups:
+    - extensions
+    resourceNames:
+    - ibm-odm-psp
+    resources:
+    - podsecuritypolicies
+    verbs:
+    - use
+  ```
+
+### Red Hat OpenShift SecurityContextConstraints Requirements
+
+This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+
+The predefined SecurityContextConstraints name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+
+This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart.
+
+From the user interface, you can copy and paste the following snippets to enable the custom SecurityContextConstraints
+* Custom SecurityContextConstraints definition:
+
+  ```yaml
+  apiVersion: security.openshift.io/v1
+  kind: SecurityContextConstraints
+  metadata:
+    annotations:
+    name: ibm-odm-scc
+  allowHostDirVolumePlugin: false
+  allowHostIPC: false
+  allowHostNetwork: false
+  allowHostPID: false
+  allowHostPorts: false
+  allowPrivilegedContainer: false
+  allowPrivilegeEscalation: false
+  allowedCapabilities: []
+  allowedFlexVolumes: []
+  allowedUnsafeSysctls: []
+  defaultAddCapabilities: []
+  defaultPrivilegeEscalation: false
+  forbiddenSysctls:
+    - "*"
+  fsGroup:
+    type: MustRunAs
+    ranges:
+    - max: 65535
+      min: 1
+  readOnlyRootFilesystem: false
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    type: MustRunAsNonRoot
+  seccompProfiles:
+  - docker/default
+  seLinuxContext:
+    type: RunAsAny
+  supplementalGroups:
+    type: MustRunAs
+    ranges:
+    - max: 65535
+      min: 1
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+  priority: 0
+  ```
 
 ## Resources Required
 
