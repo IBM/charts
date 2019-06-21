@@ -56,9 +56,9 @@ These guidelines are intended to augment the [Helm best practices](https://docs.
 | ***Integration***| This section of the table contains integration related requirements.|
 | [**IBM Helm chart best practices**](#ibm-helm-chart-best-practices)| Follow the IBM prescribed best practices for Helm chart style and behavior. |
 | [**values-metadata.yaml**](#values-metadatayaml) | YAML file that provides formatting and validation data for each entry in `values.yaml` to the IBM Cloud Private web interface. |
-| [**ibm_cloud_pak directory**](#ibm_cloud_pak-directory) | Your helm chart must include a new subdirectory `ibm_cloud_pak` which contains additional files specific to IBM Cloud Paks. |
+| [**ibm_cloud_pak directory**](#ibm_cloud_pak-directory) | Your helm chart must include a new subdirectory `ibm_cloud_pak` which includes additional files containing a manifest and security prereqs. |
 | [**ibm_cloud_pak/manifest.yaml**](#ibm_cloud_pakmanifestyaml) | YAML file describing the full contents of the Helm chart and allows automated creation of an offline install package for air-gapped clusters. |
-| [**ibm_cloud_pak/qualification.yaml**](#ibm_cloud_pakqualificationyaml) | YAML file describing the details of IBM Cloud Pak certification level. |
+| [**ibm_cloud_pak/qualification.yaml**](#ibm_cloud_pakqualificationyaml) | YAML file describing the security prereqs for the helm chart. |
 | [**Metering**](#metering-integration) | Charts should include metering annotations so that users can meter usage with the IBM Cloud Private metering service. |
 | [**Directory structure**](#directory-structure) | Chart source must be added to the `charts/community` directory. Chart archives, packaged as a `.tgz` file using `helm package` must be added to the `charts/repo/community` directory, which is a Helm repository. *Do not update index.yaml with your contribution*. index.yaml is automatically updated by a build process.|
 | [**Chart name**](#chart-name) | Helm chart names must follow the [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#chart-names). The chart name must be the same as the directory that contains the chart. Chart contributed by a company or organization may be prefixed with the company or organization name. Only charts contributed by IBM may be prefixed with ibm- |
@@ -123,7 +123,7 @@ All images used in the product need to be scanned by the IBM Cloud Private Vulne
 
 ## Document and follow principle of runtime least privilege
 
-Workloads must run with the least container privileges required.  Workloads must also clearly publish the required privileges in the chart README.  As of version 3.1.1, ICP supports pod security policies for pod isolation.  You chart must declare the pod security policy with the least privileges required to support the workload.  More information can be found in the Knowledge Center for [pod isolation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/user_management/iso_pod.html).  A set of [pre-defined pod security policies](https://github.com/IBM/cloud-pak/tree/master/spec/security/psp) for Cloud Paks are created in ICP by default.  Even if the workload uses a pod security policy per-defined by ICP, the README must still clearly indicate which privileges are required.
+Workloads must run with the least container privileges required.  Workloads must also clearly publish the required privileges in the chart README.  As of version 3.1.1, ICP supports pod security policies for pod isolation.  Your chart must declare the pod security policy with the least privileges required to support the workload.  More information can be found in the Knowledge Center for [pod isolation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/user_management/iso_pod.html).  A set of [pre-defined pod security policies](https://github.com/IBM/cloud-pak/tree/master/spec/security/psp) for helm charts are created in ICP by default.  Even if the workload uses a pod security policy per-defined by ICP, the README must still clearly indicate which privileges are required.
 
 ## Clearly document required ICP user install privileges
 
@@ -147,7 +147,7 @@ Charts should be deployable by a regular user, who does not have an administrati
 
 ## IBM Helm chart best practices
 
-Similar to the Helm CLI linter, IBM has created a linter specifically for IBM Cloud Pak certification.  There are three levels of messages produced by the linter:  
+Similar to the Helm CLI linter, IBM has created a linter specifically for community helm charts.  There are three levels of messages produced by the linter:  
 
 `Information`: Style or cosmetic recommendations; not required for certification.
 
@@ -166,23 +166,23 @@ IBM Cloud Private supports defining metadata for fields containing immutable or 
 
 ## `ibm_cloud_pak` directory
 
-Your helm chart must include a new subdirectory `ibm_cloud_pak` which contains additional files specific to IBM Cloud Paks.  The `manifest.yaml` describes the Cloud Pak contents (charts and images) while the `qualification.yaml` specifies the level and duration of the Cloud Pak status.
+Your helm chart must include a new subdirectory `ibm_cloud_pak` which includes additional files.  The `manifest.yaml` describes the helm chart contents (charts and images) while the `qualification.yaml` specifies the security pre-reqs for the helm chart.
 
 ## ibm_cloud_pak/manifest.yaml
 
 IBM Cloud Private clusters are typically in an air-gapped environment with no access to the public internet.  When installing charts that point to a public image registry like Docker Hub, the chart pods will fail to pull the images.  To help alleviate this, IBM Cloud Private provides a local image registry as well as a local chart repository as well as tooling for building and installing binary packages in an air-gapped environment.
 
-IBM Cloud Private provides tooling to [build offline binary packages](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_cluster/cli_catalog_commands.html#create-archive).  The tool reads a YAML manifest file in the helm chart and creates the binary package from the specified contents.  Cloud Paks must provide a such a manifest.yaml file for users to easily create offline binary packages in a consistent manner across products.  The manifest format can be found here: [IBM Cloud Pak manifest format](../spec/packaging/ibm_cloud_pak/manifest-yaml.md)
+IBM Cloud Private provides tooling to [build offline binary packages](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_cluster/cli_catalog_commands.html#create-archive).  The tool reads a YAML manifest file in the helm chart and creates the binary package from the specified contents.  Helm charts must provide a such a manifest.yaml file for users to easily create offline binary packages in a consistent manner across products.  The manifest format can be found here: [manifest format](../spec/packaging/ibm_cloud_pak/manifest-yaml.md)
 
 IBM Cloud Private also supports [importing binary packages that contain all the components (charts and images) required to deploy a product](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_cluster/cli_catalog_commands.html#load-archive).  The contents of the binary package are then stored in the local image registry / local chart repository and the charts can then be deployed without access to the public internet.
 
-Cloud Paks must provide a valid manifest.yaml file and test that the ICP tooling can build the binary offline package, that the package can be installed in ICP and that the product can be deployed from that installed package.
+Helm charts must provide a valid manifest.yaml file and test that the ICP tooling can build the binary offline package, that the package can be installed in ICP and that the product can be deployed from that installed package.
 
 ## ibm_cloud_pak/qualification.yaml
 
-The qualification YAML file is simply a statement of the details of the Cloud Pak such as when the Cloud Pak was certified, what level of certification was achieved and how long that certification is valid. Start with the following, and update the `issueDate` and `name` fields for the `podSecurityPolicy` and ICP `installerRole`.
+The qualification YAML file is simply a statement of the details of the security pre-reqs for the helm chart. Add the following file, and update `name` fields for the `podSecurityPolicy` and ICP `installerRole`.
 
-The qualification format can be found here: [IBM Cloud Pak qualification format](../spec/packaging/ibm_cloud_pak/qualification-yaml.md)
+The qualification format can be found here: [qualification format](../spec/packaging/ibm_cloud_pak/qualification-yaml.md)
 
 Example:
 ```
@@ -303,11 +303,11 @@ For a list of the available trial and Community Edition-based offerings, refer t
 
 ## Compatible with latest ICP
 
-Charts must be tested for compatibility with the latest releases of ICP within 60 days of general availability.  The expectation is that a Cloud Pak will work on all future version of ICP, without skipping versions. 
+Charts must be tested for compatibility with the latest releases of ICP within 60 days of general availability.  The expectation is that the helm chart will work on all future version of ICP, without skipping versions. 
 
 ## Avoid hard-coded version constraints
 
-Avoid setting kubeVersion of tillerVersion to a single specific version in both `Chart.yaml` as well as in Helm template files.  The intent is to make sure the Cloud Pak continues to work on future versions of ICP without modification.  Instead of setting a specific version, allow for a particular version or greater:
+Avoid setting kubeVersion of tillerVersion to a single specific version in both `Chart.yaml` as well as in Helm template files.  The intent is to make sure the helm chart continues to work on future versions of ICP without modification.  Instead of setting a specific version, allow for a particular version or greater:
 ```
 tillerVersion: ">=2.5.0"
 ```
