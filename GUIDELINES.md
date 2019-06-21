@@ -49,30 +49,26 @@ These guidelines are intended to augment the [Helm best practices](https://docs.
 | ***Security***| This section of the table contains security related requirements.|
 | [**Image vulnerabilities**](#image-vulnerabilities) | All images used in the product need to be scanned by the IBM Cloud Private Vulnerability Advisor and vulnerable packages fixed.  You also need to have a process in place to address image vulnerabilities as they arise. |
 | [**Document and follow principle of runtime least privilege**](#document-and-follow-principle-of-least-privilege) | Workloads must run with the least privilege required and clearly publish the required privileges in the chart README. |
-| [**Clearly document required ICP user install privileges**](#clearly-document-required-icp-user-install-privileges) | If special IBM Cloud Private user privileges such as `cluster administrator` or `team administrator` are required to install the Helm chart, clearly document them in the chart README. |
 | [**Secure sensitive data**](#secure-sensitive-data) | Sensitive data required to deploy the chart must be properly secured. |
-| [**Container security privileges**](#container-security-privileges) | Workloads should avoid using escalated security privileges for containers whenever possible. When escalated privileges are required, charts must request the minimum level of privileges needed to achieve the desired functionality. |
-| [**Kubernetes security privileges**](#kubernetes-security-privileges) | Charts should be deployable by a regular user, who does not have an administrative role, such as cluster admin. If an elevated role is required, this must be clearly documented in the chart's README.md |
+| [**Clearly document required user install privileges**](#clearly-document-required-user-install-privileges) | If special IBM Cloud Private user privileges such as `cluster administrator` or `team administrator` are required to install the Helm chart, clearly document them in the chart README. |
 | ***Integration***| This section of the table contains integration related requirements.|
+| [**Helm lint**](#helm-lint) | The chart must pass the `helm lint` verification tool with no errors. |
 | [**IBM Helm chart best practices**](#ibm-helm-chart-best-practices)| Follow the IBM prescribed best practices for Helm chart style and behavior. |
+| [**Directory structure**](#directory-structure) | Chart source must be added to the `charts/community` directory. Chart archives, packaged as a `.tgz` file using `helm package` must be added to the `charts/repo/community` directory, which is a Helm repository. *Do not update index.yaml with your contribution*. index.yaml is automatically updated by a build process.|
+| [**Chart file structure**](#chart-file-structure) | Charts must follow the standard Helm file structure: Chart.yaml, values.yaml, README.md, templates, and templates/NOTES.txt must all exist and have useful contents |
+| [**Chart name**](#chart-name) | Helm chart names must follow the [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#chart-names). The chart name must be the same as the directory that contains the chart. Chart contributed by a company or organization may be prefixed with the company or organization name. Only charts contributed by IBM may be prefixed with ibm- |
+| [**Chart version**](#chart-version) | SemVer2 numbering must be used, as per [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#version-numbers), and any update to a chart must include an updated version number, unless the changes are to the README file only.|
+| [**Chart description**](#chart-description) | All contributed charts must have a chart description in chart.yaml. This will be displayed in the ICP catalog and should be meaningful. |
+| [**Required chart keywords**](#required-chart-keywords) | Chart keywords are used by the IBM Cloud Private user interface, some of which are critical to the user interface's function. |
+| [**tillerVersion constraint**](#tillerversion-constraint) | Add a `tillerVersion` to Chart.yaml that follows the Semantic Versioning 2.0.0 format (`>=MAJOR.MINOR.PATCH`); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on. |
+| [**License**](#license) | The chart itself be Apache 2.0 licensed, and must contain the Apache 2.0 license in the LICENSE file at the root of the chart. The chart may also package additional license files, such as the license for the product being deployed, in the LICENSES directory. Both the LICENSE file and files in the LICENSES directory will be displayed to the user for agreement when deploying through the IBM Cloud Private user interface.|
+| [**README.md**](#readme-md) | In the IBM Cloud Private GUI, when a user clicks on a tile corresponding to a chart in the catalog, the README.md for that chart is used to generate the chart's front page. Given the important role that the README.md plays in ICP's user experience, all contributed charts must contain a README.md file, and it must provide all of the information needed for users to understand how to configure, deploy, and otherwise use a chart. Mandatory information includes complete descriptions of all input parameters as well as sections for [image](#image-security), a[pod security](#pod-security) and a [support statement](#support-statement). |
+| [**NOTES.txt**](#notes-txt) | Include NOTES.txt with instructions to display usage notes, next steps, &amp; relevant information. |
 | [**values-metadata.yaml**](#values-metadatayaml) | YAML file that provides formatting and validation data for each entry in `values.yaml` to the IBM Cloud Private web interface. |
 | [**ibm_cloud_pak directory**](#ibm_cloud_pak-directory) | Your helm chart must include a new subdirectory `ibm_cloud_pak` which includes additional files containing a manifest and security prereqs. |
 | [**ibm_cloud_pak/manifest.yaml**](#ibm_cloud_pakmanifestyaml) | YAML file describing the full contents of the Helm chart and allows automated creation of an offline install package for air-gapped clusters. |
 | [**ibm_cloud_pak/qualification.yaml**](#ibm_cloud_pakqualificationyaml) | YAML file describing the security prereqs for the helm chart. |
 | [**Metering**](#metering-integration) | Charts should include metering annotations so that users can meter usage with the IBM Cloud Private metering service. |
-| [**Directory structure**](#directory-structure) | Chart source must be added to the `charts/community` directory. Chart archives, packaged as a `.tgz` file using `helm package` must be added to the `charts/repo/community` directory, which is a Helm repository. *Do not update index.yaml with your contribution*. index.yaml is automatically updated by a build process.|
-| [**Chart name**](#chart-name) | Helm chart names must follow the [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#chart-names). The chart name must be the same as the directory that contains the chart. Chart contributed by a company or organization may be prefixed with the company or organization name. Only charts contributed by IBM may be prefixed with ibm- |
-| [**Chart file structure**](#chart-file-structure) | Charts must follow the standard Helm file structure: Chart.yaml, values.yaml, README.md, templates, and templates/NOTES.txt must all exist and have useful contents |
-| [**Chart version**](#chart-version) | SemVer2 numbering must be used, as per [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#version-numbers), and any update to a chart must include an updated version number, unless the changes are to the README file only.|
-| [**Chart description**](#chart-description) | All contributed charts must have a chart description in chart.yaml. This will be displayed in the ICP catalog and should be meaningful. |
-| [**Required chart keywords**](#required-chart-keywords) | Chart keywords are used by the IBM Cloud Private user interface, some of which are critical to the user interface's function. |
-| [**Helm lint**](#helm-lint) | The chart must pass the `helm lint` verification tool with no errors. |
-| [**License**](#license) | The chart itself be Apache 2.0 licensed, and must contain the Apache 2.0 license in the LICENSE file at the root of the chart. The chart may also package additional license files, such as the license for the product being deployed, in the LICENSES directory. Both the LICENSE file and files in the LICENSES directory will be displayed to the user for agreement when deploying through the IBM Cloud Private user interface.|
-| [**README.md**](#readme-md) | In the IBM Cloud Private GUI, when a user clicks on a tile corresponding to a chart in the catalog, the README.md for that chart is used to generate the chart's front page. Given the important role that the README.md plays in ICP's user experience, all contributed charts must contain a README.md file, and it must provide all of the information needed for users to understand how to configure, deploy, and otherwise use a chart. Mandatory information includes complete descriptions of all input parameters as well as sections for [image](#image-security) and [pod security](#pod-security). |
-| [**Support statement**](#support-statement) | The README.md must include a section labeled `Support`.  This section should provide details and/or links to where users can get support for urgent issues, get help, or submit issues. |
-| [**NOTES.txt**](#notes-txt) | Include NOTES.txt with instructions to display usage notes, next steps, &amp; relevant information. |
-| [**tillerVersion constraint**](#tillerversion-constraint) | Add a `tillerVersion` to Chart.yaml that follows the Semantic Versioning 2.0.0 format (`>=MAJOR.MINOR.PATCH`); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on. |
-| [**Deployment validation**](#deployment-validation) | Charts must be validated to deploy successfully and work as expected on the latest version of IBM Cloud Private using both the Helm CLI and the IBM Cloud Private GUI. Available trial and Community Edition install options are listed in [the "Getting Started" section in the README.md.](https://github.com/IBM/charts/blob/master/README.md#getting-started)|
 | ***Life cycle***| This section of the table contains life cycle related requirements.|
 | [**Compatible with latest ICP**](#compatible-with-latest-icp) | Charts must be tested for compatibility with the latest releases of ICP within 60 days of general availability. |
 | [**Avoid hard-coded version constraints**](#avoid-hard-coded-version-constraints) | Avoid setting kubeVersion of tillerVersion to a single specific version.  Instead allow for a particular version or greater. |
@@ -97,11 +93,6 @@ The following table contains guidance from IBM on how to build workloads that pr
 | [Init container definitions](#init-container-definitions) | If using [init containers](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/), use `spec` syntax vs `annotations` to describe them. These annotations are deprecated in Kubernetes 1.6 and 1.7, and are no longer supported in Kubernetes 1.8. |
 | [Node affinity](#node-affinity) | IBM suggests using `nodeAffinity` to ensure workloads are scheduled on a valid platform in a heterogeneous cluster |
 | [Storage (persistent volumes / claims)](#Storage-(persistent-volumes-/-claims)) | Do not create persistent volumes in a chart, as allocation is environment-specific and may require permissions the chart deployer doesn't have. A chart should contain a Persistent Volume Claim if persistent storage is required. |
-| [Parameter grouping and naming](#parameter-grouping-and-naming) | Use common naming conventions (outlined in the onboarding guide)  to provide consistent parameters and user experience across charts. |
-| [Labels and annotations](#labels-and-annotations) | IBM recommends that all charts to use the standard labels of "heritage, release, chart and app" on all Kubernetes resources. |
-| [Kind](#kind) | All Helm templates that define resources must have a `Kind`. Helm defaults to a pod however we avoid this practice. Helm best practice is to not define multiple resources in a single template file. |
-| [Avoid hostPath](#avoid-hostpath) | Avoid using hostPath storage, as it is not a robust storage solution. |
-| [Avoid hostNetwork](#avoid-hostnetwork) | avoid using hostNetwork as it prevents containers from co-habitating. |
 | [Document Resource Usage](#document-resoure-usage) | Charts should be clear about the resources they will consume, documented in the chart's `README.md` |
 | [Logging](#logging) | Workload containers should write logs to stdout and stderr, so they can be automatically consumed by the IBM Cloud Private logging service (Elasticsearch/Logstash/Kibana.) Workloads are also encouraged to include provide links to relevant Kibana dashboards in README.md, so that users can download them and import them to Kibana. |
 | [Monitoring](#monitoring) | Workloads should integrate with the default IBM Cloud Private monitoring service (Prometheus/Grafana), by exposing Prometheus metrics through a Kubernetes `Service` and annotating that endpoint so that it will be automatically consumed by the IBM Cloud Private monitoring service. |
@@ -123,27 +114,23 @@ All images used in the product need to be scanned by the IBM Cloud Private Vulne
 
 ## Document and follow principle of runtime least privilege
 
-Workloads must run with the least container privileges required.  Workloads must also clearly publish the required privileges in the chart README.  As of version 3.1.1, ICP supports pod security policies for pod isolation.  Your chart must declare the pod security policy with the least privileges required to support the workload.  More information can be found in the Knowledge Center for [pod isolation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/user_management/iso_pod.html).  A set of [pre-defined pod security policies](https://github.com/IBM/cloud-pak/tree/master/spec/security/psp) for helm charts are created in ICP by default.  Even if the workload uses a pod security policy per-defined by ICP, the README must still clearly indicate which privileges are required.
+Workloads must run with the least container privileges required and should avoid using escalated security privileges for containers whenever possible. When escalated privileges are required, charts must request the minimum level of privileges needed to achieve the desired functionality. IBM recommends avoiding the use of `privileged: true` or `capabilities: add: ["ALL"]` in your `securityContext`. If some elevated privileges are required, IBM recommends only adding the minimum set of privileges that are required to implement the desired functionality.
 
-## Clearly document required ICP user install privileges
-
-If special IBM Cloud Private user privileges/roles such as `cluster administrator` or `team administrator` are required to install the Helm chart, clearly document them in the chart README.
+Workloads must also clearly publish the required privileges in the chart README.  As of version 3.1.1, ICP supports pod security policies for pod isolation.  Your chart must declare the pod security policy with the least privileges required to support the workload.  More information can be found in the Knowledge Center for [pod isolation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/user_management/iso_pod.html).  A set of [pre-defined pod security policies](https://github.com/IBM/cloud-pak/tree/master/spec/security/psp) for helm charts are created in ICP by default.  Even if the workload uses a pod security policy per-defined by ICP, the README must still clearly indicate which privileges are required.
 
 ## Secure sensitive data
 
 Helm chart values provided at install time as well as secrets created in the chart are not secured by Tiller as sensitive data can be exposed from the Helm release manifest.  Therefore sensitive information that cannot be changed after the deployment must be provided by the user as a secret they pre-create.  The secret name is then provided as a parameter to the helm release.  
 
-## Container security privileges
+## Clearly document required user install privileges
 
-Workloads should avoid using escalated security privileges for containers whenever possible. When escalated privileges are required, charts must request the minimum level of privileges needed to achieve the desired functionality.
-
-IBM recommends avoiding the use of `privileged: true` or `capabilities: add: ["ALL"]` in your `securityContext`. If some elevated privileges are required, IBM recommends only adding the minimum set of privileges that are required to implement the desired functionality.
-
-## Kubernetes security privileges
-
-Charts should be deployable by a regular user, who does not have an administrative role, such as cluster admin. If an elevated Kubernetes role is required, this must be clearly documented in the chart's README.md.
+If special IBM Cloud Private user privileges/roles such as `cluster administrator` or `team administrator` are required to install the Helm chart, clearly document them in the chart README.
 
 # Integration
+
+## Helm lint
+
+All charts must pass the `helm lint` verification tool with no errors.
 
 ## IBM Helm chart best practices
 
@@ -159,6 +146,69 @@ The linter is run by IBM against the chart in the pull request and then output i
 
 The rules and descriptions for the content linter can be found here:
 [Lint rules](lint-rules.md)
+
+## Directory structure
+
+Chart source should be added to the charts/community directory. Chart archives, packaged as a .tgz file using helm package should be added to the charts/repo/community directory, which is a Helm repository.
+
+**Do not update** `charts/repo/community/index.yaml` **with your contribution.** `index.yaml` **is automatically updated by a build process when pull requests are processed.**
+
+## Chart file structure
+
+Charts should follow the standard Helm file structure: Chart.yaml, values.yaml, README.md, templates, and templates/NOTES.txt should all exist and have useful contents.
+
+## Chart name
+
+Helm chart names should follow the [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#chart-names). The chart name must be the same as the directory that contains the chart source. Charts contributed by a company or organization may be prefixed with the company or organization name. Contributions from the community must **not** be prefixed with &quot;ibm-&quot;.
+
+## Chart version
+
+SemVer2 numbering should be used, as per [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#version-numbers).
+
+## Chart description
+
+All charts must have a chart description in chart.yaml. This will be displayed in the ICP catalog UI and should be meaningful to end users.
+
+## Required chart keywords
+
+Chart keywords are used by the IBM Cloud Private user interface for categorization and filtering of charts, and some of these keywords are critical to grant a chart the proper visibility in the catalog. The Chart.yaml must include at least one of these cloud platform keywords and at least one of these architecture keywords to be accepted into this repository:
+
+Cloud Platform Keywords:  
+- `ICP` - indicates that the chart is supported for use on IBM Cloud Private  
+- `IKS` - indicates that the chart is supported for use on IBM Cloud Kubernetes Service  
+
+Architecture Keywords:  
+- `s390x`  
+- `ppc64le`  
+- `amd64`  
+
+As a supplement to the required keywords, the list of optional keywords offered in [the section on recommended chart keywords](#recommended-chart-keywords) can be leveraged to provide the chart with additional categorization and catalog visibility.
+
+## tillerVersion constraint
+
+Add a tillerVersion to Chart.yaml that follows the Semantic Versioning 2.0.0 format (\&gt;>=MAJOR.MINOR.PATCH); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on.
+
+## License
+
+The chart itself be Apache 2.0 licensed, and must contain the Apache 2.0 license in the LICENSE file at the root of the chart. The chart may also package additional license files, such as the license for the product being deployed, in the LICENSES directory. Both the LICENSE file and files in the LICENSES directory will be displayed to the user for agreement when deploying through the IBM Cloud Private user interface.  Product licenses provided in the chart must align with the licenses in the Docker images.
+
+## README.md
+
+All contributed charts must contain a useful README.md file with useful information a user would need to deploy the chart. In the IBM Cloud Private GUI, the README.md file is the "front page" that a user will see after clicking on the chart in the catalog. A complete description and explanations of all input parameters are strongly suggested.
+
+### Image security
+The README must also indicate which images need to be added to IBM Cloud Private's list of trusted image registries, since [container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html) is enabled by default beginning with IBM Cloud Private 3.1.
+
+### Pod security
+The README must also include a statement on the pod security policy required to deploy the chart. As of ICP 3.1.1, [pod security is enabled by default.](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_cluster/security.html) Charts can reference one of the [pre-defined pod security policies from ICP](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md) or describe a [custom pod security policy](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/user_management/iso_pod.html), if needed. The intent is for users to understand the required security requirements for the chart.
+
+### Support statement
+
+The README.md must include a section labeled `Support`.  This section should provide details and/or links to where users can get support for urgent issues with the product, get help, or submit issues.
+
+## NOTES.txt
+
+All charts must include NOTES.txt with instructions to display usage notes, next steps, &amp; relevant information. NOTES.txt is displayed by the IBM Cloud Private user interface after deployment.
 
 ## values-metadata.yaml
 
@@ -227,83 +277,14 @@ Workloads should specify their product ID, product name and product version for 
               productVersion: 0.1.2
 ```
 
-## Directory structure
-
-Chart source should be added to the charts/community directory. Chart archives, packaged as a .tgz file using helm package should be added to the charts/repo/community directory, which is a Helm repository.
-
-**Do not update** `charts/repo/community/index.yaml` **with your contribution.** `index.yaml` **is automatically updated by a build process when pull requests are processed.**
-
-## Chart name
-
-Helm chart names should follow the [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#chart-names). The chart name must be the same as the directory that contains the chart source. Charts contributed by a company or organization may be prefixed with the company or organization name. Contributions from the community must **not** be prefixed with &quot;ibm-&quot;.
-
-## Chart file structure
-
-Charts should follow the standard Helm file structure: Chart.yaml, values.yaml, README.md, templates, and templates/NOTES.txt should all exist and have useful contents.
-
-## Required chart keywords
-
-Chart keywords are used by the IBM Cloud Private user interface for categorization and filtering of charts, and some of these keywords are critical to grant a chart the proper visibility in the catalog. The Chart.yaml must include at least one of these cloud platform keywords and at least one of these architecture keywords to be accepted into this repository:
-
-Cloud Platform Keywords:  
-- `ICP` - indicates that the chart is supported for use on IBM Cloud Private  
-- `IKS` - indicates that the chart is supported for use on IBM Cloud Kubernetes Service  
-
-Architecture Keywords:  
-- `s390x`  
-- `ppc64le`  
-- `amd64`  
-
-As a supplement to the required keywords, the list of optional keywords offered in [the section on recommended chart keywords](#recommended-chart-keywords) can be leveraged to provide the chart with additional categorization and catalog visibility.
-
-## Chart version
-
-SemVer2 numbering should be used, as per [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#version-numbers).
-
-## Chart description
-
-All charts must have a chart description in chart.yaml. This will be displayed in the ICP catalog UI and should be meaningful to end users.
-
-## Helm lint
-
-All charts must pass the `helm lint` verification tool with no errors.
-
-## License
-
-The chart itself be Apache 2.0 licensed, and must contain the Apache 2.0 license in the LICENSE file at the root of the chart. The chart may also package additional license files, such as the license for the product being deployed, in the LICENSES directory. Both the LICENSE file and files in the LICENSES directory will be displayed to the user for agreement when deploying through the IBM Cloud Private user interface.  Product licenses provided in the chart must align with the licenses in the Docker images.
-
-## README.md
-
-All contributed charts must contain a useful README.md file with useful information a user would need to deploy the chart. In the IBM Cloud Private GUI, the README.md file is the "front page" that a user will see after clicking on the chart in the catalog. A complete description and explanations of all input parameters are strongly suggested.
-
-### Image security
-The README must also indicate which images need to be added to IBM Cloud Private's list of trusted image registries, since [container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html) is enabled by default beginning with IBM Cloud Private 3.1.
-
-### Pod security
-The README must also include a statement on the pod security policy required to deploy the chart. As of ICP 3.1.1, [pod security is enabled by default.](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_cluster/security.html) Charts can reference one of the [pre-defined pod security policies from ICP](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md) or describe a [custom pod security policy](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/user_management/iso_pod.html), if needed. The intent is for users to understand the required security requirements for the chart.
-
-## Support statement
-
-The README.md must include a section labeled `Support`.  This section should provide details and/or links to where users can get support for urgent issues with the product, get help, or submit issues.
-
-## NOTES.txt
-
-All charts must include NOTES.txt with instructions to display usage notes, next steps, &amp; relevant information. NOTES.txt is displayed by the IBM Cloud Private user interface after deployment.
-
-## tillerVersion constraint
-
-Add a tillerVersion to Chart.yaml that follows the Semantic Versioning 2.0.0 format (\&gt;>=MAJOR.MINOR.PATCH); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on.
-
-## Deployment validation
-
-Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the latest version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.  Keep in mind ICP environments are typically air-gapped, without access to the public internet.  Any configurations supported by the command line install of the helm chart must also be supported via the UI installation.  In addition, if there are any versions of IBM Cloud Private known to not work with the chart, those details should be clearly specified in the README.md under a section such as `Limitations`.  For example: `This chart is only supported on IBM Cloud Private version 3.1.0 and above.`  
-For a list of the available trial and Community Edition-based offerings, refer to [the "Getting Started" section in the README.md.](https://github.com/IBM/charts/blob/master/README.md#getting-started)
-
 # Lifecycle
 
 ## Compatible with latest ICP
 
-Charts must be tested for compatibility with the latest releases of ICP within 60 days of general availability.  The expectation is that the helm chart will work on all future version of ICP, without skipping versions. 
+Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the latest version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.  Keep in mind ICP environments are typically air-gapped, without access to the public internet.  Any configurations supported by the command line install of the helm chart must also be supported via the UI installation.  In addition, if there are any versions of IBM Cloud Private known to not work with the chart, those details should be clearly specified in the README.md under a section such as `Limitations`.  For example: `This chart is only supported on IBM Cloud Private version 3.1.0 and above.`  
+For a list of the available trial and Community Edition-based offerings, refer to [the "Getting Started" section in the README.md.](https://github.com/IBM/charts/blob/master/README.md#getting-started)
+
+In an on-going basis, charts must be tested for compatibility with the latest releases of ICP within 60 days of general availability.  The expectation is that the helm chart will work on all future version of ICP, without skipping versions.
 
 ## Avoid hard-coded version constraints
 
@@ -434,78 +415,6 @@ IBM suggests adding an `arch` parameter to `values.yaml` and referring to that p
 IBM does not recommend creating persistent volumes in a chart, as allocation is environment-specific and may require permissions the chart deployer doesn't have. A chart should contain a Persistent Volume Claim, as described in the [kubernetes documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#writing-portable-configuration) if persistent storage is required.
 
 Any required persistent volumes or storage classes that an administrator must pre-create for deployment should be clearly documented in README.md.
-
-## Parameter grouping and naming
-
-The [Helm Best Practices for Values](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/values.md) contains guidelines for [Naming Conventions](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/values.md#naming-conventions), [Usage (maps, not arrays)](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/values.md#consider-how-users-will-use-your-values), [YAML Formatting](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/values.md#flat-or-nested-values), and [Clarifying types](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/values.md#make-types-clear). The guidelines below build upon these to provide a consistent user experience across charts by using common names, values, and grouping. A nested structure has been defined with a grouping as the first token if multiple instances exist (e.g., when multiple `PersistentVolumeClaims` are required, parameters should be nested under grouping tokens such as pvc1, pvc2, …).
-
-- Parameter(s) should consist of 1 or more tokens with nested values separated by `.`. Reading from left to right the tokens should consistently be in the following order and naming (if the parameter is applicable to given chart) :
-  1. Grouping / naming token (If multiple instances - i.e. pvc1, pvc2)
-  2. Qualifier (i.e. persistence)
-  3. Parameter (i.e. enabled)
-- Global parameter(s) are recommended for fields that would commonly be set as a group across charts. This will enable usage of your charts as subcharts without modification. A common example is `global.image.secretName` which if set is `imagePullSecret` :
-
-  Excerpt from values.yaml :
-
-  ```
-        global:
-          image:
-            secretName: &quot;docker-secret&quot;
-  ```
-
-  Excerpt from Pod :
-
-  ```
-        {{- if .Values.global.image.secretName }}
-        imagePullSecrets:
-          - name: {{ .Values.global.image.secretName }}
-        {{- end }}
-  ```
-
-Common IBM Cloud Private parameters:
-
-| **Parameter** | **Definition** | **Values** |
-| --- | --- | --- |
-| image.pullPolicy | Kubernetes image pull policy | Always, Never, or IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise. |
-| image.repository | Name of image, including repository prefix (if required) | see [Extended description of Docker tags](https://docs.docker.com/edge/engine/reference/commandline/tag/#description) |
-| image.tag | Docker image tag | see [Docker tag description](https://docs.docker.com/edge/engine/reference/commandline/tag/#description) |
-| persistence.enabled | Persistence Volume (PV) enabled | true, false |
-| persistence.storageClassName or [volume].storageClassName | StorageClass pre-created by the Kubernetes sysadmin. |  |
-| persistence.existingClaimName or [volume].existingClaimName | Name of specific pre-created Persistence Volume Claim (PVC) |   |
-| persistence.size or[volume].size | Amount of storage applications requires (Gi, Mi) |   |
-| resources.limits.cpu | Describes the maximum amount of CPU allowed. | see [Kubernetes - meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
-| resources.limits.memory | Describes the maximum amount of memory allowed. | see [Kubernetes - meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
-| resources.requests.cpu | Describes the minimum amount of CPU required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | see [Kubernetes - meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
-| resources.requests.memory | Describes the minimum amount of memory required - if not specified will default to limit (if specified) or otherwise implementation-defined value. | see [Kubernetes - meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
-| service.type | Specify type of service | Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer. see [Publishing services - service types](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services---service-types) |
-
-Additional guidance:
-
-- Quote strings to avoid type conversion
-
-## Labels and annotations
-
-Helm defines a set of best practices regarding the creation of [labels and annotations](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/labels.md). Concepts covered in this document focus on metadata that can identify resources and provide queryable labels for tools like Operators. Therefore, the labels on a resource collectively should be unique.  In addition, the Best Practices link describes the set of common labels that Helm charts use.
-
-IBM recommends that all charts to use the standard labels of "heritage, release, chart and app" on all Kubernetes resources defined in your charts.
-
-## Kind
-
-All helm templates that define resources should have a single "kind" defined. The [Helm best practice](https://github.com/kubernetes/helm/blob/master/docs/chart_template_guide/yaml_techniques.md) is to avoid defining multiple resources in a single template file.
-
-## Avoid hostPath
-
-Avoid using `hostPath` storage, as it is not a robust storage solution. `hostPath` does not support dynamic provisioning, redundancy, or the ability to move pods across nodes.
-
-## Avoid hostNetwork
-
-When a pod is configured with `hostNetwork: true`, the applications running in such a pod can directly see the network interfaces of the worker node where the pod was started.  This means the application will be accessible on all network interfaces of the host machine.
-
-This prevents two pods from using the same port, and introduces a dependency on the IP address of a given node.
-
-Host networking is not a good way to make your applications accessible from outside of the cluster.  IBM suggested using `NodePort` or `Ingress` to accomplish this.
-
-IBM recommends avoiding `hostNetwork` unless you are building a chart that requires direct access to host-level networking, like a network monitor or ingress controller.
 
 ## Document resource usage
 
