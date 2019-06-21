@@ -32,6 +32,7 @@ spec:
         productID: "OperationalDecisionManagerForDevelopers"
         productVersion: {{ .Chart.AppVersion }}
     spec:
+{{ include "odm-spec-security-context" . | indent 6 }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -62,16 +63,11 @@ spec:
       containers:
         - name: {{ .Chart.Name }}
           image: {{ template "odm.repository.name" . }}/odm:{{ .Values.image.tag }}_{{ .Chart.Version }}{{ template "platform" . }}
-          securityContext:
-            runAsUser: 1001
-            runAsNonRoot: true
-            privileged: false
-            readOnlyRootFilesystem: false
-            allowPrivilegeEscalation: false
+{{ include "odm-security-context" . | indent 10 }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
           - name: LICENSE
-            value: "accept"
+            value: "{{ .Values.license }}"
           {{- if empty .Values.externalDatabase.serverName }}
           - name: DB_TYPE
             value: "h2"
@@ -98,6 +94,8 @@ spec:
           {{- end }}
           - name: DC_PERSISTENCE_LOCALE
             value: "{{ .Values.decisionCenter.persistenceLocale }}"
+          - name: "RELEASE_NAME"
+            value: {{ .Release.Name }}
           ports:
           - containerPort: 9060
     #      {{- if or (not (empty (.Values.customization.baiEmitterSecretRef))) (and .Values.internalDatabase.persistence.enabled (empty .Values.externalDatabase.serverName)) }}

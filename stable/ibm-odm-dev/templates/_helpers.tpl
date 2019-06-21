@@ -85,3 +85,24 @@ Return arch based on kube platform
     {{- printf "%s" "s390x" }}
   {{- end -}}
 {{- end -}}
+
+{{- define "odm-spec-security-context" -}}
+hostNetwork: false
+hostPID: false
+hostIPC: false
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+{{- end -}}
+
+{{- define "odm-security-context" -}}
+securityContext:
+  runAsUser: 1001
+  runAsNonRoot: true
+  privileged: false
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+{{- end -}}
