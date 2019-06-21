@@ -145,7 +145,7 @@ Similar to the Helm CLI linter, IBM has created a linter specifically for commun
 The linter is run by IBM against the chart in the pull request and then output is provided as a comment.
 
 The rules and descriptions for the content linter can be found here:
-[Lint rules](lint-rules.md)
+[Lint rules](community-lint-rules.md)
 
 ## Directory structure
 
