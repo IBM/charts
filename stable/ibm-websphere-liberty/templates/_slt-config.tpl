@@ -26,7 +26,7 @@ slt:
   product:
     id: "IBMWebSphereLiberty_5724J08_18002_151_00000"
     name: "IBM WebSphere Application Server Liberty"
-    version: "19.0.0.2"
+    version: "19.0.0.6"
   kube:
     provider: Any
   parentChart: "websphere-liberty"

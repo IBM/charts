@@ -18,6 +18,8 @@
 #     ./deleteSecurityNamespacePrereqs.sh myNamespace
 #
 
+. ../../common/kubhelper.sh
+
 if [ "$#" -lt 1 ]; then
 	echo "Usage: deleteSecurityNamespacePrereqs.sh NAMESPACE"
   exit 1
@@ -25,11 +27,30 @@ fi
 
 namespace=$1
 
-# Replace the NAMESPACE tag with the namespace specified in a temporary yaml file.
-sed 's/{{ NAMESPACE }}/'$namespace'/g' ../../pre-install/namespaceAdministration/ibm-websphere-liberty-rb.yaml > ../../pre-install/namespaceAdministration/$namespace-ibm-websphere-liberty-rb.yaml
+kubectl get namespace $namespace &> /dev/null
+if [ $? -ne 0 ]; then
+  echo "ERROR: Namespace $namespace does not exist."
+  exit 1
+fi
 
-# Delete the role binding for all service accounts in the current namespace
-kubectl delete -f ../../pre-install/namespaceAdministration/$namespace-ibm-websphere-liberty-rb.yaml -n $namespace
+if supports_scc; then
+  echo "Removing all namespace users from SCC..."
+  if command -v oc >/dev/null 2>&1 ; then
+    oc adm policy remove-scc-from-group ibm-websphere-liberty-scc system:serviceaccounts:$namespace
+  else
+    echo "ERROR:  The OpenShift CLI is not available..." 
+  fi
+fi
 
-# Clean up - delete the temporary yaml file.
-rm ../../pre-install/namespaceAdministration/$namespace-ibm-websphere-liberty-rb.yaml
+
+if supports_psp; then
+  # Replace the NAMESPACE tag with the namespace specified in a temporary yaml file.
+  sed 's/{{ NAMESPACE }}/'$namespace'/g' ../../pre-install/namespaceAdministration/ibm-websphere-liberty-rb.yaml > $namespace-ibm-websphere-liberty-rb.yaml
+
+  # Delete the role binding for all service accounts in the current namespace
+  kubectl delete -f $namespace-ibm-websphere-liberty-rb.yaml -n $namespace
+
+  # Clean up - delete the temporary yaml file.
+  rm $namespace-ibm-websphere-liberty-rb.yaml
+fi
+

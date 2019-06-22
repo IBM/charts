@@ -6,6 +6,11 @@ WebSphere Liberty is a fast, dynamic, and easy-to-use Java EE application server
 
 ## Resources Required
 
+### System resources
+- CPU Requested : 500m (500 millicpu)
+- Memory Requested : 512Mi (~ 537 MB)
+
+### Storage
 A persistent volume is required, if you plan on using the transaction service within Liberty. The `server.xml` Liberty configuration file must be configured to place the transaction log on this volume so that it persists, if the server fails and restarts.
 
 ## Accessing WebSphere Liberty
@@ -14,7 +19,27 @@ From a browser, use http://*external-ip*:*nodeport* to access the application.
 
 ## Chart Details
 
+  - Installs one `Deployment` or `StatefulSet` running WebSphere Liberty image
+  - Installs a `Service` and optionally an `Ingress` to route traffic to WebSphere Liberty server
+  - Optionally persistence can be configured to retain server logs and transaction logs
+
 ## Prerequisites
+
+### WebSphere Liberty Docker image requirements
+
+WebSphere Liberty Docker images based on Universal Base Images (UBI) are publicly available from [Docker hub](https://hub.docker.com/r/ibmcom/websphere-liberty) and used by chart as default. Our Docker images for Ubuntu are also publicly available from our [Docker Hub page](https://hub.docker.com/_/websphere-liberty). Ensure your Kubernetes environment has set the image enforcement policy appropriately to allow access to those repositories. See [Enforcing container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.2.0/manage_images/image_security.html) for more information.
+
+The Helm chart requires the Docker image to have certain directories linked. The `websphere-liberty` image from Docker Hub will already have the expected links. If you are not using that image, either directly or as parent image, then you must add the following to your Dockerfile:
+
+```shell
+ENV LOG_DIR /logs
+ENV WLP_OUTPUT_DIR /opt/ibm/wlp/output
+RUN mkdir /logs \
+    && ln -s $WLP_OUTPUT_DIR/defaultServer /output \
+    && ln -s /opt/ibm/wlp/usr/servers/defaultServer /config
+```
+
+Configuration values related to monitoring, health, JMS, IIOP, HTTP and SSL require the Liberty server to be configured appropriately at Docker image layer. See [WASDev/ci.docker](https://github.com/WASdev/ci.docker) for more information.
 
 ### PodSecurityPolicy Requirements
 
@@ -93,6 +118,70 @@ Download the following scripts located at [/ibm_cloud_pak/pak_extensions/post-de
 * The namespace scoped instructions are located at `namespaceAdministration/deleteSecurityNamespacePrereqs.sh` for team admin/operator to delete the RoleBinding for the namespace. This script takes one argument; the name of the namespace where the chart was installed.
   * Example usage: `./deleteSecurityNamespacePrereqs.sh myNamespace`
 
+### Red Hat OpenShift SecurityContextConstraints Requirements
+
+This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+
+The predefined `SecurityContextConstraints` name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this `SecurityContextConstraints` resource you can proceed to install the chart.
+
+#### Creating the required resources
+
+This chart defines a custom `SecurityContextConstraints` which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom `SecurityContextConstraints` resource using the supplied instructions or scripts in the `pak_extensions/pre-install` directory.
+
+* From the user interface, you can copy and paste the following snippets to enable the custom `SecurityContextConstraints`
+  * Custom `SecurityContextConstraints` definition:
+
+  ```yaml
+  apiVersion: security.openshift.io/v1
+  kind: SecurityContextConstraints
+  metadata:
+    annotations:
+    name: ibm-websphere-liberty-scc
+  allowHostDirVolumePlugin: false
+  allowHostIPC: false
+  allowHostNetwork: false
+  allowHostPID: false
+  allowHostPorts: false
+  allowPrivilegedContainer: false
+  allowedCapabilities: []
+  allowedFlexVolumes: []
+  defaultAddCapabilities: []
+  fsGroup:
+    type: MustRunAs
+    ranges:
+    - max: 65535
+      min: 1
+  readOnlyRootFilesystem: false
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    type: MustRunAsNonRoot
+  seccompProfiles:
+  - docker/default
+  seLinuxContext:
+    type: RunAsAny
+  supplementalGroups:
+    type: MustRunAs
+    ranges:
+    - max: 65535
+      min: 1
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+  priority: 0
+  ```
+
+* From the command line, you can run the setup scripts included under `pak_extensions/pre-install`
+  As a cluster admin the pre-install instructions are located at:
+  * `pre-install/clusterAdministration/createSecurityClusterPrereqs.sh`
+
+  As team admin the namespace scoped instructions are located at:
+  * `pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh`
+
 ### Limitations
 
 See [RELEASENOTES.md](https://github.com/IBM/charts/tree/master/stable/ibm-websphere-liberty/RELEASENOTES.md)
@@ -102,7 +191,29 @@ See [RELEASENOTES.md](https://github.com/IBM/charts/tree/master/stable/ibm-websp
 The Helm chart has the following values that can be overridden by using `--set name=value`. For example:
 
 *    `helm repo add ibm-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable/`
-*    `helm install --name liberty2 --set resources.constraints.enabled=true --set autoscaling.enabled=true --set autoscaling.minReplicas=2 ibm-charts/ibm-websphere-liberty --debug`
+*    `helm install --name my-release --set resources.constraints.enabled=true --set autoscaling.enabled=true --set autoscaling.minReplicas=2 ibm-charts/ibm-websphere-liberty --tls`
+
+Resource constraints can be enabled using `resources.constraints.enabled` parameter. Required resource can be configured using `resources.requests.cpu` and `resources.requests.memory` parameters. Resource limits can be configured using `resources.limits.cpu` and `resources.limits.memory` parameters. Review the default values specified by the chart and adjust according to your needs. It is recommended not to use `Xmx` or `Xms`. Use `–XX:MaxRAMPercentage` and `–XX:InitialRAMPercentage` for any fine tuning, such as if there are other processes set to run in the same container.
+
+### Verifying the Chart
+
+See the instruction after the helm installation completes for chart verification. The instruction can also be displayed by viewing the installed helm release under Menu -> Workloads -> Helm Releases or by running the command: `helm status my-release --tls`
+
+### Uninstalling the Chart
+
+To uninstall/delete the `my-release` deployment:
+
+```bash
+helm delete my-release --purge --tls
+```
+
+This command removes all the Kubernetes components associated with the chart, except any persistent volume claims (PVCs) which is created when `logs.persistLogs` or `logs.persistTransactionLogs` is set to `true`. This is the default behavior of Kubernetes, and ensures that valuable data is not deleted. In order to delete the server data, you can delete the PVC using the following command:
+
+```bash
+kubectl delete pvc my-pvc
+```
+
+Note: You can use `kubectl get pvc` to see the list of available PVCs.
 
 ### Configuration
 
@@ -111,6 +222,7 @@ The Helm chart has the following values that can be overridden by using `--set n
 | `image`   | `pullPolicy` | Image Pull Policy | `Always`, `Never`, or `IfNotPresent`. Defaults to `Always` if `:latest` tag is specified, or `IfNotPresent` otherwise. See Kubernetes - [Updating Images](https://kubernetes.io/docs/concepts/containers/images/#updating-images)  |
 |           | `repository` | Name of image, including repository prefix (if required). | See Docker - [Extended tag description](https://docs.docker.com/engine/reference/commandline/tag/#parent-command) |
 |           | `tag`        | Docker image tag. | See Docker - [Tag](https://docs.docker.com/engine/reference/commandline/tag/) |
+|           | `pullSecret`        | Image pull secret, if using a Docker registry that requires credentials. | See Kubernetes - [ImagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account) |
 |           | `license`    |  The license state of the image being deployed. | `Empty` (default) for development. `accept` if you have previously accepted the production license. |
 |           | `readinessProbe`       | Configure when container is ready to start accepting traffic. Use this to override the default readiness probe configuration. See [Configure Liveness and Readiness Probes](#configure-liveness-and-readiness-probes) for more information. | YAML object of readiness probe |
 |           | `livenessProbe`        | Configure when to restart container. Use this to override the default liveness probe configuration. See [Configure Liveness and Readiness Probes](#configure-liveness-and-readiness-probes) for more information. | YAML object of liveness probe |
@@ -128,6 +240,8 @@ The Helm chart has the following values that can be overridden by using `--set n
 |           | `extraContainers`     | Additional containers to be added to the server pods | YAML array of `containers` definitions |
 |           | `extraVolumes`        | Additional volumes for server pods | YAML array of `volume` definitions |
 |           | `security`  | Configure the security attributes of the pod | YAML object of security attributes |
+|           | `extraNodeSelectorRequirements`  | Additional node selector expressions to require before selecting a node for pods. Note that these will need to be satisfied in addition to the defined architecture labels in order to be scheduled. | YAML array of expressions to match. |
+|           | `extraNodeSelectorPreferences`  | Additional node selector expressions to prefer, in order of weight, when selecting a node for pods. | YAML array of expressions to match. |
 | `service` | `enabled`    | Specifies whether the `HTTP` port service is enabled or not.  |  |
 |           | `name`       | The service metadata name and DNS A record.  | |
 |           | `port`       | The port that this container exposes.  |   |
@@ -151,13 +265,13 @@ The Helm chart has the following values that can be overridden by using `--set n
 |           | `useClusterSSLConfiguration`    | Set to true if you want to use the SSL ConfigMap and secrets generated by the createClusterSSLConfiguration option. Set to false if the Docker image already has SSL configured. | `false` (default) or `true` |
 |           | `createClusterSSLConfiguration` | Specifies whether to automatically generate SSL ConfigMap and secrets. The generated ConfigMap is: liberty-config.  The generated secrets are: `mb-keystore`, `mb-keystore-password`, `mb-truststore`, and `mb-truststore-password`.  Only generate the SSL configuration one time. If you generate the configuration a second time, errors might occur. | `false` (default) or `true` |
 | `ingress` | `enabled`        | Specifies whether to use ingress.        |  `false` (default) or `true`  |
-|           | `rewriteTarget`  | Specifies the target URI where the traffic must be redirected. | See Kubernetes - Annotation `ingress.kubernetes.io/rewrite-target` - [Rewrite Target](https://github.com/kubernetes/ingress-nginx/tree/master/docs/examples/rewrite)  |
-|           | `path`           | Specifies the path for the Ingress HTTP rule.    |  See Kubernetes - [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/)  |
-|           | `host`           | Specifies a fully qualified domain names of Ingress, as defined by RFC 3986. |  See [Ingress configuration](#ingress-configuration) for more into on this. |
-|           | `secretName`     | Specifies the name of the Kubernetes secret that contains Ingress' TLS certificate and key.   |  See [Ingress configuration](#ingress-configuration) for more into on this. |
-|           | `labels`         | Specifies custom labels.         |  YAML object of labels  |
-|           | `annotations`    | Specifies custom annotations.    |  YAML object of annotations  |
-| `persistence` | `name`                   | Descriptive name that will be used as a prefix for the generated persistence volume claim. A volume is only bound if either `tranlog.persistLogs` or `logs.persistLogs` is set to `true`. | |
+|           | `rewriteTarget`  | Specifies the target URI where the traffic must be redirected. | See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this. |
+|           | `path`           | Specifies the path for the Ingress HTTP rule.    | See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this. |
+|           | `host`           | Specifies a fully qualified domain names of Ingress, as defined by RFC 3986. | See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this. |
+|           | `secretName`     | Specifies the name of the Kubernetes secret that contains Ingress' TLS certificate and key.   | See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this. |
+|           | `labels`         | Specifies custom labels.         | YAML object of labels. See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this. |
+|           | `annotations`    | Specifies custom annotations.    | YAML object of annotations. See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs) for more info on this.  |
+| `persistence` | `name`                   | Descriptive name that will be used as a prefix for the generated persistence volume claim. A volume is only bound if either `logs.persistTransactionLog` or `logs.persistLogs` is set to `true`. | |
 |             | `useDynamicProvisioning` | If `true`, the persistent volume claim will use the storageClassName to bind the volume. If `storageClassName` is not set then it will use the default StorageClass setup by kube Administrator.  If `false`, the selector will be used for the binding process. | `true` (default) or `false` |
 |             | `fsGroupGid`             | Defines file system group ID for volumes that support ownership management. This value is added to the container’s supplemental groups.  | `nil` |
 |             | `storageClassName`       | Specifies a StorageClass pre-created by the Kubernetes sysadmin. When set to `""`, then the PVC is bound to the default `storageClass` setup by kube Administrator. | |
@@ -177,10 +291,10 @@ The Helm chart has the following values that can be overridden by using `--set n
 |             | `maxReplicas`                    | Upper limit for the number of pods that can be set by the autoscaler.  Cannot be lower than `minReplicas`.   |  `Positive integer` (default to `10`)  |
 |             | `targetCPUUtilizationPercentage` | Target average CPU utilization (represented as a percentage of requested CPU) over all the pods.  |  `Integer between `1` and `100` (default to `50`)  |
 | `resources` | `constraints.enabled` | Specifies whether the resource constraints specified in this Helm chart are enabled.   | `false` (default) or `true`  |
-|           | `limits.cpu`          | Describes the maximum amount of CPU allowed. | Default is `500m`. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
-|           | `limits.memory`       | Describes the maximum amount of memory allowed. | Default is `512Mi`. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
-|           | `requests.cpu`        | Describes the minimum amount of CPU required. If not specified, the CPU amount will default to the limit (if specified) or implementation-defined value. | Default is 500m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
-|           | `requests.memory`     | Describes the minimum amount of memory required. If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value. | Default is 512Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+|           | `limits.cpu`          | Describes the maximum amount of CPU allowed. | Default is `4000m`. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
+|           | `limits.memory`       | Describes the maximum amount of memory allowed. | Default is `2Gi`. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
+|           | `requests.cpu`        | Describes the minimum amount of CPU required. If not specified, the CPU amount will default to the limit (if specified) or implementation-defined value. | Default is `500m`. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
+|           | `requests.memory`     | Describes the minimum amount of memory required. If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value. | Default is `512Mi`. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
 | `arch`    | `amd64` | Architecture preference for amd64 worker node.   | `0 - Do not use`, `1 - Least preferred`, `2 - No preference` (default) or `3 - Most preferred`  |
 |           | `ppc64le`          | Architecture preference for ppc64le worker node. | `0 - Do not use`, `1 - Least preferred`, `2 - No preference` (default) or `3 - Most preferred`  |
 |           | `s390x`       | Architecture preference for s390x worker node. | `0 - Do not use`, `1 - Least preferred`, `2 - No preference` (default) or `3 - Most preferred` |
@@ -195,22 +309,10 @@ The Helm chart has the following values that can be overridden by using `--set n
 |                | `clientId`     | The client ID that has been obtained from the OpenId Connect Provider. |  a string  |
 |                | `clientSecretName` | The Kubernetes secret containing the client secret that has been obtained from the OpenId Connect Provider. The key inside this secret must be named `clientSecret`. |  a string  |
 |                | `discoveryURL` | The discovery URL of the OpenId Connect Provider. |  a URL  |
-
+| `app`      | `autoCreate`             | Adds `prism.app.auto-create` annotation for integration with Application Navigator. | `true` |
+|            | `version`             | Adds `prism.app.auto-create.version` annotation. | `1.0.0` |
 
 ### Configuring Liberty
-
-#### Liberty Docker image requirements
-
-The Helm chart requires the Docker image to have certain directories linked. The `websphere-liberty` image from Docker Hub will already have the expected links. If you are not using this image, you must add the following to your Dockerfile:
-```shell
-ENV LOG_DIR /logs
-ENV WLP_OUTPUT_DIR /opt/ibm/wlp/output
-RUN mkdir /logs \
-    && ln -s $WLP_OUTPUT_DIR/defaultServer /output \
-    && ln -s /opt/ibm/wlp/usr/servers/defaultServer /config
-```
-
-Configuration values related to monitoring, health, JMS, IIOP, HTTP and SSL require the Liberty server to be configured appropriately at Docker image layer. See [WASDev/ci.docker](https://github.com/WASdev/ci.docker) for more information.
 
 #### ConfigMap
 
@@ -252,7 +354,7 @@ If the server fails and restarts, then to persist the transaction logs (preserve
     waitForRecovery="true" />
 ```
 
-For more information about the transaction element and its attributes, see [transaction - Transaction Manager](https://www.ibm.com/support/knowledgecenter/en/SSAW57_liberty/com.ibm.websphere.liberty.autogen.nd.doc/ae/rwlp_config_transaction.html) in the Liberty documentation.
+For more information about the transaction element and its attributes, see [transaction - Transaction Manager](https://www.ibm.com/support/knowledgecenter/SSAW57_liberty/com.ibm.websphere.liberty.autogen.nd.doc/ae/rwlp_config_transaction.html) in the Liberty documentation.
 
 #### Persisting logs
 
@@ -284,7 +386,7 @@ You can also create a PV from IBM Cloud Private dashboard by following these ste
 2.  Copy and paste the PV template.
 3.  Click Create.
 
-Note: For volumes that support ownership management, specify the group ID of the group owning the persistent volumes' file systems using the `persistence.fsGroupGid` parameter.
+Note: For volumes that support ownership management, specify the group ID of the group owning the persistent volumes' file systems using the `persistence.fsGroupGid` parameter. Some storage management solutions automatically add persistent volumes' GID to the supplementary groups. If this is not setup properly, the Liberty server fails to write to the log files and the following error appears in the container logs: `TRAS0036E: The system could not create file /logs/messages.log because of the following exception: java.security.PrivilegedActionException: java.io.IOException: Permission denied`.
 
 #### Analyzing Liberty messages
 
@@ -292,7 +394,7 @@ Logging in JSON format is enabled by default. Log events are forwarded to Elasti
 
 Use Kibana to monitor and analyze the log events. Sample Kibana dashboards are provided in the Helm chart's [dashboards](https://github.com/IBM/charts/tree/master/stable/ibm-websphere-liberty/ibm_cloud_pak/pak_extensions/dashboards) directory.  Ensure Liberty log events exist in Elasticsearch before creating an index pattern and importing dashboards in Kibana.
 
-For more information, see [Analyzing Liberty messages in IBM Cloud Private](https://www.ibm.com/support/knowledgecenter/en/SSEQTP_liberty/com.ibm.websphere.wlp.doc/ae/twlp_icp_json_logging.html) in the Knowledge Center.
+For more information, see [Analyzing Liberty messages in IBM Cloud Private](https://www.ibm.com/support/knowledgecenter/SSEQTP_liberty/com.ibm.websphere.wlp.doc/ae/twlp_icp_json_logging.html) in the Knowledge Center.
 
 #### SSL Configuration
 
@@ -307,18 +409,9 @@ To turn off SSL:
 1. Set `ssl.enabled` to `false`.
 2. Depending on which ports you enable, change `port` and `targetPorts` to non-secure ports. By convention, the default port numbers for non-secure mode are `9080` (HTTPS), `2809` (IIOP), and `7276` (JMS).
 
-#### Ingress configuration
+#### Ingress Configuration
 
-If you are deploying your chart into IBM Cloud Private:
-
-* `ingress.host` can be provided and set to a fully-qualified domain name that resolves to the IP address of your cluster’s proxy node. For example `example.com` resolved to the proxy node. When a domain name is not available, the service [`nip.io`](http://nip.io) can be used to provide a resolution based on an IP address. For example, `liberty.<IP>.nip.io` where `<IP>` would be replaced with the IP address of your cluster’s proxy node. The IP address of your cluster’s proxy node can be found by using the following command: `kubectl get nodes -l proxy=true`. Users can also leave this parameter as empty.
-
-* `ingress.secretName` set to the name of the secret containing Ingress TLS certificate and key. If this is not provided, it dynamically creates a self-signed certificate/key, stores it in a Kubernetes secret and uses the secret in Ingress' TLS.
-
-If the chart is deployed into IBM Cloud Kubernetes Service:
-
-* `ingress.host` must be provided and set to the IBM-provided Ingress _subdomain_ or your custom domain. See [Select an app domain and TLS termination](https://console.bluemix.net/docs/containers/cs_ingress.html#public_inside_2) for more info on how to get this value in IBM Cloud Kubernetes Service.
-* `ingress.secretName` must be provided. If you are using the IBM-provided Ingress domain, set this parameter to the name of the IBM-provided Ingress secret. However, if you are using a custom domain, set this parameter to the secret that you created earlier that holds your custom TLS certificate and key. See [IBM Cloud Kubernetes Service documentation](https://console.bluemix.net/docs/containers/cs_ingress.html#public_inside_2) for more info on how to get these value in an IBM Cloud Kubernetes Service cluster.
+For information on how to setup Ingress, See [Ingress Configuration](https://github.com/OpenLiberty/ci.docker/docs).
 
 #### Configure Liveness and Readiness Probes
 
@@ -326,7 +419,7 @@ With the default configuration, readiness and liveness probes are determined by 
 
 Optionally, you can override the default configurations for readiness and liveness probes by configuring `image.readinessProbe` and `image.livenessProbe` parameters, respectively. Complete definition of the probe must be provided if you choose to override.
 
-The `initialDelaySeconds` defines how long to wait before performing the first probe. Default value for readiness probe is 2 seconds and for liveness probe is 20 seconds. You should set appropriate values for your container, if necessary, to ensure that the readiness and liveness probes don’t interfere with each other. Otherwise, the liveness probe might continuously restart the pod and the pod will never be marked as ready.
+The `initialDelaySeconds` defines how long to wait before performing the first probe. Default value for readiness probe is 2 seconds and for liveness probe is 40 seconds. The `failureThreshold` defines how many times Kubernetes will try before giving up on a failing probe. Default value for readiness probe is 12 and for liveness probe is 3. You should set appropriate values for your container, if necessary, to ensure that the readiness and liveness probes don’t interfere with each other. Otherwise, the liveness probe might continuously restart the pod and the pod will never be marked as ready.
 
 More information about configuring liveness and readiness probes can be found [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/)
 
@@ -380,7 +473,13 @@ The helm chart augments the Liberty container with the following environmental v
 | `WLP_LOGGING_CONSOLE_FORMAT` | Determines json or standard log format. |
 | `WLP_LOGGING_CONSOLE_LOGLEVEL` | Determines log level. |
 | `WLP_LOGGING_CONSOLE_SOURCE` | Determines log sources to print to console output. |
-| `IIOP_ENDPOINT_HOST` | Downward API status.podIP |
+| `HTTP_PORT` | The HTTP port configured using `service.targetPort` parameter |
+| `HTTPS_PORT` | The secure HTTP port configured using `service.targetPort` parameter |
+| `JMS_PORT` | The JMS port configured using `jmsService.targetPort` parameter |
+| `JMSS_PORT` | The secure JMS port configured using `jmsService.targetPort` parameter |
+| `IIOP_PORT` | The IIOP port configured using `iiopService.nonSecureTargetPort` parameter |
+| `IIOPS_PORT` | The secure IIOP port configured using `iiopService.secureTargetPort` parameter |
+| `IIOP_ENDPOINT_HOST` | Host for IIOP endpoint. Value from downward API status.podIP is used |
 | `KUBERNETES_NAMESPACE` | Current namespace, used for auto-discovery. |
 | `KEYSTORE_REQUIRED` | Determines whether keystore is generated. |
 | `MB_KEYSTORE_PASSWORD` | Namespace scope JKS keystore password. |
@@ -391,5 +490,5 @@ The helm chart augments the Liberty container with the following environmental v
 
 
 ## More information
-See the [WebSphere Liberty documentation](https://www.ibm.com/support/knowledgecenter/en/SSAW57_liberty/as_ditamaps/was900_welcome_liberty_ndmp.html) for configuration options for deploying the Liberty server.
+See the [WebSphere Liberty documentation](https://www.ibm.com/support/knowledgecenter/SSAW57_liberty) for configuration options for deploying the Liberty server.
 
