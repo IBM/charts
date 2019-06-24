@@ -1,17 +1,20 @@
 # Breaking Changes
 None
 
-# What’s new in Chart Version 1.0.6
+# What’s new in Chart Version 1.0.8
 
-With ibm-object-storage-plugin chart version 1.0.6, the following new
+With ibm-object-storage-plugin chart version 1.0.8, the following new
 features are available:
-* Switch to ibm-cos-sdk-go from AWS SDK
-* README update
-* License update
-* Change helm repo from ibm to iks-charts 
+* Updated chart to set cpu and memory limits for object-storage plugin pods.
+* Updated registry URL to `icr.io`.
+* Updated helm repo from `iks-charts` to `ibm-charts`.
+* Updated chart to create storageclasses with `tls-cipher-suite` as per worker node's operating system family(`Debian/Red Hat`).
+* Updated `ibmc` plugin to use `--set workerOS=<debian | redhat>`, while installing/upgrading object-storage plugin, depending on worker node's operating system family.
+* README Update.
+* Configured readiness probes in plugin and driver containers.
 
 # Fixes
-* Mask IAM keys in the log file
+* Build images on Red Hat UBI (Universal Base Image) for red-hat-openshift support.
 
 # Prerequisites
 Install tiller with service-account due to some RBAC issue (helm version: >=2.9.1). Follow instructions [here](https://cloud.ibm.com/docs/containers/cs_integrations.html#helm).
@@ -25,6 +28,8 @@ For install/upgrade, follow instructions [here](https://cloud.ibm.com/docs/conta
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.0.8 | Jun 24, 2019| >=1.10.1 | 1.8.7 | None | Updated chart to set cpu and memory limits for object-storage plugin pods, Updated registry URL to `icr.io`, Updated helm repo from `iks-charts` to `ibm-charts`, Updated chart to create storageclasses with `tls-cipher-suite` as per worker node's operating system family(`Debian/Red Hat`), Updated `ibmc` plugin to use `--set workerOS=<debian / redhat>` while installing/upgrading object-storage plugin depending on worker node's operating system family, Build images on Red Hat UBI (Universal Base Image) for red-hat-openshift support, README Update; Readiness probes configured in driver/plugin containers; GoLang: v1.12.1 |
+| 1.0.7 | May 17, 2019| >=1.10.1 | 1.8.6 | None | Allow late binding and dynamic provisioning of volume, Updated helm chart to deploy on managed openshift on IBM Kubernetes Service(IKS), Updated `ibmc` plugin to install/uninstall chart `without tiller`, Updated `ibmc` plugin to install specific version of the chart, Updated `ibmc` plugin to fix the issue while installing the chart with lower version of `kubectl` client; GoLang: v1.12.1 |
 | 1.0.6 | May 02, 2019| >=1.10.1 | 1.8.6 | None | Use ibm-cos-sdk instead of AWS SDK; Mask IAM credentials in driver log; Change helm repo from ibm to iks-charts  |
 | 1.0.5 | Apr 18, 2019| >=1.10.1 | 1.8.5 | None | Mount bucket as per AccessMode defined in PVC; Exposed s3fs options from PVC, like use-xattr and readwrite-timeout; Enabled deployment on RHEL and CentOS; GoLang: v1.12.1 |
 | 1.0.4 | Apr 05, 2019| >=1.9.1 | 1.8.4 | None | Updated COS endpoints; updated storageclass templates for `Mexico` datacenter; drop `ALL` capabilities from plugin containers; replaced beta apiVersion with stable apiVersion for underlying plugin components; added option `useCustomPSP` to install plugin using custom PSP for ICP; updated `ibmc` helm plugin upgrade logic; replaced deprecated `kubernetes-incubator/external-storage` package with `kubernetes-sigs/sig-storage-lib-external-provisioner`; added support to override `tls-cipher-suite` through PVC annotations; updated Golang version to 1.12.1 for security fixes; restore original sshd_config file on worker nodes after installing driver binary; README update. |
