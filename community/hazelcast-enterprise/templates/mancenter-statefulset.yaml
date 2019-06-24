@@ -1,27 +1,43 @@
 {{- if .Values.mancenter.enabled }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ template "mancenter.fullname" . }}
   labels:
-    app: {{ template "hazelcast.name" . }}
-    chart: {{ template "hazelcast.chart" . }}
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ template "hazelcast.name" . }}
+    helm.sh/chart: {{ template "hazelcast.chart" . }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
 spec:
+  serviceName: {{ template "mancenter.fullname" . }}
   replicas: 1
   selector:
     matchLabels:
-      app: {{ template "hazelcast.name" . }}
-      release: "{{ .Release.Name }}"
+      app.kubernetes.io/name: {{ template "hazelcast.name" . }}
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
       role: mancenter
   template:
     metadata:
       labels:
-        app: {{ template "hazelcast.name" . }}
-        release: "{{ .Release.Name }}"
+        app.kubernetes.io/name: {{ template "hazelcast.name" . }}
+        helm.sh/chart: {{ template "hazelcast.chart" . }}
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
         role: mancenter
+      annotations:
+        productName: "Hazelcast Management Center"
+        productID: "com_Hazelcast_ManagementCenter"
+        productVersion: "{{ .Chart.Version }}"
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
       {{- if .Values.mancenter.image.pullSecrets }}
       imagePullSecrets:
         {{- range .Values.mancenter.image.pullSecrets }}
@@ -32,8 +48,13 @@ spec:
       nodeSelector:
 {{ toYaml .Values.mancenter.nodeSelector | indent 8 }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       securityContext:
-        runAsUser: 0
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
       containers:
       - name: {{ template "mancenter.fullname" . }}
         image: "{{ .Values.mancenter.image.repository }}:{{ .Values.mancenter.image.tag }}"
@@ -70,16 +91,21 @@ spec:
           mountPath: /data
         env:
         - name: MC_LICENSE_KEY
-        {{- if .Values.mancenter.licenseKeySecretName }}
           valueFrom:
             secretKeyRef:
               name: {{ .Values.mancenter.licenseKeySecretName }}
               key: key
-        {{- else }}
-          value: {{ .Values.mancenter.licenseKey }}
-        {{- end }}
         - name: JAVA_OPTS
-          value: "{{ if or .Values.mancenter.licenseKey .Values.mancenter.licenseKeySecretName }}-Dhazelcast.mc.license=$(MC_LICENSE_KEY){{ end }} {{ .Values.mancenter.javaOpts }}"
+          value: "{{ if .Values.mancenter.licenseKeySecretName }}-Dhazelcast.mc.license=$(MC_LICENSE_KEY){{ end }} {{ .Values.mancenter.javaOpts }}"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
       volumes:
       - name: mancenter-storage
       {{- if .Values.mancenter.persistence.enabled }}
