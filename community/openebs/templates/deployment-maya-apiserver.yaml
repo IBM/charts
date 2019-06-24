@@ -1,4 +1,4 @@
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "openebs.fullname" . }}-apiserver
@@ -8,8 +8,14 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     component: apiserver
+    name: maya-apiserver
+    openebs.io/component-name: maya-apiserver
 spec:
   replicas: {{ .Values.apiserver.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "openebs.name" . }}
+      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
@@ -18,8 +24,11 @@ spec:
         component: apiserver
       annotations:
         productName: "OpenEBS Maya-ApiServer"
-        productID: "io.openebs.chartscommunity.mapiserver.0.7.0"
-        productVersion: "0.7.0"
+        productID: "io.openebs.chartscommunity.mapiserver.1.0.0"
+        productVersion: "1.0.0"
+        name: maya-apiserver
+        openebs.io/component-name: maya-apiserver
+        openebs.io/version: {{ .Values.release.version }}
     spec:
       serviceAccountName: {{ template "openebs.serviceAccountName" . }}
       containers:
@@ -49,9 +58,11 @@ spec:
         # configured as a part of openebs installation.
         # If "true" a default cstor sparse pool will be configured, if "false" it will not be configured.
         - name: OPENEBS_IO_INSTALL_DEFAULT_CSTOR_SPARSE_POOL
-          value: "{{ .Values.ndm.sparse.enabled }}"
+          value: "{{ .Values.apiserver.sparse.enabled }}"
 {{- end }}
 {{- end }}
+        - name: OPENEBS_IO_CSTOR_POOL_SPARSE_DIR
+          value: "{{ .Values.ndm.sparse.path }}"
         # OPENEBS_NAMESPACE provides the namespace of this deployment as an
         # environment variable
         - name: OPENEBS_NAMESPACE
@@ -86,20 +97,25 @@ spec:
           value: "{{ .Values.cstor.volumeMgmt.image }}:{{ .Values.cstor.volumeMgmt.imageTag }}"
         - name: OPENEBS_IO_VOLUME_MONITOR_IMAGE
           value: "{{ .Values.policies.monitoring.image }}:{{ .Values.policies.monitoring.imageTag }}"
+        - name: OPENEBS_IO_CSTOR_POOL_EXPORTER_IMAGE
+          value: "{{ .Values.policies.monitoring.image }}:{{ .Values.policies.monitoring.imageTag }}"
+        # OPENEBS_IO_ENABLE_ANALYTICS if set to true sends anonymous usage
+        # events to Google Analytics
+        - name: OPENEBS_IO_ENABLE_ANALYTICS
+          value: "{{ .Values.analytics.enabled }}"
+        # OPENEBS_IO_ANALYTICS_PING_INTERVAL can be used to specify the duration (in hours)
+        # for periodic ping events sent to Google Analytics. Default is 24 hours.
+        - name: OPENEBS_IO_ANALYTICS_PING_INTERVAL
+          value: "{{ .Values.analytics.pingInterval }}"
+        - name: OPENEBS_IO_INSTALLER_TYPE
+          value: "charts-helm"
         livenessProbe:
           exec:
             command:
             - /usr/local/bin/mayactl
             - version
-          initialDelaySeconds: 300
-          periodSeconds: 60
-        readinessProbe:
-          exec:
-            command:
-            - /usr/local/bin/mayactl
-            - version
-          initialDelaySeconds: 30
-          periodSeconds: 60
+          initialDelaySeconds: {{ .Values.apiserver.healthCheck.initialDelaySeconds }}
+          periodSeconds: {{ .Values.apiserver.healthCheck.periodSeconds }}
 {{- if .Values.apiserver.nodeSelector }}
       nodeSelector:
 {{ toYaml .Values.apiserver.nodeSelector | indent 8 }}
@@ -108,19 +124,7 @@ spec:
       tolerations:
 {{ toYaml .Values.apiserver.tolerations | indent 8 }}
 {{- end }}
+{{- if .Values.apiserver.affinity }}
       affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types,
-          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
-          #
-          #If you specify multiple matchExpressions associated with nodeSelectorTerms,
-          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
-          #
-          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: beta.kubernetes.io/arch
-                operator: In
-                values:
-                - {{ .Values.image.arch }}
+{{ toYaml .Values.apiserver.affinity | indent 8 }}
+{{- end }}
