@@ -9,11 +9,14 @@ image:
   repo: cassandra
   tag: 3
   pullPolicy: IfNotPresent
+  ## Specify ImagePullSecrets for Pods
+  ## ref: https://kubernetes.io/docs/concepts/containers/images/#specifying-imagepullsecrets-on-a-pod
+  #pullSecrets: samcassandra-mysecret
 
 ## Specify a service type
 ## ref: http://kubernetes.io/docs/user-guide/services/
 service:
-  type: ClusterIP
+  type: NodePort
 
 ## Persist data to a persistent volume
 persistence:
@@ -27,7 +30,7 @@ persistence:
   ##
   useDynamicProvisioning: false
   storageClass: "-"
-  accessMode: ReadWriteMany
+  accessMode: ReadWriteOnce
   size: 10Gi
 
 ## Configure resource requests and limits
@@ -35,13 +38,13 @@ persistence:
 ## Minimum memory for development is 4GB and 2 CPU cores
 ## Minimum memory for production is 8GB and 4 CPU cores
 ## ref: http://docs.datastax.com/en/archived/cassandra/2.0/cassandra/architecture/architecturePlanningHardware_c.html
-resources: {}
-  # requests:
-  #   memory: 4Gi
-  #   cpu: 2
-  # limits:
-  #   memory: 4Gi
-  #   cpu: 2
+resources:
+  requests:
+    memory: 4Gi
+    cpu: 2
+  limits:
+    memory: 4Gi
+    cpu: 2
 
 ## Change cassandra configuration parameters below:
 ## ref: http://docs.datastax.com/en/cassandra/3.0/cassandra/configuration/configCassandra_yaml.html
@@ -54,7 +57,7 @@ config:
   clusterSize: 3
   seedSize: 2
   #num_tokens: 256
-  #seeds: ""
+  seeds: ""
   # If you want Cassandra to use this datacenter and rack name,
   # you need to set endpoint_snitch to GossipingPropertyFileSnitch.
   # Otherwise, these values are ignored and datacenter1 and rack1
@@ -99,6 +102,12 @@ readinessProbe:
   successThreshold: 1
   failureThreshold: 3
 
+## Configure node selector. Edit code below for adding selector to pods
+## ref: https://kubernetes.io/docs/user-guide/node-selection/
+selector: {}
+  # nodeSelector:
+    # cloud.google.com/gke-nodepool: pool-db
+
 ## Additional pod annotations
 ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 podAnnotations: {}
@@ -118,14 +127,35 @@ podDisruptionBudget: {}
   # minAvailable: 2
 
 podManagementPolicy: OrderedReady
-
 updateStrategy:
   type: OnDelete
 
+## Pod Security Context
+securityContext:
+  enabled: true
+  fsGroup: 999
+  runAsUser: 999
+
 ## Affinity for pod assignment
 ## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
-affinity: {}
+#affinity: {}
 
 ## Node tolerations for pod assignment
 ## Ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
 tolerations: []
+
+#rbac:
+  # Specifies whether RBAC resources should be created
+  #create: true
+
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# Use host network for Cassandra pods
+# You must pass seed list into config.seeds property if set to true
+hostNetwork: false
+

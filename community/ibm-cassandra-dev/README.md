@@ -13,7 +13,56 @@ This chart bootstraps a [Cassandra] (https://hub.docker.com/_/cassandra) deploym
 - PV provisioner support in the underlying infrastructure
 
 ## PodSecurityPolicy Requirements
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose predefined ibm-restricted-psp PodSecurityPolicy.
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
+
+* Predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp)
+* Custom PodSecurityPolicy definition:
+
+```yaml
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: ibm-cassandra-dev-psp
+spec:
+  allowPrivilegeEscalation: true
+  forbiddenSysctls:
+  - '*'
+  fsGroup: RunAsAny
+  requiredDropCapabilities:
+  - MKNOD
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - configMap
+  - emptyDir
+  - projected
+  - secret
+  - downwardAPI
+  - persistentVolumeClaim
+```
+
+* Custom ClusterRole for the custom PodSecurityPolicy:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ibm-cassandra-dev-clusterrole
+rules:
+- apiGroups:
+  - extensions
+  resourceNames:
+  - ibm-cassandra-dev-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+```
+
 
 ## Resources Required
 The chart deploys pods consuming minimum resources as specified in the resources configuration parameter
@@ -100,7 +149,7 @@ The following table lists the configurable parameters of the Cassandra chart and
 | `image.repo`                         | Docker image location                           | `cassandra`                                                |
 | `image.tag`                          | Docker image tag                                | `3`                                                   |
 | `image.pullPolicy`                   | Defaults to 'Always' when the latest tag is specified. Otherwise the default is 'IfNotPresent'.                               | `Always` if `imageTag` is `latest`, else `IfNotPresent`    |
-| `service.type`                       | Type of service               | `NodePort` 
+| `service.type`                       | Type of service               | `NodePort`
 | `persistence.enabled`                | (Recommended) Select this checkbox to store data on persistent volumes                      | `true`  |
 | `persistence.UseDynamicProvisioning` | Use dynamically provisioned persistent volumes to store Mesos data  | `false` |                
 | `persistence.accessMode`             | Access mode details             | `ReadWriteOnce`                                            
@@ -149,30 +198,31 @@ When you want to change the cluster size of your cassandra, you can use the helm
 helm upgrade --set config.cluster_size=5 cassandra community/ibm-cassandra-dev
 ```
 
-## Get cassandra status
+## Get Cassandra Status
 You can get your cassandra cluster status by running the command
 
 ```bash
-kubectl exec -it --namespace cassandra $(kubectl get pods --namespace cassandra -l app=cassandra-cassandra -o jsonpath='{.items[0].metadata.name}') nodetool status
+kubectl exec -it --namespace cassandra $(kubectl get pods --namespace cassandra -l app.kubernetes.io/name=ibm-cassandra-dev -o jsonpath='{.items[0].metadata.name}') nodetool status
 ```
 
 Output
 ```bash
-Datacenter: asia-east1
-======================
+Datacenter: datacenter1
+=======================
 Status=Up/Down
 |/ State=Normal/Leaving/Joining/Moving
---  Address    Load       Tokens       Owns (effective)  Host ID                               Rack
-UN  10.8.1.11  108.45 KiB  256          66.1%             410cc9da-8993-4dc2-9026-1dd381874c54  a
-UN  10.8.4.12  84.08 KiB  256          68.7%             96e159e1-ef94-406e-a0be-e58fbd32a830  c
-UN  10.8.3.6   103.07 KiB  256          65.2%             1a42b953-8728-4139-b070-b855b8fff326  b
+--  Address      Load       Tokens       Owns (effective)  Host ID                               Rack
+UN  10.1.78.49   202.38 KiB  256          65.4%             e118fd35-b6f5-4b08-8d26-f8896acd5e99  rack1
+UN  10.1.160.11  231.54 KiB  256          66.1%             b6c73ad6-1294-45af-9557-81beb0f904d4  rack1
+UN  10.1.160.15  216.66 KiB  256          68.5%             db4556e7-3866-4326-86f7-6f7ca40ae1fe  rack1
+
 ```
 
 ## Benchmark
 You can use [cassandra-stress](https://docs.datastax.com/en/cassandra/3.0/cassandra/tools/toolsCStress.html) tool to run the benchmark on the cluster by the following command
 
 ```bash
-kubectl exec -it --namespace cassandra $(kubectl get pods --namespace cassandra -l app=cassandra-cassandra -o jsonpath='{.items[0].metadata.name}') cassandra-stress
+kubectl exec -it --namespace cassandra $(kubectl get pods --namespace cassandra -l app.kubernetes.io/name=ibm-cassandra-dev -o jsonpath='{.items[0].metadata.name}') cassandra-stress
 ```
 
 Example of `cassandra-stress` argument
