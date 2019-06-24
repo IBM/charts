@@ -3,15 +3,16 @@ kind: StatefulSet
 metadata:
   name: {{ template "cassandra.fullname" . }}
   labels:
-    app: {{ template "cassandra.name" . }}
-    chart: {{ template "cassandra.chart" . }}
+    app.kubernetes.io/name: {{ template "cassandra.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
     release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   selector:
     matchLabels:
-      app: {{ template "cassandra.name" . }}
-      release: {{ .Release.Name }}
+      app.kubernetes.io/name: {{ template "cassandra.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
   serviceName: {{ template "cassandra.fullname" . }}
   replicas: {{ .Values.config.clusterSize }}
   podManagementPolicy: {{ .Values.podManagementPolicy }}
@@ -20,10 +21,11 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "cassandra.name" . }}
+        app.kubernetes.io/name: {{ template "cassandra.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
         release: {{ .Release.Name }}
-        chart: {{ template "cassandra.chart" . }}
-        heritage: {{ .Release.Service }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- if .Values.podLabels }}
 {{ toYaml .Values.podLabels | indent 8 }}
 {{- end }}
@@ -39,15 +41,21 @@ spec:
       - ip: "127.0.0.1"
         hostnames:
         - "status.localhost"
-      hostNetwork: false
+      hostNetwork: {{ .Values.hostNetwork }}
       hostPID: false
       hostIPC: false
+      serviceAccountName: {{ template "cassandra.serviceAccountName" . }}
+{{- if .Values.selector }}
+{{ toYaml .Values.selector | indent 6 }}
+{{- end }}
+      {{- if .Values.securityContext.enabled }}
       securityContext:
-        fsGroup: 999
-        runAsUser: 999
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
         runAsNonRoot: true
+      {{- end }}
       affinity:
-{{- include "nodeaffinity" . | indent 6 }}
+{{- include "cassandra.chart.nodeaffinity" . | indent 6 }}
 {{- if .Values.tolerations }}
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
@@ -64,8 +72,46 @@ spec:
           runAsUser: 0
           capabilities:
             drop:
-            - MKNOD
-{{- if .Values.commandOverrides }}
+            - ALL
+            add:
+            - SETPCAP
+            - AUDIT_WRITE
+            - CHOWN
+            - NET_RAW
+            - DAC_OVERRIDE
+            - FOWNER
+            - FSETID
+            - KILL
+            - SETGID
+            - SETUID
+            - NET_BIND_SERVICE
+            - SYS_CHROOT
+            - SETFCAP
+            - SYS_MODULE
+            - SYS_RAWIO
+            - SYS_PACCT
+            - SYS_ADMIN
+            - SYS_NICE
+            - SYS_RESOURCE
+            - SYS_TIME
+            - SYS_TTY_CONFIG
+            - AUDIT_CONTROL
+            - MAC_ADMIN
+            - MAC_OVERRIDE
+            - NET_ADMIN
+            - SYSLOG
+            - DAC_READ_SEARCH
+            - LINUX_IMMUTABLE
+            - NET_BROADCAST
+            - IPC_LOCK
+            - IPC_OWNER
+            - SYS_PTRACE
+            - SYS_BOOT
+            - LEASE
+            - WAKE_ALARM
+            - BLOCK_SUSPEND
+        
+        {{- if .Values.commandOverrides }}
         command: {{ .Values.commandOverrides }}
 {{- end }}
 {{- if .Values.argsOverrides }}
@@ -77,7 +123,11 @@ spec:
         {{- $seed_size := default 1 .Values.config.seedSize | int -}}
         {{- $global := . }}
         - name: CASSANDRA_SEEDS
+          {{- if .Values.hostNetwork }}
+          value: {{ required "You must fill \".Values.config.seeds\" with list of Cassandra seeds when hostNetwork is set to true" .Values.config.seeds | quote }}
+          {{- else }}
           value: "{{- range $i, $e := until $seed_size }}{{ template "cassandra.fullname" $global }}-{{ $i }}.{{ template "cassandra.fullname" $global }}.{{ $global.Release.Namespace }}.svc.{{ $global.Values.config.clusterDomain }}{{- if (lt ( add1 $i ) $seed_size ) }},{{- end }}{{- end }}"
+          {{- end }}     
         - name: MAX_HEAP_SIZE
           value: {{ default "8192M" .Values.config.maxHeapSize | quote }}
         - name: HEAP_NEWSIZE
@@ -162,10 +212,10 @@ spec:
   - metadata:
       name: data
       labels:
-        app: {{ template "cassandra.name" . }}
-        chart: {{ template "cassandra.name" . }}
+        app.kubernetes.io/name: {{ template "cassandra.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
         release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
     spec:
       accessModes:
         - {{ .Values.persistence.accessMode | quote }}
