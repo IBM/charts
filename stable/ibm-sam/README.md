@@ -44,22 +44,22 @@ The simplest way to create the secret is to use the kubectl command:
    kubectl create secret generic <secret-name> --from-literal=adminPassword=<password> 
    ```
    
-### PersistentVolume Requirements
+### PersistentVolumeClaim Requirements
 
-A Persistent Volume is required if persistence is enabled and no dynamic provisioning has been set up. You can create a persistent volume through a yaml file. For example:
+A Persistent Volume Claim is required if persistence is enabled and no dynamic provisioning has been set up. You can create a persistent volume claim through a yaml file. For example:
 
 ```
 apiVersion: v1
-kind: PersistentVolume
+kind: PersistentVolumeClaim
 metadata:
   name: <persistent volume name>
 spec:
-  capacity:
-    storage: 20Gi
+  storageClassName: <storage class name>
   accessModes:
     - ReadWriteOnce
-  hostPath:
-    path: <PATH>
+  resources:
+    requests:
+      storage: 20Gi
 ```
 
 To create the persistent volume using a file called `pv.yaml`:
@@ -82,29 +82,24 @@ metadata:
   annotations:
     kubernetes.io/description: "This policy allows pods to run with 
       any UID and GID, but preventing access to the host."
-  name: isam-anyuid-psp
+  name: ibm-sam-nonroot-psp
 spec:
   allowPrivilegeEscalation: true
   fsGroup:
     rule: RunAsAny
   requiredDropCapabilities: 
-  - MKNOD
+  - ALL
   allowedCapabilities:
-  - SETPCAP
-  - AUDIT_WRITE
   - CHOWN
-  - NET_RAW
   - DAC_OVERRIDE
   - FOWNER
-  - FSETID
   - KILL
-  - SETUID
-  - SETGID
   - NET_BIND_SERVICE
-  - SYS_CHROOT
-  - SETFCAP 
+  - SETFCAP
+  - SETGID
+  - SETUID
   runAsUser:
-    rule: RunAsAny
+    rule: MustRunAsNonRoot
   seLinux:
     rule: RunAsAny
   supplementalGroups:
@@ -133,12 +128,12 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   annotations:
-  name: isam-anyuid-clusterrole
+  name: ibm-sam-nonroot-clusterrole
 rules:
 - apiGroups:
   - extensions
   resourceNames:
-  - isam-anyuid-psp
+  - ibm-sam-nonroot-psp
   resources:
   - podsecuritypolicies
   verbs:
@@ -157,11 +152,11 @@ $ kubectl create -f cluster_role.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: isam-anyuid-rolebinding
+  name: ibm-sam-nonroot-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: isam-anyuid-clusterrole
+  name: ibm-sam-nonroot-clusterrole
 subjects:
 - apiGroup: rbac.authorization.k8s.io
   kind: Group
@@ -229,7 +224,7 @@ The following tables list the configurable parameters of the ISAM chart, along w
 | --------- | ----------- | ------- |
 | `global.image.repository` | The image repository. | `store/ibmcorp/isam` |
 | `global.image.dbrepository` | The image repository for the postgresql server. | `ibmcom/isam-postgresql` |
-| `global.image.tag` | The image version. | `9.0.6.0` |
+| `global.image.tag` | The image version.  This helm chart is compatible with ISAM v9.0.7.0 and later. | `9.0.7.0` |
 | `global.image.pullPolicy` | The image pull policy. | `IfNotPresent` |
 | `global.imageCredentials.dockerSecret` | The name of an existing secret which contains the Docker Store credentials. | (none) |
 | `global.container.snapshot` | The name of the configuration data snapshot that is to be used when starting the container. This will default to the latest published configuration.| latest published snapshot
@@ -238,10 +233,6 @@ The following tables list the configurable parameters of the ISAM chart, along w
 | `global.container.autoReloadInterval` | The interval, in seconds, that the runtime containers will wait before checking to see if any new configuration is available. | disabled
 | `global.persistence.enabled` | Whether to use a PVC to persist data. | `true` |
 | `global.persistence.useDynamicProvisioning` | Whether the requested volume will be automatically provisioned if dynamic provisioning is available. | `true` |
-| `global.dataVolume.existingClaimName` | The name of an existing PersistentVolumeClaim to be used.| empty |
-| `global.dataVolume.storageClassName` | The storage class of the backing PVC. | empty |
-| `global.dataVolume.accessModes` | The access mode for the PVC. | `ReadWriteMany` |
-| `global.dataVolume.size` | The size of the data volume. | `20Gi` |
 
 ### Configuration Service
 
@@ -252,12 +243,15 @@ The following tables list the configurable parameters of the ISAM chart, along w
 | `isamconfig.resources.limits.memory` | The maximum amount of memory to be used by the configuration service. | `2Gi` |
 | `isamconfig.resources.limits.cpu` | The maximum amount of CPU to be used by the configuration service. | `2000m` |
 | `isamconfig.service.type` | The service type for the configuration service. | `NodePort` |
+| `isamconfig.dataVolume.existingClaimName` | The name of an existing PersistentVolumeClaim to be used.| empty |
+| `isamconfig.dataVolume.storageClassName` | The storage class of the backing PVC. | empty |
+| `isamconfig.dataVolume.size` | The size of the data volume. | `20Gi` |
 
 ### Web Reverse Proxy Service
 
 | Parameter | Description | Default |
 | --------- | ----------- | ------- |
-| `isamwrp.container.instances` | The number of unique secure Web Reverse Proxy instances to be created.  The instance name which should be used is of the format wrp_\<instance number> (where the instance number starts at 0). | `1` |
+| `isamwrp.container.instances` | An array of instance names to be created. | `-default` |
 | `isamwrp.container.replicas` | The number of replicas to start for each unique secure Web Reverse Proxy instance. | `1` |
 | `isamwrp.resources.requests.memory` | The amount of memory to be allocated to each Web Reverse Proxy instance. | `512Mi` |
 | `isamwrp.resources.requests.cpu` | The amount of CPU to be allocated to each replica of each Web Reverse Proxy instance. | `500m` |
@@ -292,10 +286,15 @@ The following tables list the configurable parameters of the ISAM chart, along w
 | Parameter | Description | Default |
 | --------- | ----------- | ------- |
 | `isampostgresql.container.enabled` | Whether the demonstration PostgreSQL service is required. | `false` |
+| `isampostgresql.container.keySecret` | An existing secret which contains the server.pem to be used by the server.  If no secret is supplied the server will only support 'unsecure' communication. The certificate file can be added as a secret using the following command: `kubectl create secret generic <secret-name> --from-file server.pem`.| empty |
 | `isampostgresql.resources.requests.memory` | The amount of memory to be allocated to the demonstration PostgreSQL service. | `512Mi` |
 | `isampostgresql.resources.requests.cpu` | The amount of CPU to be allocated to the demonstration PostgreSQL service. | `500m` |
 | `isampostgresql.resources.limits.memory` | The maximum amount of memory to be used by the demonstration PostgreSQL service. | `1Gi` |
 | `isampostgresql.resources.limits.cpu` | The maximum amount of CPU to be used by the demonstration PostgreSQL service. | `1000m` |
+| `isampostgresql.dataVolume.existingClaimName` | The name of an existing PersistentVolumeClaim to be used.| empty |
+| `isampostgresql.dataVolume.storageClassName` | The storage class of the backing PVC. | empty |
+| `isampostgresql.dataVolume.size` | The size of the data volume. | `20Gi` |
+
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.  For example:
 
@@ -333,7 +332,7 @@ Different types of persistent storage are supported by this chart:
     - persistence.useDynamicProvisioning: false
 
 
-The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/). The volume is created using dynamic volume provisioning. If the PersistentVolumeClaim should not be managed by the chart, define `global.dataVolume.existingClaimName`.
+The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/). The volume is created using dynamic volume provisioning. If the PersistentVolumeClaim should not be managed by the chart, define the `isamconfig.dataVolume.existingClaimName` and 'isampostgresql.dataVolume.existingClaimName' parameters.
 
 ### Existing PersistentVolumeClaims
 
@@ -341,7 +340,7 @@ The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/pers
 1. Create the PersistentVolumeClaim
 1. Install the chart
 ```bash
-$ helm install --set global.dataVolume.existingClaimName=PVC_NAME
+$ helm install --set isamconfig.dataVolume.existingClaimName=PVC_NAME
 ```
 
 All containers within the chart will share the same persistent volume claim.  

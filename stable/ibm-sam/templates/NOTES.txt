@@ -34,14 +34,17 @@ The server can then be accessed at the following URL: https://127.0.0.1:9443
 Web Reverse Proxy
 =================
 
-The Web Reverse Proxy instances should be used as an entry point into the environment.  The instance names for the Web Reverse Proxy will be of the format: wrp_<instance_index> (where <instance_index> is the index of the instance, starting at 0).
+The Web Reverse Proxy instances should be used as an entry point into the environment.  The instance names in this release are:
+{{- range  .Values.isamwrp.container.instances  }}
+  - {{ . }}
+{{- end }}
 
 {{- if contains "NodePort" .Values.isamwrp.service.type }}
 
 To connect to your server obtain the external IP address and port:
 
 HOST=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath='{.items[0].status.addresses[0].address}')
-PORT=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "wrp.name" (list . "<instance_index>") }} -o jsonpath='{.spec.ports[0].nodePort}')
+PORT=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "wrp.name" (list . "<instance_name>") }} -o jsonpath='{.spec.ports[0].nodePort}')
 
 The server can then be accessed at the following URL: https://$HOST:$PORT
 
@@ -49,7 +52,7 @@ The server can then be accessed at the following URL: https://$HOST:$PORT
 
 To connect to your server using kubernetes port forwarding:
 
-POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "wrp.name" (list . "<instance_index>") }}" -o jsonpath="{.items[0].metadata.name}")
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "wrp.name" (list . "<instance_name>") }}" -o jsonpath="{.items[0].metadata.name}")
 kubectl port-forward $POD_NAME 9443:{{ template "runtime.port" . }}
 
 The server can then be accessed at the following URL: https://127.0.0.1:9443
@@ -58,7 +61,7 @@ The server can then be accessed at the following URL: https://127.0.0.1:9443
 
 To connect to the administation Web service of the container use kubernetes port forwarding:
 
-POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "wrp.name" (list . "<instance_index>") }}" -o jsonpath="{.items[0].metadata.name}")
+POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ include "wrp.name" (list . "<instance_name>") }}" -o jsonpath="{.items[0].metadata.name}")
 kubectl port-forward $POD_NAME 9443:{{ template "admin.port" . }}
 
 The server can then be accessed at the following URL: https://127.0.0.1:9443
@@ -122,7 +125,11 @@ The PostgreSQL service provided is not meant for production and should only be u
 The database has been configured with the following attributes:
   host:          {{ template "postgresql.name" . }}
   port:          {{ template "postgresql.port" . }}
+  {{- if .Values.isampostgresql.container.keySecret }}
+  secure:        true
+  {{- else }}
   secure:        false
+  {{- end }}
   database name: {{ template "postgresql.dbname" . }}
   database user: {{ template "postgresql.dbuser" . }}
   password:      -- same as the administrator password for the environment

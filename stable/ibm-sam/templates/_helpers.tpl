@@ -29,18 +29,6 @@ Create the fully name of the administration secret key.
 {{- end -}}
 
 {{/*
-The name of our persistent volume claim.
-*/}}
-{{- define "pvc.name" -}}
-{{- if .Values.global.dataVolume.existingClaimName -}}
-{{- printf "%s" .Values.global.dataVolume.existingClaimName -}}
-{{- else }}
-{{- printf "%s-datapvc" .Release.Name -}}
-{{- end }}
-{{- end -}}
-
-
-{{/*
 Our well known ports.
 */}}
 {{- define "admin.port" -}}

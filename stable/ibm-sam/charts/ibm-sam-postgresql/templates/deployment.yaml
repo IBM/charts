@@ -45,6 +45,11 @@ spec:
       hostNetwork:    false
       hostPID:        false
       hostIPC:        false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser:    70
+        runAsGroup:   70
+        fsGroup:      70
 
       affinity:
 {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
@@ -58,6 +63,9 @@ spec:
                 - {{ template "postgresql.name" . }}
             topologyKey: "kubernetes.io/hostname"
 
+      imagePullSecrets:
+        - name: {{ template "docker.credentials.secret" . }}
+
       containers:
       - name:  {{ template "postgresql.name" . }}
 
@@ -65,16 +73,15 @@ spec:
           privileged:               false
           readOnlyRootFilesystem:   false
           allowPrivilegeEscalation: false
+          runAsNonRoot:             true
+          runAsUser:                70
           capabilities:
+            drop:
+            - ALL
             add:
+            - CHOWN
             - SETUID
             - SETGID
-
-          # XXX: The install of this helm chart in the CI/CD environment fails
-          # if I specify runAsNonRoot or runAsUser.  It works fine however in
-          # a local helm/kubernetes environment.
-          # runAsNonRoot:             true
-          # runAsUser:                70
 
         image: "{{ .Values.global.image.dbrepository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.global.image.pullPolicy | quote }}
@@ -87,10 +94,15 @@ spec:
           value: {{ template "postgresql.dbname" . | quote }}
         - name: POSTGRES_INITDB_ARGS
           value: ""
+        {{- if .Values.container.keySecret }}
+        - name: POSTGRES_SSL_KEYDB
+          value: /var/local/keys/server.pem
+        {{- else }}
         - name: POSTGRES_SSL_CN
           value: ""
         - name: POSTGRES_UNSECURE
           value: "true"
+        {{- end }}
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -117,18 +129,26 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
 
         volumeMounts:
-        - name: {{ template "pvc.name" . }}
+        - name: {{ template "postgresql.pvc.name" . }}
           mountPath: /var/lib/postgresql/data
           subPath:   postgresql.data
+        {{- if .Values.container.keySecret }}
+        - name: {{ .Release.Name }}-postgresql-keys
+          mountPath: /var/local/keys
+        {{- end}}
 
       volumes:
-        - name: {{ template "pvc.name" . }}
+        - name: {{ template "postgresql.pvc.name" . }}
         {{- if .Values.global.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ template "pvc.name" . }}
+            claimName: {{ template "postgresql.pvc.name" . }}
         {{- else }}
           emptyDir: {}
         {{- end }}
-
+        {{- if .Values.container.keySecret }}
+        - name: {{ .Release.Name }}-postgresql-keys
+          secret:
+            secretName: {{ .Values.container.keySecret }}
+        {{- end }}
 {{- end }}
 
