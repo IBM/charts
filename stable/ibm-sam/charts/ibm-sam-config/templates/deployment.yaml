@@ -44,8 +44,8 @@ spec:
       hostPID:        false
       hostIPC:        false
       securityContext:
-        runAsNonRoot: false
-        runAsUser:    0
+        runAsNonRoot: true
+        runAsUser:    6000
 
       affinity:
 {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
@@ -70,12 +70,20 @@ spec:
           privileged:               false
           readOnlyRootFilesystem:   false
           allowPrivilegeEscalation: true
-          runAsNonRoot:             false
-          runAsUser:                0
+          runAsNonRoot:             true
+          runAsUser:                6000
           capabilities:
+            drop:
+            - ALL
             add:
-            - SETUID
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - KILL
+            - NET_BIND_SERVICE
+            - SETFCAP
             - SETGID
+            - SETUID
 
         image: "{{ .Values.global.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.global.image.pullPolicy | quote }}
@@ -101,7 +109,7 @@ spec:
         livenessProbe:
           tcpSocket:
             port: {{ template "admin.port" . }}
-          initialDelaySeconds: 15
+          initialDelaySeconds: 120
           periodSeconds: 20 
 
         ports:
@@ -112,19 +120,15 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
 
         volumeMounts:
-        - name: {{ template "pvc.name" . }}
+        - name: {{ template "config.pvc.name" . }}
           mountPath: /var/shared
           subPath: config.shared
-        - name: {{ template "pvc.name" . }}
-          mountPath: /var/application.logs
-          subPath: config.logs
 
       volumes:
-        - name: {{ template "pvc.name" . }}
+        - name: {{ template "config.pvc.name" . }}
         {{- if .Values.global.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ template "pvc.name" . }}
+            claimName: {{ template "config.pvc.name" . }}
         {{- else }}
           emptyDir: {}
         {{- end }}
-
