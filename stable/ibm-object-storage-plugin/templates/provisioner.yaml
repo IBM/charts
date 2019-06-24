@@ -42,16 +42,32 @@ spec:
       serviceAccountName: ibmcloud-object-storage-plugin
       containers:
         - name: {{ template "ibm-object-storage-plugin.name" . }}-container
-          {{- if contains "ICP" (.Capabilities.KubeVersion | quote | upper) }}
+          {{- if contains "ICP" (.Values.provider | quote | upper) }}
           image: "{{ .Values.image.pluginImage.publicRegistry }}:{{ .Values.image.pluginBuild }}"
           {{- else }}
           image: "{{ .Values.image.pluginImage.ibmContainerRegistry }}:{{ .Values.image.pluginBuild }}"
           {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "200m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
           securityContext:
             capabilities:
               drop: ["ALL"]
           livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - ps aux | grep "provisioner=ibm.io/ibmc-s3fs" | grep -v grep > /dev/null
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 1
+          readinessProbe:
             exec:
               command:
               - sh
