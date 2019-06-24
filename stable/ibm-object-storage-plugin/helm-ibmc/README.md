@@ -5,9 +5,9 @@ A Helm plugin that installs or upgrades Helm charts in IBM K8S Service
 * https://docs.helm.sh/helm/#helm-ibmc
 
 ## Installation
-  * `helm repo add iks-charts https://registry.bluemix.net/helm/iks-charts`
+  * `helm repo add ibm-charts https://icr.io/helm/ibm-charts`
   * `helm repo update`
-  * `helm fetch --untar iks-charts/ibm-object-storage-plugin`
+  * `helm fetch --untar ibm-charts/ibm-object-storage-plugin`
   * `helm plugin install ./ibm-object-storage-plugin/helm-ibmc`
   * `helm ibmc --help`
 
@@ -18,31 +18,39 @@ A Helm plugin that installs or upgrades Helm charts in IBM K8S Service
 
 ### Install IBM Cloud Object Storage plug-in chart
   * `helm ibmc install <chart repo>/<chart name> [flags]`
-  * `helm ibmc install iks-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin`
+  * `helm ibmc install ibm-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin`
 
 ### Example
 ```
-Mayank-Macbooks-MacBook-Pro:~ mayank-macbook$ helm plugin install ./ibm-object-storage-plugin/helm-ibmc
+$ helm plugin install ./ibm-object-storage-plugin/helm-ibmc
 Installed plugin: ibmc
-Mayank-Macbooks-MacBook-Pro:~ mayank-macbook$ helm ibmc --help
-Install or upgrade Helm charts in IBM K8S Service
+$ helm ibmc --help
+Install or upgrade Helm charts in IBM K8S Service(IKS) and IBM Cloud Private(ICP)
 
 Available Commands:
-    helm ibmc install [CHART] [flags]              Install a Helm chart
-    helm ibmc upgrade [RELEASE] [CHART] [flags]    Upgrades the release to a new version of the Helm chart
+    helm ibmc install [CHART] [flags]                      Install a Helm chart
+    helm ibmc upgrade [RELEASE] [CHART] [flags]            Upgrades the release to a new version of the Helm chart
+    helm ibmc template [CHART] [flags] [--apply|--delete]  Install/uninstall a Helm chart without tiller
 
 Available Flags:
-    --verbos                      (Optional) Verbosity intensifies...
-    -f, --values valueFiles       (Optional) specify values in a YAML file (can specify multiple) (default [])
     -h, --help                    (Optional) This text.
     -u, --update                  (Optional) Update this plugin to the latest version
 
 Example Usage:
-    helm ibmc install iks-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin
+    With Tiller:
+        Install:   helm ibmc install ibm-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin
+    Without Tiller:
+        Install:   helm ibmc template ibm-charts/ibm-object-storage-plugin --apply
+        Dry-run:   helm ibmc template ibm-charts/ibm-object-storage-plugin
+        Uninstall: helm ibmc template ibm-charts/ibm-object-storage-plugin --delete
+
+Note:
+    1. It is always recommended to install latest version of ibm-object-storage-plugin chart.
+    2. It is always recommended to have 'kubectl' client up-to-date.
 ```
 
 ```
-Mayank-Macbooks-MacBook-Pro:~ mayank-macbook$ helm ibmc install iks-charts/ibm-object-storage-plugin --verbos --name ibm-object-storage-plugin
+$ helm ibmc install ibm-charts/ibm-object-storage-plugin --verbos --name ibm-object-storage-plugin
 PARAMS
 --name ibm-object-storage-plugin
  .........................
@@ -50,11 +58,11 @@ Helm kubeconfig = /Users/mayank-macbook/.bluemix/plugins/container-service/clust
 Helm home = /Users/mayank-macbook/.helm
 Helm plugin = /Users/mayank-macbook/.helm/plugins
 Helm plugin dir = /Users/mayank-macbook/.helm/plugins/helm-ibmc
-PASSTHRU = install iks-charts/ibm-object-storage-plugin
+PASSTHRU = install ibm-charts/ibm-object-storage-plugin
 FLAGS = --name ibm-object-storage-plugin
 Installing the Helm chart
 DC: dal10
-Chart: iks-charts/ibm-object-storage-plugin
+Chart: ibm-charts/ibm-object-storage-plugin
 NAME:   ibm-object-storage-plugin
 LAST DEPLOYED: Wed Mar 20 11:21:14 2019
 NAMESPACE: default

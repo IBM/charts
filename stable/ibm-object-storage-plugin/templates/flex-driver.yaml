@@ -43,16 +43,34 @@ spec:
       serviceAccountName: ibmcloud-object-storage-driver
       containers:
         - name: {{ template "ibm-object-storage-plugin.drivername" . }}-container
-          {{- if contains "ICP" (.Capabilities.KubeVersion | quote | upper) }}
+          {{- if contains "ICP" (.Values.provider | quote | upper) }}
           image: "{{ .Values.image.driverImage.publicRegistry }}:{{ .Values.image.driverBuild }}"
           {{- else }}
           image: "{{ .Values.image.driverImage.ibmContainerRegistry }}:{{ .Values.image.driverBuild }}"
           {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "200m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
           securityContext:
             capabilities:
               drop: ["ALL"]
           livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - version1=$(cat /home/s3-dep/version.txt | grep "^Version" );
+                version2=$(/host/kubernetes/kubelet-plugins/volume/exec/ibm~ibmc-s3fs/ibmc-s3fs version);
+                if [[ "$version1" == "$version2" ]]; then exit 0; else exit 1; fi
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            failureThreshold: 1
+          readinessProbe:
             exec:
               command:
               - sh
