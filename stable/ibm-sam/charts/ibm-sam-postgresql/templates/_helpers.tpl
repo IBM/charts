@@ -42,3 +42,14 @@ Our postgresql database details
 {{- printf "5432" -}}
 {{- end -}}
 
+{{/*
+The name of our persistent volume claim.
+*/}}
+{{- define "postgresql.pvc.name" -}}
+{{- if .Values.dataVolume.existingClaimName -}}
+{{- printf "%s" .Values.dataVolume.existingClaimName -}}
+{{- else }}
+{{- printf "%s-pvc-db" .Release.Name -}}
+{{- end }}
+{{- end -}}
+

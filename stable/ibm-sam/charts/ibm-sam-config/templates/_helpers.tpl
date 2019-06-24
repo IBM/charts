@@ -35,3 +35,14 @@ this (by the DNS naming spec).
 {{- printf "https://%s:9443/shared_volume" (printf "%s-isamconfig" .Release.Name | trunc 63 | trimSuffix "-") -}}
 {{- end -}}
 
+{{/*
+The name of our persistent volume claim.
+*/}}
+{{- define "config.pvc.name" -}}
+{{- if .Values.dataVolume.existingClaimName -}}
+{{- printf "%s" .Values.dataVolume.existingClaimName -}}
+{{- else }}
+{{- printf "%s-pvc-cfg" .Release.Name -}}
+{{- end }}
+{{- end -}}
+

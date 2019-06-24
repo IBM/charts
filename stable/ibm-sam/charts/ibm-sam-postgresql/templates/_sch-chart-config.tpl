@@ -29,7 +29,7 @@ sch:
     metering:
       productName: "IBM Security Access Manager"
       productID: "5725-V90"
-      productVersion: "9.0.6.0"
+      productVersion: "9.0.7.0"
     nodeAffinity:
       nodeAffinityRequiredDuringScheduling:
         operator: In

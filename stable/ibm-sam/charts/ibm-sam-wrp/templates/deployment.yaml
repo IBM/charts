@@ -1,8 +1,10 @@
 {{- include "sch.config.init" (list . "isamwrp.sch.chart.config.values") -}}
 
 {{- $dot := . }}
-{{- range $index, $inst := until (.Values.container.instances|int) -}}
-{{- $instance := (printf "%d" $inst) -}}
+{{- range $index, $inst := .Values.container.instances }}
+{{- $instance := lower $inst }}
+{{- $wrp_instance := $inst }}
+{{- $index    := (printf "%d" $index) }}
 
 #
 # This file contains the main deployment definition used by the helm chart 
@@ -49,8 +51,8 @@ spec:
       hostPID:        false
       hostIPC:        false
       securityContext:
-        runAsNonRoot: false
-        runAsUser:    0
+        runAsNonRoot: true
+        runAsUser:    6000
 
       affinity:
 {{- include "sch.affinity.nodeAffinity" (list $dot) | indent 8 }}
@@ -74,12 +76,20 @@ spec:
           privileged:               false
           readOnlyRootFilesystem:   false
           allowPrivilegeEscalation: true
-          runAsNonRoot:             false
-          runAsUser:                0
+          runAsNonRoot:             true
+          runAsUser:                6000
           capabilities:
+            drop:
+            - ALL
             add:
-            - SETUID
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - KILL
+            - NET_BIND_SERVICE
+            - SETFCAP
             - SETGID
+            - SETUID
 
         image: "{{ $.Values.global.image.repository }}:{{ $.Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" $.Values.global.image.pullPolicy | quote }}
@@ -91,7 +101,7 @@ spec:
         - name: SERVICE
           value: webseal
         - name: INSTANCE
-          value: {{ printf "wrp_%s" $instance }}
+          value: {{ printf "%s" $wrp_instance }}
         - name: ADMIN_PWD
           valueFrom:
             secretKeyRef:
@@ -112,9 +122,8 @@ spec:
         livenessProbe:
           exec:
             command:
-            - /bin/bash
-            - -c
-            - "if [ ! -f /var/run/bootstrap.pid ]; then /sbin/health_check.sh; fi"
+            - /sbin/health_check.sh 
+            - livenessProbe
           initialDelaySeconds: 10
           periodSeconds: 10
 
@@ -130,27 +139,13 @@ spec:
           periodSeconds: 10
 
         ports:
-        - name: {{ include "wrp.service.name" (list $dot $instance) }}
+        - name: {{ include "wrp.service.name" (list $dot $index) }}
           containerPort: {{ template "runtime.port" $dot }}
-        - name: {{ include "wrp.admin.service.name" (list $dot $instance) }}
+        - name: {{ include "wrp.admin.service.name" (list $dot $index) }}
           containerPort: {{ template "admin.port" $dot }}
 
         resources:
 {{ toYaml $.Values.resources | indent 10 }}
-
-        volumeMounts:
-        - name: {{ template "pvc.name" $dot }}
-          mountPath: /var/application.logs
-          subPath: wrp.logs
-
-      volumes:
-        - name: {{ template "pvc.name" $dot }}
-        {{- if $.Values.global.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ template "pvc.name" $dot }}
-        {{- else }}
-          emptyDir: {}
-        {{- end }}
 
 ---
 

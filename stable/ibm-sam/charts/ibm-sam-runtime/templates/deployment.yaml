@@ -48,8 +48,8 @@ spec:
       hostPID:        false
       hostIPC:        false
       securityContext:
-        runAsNonRoot: false
-        runAsUser:    0
+        runAsNonRoot: true
+        runAsUser:    6000
 
       affinity:
 {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
@@ -73,12 +73,20 @@ spec:
           privileged:               false
           readOnlyRootFilesystem:   false
           allowPrivilegeEscalation: true
-          runAsNonRoot:             false
-          runAsUser:                0
+          runAsNonRoot:             true
+          runAsUser:                6000
           capabilities:
+            drop:
+            - ALL
             add:
-            - SETUID
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - KILL
+            - NET_BIND_SERVICE
+            - SETFCAP
             - SETGID
+            - SETUID
 
         image: "{{ .Values.global.image.repository }}:{{ .Values.global.image.tag }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.global.image.pullPolicy | quote }}
@@ -109,9 +117,8 @@ spec:
         livenessProbe:
           exec:
             command:
-            - /bin/bash
-            - -c
-            - "if [ ! -f /var/run/bootstrap.pid ]; then /sbin/health_check.sh; fi"
+            - /sbin/health_check.sh 
+            - livenessProbe
           initialDelaySeconds: 10
           periodSeconds: 10
 
@@ -135,19 +142,4 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
 
-        volumeMounts:
-        - name: {{ template "pvc.name" . }}
-          mountPath: /var/application.logs
-          subPath: runtime.logs
-
-      volumes:
-        - name: {{ template "pvc.name" . }}
-        {{- if .Values.global.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ template "pvc.name" . }}
-        {{- else }}
-          emptyDir: {}
-        {{- end }}
-
 {{- end }}
-
