@@ -25,6 +25,7 @@ When you install the IBM Cloud Object Storage plug-in Helm chart, the following 
   - Install the [IBM Cloud Private CLI](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/manage_cluster/install_cli.html) and the [Kubernetes CLI](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/manage_cluster/install_kubectl.html).
   - [Log in to your cluster](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.1/manage_cluster/cli_commands.html#login).
   - Install the [Helm CLI](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.1/app_center/create_helm_cli.html) on your local machine.
+  - For airgap/offline scenario, set the global scope for uploaded images "ibmcloud-object-storage-plugin" and "ibmcloud-object-storage-driver"
 
 ### PodSecurityPolicy Requirements
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
@@ -186,63 +187,63 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
 **_IBM Cloud Kubernetes Service:_**
 
 1. Verify that you set up a service account for tiller.
- 
+
    ```
    kubectl get serviceaccount -n kube-system | grep tiller
    ```
 
    **Tip:** If no service account is shown in your CLI output, run `kubectl apply -f https://raw.githubusercontent.com/IBM-Cloud/kube-samples/master/rbac/serviceaccount-tiller.yaml` to create the service account. Then, run `helm init --service-account tiller` to initialize Helm.  
 
-2. Add the IBM Cloud Helm repository `iks-charts` to your cluster.
-   
+2. Add the IBM Cloud Helm repository `ibm-charts` to your cluster.
+
    ```
-   helm repo add iks-charts https://registry.bluemix.net/helm/iks-charts
+   helm repo add ibm-charts https://icr.io/helm/ibm-charts
    ```
 
 3. Update the Helm repo to retrieve the latest version of all Helm charts in this repo.
- 
+
    ```
    helm repo update
    ```
 
 4. Download the Helm chart and unpack the chart in your current directory. Then, navigate to the `ibm-object-storage-plugin` directory.  
- 
+
    ```
-   helm fetch --untar iks-charts/ibm-object-storage-plugin && cd ibm-object-storage-plugin
+   helm fetch --untar ibm-charts/ibm-object-storage-plugin && cd ibm-object-storage-plugin
    ```
 5. To limit the IBM Cloud Object Storage plug-in access to Kubernetes secrets, go to **Optional: Limit secret access** ; otherwise, if there is no limitation to be set, continue with next step.
 
 6.  Install the IBM Cloud Object Storage Helm plug-in `ibmc`. The plug-in is used to automatically retrieve your cluster location and to set the Cloud Object Storage s3 API endpoint for your IBM Cloud Object Storage buckets in your storage classes.
-    
+
        1. Install the `ibmc` Helm plug-in.
-       
+
           ```
           helm plugin install ./helm-ibmc
           ```
           Example output:
-       
+
           ```
           Installed plugin: ibmc
           ```
        2. Verify that the `ibmc` plug-in is installed successfully.
-       
+
           ```
           helm ibmc --help
           ```
 7.  Install the IBM Cloud Object Storage plug-in. When you install the plug-in, pre-defined storage classes are added to your cluster.
 
     Example: Install chart from helm registry, without any limitation to access specific Kubernetes secrets:
-      
+
     ```
-     helm ibmc install iks-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin
+     helm ibmc install ibm-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin
     ```
-  
+
     Example: Install chart from local path, with a limitation to access the Cloud Object Storage's secrets only, as described in the `Optional: Limit secret access` section at the bottom:
-    
+
     ```
     helm ibmc install ./ --name ibm-object-storage-plugin
     ```
- 
+
 **_IBM Cloud Private:_**
 
 1. Initialize Helm CLI and log on to IBM Cloud Private cluster
@@ -252,15 +253,15 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
 
    helm init --client-only
 
-   cloudctl login -a https://mycluster.icp:8443 --skip-ssl-validation
+   cloudctl login -a https://<Master Node IP>:8443 --skip-ssl-validation
    ```
 
 2. Add the internal IBM Cloud Private Helm repository called mgmt-charts.
- 
+
    ```
-   helm repo add mgmt-charts https://mycluster.icp:8443/mgmt-repo/charts --ca-file $HELM_HOME/ca.pem --cert-file $HELM_HOME/cert.pem --key-file $HELM_HOME/key.pem
+   helm repo add mgmt-charts https://<Master Node IP>:8443/mgmt-repo/charts --ca-file $HELM_HOME/ca.pem --cert-file $HELM_HOME/cert.pem --key-file $HELM_HOME/key.pem
    "mgmt-charts" has been added to your repositories
- 
+
    ```
 
 3. List the repositories.
@@ -270,10 +271,10 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
    NAME           URL                                             
    stable         https://kubernetes-charts.storage.googleapis.com
    local          http://127.0.0.1:8879/charts                    
-   mgmt-charts    https://mycluster.icp:8443/mgmt-repo/charts  
+   mgmt-charts    https://<Master Node IP>:8443/mgmt-repo/charts  
    ```
 4. Download the Helm chart and unpack the chart in your current directory. Then, navigate to the ibm-object-storage-plugin directory.
- 
+
    ```
    helm fetch --untar mgmt-charts/ibm-object-storage-plugin && cd ibm-object-storage-plugin
    ```
@@ -283,18 +284,20 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
 6. Replace `<s3_endpoint>` with the Cloud Object Storage s3 endpoint that you want to use. For [AWS S3](https://docs.aws.amazon.com/general/latest/gr/rande.html) endpoints provide `Region` for `<storageclass_name>` and in case of [IBM COS](https://cloud.ibm.com/docs/services/cloud-object-storage/basics/classes.html#locationconstraint) endpoints provide `Locationconstraint`. `<namespace>` is custom namespace or the predefined namespace.
 
      Example: Install with ibm-privileged-psp pod security policy:
-     
+
      ```
      helm install ./ --name ibm-object-storage-plugin [--namespace <namespace>] --set cos.endpoint=https://<s3_endpoint> --set cos.storageClass=<storageclass_name> --tls
      ```
-     
+
      Example: Install with custom pod security policy:
-    
+
      ```
      helm install ./ --name ibm-object-storage-plugin [--namespace <namespace>] --set useCustomPSP=true --set cos.endpoint=https://<s3_endpoint> --set cos.storageClass=<storageclass_name> --tls
      ```
-     
-     Note the `useCustomPSP` flag passed to the command
+
+     Note the `useCustomPSP` flag passed to the command.
+
+     Also add `--set workerOS=redhat` in above commands if worker node's OS is `Red Hat`. To check worker node's OS, run `kubectl get nodes -o jsonpath='{ .items[0].status.nodeInfo.osImage }{"\n"}'`
 
 ### **Optional: Limit secret access**
 Limit the IBM Cloud Object Storage plug-in to access only the Kubernetes secrets that hold your IBM Cloud Object Storage service credentials. By default, the plug-in is authorized to access all Kubernetes secrets in your cluster.
@@ -358,9 +361,9 @@ If you do not want to provision and use IBM Cloud Object Storage in your cluster
 **Note:** Removing the plug-in does not remove existing PVCs, PVs, or data. When you remove the plug-in, all the related pods and daemon sets are removed from your cluster. You cannot provision new IBM Cloud Object Storage for your cluster or use existing PVCs and PVs after you remove the plug-in, unless you configure your app to use the IBM Cloud Object Storage API directly.
 
 **Verify that you do not have any PVCs or PVs in your cluster that use IBM Cloud Object Storage.**
-  
+
   List all pods that mount a specific PVC.
- 
+
    ```
    kubectl get pods --all-namespaces -o=jsonpath='{range .items[*]}{"\n"}{.metadata.name}{":\t"}{range .spec.volumes[*]}{.persistentVolumeClaim.claimName}{" "}{end}{end}' | grep "<pvc_name>"
    ```
@@ -369,7 +372,7 @@ If one or more pod is returned, remove the pods or deployment before removing th
 
 * Go to **IBM Cloud Kubernetes Service** for uninstallation on IKS Cluster
 * Go to **IBM Cloud Private** for uninstallation on ICP Cluster
-   
+
 **IBM Cloud Kubernetes Service:**
 
 1. Find the installation name of your Helm chart.
@@ -379,34 +382,34 @@ If one or more pod is returned, remove the pods or deployment before removing th
      ```
 
 2. Delete the IBM Cloud Object Storage plug-in by removing the Helm chart.
-  
+
      ```
      helm delete --purge <helm_chart_name>
      ```
-     
+
 3. Remove the `ibmc` Helm plug-in.
-   
+
    1. Remove the plug-in.
-    
+
       ```
       rm -rf ~/.helm/plugins/helm-ibmc
       ```
    2. Verify that the `ibmc` plug-in is removed.
-    
+
       ```
       helm plugin list
       ```
       Example output:
-    
+
       ```
       NAME    VERSION    DESCRIPTION
       ```
       The `ibmc` plug-in is removed successfully if the `ibmc` plug-in is not listed in your CLI output.
 
 **IBM Cloud Private:**
- 
-1. Find the installation name of your Helm chart. 
- 
+
+1. Find the installation name of your Helm chart.
+
      ```
      helm ls --tls | grep ibm-object-storage-plugin
      ```
@@ -418,7 +421,7 @@ If one or more pod is returned, remove the pods or deployment before removing th
      ```
 
 **Verify that the IBM Cloud Object Storage pods are removed.**
- 
+
    ```
    kubectl get pods -n <namespace> | grep object-storage
    ```
@@ -443,10 +446,11 @@ Review the parameters that you can configure for IBM Cloud Private during the IB
 |`cos.endpoint`|The s3 API endpoint for your Cloud Object Storage instance that you want to use. The API endpoint varies depending on the type of Cloud Object Storage that you use. |IBM Cloud Object Storage service: `https://s3.us.cloud-object-storage.appdomain.cloud`, Minio: `http://minio-service.default:9000`|`https://<Endpoint URL>`|
 |`cos.storageClass`|The name of the storage class which refers to `Location + Storage Class` / `LocationConstraint` as discussed [here](https://cloud.ibm.com/docs/services/cloud-object-storage/basics/classes.html#locationconstraint) |`standard`| `<StorageClass>`|
 
+## Tips:
+- By default, object-storage plugin storageclasses are created with `"AESGCM"` as `tls-cipher-suite` for `Debian` family's operating systems and `"ecdhe_rsa_aes_128_gcm_sha_256"` as `tls-cipher-suite` for `Red Hat` family's operating systems. Cipher suite can be overridden from the PVC using `ibm.io/tls-cipher-suite: "<TLS_CIPHER_SUITE>"` under `annotations` section.
+
 ## Limitations
 - `runAsUser` and `fsGroup` IDs should be same to provide non-root user access to COS volume mount.
-- With RedHat / CentOS, use TLS Cipher `ecdhe_rsa_aes_128_gcm_sha_256`. You can set it from PVC using
-`ibm.io/tls-cipher-suite: "ecdhe_rsa_aes_128_gcm_sha_256"` under `annotations` section.
 - **Platform support:** This Helm chart is validated to run in:
   - IBM Cloud Kubernetes Service
   - IBM Cloud Private with local Cloud Object Storage
@@ -457,4 +461,3 @@ Review the following links for further information about IBM Cloud Object Storag
 - [General information about IBM Cloud Object Storage](https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-about-ibm-cloud-object-storage#about-ibm-cloud-object-storage).
 - [Create your first persistent volume claim (PVC)](https://cloud.ibm.com/docs/containers?topic=containers-object_storage#add_cos) for your app that points to a bucket in Cloud Object Storage.
 - [Use Cloud Object Storage in a Kubernetes stateful set](https://cloud.ibm.com/docs/containers?topic=containers-object_storage#cos_statefulset).
-
