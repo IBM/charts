@@ -2,12 +2,6 @@
 
 [Hazelcast IMDG Enterprise](https://hazelcast.com/products/enterprise/) is the most widely used in-memory data grid with hundreds of thousands of installed clusters around the world. It offers caching solutions ensuring that data is in the right place when it’s needed for optimal performance.
 
-## Quick Start
-
-```bash
-$ helm install --set hazelcast.licenseKey=<license_key> community/hazelcast-enterprise
-```
-
 ## Introduction
 
 This chart bootstraps a [Hazelcast Enterprise](https://github.com/hazelcast/hazelcast-docker/tree/master/hazelcast-enterprise-kubernetes) and [Management Center](https://github.com/hazelcast/management-center-docker) deployments on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
@@ -15,7 +9,7 @@ This chart bootstraps a [Hazelcast Enterprise](https://github.com/hazelcast/haze
 ## Prerequisites
 
 - Kubernetes 1.9+
-- [Container Image Security](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html) is enabled by default in ICP 3.1+. Therefore, Docker Hub container registry `docker.io/hazelcast/*` must be added to the list of trusted registries.
+- [Container Image Security](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.0/manage_images/image_security.html) is enabled by default in IBM Cloud Private 3.1+. Therefore, Docker Hub container registry `docker.io/hazelcast/*` must be added to the list of trusted registries.
 
 An example cluster image policy as below :
 
@@ -29,12 +23,79 @@ spec:
   - name: docker.io/hazelcast/*
 ```
 
+### PodSecurityPolicy Requirements
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
+
+* Predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)
+* Custom PodSecurityPolicy definition:
+
+```yaml
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: hazelcast-enterprise-psp
+spec:
+  allowPrivilegeEscalation: false
+  forbiddenSysctls:
+  - '*'
+  fsGroup:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  volumes:
+  - configMap
+  - emptyDir
+  - secret
+  - persistentVolumeClaim
+```
+
+* Custom ClusterRole for the custom PodSecurityPolicy:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hazelcast-enterprise-clusterrole
+rules:
+- apiGroups:
+  - extensions
+  resourceNames:
+  - hazelcast-enterprise-psp
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+  ```
+
+### Hazelcast Enterprise License Key
+
+You need to create a secret with the Hazelcast Enterprise License Key:
+
+```bash
+$ kubectl create secret generic hz-enterprise-license-key --from-literal=key=LICENSE-KEY
+```
+
+If you don't have a valid Hazelcast Enterprise license, you can contact sales@hazelcast.com for a trial license key.
+
 ## Installing the Chart
 
 To install the chart with the release name `my-release`:
 
 ```bash
-$ helm install --set hazelcast.licenseKey=<license_key> --name my-release community/hazelcast-enterprise
+$ helm install --name my-release community/hazelcast-enterprise
 ```
 
 The command deploys Hazelcast on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
@@ -62,8 +123,7 @@ The following table lists the configurable parameters of the Hazelcast chart and
 | `image.pullPolicy`                         | Image pull policy                                                                                              | `IfNotPresent`                                       |
 | `image.pullSecrets`                        | Specify docker-registry secret names as an array                                                               | `nil`                                                |
 | `cluster.memberCount`                      | Number of Hazelcast members                                                                                    | 2                                                    |
-| `hazelcast.licenseKey`                     | Hazelcast Enterprise License Key                                                                               | `nil`                                                |
-| `hazelcast.licenseKeySecretName`           | Kubernetes Secret Name, where Hazelcast Enterprise License Key is stored (can be used instead of licenseKey)   | `nil`                                                |
+| `hazelcast.licenseKeySecretName`           | Kubernetes Secret Name, where Hazelcast Enterprise License Key is stored                                       | `nil`                                                |
 | `hazelcast.rest`                           | Enable REST endpoints for Hazelcast member                                                                     | `true`                                               |
 | `hazelcast.javaOpts`                       | Additional JAVA_OPTS properties for Hazelcast member                                                           | `nil`                                                |
 | `hazelcast.configurationFiles`             | Hazelcast configuration files                                                                                  | `{DEFAULT_HAZELCAST_XML}`                            |
@@ -92,8 +152,7 @@ The following table lists the configurable parameters of the Hazelcast chart and
 | `mancenter.image.pullPolicy`               | Image pull policy                                                                                              | `IfNotPresent`                                       |
 | `mancenter.image.pullSecrets`              | Specify docker-registry secret names as an array                                                               | `nil`                                                |
 | `mancenter.javaOpts`                       | Additional JAVA_OPTS properties for Hazelcast Management Center                                                | `nil`                                                |
-| `mancenter.licenseKey`                     | License Key for Hazelcast Management Center, if not provided, can be filled in the web interface               | `nil`                                                |
-| `mancenter.licenseKeySecretName`           | Kubernetes Secret Name, where Management Center License Key is stored (can be used instead of licenseKey)      | `nil`                                                |
+| `mancenter.licenseKeySecretName`           | Kubernetes Secret Name, where Management Center License Key is stored                                          | `nil`                                                |
 | `mancenter.nodeSelector`                   | Hazelcast Management Center node labels for pod assignment                                                     | `nil`                                                |
 | `mancenter.resources`                      | CPU/Memory resource requests/limits                                                                            | `nil`                                                |
 | `mancenter.persistence.enabled`            | Enable Persistent Volume for Hazelcast Management                                                              | `true`                                               |
@@ -119,7 +178,7 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 
 ```bash
 $ helm install --name my-release \
-  --set hazelcast.licenseKey=<license_key>,cluster.memberCount=3,hazelcast.rest=false \
+  --set cluster.memberCount=3,hazelcast.rest=false \
     community/hazelcast-enterprise
 ```
 
@@ -130,8 +189,6 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 ```bash
 $ helm install --name my-release -f values.yaml community/hazelcast-enterprise
 ```
-
-> **Tip**: You can use the default [values.yaml](values.yaml) with the `hazelcast.license` filled in
 
 ## Custom Hazelcast configuration
 
@@ -165,3 +222,9 @@ hazelcast:
         <!-- Custom Configuration Placeholder -->
       </hazelcast>
 ```
+
+## Support
+Hazelcast has a wide variety of community and commercial support options available for users:
+* [Hazelcast Commercial Support](https://hazelcast.zendesk.com/hc/en-us)
+* [Hazelcast StackOverflow](https://stackoverflow.com/questions/tagged/hazelcast)
+* [Hazelcast Google Group](https://groups.google.com/forum/#!forum/hazelcast)
