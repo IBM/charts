@@ -23,7 +23,8 @@ spec:
         release: {{ .Release.Name }}
       annotations:
         sidecar.istio.io/inject: "false"
-        scheduler.alpha.kubernetes.io/critical-pod: ""
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
         productName: kiali
         productID: kiali_{{ .Chart.Version }}_apachev2_00000
         productVersion: {{ .Chart.Version }}
@@ -47,18 +48,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: SERVER_CREDENTIALS_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.dashboard.secretName }}
-              key: {{ .Values.dashboard.usernameKey }}
-              optional: true
-        - name: SERVER_CREDENTIALS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.dashboard.secretName }}
-              key: {{ .Values.dashboard.passphraseKey }}
-              optional: true
         - name: PROMETHEUS_SERVICE_URL
           value: {{ .Values.prometheusAddr }}
 {{- if .Values.contextPath }}
@@ -78,6 +67,8 @@ spec:
         volumeMounts:
         - name: kiali-configuration
           mountPath: "/kiali-configuration"
+        - name: kiali-secret
+          mountPath: "/kiali-secret"
         resources:
 {{- if .Values.resources }}
 {{ toYaml .Values.resources | indent 10 }}
@@ -88,8 +79,13 @@ spec:
       - name: kiali-configuration
         configMap:
           name: kiali
+      - name: kiali-secret
+        secret:
+          secretName: {{ .Values.dashboard.secretName }}
+          optional: true
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAntiAffinity" . | indent 6 }}
       {{- if .Values.tolerations }}
       tolerations:
 {{ toYaml .Values.tolerations | indent 6 }}

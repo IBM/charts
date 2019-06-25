@@ -23,7 +23,6 @@ spec:
         release: {{ .Release.Name }}
       annotations:
         sidecar.istio.io/inject: "false"
-        scheduler.alpha.kubernetes.io/critical-pod: ""
         productName: prometheus
         productID: prometheus_{{ .Chart.Version }}_apachev2_00000
         productVersion: {{ .Chart.Version }}
@@ -31,16 +30,6 @@ spec:
       serviceAccountName: prometheus
 {{- if .Values.global.priorityClassName }}
       priorityClassName: "{{ .Values.global.priorityClassName }}"
-{{- end }}
-{{- if .Values.security.enabled }}
-      initContainers:
-      - name: prom-init
-        image: "{{ .Values.promInit.image.repository }}:{{ .Values.promInit.image.tag }}"
-        command: ['sh', '-c', 'counter=0; until [ "$counter" -ge 30 ]; do if [ -f /etc/istio-certs/key.pem ]; then exit 0; else echo waiting for istio certs && sleep 1 && counter=$((counter+1)); fi; done; exit 1;']
-        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-        volumeMounts:
-          - mountPath: /etc/istio-certs
-            name: istio-certs
 {{- end }}
       containers:
         - name: prometheus
@@ -77,11 +66,14 @@ spec:
           name: prometheus
       - name: istio-certs
         secret:
+{{- if not .Values.security.enabled }}
           defaultMode: 420
+{{- end }}
           optional: true
           secretName: istio.default
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAntiAffinity" . | indent 6 }}
       {{- if .Values.tolerations }}
       tolerations:
 {{ toYaml .Values.tolerations | indent 6 }}
