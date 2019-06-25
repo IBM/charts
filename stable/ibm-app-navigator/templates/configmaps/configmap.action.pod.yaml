@@ -1,0 +1,43 @@
+{{- /* ###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prism.actions.pod
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }} 
+data:
+  url-actions: |
+    [
+      { 
+        "name":"detail", 
+        "text":"View detail", 
+        "text.nls":"action.url.pod.detail.text",
+        "description":"View Pod detail",  
+        "description.nls":"action.url.pod.detail.desc", 
+{{ if eq .Values.env.kubeEnv "minikube" }}
+        "url-pattern":"${builtin.icp-console-url}/pod/${resource.$.metadata.namespace}/${resource.$.metadata.name}?namespace=${resource.$.metadata.namespace}", 
+{{ else }}
+        "url-pattern":"${builtin.icp-console-url}/workloads/deployments/${resource.$.metadata.namespace}/${snippet.get_name(${func.kubectlGet(deployments, -l, app=${resource.$.metadata.labels.app}, -n, ${resource.$.metadata.namespace}, -o, json)})}/pods/${resource.$.metadata.name}", 
+{{ end }}
+        "open-window": "current", 
+        "menu-item": "false" 
+      }
+    ]
+  snippets: |
+    {
+      "get_name": "function getName(json) 
+                   { 
+                     return JSON.parse(json).items[0].metadata.name;
+                   }"
+    }

@@ -1,0 +1,97 @@
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prism-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: ibm-app-nav-controller
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "ibm-app-nav-controller") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}         
+    spec:
+      affinity:
+{{ include "ibm-app-navigator.affinity.nodeAffinity" (list .) | indent 8 }}   
+      containers:
+      - name: prism-controller
+        image: "{{ .Values.appNavController.repository }}:{{ .Values.appNavController.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}       
+        env:
+          - name: PRISM_CONFIG_NAMESPACE
+            value: {{ .Release.Namespace }}
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - testcntlr.sh
+          initialDelaySeconds: 30            
+          periodSeconds: 5             
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - testcntlr.sh
+          initialDelaySeconds: 120
+          periodSeconds: 30             
+{{ include "ibm-app-navigator.container.security" . | indent 8 }}
+        resources:
+          {{- if .Values.appNavController.resources.constraints.enabled }}
+          limits:
+{{ toYaml .Values.appNavController.resources.limits | indent 12 }}
+          requests:
+{{ toYaml .Values.appNavController.resources.requests | indent 12 }}
+          {{- end }}            
+
+      - name: app-nav-api
+        image: "{{ .Values.appNavApi.repository }}:{{ .Values.appNavApi.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+          - name: PRISM_CONFIG_NAMESPACE
+            value: {{ .Release.Namespace }}
+          - name: KUBE_ENV
+            value: {{ .Values.env.kubeEnv }}
+        readinessProbe:
+          httpGet:
+            path: /prism/health
+            scheme: HTTPS
+            port: 9443
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /prism/health
+            scheme: HTTPS
+            port: 9443
+          initialDelaySeconds: 120
+          periodSeconds: 15
+          failureThreshold: 6        
+{{ include "ibm-app-navigator.container.security" . | indent 8 }}
+        resources:
+          {{- if .Values.appNavApi.resources.constraints.enabled }}
+          limits:
+{{ toYaml .Values.appNavApi.resources.limits | indent 12 }}
+          requests:
+{{ toYaml .Values.appNavApi.resources.requests | indent 12 }}
+          {{- end }}
+
+      restartPolicy: "Always"
+      serviceAccountName: {{ .Release.Name }}-sa
+{{ include "ibm-app-navigator.pod.security" . | indent 6 }}
+      tolerations:
+      - effect: NoSchedule
+        key: dedicated
+        operator: Exists
+      - key: CriticalAddonsOnly
+        operator: Exists
