@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+  labels:
+    app: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+# spec\.template\.spec\.affinity\.nodeAffinity\.requiredDuringSchedulingIgnoredDuringExecution\.nodeSelectorTerms\[[0-9]+\]\.matchExpressions\[[0-9]+\]\.key
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 51000
+  containers:
+  - name: nexus-test
+    image: {{ .Values.nexus.imageName }}:{{ .Values.nexus.imageTag }}
+    command: ["sh", "-c", "wget http://localhost:{{ .Values.nexus.nexusPort }}"]
+    securityContext:
+          runAsUser: 51000
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+  restartPolicy: Never
