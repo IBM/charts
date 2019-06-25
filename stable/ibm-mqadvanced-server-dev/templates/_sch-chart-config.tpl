@@ -37,3 +37,15 @@ sch:
 {{- define "ibm-mq.chart.config.platform" -}}
 {{ .Capabilities.KubeVersion.GitVersion | lower | regexFind "[a-z]ks|icp" -}}
 {{- end -}}
+
+{{- define "ibm-mq.sch.chart.config.metadata.labels" }}
+{{- range $key, $value := .Values.metadata.labels }}
+{{ $key }}: {{ $value | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "ibm-mq.chart.config.validate-multi-instance-persistence" -}}
+{{- if or (eq .Values.queueManager.multiInstance false) (and .Values.queueManager.multiInstance .Values.persistence.enabled) -}}
+ok
+{{- end -}}
+{{- end -}}
