@@ -1,32 +1,35 @@
 # Breaking Changes
 
-- On IBM Cloud Kubernetes Service you need to set `security.initVolumeAsRoot` to `true`
+- Now runs as user ID 888. If you are upgrading from a previous release, you need to set `security.initVolumeAsRoot` to `true` to enable changes to persistent file ownership.  You should then perform another upgrade to remove this setting.
+- You must now create a new [Secret](https://kubernetes.io/docs/concepts/configuration/secret/) in the target namespace that contains the 'admin' user password and optionally the 'app' user password to use for messaging.  If you are upgrading from a previous release, you need to set `queueManager.dev.secret.name` to the `name` of your new secret and `queueManager.dev.secret.adminPasswordKey` to the secret `key` that contains the 'admin' user password.  If you previously also set an 'app' user password you must set `queueManager.dev.secret.appPasswordKey` to the secret `key` that contains the 'app' user password.
+- MQSC files supplied will be verified before being run. Files containing invalid MQSC will cause the container to fail to start.
 
-# What’s new in the MQ Advanced for Developers Chart, Version 3.0.x
+# What’s new in the MQ Advanced for Developers Chart, Version 4.0.x
 
-- Updated to IBM MQ 9.1.2
-- Improved security (including running as non-root)
-- Additional IBM Cloud Pak content
-- Added ILMT annotations
-- README updates
+- Added support for multi-instance queue managers
+- Custom labels
+- Image is now based on Universal Base Image (UBI) version 7
+- Added ability to supply TLS Certificates to image for use within queue manager and MQ Console
+- Added ability to enable debug output
 
 # Fixes
 
-- V3.0.1: Fix capabilities when running init volume as root 
-- V3.0.0: Kibana dashboard fix
+- None
 
 # Prerequisites
 
-- None
+- The following IBM Platform Core Service is required: `tiller`
 
 # Documentation
 
 - [What's new and changed in IBM MQ Version 9.1.x](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.1.0/com.ibm.mq.pro.doc/q113110_.htm)
+- When upgrading from a previous version of this chart, you will experience a short outage, while the old Queue Manager container is replaced.  Client applications which are set to automatically reconnect should recover within seconds or minutes.
 
 # Version History
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 4.0.0 | June 2019 | >= 1.11.0 | = MQ 9.1.2.0 | Now runs as user ID 888; Password secret required; Verification of MQSC files | Added support for multi-instance queue managers; Custom labels; Image based on UBI; Added TLS certificates mechanism |
 | 3.0.1 | March 2019 | >= 1.9 | = MQ 9.1.2.0 | None | Fix capabilities when running init volume as root |
 | 3.0.0 | March 2019 | >= 1.9 | = MQ 9.1.2.0 | Set initVolumeAsRoot on IKS | Updated to IBM MQ 9.1.2; Improved security (including running as non-root); Additional IBM Cloud Pak content; Added ILMT annotations; README updates; Kibana dashboard fix |
 | 2.2.0 | November 2018 | >= 1.9 | = MQ 9.1.1.0 | None | Updated to IBM MQ 9.1.1 |

@@ -10,13 +10,15 @@ This chart will do the following:
 
 * Create a single MQ server (Queue Manager) using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with exactly one replica.  Kubernetes will ensure that if it fails for some reason, it will be restarted, possibly on a different worker node.
 * Create a [Service](https://kubernetes.io/docs/concepts/services-networking/service/).  This is used to ensure that MQ client applications have a consistent IP address to connect to, regardless of where the Queue Manager is actually running.
-* Create a [Secret](https://kubernetes.io/docs/concepts/configuration/secret/).  This is used to store passwords used for the default developer configuration.
 
 ## Prerequisites
 
-* Kubernetes 1.9 or greater, with beta APIs enabled
+* Kubernetes 1.11.0 or greater, with beta APIs enabled.
+* You must create a [Secret](https://kubernetes.io/docs/concepts/configuration/secret/) in the target namespace.  This must contain the 'admin' user password and optionally the 'app' user password to use for messaging.
 * If persistence is enabled (see the **configuration** section), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
-* If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191)
+* If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191).
+* Operator is the minimum role required to install this chart.
+* The following IBM Platform Core Service is required: `tiller`
 
 ### PodSecurityPolicy Requirements
 
@@ -89,16 +91,16 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
 
 This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre-install actions that need to occur.
 
-The predefined SecurityContextConstraints name: `privileged` has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+The predefined SecurityContextConstraints name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
 
-This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart.
+This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied scripts in the `pak_extensions` pre-install directory.
 
   - Custom SecurityContextConstraints definition:
     ```
     apiVersion: security.openshift.io/v1
     kind: SecurityContextConstraints
     metadata:
-      name: ibm-mq-scc
+      name: ibm-mq-dev-scc
     allowHostDirVolumePlugin: false
     allowHostIPC: false
     allowHostNetwork: false
@@ -132,6 +134,14 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     priority: 0
     ```
 
+- From the command line, you can run the setup scripts included under [pak_extensions](https://github.com/IBM/charts/tree/master/stable/ibm-mqadvanced-server-dev/ibm_cloud_pak/pak_extensions/)
+
+  As a cluster admin the pre-install script is located at:
+  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
+
+  As team admin the namespace scoped pre-install script is located at:
+  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
+
 ## Resources Required
 
 This chart uses the following resources by default:
@@ -147,10 +157,12 @@ See the **configuration** section for how to configure these values.
 Install the chart, specifying the release name (for example `foo`) and Helm repository name (for example `mylocal-repo`) with the following command:
 
 ```sh
-helm install --name foo mylocal-repo/ibm-mqadvanced-server-dev --set license=accept --tls
+helm install --name foo mylocal-repo/ibm-mqadvanced-server-dev --set license=accept --set queueManager.dev.secret.name=mysecret --set queueManager.dev.secret.adminPasswordKey=adminPassword --tls
 ```
 
 This example assumes that you have a local Helm repository configured, called `mylocal-repo`.  You could alternatively reference a local directory containing the Helm chart code.
+
+This example also assumes that you have created a Secret `mysecret`, containing a key `adminPassword` with your admin password.  
 
 This command accepts the [IBM MQ Advanced for Developers license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-AVCJ4S) and deploys an MQ Advanced for Developers server on the Kubernetes cluster. The **configuration** section lists the parameters that can be configured during installation.
 
@@ -174,17 +186,26 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | ------------------------------- | --------------------------------------------------------------- | ------------------------------------------ |
 | `license`                       | Set to `accept` to accept the terms of the IBM license          | `"not accepted"`                           |
 | `image.repository`              | Image full name including repository                            | `ibmcom/mq`                                |
-| `image.tag`                     | Image tag                                                       | `9.1.2.0`                                  |
+| `image.tag`                     | Image tag                                                       | `9.1.2.0-UBI`                              |
 | `image.pullPolicy`              | Image pull policy                                               | `IfNotPresent`                             |
 | `image.pullSecret`              | Image pull secret, if you are using a private Docker registry   | `nil`                                      |
 | `arch.amd64`                    | Preference for installation on worker nodes with the `amd64` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler |
 | `arch.ppc64le`                  | Preference for installation on worker nodes with the `ppc64le` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler |
 | `arch.s390x`                    | Preference for installation on worker nodes with the `s390x` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler |
+| `metadata.labels`               | Additional labels to be added to resources                      | `{}`                                       |
 | `persistence.enabled`           | Use persistent volumes for all defined volumes                  | `true`                                     |
 | `persistence.useDynamicProvisioning` | Use dynamic provisioning (storage classes) for all volumes | `true`                                     |
-| `dataPVC.name`                  | Suffix for the PVC name                                         | `"data"`                                   |
+| `dataPVC.name`                  | Suffix for the PVC name for main MQ data (under `/var/mqm`)     | `"data"`                                   |
 | `dataPVC.storageClassName`      | Storage class of volume for main MQ data (under `/var/mqm`)     | `""`                                       |
 | `dataPVC.size`                  | Size of volume for main MQ data (under `/var/mqm`)              | `2Gi`                                      |
+| `logPVC.enabled`                | Whether or not to use separate storage for transaction logs     | `false`                                    |
+| `logPVC.name`                   | Suffix for the PVC name for transaction logs                    | `"log"`                                    |
+| `logPVC.storageClassName`       | Storage class of volume for transaction logs                    | `""`                                       |
+| `logPVC.size`                   | Size of volume for transaction logs                             | `2Gi`                                      |
+| `qmPVC.enabled`                 | Whether or not to use separate storage for queue manager data   | `false`                                    |
+| `qmPVC.name`                    | Suffix for the PVC name for queue manager data                  | `"qm"`                                     |
+| `qmPVC.storageClassName`        | Storage class of volume for queue manager data                  | `""`                                       |
+| `qmPVC.size`                    | Size of volume for queue manager data                           | `2Gi`                                      |
 | `service.type`                  | Kubernetes service type exposing ports, e.g. `NodePort`         | `ClusterIP`                                |
 | `metrics.enabled`               | Enable Prometheus metrics for the Queue Manager                 | `true`                                     |
 | `resources.limits.cpu`          | Kubernetes CPU limit for the Queue Manager container            | `500m`                                     |
@@ -196,8 +217,12 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `security.context.supplementalGroups` | List of supplemental groups (if required by storage provider) | `nil`                                  |
 | `security.initVolumeAsRoot`     | Whether or not storage provider requires root permissions to initialize | `false`                            |
 | `queueManager.name`             | MQ Queue Manager name                                           | Helm release name                          |
-| `queueManager.dev.adminPassword` | Developer defaults - administrator password                    | Random generated string.  See the notes that appear when you install for how to retrieve this. |
-| `queueManager.dev.appPassword`  | Developer defaults - app password                               | `nil` (no password required to connect an MQ client) |
+| `queueManager.multiInstance`    | Whether to run in multi-instance mode with an active and standby queue manager | `false`                     |
+| `queueManager.dev.secret.name`  | Secret that contains the 'admin' user password and optionally the 'app' user password to use for messaging | Mandatory - a secret name must be set |
+| `queueManager.dev.secret.adminPasswordKey` | Secret key that contains the 'admin' user password    | Mandatory - a key must be set              |
+| `queueManager.dev.secret.appPasswordKey` | Secret key that contains the 'app' user password        | `nil` (no password required to connect an MQ client) |
+| `pki.keys`                      | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates with private keys. See section titled "Supplying certificates to be used for TLS" for more details  | `[]` |
+| `pki.trust`                     | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates. See section titled "Supplying certificates to be used for TLS" for more details  | `[]` |
 | `nameOverride`                  | Set to partially override the resource names used in this chart | `ibm-mq`                                   |
 | `livenessProbe.initialDelaySeconds` | The initial delay before starting the liveness probe. Useful for slower systems that take longer to start the Queue Manager. | 60 |
 | `livenessProbe.periodSeconds`   | How often to run the probe                                      | 10                                         |
@@ -208,6 +233,7 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `readinessProbe.timeoutSeconds` | Number of seconds after which the probe times out               | 3                                          |
 | `readinessProbe.failureThreshold` | Minimum consecutive failures for the probe to be considered failed after having succeeded | 1              |
 | `log.format`                    | Error log format on container's console.  Either `json` or `basic` | `basic`                                 |
+| `log.debug`                     | Enables additional log output for debug purposes. | `false` |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
@@ -236,6 +262,62 @@ By default, the MQ container output for the MQ Advanced for Developers image is 
 ### Connecting to the web console
 
 The MQ Advanced for Developers image includes the MQ web server.  The web server runs the web console, and the MQ REST APIs.  By default, the MQ server deployed by this chart is accessible via a `ClusterIP` [Service](https://kubernetes.io/docs/concepts/services-networking/service/), which is only accessible from within the Kubernetes cluster.  If you want to access the web console from a web browser, then you need to select a different type of Service.  For example, a `NodePort` service will expose the web console port on each worker node.
+
+### Supplying certificates to be used for TLS
+
+The `pki.trust` and `pki.keys` allow you to supply details of Kubernetes secrets that contain TLS certificates. By doing so the TLS certificates will be imported into the container at runtime and MQ will be configured to use them. You can supply both Certificiates which contain only a public key and certificiates that contain both public and private keys. 
+
+If you supply invalid files or invalid YAML objects then the container will terminate with an appropriate termination message. The next 2 sections will detail the requirements for supplying each type of certificate.
+
+#### Supplying certificates which contain the public and private keys
+When supplying a Kubernetes secret that contains a certificate files for both the public and private key you must ensure that the secret contains a file that ends in `.crt` and a file that ends in `.key` named the same. For example: `tls.crt` and `tls.key`. The extension of the file denotes whether the file is the public key (`.crt`) or the private key (`.key`) and must be correct. If your certificate has been issued by a Certificate Authority, then the certificate from the CA must be included as a seperate file with the `.crt` extension. For example: `ca.crt`.
+
+The format of the YAML objects for `pki.keys` value is as follows:
+
+```YAML
+- name: mykeys
+  secret:
+    secretName: mykeysecret
+    items:
+      - tls.key
+      - tls.crt
+      - ca.crt
+```
+
+or alternatively in a single line you can supply the following: `- name: mykeys, secret: {secretName: mykeysecret, items: [tls.key, tls.crt, ca.crt]}`
+
+`name` must be set to a lowercase alphanumeric value and will be used as the label for the certificate in the keystore and queue manager. 
+
+`secret.secretName` must match the name of a Kubernetes secret that contains the TLS certificates you wish to import
+
+`secret.items` must list the TLS certificate files contained in `secret.secretName` you want to import.
+
+To supply the YAML objects when deploying via Helm you should use the following: `--set pki.keys[0].name=mykeys,pki.keys[0].secret.secretName=mykeysecret,pki.keys[0].secret.items[0]=tls.key,pki.keys[0].secret.items[1]=tls.crt,pki.keys[0].secret.items[2]=ca.crt`
+
+If you supply multiple YAML objects then the queue manager will use the first object choosen by the label name alphabetically. For example if you supply the following labels: `alabel`, `blabel` and `clabel`. The queue manager and MQ Console will use the certificate with the label `alabel` for it's identity. In this queue manager this can be changed by running the MQSC command: `ALTER QMGR CERTLABL('<new label>')`.
+
+#### Supplying certficates which contain only the public key
+When supplying a Kubernetes secret that contains a certificate file with only the public key you must ensure that the secret contains files that have the extension `.crt`. For example: `tls.crt` and `ca.crt`. 
+
+The format of the YAML objects for `pki.trust` value is as follows:
+
+```YAML
+- secret:
+    secretName: mycertificate
+    items:
+      - tls.crt
+```
+
+or alternatively in a single line you can supply the following: `- secret: {secretName: mycertificate, items: [tls.crt]}`
+
+`secret.secretName` must match the name of a Kubernetes secret that contains the TLS certificates you wish to add.
+
+`secret.items` must list the TLS certificate files contained in `secret.secretName` you want to add.
+
+To supply the YAML objects when deploying via Helm you should use the following: `--set pki.trust[0].secret.secretName=mycertificate,pki.trust[0].secret.items[0]=tls.crt`
+
+If you supply multiple YAML objects then all of the certificates specified will be added into the queue managers and MQ Console Truststore.
+
 
 ## Copyright
 
