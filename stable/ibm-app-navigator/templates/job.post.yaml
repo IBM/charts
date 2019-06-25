@@ -1,0 +1,61 @@
+{{- /* ###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: prism-init-post
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": hook-succeeded
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  template:
+    metadata:
+      name: app-nav-init 
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+        app-nav-component: app-nav-init      
+      annotations:
+        sidecar.istio.io/inject: "false"
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}         
+    spec:
+      affinity:
+{{ include "ibm-app-navigator.affinity.nodeAffinity" (list .) | indent 8 }}        
+      containers:
+      - name: prism-init
+        image: "{{ .Values.appNavInit.repository }}:{{ .Values.appNavInit.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}    
+        env: 
+        - name: HOOK_MODE
+          value: postinstall
+        - name: KUBE_ENV        
+          value: {{ .Values.env.kubeEnv }}
+        - name: PRISM_CONFIG_NAMESPACE
+          value: {{ .Release.Namespace }}
+{{ include "ibm-app-navigator.container.security" . | indent 8 }}
+        resources:
+          {{- if .Values.appNavInit.resources.constraints.enabled }}
+          limits:
+{{ toYaml .Values.appNavInit.resources.limits | indent 12 }}
+          requests:
+{{ toYaml .Values.appNavInit.resources.requests | indent 12 }}
+          {{- end }}  
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-sa
+{{ include "ibm-app-navigator.pod.security" . | indent 6 }}
+      tolerations:
+      - effect: NoSchedule
+        key: dedicated
+        operator: Exists
+      - key: CriticalAddonsOnly
+        operator: Exists

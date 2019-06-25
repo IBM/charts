@@ -1,0 +1,52 @@
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: prism.status-mapping.pod
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}  
+data:
+  algorithm: "function getStatus(status) {
+
+      var statusJson = JSON.parse(status);
+      var statusText = 'Problem';
+      var statusFlyover = '';
+      var nlsJSON= {};
+      var phase = statusJson.phase;
+
+      if (phase == 'Running') {
+        statusText = 'Normal';
+        statusFlyover = 'Status returned by platform: '+phase;
+	      nlsJSON= [ 'status.flyover.pod', phase ]; 
+      } else if (phase == 'Succeeded') {
+        statusText = 'Normal';
+        statusFlyover = 'Status returned by platform: '+phase;
+	      nlsJSON= [ 'status.flyover.pod', phase ]; 
+      } else if (phase == 'Pending') {
+        statusText = 'Warning';
+        statusFlyover = 'No status returned by platform';
+        nlsJSON= [ 'status.flyover.pod.error' ]; 
+
+	      if (statusJson.containerStatuses !== undefined) { 
+	         if (statusJson.containerStatuses[0] !== undefined) { 
+	            if (statusJson.containerStatuses[0].state !== undefined) { 
+                 if (statusJson.containerStatuses[0].state.waiting !== undefined) { 
+                    if (statusJson.containerStatuses[0].state.waiting.reason !== undefined) { 
+                       statusFlyover = 'Status returned by platform: '+statusJson.containerStatuses[0].state.waiting.reason;
+                       nlsJSON= [ 'status.flyover.pod', statusJson.containerStatuses[0].state.waiting.reason ]; 
+		                }
+	               }
+	            }
+           }
+        }
+      } else {
+        statusText = 'Problem';
+        statusFlyover = 'No status returned by platform';
+	      nlsJSON= [ 'status.flyover.pod.error' ]; 
+      }
+
+      var statusJSON= { 'value': statusText, 'flyover': statusFlyover, 'flyover.nls': nlsJSON };
+
+      return JSON.stringify(statusJSON);
+}"    

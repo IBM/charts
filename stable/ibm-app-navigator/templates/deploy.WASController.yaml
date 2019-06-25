@@ -1,0 +1,64 @@
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prism-was-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: ibm-app-nav-was-controller
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "ibm-app-nav-was-controller") | indent 8 }}
+        app-nav-component: ibm-app-nav-was-controller
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}         
+    spec:
+      affinity:
+{{ include "ibm-app-navigator.affinity.nodeAffinity" (list .) | indent 8 }}       
+      containers:
+      - name: prism-was-controller
+        image: "{{ .Values.appNavWASController.repository }}:{{ .Values.appNavWASController.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+          - name: PRISM_CONFIG_NAMESPACE
+            value: {{ .Release.Namespace }}
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - testcntlr.sh
+          initialDelaySeconds: 30            
+          periodSeconds: 5             
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - testcntlr.sh
+          initialDelaySeconds: 60            
+          periodSeconds: 30           
+{{ include "ibm-app-navigator.container.security" . | indent 8 }}
+        resources:
+          {{- if .Values.appNavWASController.resources.constraints.enabled }}
+          limits:
+{{ toYaml .Values.appNavWASController.resources.limits | indent 12 }}
+          requests:
+{{ toYaml .Values.appNavWASController.resources.requests | indent 12 }}
+          {{- end }}            
+      restartPolicy: "Always"
+      serviceAccountName: {{ .Release.Name }}-sa        
+{{ include "ibm-app-navigator.pod.security" . | indent 6 }}
+      tolerations:
+      - effect: NoSchedule
+        key: dedicated
+        operator: Exists
+      - key: CriticalAddonsOnly
+        operator: Exists

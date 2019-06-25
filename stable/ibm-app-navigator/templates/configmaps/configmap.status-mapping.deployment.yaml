@@ -1,0 +1,37 @@
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prism.status-mapping.deployment
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}  
+data:
+  algorithm: "function getStatus(status) {
+    var statusJson = JSON.parse(status);
+    
+    var replicas = statusJson.replicas;
+    var available = statusJson.availableReplicas;
+    if (!replicas) replicas = 0;
+    if (!available) available = 0;
+
+    var statusText = 'Unknown';
+
+    if (replicas == 0) { 
+      statusText= 'Warning';
+    } else if (replicas == available) {
+      statusText = 'Normal';
+    } else if (available == 0) {
+      statusText = 'Problem';
+    } else if (replicas > available) {
+      statusText = 'Warning';
+    }
+
+    var statusFlyover = 'Desired: ' + replicas + ', Available: ' + available;
+    
+    var nlsJSON= [ 'status.flyover.deployment', replicas.toString(), available.toString() ]; 
+
+    var statusJSON= { 'value': statusText, 'flyover': statusFlyover, 'flyover.nls': nlsJSON};
+
+    return JSON.stringify(statusJSON); 
+}"  

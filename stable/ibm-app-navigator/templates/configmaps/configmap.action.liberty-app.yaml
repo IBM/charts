@@ -1,0 +1,113 @@
+{{- /* ###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+apiVersion:  v1
+kind: ConfigMap
+metadata: 
+  name: prism.actions.liberty-app
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }} 
+data:
+  url-actions: | 
+      [
+        {  
+          "name": "console", 
+          "text": "Access Admin Center",
+          "text.nls": "action.url.liberty.app.console.text",
+          "description": "Access Liberty Admin Center", 
+          "description.nls": "action.url.liberty.app.console.desc", 
+          "url-pattern": "${resource.$.metadata.annotations['prism.platform.console-url']}",
+          "open-window": "tab"
+        },
+        {  
+          "name": "klog", 
+          "text":"View Kibana Logs",
+          "text.nls":"action.url.liberty.klog.text",
+          "description":"View Liberty Kibana problem dashboard to see logs",
+          "description.nls":"action.url.liberty.klog.desc",
+          "url-pattern":"${snippet.geturl(${builtin.kibana-url},${builtin.liberty-problems-dashboard},${func.kubectlGet(Liberty-App,${resource.$.metadata.name},--namespace,${resource.$.metadata.namespace},-o,json)})}",
+          "open-window": "tab"
+        }
+      ] 
+  snippets: |
+    {
+      "status": "function status() {
+        return '{.status}';
+      }",
+      "geturl": "function geturl(kibanaUrl,dashboard,libertyApp) { 
+          var System = Java.type('java.lang.System');
+          System.out.println(\"Enter geturl \"+2); 
+
+          var libertyJSON= JSON.parse(libertyApp);
+          var status= libertyJSON.status; 
+          var usrDir= ''; 
+
+          var dashboardUrl= kibanaUrl+\"#/dashboard/Liberty-Problems-K5-20190609?_g=(refreshInterval:(display:Off,pause:!f,value:0),time:(from:now-15m,mode:quick,to:now))&_a=(description:'',filters:!(('$state':(store:appState),meta:(alias:'Server%20Filter',disabled:!f,index:'logstash-*',key:query,negate:!f,type:custom,value:\"
+
+           +\"'%7B%22bool%22:%7B%22should%22:%5B\";
+
+           for (i=0; i<status.deployments.length; i++) {
+
+              dashboardUrl+=\"%7B%22bool%22:%7B%22must%22:%5B%7B%22term%22:%7B%22host.keyword%22:%22\";
+
+              dashboardUrl+=status.deployments[i].host;
+
+              dashboardUrl+=\"%22%7D%7D,%7B%22term%22:%7B%22ibm_userDir.keyword%22:%22\";
+
+              usrDir= status.deployments[i].wlpUsrDir+'/usr/';
+              usrDir= usrDir.replace(new RegExp(' ', 'g'), '%20');
+              usrDir= usrDir.replace(new RegExp('/', 'g'), '%2F');
+
+              dashboardUrl+=usrDir; 
+          
+              dashboardUrl+=\"%22%7D%7D,%7B%22term%22:%7B%22ibm_serverName.keyword%22:%22\";
+
+              dashboardUrl+=status.deployments[i].server;         
+            
+              dashboardUrl+=\"%22%7D%7D%5D%7D%7D\";
+
+              if ( i < status.deployments.length-1 ) dashboardUrl+=\",\"; 
+           }
+            
+           dashboardUrl+=\"%5D%7D%7D'),query:(bool:(should:!(\";
+
+           for (i=0; i<status.deployments.length; i++) {
+
+              dashboardUrl+=\"(bool:(must:!((term:(host.keyword:\"; 
+              
+              dashboardUrl+=status.deployments[i].host;
+
+              
+              dashboardUrl+=\")),(term:(ibm_userDir.keyword:\";
+            
+              usrDir= status.deployments[i].wlpUsrDir+'/usr/';
+              usrDir= usrDir.replace(new RegExp(' ', 'g'), '%20');
+              usrDir= usrDir.replace(new RegExp('/', 'g'), '%2F');
+
+              dashboardUrl+=usrDir;
+          
+              dashboardUrl+=\")),(term:(ibm_serverName.keyword:\";
+      
+              dashboardUrl+=status.deployments[i].server; 
+  
+              dashboardUrl+=\")))))\"; 
+
+              if ( i < status.deployments.length-1 ) dashboardUrl+=\",\"; 
+           }
+              
+        dashboardUrl+=\")))))\"
+            
+            +\",options:(darkTheme:!f),panels:!((col:1,id:liberty_probleminfo,panelIndex:1,row:1,size_x:12,size_y:1,type:visualization),(col:1,id:liberty_topMessageIds,panelIndex:5,row:6,size_x:12,size_y:3,type:visualization),(col:1,id:liberty_messageGraph,panelIndex:6,row:9,size_x:4,size_y:2,type:visualization),(col:9,id:liberty_ffdcGraph,panelIndex:7,row:9,size_x:4,size_y:2,type:visualization),(col:5,id:liberty_traceGraph,panelIndex:8,row:9,size_x:4,size_y:2,type:visualization),(col:1,id:b1afa090-c266-11e8-b344-7d7a26e293da,panelIndex:19,row:2,size_x:4,size_y:2,type:visualization),(col:5,id:c1f2fce0-c266-11e8-b344-7d7a26e293da,panelIndex:20,row:2,size_x:4,size_y:2,type:visualization),(col:9,id:d29457b0-c266-11e8-b344-7d7a26e293da,panelIndex:21,row:2,size_x:4,size_y:2,type:visualization),(col:1,columns:!(loglevel,module,message,kubernetes.pod,ibm_sequence),id:liberty_messageSearch,panelIndex:25,row:11,size_x:12,size_y:4,sort:!('@timestamp',desc),type:search),(col:1,columns:!(loglevel,module,message,kubernetes.pod,ibm_sequence),id:liberty_traceSearch,panelIndex:26,row:15,size_x:12,size_y:4,sort:!('@timestamp',desc),type:search),(col:1,columns:!(ibm_className,ibm_probeID,ibm_exceptionName,kubernetes.pod,ibm_sequence),id:liberty_ffdcSearch,panelIndex:27,row:19,size_x:12,size_y:4,sort:!('@timestamp',desc),type:search),(col:1,id:bbdafb10-8a2e-11e9-bccd-ad683bf7518d,panelIndex:28,row:4,size_x:4,size_y:2,type:visualization),(col:5,id:f04cbb40-8a2e-11e9-bccd-ad683bf7518d,panelIndex:29,row:4,size_x:4,size_y:2,type:visualization),(col:9,id:'21ecbdd0-8a2f-11e9-bccd-ad683bf7518d',panelIndex:30,row:4,size_x:4,size_y:2,type:visualization)),query:(query_string:(analyze_wildcard:!t,query:'*')),timeRestore:!t,title:Liberty-Problems-K5-20190609,uiState:(P-19:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-20:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-21:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-28:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-29:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-30:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-6:(vis:(colors:(AUDIT:%233F2B5B,INFO:%237EB26D,SEVERE:%23BF1B00,WARNING:%23F2C96D)))),viewMode:view)\"; 
+
+          return dashboardUrl;
+      }"
+    }
