@@ -32,7 +32,6 @@ spec:
         {{- end }}
       annotations:
         sidecar.istio.io/inject: "false"
-        scheduler.alpha.kubernetes.io/critical-pod: ""
         productName: {{ $key }}
         productID: {{ $key }}_{{ $.Chart.Version }}_apachev2_00000
         productVersion: {{ $.Chart.Version }}
@@ -63,6 +62,12 @@ spec:
         - name: ingress-sds
           image: "{{ $spec.sds.image.repository }}:{{ $spec.sds.image.tag }}"
           imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          resources:
+{{- if $spec.sds.resources }}
+{{ toYaml $spec.sds.resources | indent 12 }}
+{{- else }}
+{{ toYaml $.Values.global.defaultResources | indent 12 }}
+{{- end }}
           env:
           - name: "ENABLE_WORKLOAD_SDS"
             value: "false"
@@ -103,8 +108,12 @@ spec:
           - router
           - --domain
           - $(POD_NAMESPACE).svc.{{ $.Values.global.proxy.clusterDomain }}
-          - --log_output_level
-          - 'info'
+        {{- if $.Values.global.proxy.logLevel }}
+          - --proxyLogLevel={{ $.Values.global.proxy.logLevel }}
+        {{- end }}
+        {{- if $.Values.global.logging.level }}
+          - --log_output_level={{ $.Values.global.logging.level }}
+        {{- end }}
           - --drainDuration
           - '45s' #drainDuration
           - --parentShutdownDuration
@@ -150,6 +159,10 @@ spec:
           - istio-pilot.{{ $.Values.global.istioNamespace }}:15010
           {{- else }}
           - istio-pilot:15010
+          {{- end }}
+          {{- if $spec.applicationPorts }}
+          - --applicationPorts
+          - "{{ $spec.applicationPorts }}"
           {{- end }}
         {{- end }}
         {{- if $.Values.global.trustDomain }}
@@ -197,6 +210,11 @@ spec:
               fieldRef:
                 apiVersion: v1
                 fieldPath: status.podIP
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: status.hostIP
           - name: ISTIO_META_POD_NAME
             valueFrom:
               fieldRef:
@@ -221,7 +239,8 @@ spec:
           volumeMounts:
           {{- if $.Values.global.sds.enabled }}
           - name: sdsudspath
-            mountPath: /var/run/sds
+            mountPath: /var/run/sds/uds_path
+            readOnly: true
           {{- if $.Values.global.sds.useTrustworthyJwt }}
           - name: istio-token
             mountPath: /var/run/secrets/tokens
@@ -254,7 +273,8 @@ spec:
       {{- if $.Values.global.sds.enabled }}
       - name: sdsudspath
         hostPath:
-          path: /var/run/sds
+          path: /var/run/sds/uds_path
+          type: Socket
       {{- if $.Values.global.sds.useTrustworthyJwt }}
       - name: istio-token
         projected:
@@ -283,6 +303,7 @@ spec:
       {{- end }}
       affinity:
       {{- include "gatewaynodeaffinity" (dict "root" $ "nodeSelector" $spec.nodeSelector) | indent 6 }}
+      {{- include "gatewaypodAntiAffinity" (dict "podAntiAffinityLabelSelector" $spec.podAntiAffinityLabelSelector "podAntiAffinityTermLabelSelector" $spec.podAntiAffinityTermLabelSelector) | indent 6 }}
       {{- if $spec.tolerations }}
       tolerations:
 {{ toYaml $spec.tolerations | indent 6 }}
