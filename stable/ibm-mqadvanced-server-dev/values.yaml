@@ -19,7 +19,7 @@ image:
   # repository is the container repository to use, which must contain IBM MQ Advanced for Developers
   repository: ibmcom/mq
   # tag is the tag to use for the container repository
-  tag: 9.1.2.0
+  tag: 9.1.2.0-UBI
   # pullSecret is the secret to use when pulling the image from a private registry
   pullSecret:
   # pullPolicy is either IfNotPresent or Always (https://kubernetes.io/docs/concepts/containers/images/)
@@ -35,6 +35,10 @@ arch:
   ppc64le: "2 - No preference"
   s390x: "2 - No preference"
 
+# metadata allows setting of additional labels to be added to all resources. Set on helm install using --set metadata.labels.KEY=VALUE,metadata.labels.=VALUE,...
+metadata:
+  labels: {}
+
 # persistence section specifies persistence settings which apply to the whole chart
 persistence:
   # enabled is whether to use Persistent Volumes or not
@@ -42,10 +46,32 @@ persistence:
   # useDynamicProvisioning is whether or not to use Storage Classes to dynamically create Persistent Volumes
   useDynamicProvisioning: true
 
-# dataPVC section specifies settings for the main Persistent Volume Claim, which is used for data in /var/mqm
+# dataPVC section specifies settings for the main Persistent Volume Claim, which is used for data in /var/mqm -> /mnt/mqm
 dataPVC:
   # name sets part of the name for this Persistent Volume Claim
   name: "data"
+  ## storageClassName is the name of the Storage Class to use, or an empty string for no Storage Class
+  storageClassName: ""
+  ## size is the minimum size of the Persistent Volume
+  size: 2Gi
+
+# logPVC section specifies settings for the transaction logs Persistent Volume Claim, which is used for data in /mnt/mqm-log
+logPVC:
+  ## enabled is whether to use separate storage for transaction logs
+  enabled: false
+  # name sets part of the name for this Persistent Volume Claim
+  name: "log"
+  ## storageClassName is the name of the Storage Class to use, or an empty string for no Storage Class
+  storageClassName: ""
+  ## size is the minimum size of the Persistent Volume
+  size: 2Gi
+
+# qmPVC section specifies settings for the queue manager data Persistent Volume Claim, which is used for data in /mnt/mqm-data
+qmPVC:
+  ## enabled is whether to use separate storage for queue manager data
+  enabled: false
+  # name sets part of the name for this Persistent Volume Claim
+  name: "qm"
   ## storageClassName is the name of the Storage Class to use, or an empty string for no Storage Class
   storageClassName: ""
   ## size is the minimum size of the Persistent Volume
@@ -76,16 +102,33 @@ security:
 queueManager:
   # name allows you to specify the name to use for the queue manager.  Defaults to the Helm release name.
   name:
+  # multiInstance specifies whether to run in multi-instance mode with an active and standby queue manager
+  multiInstance: false
   # dev section specifies settings for the MQ developer defaults available in the MQ Advanced for Developers image.
   dev:
-    # adminPassword sets the password of the admin user
-    adminPassword:
-    # appPassword sets the password of the app user
-    appPassword:
+    secret:
+      # name is the secret that contains the 'admin' user password and optionally the 'app' user password to use for messaging
+      name:
+      # adminPasswordKey is the secret key that contains the 'admin' user password
+      adminPasswordKey:
+      # appPasswordKey is the secret key that contains the 'app' user password
+      appPasswordKey:
+
+# pki is used to supply certificates, that are stored in k8s secrets, for use with the webconsole and queue manager. 
+# Must be supplied as an array of yaml objects in the following format:
+# - name: <label to give certificate> (only for pki.keys)
+#   secret:
+#     secretName: <name of Kubernetes secret>
+#     items:
+#       - <certificate files to import> (for example: tls.key, tls.crt, ca.crt)
+pki:
+  keys: []
+  trust: []
 
 # log section specifies settings for MQ error logs
 log:
   format: basic
+  debug: false
 
 # metrics section specifies settings for generating queue manager metrics
 metrics:
