@@ -1,0 +1,42 @@
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: prism.status-mapping.was-traditional-app
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}    
+data:
+  algorithm: "function getStatus(status) {
+
+  var statusJson = JSON.parse(status);
+  var running = statusJson.running;
+  var targets = statusJson.targets;
+  var unknown= statusJson.unknown; 
+  if (!running) running = 0;
+  if (!targets) targets = 0;
+  if (!unknown) unknown = 0;
+
+  var statusText = 'Unknown';
+  var statusFlyover= '';
+  var nlsJSON= '';
+  var statusJSON= {};
+
+  if ( unknown !== targets ) { 
+    if ( running == 0 ) { 
+       statusText= 'Problem';
+    } else if ( running < targets ) { 
+       statusText= 'Warning';
+    } else if ( running == targets ) { 
+       statusText= 'Normal';
+    }
+  }
+
+  statusFlyover = 'Running: ' + running + ', Targets: ' + targets + ', Unknown: ' + unknown;
+  
+  nlsJSON= [ 'status.flyover.was.traditional', running.toString(), targets.toString(), unknown.toString() ]; 
+  
+  statusJSON= { 'value': statusText, 'flyover': statusFlyover, 'flyover.nls': nlsJSON }; 
+  
+  return JSON.stringify(statusJSON); 
+}" 

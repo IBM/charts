@@ -1,0 +1,53 @@
+{{- /* ###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prism.actions.deployment-twas
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }} 
+data:
+  url-actions: |
+    [    
+      {
+        "name":"klog",
+        "text":"View Kibana Logs",
+        "text.nls":"action.url.was.traditional.klog.text",
+        "description":"View Liberty Kibana problem dashboard to see problems in logs",
+        "description.nls":"action.url.was.traditional.klog.desc",
+        "url-pattern":"${snippet.create_kibana_log_urlw(${builtin.kibana-url},${resource.$.metadata.namespace},${func.podlist()})}",
+        "open-window": "tab"
+      }
+    ]
+  snippets: |
+    {
+      "create_kibana_log_urlw": "function createKibanaLogUrlw(kibanaUrl, namespace, json) 
+                                { var timeSlot = '15m';
+                                  var pods = JSON.parse(json).pods;
+                                  var podsString = '';
+                                  var matchPhrases = '';
+                                  pods.map( function(nextPod) {
+                                    if(podsString.length>0) podsString = podsString + ',';
+                                    if(matchPhrases.length>0) matchPhrases = matchPhrases + ',';
+                                    podsString = podsString + '%7B%22term%22:%7B%22kubernetes.pod.keyword%22:%22' + nextPod +'%22%7D%7D';
+                                    matchPhrases = matchPhrases + '(term:(kubernetes.pod.keyword:' + nextPod + '))'
+                                  })
+                                  return kibanaUrl 
+                                      + \"#/dashboard/WAS-traditional-Problems-K5-20190609?_g=()&_a=(description:'Dashboard%20visualizes%20message%20and%20trace%20information%20for%20WebSphere%20Application%20Server%20traditional',filters:!(('$state':(store:appState),meta:(alias:'Pod%20Filter',disabled:!f,index:'logstash-*',key:query,negate:!f,type:custom,value:'%7B%22bool%22:%7B%22minimum_should_match%22:1,%22should%22:%5B\" 
+                                      + podsString 
+                                      + \"%5D%7D%7D'),query:(bool:(minimum_should_match:1,should:!(\"
+                                      + matchPhrases 
+                                      + \"))))),options:(darkTheme:!f),panels:!((col:1,id:was_probleminfo,panelIndex:1,row:1,size_x:12,size_y:1,type:visualization),(col:1,id:was_hostsTable,panelIndex:2,row:2,size_x:4,size_y:3,type:visualization),(col:9,id:was_containersTable,panelIndex:4,row:2,size_x:4,size_y:3,type:visualization),(col:1,id:was_topMessageIds,panelIndex:5,row:8,size_x:12,size_y:3,type:visualization),(col:1,columns:!(loglevel,module,message,ibm_sequence),id:was_messageSearch,panelIndex:9,row:14,size_x:12,size_y:4,sort:!(ibm_sequence,desc),type:search),(col:1,id:was_messageGraph,panelIndex:14,row:11,size_x:6,size_y:3,type:visualization),(col:7,id:was_traceGraph,panelIndex:12,row:11,size_x:6,size_y:3,type:visualization),(col:5,id:was_podGraph,panelIndex:15,row:2,size_x:4,size_y:3,type:visualization),(col:1,columns:!(loglevel,module,message,ibm_sequence),id:was_traceSearch,panelIndex:16,row:18,size_x:12,size_y:4,sort:!(ibm_sequence.keyword,desc),type:search),(col:1,id:was_cellsTable,panelIndex:17,row:5,size_x:4,size_y:3,type:visualization),(col:5,id:was_nodesTable,panelIndex:18,row:5,size_x:4,size_y:3,type:visualization),(col:9,id:was_serversTable,panelIndex:19,row:5,size_x:4,size_y:3,type:visualization)),query:(query_string:(analyze_wildcard:!t,query:'*')),timeRestore:!t,title:WAS-traditional-Problems-K5-20190609,uiState:(P-13:(vis:(defaultColors:('0%20-%20100':'rgb(0,104,55)'))),P-15:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-17:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-18:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-19:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-2:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-4:(vis:(params:(sort:(columnIndex:!n,direction:!n))))),viewMode:view)\";
+                                }"
+
+    }

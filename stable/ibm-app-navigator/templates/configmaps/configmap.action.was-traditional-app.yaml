@@ -1,0 +1,134 @@
+{{- /* ###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "ibm-app-navigator.sch.chart.config.values") -}}
+apiVersion:  v1
+kind: ConfigMap
+metadata: 
+  name: prism.actions.was-traditional-app
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }} 
+data:
+  url-actions: | 
+      [
+        {  
+          "name": "console", 
+          "text": "Access Admin Console",
+          "text.nls": "action.url.was.traditional.console.text",
+          "description": "Access WebSphere Admin Console", 
+          "description.nls": "action.url.was.traditional.console.desc", 
+          "url-pattern": "${resource.$.metadata.annotations['prism.platform.console-url']}",
+          "open-window": "tab",
+          "propagate-identity": "true"
+        },
+        {  
+          "name": "klog", 
+          "text":"View Kibana Logs",
+          "text.nls":"action.url.was.traditional.klog.text",
+          "description":"View WebSphere Kibana problem dashboard to see logs",
+          "description.nls":"action.url.was.traditional.klog.desc",
+          "url-pattern":"${snippet.geturlw(${builtin.kibana-url},${builtin.liberty-problems-dashboard},${func.kubectlGet(WAS-Traditional-App,${resource.$.metadata.name},--namespace,${resource.$.metadata.namespace},-o,json)})}",
+          "open-window": "tab"
+        }
+      ] 
+  cmd-actions: |
+    [
+      {
+        "name": "setTraceSpecification",
+        "text": "Set Trace",
+        "text.nls": "action.cmd.was.traditional.trace.text",
+        "description": "Set diagnostic trace string.",
+        "description.nls": "action.cmd.was.traditional.trace.desc",
+        "image": "{{ .Values.appNavCmds.repository }}:{{ .Values.appNavCmds.tag }}",
+        "cmd-pattern": "sh set-tWAS-App-trace.sh ${resource.$.metadata.name} ${resource.$.metadata.namespace} ${input.trace-string}",
+        "requires-input": "trace-setting"
+      }
+    ]
+  inputs: |
+    {
+      "trace-setting": {
+        "title": "Trace string",
+        "fields": {
+            "trace-string":
+                { "label": "Trace String", "type" : "string", "size":"large", "description": "WebSphere server trace string", "default": "*=all=disabled", "optional":false, "validator": "tracestring-validator" }
+        }
+      }
+    }
+  snippets: |
+    {
+        "tracestring-validator": "function tracestringValidator(json) {
+                                       var value = JSON.parse(json).value
+                                       if ( value != undefined && value.length>0 )
+                                          return  \"{ 'valid': true, 'message': ''}\"
+                                       else
+                                          return   \"{ 'valid': false, 'message': 'Trace string is required!'}\"
+                                    }",
+         "status": "function status() {
+                       return '{.status}';
+                   }",
+         "geturlw": "function geturlw(kibanaUrl,dashboard,WASApp) { 
+          var System = Java.type('java.lang.System');
+
+          var wasJSON= JSON.parse(WASApp);
+          var status= wasJSON.status; 
+          var metadata= wasJSON.metadata; 
+
+          var dashboardUrl= kibanaUrl+\"#/dashboard/WAS-traditional-Problems-K5-20190609?_g=(refreshInterval:(display:Off,pause:!f,value:0),time:(from:now-15m,mode:quick,to:now))&_a=(description:'',filters:!(('$state':(store:appState),meta:(alias:'Server%20Filter',disabled:!f,index:'logstash-*',key:query,negate:!f,type:custom,value:\"
+
+           +\"'%7B%22bool%22:%7B%22should%22:%5B\";
+
+           for (i=0; i<status.deployments.length; i++) {
+
+              dashboardUrl+=\"%7B%22bool%22:%7B%22must%22:%5B%7B%22term%22:%7B%22ibm_cellName.keyword%22:%22\";
+
+              dashboardUrl+=metadata.labels['was-nd-cell'];
+
+              dashboardUrl+=\"%22%7D%7D,%7B%22term%22:%7B%22ibm_nodeName.keyword%22:%22\";
+
+              dashboardUrl+=status.deployments[i].node;
+          
+              dashboardUrl+=\"%22%7D%7D,%7B%22term%22:%7B%22ibm_serverName.keyword%22:%22\";
+
+              dashboardUrl+=status.deployments[i].server;         
+            
+              dashboardUrl+=\"%22%7D%7D%5D%7D%7D\";
+
+              if ( i < status.deployments.length-1 ) dashboardUrl+=\",\"; 
+           }
+            
+           dashboardUrl+=\"%5D%7D%7D'),query:(bool:(should:!(\";
+
+           for (i=0; i<status.deployments.length; i++) {
+
+              dashboardUrl+=\"(bool:(must:!((term:(ibm_cellName.keyword:\"; 
+              
+              dashboardUrl+=metadata.labels['was-nd-cell'];
+              
+              dashboardUrl+=\")),(term:(ibm_nodeName.keyword:\";
+            
+              dashboardUrl+=status.deployments[i].node;
+          
+              dashboardUrl+=\")),(term:(ibm_serverName.keyword:\";
+      
+              dashboardUrl+=status.deployments[i].server; 
+  
+              dashboardUrl+=\")))))\"; 
+
+              if ( i < status.deployments.length-1 ) dashboardUrl+=\",\"; 
+           }
+              
+        dashboardUrl+=\")))))\"
+            
+            +\",options:(darkTheme:!f),panels:!((col:1,id:was_probleminfo,panelIndex:1,row:1,size_x:12,size_y:1,type:visualization),(col:1,id:was_hostsTable,panelIndex:2,row:2,size_x:4,size_y:3,type:visualization),(col:9,id:was_containersTable,panelIndex:4,row:2,size_x:4,size_y:3,type:visualization),(col:1,id:was_topMessageIds,panelIndex:5,row:8,size_x:12,size_y:3,type:visualization),(col:1,columns:!(loglevel,module,message,ibm_sequence),id:was_messageSearch,panelIndex:9,row:14,size_x:12,size_y:4,sort:!(ibm_sequence,desc),type:search),(col:1,id:was_messageGraph,panelIndex:14,row:11,size_x:6,size_y:3,type:visualization),(col:7,id:was_traceGraph,panelIndex:12,row:11,size_x:6,size_y:3,type:visualization),(col:5,id:was_podGraph,panelIndex:15,row:2,size_x:4,size_y:3,type:visualization),(col:1,columns:!(loglevel,module,message,ibm_sequence),id:was_traceSearch,panelIndex:16,row:18,size_x:12,size_y:4,sort:!(ibm_sequence.keyword,desc),type:search),(col:1,id:was_cellsTable,panelIndex:17,row:5,size_x:4,size_y:3,type:visualization),(col:5,id:was_nodesTable,panelIndex:18,row:5,size_x:4,size_y:3,type:visualization),(col:9,id:was_serversTable,panelIndex:19,row:5,size_x:4,size_y:3,type:visualization)),query:(query_string:(analyze_wildcard:!t,query:'*')),timeRestore:!t,title:WAS-traditional-Problems-K5-20190609,uiState:(P-13:(vis:(defaultColors:('0%20-%20100':'rgb(0,104,55)'))),P-15:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-17:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-18:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-19:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-2:(vis:(params:(sort:(columnIndex:!n,direction:!n)))),P-4:(vis:(params:(sort:(columnIndex:!n,direction:!n))))),viewMode:view)\"; 
+
+          return dashboardUrl;
+      }"
+    }
