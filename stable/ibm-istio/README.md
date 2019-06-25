@@ -128,21 +128,25 @@ The chart deploys pods that consume minimum resources as specified in the resour
 1. **Important**: If your helm version is < 2.10, which doesn't support `crd-install` hook, then you need to manually install Istio’s CRDs via `kubectl apply` before deploying the `ibm-istio` chart; After all Istio’s CRDs are committed in the kube-apiserver, you have to add `--set global.crds=false` parameter to `helm install ...` command line(or if you're installing `ibm-istio` from `Catalog`, uncheck the `crds` checkbox in global section) when you deploy the `ibm-istio` chart. To manually install Istio’s CRDs, you can execute the following commands:
 
    ```
-   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-1*.yaml
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-10.yaml
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-11.yaml
    ```
 
    or if you have downloaded the chart locally:
    ```
-   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-1*.yaml
+   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-10.yaml
+   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-11.yaml
    ```
    **Note**: If you are enabling `certmanager`, you also need to install its CRDs and wait a few seconds for the CRDs to be committed in the kube-apiserver:
    ```
-   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-certmanager-*.yaml
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-certmanager-10.yaml
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-certmanager-11.yaml
    ```
 
    or if you have downloaded the chart locally:
    ```
-   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-certmanager-*.yaml
+   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-certmanager-10.yaml
+   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-certmanager-11.yaml
    ```
 
 2. Create namespace `istio-system` for the chart:
@@ -239,7 +243,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `global.remoteTelemetryAddress` | Specifies the address of Istio telemetry on central Istio control plane | valid address | `""` |
 | `global.remoteZipkinAddress` | Specifies the address of zipkin tracer on central Istio control plane | valid address | `""` |
 | `global.proxy.repository` | Specifies the proxy image location | valid image repository | `ibmcom/istio-proxyv2` |
-| `global.proxy.tag` | Specifies the proxy image version | valid image tag | `1.1.0` |
+| `global.proxy.tag` | Specifies the proxy image version | valid image tag | `1.1.7` |
 | `global.proxy.clusterDomain` | Specifies the cluster domain, default value is 'cluster.local' | valid cluster domain | `cluster.local` |
 | `global.proxy.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | `{requests.cpu: 10m}` |
 | `global.proxy.concurrency` | Controls number of proxy worker threads. If set to 0 (default), then start worker thread for each CPU thread/core | valid number(>=0) | `0` |
@@ -265,7 +269,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `global.proxy.envoyMetricsService.port` | Specifies the port for the external envoy metrics server | valid metrics service port | `""` |
 | `global.proxy.tracer` | Specifies the tracer service name for the Istio | valid tracer service name | `"zipkin"` |
 | `global.proxy_init.repository` | Specifies the proxy init image location | valid image repository | `ibmcom/istio-proxy_init` |
-| `global.proxy_init.tag` | Specifies the proxy init image version | valid image tag | `1.1.0` |
+| `global.proxy_init.tag` | Specifies the proxy init image version | valid image tag | `1.1.7` |
 | `global.imagePullPolicy` | Specifies the image pull policy | valid image pull policy | `IfNotPresent` |
 | `global.controlPlaneSecurityEnabled` | Specifies whether control plane mTLS is enabled | true/false | `false` |
 | `global.disablePolicyChecks` | Specifies whether to disables mixer policy checks | true/false | `true` |
@@ -294,9 +298,11 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `global.outboundTrafficPolicy.mode` | Specifies the default outbound traffic policy mode, default value is 'ALLOW_ANY' | 'ALLOW_ANY' or 'REGISTRY_ONLY' | 'ALLOW_ANY' |
 | `global.sds` | Specifies the configuration for the secret discovery service(SDS) | SDS configuration | `{}` |
 | `global.meshNetworks` | Configures the mesh networks to be used by the Split Horizon EDS | valid mesh network | `{}` |
+| `global.localityLbSetting` | Specifies the global locality load balancing settings | valid locality lb settings | `{}` |
 | `global.enableHelmTest` | Specifies whether to render the helm test resources, default value is false | true/false | `false` |
 | `global.arch.amd64`| Architecture preference for amd64 node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
 | `global.arch.ppc64le` | Architecture preference for ppc64le node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
+| `global.arch.s390x` | Architecture preference for s390x node | `0 - Do not use`/`1 - Least preferred`/`2 - No preference`/`3 - Most preferred` | `2 - No preference` |
 | `gateways.enabled` | Specifies whether the Istio Gateway should be installed | true/false | `true` |
 | `gateways.istio-ingressgateway.enabled` | Specifies whether the Ingress Gateway should be installed | true/false | `true` |
 | `gateways.istio-ingressgateway.labels` | Specifies labels for Ingress Gateway | valid labels | `app: istio-ingressgateway` |
@@ -343,20 +349,20 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `sidecarInjectorWebhook.replicaCount` | Specifies number of desired pods for automatic sidecar injector webhook | number | `1` |
 | `sidecarInjectorWebhook.enableNamespacesByDefault` | Specifies use the default namespaces for automatic sidecar injector webhook | true/false | `false` |
 | `sidecarInjectorWebhook.image.repository` | Specifies the Automatic Sidecar Injector image location | valid image repository | `ibmcom/istio-sidecar_injector` |
-| `sidecarInjectorWebhook.image.tag` | Specifies the Automatic Sidecar Injector image version | valid image tag | `1.1.0` |
+| `sidecarInjectorWebhook.image.tag` | Specifies the Automatic Sidecar Injector image version | valid image tag | `1.1.7` |
 | `sidecarInjectorWebhook.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `sidecarInjectorWebhook.nodeSelector` | Specifies customized node selector for deployment | valid node selector | {} |
 | `galley.enabled` | Specifies whether Galley should be installed | true/false | `true` |
 | `galley.replicaCount` | Specifies number of desired pods for Galley deployment | number | `1` |
 | `galley.image.repository` | Specifies the galley image location | valid image repository | `ibmcom/istio-galley` |
-| `galley.image.tag` | Specifies the galley image version | valid image tag | `1.1.0` |
+| `galley.image.tag` | Specifies the galley image version | valid image tag | `1.1.7` |
 | `galley.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `galley.tolerations` | Specifies customized tolerations for deployment | valid tolerations | [] |
 | `galley.nodeSelector` | Specifies customized node selector for deployment | valid node selector | {} |
 | `mixer.enabled` | Specifies whether Mixer should be installed | true/false | `true` |
 | `mixer.replicaCount` | Specifies number of desired pods for Mixer deployment | number | `1` |
 | `mixer.image.repository` | Specifies the Mixer image location | valid image repository | `ibmcom/istio-mixer` |
-| `mixer.image.tag` | Specifies the Mixer image version | valid image tag | `1.1.0` |
+| `mixer.image.tag` | Specifies the Mixer image version | valid image tag | `1.1.7` |
 | `mixer.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `mixer.tolerations` | Specifies customized tolerations for deployment | valid tolerations | [] |
 | `mixer.nodeSelector` | Specifies customized node selector for deployment | valid node selector | {} |
@@ -373,7 +379,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `pilot.autoscaleMin` | Specifies lower limit for the number of pods that can be set by the autoscaler | number | `1` |
 | `pilot.autoscaleMax` | Specifies upper limit for the number of pods that can be set by the autoscaler | number | `5` |
 | `pilot.image.repository` | Specifies the Pilot image location | valid image repository | `ibmcom/istio-pilot` |
-| `pilot.image.tag` | Specifies the Pilot image version | valid image tag | `1.1.0` |
+| `pilot.image.tag` | Specifies the Pilot image version | valid image tag | `1.1.7` |
 | `pilot.sidecar` | Specifies whether to enable the envoy sidecar to Pilot | true/false | `true` |
 | `pilot.traceSampling` | Specifies the number of trace sample for Pilot | number | `100.0` |
 | `pilot.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | `{requests.cpu: 500m, requests.memory: 2048Mi}` |
@@ -382,23 +388,22 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `pilot.tolerations` | Specifies customized tolerations for deployment | valid tolerations | [] |
 | `pilot.nodeSelector` | Specifies customized node selector for deployment | valid node selector | {} |
 | `security.enabled` | Specifies whether Citadel should be installed | true/false | `true` |
-| `security.replicaCount` | Specifies number of desired pods for Citadel deployment | number | `1` |
 | `security.selfSigned` | Specifies whether self-signed CA is enabled | true/false | `true` |
 | `security.image.repository` | Specifies the Citadel image location | valid image repository | `ibmcom/istio-citadel` |
-| `security.image.tag` | Specifies the Citadel image version | valid image tag | `1.1.0` |
+| `security.image.tag` | Specifies the Citadel image version | valid image tag | `1.1.7` |
 | `security.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `security.tolerations` | Specifies customized tolerations for deployment | valid tolerations | [] |
 | `security.nodeSelector` | Specifies customized node selector for deployment | valid node selector | {} |
 | `nodeagent.enabled`| Specifies whether citadel node agent should be installed | true/false | `false` |
 | `nodeagent.image.repository` | Specifies the citadel node agent image location | valid image repository | `ibmcom/istio-node-agent-k8s` |
-| `nodeagent.image.tag` | Specifies the citadel node agent image version | valid image tag | `1.1.0` |
+| `nodeagent.image.tag` | Specifies the citadel node agent image version | valid image tag | `1.1.7` |
 | `nodeagent.env` | Specifies the environment variables for the citadel node agent | valid env | {} |
 | `nodeagent.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `nodeagent.tolerations` | Specifies customized tolerations for deployment | valid tolerations | [] |
 | `nodeagent.nodeSelector` | Specifies customized node selector for deployment | valid node selector | {} |
 | `istiocni.enabled`| Specifies whether the istio-cni should be installed | true/false | `false` |
 | `istiocni.image.repository` | Specifies the istio-cni image location | valid image repository | `ibmcom/istio-cni` |
-| `istiocni.image.tag` | Specifies the istio-cni image version | valid image tag | `1.1.0` |
+| `istiocni.image.tag` | Specifies the istio-cni image version | valid image tag | `1.1.7` |
 | `istiocni.logLevel` | Specifies the log level for the istio-cni | valid log level | `info` |
 | `istiocni.excludeNamespaces` | Specifies the exclude namespaces for the istio-cni | valid namespace array | `["istio-system"]` |
 | `istiocni.tolerations` | Specifies customized tolerations for deployment | valid tolerations | [] |
@@ -440,7 +445,7 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `servicegraph.enabled` | Specifies whether Servicegraph addon should be installed | true/false | `false` |
 | `servicegraph.replicaCount` | Specifies number of desired pods for Servicegraph deployment | number | `1` |
 | `servicegraph.image.repository` | Specifies the Servicegraph image location | valid image repository | `ibmcom/istio-servicegraph` |
-| `servicegraph.image.tag` | Specifies the Servicegraph image version | valid image tag | `1.1.0` |
+| `servicegraph.image.tag` | Specifies the Servicegraph image version | valid image tag | `1.1.7` |
 | `servicegraph.service.annotations` | Specifies the annotation for the Servicegraph service | valid service annotation | {} |
 | `servicegraph.service.name` | Specifies name for the Servicegraph service | valid service name | `http` |
 | `servicegraph.service.type` | Specifies type for the Servicegraph service | valid service type | `ClusterIP` |
@@ -477,14 +482,12 @@ Helm charts expose configuration options which are currently in alpha.  The curr
 | `kiali.enabled` | Specifies whether kiali addon should be installed | true/false | `false` |
 | `kiali.replicaCount` | Specifies number of desired pods for kiali | number | `1` |
 | `kiali.image.repository` | Specifies the kiali image location | valid image repository | `ibmcom/kiali` |
-| `kiali.image.tag` | Specifies the kiali image version | valid image tag | `v0.14` |
+| `kiali.image.tag` | Specifies the kiali image version | valid image tag | `v0.16.2` |
 | `kiali.ingress.enabled` | Specifies whether the kiali ingress enabled | true/false | `false` |
 | `kiali.ingress.hosts` | Specify the hosts for Kiali ingress | array consists of valid hosts | [] |
 | `kiali.ingress.annotations` | Specify the annotations for Kiali ingress | object consists of valid annotations | {} |
 | `kiali.ingress.tls` | Specify the TLS settigs for Kiali ingress | array consists of valid TLS settings | [] |
 | `kiali.dashboard.secretName` | Specifies secret name that contains username and passphrase for the Kiali dashboard | valid secret name | `kiali` |
-| `kiali.dashboard.usernameKey` | Specifies the username key for the secret that contains username for the Kiali dashboard | valid secret key string | `username` |
-| `kiali.dashboard.passphraseKey` | Specifies the passphrase key for the secret that contains passphrase for the Kiali dashboard | valid secret key string | `passphrase` |
 | `kiali.resources` | CPU/Memory for resource requests & limits | valid CPU&memory settings | {} |
 | `kiali.tolerations` | Specifies customized tolerations for deployment | valid tolerations | [] |
 | `kiali.nodeSelector` | Specifies customized node selector for deployment | valid node selector | {} |
@@ -518,4 +521,26 @@ $ helm delete istio --purge
 
 ## Limitations
 
-Currently, only one instance of Istio can be installed on a cluster at a time.
+1. Currently, only one instance of Istio can be installed on a cluster at a time.
+2. There is [know issue](https://github.com/helm/helm/issues/4697) that `crd-install` hook isn't working during upgrading. For now, if you want to upgrade `ibm-istio` chart to current version, you need to manually apply all the CRDs before upgrading with the following commmands:
+   ```
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-10.yaml
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-11.yaml
+   ```
+
+   or if you have downloaded the chart locally:
+   ```
+   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-10.yaml
+   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-11.yaml
+   ```
+   **Note**: If you are enabling `certmanager`, you also need to install its CRDs and wait a few seconds for the CRDs to be committed in the kube-apiserver:
+   ```
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-certmanager-10.yaml
+   $ kubectl apply -f https://raw.githubusercontent.com/IBM/charts/master/stable/ibm-istio/additionalFiles/crds/crd-certmanager-11.yaml
+   ```
+
+   or if you have downloaded the chart locally:
+   ```
+   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-certmanager-10.yaml
+   $ kubectl apply -f ../ibm-istio/additionalFiles/crds/crd-certmanager-11.yaml
+   ```
