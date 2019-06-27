@@ -14,7 +14,7 @@ helm install --name my-release community/gitlab
 
 ### Create secrets
 
-TODO: any secrets that need to be or could be pre-created?
+If TLS is enabled, you will need to create certificates for `unicorn`, `minio` (if installed), and the Docker registry. Instructions on how to create these certificates using ICP's Certificate manager can be found [here](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.2/manage_applications/create_cert.html).
 
 ### Image Security Policies
 
@@ -73,21 +73,78 @@ For documentation on managing image policies refer to [Enforcing container image
 
 ## Persistence
 
-TODO: 5+ PVCs created depending on what subcharts you are installing
+This chart will create Persistent Volume Claims with the assumption that a dynamic provisioner will create the required storage resources. For more information on storage configuration and installation, refer to [GitLab's storage documentation](https://gitlab.com/charts/gitlab/blob/master/doc/installation/storage.md)
 
 ## RBAC
 
-RBAC is enabled by default.  If you want to disable it you will need to do the following:
-
-TODO: I think there are like 8+ places to turn this off
+RBAC is enabled by default.  If you want to disable it you will need to set the following settings to `false`:
 
 ```bash
-helm install community/gitlab --set <chartnames>.rbac.create=false
+certmanager.rbac.create=false
+nginx-ingress.rbac.createRole=false
+prometheus.rbac.create=false
+gitlab-runner.rbac.create=false
 ```
 
 ## Configuration
 
-TODO: enter huge table here based on values.yaml or just point to something in their doc?
+GitLab provides many values to configure each of the parts of the chart. The tables below reflect those of the values provided in this serve as a bare minimum for installation. Further information can be found on [GitLab's documentation for this chart.](https://gitlab.com/charts/gitlab/tree/8cd44f7ebde44adfda32513b9905976382a1caeb/doc)
+
+### global
+|  Parameter                                                  |  Default                  | Description |
+|  :--------                                                  |  :------                  | :---------- |
+|  `edition`                             |  `"ee"`                  | Edition of GitLab to install; `"ce"` for Community Edition and `"ee"` for Enterprise Edition. |
+|  `hosts.domain`                                             |  `"example.com"`  | The domain name to be used for the service. |
+|  `hosts.https`                                              |  `true`  | Uses HTTPS when enabled; to use HTTP, set both this as well as `global.ingress.tls.enabled` to `false`. |
+|  `hosts.externalIP`                                         |  `""`         | The IP that these services will be exposed on; this is the IP of the proxy or LoadBalancer used for the services. |
+|  `ingress.configureCertmanager`                             |  `false`                  | This chart can set up its own `cert-manager` and create certificates to associate with its services. This is not advised on ICP. |
+|  `ingress.tls.enabled`                                              |  `true`                  | TLS is used when set to `true`. |
+|  `minio.enabled`         |  `true`                       | Installs `minio` when set to `true`. |
+|  `minio.ingress.tls.secretName`  |  `""`                         | Name of the secret containing the TLS certificate for the `minio` service. |
+---
+### certmanager
+> By default, IBM disables the install of `cert-manager` in this chart because it causes serious conflicts with the existing `cert-manager` and its associated CRDs on ICP. 
+
+|  Parameter      |  Default  | Description |
+|  :--------      |  :------  | :---------- |
+|  `install`      |  `false`  | When set to `true`, the chart installs the [cert-manager chart](https://github.com/jetstack/cert-manager). Perform this at your own risk. |
+|  `rbac.create`  |  `true`   | When set to `true`, the chart creates and uses RBAC. |
+---
+### gitlab-runner
+|  Parameter      |  Default  | Description |
+|  :--------      |  :------  | :---------- |
+|  `install`      |  `false`  | Installs [GitLab Runner](https://docs.gitlab.com/runner/) when set to `true`. |
+|  `rbac.create`  |  `true`   | When set to `true`, the chart creates and uses RBAC. |
+---
+### nginx-ingress
+|  Parameter      |  Default  | Description |
+|  :--------      |  :------  | :---------- |
+|  `enabled`      |  `false`  | Installs an nginx ingress controller when set to `true`; ICP already has an Ingress controller installed by default.  |
+|  `rbac.create`  |  `true`   | When set to `true`, the chart creates and uses RBAC. |
+---
+### prometheus
+|  Parameter      |  Default  | Description |
+|  :--------      |  :------  | :---------- |
+|  `install`      |  `false`  | Installs the `prometheus` subchart. |
+|  `rbac.create`  |  `true`   | When set to `true`, the chart creates and uses RBAC. |
+---
+### registry
+|  Parameter         |  Default  | Description |
+|  :--------         |  :------  | :---------- |
+|  `minReplicas`     |  `1`      | Minimum count of registry replicas. |
+|  `maxReplicas`     |  `3`      | Maximum count of registry replicas. |
+|  `ingress.tls.secretName`  |  `""`     | Name of the secret containing the TLS certificate for the `registry` service. |
+---
+### gitlab
+|  Parameter                   |  Default  | Description |
+|  :--------                   |  :------  | :---------- |
+|  `gitlab-shell.minReplicas`  |  `1`      | Minimum count of `gitlab-shell` replicas. |
+|  `gitlab-shell.maxReplicas`  |  `3`      | Maximum count of `gitlab-shell` replicas. |
+|  `sidekiq.minReplicas`       |  `1`      | Minimum count of `sidekiq` replicas. |
+|  `sidekiq.maxReplicas`       |  `3`      | Maximum count of `sidekiq` replicas. |
+|  `unicorn.minReplicas`       |  `1`      | Minimum count of `unicorn` replicas. |
+|  `unicorn.maxReplicas`       |  `3`      | Maximum count of `unicorn` replicas. |
+|  `unicorn.ingress.tls.secretName`            |  `""`     | Name of the secret containing the TLS certificate for the `unicorn` service. |
 
 ## Uninstalling the chart
 
@@ -101,13 +158,11 @@ The command removes the Kubernetes objects associated with the chart and deletes
 
 ## Detailed documentation
 
-See the [repository documentation](https://gitlab.com/charts/gitlab/tree/8cd44f7ebde44adfda32513b9905976382a1caeb/doc/index.md) for how to install GitLab and
-other information on charts, tools, and advanced configuration.
+See the [repository documentation](https://gitlab.com/charts/gitlab/tree/8cd44f7ebde44adfda32513b9905976382a1caeb/doc/index.md) for how to install GitLab and other information on charts, tools, and advanced configuration.
 
 ## Architecture and goals
 
-See [architecture documentation](https://gitlab.com/charts/gitlab/tree/8cd44f7ebde44adfda32513b9905976382a1caeb/doc/architecture/index.md) for an overview
-of this project goals and architecture.
+See [architecture documentation](https://gitlab.com/charts/gitlab/tree/8cd44f7ebde44adfda32513b9905976382a1caeb/doc/architecture/index.md) for an overview of this project goals and architecture.
 
 ## Known issues and limitations
 
