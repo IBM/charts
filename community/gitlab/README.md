@@ -99,8 +99,6 @@ GitLab provides many values to configure each of the parts of the chart. The tab
 |  `hosts.externalIP`                                         |  `""`         | The IP that these services will be exposed on; this is the IP of the proxy or LoadBalancer used for the services. |
 |  `ingress.configureCertmanager`                             |  `false`                  | This chart can set up its own `cert-manager` and create certificates to associate with its services. This is not advised on ICP. |
 |  `ingress.tls.enabled`                                              |  `true`                  | TLS is used when set to `true`. |
-|  `minio.enabled`         |  `true`                       | Installs `minio` when set to `true`. |
-|  `minio.ingress.tls.secretName`  |  `""`                         | Name of the secret containing the TLS certificate for the `minio` service. |
 ---
 ### certmanager
 > By default, IBM disables the install of `cert-manager` in this chart because it causes serious conflicts with the existing `cert-manager` and its associated CRDs on ICP. 
@@ -115,6 +113,11 @@ GitLab provides many values to configure each of the parts of the chart. The tab
 |  :--------      |  :------  | :---------- |
 |  `install`      |  `false`  | Installs [GitLab Runner](https://docs.gitlab.com/runner/) when set to `true`. |
 |  `rbac.create`  |  `true`   | When set to `true`, the chart creates and uses RBAC. |
+---
+### minio
+|  Parameter         |  Default                      | Description |
+|  :--------         |  :------                      | :---------- |
+|  `ingress.tls.secretName`  |  `""`                         | Name of the secret containing the TLS certificate for the `minio` service. |
 ---
 ### nginx-ingress
 |  Parameter      |  Default  | Description |
