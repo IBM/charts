@@ -1,21 +1,14 @@
 ## What's new...
-DataPower 2018.4.1.4 \
-Improved healthcheck no longer relies on backend. \
-Enabling SSH raises permissions to work properly.
+DataPower 2018.4.1.6 \
+L2 certification \
+Set admin password with adminUserSecret
 
 ## Fixes
-Pull secrets now work.
-SSH now works.
 
 ## Prerequisites
 None
 
 ## Breaking Changes
-Helm upgrade from 2.0.5 to 3.0.0 broken due to new label scheme. To upgrade:
-- Redeploy with identical values.yaml.
-- Shift downstream services to point at new ibm-datapower-dev service.
-- Deprecate 2.0.5 deployment.
-- Ultimately delete 2.0.5 deployment after move is complete.
 
 ## Documentation
 See README.md
@@ -24,6 +17,7 @@ See README.md
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ------------ | ------- | ---------------------------------- | ---- | -------------------------------------------------------------- |
+| 3.0.1 | Jun 28, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.6.309660 | None | L2 cert, adminUserSecret |
 | 3.0.0 | Apr 19, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.4.307525 | Changed label scheme | 2018.4.1.4, pull secrets, health check, ssh permissions |
 | 2.0.5 | Mar 08, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.3.306649 | None | 2018.4.1.3, use secret for https keys/certs, ILMT annotations |
 | 2.0.4 | Feb 08, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.2:306098 | None | Continuous delivery update for 2018.4.1.2 FixPack |

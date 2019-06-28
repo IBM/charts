@@ -3,6 +3,20 @@
 auto-startup.cfg: |
     top; configure terminal;
 
+{{- if .Values.datapower.adminUserSecret }}
+    %if% available "include-config"
+
+    include-config "auto-user-cfg"
+      config-url "config:///auto-user.cfg"
+      auto-execute
+      no interface-detection
+    exit
+
+    exec "config:///auto-user.cfg"
+
+    %endif%
+{{- end }}
+
     %if% available "include-config"
 
     include-config "healthCheck"
@@ -104,6 +118,7 @@ auto-startup.cfg: |
       local-ip-rewrite
       maxchkpoints 3
     exit
+
 auto-user.cfg: |
     top; configure terminal;
 

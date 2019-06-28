@@ -28,9 +28,6 @@ spec:
       annotations:
         productName: 'IBM DataPower Gateway Virtual Edition for Developers'
         productID: 'IBMDataPowerGatewayVirtualEdition_{{ .Values.datapower.image.tag }}_Developers'
-        productChargedContainers: ""
-        productFlexpointBundle: {{ quote .Values.datapower.flexpointBundle }}
-        productMetric: "PROCESSOR_VALUE_UNIT"
         productVersion: "{{ .Values.datapower.image.tag }}"
         prometheus.io/scrape: 'true'
         prometheus.io/path: '/snmp'
@@ -56,6 +53,10 @@ spec:
           - sh
           - -c
           - |
+            cp -r /opt/ibm/datapower/init/config/. /drouter/config/
+{{- if .Values.datapower.adminUserSecret }}
+            sh /opt/ibm/datapower/init/admin-user/init-admin-user.sh
+{{- end }}
             exec /start.sh --log-format {{ .Values.datapower.env.defaultLogFormat }}
         stdin: true
         tty: true
@@ -124,6 +125,8 @@ spec:
         - name: health
           containerPort: 7878
         volumeMounts:
+            - mountPath: "/opt/ibm/datapower/init/config"
+              name: {{ template "ibm-datapower-dev.fullname" . }}-init-config-volume
             - mountPath: "/drouter/config"
               name: {{ template "ibm-datapower-dev.fullname" . }}-config-volume
             - mountPath: "/drouter/local/health"
@@ -132,8 +135,16 @@ spec:
             - mountPath: "/drouter/secure/usrcerts/{{ .Values.patternName }}"
               name: {{ template "ibm-datapower-dev.fullname" . }}-secret-volume
 {{- end }}
+{{- if .Values.datapower.adminUserSecret }}
+            - name: init-admin-user
+              mountPath: /opt/ibm/datapower/init/admin-user
+            - name: init-admin-user-secret
+              mountPath: /opt/ibm/datapower/init/admin-user-secret
+{{- end }}
       volumes:
         - name: {{ template "ibm-datapower-dev.fullname" . }}-config-volume
+          emptyDir: {}
+        - name: {{ template "ibm-datapower-dev.fullname" . }}-init-config-volume
           configMap:
             name: {{ template "ibm-datapower-dev.fullname" . }}-config
             items:
@@ -154,6 +165,15 @@ spec:
           secret:
             secretName: {{ .Values.crypto.frontsideSecret }}
 {{- end }}
+{{- if .Values.datapower.adminUserSecret }}
+        - name: init-admin-user
+          configMap:
+            name: {{ template "ibm-datapower-dev.fullname" . }}-static-init-admin-user
+        - name: init-admin-user-secret
+          secret:
+            secretName: {{ .Values.datapower.adminUserSecret }}
+{{- end }}
+
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

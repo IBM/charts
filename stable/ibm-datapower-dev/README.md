@@ -18,7 +18,32 @@ Deploys IBM DataPower Gateway Virtual Edition for Developers.
 Only works with DataPower version 2018.4.1.3 and above.
 
 ## Prerequisites
+WARNING! Not providing an adminUserSecret will result in a default, hardcoded admin password. \
+A user with the Operator role is required to install this chart. \
 helm and kubectl must be installed and configured on your system.
+
+### Admin Password Secret
+It is possible to change the default admin password prior to deployment by creating a password secret and passing that into the `adminUserSecret` value.
+
+In order to replace the default admin credentials, the new credentials should be configured via Secret and `.Values.datapower.adminUserSecret` must be set to the name of the Secret containing the admin user's credentials.
+
+The following are properties which can be used to define the admin user's credentials:
+- `password-hashed`: The hashed value (see Linux `man 3 crypt` for format) of the admin user's password. Required if `password` is not defined.
+- `password`: The admin user's password. Required if `password-hashed` is not defined; ignored if `password-hashed` is defined.
+- `salt`: The salt value used when hashing `password` (see `man 3 crypt`). Optional; ignored when `password-hashed` is defined. (Default: 12345678)
+- `method`: The name of the hashing algorithm used to hash `password`. Valid options: md5, sha256. Optional; ignored when `password-hashed` is defined. (Default: md5)
+
+The following examples create Secrets with different values, but result in an admin user with the same credentials (and the same password hash):
+-  `kubectl create secret generic admin-credentials --from-literal=password=helloworld --from-literal=salt=12345678 --from-literal=method=md5`
+-  `kubectl create secret generic admin-credentials --from-literal=password=helloworld`
+-  `kubectl create secret generic admin-credentials --from-literal=password-hashed='$1$12345678$8.nskQfP4gQ8tk5xw6Wa8/'`
+
+These two examples also result in Secrets with different values but identical admin credentials
+-  `kubectl create secret generic admin-credentials --from-literal=password=hunter2 --from-literal=salt=NaCl --from-literal=method=sha256`  
+-  `kubectl create secret generic admin-credentials --from-literal=password-hashed='$5$NaCl$aOrRVimQNvZ2ZLjnAyMvT3WgaUEXoWgwkgyBrhwIg04'`
+  Notice that, when setting `password-hashed`, the value must be surrounded by single-quotes
+
+In all of the examples above, `.Values.datapower.adminUserSecret` should be set to 'admin-credentials' for the admin user to be configured.
 
 ### PodSecurityPolicy Requirements
 
@@ -85,6 +110,8 @@ Minimum resources per pod: 2 CPU and 4 GB RAM
 [//]: # (Resources Required End)
 
 ## Installing the Chart
+Users installing this chart must have at least "edit" permissions for the target namespace.
+
 To install the chart with the release name `my-release` and default pattern (See .Values.patternName below):
  ```bash
 $ helm install --name my-release -f <myvalues.yaml> stable/ibm-datapower-dev --tls
