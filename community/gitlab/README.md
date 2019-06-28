@@ -93,7 +93,7 @@ GitLab provides many values to configure each of the parts of the chart. The tab
 ### global
 |  Parameter                                                  |  Default                  | Description |
 |  :--------                                                  |  :------                  | :---------- |
-|  `edition`                             |  `"ee"`                  | Edition of GitLab to install; `"ce"` for Community Edition and `"ee"` for Enterprise Edition. |
+|  `edition`                             |  `"ce"`                  | Edition of GitLab to install; `"ce"` for Community Edition and `"ee"` for Enterprise Edition. |
 |  `hosts.domain`                                             |  `"example.com"`  | The domain name to be used for the service. |
 |  `hosts.https`                                              |  `true`  | Uses HTTPS when enabled; to use HTTP, set both this as well as `global.ingress.tls.enabled` to `false`. |
 |  `hosts.externalIP`                                         |  `""`         | The IP that these services will be exposed on; this is the IP of the proxy or LoadBalancer used for the services. |
