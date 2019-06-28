@@ -59,7 +59,7 @@ spec:
 {{ $labels | indent 8 }}
       annotations:
         # Used for identifying release candidates
-        releaseCandidate: 2019.1.1
+        releaseCandidate: ibm-eventstreams-dev-2019.2.1
 {{ include "metering" (list . ) | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
@@ -92,6 +92,11 @@ spec:
       - name: redis
         image: {{ include "eventstreams.image" (list . "eventstreams-database" .Values.global.image.imageTags.databaseTag) | quote }}
         imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          limits:
+{{ toYaml .Values.global.resources.database.limits | indent 12 }}
+          requests:
+{{ toYaml .Values.global.resources.database.requests | indent 12 }}
         securityContext:
           privileged: false
           readOnlyRootFilesystem: true
@@ -114,7 +119,7 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 10
           successThreshold: 1
-          timeoutSeconds: 2
+          timeoutSeconds: 10
         readinessProbe:
           exec:
             command:
@@ -125,7 +130,7 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 10
           successThreshold: 1
-          timeoutSeconds: 2
+          timeoutSeconds: 10
         env:
           {{- include "license.accept.env.ref" . | indent 10 }}
       - name: "access-controller"
@@ -157,10 +162,10 @@ spec:
             path: /v1/alive
             scheme: HTTPS
         resources:
-          limits:
-{{ toYaml .sch.config.security.accesscontroller.resources.limits | indent 14 }}
           requests:
-{{ toYaml .sch.config.security.accesscontroller.resources.requests | indent 14 }}
+{{ toYaml .Values.global.resources.accessController.requests | indent 14 }}
+          limits:
+{{ toYaml .Values.global.resources.accessController.limits | indent 14 }}
         env:
         {{- include "license.accept.env.ref" . | indent 6 }}
         - name: NAMESPACE
@@ -172,7 +177,7 @@ spec:
         - name: ICP_PDP_SUFFIX
           value: {{ .sch.config.security.iamPDPSuffix | quote}}
         - name: REDIS_HOSTNAME
-          value: "localhost"
+          value: "127.0.0.1"
         - name: TLS_CERT
           value: /tls/tls.cert
         - name: TLS_PRIKEY

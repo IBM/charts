@@ -13,6 +13,8 @@
 # Defines the pod that runs the admin REST API
 ###############################################################################
 {{- include "sch.config.init" (list . "rest.sch.chart.config.values") | trim -}}
+# Define a tlsEnabled var from Values.
+{{- include "sch.config.init" (list . "tls.sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.rest.deployment.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 # Component is 'rest' as this makes up part of implementing the Admin REST API
@@ -24,6 +26,9 @@
 # Service allowing access to the ZooKeeper cluster
 {{ $zookeeperHeadlessService := .sch.chart.components.zookeeper.headless.name -}}
 {{ $zookeeperHeadlessServiceName := include "sch.names.fullCompName" (list . $zookeeperHeadlessService) -}}
+# Service allowing access to the Schema Registry
+{{ $schemaRegistryService:= .sch.chart.components.schemaregistry.service.name -}}
+{{ $schemaRegistryServiceName := include "sch.names.fullCompName" (list . $schemaRegistryService) }}
 # Service allowing access to the replicator cluster
 {{ $replicatorService := .sch.chart.components.replicator.service.name -}}
 {{ $replicatorServiceName := include "sch.names.fullCompName" (list . $replicatorService) -}}
@@ -68,6 +73,12 @@
 {{ $kafkaInternalVersion := .sch.chart.components.kafka.kafkaInternalVersion -}}
 # Default user for security context
 {{ $defaultUser := .sch.securityContext.defaultUser -}}
+# TLS Proxy config map name
+{{ $tlsConfigMap := .sch.chart.components.rest.configMap.name -}}
+{{ $tlsConfigMapName := include "sch.names.fullCompName" (list . $tlsConfigMap ) }}
+{{ $httpProtocol := .sch.config.tlsInternal.httpProtocol }}
+# k8s configuration
+{{ $clusterName := .Values.global.k8s.clusterName -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -101,6 +112,21 @@ spec:
         runAsUser: {{ $defaultUser }}
       volumes:
       {{- include "license.accept.ref" . | indent 6 }}
+        - name: tlsproxy-config-map
+          configMap:
+            name: {{ $tlsConfigMapName }}
+        - name: proxy-certs-volume
+          secret:
+            secretName: {{ $proxySecretName }}
+            items:
+            - key: podtls.cert
+              path: ca-certificates.crt
+        - name: podtls-jks-volume
+          secret:
+            secretName: {{ $proxySecretName }}
+            items:
+            - key: podtls.jks
+              path: podtls.jks
       {{- if $replicatorEnabled }}
         - name: replicator-secret-volume
           secret:
@@ -130,6 +156,9 @@ spec:
         - name: "wait-for-kafka-headless"
           image: {{ include "eventstreams.image" (list . "eventstreams-init" .Values.global.image.imageTags.initTag) | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - containerPort: {{ $ports.rest.server }}
+              name: "https"
           env:
             {{- include "license.accept.env.ref" . | indent 12 }}
           securityContext:
@@ -143,6 +172,49 @@ spec:
               - ALL
           command: ['sh', '-c', 'echo Waiting for {{ $kafkaHeadlessServiceName }}; until nslookup {{ $kafkaHeadlessServiceName }}; do echo "Waiting for {{ $kafkaHeadlessServiceName }}"; sleep 10; done;']
       containers:
+        # tls proxy sidecar - encrypts traffic to elastic search
+        - name: tls-proxy
+          image: {{ include "eventstreams.image" (list . "eventstreams-proxy" .Values.global.image.imageTags.proxyTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $defaultUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+{{ toYaml .Values.global.resources.tlsProxy.requests | indent 14 }}
+            limits:
+{{ toYaml .Values.global.resources.tlsProxy.limits | indent 14 }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ES_CONFIG_PATH
+              value: {{ .sch.chart.components.rest.tlsConfigPath | quote }}
+          volumeMounts:
+            - name: proxy-certs-volume
+              mountPath: /etc/ssl/certs
+              readOnly: true
+            - name: tlsproxy-config-map
+              mountPath: {{ .sch.chart.components.collector.tlsConfigPath | quote }}
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: "/live"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 15
         - name: "rest"
           image: {{ include "eventstreams.image" (list . "eventstreams-rest" .Values.global.image.imageTags.restTag) | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
@@ -157,13 +229,14 @@ spec:
               - ALL
           resources:
             limits:
-{{ toYaml .sch.config.rest.resources.limits | indent 14 }}
+{{ toYaml .Values.global.resources.rest.limits | indent 14 }}
             requests:
-{{ toYaml .sch.config.rest.resources.requests | indent 14 }}
+{{ toYaml .Values.global.resources.rest.requests | indent 14 }}
           readinessProbe:
             httpGet:
               path: /status
-              port: {{ $ports.rest.server }}
+              port: {{ $ports.rest.health }}
+              scheme: HTTPS
               httpHeaders:
                 - name: Accept
                   value: '*/*'
@@ -175,7 +248,8 @@ spec:
           livenessProbe:
             httpGet:
               path: /status
-              port: {{ $ports.rest.server }}
+              port: {{ $ports.rest.health }}
+              scheme: HTTPS
               httpHeaders:
                 - name: Accept
                   value: '*/*'
@@ -207,6 +281,21 @@ spec:
                 secretKeyRef:
                   name: {{ $proxySecretName }}
                   key: "tls.cluster"
+            - name: "TLS_CERT"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.cert"
+            - name: "TLS_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.key"
+            - name: "PODTLS_JKS_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.jks.password"
             - name: "CLUSTER_EXTERNAL_IP"
               valueFrom:
                 secretKeyRef:
@@ -218,13 +307,15 @@ spec:
                   name: {{ $oauthSecretName }}
                   key: "clusterExternalPort"
             - name: KAFKA_BOOTSTRAP_URL
-              value: "{{ $kafkaHeadlessServiceName }}.{{ .Release.Namespace }}:{{ $ports.kafka.internalEventStreamsSecureIntercept }}"
+              value: "{{ $kafkaHeadlessServiceName }}.{{ .Release.Namespace }}.svc.{{ $clusterName }}:{{ $ports.kafka.internalEventStreamsSecureIntercept }}"
             - name: ZOOKEEPER_CONNECT
-              value: "{{ $zookeeperHeadlessServiceName }}.{{ .Release.Namespace }}:{{ $ports.zookeeper.client }}"
+              value: "127.0.0.1:{{ $ports.zookeeper.client }}"
+            - name: SCHEMA_REGISTRY_URL
+              value: "https://{{ $schemaRegistryServiceName }}.{{ .Release.Namespace }}.svc.{{ $clusterName }}:{{ $ports.schemaregistry.server }}/api"
             - name: MESSAGE_INDEXING_DISABLED
               value: {{ (ne .Values.messageIndexing.messageIndexingEnabled true) | toString | quote }}
             - name: INDEX_MANAGER_URL
-              value: "{{ $indexmgrServiceName }}.{{ .Release.Namespace }}:{{ $ports.indexmgr.api }}"
+              value: "{{ $httpProtocol }}://{{ $indexmgrServiceName }}.{{ .Release.Namespace }}.svc.{{ $clusterName }}:{{ $ports.indexmgr.api }}"
             - name: ICP_PAP_SUFFIX
               value: {{ .sch.config.security.iamPAPSuffix | quote}}
             - name: ICP_IAM_TOKEN_SUFFIX
@@ -258,7 +349,7 @@ spec:
             - name: GEOREPLICATION_ENABLED
               value: "true"
             - name: REPLICATOR_SVC_URL
-              value: "http://{{ $replicatorServiceName }}.{{ .Release.Namespace }}:{{ $ports.replicator.api }}"
+              value: "http://{{ $replicatorServiceName }}.{{ .Release.Namespace }}.svc.{{ $clusterName }}:{{ $ports.replicator.api }}"
             - name: KAFKA_HEADLESS_SVC_NAME
               value: {{ $kafkaHeadlessServiceName | quote }}
             - name: ZK_HEADLESS_SVC_NAME
@@ -269,6 +360,15 @@ spec:
           volumeMounts:
             - name: proxy-config-volume
               mountPath: /etc/proxy-configmap
+            - name: proxy-certs-volume
+              mountPath: /etc/ssl/certs
+              readOnly: true
+            - name: tlsproxy-config-map
+              mountPath: {{ .sch.chart.components.rest.tlsConfigPath | quote }}
+              readOnly: true
+            - name: podtls-jks-volume
+              mountPath: "/opt/ibm/wlp/usr/shared/resources/security"
+              readOnly: true
           {{- if $replicatorEnabled }}
             - name: replicator-secret-volume
               mountPath: /etc/georeplication
@@ -290,19 +390,20 @@ spec:
               - ALL
           resources:
             limits:
-{{ toYaml .sch.config.codegen.resources.limits | indent 14 }}
+{{ toYaml .Values.global.resources.codegen.limits | indent 14 }}
             requests:
-{{ toYaml .sch.config.codegen.resources.requests | indent 14 }}
+{{ toYaml .Values.global.resources.codegen.requests | indent 14 }}
           readinessProbe:
             httpGet:
               path: /health
               port: {{ $ports.codegen.server }}
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 10
           livenessProbe:
             httpGet:
               path: /health
               port: {{ $ports.codegen.server }}
             initialDelaySeconds: 90
             periodSeconds: 10
-
+            timeoutSeconds: 10

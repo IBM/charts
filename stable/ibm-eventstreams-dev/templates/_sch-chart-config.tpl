@@ -11,7 +11,7 @@ sch:
     # This user should also be the one created and used in the dockerfile
     # If an alternate user is required in the dockerfile, the security context user in the container should be changed to reflect this
     # The user in the security context of the chart (level above container) should be left as default as it will be overriden by the containers user
-    defaultUser: 5000
+    defaultUser: 65534
 
   restrictedNamespaces:
     - kube-system
@@ -35,10 +35,10 @@ sch:
       dev: "IBM Event Streams Community Edition"
       prod: "IBM Event Streams"
       foundation-prod: "IBM Event Streams Foundation Edition"
-      cip-prod: "IBM Event Streams Cloud Integration Platform Edition"
+      icp4i-prod: "IBM Cloud Pak for Integration - Event Streams"
       prerelease-prod: "IBM Event Streams pre-release"
 
-    productVersion: 2019.1.1
+    productVersion: 2019.2.1
 
     # Use the old convention for standard Kubernetes labels, as switching
     # to the new labels would break upgrades
@@ -92,6 +92,10 @@ sch:
           name: "release-cm"
         releaseCreateJob:
           name: "release-cm-creater-job"
+        releasePortsPatcherJob:
+          name: "release-cm-addport-job"
+        releasePortsDeleterJob:
+          name: "release-cm-delport-job"
         releasePatcherJob:
           name: "release-cm-patcher-job"
         releaseDeleteJob:
@@ -110,8 +114,8 @@ sch:
       kafka:
         # component label for all the Kafka-related resources
         compName: "kafka"
-        kafkaVersion: "2.1.1"
-        kafkaInternalVersion: "2.1"
+        kafkaVersion: "2.2.0"
+        kafkaInternalVersion: "2.2"
         networkPolicy: "kafka-access"
         # all of the resources deployed by the Kafka charts
         statefulSet:
@@ -130,6 +134,12 @@ sch:
           name: "kafka-sa"
         jmxSecret:
           name: "jmx-secret"
+        configMap:
+          name: "kafka-cm"
+        mproxyConfigMap:
+          name: "kafka-mpcm"
+        configPath: "/config"
+        tlsConfigPath: "/tlsconfig"
 
       #
       # Components relating to the Kafka metrics proxy
@@ -153,6 +163,9 @@ sch:
           name: "elastic-sts"
         serviceAccount:
           name: "elastic-sa"
+        configMap:
+          name: "elastic-cm"
+        tlsConfigPath: "/tlsconfig"
 
       #
       # Components relating to the index manager
@@ -168,6 +181,9 @@ sch:
           name: "indexmgr-deploy"
         serviceAccount:
           name: "indexmgr-sa"
+        configMap:
+          name: "indexmgr-cm"
+        tlsConfigPath: "/tlsconfig"
 
       #
       # Components relating to the collector
@@ -183,6 +199,9 @@ sch:
           name: "collector-deploy"
         serviceAccount:
           name: "collector-sa"
+        configMap:
+          name: "collector-cm"
+        tlsConfigPath: "/tlsconfig"
 
       #
       # Components relating to the ZooKeeper nodes
@@ -198,6 +217,9 @@ sch:
           name: "zookeeper-headless-svc"
         fixed:
           name: "zookeeper-fixed-ip-svc"
+        configMap:
+          name: "zookeeper-cm"
+        configPath: "/config"
 
       #
       # Components relating to the proxy that allows external access to Kafka
@@ -235,7 +257,10 @@ sch:
         deployment:
           name: "replicator-deploy"
         configMap:
-          name: "replicator-cm"
+          replicatorConfigMap:
+            name: "replicator-cm"
+          proxyConfigMap:
+            name: "replicator-proxy-cm"
         secretCreatorJob:
           name: "replicator-secret-job"
         secretDeleterJob:
@@ -249,6 +274,7 @@ sch:
             name: "replicator-rest-role"
           roleBinding:
             name: "replicator-rest-rolebinding"
+        configPath: "/config"
 
       #
       # Components relating to the Admin REST API
@@ -270,6 +296,7 @@ sch:
           name: "rest-role"
         roleBindings:
           name: "rest-rolebinding"
+        tlsConfigPath: "/tlsconfig"
 
       #
       # Components relating to hosting the Admin REST API proxy
@@ -302,7 +329,6 @@ sch:
           name: "rest-producer-deploy"
         serviceAccount:
           name: "rest-producer-sa"
-
       #
       # Components relating to hosting the admin UI
       #
@@ -340,6 +366,8 @@ sch:
           name: "iam-secret"
         roleMappings:
           name: "role-mappings"
+        roleMappingsConfigMap:
+          name: "role-mappings-cm"
         serviceAccount:
           name: "security-sa"
         accesscontroller:
@@ -373,10 +401,16 @@ sch:
         # resources deployed by the schemaregistry chart
         statefulSet:
           name: "schemaregistry-sts"
+        persistentVolumeClaim:
+          name: "schemaregistry-pvc"
         serviceAccount:
           name: "schemaregistry-sa"
         service:
           name: "schemaregistry-svc"
+        role:
+          name: "schemaregistry-role"
+        roleBinding:
+          name: "schemaregistry-rolebinding"
 
 
 {{- end -}}

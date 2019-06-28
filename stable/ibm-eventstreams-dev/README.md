@@ -1,11 +1,10 @@
 # IBM Event Streams Community Edition
 
-[IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, pub-sub technology for building event-driven applications. It's built on top of [Apache Kafka®](https://kafka.apache.org/) version 2.1.1.
+Built on Apache Kafka®, [IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, event streaming platform that helps you build intelligent, responsive, event-driven applications. Event Streams release 2019.2.1 uses the [Kafka](https://kafka.apache.org/) 2.2.0 release and supports the use of all Kafka interfaces.
 
 ## Introduction
 
-This chart deploys Apache Kafka® and supporting infrastructure such as Apache ZooKeeper™. For more information about IBM Event Streams, see the [product documentation](
-https://ibm.github.io/event-streams/about/overview/).
+This chart deploys Apache Kafka® and supporting infrastructure such as Apache ZooKeeper™. For more information about IBM Event Streams, see the [Event Streams product documentation](https://ibm.github.io/event-streams/about/overview/).
 
 ## Chart Details
 
@@ -23,6 +22,7 @@ This Helm chart will install the following:
 - An Elasticsearch cluster using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with 2 replicas to support the user interface
 - An index manager as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to provide access to the Elasticsearch nodes
 - A Collector as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) to provide monitoring metrics to Prometheus
+- A schema registry as a [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/) to support structured messages, with 2 replicas if persistence is enabled, or 1 if it is not
 
 ## Prerequisites
 
@@ -104,32 +104,25 @@ rules:
   - use
 ```
 
-Event Streams applies network policies to control the traffic within the namespace where it is deployed, limiting the traffic to that required by Event Streams. For more information about the network policies and the the traffic they permit, see the [product documentation](https://ibm.github.io/event-streams/security/network-policies/).
+Event Streams applies network policies to control the traffic within the namespace where it is deployed, limiting the traffic to that required by Event Streams. For more information about the network policies and the the traffic they permit, see the [Event Streams product documentation](https://ibm.github.io/event-streams/security/network-policies/).
 
-For more information about PodSecurityPolicy definitions, see the [IBM Cloud Private documentation](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.2/manage_cluster/security.html).
+For more information about PodSecurityPolicy definitions, see the [IBM Cloud Private documentation](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.2.0/manage_cluster/security.html).
 
 ## Resources Required
 
-The following table lists the resource requirements of the IBM Event Streams Helm chart. For details about the requirements for each pod and their containers, see the tables in the [product documentation](https://ibm.github.io/event-streams/installing/prerequisites/#helm-resource-requirements).
+The following table lists the resource requirements of the IBM Event Streams Helm chart. For details about the requirements for each pod and their containers, see the tables in the [Event Streams product documentation](https://ibm.github.io/event-streams/installing/prerequisites/#helm-resource-requirements).
 
-| Pod                   | Number of replicas  | Total CPU per pod  | Total memory per pod (Gi)
-| ----------------------|---------------------|--------------------|--------------------------
-| Kafka                 | 3*                  | 1*                 | 3.5*
-| ZooKeeper             | 3                   | 0.1*               | 1*
-| Administration UI     | 1                   | 1                  | 1
-| Administration server | 1                   | 4.5                | 2.5
-| REST producer server  | 1                   | 4                  | 2
-| REST proxy            | 1                   | unlimited          | unlimited
-| Collector             | 1                   | 1                  | 1
-| Network proxy         | 2                   | unlimited          | unlimited
-| Access controller     | 1                   | 0.1                | 0.25
-| Index manager         | 1                   | unlimited          | unlimited
-| Elasticsearch         | 2                   | unlimited          | 4
+| Pods                   | Number of replicas | Minimum total CPU | Minimum total memory (Gi) |
+| --------------------- | ------------------ | ----------------- | ------------------------- |
+| Kafka pod      | 3*                 | 2.2*                | 4.7*                      |
+| Event Streams core pods | 12 if no persistence enabled  | 13 if no persistence enabled   | 10 if no persistence enabled   |
+| &nbsp;            |  13 if persistence enabled  |  14 if persistence enabled  |  10.5 if persistence enabled|
+| Message indexing pods  | 3  | 1.5  | 4.1  |
 
 The settings marked with an asterisk (*) can be configured.
 
 
-The CPU and memory limits for the network proxy are not limited by the chart, so will inherit the resource limits for the namespace that the chart is being installed into. If there are no resource limits set for the namespace, the network proxy pod will run with unbounded CPU and memory limits.
+
 
 Persistence is not enabled by default and no persistent volumes are required. If you are going to enable persistence, you can find more information about storage requirements below.
 
@@ -203,12 +196,12 @@ helm upgrade --reuse-values --set kafka.configMapName=<configmap_name> <release_
 
 To install the chart, your user id must have the Cluster Administrator role.
 
-Add the IBM Cloud Private internal Helm repository called `local-charts` to the Helm CLI as an external repository, as described in the [IBM Cloud Private documentation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/app_center/add_int_helm_repo_to_cli.html).
+Add the IBM Cloud Private internal Helm repository called `local-charts` to the Helm CLI as an external repository, as described in the [IBM Cloud Private documentation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.2.0/app_center/add_int_helm_repo_to_cli.html).
 
 Install the chart, specifying the release name and namespace with the following command:
 
 ```
-helm install --name <release_name> --namespace=<namespace_name> --set license=accept ibm-eventstreams-dev --tls
+helm install --name <release_name> --namespace=<namespace_name> --set license=accept local-charts/ibm-eventstreams-dev --tls
 ```
 
 NOTE: The release name should consist of lower-case alphanumeric characters and not start with a digit or contain a space.
@@ -246,82 +239,93 @@ The following tables list the configurable parameters of the `ibm-eventstreams-d
 
 ### Global install settings
 
-| Parameter                                       | Description                                                                                   | Default                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `license`                                       | Set to 'accept' to indicate that you accept the terms of the IBM license                      | `Not accepted`                  |
+| Parameter | Description                                                              | Default        |
+| --------- | ------------------------------------------------------------------------ | -------------- |
+| `license` | Set to 'accept' to indicate that you accept the terms of the IBM license | `Not accepted` |
 | `global.image.repository`                       | Docker image registry                                                                         | `ibmcom`                        |
 | `global.image.pullSecret`                       | Image pull secret, if using a Docker registry that requires credentials                       | `nil`                           |
 | `global.image.pullPolicy`                       | Image pull policy                                                                             | `IfNotPresent`                  |
 | `global.fsGroupGid`                             | File system group ID for volumes that support ownership management                            | `nil`                           |
 | `global.arch`                                   | The worker node architecture where IBM Event Streams will be deployed                         | `amd64`                         |
+| `global.security.tlsInternal` | Control the use of TLS between pods  | disabled  |
 
 ### Insights - help us improve our product
 
-| Parameter                                       | Description                                                                                   | Default                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `telemetry.enabled`                             | Allow IBM to use in-application code to transmit product usage analytics                      | `false`                         |
+| Parameter           | Description                                                              | Default |
+| ------------------- | ------------------------------------------------------------------------ | ------- |
+| `telemetry.enabled` | Allow IBM to use in-application code to transmit product usage analytics | `false` |
 
 ### Kafka broker settings
 
-| Parameter                                       | Description                                                                                   | Default                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `kafka.resources.limits.cpu`                    | CPU limit for Kafka brokers                                                                   | `1000m`                         |
-| `kafka.resources.limits.memory`                 | Memory limit for Kafka brokers                                                                | `2Gi`                           |
-| `kafka.resources.requests.cpu`                  | CPU request for Kafka brokers                                                                 | `1000m`                         |
-| `kafka.resources.requests.memory`               | Memory request for Kafka brokers                                                              | `2Gi`                           |
-| `kafka.brokers`                                 | Number of brokers in the Kafka cluster, minimum 3                                             | `3`                             |
-| `kafka.configMapName`                           | Optional ConfigMap used to apply static configuration to brokers in the cluster               | `nil`                           |
-| `kafka.openJMX`                                 | Open each Kafka broker's JMX port for secure connections from inside the IBM Cloud Private cluster | `false`                    |
+| Parameter                         | Description                                                                                        | Default |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- | ------- |
+| `kafka.resources.limits.cpu`      | CPU limit for Kafka brokers                                                                        | `1000m` |
+| `kafka.resources.limits.memory`   | Memory limit for Kafka brokers                                                                     | `2Gi`   |
+| `kafka.resources.requests.cpu`    | CPU request for Kafka brokers                                                                      | `1000m` |
+| `kafka.resources.requests.memory` | Memory request for Kafka brokers                                                                   | `2Gi`   |
+| `kafka.brokers`                   | Number of brokers in the Kafka cluster, minimum 3                                                  | `3`     |
+| `kafka.configMapName`             | Optional ConfigMap used to apply static configuration to brokers in the cluster                    | `nil`   |
+| `kafka.openJMX`                   | Open each Kafka broker's JMX port for secure connections from inside the IBM Cloud Private cluster | `false` |
 
 ### Kafka persistent storage settings
 
-| Parameter                                       | Description                                                                                   | Default                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `persistence.enabled`                           | Enable persistent storage for Apache Kafka                                                    | `false`                         |
-| `persistence.useDynamicProvisioning`            | Use dynamic provisioning for Apache Kafka                                                     | `false`                         |
-| `persistence.dataPVC.name`                      | Prefix for the name of persistent volume claims used for Apache Kafka                         | `datadir`                       |
-| `persistence.dataPVC.storageClassName`          | Storage class of the persistent volume claims created for Apache Kafka                        | `nil`                           |
-| `persistence.dataPVC.size`                      | Size of the persistent volume claims created for Apache Kafka                                 | `4Gi`                           |
+| Parameter                              | Description                                                            | Default   |
+| -------------------------------------- | ---------------------------------------------------------------------- | --------- |
+| `persistence.enabled`                  | Enable persistent storage for Apache Kafka                             | `false`   |
+| `persistence.useDynamicProvisioning`   | Use dynamic provisioning for Apache Kafka                              | `false`   |
+| `persistence.dataPVC.name`             | Prefix for the name of persistent volume claims used for Apache Kafka  | `datadir` |
+| `persistence.dataPVC.storageClassName` | Storage class of the persistent volume claims created for Apache Kafka | `nil`     |
+| `persistence.dataPVC.size`             | Size of the persistent volume claims created for Apache Kafka          | `4Gi`     |
 
 ### ZooKeeper settings
 
-| Parameter                                       | Description                                                                                   | Default                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `zookeeper.resources.limits.cpu`                | CPU limit for ZooKeeper servers                                                               | `100m`                          |
-| `zookeeper.resources.requests.cpu`              | CPU request for ZooKeeper servers                                                             | `100m`                          |
-| `zookeeper.persistence.enabled`                 | Enable persistent storage for ZooKeeper servers                                               | `false`                         |
-| `zookeeper.persistence.useDynamicProvisioning`  | Use dynamic provisioning for ZooKeeper servers                                                | `false`                         |
-| `zookeeper.dataPVC.name`                        | Prefix for the name of the persistent volume claims for ZooKeeper servers                     | `datadir`                       |
-| `zookeeper.dataPVC.storageClassName`            | Storage class of the persistent volume claims created for ZooKeeper servers                   | `nil`                           |
-| `zookeeper.dataPVC.size`                        | Size of the persistent volume claims created for ZooKeeper servers                            | `2Gi`                           |
+| Parameter                                      | Description                                                                 | Default   |
+| ---------------------------------------------- | --------------------------------------------------------------------------- | --------- |
+| `zookeeper.resources.limits.cpu`               | CPU limit for ZooKeeper servers                                             | `100m`    |
+| `zookeeper.resources.requests.cpu`             | CPU request for ZooKeeper servers                                           | `100m`    |
+| `zookeeper.persistence.enabled`                | Enable persistent storage for ZooKeeper servers                             | `false`   |
+| `zookeeper.persistence.useDynamicProvisioning` | Use dynamic provisioning for ZooKeeper servers                              | `false`   |
+| `zookeeper.dataPVC.name`                       | Prefix for the name of the persistent volume claims for ZooKeeper servers   | `datadir` |
+| `zookeeper.dataPVC.storageClassName`           | Storage class of the persistent volume claims created for ZooKeeper servers | `nil`     |
+| `zookeeper.dataPVC.size`                       | Size of the persistent volume claims created for ZooKeeper servers          | `2Gi`     |
 
 ### External access settings
 
-| Parameter                                       | Description                                                                                    | Default                        |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------ |
-| `proxy.externalEndpoint`                        | External hostname or IP address to be used by external clients, default to cluster master node | `nil`                          |
+| Parameter                | Description                                                                                    | Default |
+| ------------------------ | ---------------------------------------------------------------------------------------------- | ------- |
+| `proxy.externalEndpoint` | External hostname or IP address to be used by external clients, default to cluster master node | `nil`   |
 
 ### Secure connection settings
 
-| Parameter                                       | Description                                                                                   | Default                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `tls.type`                                      | Type of certificate, specify 'selfsigned' to have one generated on install, or 'provided' if providing your own | `selfsigned`  |
-| `tls.key`                                       | If tls.type is 'provided', base64-encoded TLS private key                                     | `nil`                           |
-| `tls.cert`                                      | If tls.type is 'provided', base64-encoded TLS certificate                                     | `nil`                           |
-| `tls.cacert`                                    | If tls.type is 'provided', base64-encoded CA certificate/bundle                               | `nil`                           |
+| Parameter    | Description                                                                                                     | Default      |
+| ------------ | --------------------------------------------------------------------------------------------------------------- | ------------ |
+| `tls.type`   | Type of certificate, specify 'selfsigned' to have one generated on install, or 'provided' if providing your own | `selfsigned` |
+| `tls.key`    | If tls.type is 'provided', base64-encoded TLS private key                                                       | `nil`        |
+| `tls.cert`   | If tls.type is 'provided', base64-encoded TLS certificate                                                       | `nil`        |
+| `tls.cacert` | If tls.type is 'provided', base64-encoded CA certificate/bundle                                                 | `nil`        |
 
 ### Message indexing settings
 
-| Parameter                                       | Description                                                                                   | Default                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `messageIndexing.messageIndexingEnabled`        | Enable message indexing to enhance browsing the messages on topics                            | `true`                        |
-| `messageIndexing.resources.limits.memory`       | Memory limits for Index Manager nodes                                                         | `2Gi`                           |
+| Parameter                                 | Description                                                        | Default                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `messageIndexing.messageIndexingEnabled`  | Enable message indexing to enhance browsing the messages on topics | `true` |
+| `messageIndexing.resources.limits.memory` | Memory limits for Index Manager nodes                              | `2Gi`                                                                  |
 
 ### External monitoring settings
 
-| Parameter                                       | Description                                                                                   | Default                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `externalMonitoring.datadog.<check_template>`   | JSON string for the required Datadog® Autodiscovery check template used for Kafka monitoring   | `nil`                           |
+| Parameter                                     | Description                                                                                  | Default |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------- | ------- |
+| `externalMonitoring.datadog.<check_template>` | JSON string for the required Datadog® Autodiscovery check template used for Kafka monitoring | `nil`   |
+
+### Schema Registry settings
+
+| Parameter                                              | Description                                                                       | Default   |
+| -------------------------------------------------------| ----------------------------------------------------------------------------------| --------- |
+| `schema-registry.persistence.enabled`                  | Enable persistent storage for Schema Registry servers                             | `false`   |
+| `schema-registry.persistence.useDynamicProvisioning`   | Use dynamic provisioning for Schema Registry servers                              | `false`   |
+| `schema-registry.dataPVC.name`                         | Prefix for the name of the persistent volume claims for Schema Registry servers   | `datadir` |
+| `schema-registry.dataPVC.storageClassName`             | Storage class of the persistent volume claims created for Schema Registry servers | `nil`     |
+| `schema-registry.dataPVC.size`                         | Size of the persistent volume claims created for Schema Registry servers          | `100Mi`   |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
