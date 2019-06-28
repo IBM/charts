@@ -10,16 +10,16 @@
 # disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 #
 ###############################################################################
-# Defines the service that exposes the proxy enabling HTTPS access to the REST API
-####################################################################################
+# Defines a service to allow internal access to the Schema Registry REST API
+###############################################################################
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
-{{- include "sch.config.init" (list . "rest.sch.chart.config.values") -}}
-{{ $namePrefix := .sch.chart.components.restproxy.internalservice.name -}}
-{{ $name := include "sch.names.fullCompName" (list . $namePrefix) }}
-# Component is 'restproxy' as this makes up part of implementing the REST API proxy
-{{ $compName := .sch.chart.components.restproxy.compName -}}
+{{- include "sch.config.init" (list . "schemaregistry.sch.chart.config.values" ) -}}
+{{ $namePrefix := .sch.chart.components.schemaregistry.service.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'schemaregistry' as this makes up part of implementing the Schema Registry
+{{ $compName := .sch.chart.components.schemaregistry.compName -}}
 {{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
-{{ $deploymentName := .sch.chart.components.restproxy.deployment.name -}}
+{{ $statefulSet := .sch.chart.components.schemaregistry.statefulSet.name -}}
 # import port definitions
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $ports := .sch.config.ports }}
@@ -27,13 +27,15 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ $name | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
 spec:
   ports:
-    - name: admin-rest-http
+    - port: {{ $ports.schemaregistry.server }}
+      targetPort: {{ $ports.schemaregistry.server }}
       protocol: TCP
-      port: {{ $ports.restproxy.http  }}
+      name: http-port
   selector:
     release: {{ .Release.Name | quote }}
-    serviceSelector: {{ $deploymentName | quote }}
+    serviceSelector: {{ $statefulSet | quote }}
