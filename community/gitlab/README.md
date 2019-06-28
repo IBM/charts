@@ -14,7 +14,7 @@ helm install --name my-release community/gitlab
 
 ### Create secrets
 
-If TLS is enabled, you will need to create certificates for `unicorn`, `minio` (if installed), and the Docker registry. Instructions on how to create these certificates using ICP's Certificate manager can be found [here](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.2/manage_applications/create_cert.html).
+If TLS is enabled, you will need to create certificates for `unicorn`, `minio` (if installed), and the Docker registry. Instructions on how to create these certificates using IBM Cloud Private's Certificate manager can be found [here](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.1.2/manage_applications/create_cert.html).
 
 ### Image Security Policies
 
