@@ -1,0 +1,49 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018,2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if or .Values.ddl.enabled .Values.paiDistributed.mode }}
+# Headless service for  DNS entries of DDL/Distributed workers
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: "{{ template "fullname" . }}"
+spec:
+  clusterIP: None
+  ports:
+  - name: dummy # Actually, no specific port is needed for headless service
+    port: 22
+    targetPort: 22
+  selector:
+    app: {{ template "fullname" . }}
+{{- else }}
+{{- if and (ne .Values.service.type "None" ) (ne .Values.service.type "" ) (ne .Values.service.port "") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: "{{ template "fullname" . }}"
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+   - port: {{ .Values.service.port }}
+     targetPort: {{ .Values.service.port }}
+     protocol: TCP
+  selector:
+    app: {{ template "fullname" . }}
+{{- end }}
+{{- end }}
