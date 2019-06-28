@@ -1,0 +1,75 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+# "Restricted Materials of IBM"
+#
+# Copyright IBM Corp. 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#*******************************************************************************
+
+#
+# @Author Huang, Fuguo (a.k.a Ken) at 06.Nov.2018
+#
+apiVersion: batch/v1
+kind: Job
+
+metadata:
+  name: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-oidc-registration
+  labels:
+    app: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-oidc-registration
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-oidc-registration
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: "{{ .Chart.Description }}"
+        productID: "Tool"
+        productVersion: "{{ .Chart.Version }}"
+    spec:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      affinity:
+        {{- include "nodeAffinity" . | indent 6 }}
+      containers:
+        - name: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-oidc-registration
+          image: "{{ .Values.couchdb.image.repository }}:{{ .Values.couchdb.image.tag }}"
+          imagePullPolicy: {{ .Values.couchdb.image.pullPolicy }} 
+          command: ["/bin/bash", "-c", "mkdir -p /opt/oidc && cp /scripts/register-client.sh /opt/oidc && /opt/oidc/register-client.sh"]
+          resources:
+{{ toYaml .Values.couchdb.resources | indent 12 }}
+          volumeMounts:
+            - name: registration-script
+              mountPath: /scripts
+            - name: registration-json
+              mountPath: /jsons
+          securityContext:
+            allowPrivilegeEscalation: false 
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            privileged: false
+            capabilities:
+              drop:
+              - ALL
+      volumes:
+        - name: registration-script
+          configMap:
+            name: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-oidc-registration-script
+            defaultMode: 0744
+        - name: registration-json
+          configMap:
+            name: {{ template "fullname" . }}-{{ .Chart.Version | replace "." "" }}-registration-json
+            defaultMode: 0744
+      restartPolicy: Never

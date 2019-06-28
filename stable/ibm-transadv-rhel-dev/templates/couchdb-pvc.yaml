@@ -1,0 +1,47 @@
+# © Copyright IBM Corporation 2017
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#
+# This volume claim is to be used by the couchdb-pod in minikube.
+# Before creating this volume claim, the persistent volume need to be created
+# using the persistentvol.yaml descriptor
+#
+{{- if and .Values.couchdb.persistence.enabled (not .Values.couchdb.persistence.existingClaim) }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "fullname" . }}-couchdb
+  labels:
+    app: {{ template "fullname" . }}-couchdb
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  {{- if .Values.couchdb.persistence.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.couchdb.persistence.storageClassName | quote }}
+
+  {{- else }}
+  ## disable dynamic provisioning
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - {{ .Values.couchdb.persistence.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.couchdb.persistence.size | quote }}
+{{- end }}
