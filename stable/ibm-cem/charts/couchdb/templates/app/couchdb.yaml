@@ -23,7 +23,7 @@ metadata:
     origin: helm-cem
 spec:
   serviceName: {{ $serviceName }}
-  replicas: {{ .Values.clusterSize }}
+  replicas: {{ include "couchdb.replicationFactor" . }}
   selector:
     matchLabels:
       release: {{ .Release.Name }}
@@ -74,7 +74,7 @@ spec:
 {{- if eq .Values.global.privileged true }}
       initContainers:
       - name: set-volume-permissions
-        image: "{{ include "couchdb.getImageRepo" . }}/hdm-couchdb:{{ .Values.image.tag }}"
+        image: {{ include "couchdb.getImageRepo" . }}/hdm-couchdb:{{ .Values.image.tag }}
         command: ["sh", "-c", "chown -R couchdb:couchdb /opt/couchdb/data"]
         securityContext:
           runAsUser: 0
@@ -87,8 +87,8 @@ spec:
 {{- end }}
       containers:
         - name: couchdb
-          image: "{{ include "couchdb.getImageRepo" . }}/hdm-couchdb:{{ .Values.image.tag }}"
-          imagePullPolicy: Always
+          image: {{ include "couchdb.getImageRepo" . }}/hdm-couchdb:{{ .Values.image.tag }}
+          imagePullPolicy: IfNotPresent
           securityContext:
             privileged: false
             readOnlyRootFilesystem: false
@@ -112,23 +112,23 @@ spec:
             - name: NAMESPACE
               value: {{ .Release.Namespace }}
             - name: RELEASE_NAME
-              value: {{ template "releasename" . }}
+              value: {{ template "couchdb.releasename" . }}
             - name: COUCHDB_USER
               valueFrom:
                 secretKeyRef:
-                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  name: '{{ template "couchdb.releasename" . }}-{{ .Values.secretName }}'
                   key: username
             - name: COUCHDB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  name: '{{ template "couchdb.releasename" . }}-{{ .Values.secretName }}'
                   key: password
             - name: COUCHDB_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  name: '{{ template "couchdb.releasename" . }}-{{ .Values.secretName }}'
                   key: secret
- {{ if .Values.autoClusterConfig.enabled }}
+ {{ if eq (include "couchdb.autoClusterConfigSetting" .) "true" }}
             - name: ERL_FLAGS
               value: " -name couchdb@$(POD_NAME).$(RELEASE_NAME)-couchdb.$(NAMESPACE).svc.cluster.local -setcookie monster "
  {{ else }}
@@ -154,10 +154,19 @@ spec:
               mountPath: /opt/couchdb/data
             - name: {{ $cdbConfigTemplateName }}
               mountPath: /opt/couchdb/etc/default.d
-{{ if .Values.autoClusterConfig.enabled }}
+ {{ if eq (include "couchdb.autoClusterConfigSetting" .) "true" }}
         - name: cluster-config
-          imagePullPolicy: Always
-          image: "{{ include "couchdb.getImageRepo" . }}/hdm-cem-python-sidecar:{{ .Values.sidecarImage.tag }}"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          image: "{{ include "couchdb.getImageRepo" . }}/hdm-{{ .Values.sidecarImage.name }}:{{ .Values.sidecarImage.tag }}"
           env:
             - name: AUTO_CLUSTER_CONFIG
               value: "true"
@@ -166,29 +175,16 @@ spec:
             - name: COUCHDB_USER
               valueFrom:
                 secretKeyRef:
-                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  name: '{{ template "couchdb.releasename" . }}-{{ .Values.secretName }}'
                   key: username
             - name: COUCHDB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: '{{ template "releasename" . }}-{{ .Values.secretName }}'
+                  name: '{{ template "couchdb.releasename" . }}-{{ .Values.secretName }}'
                   key: password
             - name: SERVICE_NAME
               value: {{ $serviceName }}
-          livenessProbe:
-            exec:
-             command:
-             - cat
-             - /tmp/cluster-configured
-            initialDelaySeconds: 30
-            periodSeconds: 30
-          readinessProbe:
-            exec:
-              command:
-              - cat
-              - /tmp/cluster-configured
-            initialDelaySeconds: 30
-            periodSeconds: 30
+{{ include "couchdb.sidecar.probes" . | indent 10}}
 {{ end }}
       volumes:
         - name: {{ $cdbConfigTemplateName }}

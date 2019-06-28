@@ -12,6 +12,9 @@ additional configuration values used by the Shared Configurable Helpers.
 sch:
   chart:
     appName: {{ .Chart.Name }}
+    components:
+       clientSecretGeneratorName: "client-secret-generator"
+       kafkaClientSecretGeneratorName: "kafka-client-secret-generator"
 {{- end -}}
 
 ##############################

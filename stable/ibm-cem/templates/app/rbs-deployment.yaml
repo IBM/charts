@@ -5,19 +5,20 @@
 *
 *  5737-H89, 5737-H64
 *
-* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+* © Copyright IBM Corp. 2015, 2019  All Rights Reserved.
 *
 * US Government Users Restricted Rights - Use, duplication, or
 * disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 ********************************************************* {COPYRIGHT-END} ****/}}
 {{- $compName := "rba-rbs" -}}
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- $appFullName := include "sch.names.fullName" (list .) -}}
 {{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
 {{- $rbsTlsTemplateName := include "sch.names.volumeClaimTemplateName" (list . "tls" $deploymentName) -}}
 {{- $rootData := fromYaml (include "root.data" .) -}}
 {{- $rootMetering := $rootData.metering -}}
 
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $deploymentName }}
@@ -40,7 +41,7 @@ spec:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
-{{ include "ingress-host-alias" . | indent 6 }}
+{{ include "cem.ingress.hostAlias" . | indent 6 }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -65,10 +66,11 @@ spec:
                 {{- range $arch := .Values.arch }}
                   - {{ $arch -}}
                 {{ end }}
+{{ include "cem.affinity.resilience" (dict "root" . "comp" $compName) | indent 8 }}
       initContainers:
       - name: waitforcouchdb
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
-        command: ["sh", "-c", "i=1;until getent hosts {{ template "releasename" . }}-couchdb.{{ .Release.Namespace }}.svc; do echo waiting for couchdb $i;i=$((i+1)); sleep 2; done;"]
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.rba.rbs.image.name }}:{{ .Values.commonimages.rba.rbs.image.tag }}"
+        command: ["sh", "-c", "i=1;until getent hosts {{ template "cem.releasename" . }}-couchdb.{{ .Release.Namespace }}.svc; do echo waiting for couchdb $i;i=$((i+1)); sleep 2; done;"]
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -79,8 +81,8 @@ spec:
             drop:
             - ALL
       - name: waitforkafka
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
-        command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.rba.rbs.image.name }}:{{ .Values.commonimages.rba.rbs.image.tag }}"
+        command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "cem.releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -91,7 +93,7 @@ spec:
             drop:
             - ALL
       - name: migratedata
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.rba.rbs.image.name }}:{{ .Values.commonimages.rba.rbs.image.tag }}"
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -106,7 +108,7 @@ spec:
 {{ include "rbarbs.env" . | indent 8 }}
       containers:
       - name: rba-rbs
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-icp-rba-rbs:{{ .Values.commonimages.rba.rbs.image.tag }}"
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.rba.rbs.image.name }}:{{ .Values.commonimages.rba.rbs.image.tag }}"
         imagePullPolicy: IfNotPresent
         securityContext:
           privileged: false
@@ -135,10 +137,27 @@ spec:
           initialDelaySeconds: 20
           periodSeconds: 30
         resources:
-{{ include "ibmcemprod.comp.size.data" (list . "rbs" "resources") | indent 10 }}
+{{ include "cem.resources.comp.size.data" (list . "rbs" "resources") | indent 10 }}
         env:
 {{ include "rbarbs.env" . | indent 8 }}
+{{- if .Values.global.internalTLS.enabled }}
+        volumeMounts:
+        - name: servercrt
+          mountPath: /home/node/keys
+{{- end }}
       restartPolicy: Always
+{{- if .Values.global.internalTLS.enabled }}
+      volumes:
+      - name: servercrt
+        secret:
+          defaultMode: 0444
+          items:
+          - key: tls.crt
+            path: server.crt
+          - key: tls.key
+            path: server.key
+          secretName: {{ $appFullName }}-certificate
+{{- end }}
 {{ if eq .Values.rba.rbs.updateStrategy "RollingUpdate" }}
   strategy:
     type: RollingUpdate

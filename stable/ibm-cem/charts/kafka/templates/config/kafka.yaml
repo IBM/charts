@@ -1,3 +1,12 @@
+{{/*********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* (C) Copyright IBM Corporation 2019.  All rights reserved.
+*
+* The source code for this program is not published or otherwise
+* divested of its trade secrets, irrespective of what has been
+* deposited with the U.S. Copyright Office.
+********************************************************* {COPYRIGHT-END} ****/}}
 {{- include "sch.config.init" (list . "kafka.sch.chart.config.values") -}}
 {{- $configMapName := include "sch.names.fullName" (list .) -}}
 {{- $root := . -}}
@@ -65,51 +74,12 @@ data:
       EXTERNAL_KAFKA_HOSTNAME=${listenerHostnames[0]}
     fi
 
-    # generate advertised listeners based on ssl/allowInsecure/advertisedListeners settings
+    # generate advertised listeners based on tls/allowInsecure/advertisedListeners settings
     echo "advertised.listeners={{ template "kafka.advertisedListeners" . }}" >> /var/lib/kafka/data/server.properties
 
     # configure protocol map
     echo "listener.security.protocol.map=PLAINTEXT:PLAINTEXT,PLAINTEXT_EXTERNAL:PLAINTEXT,SASL_SSL_EXTERNAL:SASL_SSL,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL" >> /var/lib/kafka/data/server.properties
 
-{{ if .Values.ssl.enabled }}
-  kafka_client_jaas.conf: |-
-    KafkaClient {
-      org.apache.kafka.common.security.plain.PlainLoginModule required
-      username="{{ .Values.client.username }}"
-      password="{{ .Values.client.password }}";
-    };
-  kafka_server_jaas.conf: |-
-    KafkaServer {
-      org.apache.kafka.common.security.plain.PlainLoginModule required
-      username="{{ .Values.admin.username }}"
-      password="{{ .Values.admin.password }}"
-      user_{{ .Values.admin.username }}="{{ .Values.admin.password }}"
-      user_{{ .Values.client.username }}="{{ .Values.client.password }}";
-    };
-{{ end }}
-  consumer.properties: |-
-{{ if .Values.ssl.enabled }}
-    security.protocol=SASL_SSL
-    ssl.keystore.location=/etc/keystore/server.keystore.jks
-    ssl.keystore.password={{ .Values.global.ssl.keystorePassword }}
-    ssl.truststore.location=/etc/keystore/server.truststore.jks
-    ssl.truststore.password={{ .Values.global.ssl.truststorePassword }}
-    ssl.key.password={{ .Values.global.ssl.password }}
-    sasl.mechanism=PLAIN
-{{ end }}
-    group.id=test-consumer-group
-  producer.properties: |-
-{{ if .Values.ssl.enabled }}
-    security.protocol=SASL_SSL
-    ssl.keystore.location=/etc/keystore/server.keystore.jks
-    ssl.keystore.password={{ .Values.global.ssl.keystorePassword }}
-    ssl.truststore.location=/etc/keystore/server.truststore.jks
-    ssl.truststore.password={{ .Values.global.ssl.truststorePassword }}
-    ssl.key.password={{ .Values.global.ssl.password }}
-    sasl.mechanism=PLAIN
-{{ end }}
-    bootstrap.servers={{ template "kafka.fullname" . }}-0.{{.Release.Namespace}}.svc:{{ if .Values.ssl.enabled }}9093{{ else }}9092{{ end }}
-    compression.type=none
   server.properties: |-
     # Licensed to the Apache Software Foundation (ASF) under one or more
     # contributor license agreements.  See the NOTICE file distributed with
@@ -169,9 +139,9 @@ data:
     ############################# Internal Topic Settings  #############################
     # The replication factor for the group metadata internal topics "__consumer_offsets" and "__transaction_state"
     # For anything other than development testing, a value greater than 1 is recommended for to ensure availability such as 3.
-    offsets.topic.replication.factor={{ .Values.offsetsTopicReplicationFactor }}
-    transaction.state.log.replication.factor=1
-    transaction.state.log.min.isr=1
+    offsets.topic.replication.factor={{ template "kafka.topicReplicationFactor" . }}
+    transaction.state.log.replication.factor={{ template "kafka.topicReplicationFactor" . }}
+    transaction.state.log.min.isr={{ template "kafka.minInSyncReplicas"  . }}
     ############################# Log Flush Policy #############################
     # Messages are immediately written to the filesystem but by default we only fsync() to sync
     # the OS cache lazily. The following configurations control the flush of data to disk.
@@ -211,12 +181,8 @@ data:
     # Amount of time to retain delete tombstone markers for log compacted topics - 12 hrs
     log.cleaner.delete.retention.ms=43200000
     ############################# Zookeeper #############################
-    # Zookeeper connection string (see zookeeper docs for details).
-    # This is a comma separated host:port pairs, each corresponding to a zk
-    # server. e.g. "127.0.0.1:3000,127.0.0.1:3001,127.0.0.1:3002".
-    # You can also append an optional chroot string to the urls to specify the
-    # root directory for all kafka znodes.
-    zookeeper.connect=localhost:2181
+    # Zookeeper connection string is dynamically set in the overrides of start-kafka.sh
+    #zookeeper.connect=localhost:2181
     # Timeout in ms for connecting to zookeeper
     zookeeper.connection.timeout.ms=1000000
     #######  CUSTOM CONFIGURATION   ##########
@@ -224,33 +190,19 @@ data:
     controlled.shutdown.enable=true
     replica.fetch.max.bytes=2097152
     message.max.bytes=2097152
-    min.insync.replicas={{ .Values.minInsyncReplicas }}
+    min.insync.replicas={{ template "kafka.minInSyncReplicas"  . }}
     #num.replica.fetchers=REPLACE_NUM_REPLICA_FETCHERS
-    #default.replication.factor=REPLACE_DEFAULT_REPLICATION_FACTOR
+    default.replication.factor={{ template "kafka.topicReplicationFactor" . }}
     ############################# Group Coordinator Settings #############################
     # The following configuration specifies the time, in milliseconds, that the GroupCoordinator will delay the initial consumer rebalance.
     # The rebalance will be further delayed by the value of group.initial.rebalance.delay.ms as new members join the group, up to a maximum of max.poll.interval.ms.
     # The default value for this is 3 seconds.
     # We override this to 0 here as it makes for a better out-of-the-box experience for development and testing.
     # However, in production environments the default value of 3 seconds is more suitable as this will help to avoid unnecessary, and potentially expensive, rebalances during application startup.
-    group.initial.rebalance.delay.ms=0
-{{ if .Values.ssl.enabled }}
-    #################### SSL Settings #########################
-    ssl.protocol=TLS
-    ssl.enabled.protocols=TLSv1.2,TLSv1.1,TLSv1
-    ssl.keystore.type=JKS
-    ssl.keystore.location=/etc/keystore/server.keystore.jks
-    ssl.keystore.password={{ .Values.global.ssl.keystorePassword }}
-    ssl.key.password={{ .Values.global.ssl.password }}
-    ssl.truststore.type=JKS
-    ssl.truststore.location=/etc/keystore/server.truststore.jks
-    ssl.truststore.password={{ .Values.global.ssl.truststorePassword }}
-    ssl.client.auth=required
-    #################### SASL Settings ########################
-    sasl.enabled.mechanisms=PLAIN
-    sasl.mechanism.inter.broker.protocol=PLAIN
+    group.initial.rebalance.delay.ms=3000
+{{ if .Values.global.kafka.clientEncryption }}
     inter.broker.listener.name=SASL_SSL
-    listeners={{ if .Values.ssl.allowInsecure }}PLAINTEXT://0.0.0.0:9092{{ if kindIs "slice" .Values.advertisedListeners }},PLAINTEXT_EXTERNAL://0.0.0.0:19092,{{ end }}{{ end }}SASL_SSL://0.0.0.0:9093{{ if kindIs "slice" .Values.advertisedListeners }},SASL_SSL_EXTERNAL://0.0.0.0:19093{{ end }}
+    listeners={{ if .Values.global.kafka.allowInsecure }}PLAINTEXT://0.0.0.0:9092,{{ if kindIs "slice" .Values.advertisedListeners }}PLAINTEXT_EXTERNAL://0.0.0.0:19092,{{ end }}{{ end }}SASL_SSL://0.0.0.0:9093,{{ if kindIs "slice" .Values.advertisedListeners }}SASL_SSL_EXTERNAL://0.0.0.0:19093{{ end }}
 {{ else }}
     inter.broker.listener.name=PLAINTEXT
     listeners=PLAINTEXT://0.0.0.0:9092{{ if kindIs "slice" .Values.advertisedListeners }},PLAINTEXT_EXTERNAL://0.0.0.0:19092{{ end }}
@@ -258,7 +210,6 @@ data:
     ####################### OTHER #############################
     authorizer.class.name=kafka.security.auth.SimpleAclAuthorizer
     allow.everyone.if.no.acl.found=true
-    super.users=User:admin
     auto.create.topics.enable=false
   log4j.properties: |-
     # Licensed to the Apache Software Foundation (ASF) under one or more

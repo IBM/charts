@@ -1,10 +1,4 @@
 {{/* vim: set filetype=mustache: */}}
-{{/*
-Expand the name of the chart.
-*/}}
-{{- define "name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
 
 {{- define "couchdb.getImageRepo" -}}
 {{- if .Values.global.image.repository -}}
@@ -16,17 +10,13 @@ Expand the name of the chart.
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 */}}
-{{- define "fullname" -}}
+{{- define "couchdb.fullname" -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "releasename" -}}
+{{- define "couchdb.releasename" -}}
 {{- printf "%s" .Release.Name  | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
-{{- define "serverNamespace" -}}
-{{- printf "%s" .Release.Namespace  | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -35,28 +25,26 @@ Check if tag contains specific platform suffix and if not set based on kube plat
 uncomment this section for PPA charts, can be removed in github.com charts
 */}}
 
-{{- define "platform" -}}
-{{- if not .Values.arch }}
-  {{- if (eq "linux/amd64" .Capabilities.KubeVersion.Platform) }}
-    {{- printf "-%s" "x86_64" }}
-  {{- end -}}
-  {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
-    {{- printf "-%s" "ppc64le" }}
-  {{- end -}}
-{{- else -}}
-  {{- if eq .Values.arch "amd64" }}
-    {{- printf "-%s" "x86_64" }}
-  {{- else -}}
-    {{- printf "-%s" .Values.arch }}
-  {{- end -}}
-{{- end -}}
-{{- end -}}
+{{/*
+check if couchdb.clusterSize == "environmentSizeDefault" and if so use value in _resouces.tpl
+corresponding to environmentSize setting
+*/}}
+{{- define "couchdb.replicationFactor" -}}
+  {{- if eq ( .Values.clusterSize | toString) "environmentSizeDefault" }}
+    {{- include "couchdb.comp.size.data" (list . "couchdb" "replicas") }}
+  {{- else }}
+    {{- .Values.clusterSize }}
+  {{- end }}
+{{- end }}
 
-{{- define "arch" -}}
-  {{- if (eq "linux/amd64" .Capabilities.KubeVersion.Platform) }}
-    {{- printf "%s" "amd64" }}
-  {{- end -}}
-  {{- if (eq "linux/ppc64le" .Capabilities.KubeVersion.Platform) }}
-    {{- printf "%s" "ppc64le" }}
-  {{- end -}}
-{{- end -}}
+{{/*
+check if autoClusterConfig.enabled == "environmentSizeDefault" and if so use value in _resouces.tpl
+corresponding to environmentSize setting
+*/}}
+{{- define "couchdb.autoClusterConfigSetting" -}}
+  {{- if eq ( .Values.autoClusterConfig.enabled | toString) "environmentSizeDefault" }}
+    {{- include "couchdb.comp.size.data" (list . "couchdb" "autoClusterConfig.enabled") }}
+  {{- else }}
+    {{- .Values.autoClusterConfig.enabled }}
+  {{- end }}
+{{- end }}

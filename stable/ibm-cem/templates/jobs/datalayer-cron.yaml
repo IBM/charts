@@ -5,7 +5,7 @@
 *
 *  5737-H89, 5737-H64
 *
-* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+* © Copyright IBM Corp. 2015, 2019  All Rights Reserved.
 *
 * US Government Users Restricted Rights - Use, duplication, or
 * disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
@@ -36,7 +36,7 @@ spec:
           annotations:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 12 }}
         spec:
-{{ include "ingress-host-alias" . | indent 10 }}
+{{ include "cem.ingress.hostAlias" . | indent 10 }}
           hostNetwork: false
           hostPID: false
           hostIPC: false
@@ -68,14 +68,50 @@ spec:
                     {{ end }}
           containers:
           - name: expirycheck
-            image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-datalayer:{{ .Values.commonimages.datalayer.image.tag }}"
+            image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.datalayer.image.name }}:{{ .Values.commonimages.datalayer.image.tag }}"
             command:
               - /bin/sh
               - -c
               - 'node expirycheck'
             env:
-            - name: NODE_CONFIG
-              value: '{"cassandra": {"contactPoints": [{{- template "datalayer.contactPoints" . }}],"localDataCenter":"datacenter1","keyspace": "datalayer","authProvider": { "userid": "cassandra", "password": "cassandra" },"socketOptions":{"readTimeout": 120000}, "cassandraNodeReplicas": {{ .Values.global.cassandraNodeReplicas }}},"kafka":{"enabled":{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }},"secured":{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }},"kafka_brokers_sasl":{{ include "cem.services.kafkabrokers.json" . }},"user": "{{ .Values.kafka.client.username }}","password": "{{ .Values.kafka.client.password }}","sslcalocation": "/etc/keystore/ca-cert","sslcertlocation": "/etc/keystore/client.pem","sslkeylocation": "/etc/keystore/client.key","sslkeypassword": "{{ .Values.kafka.ssl.password }}","kafka_admin_url":"{{ include "cem.services.kafkaadmin" . }}"}, "logging": {"useStdout": true}}'
+            - name: NODE_CONFIG_ENV
+              value: icp
+            - name: CASSANDRA_CONTACTPOINTS
+              value: '[{{- template "cem.datalayer.contactPoints" . }}]'
+{{- if .Values.global.cassandra.superuserRole }}
+            - name: CASSANDRA_USERID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-cassandra-auth-secret
+                  key: username
+            - name: CASSANDRA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-cassandra-auth-secret
+                  key: password
+{{- end }}
+            - name: CASSANDRA_NODE_REPLICAS
+              value: '{{ .Values.global.cassandraNodeReplicas }}'
+            - name: KAFKA_SECURED
+              value: '{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }}'
+            - name: KAFA_BROKERS
+              value: '{{ include "cem.services.kafkabrokers.json" . }}'
+            - name: KAFKA_USER
+              value: '{{ .Values.kafka.client.username }}'
+            - name: KAFKA_PASSWORD
+              value: '{{ .Values.kafka.client.password }}'
+            - name: KAFKA_SSL_PASSWORD
+              value: '{{ .Values.kafka.ssl.password }}'
+            - name: KAFKA_ADMIN_URL
+              value: '{{ include "cem.services.kafkaadmin" . }}'
+            - name: KAFKA_CLUSTER_SIZE
+              value: '{{ .Values.global.kafka.clusterSize }}'
+{{- if (or (eq .Values.productName "IBM Cloud App Management") (eq .Values.productName "IBM Cloud App Management Advanced")) }}
+            - name: EVENTS_TO_KAFKA
+              value: 'true'
+{{- end }}
+            - name: CEM_ICP_EDITION
+              value: '{{ if eq .Values.productName "IBM Cloud Event Management Community Edition" }}community{{ else }}standard{{ end }}'
             resources: {}
             terminationMessagePath: "/dev/termination-log"
             imagePullPolicy: IfNotPresent

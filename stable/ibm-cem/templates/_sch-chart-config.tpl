@@ -16,9 +16,9 @@ sch:
 
 {{- define "ibm-cem.data" -}}
   metering:
-    productName: "{{ .Values.productName }}"
+    productName: "IBM Cloud Event Management Community Edition"
     productID: "5737-H89"
-    productVersion: "{{ .Chart.AppVersion }}"
+    productVersion: "{{ .Values.global.appVersion }}"
 {{- end -}}
 
 {{- define "root.data" -}}
