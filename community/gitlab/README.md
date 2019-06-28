@@ -97,7 +97,7 @@ GitLab provides many values to configure each of the parts of the chart. The tab
 |  `hosts.domain`                                             |  `"example.com"`  | The domain name to be used for the service. |
 |  `hosts.https`                                              |  `true`  | Uses HTTPS when enabled; to use HTTP, set both this as well as `global.ingress.tls.enabled` to `false`. |
 |  `hosts.externalIP`                                         |  `""`         | The IP that these services will be exposed on; this is the IP of the proxy or LoadBalancer used for the services. |
-|  `ingress.configureCertmanager`                             |  `false`                  | This chart can set up its own `cert-manager` and create certificates to associate with its services. This is not advised on ICP. |
+|  `ingress.configureCertmanager`                             |  `false`                  | This chart can set up its own `cert-manager` and create certificates to associate with its services. This is not advised on IBM Cloud Private. |
 |  `ingress.tls.enabled`                                              |  `true`                  | TLS is used when set to `true`. |
 ---
 ### certmanager
