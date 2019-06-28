@@ -1,0 +1,75 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018,2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+apiVersion: v1
+
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test-nvidia-smi"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app: "{{ .Release.Name }}-test"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 2051
+  affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "ppc64le"
+                - "amd64"
+  containers:
+  - name: "{{ .Release.Name }}-test-nvidia-smi"
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+    command: [ "/bin/bash", "-c" ]    
+    {{- if .Values.resources.gpu }}
+    args: [ "nvidia-smi;" ]
+    {{- else }}
+    args: [ "echo WMLCE;" ]
+    {{- end }}
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: true
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+        add:
+        - AUDIT_WRITE
+        - CHOWN
+        - FOWNER
+        - SETUID
+        - SETGID
+        - SYS_CHROOT
+        - DAC_OVERRIDE
+        - NET_BIND_SERVICE
+    resources:
+      limits:
+        {{- if and (eq (.Capabilities.KubeVersion.Major|int) 1) (lt (.Capabilities.KubeVersion.Minor|int) 11) }}        
+          alpha.kubernetes.io/nvidia-gpu: {{ .Values.resources.gpu }}
+        {{- else }}
+          nvidia.com/gpu: {{ .Values.resources.gpu }}
+        {{- end }}   
+  {{- if .Values.resources.gputype }}
+  nodeSelector:
+    gputype: {{ .Values.resources.gputype }}
+  {{- end }} 
+  restartPolicy: Never
