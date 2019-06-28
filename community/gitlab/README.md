@@ -71,6 +71,55 @@ The following images may also need to be allowed depending on what subcharts you
 
 For documentation on managing image policies refer to [Enforcing container image security](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_images/image_security.html).
 
+## Pod Security Policy
+This chart requires additional privileges in order to successfully install. The IBM-provided `ibm-anyuid-hostaccess-psp` Pod Security Policy as of IBM Cloud Private 3.1.2 contains the necessary permissions; it is defined as follows:
+
+```yaml
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+annotations:
+    kubernetes.io/description: 'This policy allows pods to run with any UID and GID
+    and any volume, including the host path. WARNING:  This policy allows hostPath
+    volumes. Use with caution.'
+name: custom-anyuid-hostpath-psp
+spec:
+allowPrivilegeEscalation: true
+allowedCapabilities:
+- SETPCAP
+- AUDIT_WRITE
+- CHOWN
+- NET_RAW
+- DAC_OVERRIDE
+- FOWNER
+- FSETID
+- KILL
+- SETUID
+- SETGID
+- NET_BIND_SERVICE
+- SYS_CHROOT
+- SETFCAP
+fsGroup:
+    rule: RunAsAny
+requiredDropCapabilities:
+- MKNOD
+runAsUser:
+    rule: RunAsAny
+seLinux:
+    rule: RunAsAny
+supplementalGroups:
+    rule: RunAsAny
+volumes:
+- '*'
+```
+
+To apply this policy to a namespace, run the following `kubectl` command: 
+```
+kubectl -n <namespace> create rolebinding ibm-anyuid-hostaccess-psp-clusterrole-rolebinding --clusterrole=ibm-anyuid-hostaccess-psp-clusterrole --group=system:serviceaccounts:<namespace>
+```
+
+> Note: The default Pod Security Policies are subject to change between releases of IBM Cloud Private; it is recommended that administrators review the default policies before applying them to their namespaces to ensure that the appropriate and expected privileges are granted to a given namespace.
+
 ## Persistence
 
 This chart will create Persistent Volume Claims with the assumption that a dynamic provisioner will create the required storage resources. For more information on storage configuration and installation, refer to [GitLab's storage documentation](https://gitlab.com/charts/gitlab/blob/master/doc/installation/storage.md)
