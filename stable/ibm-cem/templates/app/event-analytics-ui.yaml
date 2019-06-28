@@ -5,18 +5,19 @@
 *
 *  5737-H89, 5737-H64
 *
-* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+* © Copyright IBM Corp. 2015, 2019 All Rights Reserved.
 *
 * US Government Users Restricted Rights - Use, duplication, or
 * disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 ********************************************************* {COPYRIGHT-END} ****/}}
 {{- $compName := "event-analytics-ui" -}}
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- $appFullName := include "sch.names.fullName" (list .) -}}
 {{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
 {{- $eaKeystoreTemplateName := include "sch.names.volumeClaimTemplateName" (list . "keystore" $deploymentName) -}}
 {{- $rootData := fromYaml (include "root.data" .) -}}
 {{- $rootMetering := $rootData.metering -}}
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $deploymentName }}
@@ -39,7 +40,7 @@ spec:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
-{{ include "ingress-host-alias" . | indent 6 }}
+{{ include "cem.ingress.hostAlias" . | indent 6 }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -64,10 +65,11 @@ spec:
                 {{- range $arch := .Values.arch }}
                   - {{ $arch -}}
                 {{ end }}
+{{ include "cem.affinity.resilience" (dict "root" . "comp" $compName) | indent 8 }}
       initContainers:
       - name: waitforkafka
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-event-analytics-ui:{{ .Values.commonimages.eventanalyticsui.image.tag }}"
-        command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.eventanalyticsui.image.name }}:{{ .Values.commonimages.eventanalyticsui.image.tag }}"
+        command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "cem.releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -78,8 +80,8 @@ spec:
             drop:
             - ALL
       - name: waitforredis
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-event-analytics-ui:{{ .Values.commonimages.eventanalyticsui.image.tag }}"
-        command: ["sh", "-c", "i=1;until getent hosts {{ template "releasename" . }}-redis-master-svc.{{ .Release.Namespace }}.svc; do echo waiting for redis $i;i=$((i+1)); sleep 2; done;"]
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.eventanalyticsui.image.name }}:{{ .Values.commonimages.eventanalyticsui.image.tag }}"
+        command: ["sh", "-c", "i=1;until getent hosts {{ include "cem.services.redissentinelsvc" . }}; do echo waiting for redis $i;i=$((i+1)); sleep 2; done;"]
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -91,7 +93,7 @@ spec:
             - ALL
       containers:
       - name: event-analytics-ui
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-event-analytics-ui:{{ .Values.commonimages.eventanalyticsui.image.tag }}"
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.eventanalyticsui.image.name }}:{{ .Values.commonimages.eventanalyticsui.image.tag }}"
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -120,17 +122,28 @@ spec:
         - name: {{ $eaKeystoreTemplateName }}
           mountPath: /etc/keystore
 {{ end }}
+{{- if .Values.global.internalTLS.enabled }}
+        - name: servercrt
+          mountPath: /app/src/server/keys
+{{- end }}
         env:
         - name: LICENSE
           value: {{ .Values.license | default "not accepted" }}
+        - name: NODE_EXTRA_CA_CERTS
+          value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+{{- if .Values.global.internalTLS.enabled }}
+        - name: PORT
+          value: "3200"
+        - name: SSL_APP_PORT
+          value: "3201"
+{{- else }}
         - name: PORT
           value: "3201"
+{{- end }}
         - name: BASEURL
           value: '{{ include "cem.services.uiserver" . }}'
         - name: ENV_ICP
           value: "1"
-        - name: UAG_URL
-          value: '{{ include "cem.services.cemusers" . }}'
 {{ include "cloudeventmanagement.omaasui.env" . | indent 8 }}
         - name: VCAP_APPLICATION
           value: '{}'
@@ -145,7 +158,7 @@ spec:
         - name: INGRESS_PORT
           value: '{{ .Values.global.ingress.port }}'
         resources:
-{{ include "ibmcemprod.comp.size.data" (list . "eventanalyticsui" "resources") | indent 10 }}
+{{ include "cem.resources.comp.size.data" (list . "eventanalyticsui" "resources") | indent 10 }}
         terminationMessagePath: "/dev/termination-log"
         imagePullPolicy: IfNotPresent
       restartPolicy: Always
@@ -157,6 +170,17 @@ spec:
         secret:
           secretName: cem-trust
 {{ end }}
+{{- if .Values.global.internalTLS.enabled }}
+      - name: servercrt
+        secret:
+          defaultMode: 0444
+          items:
+          - key: tls.crt
+            path: server.crt
+          - key: tls.key
+            path: server.key
+          secretName: {{ $appFullName }}-certificate
+{{- end }}
   strategy:
     type: RollingUpdate
     rollingUpdate:

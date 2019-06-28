@@ -5,17 +5,18 @@
 *
 *  5737-H89, 5737-H64
 *
-* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+* © Copyright IBM Corp. 2015, 2019  All Rights Reserved.
 *
 * US Government Users Restricted Rights - Use, duplication, or
 * disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 ********************************************************* {COPYRIGHT-END} ****/}}
 {{- $compName := "normalizer" -}}
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- $appFullName := include "sch.names.fullName" (list .) -}}
 {{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
 {{- $rootData := fromYaml (include "root.data" .) -}}
 {{- $rootMetering := $rootData.metering -}}
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $deploymentName }}
@@ -38,7 +39,7 @@ spec:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
-{{ include "ingress-host-alias" . | indent 6 }}
+{{ include "cem.ingress.hostAlias" . | indent 6 }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -63,9 +64,35 @@ spec:
                 {{- range $arch := .Values.arch }}
                   - {{ $arch -}}
                 {{ end }}
+{{ include "cem.affinity.resilience" (dict "root" . "comp" $compName) | indent 8 }}
+      initContainers:
+      - name: waitforcouchdb
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.normalizer.image.name }}:{{ .Values.commonimages.normalizer.image.tag }}"
+        command: ["sh", "-c", "i=1;until getent hosts {{ template "cem.releasename" . }}-couchdb.{{ .Release.Namespace }}.svc; do echo waiting for couchdb $i;i=$((i+1)); sleep 2; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+      - name: waitforredis
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.normalizer.image.name }}:{{ .Values.commonimages.normalizer.image.tag }}"
+        command: ["sh", "-c", "i=1;until getent hosts {{ include "cem.services.redissentinelsvc" . }}; do echo waiting for redis $i;i=$((i+1)); sleep 2; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
       containers:
       - name: normalizer
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-normalizer:{{ .Values.commonimages.normalizer.image.tag }}"
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.normalizer.image.name }}:{{ .Values.commonimages.normalizer.image.tag }}"
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -91,10 +118,19 @@ spec:
         env:
         - name: LICENSE
           value: {{ .Values.license | default "not accepted" }}
+        - name: NODE_EXTRA_CA_CERTS
+          value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         - name: OUTGOING_USE_SELFSIGNED_CERT
           value : {{ .Values.normalizer.outgoingUseSelfsignedCert | quote}}
+{{- if .Values.global.internalTLS.enabled }}
+        - name: PORT
+          value: "3900"
+        - name: SSL_APP_PORT
+          value: "3901"
+{{- else }}
         - name: PORT
           value: "3901"
+{{- end }}
         - name: ENV_ICP
           value: "1"
         - name: BASEURL
@@ -109,12 +145,29 @@ spec:
         - name: INGRESS_PORT
           value: '{{ .Values.global.ingress.port }}'
         resources:
-{{ include "ibmcemprod.comp.size.data" (list . "normalizer" "resources") | indent 10 }}
+{{ include "cem.resources.comp.size.data" (list . "normalizer" "resources") | indent 10 }}
         terminationMessagePath: "/dev/termination-log"
         imagePullPolicy: IfNotPresent
+{{- if .Values.global.internalTLS.enabled }}
+        volumeMounts:
+        - name: servercrt
+          mountPath: /app/keys
+{{- end }}
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
+{{- if .Values.global.internalTLS.enabled }}
+      volumes:
+      - name: servercrt
+        secret:
+          defaultMode: 0444
+          items:
+          - key: tls.crt
+            path: server.crt
+          - key: tls.key
+            path: server.key
+          secretName: {{ $appFullName }}-certificate
+{{- end }}
   strategy:
     type: RollingUpdate
     rollingUpdate:

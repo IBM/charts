@@ -22,6 +22,7 @@ spec:
   selector:
     matchLabels:
       release: {{ .Release.Name }}
+      app: {{ template "fullname" . }}
   template:
     metadata:
       labels:
@@ -31,8 +32,8 @@ spec:
         heritage: "{{ .Release.Service }}"
       annotations:
         productName: IBM Voice Gateway
-        productID: IBMVoiceGateway_5737D52_1010_IL_0000
-        productVersion: 1.0.1.0
+        productID: IBMVoiceGateway_5737D52_1020_IL_0000
+        productVersion: 1.0.2.0
         com.ibm.cloud.metering.selfmeter: "true"
     spec:
       {{ if .Values.image.imagePullSecrets }}
@@ -280,6 +281,20 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: status.hostIP
+        - name: HTTP_HOST
+          value: "{{ .Values.sipOrchestratorEnvVariables.httpHost }}"
+        {{ if .Values.sipOrchestratorEnvVariables.secureAdminInterface }}
+        - name: ADMIN_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.sipOrchestratorEnvVariables.adminCredentialSecret }}
+              key: adminUsername
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.sipOrchestratorEnvVariables.adminCredentialSecret }}
+              key: adminPassword
+        {{ end }}     
         - name: MEDIA_RELAY_HOST
           value: "{{ .Values.sipOrchestratorEnvVariables.mediaRelayHost }}"
         - name: SIP_PORT
@@ -367,6 +382,11 @@ spec:
               name: {{ .Values.sipOrchestratorEnvVariables.sslPassphraseSecret }}
               key: sslPassphrase
         {{ end }}
+
+        - name: ENABLE_METRICS_AUTH
+          value: "{{ .Values.sipOrchestratorEnvVariables.enableMetricsAuth }}"
+        - name: METRICS_SAMPLING_INTERVAL
+          value: "{{ .Values.sipOrchestratorEnvVariables.metricsSamplingInterval }}"
           
         volumeMounts:
         {{- if eq .Values.persistence.logsVolume.enablePersistentLogs true }}

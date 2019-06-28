@@ -33,19 +33,68 @@ hostname for a given instance of Kafka.
 
 {{/*
 Returns a comma separated list of advertised listeners
-This is used to configure Kafka, depending on ssl.enabled, ssl.allowInsecure and advertisedListeners
+This is used to configure Kafka, depending on global.kafka.clientEncryption, global.kafka.allowInsecure and advertisedListeners
 */}}
 {{- define "kafka.advertisedListeners" -}}
-{{- if .Values.ssl.allowInsecure -}}
+{{- if .Values.global.kafka.allowInsecure -}}
   {{- printf "PLAINTEXT://$POD_IP:9092," -}}
   {{ if kindIs "slice" .Values.advertisedListeners }}
     {{- printf "PLAINTEXT_EXTERNAL://${EXTERNAL_KAFKA_HOSTNAME}:${EXTERNAL_KAFKA_PORT}," }}
   {{- end -}}
 {{- end -}}
-{{- if .Values.ssl.enabled -}}
+{{- if .Values.global.kafka.clientEncryption -}}
   {{- printf "SASL_SSL://$POD_IP:9093," -}}
   {{- if kindIs "slice" .Values.advertisedListeners }}
     {{- printf "SASL_SSL_EXTERNAL://${EXTERNAL_KAFKA_HOSTNAME}:${EXTERNAL_KAFKA_SECURE_PORT}," }}
   {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+decides on using global or local kafka.clustersize
+*/}}
+{{- define "kafka.rawReplicationFactor" }}
+  {{- if .Values.global.kafka.clusterSize }}
+    {{- .Values.global.kafka.clusterSize }}
+  {{- else }}
+    {{- .Values.clusterSize }}
+  {{- end }}
+{{- end -}}
+
+{{/*
+check if kafka.clusterSize == "environmentSizeDefault" and if so use value in _resouces.tpl
+corresponding to environmentSize setting
+*/}}
+{{- define "kafka.replicationFactor" -}}
+  {{- if eq ( (include "kafka.rawReplicationFactor" .) | toString) "environmentSizeDefault" }}
+    {{- include "kafka.comp.size.data" (list . "kafka" "replicas") }}
+  {{- else }}
+    {{- include "kafka.rawReplicationFactor" . }}
+  {{- end }}
+{{- end }}
+
+{{/*
+Calculates the desired replication factor given the number of brokers.
+Will work with either clusterSize or global.kafka.clusterSize (global value preferred)
+*/}}
+{{- define "kafka.topicReplicationFactor" -}}
+{{- $numBrokers := int (include "kafka.replicationFactor" .) -}}
+{{- if gt $numBrokers 3 -}}
+  {{- printf "%d" 3 }}
+{{- else -}}
+  {{- printf "%d" $numBrokers }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Calculates the desired in sync replicas given the number of brokers.
+Will work with either clusterSize or global.kafka.clusterSize (global value preferred)
+*/}}
+{{- define "kafka.minInSyncReplicas" -}}
+{{- $numBrokers := int (include "kafka.replicationFactor" .) -}}
+{{- if gt $numBrokers 2 -}}
+  {{- printf "%d" 2 }}
+{{- else -}}
+  {{- printf "%d" 1 }}
 {{- end -}}
 {{- end -}}

@@ -12,15 +12,18 @@ additional configuration values used by the Shared Configurable Helpers.
 sch:
   chart:
     appName: {{ .Chart.Name }}
+    components:
+       clientSecretGeneratorName: "client-secret-generator"
+       adminSecretGeneratorName: "admin-client-secret-generator"
 {{- end -}}
 
+{{- /*
 ##############################
 ## METERING
 ##############################
-
-##############################
 ## define data for this chart
 ##############################
+*/ -}}
 {{- define "kafka.data" -}}
 metering:
   productName: "Kafka"
@@ -28,9 +31,11 @@ metering:
   productVersion: "0.0.0.1"
 {{- end -}}
 
+{{- /*
 ##############################
 ## common helper to get the root data based on parsing the template name
 ##############################
+*/ -}}
 {{- define "root.data" -}}
 {{- $chartList := (splitList "/charts/" .Template.Name) -}}
 {{- $rootChartName := (index (splitList "/" (index $chartList 0)) 0) -}}

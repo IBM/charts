@@ -1,3 +1,12 @@
+{{/*********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* (C) Copyright IBM Corporation 2019.  All rights reserved.
+*
+* The source code for this program is not published or otherwise
+* divested of its trade secrets, irrespective of what has been
+* deposited with the U.S. Copyright Office.
+********************************************************* {COPYRIGHT-END} ****/}}
 {{- include "sch.config.init" (list . "zookeeper.sch.chart.config.values") -}}
 {{- $configMapName := include "sch.names.fullName" (list .) -}}
 {{- $root := . -}}
@@ -44,15 +53,15 @@ data:
     # Set to "0" to disable auto purge feature
     autopurge.purgeInterval=6
     cnxTimeout=1000
-    {{- if .Values.global.zookeeper.clusterSize }}
-    {{- range $index := until (.Values.global.zookeeper.clusterSize | int) }}
+    {{- range $index := until (int (include "zookeeper.replicationFactor" .)) }}
     server.{{add $index 1}}={{ $root.Release.Name }}-zookeeper-{{$index}}.{{ $root.Release.Name }}-zkensemble.{{ $root.Release.Namespace }}.svc:2888:3888:participant
     {{- end }}
-    {{- else }}
-    {{- range $index := until (.Values.clusterSize | int) }}
-    server.{{add $index 1}}={{ $root.Release.Name }}-zookeeper-{{$index}}.{{ $root.Release.Name }}-zkensemble.{{ $root.Release.Namespace }}.svc:2888:3888:participant
-    {{- end }}
-    {{- end }}
+    {{- if or .Values.global.zookeeper.clientUserSecret .Values.global.zookeeper.kafkaClientUserSecret }}
+    authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider
+    requireClientAuthScheme=sasl
+    jaasLoginRenew=3600000
+    {{ end }}
+    
   log4j.properties: |-
     log4j.rootLogger=INFO, stdout
     log4j.appender.stdout=org.apache.log4j.ConsoleAppender

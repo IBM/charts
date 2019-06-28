@@ -1,0 +1,114 @@
+{{- if .Values.global.cassandra.superuserRole }}
+{{- include "sch.config.init" (list . "cassandra.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.changeSuperuserPreUpgradeName -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+    app: cassandra-{{ $compName }}
+    chart: "cassandra"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: {{ $compName }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": "hook-succeeded,hook-failed"
+spec:
+  template:
+    metadata:
+      labels:
+        app: cassandra-{{ $compName }}
+        chart: "cassandra"
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: {{ $compName }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        supplementalGroups:
+        {{- range $group := .Values.global.persistence.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
+      restartPolicy: Never
+      containers:
+      - name: {{ $compName | quote }}
+        image: "{{ .Values.global.image.repository }}/hdm-{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- if .Values.global.cassandra.clientEncryption }}
+        env:
+        - name: CASSANDRA_CLIENT_ENCRYPTION_ENABLED
+          value: "true"
+        - name: CA_CERTIFICATE
+          value: /opt/cacerts/{{ .Values.global.internalCaCertificate.certificateName }}
+        - name: REQUIRE_CLIENT_AUTH
+          value: {{ .Values.global.cassandra.requireClientAuth | quote }}
+        {{- if .Values.global.cassandra.requireClientAuth }}
+        - name: RELEASE
+          value: {{ .Release.Name }}-cassandra
+        - name: CA_KEY
+          value: /opt/cacerts/{{ .Values.global.internalCaCertificate.certificateKeyName }}
+        - name: STORE_DIR
+          value: /opt/tls
+        {{- end }}
+        volumeMounts:
+        - name: cacerts-secret
+          mountPath: /opt/cacerts
+        {{- if .Values.global.cassandra.requireClientAuth }}
+        - name: tls-store
+          mountPath: /opt/tls
+        {{- end }}
+        {{- end }}
+        envFrom:
+        - secretRef:
+            name: {{ .Release.Name }}-cassandra-auth-secret
+        command: ["/usr/bin/python"]
+        args:
+        - "-u"
+        - "/opt/ibm/change-superuser.py"
+        - "--pre-upgrade"
+        - "--user"
+        - "$(username)"
+        - "--password"
+        - "$(password)"
+        - "--node"
+        - "{{ .Release.Name }}-cassandra"
+        - "--replication-factor"
+        - {{ template "cassandra.authSchemaReplicationFactor" . }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+      {{- if .Values.global.cassandra.clientEncryption }}
+      volumes:
+      - name: cacerts-secret
+        secret:
+          secretName: {{ .Values.global.internalCaCertificate.secretName }}
+      {{- if .Values.global.cassandra.requireClientAuth }}
+      - name: tls-store
+        emptyDir: {}
+      {{- end }}
+      {{- end }}
+{{- end }}

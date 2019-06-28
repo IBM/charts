@@ -6,7 +6,7 @@
 *
 *  5737-H89, 5737-H64
 *
-* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+* © Copyright IBM Corp. 2015, 2019  All Rights Reserved.
 *
 * US Government Users Restricted Rights - Use, duplication, or
 * disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
@@ -18,17 +18,17 @@ This file defines the various sizes which may be included in a container's spec
 
 {{- /*
 `$chart.resources` will supply a resources definition based on the provided yaml
-in the ibmcemprod.sizeData definition. Specify resources in the format:
+in the cem.resources.sizeData definition. Specify resources in the format:
 service:
   size0|1:
       resources:
 __Usage:__
 resources:
-{{ include "ibmcemprod.comp.size.data" (list . "component" "resour") | indent 10 }}
+{{ include "cem.resources.comp.size.data" (list . "component" "resour") | indent 10 }}
 ```
   */ -}}
 
-{{- define "ibmcemprod.sizeData" -}}
+{{- define "cem.resources.sizeData" -}}
 normalizer:
   size0:
     enableHPA: false
@@ -241,7 +241,7 @@ rbs:
     enableHPA: false
     resources:
       limits:
-        memory: 1024Mi
+        memory: 1536Mi
         cpu: 1000m
       requests:
         memory: 100Mi
@@ -250,7 +250,7 @@ rbs:
     enableHPA: true
     resources:
       limits:
-        memory: 1024Mi
+        memory: 1536Mi
         cpu: 1000m
       requests:
         memory: 100Mi
@@ -276,21 +276,21 @@ as:
         cpu: 500m
 {{- end -}}
 
-{{- define "ibmcemprod.comp.size.data" -}}
+{{- define "cem.resources.comp.size.data" -}}
 {{- $root := (index . 0) -}}
 {{- $resName := (index . 1) -}}
 {{- $keyName := (index . 2) -}}
-{{- $sizeData := fromYaml (include "ibmcemprod.sizeData" .) -}}
+{{- $sizeData := fromYaml (include "cem.resources.sizeData" .) -}}
 {{- $resData := index $sizeData $resName -}}
 {{- $resSizeData := index $resData $root.Values.global.environmentSize -}}
 {{- $result := index $resSizeData $keyName -}}
 {{- toYaml $result | trimSuffix "\n" -}}
 {{- end -}}
 
-{{- define "ibmcemprod.comp.hpa" -}}
+{{- define "cem.resources.comp.hpa" -}}
 {{- $root := (index . 0) -}}
 {{- $resName := (index . 1) -}}
-{{- $sizeData := fromYaml (include "ibmcemprod.sizeData" .) -}}
+{{- $sizeData := fromYaml (include "cem.resources.sizeData" .) -}}
 {{- $resData := index $sizeData $resName -}}
 {{- $resSizeData := index $resData $root.Values.global.environmentSize -}}
 {{- $result := index $resSizeData "enableHPA" -}}

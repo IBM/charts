@@ -18,6 +18,9 @@ resources:
 {{- define "couchdb.sizeData" -}}
 couchdb:
   size0:
+    autoClusterConfig:
+      enabled: false
+    replicas: 1
     resources:
       limits:
         memory: 800Mi
@@ -26,6 +29,9 @@ couchdb:
         memory: 600Mi
         cpu: 200m
   size1:
+    autoClusterConfig:
+      enabled: true
+    replicas: 3
     resources:
       limits:
         memory: 2800Mi

@@ -4,7 +4,7 @@ Name helpers for SCH (Shared Configurable Helpers)
 sch/_names.tpl contains shared configurable helper templates for 
 creating resource names.
 
-Usage of "sch.names.*" requires the following line be include at 
+Usage of "sch.names.*" requires the following line be include at
 the begining of template:
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
  
@@ -20,16 +20,13 @@ the begining of template:
 and required tpl files for this version of sch/_names.tpl
 */ -}}
 {{- define "sch.names.version" -}}
-version: "1.0.1"
+version: "1.2.7"
 tillerVersion: ">=2.6.0"
-requires:
-  - "templates/sch-2.6.0/_config.tpl"
-  - "templates/sch-2.6.0/_utils.tpl"
 {{- end -}}
 
 
 {{- /*
-`"sch.names.appName"` will generate a app name based on the precedence and 
+`"sch.names.appName"` will generate a app name based on the precedence and
 existanece of `.Values.nameOverride`, `.sch.chart.appName`,
  `.sch.chart.shortName`, `.Chart.Name`.
 
@@ -60,19 +57,19 @@ __Usage:__
   {{- $params := . -}}
   {{- $root := first $params -}}
   {{- $schBase := dict "sch" (dict "chart" (dict "shortName" "" "appName" "")) -}}
-  {{- $_ := merge $root $schBase -}}  
-  {{- $appName := coalesce $root.Values.nameOverride $root.sch.chart.appName  $root.sch.chart.shortName $root.Chart.Name -}}  
+  {{- $_ := merge $root $schBase -}}
+  {{- $appName := coalesce $root.Values.nameOverride $root.sch.chart.appName  $root.sch.chart.shortName $root.Chart.Name -}}
   {{- $appName -}}
 {{- end -}}
 
 {{/*
-`"sch.names.fullName"` will generate a fullName made up of `.Release.name` and 
-appName, it will truncate the name parts based on values defined in 
-`sch.names.fullName.*`. 
+`"sch.names.fullName"` will generate a fullName made up of `.Release.name` and
+appName, it will truncate the name parts based on values defined in
+`sch.names.fullName.*`.
 
-When name parts are truncated, a "somewhat random" 4 character suffix is used 
-for each part, which is the first 4 characters of the sha256 or the truncated 
-string. 
+When name parts are truncated, a "somewhat random" 4 character suffix is used
+for each part, which is the first 4 characters of the sha256 or the truncated
+string.
 
 __Config Values Used:__
 - `.sch.names.fullName.maxLength`
@@ -82,11 +79,11 @@ __Config Values Used:__
 __Uses:__
 - `"sch.utils.getItem"`
 - `"sch.names.releaseAppCompName"`
-   
+
 __Parameters input as a list of values:__
 - the root context (required)
 
-__Usage:__ 
+__Usage:__
 ```
   name: {{ include "sch.names.fullName" (list .) }}
   or
@@ -99,7 +96,7 @@ __Usage:__
 
   {{/* $schBase values are defined in sch/_config.yaml and can be modified by chart in sch-chart-config.yaml*/}}
   {{- $schBase := dict "sch" (dict "names" (dict "fullName" (dict "maxLength" 253 "releaseNameTruncLength" 253 "appNameTruncLength" 253))) -}}
-  {{- $_ := merge $root $schBase -}}  
+  {{- $_ := merge $root $schBase -}}
   {{- $maxLength := (int ($root.sch.names.fullName.maxLength)) -}}
   {{- $truncLength := (int (include "sch.utils.getItem" (list $params 1 $maxLength))) -}}
   {{- $releaseNameTruncLength := (int ($root.sch.names.fullName.releaseNameTruncLength)) -}}
@@ -112,11 +109,11 @@ __Usage:__
 
 
 {{/*
-`"sch.names.fullCompName"` will generate a compName made up of `.Release.name`, 
-appName and if specified an optional component name, it will truncate the name 
+`"sch.names.fullCompName"` will generate a compName made up of `.Release.name`,
+appName and if specified an optional component name, it will truncate the name
 parts based on values defined in `sch.names.fullCompName.*`.
 
-When name parts are truncated, a "somewhat random" 4 digit suffix is used for 
+When name parts are truncated, a "somewhat random" 4 digit suffix is used for
 each part, which is the first 4 characters of the sha256 or the truncated string. 
 
 __Config Values Used:__
@@ -147,7 +144,7 @@ __Usage:__ 
 
   {{/* $schBase values are defined in sch/_config.yaml and can be modified by chart in sch-chart-config.yaml*/}}
   {{- $schBase := dict "sch" (dict "names" (dict "fullCompName" (dict "maxLength" 253 "releaseNameTruncLength" 253 "appNameTruncLength" 253 "compNameTruncLength" 253))) -}}
-  {{- $_ := merge $root $schBase -}}  
+  {{- $_ := merge $root $schBase -}}
   {{- $maxLength := (int ($root.sch.names.fullCompName.maxLength)) -}}
   {{- $releaseNameTruncLength := (int ($root.sch.names.fullCompName.releaseNameTruncLength)) -}}
   {{- $appNameTruncLength := (int ($root.sch.names.fullCompName.appNameTruncLength)) -}}
@@ -161,14 +158,14 @@ __Usage:__ 
 release name, appName and if specified an optional component name, it will 
 truncate the name parts based on values defined in `sch.names.statefulSetName.*`.
 
-When name parts are truncated, a "somewhat random" 4 character suffix is used 
-for each part, which is the first 4 characters of the sha256 or the truncated 
+When name parts are truncated, a "somewhat random" 4 character suffix is used
+for each part, which is the first 4 characters of the sha256 or the truncated
 string.
 
-Because statefulSet can have VolumeClaimTemplates, and if that 
-VolumeClaimTemplates generates a dynamic PV with a storage class such as 
-GlusterFS, it could result in generating a service with a name containing the 
-statefulSet name; therefore, there may be cases in which the statefulSet name 
+Because statefulSet can have VolumeClaimTemplates, and if that
+VolumeClaimTemplates generates a dynamic PV with a storage class such as
+GlusterFS, it could result in generating a service with a name containing the
+statefulSet name; therefore, there may be cases in which the statefulSet name
 needs to be truncated based on the default or chart specified configuration.
 
 __Config Values Used:__
@@ -200,8 +197,8 @@ __Usage:__ 
 
   {{/* $schBase values are defined in sch/_config.yaml and can be modified by chart in sch-chart-config.yaml*/}}
   {{- $schBase := dict "sch" (dict "names" (dict "statefulSetName" (dict "maxLength" 253 "releaseNameTruncLength" 253 "appNameTruncLength" 253 "compNameTruncLength" 253))) -}}
-  {{- $_ := merge $root $schBase -}} 
-   
+  {{- $_ := merge $root $schBase -}}
+
   {{- $maxLength := (int ($root.sch.names.statefulSetName.maxLength)) -}}
   {{- $releaseNameTruncLength := (int ($root.sch.names.statefulSetName.releaseNameTruncLength)) -}}
   {{- $appNameTruncLength := (int ($root.sch.names.statefulSetName.appNameTruncLength)) -}}
@@ -212,17 +209,17 @@ __Usage:__ 
 
 
 {{/*
-`"sch.names.volumeClaimTemplateName"` will truncate the pvc name part based on 
-values defined in `sch.names.volumeClaimTemplateName.*` and the length of the 
+`"sch.names.volumeClaimTemplateName"` will truncate the pvc name part based on
+values defined in `sch.names.volumeClaimTemplateName.*` and the length of the
 statefulSet name.
 
-When name parts are truncated, a "somewhat random" 4 character suffix is used 
-for each part, which is the first 4 characters of the sha256 or the truncated 
+When name parts are truncated, a "somewhat random" 4 character suffix is used
+for each part, which is the first 4 characters of the sha256 or the truncated
 string.
 
-Because VolumeClaimTemplates may generate a dynamic PV with a storage class 
+Because VolumeClaimTemplates may generate a dynamic PV with a storage class
 such as GlusterFS, it could result in generating a service with a name containing
-the statefulSet name; therefore, there may be cases in which the statefulSet 
+the statefulSet name; therefore, there may be cases in which the statefulSet
 name needs to be used to determine length available for the pvc name.
 
 __Config Values Used:__
@@ -256,7 +253,7 @@ __Usage:__ 
 
   {{/* $schBase values are defined in sch/_config.yaml and can be modified by chart in sch-chart-config.yaml*/}}
   {{- $schBase := dict "sch" (dict "names" (dict "volumeClaimTemplateName" (dict "maxLength" 253  "claimNameTruncLength" 253 "possiblePrefix" "glusterfs-dynamic-"))) -}}
-  {{- $_ := merge $root $schBase -}}  
+  {{- $_ := merge $root $schBase -}}
 
   {{- $maxLength := (int ($root.sch.names.volumeClaimTemplateName.maxLength)) -}}
   {{- $possiblePrefix := $root.sch.names.volumeClaimTemplateName.possiblePrefix -}}
@@ -267,7 +264,7 @@ __Usage:__ 
   {{- $claimNameLength := len $claimName -}}
   {{- $preClaimNameLength := add 5 (add $prefixLength $statefulSetNameLength) -}}
   {{- $claimNameMaxLength := max $claimNameTruncLength (int (sub $maxLength $preClaimNameLength)) -}}
-    
+
   {{- $buildNameParms := list (dict "name" $claimName "length" $claimNameMaxLength "unique" 4) -}}
   {{- printf "%s" (include "sch.names.buildName" $buildNameParms) -}}
 {{- end -}}
@@ -275,7 +272,7 @@ __Usage:__ 
 
 {{/*
 `"sch.names.persistentVolumeClaimName"` will generate a persistentVolumeClaimName 
-name made up of `.Release.name`, appName and the pvc name, it will truncate the name 
+name made up of `.Release.name`, appName and the pvc name, it will truncate the name
 parts based on values defined in `sch.names.persistentVolumeClaimName.*`. 
 
 When name parts are truncated, a "somewhat random" 4 character suffix is used for 
@@ -301,7 +298,7 @@ __Usage:__
   {{- $pvcName := "dataPVC" -}}
   
   name: {{ include "sch.names.persistentVolumeClaimName" (list . $pvcName) }}
-```  
+```
 */}}
 {{- define "sch.names.persistentVolumeClaimName" -}}
   {{- $params := . -}}
@@ -310,8 +307,8 @@ __Usage:__
 
   {{/* $schBase values are defined in sch/_config.yaml and can be modified by chart in sch-chart-config.yaml*/}}
   {{- $schBase := dict "sch" (dict "names" (dict "persistentVolumeClaimName" (dict "maxLength" 253 "releaseNameTruncLength" 253 "appNameTruncLength" 253 "claimNameTruncLength" 253 "possiblePrefix" "glusterfs-dynamic-"))) -}}
-  {{- $_ := merge $root $schBase -}}  
-   
+  {{- $_ := merge $root $schBase -}}
+
   {{- $possiblePrefix := $root.sch.names.persistentVolumeClaimName.possiblePrefix -}}
   {{- $prefixLength := len $possiblePrefix -}}
 
@@ -323,23 +320,23 @@ __Usage:__
 {{- end -}}
 
 {{/*
-"sch.names.buildName" is a helper which takes a list of mapd of names and lengths 
-to iterate though and truncate each part to the length specified. 
+"sch.names.buildName" is a helper which takes a list of map of names and lengths
+to iterate though and truncate each part to the length specified.
 
 Config Values Used: NA
-  
+
 Uses:
   - "sch.utils.truncUnique"
-    
+
 Parameters input as an array of one values:
   - a list of dict with name and length key,values (required)
 
-Usage: 
+Usage:
     {{- $buildNameParms := (list) -}}
     {{- $buildNameParms := append $buildNameParms (dict "name" "name1" "length" 5) -}}
     {{- $buildNameParms := append $buildNameParms (dict "name" "longername" "length" 6) -}}
     {{- $shortResult := print (include "sch.names.buildName" $buildNameParms) -}}
-  
+
 */}}
 {{- define "sch.names.buildName" -}}
   {{- $parms := . -}}
@@ -356,14 +353,14 @@ Usage:
 {{- end -}}
 
 {{/*
-"sch.names.releaseAppCompName" is a shared helper to build a name based of the release 
-and app names and then a "component" name.  
+"sch.names.releaseAppCompName" is a shared helper to build a name based of the release
+and app names and then a "component" name.
 
 Config Values Used: NA
-  
+
 Uses:
   - "sch.utils.truncUnique"
-    
+
 Parameters input as an array of one values:
   - the root context (required)
   - component name (required)
@@ -372,13 +369,13 @@ Parameters input as an array of one values:
   - appNameTruncLength (required)
   - compNameTruncLength (required)
 
-Usage: 
+Usage:
   {{- $maxLength := 63 -}}
   {{- $releaseNameTruncLength := 30 -}}
   {{- $appNameTruncLength := 20 -}}
   {{- $compNameTruncLength := 11 -}}
   {{- include "sch.names.releaseAppCompName" (list $root $compName $maxLength $releaseNameTruncLength $appNameTruncLength $compNameTruncLength) -}}
- 
+
 */}}
 {{- define "sch.names.releaseAppCompName" -}}
   {{- $params := . -}}
@@ -390,23 +387,20 @@ Usage:
   {{- $releaseNameTruncLength := (int (include "sch.utils.getItem" (list $params 3 "253"))) -}}
   {{- $appNameTruncLength := (int (include "sch.utils.getItem" (list $params 4 "253"))) -}}
   {{- $compNameTruncLength := (int (include "sch.utils.getItem" (list $params 5 "253"))) -}}
-   
+
   {{- $fullLengthResult := (printf "%s-%s-%s" $releaseName $appName $compName) -}}
   {{- $fullLengthResult :=  include "sch.utils.withinLength" (list $root $fullLengthResult $maxLength) -}}
 
   {{- if $fullLengthResult -}}
     {{- $fullLengthResult | lower | trimSuffix "-" -}}
-  {{- else -}} 
+  {{- else -}}
     {{- $buildNameParms := (list) -}}
     {{- $buildNameParms := append $buildNameParms (dict "name" $releaseName "length" $releaseNameTruncLength) -}}
     {{- $buildNameParms := append $buildNameParms (dict "name" $appName "length" $appNameTruncLength) -}}
     {{- $buildNameParms := append $buildNameParms (dict "name" $compName "length" $compNameTruncLength) -}}
-  
+
     {{- $shortResult := print (include "sch.names.buildName" $buildNameParms) -}}
     {{- $shortResult | lower | trimSuffix "-" -}}
   {{- end -}}
 {{/*   */}}
 {{- end -}}
-
-
-

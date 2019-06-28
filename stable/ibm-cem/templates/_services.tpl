@@ -6,7 +6,7 @@
 *
 *  5737-H89, 5737-H64
 *
-* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+* © Copyright IBM Corp. 2015, 2019  All Rights Reserved.
 *
 * US Government Users Restricted Rights - Use, duplication, or
 * disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
@@ -29,75 +29,87 @@ For example the host of cem-users can be extracted with:
 
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
 
+{{- define "cem.iproto" }}
+{{- if .Values.global.internalTLS.enabled -}}
+https
+{{- else -}}
+http
+{{- end }}
+{{- end }}
+
+
 {{ define "cem.services.alertnotification" -}}
-https://edge-alert-notification.stage1.mybluemix.net/
+https://console-mp.us-south.alertnotification.cloud.ibm.com
 {{- end }}
 
 {{ define "cem.services.apm" -}}
-http://{{ template "releasename" . }}-amui.{{ .Release.Namespace }}.svc:3000
+http://{{ template "cem.releasename" . }}-amui.{{ .Release.Namespace }}.svc:3000
 {{- end }}
 
 {{ define "cem.services.brokers" -}}
-http://{{ include "sch.names.fullCompName" (list . "brokers") }}.{{ .Release.Namespace }}.svc:6007
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "brokers") }}.{{ .Release.Namespace }}.svc:6007
 {{- end }}
 
 {{/* The API URL is only used for external reference */}}
 {{ define "cem.services.cemapi" -}}
 {{- if ne .Values.global.ingress.apidomain "" -}}
 https://{{ .Values.global.ingress.apidomain }}/api
+{{- else if ne (.Values.global.ingress.port|toString) "443" -}}
+https://{{ .Values.global.ingress.domain }}:{{ .Values.global.ingress.port }}/{{ .Values.global.ingress.prefix }}api
 {{- else -}}
 https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}api
 {{- end }}
 {{- end }}
 
+{{/* The following contains a trailing forward slash that can be removed in future versions post 2.3.0 (subject to issue 4908) */}}
 {{ define "cem.services.cemusers" -}}
-http://{{ include "sch.names.fullCompName" (list . "cem-users") }}.{{ .Release.Namespace }}.svc:6002
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "cem-users") }}.{{ .Release.Namespace }}.svc:6002/
 {{- end }}
 
 {{ define "cem.services.channelservices" -}}
-http://{{ include "sch.names.fullCompName" (list . "channelservices") }}.{{ .Release.Namespace }}.svc:3091
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "channelservices") }}.{{ .Release.Namespace }}.svc:3091
 {{- end }}
 
 {{ define "cem.services.couchdb" -}}
-http://{{ template "releasename" . }}-couchdb.{{ .Release.Namespace }}.svc:5984
+http://{{ template "cem.releasename" . }}-couchdb.{{ .Release.Namespace }}.svc:5984
 {{- end }}
 
 {{ define "cem.services.datalayer" -}}
-http://{{ include "sch.names.fullCompName" (list . "datalayer") }}.{{ .Release.Namespace }}.svc:10010
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "datalayer") }}.{{ .Release.Namespace }}.svc:10010
 {{- end }}
 
 {{ define "cem.services.eventpreprocessor" -}}
-http://{{ include "sch.names.fullCompName" (list . "eventpreprocessor") }}.{{ .Release.Namespace }}.svc:3051
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "eventpreprocessor") }}.{{ .Release.Namespace }}.svc:3051
 {{- end }}
 
 {{ define "cem.services.incidentprocessor" -}}
-http://{{ include "sch.names.fullCompName" (list . "incidentprocessor") }}.{{ .Release.Namespace }}.svc:6006
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "incidentprocessor") }}.{{ .Release.Namespace }}.svc:6006
 {{- end }}
 
 {{/* The following must expand to a comma separated list of host:port (subject to issue 1194) */}}
 {{ define "cem.services.kafkabrokers" -}}
-{{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc:{{- if eq .Values.kafka.ssl.enabled true }}9093{{ else }}9092{{ end }}
+{{ template "cem.releasename" . }}-kafka.{{ .Release.Namespace }}.svc:{{- if eq .Values.kafka.ssl.enabled true }}9093{{ else }}9092{{ end }}
 {{- end }}
 
 {{/* The following must expand to a json array of host:port (subject to issue 1194) */}}
 {{ define "cem.services.kafkabrokers.json" -}}
-["{{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc:{{- if eq .Values.kafka.ssl.enabled true }}9093{{ else }}9092{{ end }}"]
+["{{ template "cem.releasename" . }}-kafka.{{ .Release.Namespace }}.svc:{{- if eq .Values.kafka.ssl.enabled true }}9093{{ else }}9092{{ end }}"]
 {{- end }}
 
 {{ define "cem.services.kafkaadmin" -}}
-http://{{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc:{{ .Values.global.kafka.kafkaRestInsecurePort }}
+http://{{ template "cem.releasename" . }}-kafka.{{ .Release.Namespace }}.svc:{{ .Values.global.kafka.kafkaRestInsecurePort }}
 {{- end }}
 
 {{ define "cem.services.normalizer" -}}
-http://{{ include "sch.names.fullCompName" (list . "normalizer") }}.{{ .Release.Namespace }}.svc:3901
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "normalizer") }}.{{ .Release.Namespace }}.svc:3901
 {{- end }}
 
 {{ define "cem.services.notificationprocessor" -}}
-http://{{ include "sch.names.fullCompName" (list . "notificationprocessor") }}.{{ .Release.Namespace }}.svc:6008
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "notificationprocessor") }}.{{ .Release.Namespace }}.svc:6008
 {{- end }}
 
 {{ define "cem.services.integrationcontroller" -}}
-http://{{ include "sch.names.fullCompName" (list . "integration-controller") }}.{{ .Release.Namespace }}.svc:6004
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "integration-controller") }}.{{ .Release.Namespace }}.svc:6004
 {{- end }}
 
 {{ define "cem.services.regionrelay" -}}
@@ -109,33 +121,37 @@ https://ea-api-REGION.opsmgmt.bluemix.net/
 {{- end }}
 
 {{ define "cem.services.rba" -}}
-http://{{ include "sch.names.fullCompName" (list . "rba-rbs") }}.{{ .Release.Namespace }}.svc:3005
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "rba-rbs") }}.{{ .Release.Namespace }}.svc:3005
 {{- end }}
 
 {{ define "cem.services.rbaas" -}}
-http://{{ include "sch.names.fullCompName" (list . "rba-as") }}.{{ .Release.Namespace }}.svc:3080
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "rba-as") }}.{{ .Release.Namespace }}.svc:3080
+{{- end }}
+
+{{ define "cem.services.redissecured" -}}
+true
 {{- end }}
 
 {{ define "cem.services.redissentinelsvc" -}}
-{{ template "releasename" . }}-redis-sentinel.{{ .Release.Namespace }}.svc
+{{ template "cem.releasename" . }}-ibm-redis-sentinel-svc.{{ .Release.Namespace }}.svc
 {{- end }}
 
 {{ define "cem.services.redishost" -}}
-{{ template "releasename" . }}-redis-master-svc.{{ .Release.Namespace }}.svc
+{{ template "cem.releasename" . }}-ibm-redis-master-svc.{{ .Release.Namespace }}.svc
 {{- end }}
 
 {{ define "cem.services.schedulingui" -}}
-http://{{ include "sch.names.fullCompName" (list . "scheduling-ui") }}.{{ .Release.Namespace }}.svc:3191
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "scheduling-ui") }}.{{ .Release.Namespace }}.svc:3191
 {{- end }}
 
 {{ define "cem.services.uiserver" -}}
-http://{{ include "sch.names.fullCompName" (list . "event-analytics-ui") }}.{{ .Release.Namespace }}.svc:3201
+{{ include "cem.iproto" . }}://{{ include "sch.names.fullCompName" (list . "event-analytics-ui") }}.{{ .Release.Namespace }}.svc:3201
 {{- end }}
 
 {{/*
 Ingress rule for a single host, used below
 */}}
-{{ define "ingress-rule" -}}
+{{ define "cem.ingress.rule" -}}
 {{ $context :=  . | first -}}
 {{ $prefix := . | rest| first -}}
 {{ $service := . | rest | rest | first -}}
@@ -149,25 +165,26 @@ Ingress rule for a single host, used below
 {{/*
 Use the ingress rule above for each service attached to ingress.
 */}}
-{{ define "ingress-rules" -}}
-{{ include "ingress-rule" (list . "users/" "cem-users" 6002) }}
-{{ include "ingress-rule" (list . "chanl/" "channelservices" 3091) }}
-{{ include "ingress-rule" (list . "cemui/" "event-analytics-ui" 3201) }}
-{{ include "ingress-rule" (list . "integ/" "integration-controller" 6004) }}
-{{ include "ingress-rule" (list . "norml/" "normalizer" 3901) }}
-{{ include "ingress-rule" (list . "notif/" "notificationprocessor" 6008) }}
-{{ include "ingress-rule" (list . "sched/" "scheduling-ui" 3191) }}
-{{ include "ingress-rule" (list . "rbarb/" "rba-rbs" 3005) }}
+{{ define "cem.ingress.uirules" -}}
+{{ include "cem.ingress.rule" (list . "users/" "cem-users" 6002) }}
+{{ include "cem.ingress.rule" (list . "chanl/" "channelservices" 3091) }}
+{{ include "cem.ingress.rule" (list . "cemui/" "event-analytics-ui" 3201) }}
+{{ include "cem.ingress.rule" (list . "integ/" "integration-controller" 6004) }}
+{{ include "cem.ingress.rule" (list . "norml/" "normalizer" 3901) }}
+{{ include "cem.ingress.rule" (list . "notif/" "notificationprocessor" 6008) }}
+{{ include "cem.ingress.rule" (list . "sched/" "scheduling-ui" 3191) }}
+{{ include "cem.ingress.rule" (list . "rbarb/" "rba-rbs" 3005) }}
 {{- end }}
-{{ define "api-rules" -}}
-{{ include "ingress-rule" (list . "api/eventPolicies/" "eventpreprocessor" 3051) }}
-{{ include "ingress-rule" (list . "api/eventPoliciesSpecification/" "eventpreprocessor" 3051) }}
-{{ include "ingress-rule" (list . "api/events/" "eventpreprocessor" 3051) }}
-{{ include "ingress-rule" (list . "api/incidentPolicies/" "incidentprocessor" 6006) }}
-{{ include "ingress-rule" (list . "api/incidentquery/" "incidentprocessor" 6006) }}
-{{ include "ingress-rule" (list . "api/spec/incidentPolicies/" "incidentprocessor" 6006) }}
-{{ include "ingress-rule" (list . "api/v1/rba/" "rba-rbs" 3005) }}
-{{ include "ingress-rule" (list . "api-gateway/" "rba-rbs" 3005) }}
+{{ define "cem.ingress.apirules" -}}
+{{ include "cem.ingress.rule" (list . "api/eventPolicies/" "eventpreprocessor" 3051) }}
+{{ include "cem.ingress.rule" (list . "api/eventPoliciesSpecification/" "eventpreprocessor" 3051) }}
+{{ include "cem.ingress.rule" (list . "api/events/" "eventpreprocessor" 3051) }}
+{{ include "cem.ingress.rule" (list . "api/incidentPolicies/" "incidentprocessor" 6006) }}
+{{ include "cem.ingress.rule" (list . "api/incidentquery/" "incidentprocessor" 6006) }}
+{{ include "cem.ingress.rule" (list . "api/notificationTemplates/" "channelservices" 3091) }}
+{{ include "cem.ingress.rule" (list . "api/spec/incidentPolicies/" "incidentprocessor" 6006) }}
+{{ include "cem.ingress.rule" (list . "api/v1/rba/" "rba-rbs" 3005) }}
+{{ include "cem.ingress.rule" (list . "api-gateway/" "rba-rbs" 3005) }}
 {{- end }}
 
 {{/*
@@ -175,7 +192,7 @@ Micro services talk to each other directly, so they do not need ingress hosts.
 If they need to talk via ingress entries for each ingress domain name used will
 be added here.
 */}}
-{{ define "ingress-host-alias" -}}
+{{ define "cem.ingress.hostAlias" -}}
 {{- end }}
 
 {{ define "cem.service.protocol" -}}

@@ -1,0 +1,27 @@
+{{- include "sch.config.init" (list . "ibmRedis.sch.chart.config.values") -}}
+Redis cluster can be accessed via port 6379 on the following DNS name from within your cluster:
+{{ include "sch.names.fullCompName" (list . .sch.chart.components.masterService) }}.{{ .Release.Namespace }}.svc.cluster.local
+
+
+To connect to your Redis server:
+
+1. Find the master pod to use as a client:
+
+  export MASTER_POD_NAME=$(kubectl get pod -l redis-role=master,release={{ .Release.Name }} -o jsonpath='{range .items[*]}{.metadata.name}')
+  echo Master pod is $MASTER_POD_NAME
+
+2. To extract password from the secret file gerenated by the chart
+
+   kubectl get secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) }}  -o json | jq -r .data.password | base64 -D
+
+3. Run a Redis pod that you can use as a client:
+
+  kubectl exec -it $MASTER_POD_NAME /bin/bash
+
+4. Connect using the Redis CLI:
+
+  redis-cli -h {{ include "sch.names.fullCompName" (list . .sch.chart.components.masterService) | quote }} -a <password>
+
+To see the pod roles, run the following:
+
+  kubectl get pods -L redis-role -l release={{ .Release.Name }}
