@@ -101,7 +101,7 @@ GitLab provides many values to configure each of the parts of the chart. The tab
 |  `ingress.tls.enabled`                                              |  `true`                  | TLS is used when set to `true`. |
 ---
 ### certmanager
-> By default, IBM disables the install of `cert-manager` in this chart because it causes serious conflicts with the existing `cert-manager` and its associated CRDs on ICP. 
+> By default, IBM disables the install of `cert-manager` in this chart because it causes serious conflicts with the existing `cert-manager` and its associated CRDs on IBM Cloud Private. 
 
 |  Parameter      |  Default  | Description |
 |  :--------      |  :------  | :---------- |
