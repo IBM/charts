@@ -1,6 +1,8 @@
 
 # IBM INTEGRATION BUS
 
+On 28th June 2019, this version of the Helm chart for IBM App Connect Enterprise will no longer be supported. This chart will be removed on July 29th 2019.
+
 ![IIB Logo](https://ot4i.github.com/iib-helm/ibm-integration-bus-dev/IBM_Integration_Bus_Icon.svg)
 
 IBM® Integration Bus is a market-leading lightweight enterprise integration engine that offers a fast, simple way for systems and applications to communicate with each other. As a result, it can help you achieve business value, reduce IT complexity and save money. IBM Integration Bus supports a range of integration choices, skills and interfaces to optimize the value of existing technology investments. 
