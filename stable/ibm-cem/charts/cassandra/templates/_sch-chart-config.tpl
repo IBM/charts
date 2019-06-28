@@ -12,6 +12,11 @@ additional configuration values used by the Shared Configurable Helpers.
 sch:
   chart:
     appName: "cassandra"
+    components:
+      authSecretGeneratorName: "auth-secret-generator"
+      changeSuperuserPostInstallName: "change-superuser-post-install"
+      changeSuperuserPreUpgradeName: "change-superuser-pre-upgrade"
+      changeSuperuserPostUpgradeName: "change-superuser-post-upgrade"
 {{- end -}}
 
 {{- /*

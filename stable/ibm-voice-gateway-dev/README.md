@@ -180,10 +180,10 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `tenantConfigSecretName`           | Tenant Config secret name             | `vgw-tenantconfig-secret`                                                      |
 | `image.sipOrchestrator.repository`           | Sip Orchestrator repository             | `ibmcom/voice-gateway-so`                                                      |
 | `image.sipOrchestrator.containerName`           | Sip Orchestrator container name             | `vgw-sip-orchestrator`                                                      |
-| `image.sipOrchestrator.tag`           | Sip Orchestrator docker image tag             | `1.0.1.0`                                                      |
+| `image.sipOrchestrator.tag`           | Sip Orchestrator docker image tag             | `1.0.2.0`                                                      |
 | `image.mediaRelay.repository`           | Media Relay repository             | `ibmcom/voice-gateway-mr`                                                      |
 | `image.mediaRelay.containerName`           | Media Relay container name             | `vgw-media-relay`                                                      |
-| `image.mediaRelay.tag`           | Media Relay docker image tag             | `1.0.1.0`                                                      |
+| `image.mediaRelay.tag`           | Media Relay docker image tag             | `1.0.2.0`                                                      |
 | `image.pullPolicy`           | Image pull policy             | `Always`                                                      |
 | `image.imagePullSecrets`           | Docker repository image pull secret             | `n/a`                                                      |
 | `persistence.useDynamicProvisioning`           | Dynamic provisioning setup             | `false`                                                      |
@@ -222,11 +222,14 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `mediaRelayEnvVariables.enableMutualAuth`           | Secure connections using Mutual Authentication             | `false`                                                      |
 | `mediaRelayEnvVariables.sslClientPkcs12FileSecret`           | SSL client PKCS12 file secret             | `ssl-client-pkcs12-file-secret`                                                      |
 | `mediaRelayEnvVariables.sslClientPassphraseSecret`           | SSL client passphrase secret name             | `ssl-client-passphrase-secret`                                                      |
+| `sipOrchestratorEnvVariables.httpHost`           | HTTP Host             | `127.0.0.1`                                                      |
+| `sipOrchestratorEnvVariables.secureAdminInterface`           | Secure admin interface with credentials             | `false`                                                      |
+| `sipOrchestratorEnvVariables.adminCredentialSecret`           | Admin Credential secret             | `admin-credentials`                                                      |
 | `sipOrchestratorEnvVariables.mediaRelayHost`           | Media Relay Host             | `localhost:8080`                                                      |
 | `sipOrchestratorEnvVariables.sipPort`           | SIP Port             | `5060`                                                      |
 | `sipOrchestratorEnvVariables.sipPortTcp`           | SIP Port for TCP             | `5060`                                                      |
 | `sipOrchestratorEnvVariables.sipPortTls`           | SIP Port for TLS             | `5061`                                                      |
-| `sipOrchestratorEnvVariables.logLevel`           | Log Level             | `audit`                                                      |
+| `sipOrchestratorEnvVariables.logLevel`           | Log Level             | `info`                                                      |
 | `sipOrchestratorEnvVariables.logMaxFiles`           | Log Max Files             | `5`                                                      |
 | `sipOrchestratorEnvVariables.logMaxFileSize`           | Log Max File Size             | `100`                                                      |
 | `sipOrchestratorEnvVariables.enableAuditMessages`           | Enable Audit Messages             | `true`                                                      |
@@ -246,6 +249,8 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `sipOrchestratorEnvVariables.sslKeyTrustStoreSecret`           | SSL key trust store secret             | `trust-store-file-secret`                                                      |
 | `sipOrchestratorEnvVariables.sslFileType`           | SSL file type             | `JKS`                                                      |
 | `sipOrchestratorEnvVariables.sslPassphraseSecret`           | SSL passphrase secret name             | `ssl-passphrase-secret`                                                      |
+| `sipOrchestratorEnvVariables.enableMetricsAuth`           | Enable authentication for the monitoring API             | `false`                                                      |
+| `sipOrchestratorEnvVariables.metricsSamplingInterval`           | Metrics Sampling Interval in seconds             | `600`                                                      |
 | `metering.meteringApiKeySecret`           | Metering Api Key Secret            | `metering-api-key-secret`                                                      |
 | `metering.icpMasterNodeIP`           | IBM Cloud Private Master Node Domain/IP             | `mycluster.icp`                                                      |
 | `metering.meteringServerURL`           | Metering Server URL             | `https://mycluster.icp:8443/meteringapi`                                                      |
@@ -311,6 +316,13 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
   kubectl create secret generic proxy-password --from-file=soProxyPassword=so_proxy_password.txt --from-file=mrProxyPassword=mr_proxy_password.txt -n <namespace>
   ```
 - Enter the secret name in the `Proxy Password secret name` field of the respective container or you can set the mediaRelayEnvVariables.proxyPasswordSecret and sipOrchestratorEnvVariables.proxyPasswordSecret variables during installation using Helm CLI.
+
+#### Secure admin interface with credentials:
+- Create username and password secret for admin credentials using the following command:
+  ```bash
+  kubectl create secret generic admin-credentials --from-literal=adminUsername=<USERNAME> --from-literal=adminPassword=<PASSWORD> -n <namespace>
+  ```
+- Enable option `Secure admin interface with credentials` in SIP Orchestrator configuration before deployment.
 
 ## Storage
 - A PersistentVolume needs to be pre-created prior to installing the chart if you want to enable persistent recording or persistent logs and no dynamic provisioning has been set up. 

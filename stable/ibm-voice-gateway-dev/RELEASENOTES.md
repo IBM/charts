@@ -1,9 +1,11 @@
 # Breaking Changes
 * None
 
-# What's new in 2.1.1
-* Updated voice gateway images to 1.0.1.0
+# What's new in 2.2.1
+* Added support for a monitoring metrics
+* Updated voice gateway images to 1.0.2.0
 * [What's new](https://www.ibm.com/support/knowledgecenter/SS4U29/whatsnew.html)
+
 
 # Fixes
 None
@@ -38,6 +40,7 @@ None
 
 | Chart | Date        | Kubernetes Required | Image(s) Supported | Details |
 | ----- | ----------- | ----------- | ------------------ | ------- |
+| 2.2.1 | Jun 28, 2019 | >= 1.11    | ibmcom/voice-gateway-so:1.0.2.0 and ibmcom/voice-gateway-mr:1.0.2.0 | Updated images to version 1.0.2.0, added support for monitoring metrics |
 | 2.1.1 | Mar 29, 2019 | >= 1.11    | ibmcom/voice-gateway-so:1.0.1.0 and ibmcom/voice-gateway-mr:1.0.1.0 | Updated images to version 1.0.1.0 |
 | 2.1.0 | Mar 01, 2019 | >= 1.11    | ibmcom/voice-gateway-so:1.0.0.8d and ibmcom/voice-gateway-mr:1.0.0.8d | Updated images to version 1.0.0.8d, added support for storing persistent logs, configuring SSL, mutual authentication and MRCPv2 |
 | 2.0.1 | Oct 26, 2018 | >= 1.11    | ibmcom/voice-gateway-so:1.0.0.7a and ibmcom/voice-gateway-mr:1.0.0.7a | Updated images to version 1.0.0.7a |

@@ -42,9 +42,9 @@
 - name: CEMSERVICEBROKER_DOCUMENTATIONURL
   value: 'https://console.bluemix.net/docs/services/EventManagement/index.html'
 - name: CEMSERVICEBROKER_CEMOTCDOCUMENTATIONURL
-  value: 'https://console.bluemix.net/docs/services/ContinuousDelivery/toolchains_integrations.html#cloudeventmanagement'
+  value: 'https://cloud.ibm.com/docs/services/ContinuousDelivery?topic=ContinuousDelivery-integrations#cloudeventmanagement'
 - name: CEMSERVICEBROKER_ANSOTCDOCUMENTATIONURL
-  value: 'https://console.bluemix.net/docs/services/ContinuousDelivery/toolchains_integrations.html#alertnotification'
+  value: 'https://cloud.ibm.com/docs/services/ContinuousDelivery?topic=ContinuousDelivery-integrations#alertnotification'
 - name: CEMSERVICEBROKER_APIURL
   value: 'https://ENV-api.DOMAIN.mybluemix.net'
 - name: CEMSERVICEBROKER_EXPERIMENTALPLANID
@@ -57,6 +57,8 @@
   value: fd9349be-e7e3-4ff7-90ff-45f75465f444
 - name: CEMSERVICEBROKER_MONITORINGADVPLANID
   value: 99b23e24-a751-4217-bb64-edc00b87e672
+- name: CEMSERVICEBROKER_MONITORINGMCMPLANID
+  value: 29a1b47b-176e-41e0-ae7e-202f489d6f01
 - name: CEMSERVICEBROKER_EVENTMANAGEMENTPLANID
   value: 3e0c0fc1-bce1-4d81-9885-ae3f0d218d28
 - name: CEMSERVICEBROKER_EVENTMANAGEMENTMCMBASEPLANID
@@ -68,7 +70,7 @@
 - name: CEMSERVICEBROKER_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-brokers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-brokers-cred-secret'
       key: password
 - name: CEMSERVICEBROKER_REGIONURL
   value: 'https://mccp.REGION.bluemix.net/v2/region'
@@ -87,7 +89,7 @@
 - name: CEMSERVICEBROKER_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-brokers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-brokers-cred-secret'
       key: username
 - name: CEMSERVICEBROKER_MASTERURL
   value: 'https://cem-bm-broker.mybluemix.net'
@@ -104,12 +106,12 @@
 - name: COUCHDB_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: username
 - name: COUCHDB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: password
 - name: COUCHDB_MAXRETRIES
   value: '15'
@@ -120,22 +122,22 @@
 - name: UAG_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: username
 - name: UAG_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: password
 - name: UAG_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientid
 - name: UAG_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
 - name: BROKERS_URL
   value: '{{ include "cem.services.brokers" . }}'
@@ -216,7 +218,7 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: MAINTENANCE_KAFKA_CQUEUE_SIZE_KB
   value: '100000'
 - name: MCM_POLL_INTERVAL
@@ -226,23 +228,31 @@
 - name: MODEL_KEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyname
 - name: MODEL_KEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyvalue
 - name: MODEL_HKEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyname
 - name: MODEL_HKEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyvalue
+- name: S3RBAOBJECTSTORAGE_APIKEY
+  value: none
+- name: S3RBAOBJECTSTORAGE_ENDPOINTS
+  value: 'https://control.cloud-object-storage.cloud.ibm.com/v2/endpoints'
+- name: S3RBAOBJECTSTORAGE_BUCKET
+  value: none
+- name: S3RBAOBJECTSTORAGE_LOCATION
+  value: us
 - name: RBA_PDOC_OBJECTSTORAGE_AUTHURL
   value: 'https://identity.open.softlayer.com'
 - name: RBA_PDOC_OBJECTSTORAGE_REGION
@@ -256,20 +266,27 @@
 - name: AUTH_SESSION_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-event-analytics-ui-session-secret'
+      name: '{{ template "cem.releasename" . }}-cem-event-analytics-ui-session-secret'
       key: session
 - name: AUTH_SESSION_TTL
   value: '7200'
 - name: REDIS_SSH_USERNAME
   value: none
+- name: REDIS_SERVER_SECURED
+  value: '{{ include "cem.services.redissecured" . }}'
 - name: REDIS_PASSWORD
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-ibm-redis-cred-secret'
+      key: password
 - name: REDIS_SSH_HOSTS
   value: '[]'
 - name: REDIS_DST_HOST
   value: '{{ include "cem.services.redishost" . }}'
 - name: REDIS_DST_PORT
   value: '6379'
+- name: REDIS_DESTINATIONS
+  value: '[{"host":"{{ include "cem.services.redishost" . }}","port":6379}]'
 - name: REDIS_LOCAL_HOST
   value: 127.0.0.1
 - name: REDIS_LOCAL_PORT
@@ -288,6 +305,8 @@
   value: '26379'
 - name: REDIS_SENTINEL_NAME
   value: mymaster
+- name: REDIS_CONNECT_SENTINELS
+  value: 'false'
 - name: SERVICEMONITOR_MONITORS
   value: '{"cemusers":"{{ include "cem.services.cemusers" . }}","channelservices":"{{ include "cem.services.channelservices" . }}","eventpreprocessor":"{{ include "cem.services.eventpreprocessor" . }}","incidentprocessor":"{{ include "cem.services.incidentprocessor" . }}","normalizer":"{{ include "cem.services.normalizer" . }}","notificationprocessor":"{{ include "cem.services.notificationprocessor" . }}","integrationcontroller":"{{ include "cem.services.integrationcontroller" . }}","schedulingui":"{{ include "cem.services.schedulingui" . }}","uiserver":"{{ include "cem.services.uiserver" . }}"}'
 - name: SYSLOG_TARGETS
@@ -328,34 +347,34 @@
 - name: UAG_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: username
 - name: UAG_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: password
 - name: UAG_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientid
 - name: UAG_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
 - name: CHANNELSERVICES_URL
   value: '{{ include "cem.services.channelservices" . }}/api/send/v1'
 - name: CHANNELSERVICES_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
       key: username
 - name: CHANNELSERVICES_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
       key: password
 - name: CIRCUITBREAKER_TRIP_LIMIT
   value: '1000000'
@@ -366,12 +385,12 @@
 - name: COUCHDB_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: username
 - name: COUCHDB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: password
 - name: COUCHDB_MAXRETRIES
   value: '15'
@@ -418,33 +437,40 @@
 - name: MODEL_KEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyname
 - name: MODEL_KEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyvalue
 - name: MODEL_HKEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyname
 - name: MODEL_HKEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyvalue
 - name: REDIS_SSH_USERNAME
   value: none
+- name: REDIS_SERVER_SECURED
+  value: '{{ include "cem.services.redissecured" . }}'
 - name: REDIS_PASSWORD
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-ibm-redis-cred-secret'
+      key: password
 - name: REDIS_SSH_HOSTS
   value: '[]'
 - name: REDIS_DST_HOST
   value: '{{ include "cem.services.redishost" . }}'
 - name: REDIS_DST_PORT
   value: '6379'
+- name: REDIS_DESTINATIONS
+  value: '[{"host":"{{ include "cem.services.redishost" . }}","port":6379}]'
 - name: REDIS_LOCAL_HOST
   value: 127.0.0.1
 - name: REDIS_LOCAL_PORT
@@ -463,6 +489,8 @@
   value: '26379'
 - name: REDIS_SENTINEL_NAME
   value: mymaster
+- name: REDIS_CONNECT_SENTINELS
+  value: 'false'
 - name: AUTH_PROVIDER_MODE
   value: '{{ .Values.auth.type }}'
 - name: AUTH_REDIRECT_URIS
@@ -485,16 +513,26 @@
   value: 'https://accountmanagement.REGION.bluemix.net'
 - name: BLUEMIX_USER_PREFERENCES_API
   value: 'https://user-preferences.REGION.bluemix.net'
+{{- if eq .Values.auth.type "cf" }}
 - name: BLUEID_CLIENTID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-blueid-auth-secret'
       key: blueidClientId
+{{- else }}
+- name: BLUEID_CLIENTID
+  value: ''
+{{- end }}
+{{- if eq .Values.auth.type "cf" }}
 - name: BLUEID_CLIENTSEC
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-blueid-auth-secret'
       key: blueidClientSecret
+{{- else }}
+- name: BLUEID_CLIENTSEC
+  value: ''
+{{- end }}
 - name: BLUEID_ISSUERID
   value: '{{.Values.blueid.issuer}}'
 - name: BLUEID_AUTHURL
@@ -512,12 +550,12 @@
 - name: AUTH_ICP_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: oidcclientid
 - name: AUTH_ICP_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: oidcclientsecret
 - name: SYSLOG_TARGETS
   value: '[]'
@@ -579,12 +617,12 @@
 - name: COUCHDB_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: username
 - name: COUCHDB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: password
 - name: COUCHDB_MAXRETRIES
   value: '15'
@@ -601,22 +639,22 @@
 - name: UAG_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: username
 - name: UAG_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: password
 - name: UAG_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientid
 - name: UAG_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
 - name: COMMON_SERVICEMONITOR_RETRY_INTERVAL
   value: '60'
@@ -675,22 +713,22 @@
 - name: MODEL_KEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyname
 - name: MODEL_KEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyvalue
 - name: MODEL_HKEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyname
 - name: MODEL_HKEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyvalue
 - name: GCM_APIKEY
   value: none
@@ -707,12 +745,12 @@
 - name: EMAIL_SMTPUSER
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-email-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-email-auth-secret'
       key: smtpuser
 - name: EMAIL_SMTPPASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-email-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-email-auth-secret'
       key: smtppassword
 - name: EMAIL_SMTPREJECTUNAUTHORIZED
   value: '{{.Values.email.smtprejectunauthorized}}'
@@ -721,7 +759,7 @@
 - name: EMAIL_APIKEY
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-email-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-email-auth-secret'
       key: apikey
 - name: APN_PRODUCTION
   value: 'false'
@@ -734,12 +772,12 @@
 - name: NEXMO_KEY
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-nexmo-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-nexmo-auth-secret'
       key: key
 - name: NEXMO_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-nexmo-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-nexmo-auth-secret'
       key: secret
 - name: NEXMO_SMS
   value: '{{.Values.nexmo.sms}}'
@@ -757,14 +795,21 @@
   value: '{{.Values.nexmo.countryblacklist}}'
 - name: REDIS_SSH_USERNAME
   value: none
+- name: REDIS_SERVER_SECURED
+  value: '{{ include "cem.services.redissecured" . }}'
 - name: REDIS_PASSWORD
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-ibm-redis-cred-secret'
+      key: password
 - name: REDIS_SSH_HOSTS
   value: '[]'
 - name: REDIS_DST_HOST
   value: '{{ include "cem.services.redishost" . }}'
 - name: REDIS_DST_PORT
   value: '6379'
+- name: REDIS_DESTINATIONS
+  value: '[{"host":"{{ include "cem.services.redishost" . }}","port":6379}]'
 - name: REDIS_LOCAL_HOST
   value: 127.0.0.1
 - name: REDIS_LOCAL_PORT
@@ -783,6 +828,8 @@
   value: '26379'
 - name: REDIS_SENTINEL_NAME
   value: mymaster
+- name: REDIS_CONNECT_SENTINELS
+  value: 'false'
 - name: SLACK_USERNAME
   value: alertnotification
 - name: CHANNELSERVICES_BLACKLIST
@@ -792,13 +839,23 @@
 - name: CHANNELSERVICES_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
       key: username
 - name: CHANNELSERVICES_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
       key: password
+- name: IMAGE_URLS_CEM50
+  value: 'https://ibm.biz/cem50png'
+- name: IMAGE_URLS_CEM64
+  value: 'https://ibm.biz/cem64png'
+- name: IMAGE_URLS_APM50
+  value: 'https://ibm.biz/apm50png'
+- name: IMAGE_URLS_APM64
+  value: 'https://ibm.biz/apm64png'
+- name: IMAGE_URLS_EXPLORE
+  value: 'https://ibm.biz/explorepng'
 {{- end -}}
 
 {{- define "cloudeventmanagement.incidentprocessor.env" -}}
@@ -859,12 +916,12 @@
 - name: COUCHDB_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: username
 - name: COUCHDB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: password
 - name: COUCHDB_MAXRETRIES
   value: '15'
@@ -878,10 +935,26 @@
   value: '10000'
 - name: DATALAYER_CA
   value: '[]'
+{{- if .Values.global.internalTLS.enabled  }}
 - name: DATALAYER_CERT
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-ibm-cem-certificate'
+      key: tls.crt
+{{- else }}
+- name: DATALAYER_CERT
+  value: ''
+{{- end }}
+{{- if .Values.global.internalTLS.enabled  }}
 - name: DATALAYER_KEY
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-ibm-cem-certificate'
+      key: tls.key
+{{- else }}
+- name: DATALAYER_KEY
+  value: ''
+{{- end }}
 - name: KAFKA_ENABLED
   value: 'true'
 - name: KAFKA_BROKERS_SASL_BROKERS
@@ -903,7 +976,7 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: MAINTENANCE_DISABLED_URIS
   value: ''
 - name: MAINTENANCE_GAMS
@@ -927,22 +1000,22 @@
 - name: MODEL_KEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyname
 - name: MODEL_KEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyvalue
 - name: MODEL_HKEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyname
 - name: MODEL_HKEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyvalue
 - name: SYSLOG_TARGETS
   value: '[]'
@@ -951,22 +1024,22 @@
 - name: UAG_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: username
 - name: UAG_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: password
 - name: UAG_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientid
 - name: UAG_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
 - name: MH_BROKERS_SASL_BROKERS
   value: ''
@@ -1014,14 +1087,21 @@
   value: '1'
 - name: REDIS_SSH_USERNAME
   value: none
+- name: REDIS_SERVER_SECURED
+  value: '{{ include "cem.services.redissecured" . }}'
 - name: REDIS_PASSWORD
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-ibm-redis-cred-secret'
+      key: password
 - name: REDIS_SSH_HOSTS
   value: '[]'
 - name: REDIS_DST_HOST
   value: '{{ include "cem.services.redishost" . }}'
 - name: REDIS_DST_PORT
   value: '6379'
+- name: REDIS_DESTINATIONS
+  value: '[{"host":"{{ include "cem.services.redishost" . }}","port":6379}]'
 - name: REDIS_LOCAL_HOST
   value: 127.0.0.1
 - name: REDIS_LOCAL_PORT
@@ -1040,6 +1120,8 @@
   value: '26379'
 - name: REDIS_SENTINEL_NAME
   value: mymaster
+- name: REDIS_CONNECT_SENTINELS
+  value: 'false'
 {{- end -}}
 
 {{- define "cloudeventmanagement.integrationcontroller.env" -}}
@@ -1061,16 +1143,26 @@
   value: 'https://accountmanagement.REGION.bluemix.net'
 - name: BLUEMIX_USER_PREFERENCES_API
   value: 'https://user-preferences.REGION.bluemix.net'
+{{- if eq .Values.auth.type "cf" }}
 - name: BLUEID_CLIENTID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-blueid-auth-secret'
       key: blueidClientId
+{{- else }}
+- name: BLUEID_CLIENTID
+  value: ''
+{{- end }}
+{{- if eq .Values.auth.type "cf" }}
 - name: BLUEID_CLIENTSEC
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-blueid-auth-secret'
       key: blueidClientSecret
+{{- else }}
+- name: BLUEID_CLIENTSEC
+  value: ''
+{{- end }}
 - name: BLUEID_ISSUERID
   value: '{{.Values.blueid.issuer}}'
 - name: BLUEID_AUTHURL
@@ -1140,34 +1232,34 @@
 - name: UAG_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: username
 - name: UAG_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: password
 - name: UAG_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientid
 - name: UAG_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
 - name: COUCHDB_URL
   value: '{{ include "cem.services.couchdb" . }}'
 - name: COUCHDB_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: username
 - name: COUCHDB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: password
 - name: COUCHDB_MAXRETRIES
   value: '15'
@@ -1182,23 +1274,25 @@
 - name: IC_HMAC_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-intctl-hmac-secret'
+      name: '{{ template "cem.releasename" . }}-cem-intctl-hmac-secret'
       key: keyvalue
 - name: IC_HMAC_NAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-intctl-hmac-secret'
+      name: '{{ template "cem.releasename" . }}-cem-intctl-hmac-secret'
       key: keyname
 - name: IC_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-integrationcontroller-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-integrationcontroller-cred-secret'
       key: username
 - name: IC_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-integrationcontroller-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-integrationcontroller-cred-secret'
       key: password
+- name: IC_HISTORY_MAX_RECENT
+  value: '10'
 - name: COMMON_SERVICEMONITOR_RETRY_INTERVAL
   value: '60'
 - name: COMMON_SERVICEMONITOR_EVENTSINK0_ENABLED
@@ -1234,33 +1328,40 @@
 - name: MODEL_KEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyname
 - name: MODEL_KEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyvalue
 - name: MODEL_HKEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyname
 - name: MODEL_HKEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyvalue
 - name: REDIS_SSH_USERNAME
   value: none
+- name: REDIS_SERVER_SECURED
+  value: '{{ include "cem.services.redissecured" . }}'
 - name: REDIS_PASSWORD
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-ibm-redis-cred-secret'
+      key: password
 - name: REDIS_SSH_HOSTS
   value: '[]'
 - name: REDIS_DST_HOST
   value: '{{ include "cem.services.redishost" . }}'
 - name: REDIS_DST_PORT
   value: '6379'
+- name: REDIS_DESTINATIONS
+  value: '[{"host":"{{ include "cem.services.redishost" . }}","port":6379}]'
 - name: REDIS_LOCAL_HOST
   value: 127.0.0.1
 - name: REDIS_LOCAL_PORT
@@ -1279,6 +1380,8 @@
   value: '26379'
 - name: REDIS_SENTINEL_NAME
   value: mymaster
+- name: REDIS_CONNECT_SENTINELS
+  value: 'false'
 - name: SYSLOG_TARGETS
   value: '[]'
 {{- end -}}
@@ -1341,12 +1444,12 @@
 - name: CHANNELSERVICES_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
       key: username
 - name: CHANNELSERVICES_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
       key: password
 - name: KAFKA_ENABLED
   value: 'true'
@@ -1369,7 +1472,7 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: MH_MQLIGHT_LOOKUP_URL
   value: 'https://mqlight-lookup-prod01.messagehub.services.us-south.bluemix.net/Lookup?serviceId=INSTANCE_ID'
 - name: MH_BROKERS_SASL_BROKERS
@@ -1389,33 +1492,40 @@
 - name: UAG_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: username
 - name: UAG_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: password
 - name: UAG_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientid
 - name: UAG_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
 - name: REDIS_SSH_USERNAME
   value: none
+- name: REDIS_SERVER_SECURED
+  value: '{{ include "cem.services.redissecured" . }}'
 - name: REDIS_PASSWORD
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-ibm-redis-cred-secret'
+      key: password
 - name: REDIS_SSH_HOSTS
   value: '[]'
 - name: REDIS_DST_HOST
   value: '{{ include "cem.services.redishost" . }}'
 - name: REDIS_DST_PORT
   value: '6379'
+- name: REDIS_DESTINATIONS
+  value: '[{"host":"{{ include "cem.services.redishost" . }}","port":6379}]'
 - name: REDIS_LOCAL_HOST
   value: 127.0.0.1
 - name: REDIS_LOCAL_PORT
@@ -1434,10 +1544,12 @@
   value: '26379'
 - name: REDIS_SENTINEL_NAME
   value: mymaster
+- name: REDIS_CONNECT_SENTINELS
+  value: 'false'
 - name: AUTH_SESSION_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-event-analytics-ui-session-secret'
+      name: '{{ template "cem.releasename" . }}-cem-event-analytics-ui-session-secret'
       key: session
 - name: AUTH_SESSION_TTL
   value: '7200'
@@ -1459,16 +1571,26 @@
   value: 'https://accountmanagement.REGION.bluemix.net'
 - name: BLUEMIX_USER_PREFERENCES_API
   value: 'https://user-preferences.REGION.bluemix.net'
+{{- if eq .Values.auth.type "cf" }}
 - name: BLUEID_CLIENTID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-blueid-auth-secret'
       key: blueidClientId
+{{- else }}
+- name: BLUEID_CLIENTID
+  value: ''
+{{- end }}
+{{- if eq .Values.auth.type "cf" }}
 - name: BLUEID_CLIENTSEC
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-auth-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-blueid-auth-secret'
       key: blueidClientSecret
+{{- else }}
+- name: BLUEID_CLIENTSEC
+  value: ''
+{{- end }}
 - name: BLUEID_ISSUERID
   value: '{{.Values.blueid.issuer}}'
 - name: BLUEID_AUTHURL
@@ -1517,6 +1639,10 @@
   value: 'false'
 - name: CEMSERVICEBROKER_APIURL
   value: '{{ include "cem.services.cemapi" . }}'
+- name: UI_MAX_LISTENERS
+  value: '200'
+- name: UI_XSRF_BACKWARD
+  value: 'false'
 - name: SYSLOG_TARGETS
   value: '[]'
 {{- end -}}
@@ -1579,12 +1705,12 @@
 - name: COUCHDB_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: username
 - name: COUCHDB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: password
 - name: COUCHDB_MAXRETRIES
   value: '15'
@@ -1598,10 +1724,26 @@
   value: '10000'
 - name: DATALAYER_CA
   value: '[]'
+{{- if .Values.global.internalTLS.enabled  }}
 - name: DATALAYER_CERT
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-ibm-cem-certificate'
+      key: tls.crt
+{{- else }}
+- name: DATALAYER_CERT
+  value: ''
+{{- end }}
+{{- if .Values.global.internalTLS.enabled  }}
 - name: DATALAYER_KEY
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-ibm-cem-certificate'
+      key: tls.key
+{{- else }}
+- name: DATALAYER_KEY
+  value: ''
+{{- end }}
 - name: MAINTENANCE_DISABLED_URIS
   value: ''
 - name: MAINTENANCE_GAMS
@@ -1623,22 +1765,22 @@
 - name: UAG_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: username
 - name: UAG_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: password
 - name: UAG_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientid
 - name: UAG_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
 - name: COMMON_SERVICEMONITOR_RETRY_INTERVAL
   value: '60'
@@ -1673,33 +1815,40 @@
 - name: MODEL_KEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyname
 - name: MODEL_KEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyvalue
 - name: MODEL_HKEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyname
 - name: MODEL_HKEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyvalue
 - name: REDIS_SSH_USERNAME
   value: none
+- name: REDIS_SERVER_SECURED
+  value: '{{ include "cem.services.redissecured" . }}'
 - name: REDIS_PASSWORD
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-ibm-redis-cred-secret'
+      key: password
 - name: REDIS_SSH_HOSTS
   value: '[]'
 - name: REDIS_DST_HOST
   value: '{{ include "cem.services.redishost" . }}'
 - name: REDIS_DST_PORT
   value: '6379'
+- name: REDIS_DESTINATIONS
+  value: '[{"host":"{{ include "cem.services.redishost" . }}","port":6379}]'
 - name: REDIS_LOCAL_HOST
   value: 127.0.0.1
 - name: REDIS_LOCAL_PORT
@@ -1718,6 +1867,44 @@
   value: '26379'
 - name: REDIS_SENTINEL_NAME
   value: mymaster
+- name: REDIS_CONNECT_SENTINELS
+  value: 'false'
+- name: KAFKA_ENABLED
+  value: 'true'
+- name: KAFKA_BROKERS_SASL_BROKERS
+  value: '{{ include "cem.services.kafkabrokers" . }}'
+- name: KAFKA_USERNAME
+  value: '{{ .Values.kafka.client.username }}'
+- name: KAFKA_PASSWORD
+  value: '{{ .Values.kafka.client.password }}'
+- name: KAFKA_SECURED
+  value: '{{ .Values.kafka.ssl.enabled }}'
+- name: KAFKA_SSL_CA_LOCATION
+  value: /etc/keystore/ca-cert
+- name: KAFKA_SSL_CERT_LOCATION
+  value: /etc/keystore/client.pem
+- name: KAFKA_SSL_KEY_LOCATION
+  value: /etc/keystore/client.key
+- name: KAFKA_SSL_KEY_PASSWORD
+  value: '{{ .Values.kafka.ssl.password }}'
+- name: KAFKA_ADMIN_URL
+  value: '{{ include "cem.services.kafkaadmin" . }}'
+- name: KAFKA_TOPICS
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+- name: MH_BROKERS_SASL_BROKERS
+  value: ''
+- name: MH_USERNAME
+  value: none
+- name: MH_PASSWORD
+  value: none
+- name: MH_API_KEY
+  value: none
+- name: MH_ADMIN_URL
+  value: 'https://kafka-admin-prod01.messagehub.services.us-south.bluemix.net:443'
+- name: MH_REST_URL
+  value: 'https://kafka-rest-prod01.messagehub.services.us-south.bluemix.net:443'
+- name: MH_MQLIGHT_LOOKUP_URL
+  value: 'https://mqlight-lookup-prod01.messagehub.services.us-south.bluemix.net/Lookup?serviceId=INSTANCE_ID'
 {{- end -}}
 
 {{- define "cloudeventmanagement.notificationprocessor.env" -}}
@@ -1747,35 +1934,97 @@
   value: none
 - name: COMMON_SERVICEMONITOR_EVENTSINK2_PASSWORD
   value: none
+- name: CHANNELSERVICES_URL
+  value: '{{ include "cem.services.channelservices" . }}/api/send/v1'
+- name: CHANNELSERVICES_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
+      key: username
+- name: CHANNELSERVICES_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
+      key: password
 - name: CIRCUITBREAKER_TRIP_LIMIT
   value: '1000000'
 - name: CIRCUITBREAKER_RESET_TIME
   value: '1'
+- name: UAG_URL
+  value: '{{ include "cem.services.cemusers" . }}'
+- name: UAG_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
+      key: username
+- name: UAG_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
+      key: password
+- name: UAG_CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
+      key: clientid
+- name: UAG_CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
+      key: clientsecret
 - name: COUCHDB_URL
   value: '{{ include "cem.services.couchdb" . }}'
 - name: COUCHDB_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: username
 - name: COUCHDB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: password
 - name: COUCHDB_MAXRETRIES
   value: '15'
 - name: COUCHDB_DBNAME
   value: collabopsuser
+- name: DATALAYER_DISABLED
+  value: 'false'
+- name: DATALAYER_URL
+  value: '{{ include "cem.services.datalayer" . }}'
+- name: DATALAYER_KEEPALIVE
+  value: '10000'
+- name: DATALAYER_CA
+  value: '[]'
+{{- if .Values.global.internalTLS.enabled  }}
+- name: DATALAYER_CERT
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-ibm-cem-certificate'
+      key: tls.crt
+{{- else }}
+- name: DATALAYER_CERT
+  value: ''
+{{- end }}
+{{- if .Values.global.internalTLS.enabled  }}
+- name: DATALAYER_KEY
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-ibm-cem-certificate'
+      key: tls.key
+{{- else }}
+- name: DATALAYER_KEY
+  value: ''
+{{- end }}
 - name: IC_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-integrationcontroller-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-integrationcontroller-cred-secret'
       key: username
 - name: IC_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-integrationcontroller-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-integrationcontroller-cred-secret'
       key: password
 - name: KAFKA_ENABLED
   value: 'true'
@@ -1798,7 +2047,7 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: LOGMET_LOG_HOST
   value: logs.opvis.bluemix.net
 - name: LOGMET_LOG_PORT
@@ -1841,18 +2090,6 @@
   value: 'https://kafka-rest-prod01.messagehub.services.us-south.bluemix.net:443'
 - name: MH_MQLIGHT_LOOKUP_URL
   value: 'https://mqlight-lookup-prod01.messagehub.services.us-south.bluemix.net/Lookup?serviceId=INSTANCE_ID'
-- name: CHANNELSERVICES_URL
-  value: '{{ include "cem.services.channelservices" . }}/api/send/v1'
-- name: CHANNELSERVICES_USERNAME
-  valueFrom:
-    secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
-      key: username
-- name: CHANNELSERVICES_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
-      key: password
 - name: BROKERS_URL
   value: '{{ include "cem.services.brokers" . }}'
 - name: UISERVER_URL
@@ -1884,45 +2121,23 @@
 - name: MODEL_KEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyname
 - name: MODEL_KEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyvalue
 - name: MODEL_HKEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyname
 - name: MODEL_HKEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyvalue
-- name: UAG_URL
-  value: '{{ include "cem.services.cemusers" . }}'
-- name: UAG_USERNAME
-  valueFrom:
-    secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
-      key: username
-- name: UAG_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
-      key: password
-- name: UAG_CLIENT_ID
-  valueFrom:
-    secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
-      key: clientid
-- name: UAG_CLIENT_SECRET
-  valueFrom:
-    secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
-      key: clientsecret
 - name: USAGE_NOTIFY_PERCENTS
   value: '75,90,100'
 {{- end -}}
@@ -1955,12 +2170,12 @@
 - name: IC_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-integrationcontroller-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-integrationcontroller-cred-secret'
       key: username
 - name: IC_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-integrationcontroller-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-integrationcontroller-cred-secret'
       key: password
 - name: BROKERS_URL
   value: '{{ include "cem.services.brokers" . }}'
@@ -1995,39 +2210,46 @@
 - name: CEMSLACK_CLIENTSECRET
   value: none
 - name: INCOMING_EMAIL_DOMAIN
-  value: events.mail.us-south.cloudeventmanagement.test.cloud.ibm.com
+  value: ''
 - name: UAG_URL
   value: '{{ include "cem.services.cemusers" . }}'
 - name: UAG_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: username
 - name: UAG_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: password
 - name: UAG_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientid
 - name: UAG_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
 - name: REDIS_SSH_USERNAME
   value: none
+- name: REDIS_SERVER_SECURED
+  value: '{{ include "cem.services.redissecured" . }}'
 - name: REDIS_PASSWORD
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-ibm-redis-cred-secret'
+      key: password
 - name: REDIS_SSH_HOSTS
   value: '[]'
 - name: REDIS_DST_HOST
   value: '{{ include "cem.services.redishost" . }}'
 - name: REDIS_DST_PORT
   value: '6379'
+- name: REDIS_DESTINATIONS
+  value: '[{"host":"{{ include "cem.services.redishost" . }}","port":6379}]'
 - name: REDIS_LOCAL_HOST
   value: 127.0.0.1
 - name: REDIS_LOCAL_PORT
@@ -2046,26 +2268,8 @@
   value: '26379'
 - name: REDIS_SENTINEL_NAME
   value: mymaster
-- name: OBJSTORE_URL
-  value: 'https://identity.open.softlayer.com'
-- name: OBJSTORE_PROJECT
-  value: none
-- name: OBJSTORE_PROJECTID
-  value: none
-- name: OBJSTORE_REGION
-  value: none
-- name: OBJSTORE_USERID
-  value: none
-- name: OBJSTORE_USERNAME
-  value: none
-- name: OBJSTORE_PASSWORD
-  value: none
-- name: OBJSTORE_DOMAINID
-  value: none
-- name: OBJSTORE_DOMAINNAME
-  value: none
-- name: OBJSTORE_ROLE
-  value: admin
+- name: REDIS_CONNECT_SENTINELS
+  value: 'false'
 - name: BLUEMIX_API_URL
   value: 'https://api.REGION.bluemix.net'
 - name: BLUEMIX_CONSOLE_URL
@@ -2125,10 +2329,46 @@
 - name: DOWNLOAD_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-download-secret'
+      name: '{{ template "cem.releasename" . }}-cem-download-secret'
       key: keyvalue
 - name: DOWNLOAD_TIMEOUT
   value: '300000'
+- name: COUCHDB_URL
+  value: '{{ include "cem.services.couchdb" . }}'
+- name: COUCHDB_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
+      key: username
+- name: COUCHDB_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
+      key: password
+- name: COUCHDB_MAXRETRIES
+  value: '15'
+- name: COUCHDB_DBNAME
+  value: collabopsuser
+- name: MODEL_KEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
+      key: keyname
+- name: MODEL_KEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
+      key: keyvalue
+- name: MODEL_HKEYNAME
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
+      key: hkeyname
+- name: MODEL_HKEYVALUE
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
+      key: hkeyvalue
 {{- end -}}
 
 {{- define "cloudeventmanagement.schedulingui.env" -}}
@@ -2137,34 +2377,34 @@
 - name: CHANNELSERVICES_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
       key: username
 - name: CHANNELSERVICES_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-channelservices-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-channelservices-cred-secret'
       key: password
 - name: UAG_URL
   value: '{{ include "cem.services.cemusers" . }}'
 - name: UAG_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: username
 - name: UAG_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: password
 - name: UAG_CLIENT_ID
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientid
 - name: UAG_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-cemusers-cred-secret'
+      name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: clientsecret
 - name: COMMON_SERVICEMONITOR_RETRY_INTERVAL
   value: '60'
@@ -2213,7 +2453,7 @@
 - name: KAFKA_ADMIN_URL
   value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: KAFKA_TOPICS
-  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
+  value: '[{"name":"cem-notifications","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-serviceinstances","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=-1"},{"name":"incidents","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"},{"name":"cem-usage","partitions":6,"replication":"{{ .Values.global.kafka.clusterSize }}","config":"retention.ms=3600000"}]'
 - name: MH_BROKERS_SASL_BROKERS
   value: ''
 - name: MH_USERNAME
@@ -2235,12 +2475,12 @@
 - name: COUCHDB_USERNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: username
 - name: COUCHDB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-{{ .Values.couchdb.secretName }}'
+      name: '{{ template "cem.releasename" . }}-{{ .Values.couchdb.secretName }}'
       key: password
 - name: COUCHDB_MAXRETRIES
   value: '15'
@@ -2287,33 +2527,40 @@
 - name: MODEL_KEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyname
 - name: MODEL_KEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: keyvalue
 - name: MODEL_HKEYNAME
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyname
 - name: MODEL_HKEYVALUE
   valueFrom:
     secretKeyRef:
-      name: '{{ template "releasename" . }}-cem-model-secret'
+      name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyvalue
 - name: REDIS_SSH_USERNAME
   value: none
+- name: REDIS_SERVER_SECURED
+  value: '{{ include "cem.services.redissecured" . }}'
 - name: REDIS_PASSWORD
-  value: none
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-ibm-redis-cred-secret'
+      key: password
 - name: REDIS_SSH_HOSTS
   value: '[]'
 - name: REDIS_DST_HOST
   value: '{{ include "cem.services.redishost" . }}'
 - name: REDIS_DST_PORT
   value: '6379'
+- name: REDIS_DESTINATIONS
+  value: '[{"host":"{{ include "cem.services.redishost" . }}","port":6379}]'
 - name: REDIS_LOCAL_HOST
   value: 127.0.0.1
 - name: REDIS_LOCAL_PORT
@@ -2332,6 +2579,8 @@
   value: '26379'
 - name: REDIS_SENTINEL_NAME
   value: mymaster
+- name: REDIS_CONNECT_SENTINELS
+  value: 'false'
 - name: SYSLOG_TARGETS
   value: '[]'
 - name: BSS_INTERVAL
@@ -2340,4 +2589,8 @@
   value: 'false'
 - name: BSS_PROCESSSUBS
   value: '20'
+- name: RBAADMINACCESS_USER
+  value: ''
+- name: RBAADMINACCESS_PASSWORD
+  value: ''
 {{- end -}}

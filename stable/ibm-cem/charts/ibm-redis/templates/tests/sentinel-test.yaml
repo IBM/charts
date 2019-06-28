@@ -1,0 +1,68 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmRedis.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list . "sentinel-test") | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "sentinel-test") | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  restartPolicy: Never
+  affinity:
+        {{- if .Values.affinity }}
+{{ .Values.affinity | toYaml | indent 4 }}
+        {{- else }}
+          {{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+        {{- end }}
+{{- if ne .Values.global.image.pullSecret "" }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecret }}
+{{- end }}
+  serviceAccountName: {{ include "ibmRedis.serviceAccountName" . | quote }}
+  containers:
+    - name: "sentinel-test"
+      image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+      imagePullPolicy: {{.Values.image.pullPolicy}}
+      resources:
+        requests:
+          memory: 128Mi
+          cpu: 10m
+        limits:
+          memory: 128Mi
+          cpu: 50m
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1000
+        capabilities:
+          drop:
+          - ALL
+      command:
+      - "redis-cli"
+      - "-h"
+      - {{ include "sch.names.fullCompName" (list . .sch.chart.components.sentinelService) | quote }}
+      - "-p"
+      - "26379"
+      - "SENTINEL"
+      - "masters"

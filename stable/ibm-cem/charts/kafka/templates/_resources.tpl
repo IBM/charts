@@ -1,6 +1,7 @@
 {{- define "kafka.sizeData" -}}
 kafka:
   size0:
+    replicas: 1
     kafkaHeapOpts: "-Xms512M -Xmx512M"
     resources:
       requests:
@@ -10,6 +11,7 @@ kafka:
         memory: "800Mi"
         cpu: "1.0"
   size1:
+    replicas: 3
     kafkaHeapOpts: "-Xms1G -Xmx1G"
     resources:
       requests:

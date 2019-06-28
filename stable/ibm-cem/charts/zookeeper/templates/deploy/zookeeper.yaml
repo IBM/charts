@@ -1,3 +1,12 @@
+{{/*********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* (C) Copyright IBM Corporation 2019.  All rights reserved.
+*
+* The source code for this program is not published or otherwise
+* divested of its trade secrets, irrespective of what has been
+* deposited with the U.S. Copyright Office.
+********************************************************* {COPYRIGHT-END} ****/}}
 ## create map for my data
 {{- $rootData := fromYaml (include "root.data" .) }}
 ## get root metering data
@@ -24,11 +33,7 @@ metadata:
 spec:
   serviceName:  {{ include "sch.names.fullCompName" (list .) | quote | replace "zookeeper" "zkensemble" }}
   podManagementPolicy: "Parallel"
-  {{- if .Values.global.zookeeper.clusterSize }}
-  replicas: {{ .Values.global.zookeeper.clusterSize }}
-  {{- else }}
-  replicas: {{ .Values.clusterSize }}
-  {{- end }}
+  replicas: {{ include "zookeeper.replicationFactor" . }}
   selector:
     matchLabels:
       app: {{ include "sch.names.appName" (list .) | quote }}
@@ -128,6 +133,37 @@ spec:
         env:
         - name: JVMFLAGS
           value: {{ include "zookeeper.comp.size.data" (list . "jvmArgs") | quote }}
+          # This ensures a restart of all pods after scaling
+        - name: ZK_NUM_BROKERS
+          value: {{ include "zookeeper.replicationFactor" . | quote }}
+{{ if .Values.global.zookeeper.clientUserSecret }}
+        - name: ZK_CLIENT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.global.zookeeper.clientUserSecret }}"
+              key: username
+        - name: ZK_CLIENT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.global.zookeeper.clientUserSecret }}"
+              key: password
+{{ end }}
+{{ if .Values.global.zookeeper.kafkaClientUserSecret }}
+        - name: ZK_KAFKA_CLIENT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.global.zookeeper.kafkaClientUserSecret }}"
+              key: username
+        - name: ZK_KAFKA_CLIENT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.global.zookeeper.kafkaClientUserSecret }}"
+              key: password
+{{ end }}
+{{- if or .Values.global.zookeeper.clientUserSecret .Values.global.zookeeper.kafkaClientUserSecret }}
+        - name: SERVER_JVMFLAGS
+          value: "-Djava.security.auth.login.config=/tmp/secureconfig/jaas.conf"
+{{ end }}
         command:
         - /opt/start-zookeeper.sh
         - start-foreground
@@ -162,10 +198,15 @@ spec:
           mountPath: /opt/zookeeper/conf
         - name: {{ $zkdataTemplateName }}
           mountPath: /var/lib/zookeeper/data
+        - name: secureconfig
+          mountPath: /tmp/secureconfig
       volumes:
       - name: {{ $zkconfigTemplateName }}
         configMap:
           name: {{ $statefulSetName }}
+      - name: secureconfig
+        emptyDir:
+          medium: "Memory"
 {{ if .Values.global.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:

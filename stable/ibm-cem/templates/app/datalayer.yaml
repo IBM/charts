@@ -5,13 +5,14 @@
 *
 *  5737-H89, 5737-H64
 *
-* © Copyright IBM Corp. 2015, 2018  All Rights Reserved.
+* © Copyright IBM Corp. 2015, 2019  All Rights Reserved.
 *
 * US Government Users Restricted Rights - Use, duplication, or
 * disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 ********************************************************* {COPYRIGHT-END} ****/}}
 {{- $compName := "datalayer" -}}
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- $appFullName := include "sch.names.fullName" (list .) -}}
 {{- $statefulSetName := include "sch.names.statefulSetName" (list . $compName) -}}
 {{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
 {{- $dlJobsTemplateName := include "sch.names.volumeClaimTemplateName" (list . "jobs" $statefulSetName) -}}
@@ -53,7 +54,7 @@ spec:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
     spec:
-{{ include "ingress-host-alias" . | indent 6 }}
+{{ include "cem.ingress.hostAlias" . | indent 6 }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -83,23 +84,37 @@ spec:
                 {{- range $arch := .Values.arch }}
                   - {{ $arch -}}
                 {{ end }}
+{{ include "cem.affinity.resilience" (dict "root" . "comp" $compName) | indent 8 }}
+{{ include "cem.affinity.performance" (dict "root" . "app" "cassandra") | indent 8 }}
       containers:
       - name: datalayer
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-datalayer:{{ .Values.commonimages.datalayer.image.tag }}"
+        image: '{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.datalayer.image.name }}:{{ .Values.commonimages.datalayer.image.tag }}'
         ports:
+{{- if .Values.global.internalTLS.enabled }}
+        - containerPort: 10011
+{{- else }}
         - containerPort: 10010
+{{- end }}
           protocol: TCP
         # Early polls of /servicemonitor can take a while, use a higher
         # initialDelaySeconds for liveness.
         livenessProbe:
           tcpSocket:
+{{- if .Values.global.internalTLS.enabled }}
+            port: 10011
+{{- else }}
             port: 10010
+{{- end }}
           initialDelaySeconds: 120
           periodSeconds: 30
           timeoutSeconds: 20
         readinessProbe:
           tcpSocket:
+{{- if .Values.global.internalTLS.enabled }}
+            port: 10011
+{{- else }}
             port: 10010
+{{- end }}
           initialDelaySeconds: 20
           timeoutSeconds: 20
         env:
@@ -107,16 +122,54 @@ spec:
           value: {{ .Values.license | default "not accepted" }}
         - name: ENV_ICP
           value: "1"
+        - name: NODE_CONFIG_ENV
+          value: icp
+        - name: NODE_EXTRA_CA_CERTS
+          value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         - name: BASEURL
           value: '{{ include "cem.services.datalayer" . }}'
-        - name: NODE_CONFIG
-          value: '{"cassandra": {"contactPoints": [{{- template "datalayer.contactPoints" . }}],"localDataCenter":"datacenter1","keyspace": "datalayer","authProvider": { "userid": "cassandra", "password": "cassandra" }, "watchdogPeriodSeconds": 60},"jobstore": {"directory": "/home/dataapi/jobstore","limit": 5000},"kafka":{"enabled": true,"secured":{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }},"kafka_brokers_sasl":{{ include "cem.services.kafkabrokers.json" . }},"user": "{{ .Values.kafka.client.username }}","password": "{{ .Values.kafka.client.password }}","sslcalocation": "/etc/keystore/ca-cert","sslcertlocation": "/etc/keystore/client.pem","sslkeylocation": "/etc/keystore/client.key","sslkeypassword": "{{ .Values.kafka.ssl.password }}","kafka_admin_url":"{{ include "cem.services.kafkaadmin" . }}","topics":[{"name":"cem-notifications","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidents","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidentResourceDashboard","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidentStateDashboard","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"incidentTrendDashboard","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"},{"name":"timeline","partitions":6,"replication":{{ .Values.kafka.clusterSize }},"config":"retention.ms=3600000"}]}, "logging": {"useStdout": true}, "maintenance": {"kafkaConcurrencyLimit":  10, "ignoreKafkaSubscriptions": "(AUTOTEST-).*", "kafkacqueuesizekb": 10000}, "consumerName": "{{ $serviceName }}", {{ if (or (eq .Values.productName "IBM Cloud App Management") (eq .Values.productName "IBM Cloud App Management Advanced")) }}"eventstokafka": true, {{ end }}"edition": {{ if eq .Values.productName "IBM Cloud Event Management Community Edition" }}"community"{{ else }}"standard"{{ end }}}'
+        - name: CASSANDRA_CONTACTPOINTS
+          value: '[{{- template "cem.datalayer.contactPoints" . }}]'
+{{- if .Values.global.cassandra.superuserRole }}
+        - name: CASSANDRA_USERID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-cassandra-auth-secret
+              key: username
+        - name: CASSANDRA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-cassandra-auth-secret
+              key: password
+{{- end }}
+        - name: KAFKA_SECURED
+          value: '{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }}'
+        - name: KAFA_BROKERS
+          value: '{{ include "cem.services.kafkabrokers.json" . }}'
+        - name: KAFKA_USER
+          value: '{{ .Values.kafka.client.username }}'
+        - name: KAFKA_PASSWORD
+          value: '{{ .Values.kafka.client.password }}'
+        - name: KAFKA_SSL_PASSWORD
+          value: '{{ .Values.kafka.ssl.password }}'
+        - name: KAFKA_ADMIN_URL
+          value: '{{ include "cem.services.kafkaadmin" . }}'
+        - name: KAFKA_CLUSTER_SIZE
+          value: '{{ .Values.global.kafka.clusterSize }}'
+        - name: SERVICE_NAME
+          value: '{{ $serviceName }}'
+{{- if (or (eq .Values.productName "IBM Cloud App Management") (eq .Values.productName "IBM Cloud App Management Advanced")) }}
+        - name: EVENTS_TO_KAFKA
+          value: 'true'
+{{- end }}
+        - name: CEM_ICP_EDITION
+          value: '{{ if eq .Values.productName "IBM Cloud Event Management Community Edition" }}community{{ else }}standard{{ end }}'
         - name: LD_LIBRARY_PATH
           value: '/app/node_modules/node-rdkafka/build/Release'
         - name: SASL_PATH
           value: '/app/node_modules/node-rdkafka/build/Release'
         resources:
-{{ include "ibmcemprod.comp.size.data" (list . "datalayer" "resources") | indent 10 }}
+{{ include "cem.resources.comp.size.data" (list . "datalayer" "resources") | indent 10 }}
         terminationMessagePath: "/dev/termination-log"
         imagePullPolicy: IfNotPresent
         volumeMounts:
@@ -126,6 +179,10 @@ spec:
         - name: {{ $dlKeystoreTemplateName }}
           mountPath: /etc/keystore
 {{ end }}
+{{- if .Values.global.internalTLS.enabled }}
+        - name: servercrt
+          mountPath: /app/keys
+{{- end }}
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -138,7 +195,7 @@ spec:
       initContainers:
 {{- if eq .Values.global.privileged true }}
       - name: set-volume-permissions
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-datalayer:{{ .Values.commonimages.datalayer.image.tag }}"
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.datalayer.image.name }}:{{ .Values.commonimages.datalayer.image.tag }}"
         command: ["sh", "-c", "chown -R dataapi:dataapi /home/dataapi/jobstore"]
         securityContext:
           runAsNonRoot: false
@@ -148,10 +205,19 @@ spec:
           mountPath: "/home/dataapi/jobstore"
 {{- end }}
       - name: waitforcassandra
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-datalayer:{{ .Values.commonimages.datalayer.image.tag }}"
-        command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "releasename" . }}-cassandra.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for cassandra $i;i=$((i+1)); sleep 10; done;"]
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.datalayer.image.name }}:{{ .Values.commonimages.datalayer.image.tag }}"
+        command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "cem.releasename" . }}-cassandra.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for cassandra $i;i=$((i+1)); sleep 10; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
       - name: setupdb
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-datalayer:{{ .Values.commonimages.datalayer.image.tag }}"
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.datalayer.image.name }}:{{ .Values.commonimages.datalayer.image.tag }}"
         # Only run setupdb on the first pod
         command:
           - /bin/sh
@@ -160,8 +226,40 @@ spec:
         env:
         - name: LICENSE
           value: {{ .Values.license | default "not accepted" }}
-        - name: NODE_CONFIG
-          value: '{"cassandra": {"contactPoints": [{{- template "datalayer.contactPoints" . }}],"localDataCenter":"datacenter1","keyspace": "datalayer","authProvider": { "userid": "cassandra", "password": "cassandra" },"socketOptions":{"readTimeout": {{ .Values.datalayer.socketReadTimeout }}}, "cassandraNodeReplicas": {{ .Values.global.cassandraNodeReplicas }}},"jobstore": {"directory": "/home/dataapi/jobstore","limit": 5000},"kafka":{"enabled":{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }},"secured":{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }},"kafka_brokers_sasl":{{ include "cem.services.kafkabrokers.json" . }},"user": "{{ .Values.kafka.client.username }}","password": "{{ .Values.kafka.client.password }}","sslcalocation": "/etc/keystore/ca-cert","sslcertlocation": "/etc/keystore/client.pem","sslkeylocation": "/etc/keystore/client.key","sslkeypassword": "{{ .Values.kafka.ssl.password }}","kafka_admin_url":"{{ include "cem.services.kafkaadmin" . }}"}, "logging": {"useStdout": true}}'
+        - name: NODE_CONFIG_ENV
+          value: icp
+        - name: CASSANDRA_CONTACTPOINTS
+          value: '[{{- template "cem.datalayer.contactPoints" . }}]'
+{{- if .Values.global.cassandra.superuserRole }}
+        - name: CASSANDRA_USERID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-cassandra-auth-secret
+              key: username
+        - name: CASSANDRA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-cassandra-auth-secret
+              key: password
+{{- end }}
+        - name: CASSANDRA_READTIMEOUT
+          value: '{{ .Values.datalayer.socketReadTimeout }}'
+        - name: CASSANDRA_NODE_REPLICAS
+          value: '{{ .Values.global.cassandraNodeReplicas }}'
+        - name: KAFKA_SECURED
+          value: '{{- if eq .Values.kafka.ssl.enabled true }}true{{ else }}false{{ end }}'
+        - name: KAFA_BROKERS
+          value: '{{ include "cem.services.kafkabrokers.json" . }}'
+        - name: KAFKA_USER
+          value: '{{ .Values.kafka.client.username }}'
+        - name: KAFKA_PASSWORD
+          value: '{{ .Values.kafka.client.password }}'
+        - name: KAFKA_SSL_PASSWORD
+          value: '{{ .Values.kafka.ssl.password }}'
+        - name: KAFKA_ADMIN_URL
+          value: '{{ include "cem.services.kafkaadmin" . }}'
+        - name: KAFKA_CLUSTER_SIZE
+          value: '{{ .Values.global.kafka.clusterSize }}'
         resources: {}
         terminationMessagePath: "/dev/termination-log"
         imagePullPolicy: IfNotPresent
@@ -175,8 +273,17 @@ spec:
             drop:
             - ALL
       - name: waitforkafka
-        image: "{{ include "ibm-cem.getImageRepo" . }}/hdm-datalayer:{{ .Values.commonimages.datalayer.image.tag }}"
-        command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
+        image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.datalayer.image.name }}:{{ .Values.commonimages.datalayer.image.tag }}"
+        command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "cem.releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
@@ -186,6 +293,17 @@ spec:
         secret:
           secretName: cem-trust
 {{ end }}
+{{- if .Values.global.internalTLS.enabled }}
+      - name: servercrt
+        secret:
+          defaultMode: 0444
+          items:
+          - key: tls.crt
+            path: server_crt.pem
+          - key: tls.key
+            path: server_key.pem
+          secretName: {{ $appFullName }}-certificate
+{{- end }}
   {{ if not .Values.global.persistence.enabled }}
       - name: {{ $dlJobsTemplateName }}
         emptyDir: {}

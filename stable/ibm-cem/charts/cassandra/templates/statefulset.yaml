@@ -24,7 +24,7 @@ metadata:
 spec:
   serviceName:  {{ include "sch.names.fullCompName" (list .) | quote }}
   podManagementPolicy: "Parallel"
-  replicas: {{ .Values.global.cassandraNodeReplicas }}
+  replicas: {{ include "cassandra.replicationFactor" . }}
   selector:
     matchLabels:
       release: {{ .Release.Name }}
@@ -103,9 +103,6 @@ spec:
             capabilities:
               drop:
               - ALL
-#          dnsPolicy: ClusterFirst
-#          restartPolicy: Always
-#          securityContext: {}
           ports:
             - containerPort: 7000
               name: intra-node
@@ -138,7 +135,7 @@ spec:
               command:
                 - bash
                 - -c
-                - 'nc -z -w 5 $HOSTNAME 7000 || tail -1 /opt/ibm/cassandra/logs/system.log | grep "CommitLog.*Replaying" > /dev/null'
+                - 'socat -T 5 /dev/null TCP4:$HOSTNAME:{{ if ne .Values.internodeEncryption "none" }}7001{{ else }}7000{{ end }} || tail -1 /opt/ibm/cassandra/logs/system.log | grep "CommitLog.*Replaying" > /dev/null'
             initialDelaySeconds: 120
             periodSeconds: 120
             timeoutSeconds: 60
@@ -151,6 +148,42 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 60
           env:
+            {{- if .Values.global.cassandra.superuserRole }}
+            - name: CASSANDRA_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-cassandra-auth-secret
+                  key: username
+            - name: CASSANDRA_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-cassandra-auth-secret
+                  key: password
+            {{- end }}
+            {{- if .Values.global.cassandra.clientEncryption }}
+            - name: CASSANDRA_CLIENT_ENCRYPTION_ENABLED
+              value: "true"
+            - name: REQUIRE_CLIENT_AUTH
+              value: {{ .Values.global.cassandra.requireClientAuth | quote }}
+            {{- end }}
+            {{- if ne .Values.internodeEncryption "none"}}
+            - name: CASSANDRA_INTERNODE_ENCRYPTION
+              value: {{ .Values.internodeEncryption | quote }}
+            {{- end }}
+            {{- if or ( ne .Values.internodeEncryption "none" ) .Values.global.cassandra.clientEncryption }}
+            - name: RELEASE
+              value: {{ .Release.Name }}-cassandra
+            - name: CA_CERTIFICATE
+              value: /opt/cacerts/{{ .Values.global.internalCaCertificate.certificateName }}
+            - name: CA_KEY
+              value: /opt/cacerts/{{ .Values.global.internalCaCertificate.certificateKeyName }}
+            - name: STORE_DIR
+              value: /opt/tls
+            {{- end }}
+            - name: RUN_CHANGE_SUPERUSER
+              value: {{ .Values.global.cassandra.superuserRole | quote }}
+            - name: CASSANDRA_AUTH_REPLICATION_FACTOR
+              value: {{ template "cassandra.authSchemaReplicationFactor" . }}
             - name: CASSANDRA_HEAP_SIZE
               value: {{ include "cassandra.comp.size.data" (list . "cassandraHeapSize") | quote }}
             - name: CASSANDRA_HEAP_NEWSIZE
@@ -181,6 +214,8 @@ spec:
               value: "10000"
             - name: CASSANDRA_WRITE_REQUEST_TIMEOUT
               value: "2000"
+            - name: CASSANDRA_CAS_CONTENTION_TIMEOUT
+              value: "2000"
             - name: CASSANDRA_BACKUP_SPEED
               value: "17M"
             - name: CASSANDRA_BATCH_SIZE_WARN
@@ -207,9 +242,22 @@ spec:
           {{ end }}
             - name: {{ .Release.Name }}-cassandralogs
               mountPath: /opt/ibm/cassandra/logs
+          {{- if or ( ne .Values.internodeEncryption "none" ) .Values.global.cassandra.clientEncryption }}
+            - name: cacerts-secret
+              mountPath: /opt/cacerts
+            - name: tls-store
+              mountPath: /opt/tls
+          {{- end }}
       volumes:
         - name: {{ .Release.Name }}-cassandralogs
           emptyDir: {}
+        {{- if or ( ne .Values.internodeEncryption "none" ) .Values.global.cassandra.clientEncryption }}
+        - name: cacerts-secret
+          secret:
+            secretName: {{ .Values.global.internalCaCertificate.secretName }}
+        - name: tls-store
+          emptyDir: {}
+        {{- end }}
 {{ if .Values.global.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:

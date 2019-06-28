@@ -1,5 +1,6 @@
 {{- define "zookeeper.sizeData" -}}
 size0:
+  replicas: 1
   jvmArgs: "-Xms64M -Xmx128M"
   resources:
     requests:
@@ -9,6 +10,7 @@ size0:
       memory: "450Mi"
       cpu: "0.5" 
 size1:
+  replicas: 3
   jvmArgs: "-Xms64M -Xmx256M"
   resources:
     requests:

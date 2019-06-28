@@ -16,6 +16,6 @@ constraint for this version of the Shared Configurable Helpers.
 for this version of the Shared Configurable Helpers.
 */ -}}
 {{- define "sch.version" -}}
-version: "1.2.1"
+version: "1.2.7"
 tillerVersion: ">=2.6.0"
 {{- end -}}
