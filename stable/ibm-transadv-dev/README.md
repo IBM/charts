@@ -273,14 +273,14 @@ The following tables lists the configurable parameters of the Transformation Adv
 | arch.s390x                                          | S390x worker node scheduler preference in a hybrid cluster   | 2 - No preference                                       |
 | ingress.enabled                                     | enable ingress to reach the service                          | true                                                    |
 | authentication.icp.edgeIp                           | edge node IP                                                 | ""                                                      | 
-| authentication.icp.endpointPort                     | edge node login port                                         | 8443                                                    |
+| authentication.icp.endpointPort                     | edge node login port                                         | 8443 _(1)_                                                   |
 | authentication.icp.secretName                       | The name of the secret in the Configuration in the same namespace of this release to be installed to| ""               |
 | authentication.oidc.endpointPort                    | OIDC authentication endpoint port                            | 9443                                                    |
 | authentication.oidc.clientId.clientId               | a OIDC registry will be created with this id                 | ca5282946fac07867fbc937548cb35d3ebbace7e                |
 | authentication.oidc.clientSecret                    | a OIDC registry will be created with this secret             | 94b6cbce793d0606c0df9e8d656a159f0c06631b                |
 | security.serviceAccountName                         | name of the service account to use                           | default                                                 |
 | couchdb.image.repository                            | couchdb image repository                                     | ibmcom/transformation-advisor-db                        |
-| couchdb.image.tag                                   | couchdb image tag                                            | 1.9.7                                                   |
+| couchdb.image.tag                                   | couchdb image tag                                            | 1.9.8                                                   |
 | couchdb.image.pullPolicy                            | couchdb image pull policy                                    | IfNotPresent                                            |
 | couchdb.resources.requests.memory                   | requests memory                                              | 2Gi                                                     |
 | couchdb.resources.requests.cpu                      | requests cpu                                                 | 1000m                                                   |
@@ -294,7 +294,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | couchdb.persistence.existingClaim                   | existing pv claim                                            | ""                                                      |
 | couchdb.persistence.storageClassName                | couchdb storage class name                                   | ""                                                      |
 | transadv.image.repository                           | transadv server image                                        | ibmcom/transformation-advisor-server                    |
-| transadv.image.tag                                  | transadv server image tag                                    | 1.9.7                                                   |
+| transadv.image.tag                                  | transadv server image tag                                    | 1.9.8                                                   |
 | transadv.image.pullPolicy                           | image pull policy                                            | IfNotPresent                                            |
 | transadv.resources.requests.memory                  | requests memory                                              | 2Gi                                                     |
 | transadv.resources.requests.cpu                     | requests cpu                                                 | 1000m                                                   |
@@ -302,7 +302,7 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadv.resources.limits.cpu                       | limits cpu                                                   | 16000m                                                  |
 | transadv.service.nodePort                           | transadv sevice node port                                    | 30111                                                   |
 | transadvui.image.repository                         | transadv ui image                                            | ibmcom/transformation-advisor-ui                        |
-| transadvui.image.tag                                | transadv ui image tag                                        | 1.9.7                                                   |
+| transadvui.image.tag                                | transadv ui image tag                                        | 1.9.8                                                   |
 | transadvui.image.pullPolicy                         | image pull policy                                            | IfNotPresent                                            |
 | transadvui.resources.requests.memory                | requests memory                                              | 2Gi                                                     |
 | transadvui.resources.requests.cpu                   | requests cpu                                                 | 1000m                                                   |
@@ -310,6 +310,13 @@ The following tables lists the configurable parameters of the Transformation Adv
 | transadvui.resources.limits.cpu                     | limits cpu                                                   | 16000m                                                  |
 | transadvui.service.nodePort                         | transadv sevice node port                                    | 30222                                                   |
 | transadvui.inmenu                                   | add to Tools menu                                            | true                                                    |
+
+
+Notes:
+
+_(1)_ The edge node login port can be varied when ICP is configured and installed. In ICP 3.1.2 or later, the port information can be found in the left navigation in ICP console UI, Configuration > ConfigMaps; 
+then search for __ibmcloud-cluster-info__, the edge node login port value is from _cluster_router_https_port_ 
+
 
 ## Requirements for Transformation Advisor Deployments to Liberty on IBM Cloud Private
 
