@@ -80,16 +80,16 @@ spec:
   {{- $nodeAffinity := $root.sch.chart.nodeAffinity | default $defaultNodeAffinity }}
 nodeAffinity:
   {{- if (gt (len $nodeAffinity) 0) -}}
-  {{/* Future item specified by kubernetes. Not currently available
+  {{- /* Future item specified by kubernetes. Not currently available
     {{- if (hasKey $nodeAffinity "nodeAffinityRequiredDuringSchedulingRequiredDuringExecution") }}
   {{ include "sch.affinity.nodeAffinityRequiredDuringSchedulingRequiredDuringExecution" (list $root $nodeAffinity) }}
     {{- end }}
-  */}}
-    {{- if or (hasKey $nodeAffinity "nodeAffinityRequiredDuringScheduling") (hasKey $root.Values "arch")}}
-  {{ include "sch.affinity.nodeAffinityRequiredDuringScheduling" (list $root $nodeAffinity) }}
+  */ -}}
+    {{- if or (hasKey $nodeAffinity "nodeAffinityRequiredDuringScheduling") (hasKey $root.Values "arch") }}
+  {{ include "sch.affinity.nodeAffinityRequiredDuringScheduling" (list $root $nodeAffinity) -}}
     {{- end }}
     {{- if or (hasKey $nodeAffinity "nodeAffinityPreferredDuringScheduling") (hasKey $root.Values "arch") }}
-  {{ include "sch.affinity.nodeAffinityPreferredDuringScheduling" (list $root $nodeAffinity) | indent 2 }}
+  {{- include "sch.affinity.nodeAffinityPreferredDuringScheduling" (list $root $nodeAffinity) | indent 2 }}
     {{- end }}
   {{- end }}
 {{- end }}
@@ -98,7 +98,7 @@ nodeAffinity:
 
 {{- define "sch.affinity.nodeAffinityRequiredDuringSchedulingRequiredDuringExecution" -}}
     {{- $params := . }}
-    {{- $root := first $params }}
+    {{- $root := first $params -}}
     {{- $affinity := last $params -}}
     {{- $operator := $affinity.nodeAffinityRequiredDuringScheduling.operator -}}
     {{- $values := $affinity.nodeAffinityRequiredDuringScheduling.values -}}
@@ -111,7 +111,7 @@ requiredDuringSchedulingRequiredDuringExecution:
     {{- range $key := $values }}
         - {{ $key }}
     {{- end -}}
-{{- end }}
+{{- end -}}
 
 */}}
 
@@ -121,22 +121,44 @@ requiredDuringSchedulingRequiredDuringExecution:
     {{- $affinity := last $params -}}
     {{- $operator := $affinity.nodeAffinityRequiredDuringScheduling.operator -}}
     {{- $values := $affinity.nodeAffinityRequiredDuringScheduling.values -}}
-requiredDuringSchedulingIgnoredDuringExecution:
+    {{- if $root.Values.arch -}}
+      {{- $archType := typeOf $root.Values.arch -}}
+      {{- if eq $archType "map[string]interface {}" -}}
+        {{- /* Helm templating has issues with reassigning variables within a loop in some versions of Helm. */ -}}
+        {{- /* It also cannnot break from a loop. Using a dictionary in this way is a workaround for this issue. */ -}}
+        {{- $firstFound := dict "firstFound" false }}
+        {{- range $key, $value := $root.Values.arch }}
+          {{- $splitValue := split " " $value }}
+          {{- $weight := $splitValue._0 | int64 }}
+          {{- if gt $weight 0 }}
+            {{- if hasKey $firstFound "firstFound" }}
+              {{- $_ := unset $firstFound "firstFound" }}
+  requiredDuringSchedulingIgnoredDuringExecution:
     nodeSelectorTerms:
     - matchExpressions:
       - key: {{ default "beta.kubernetes.io/arch" $affinity.key }}
         operator: {{ $operator }}
         values:
-    {{- if $root.Values.arch -}}
-      {{- $archType := typeOf $root.Values.arch -}}
-      {{- if eq $archType "map[string]interface {}" -}}
-        {{- range $key, $value := $root.Values.arch }}
+            {{- end }}
         - {{ $key }}
+          {{- end }}
         {{- end -}}
       {{- else }}
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+    - matchExpressions:
+      - key: {{ default "beta.kubernetes.io/arch" $affinity.key }}
+        operator: {{ $operator }}
+        values:
         - {{ $root.Values.arch }}
       {{- end -}}
     {{- else -}}
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+    - matchExpressions:
+      - key: {{ default "beta.kubernetes.io/arch" $affinity.key }}
+        operator: {{ $operator }}
+        values:
     {{- range $key := $values }}
         - {{ $key }}
     {{- end -}}
@@ -151,9 +173,10 @@ requiredDuringSchedulingIgnoredDuringExecution:
   {{- $affinity := $root.Values.arch | default $affinityDefault -}}
   {{- if not $root.Values.arch }}
   {{- range $key, $value := $affinity }}
-preferredDuringSchedulingIgnoredDuringExecution:
     {{- $weight := $value.weight | int64 }}
-    {{- $operator := $value.operator }}
+    {{- if gt $weight 0 }}
+preferredDuringSchedulingIgnoredDuringExecution:
+      {{- $operator := $value.operator }}
 - weight: {{ $weight }}
   preference:
     matchExpressions:
@@ -161,18 +184,26 @@ preferredDuringSchedulingIgnoredDuringExecution:
       operator: {{ default "In" $operator }}
       values:
       - {{ $key }}
+    {{ end -}}
   {{ end -}}
   {{- else if and ($root.Values.arch) (eq (typeOf $root.Values.arch) "map[string]interface {}") }}
-preferredDuringSchedulingIgnoredDuringExecution:
+    {{- $firstFound := dict "firstFound" false }}
     {{- range $key, $value := $root.Values.arch }}
-    {{- $splitValue := split " " $value }}
-- weight: {{ $splitValue._0 }}
+      {{- $splitValue := split " " $value }}
+      {{- $weight := $splitValue._0 | int64 }}
+      {{- if gt $weight 0 }}
+      {{- if hasKey $firstFound "firstFound" }}
+        {{- $_ := unset $firstFound "firstFound" }}
+preferredDuringSchedulingIgnoredDuringExecution:
+      {{- end }}
+- weight: {{ $weight }}
   preference:
     matchExpressions:
     - key: "beta.kubernetes.io/arch"
       operator: "In"
       values:
       - {{ $key }}
+      {{- end -}}
     {{- end -}}
   {{- end }}
 {{- end }}
