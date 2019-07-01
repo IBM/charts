@@ -15,16 +15,17 @@ Usage of "sch.secretGen.*" requires the following:
    dependencies:
      - name: ibm-sch
        repository: "@sch"
-       version: "^1.2.8"
+       version: "^1.2.10"
        alias: sch
    ```
 
 1. The container image used by the secret generator must be added to ibm_cloud_pak/manifest.yaml:
 
    ```
-   - image: ibmcom/kubectl:v1.12.4
+   - image: opencontent-common-utils:1.1.2-amd64
      references:
-     - repository: ibmcom/kubectl:v1.12.4
+     - repository: opencontent-common-utils:1.1.2-amd64
+       pull-repository: ibmcom/opencontent-common-utils:1.1.2-amd64
    ```
 
 1. PodSecurityPolicy Requirements
@@ -54,7 +55,7 @@ Usage of "sch.secretGen.*" requires the following:
     apiVersion: v1
     kind: ServiceAccount
     metadata:
-        name: ibm-aspera-secret-gen
+        name: ibm-sch-secret-gen
         namespace: "{{ NAMESPACE }}" #Replace {{ NAMESPACE }} with the namespace you are deploying to
     ```
 
@@ -64,11 +65,11 @@ Usage of "sch.secretGen.*" requires the following:
     apiVersion: rbac.authorization.k8s.io/v1
     kind: Role
     metadata:
-        name: ibm-sch-secret-gen
+      name: ibm-sch-secret-gen
     rules:
     - apiGroups: [""]
-        resources: ["secrets"]
-        verbs: ["list", "create", "delete"]
+      resources: ["secrets"]
+      verbs: ["list", "create", "delete"]
     ```
 
   1. RoleBinding:
@@ -77,15 +78,15 @@ Usage of "sch.secretGen.*" requires the following:
     apiVersion: rbac.authorization.k8s.io/v1
     kind: RoleBinding
     metadata:
-        name: ibm-sch-secret-gen
+      name: ibm-sch-secret-gen
     roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: Role
-        name: ibm-sch-secret-gen
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: ibm-sch-secret-gen
     subjects:
     - kind: ServiceAccount
-        name: ibm-sch-secret-gen
-        namespace: "{{ NAMESPACE }}"
+      name: ibm-sch-secret-gen
+      namespace: "{{ NAMESPACE }}"
     ```
 
 ********************************************************************
@@ -123,17 +124,17 @@ __Parameters input as an list of values:__
 - the root context (required)
 
 __Usage:__
-Example 1: Create a generic secret and a secret containing a self-signed CA certificate
+Example 1: Create a generic secret and a secret containing a self-signed CA certificate. Use the chart service account vs. the default
 ```
 {{- define "sch.chart.config.values" -}}
 sch:
   chart:
     secretGen:
-      suffix: {{ include "sch.names.appName" (list .) }}
+      suffix: default-suffix
       overwriteExisting: false
       serviceAccountName: mychart-serviceaccount  # Set this to your service account name or remove it to use ibm-sch-secret-gen
       secrets:
-      - name: {{ include "sch.names.fullName" (list . 53)}}-passwords  # maxLength of 63 minus 10 characters for `-passwords`
+      - name: passwords  # this will include the suffix in the format of <name>-<suffix>
         create: true
         type: generic
         values:
@@ -141,7 +142,7 @@ sch:
           length: 30
         - name: MYSQL_PASSWORD
           length: 30
-      - name: {{ include "sch.names.fullName" (list . 46)}}-mysql.myhost.com # maxLength of 63 minus 17 characters for `-mysql.myhost.com`
+      - name: mysql.myhost.com # this will include the suffix in the format of <name>-<suffix>
         create: {{ empty .Values.tlsSecret }}
         type: tls
         cn: mysql.myhost.com
@@ -167,11 +168,11 @@ Set the generator value for the corresponding secret:
 sch:
   chart:
     secretGen:
-      suffix: {{ include "sch.names.appName" (list .) }}
+      suffix: default-suffix
       overwriteExisting: false
       serviceAccountName: mychart-serviceaccount  # Set this to your service account name or remove it to use ibm-sch-secret-gen
       secrets:
-      - name: {{ include "sch.names.fullName" (list . 53)}}-passwords  # maxLength of 63 minus 10 characters for `-passwords`
+      - name: passwords  # this will include the suffix in the format of <name>-<suffix>
         create: true
         type: generic
         values:
@@ -187,7 +188,7 @@ sch:
 {{- $params := . -}}
 {{- $root := first $params -}}
 {{- /* $root.Values.sch refers to the alias name of ibm-sch set in requirements.yaml and points to the values in the ibm-sch values.yaml */ -}}
-{{- if and $root.Values.sch $root.sch.chart.secretGen -}}
+{{- if and $root.Values.sch $root.sch.chart.secretGen (gt (len $root.sch.chart.secretGen.secrets) 0) -}}
   {{- $secretGenRoot := omit $root "Values" -}}
   {{- $extraLabels := dict "role" "create" -}}
   {{- $_ := set $secretGenRoot "Values" $root.Values.sch -}}
@@ -247,13 +248,13 @@ spec:
           limits:
             memory: 200Mi
             cpu: '.5'
-        image: "{{ $secretGenRoot.Values.image.repository }}/{{ $secretGenRoot.Values.image.name }}:{{ $secretGenRoot.Values.image.tag }}"
+        image: "{{ if $secretGenRoot.Values.image.repository }}{{ trimSuffix "/" $secretGenRoot.Values.image.repository }}/{{ end }}{{ $secretGenRoot.Values.image.name }}:{{ $secretGenRoot.Values.image.tag }}"
         imagePullPolicy: {{ $secretGenRoot.Values.image.pullPolicy }}
         volumeMounts:
         - name: tls-out
           mountPath: /tmp/secretGen/tls
         command:
-        - /bin/ash
+        - /bin/bash
         - -c
         - |
             set -e
@@ -264,7 +265,7 @@ spec:
 {{- $oldName := $secret.name -}}
 {{- $_ := set $secret "name" (list $secret.name $suffix | join "-") -}}
 {{ include $secretFunction  (list $secret $labels $overwriteExisting) | indent 12 }}
-{{- $_ := set $secret "name" $oldName -}}
+{{- $_ := set $secret "name" $oldName }}
 {{ end }}
 {{- end -}}
 {{- end -}}
@@ -294,10 +295,11 @@ Delete two secrets with the tls being conditional
 sch:
   chart:
     secretGen:
-      suffix: {{ include "sch.names.appName" (list .) }}
+      suffix: default-suffix
       overwriteExisting: false
+      serviceAccountName: mychart-serviceaccount  # Set this to your service account name or remove it to use ibm-sch-secret-gen
       secrets:
-      - name: {{ include "sch.names.fullName" (list . 53)}}-passwords  # maxLength of 63 minus 10 characters for `-passwords`
+      - name: passwords  # this will include the suffix in the format of <name>-<suffix>
         create: true
         type: generic
         values:
@@ -305,7 +307,7 @@ sch:
           length: 30
         - name: MYSQL_PASSWORD
           length: 30
-      - name: {{ include "sch.names.fullName" (list . 46)}}-mysql.myhost.com # maxLength of 63 minus 17 characters for `-mysql.myhost.com`
+      - name: mysql.myhost.com # this will include the suffix in the format of <name>-<suffix>
         create: {{ empty .Values.tlsSecret }}
         type: tls
         cn: mysql.myhost.com
@@ -321,7 +323,7 @@ used in template as follows:
 {{- $params := . -}}
 {{- $root := first $params -}}
 {{- /* $root.Values.sch refers to the alias name of ibm-sch set in requirements.yaml and points to the values in the ibm-sch values.yaml */ -}}
-{{- if and $root.Values.sch $root.sch.chart.secretGen -}}
+{{- if and $root.Values.sch $root.sch.chart.secretGen (gt (len $root.sch.chart.secretGen.secrets) 0) -}}
   {{- $secretGenRoot := omit $root "Values" -}}
   {{- $extraLabels := dict "role" "delete" -}}
   {{- $_ := set $secretGenRoot "Values" $root.Values.sch -}}
@@ -371,10 +373,17 @@ spec:
           capabilities:
             drop:
             - ALL
-        image: "{{ $secretGenRoot.Values.image.repository }}/{{ $secretGenRoot.Values.image.name }}:{{ $secretGenRoot.Values.image.tag }}"
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ if $secretGenRoot.Values.image.repository }}{{ trimSuffix "/" $secretGenRoot.Values.image.repository }}/{{ end }}{{ $secretGenRoot.Values.image.name }}:{{ $secretGenRoot.Values.image.tag }}"
         imagePullPolicy: {{ $secretGenRoot.Values.image.pullPolicy }}
         command:
-        - /bin/ash
+        - /bin/bash
         - -c
         - |
 {{- range $secret := $root.sch.chart.secretGen.secrets }}

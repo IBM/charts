@@ -21,7 +21,7 @@ do
   cp -R $TESTDIR/../../templates/* $TESTDIR/chart/charts/ibm-sch/templates
   cp -R $TESTDIR/../../Chart.yaml $TESTDIR/chart/charts/ibm-sch/Chart.yaml
   cp -R $TESTDIR/../../values.yaml $TESTDIR/chart/charts/ibm-sch/values.yaml
-  helm template $TESTDIR/chart -f $TESTDIR/chart/values.yaml | sed '/---/d' | sed '/^$/d' | sed '/# Source/d' > $TESTDIR/output.yaml
+  helm template $TESTDIR/chart -f $TESTDIR/chart/values.yaml | sed '/---/d' | sed '/^$/d' | sed '/# Source/d' | sed 's/"release-name"/"RELEASE-NAME"/g' > $TESTDIR/output.yaml
   $SCRIPTDIR/compareyaml -expected=$TESTDIR/expected.yaml -actual=$TESTDIR/output.yaml
   if [ $? != 0 ]; then
     FAIL=true
@@ -29,7 +29,7 @@ do
   rm -rf $TESTDIR/chart/charts
 done
 
-rm compareyaml
+rm $SCRIPTDIR/compareyaml
 
 if [ $FAIL = true ]; then
   echo "One or more test failed."
