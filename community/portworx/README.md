@@ -18,6 +18,11 @@ Container Image Security is enabled by default in ICP 3.1 and above. Hence add t
 * docker.io/lachlanevenson/*
 * quay.io/k8scsi/*
 
+
+### PodSecurityPolicy Requirements
+
+This chart requires a `PodSecurityPolicy` role to be bound to the target namespace prior to installation.  On IBM Cloud Private, choose the predefined [ibm-anyuid-hostaccess-psp](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md) PodSecurityPolicy.
+
 ## Limitations
 * The portworx helm chart can only be deployed in the kube-system namespace. Hence use "kube-system" in the "Target namespace" during configuration.
 * You can only deploy one portworx helm chart per Kubernetes cluster.
