@@ -60,7 +60,7 @@ These guidelines are intended to augment the [Helm best practices](https://docs.
 | [**Chart version**](#chart-version) | SemVer2 numbering must be used, as per [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#version-numbers), and any update to a chart must include an updated version number, unless the changes are to the README file only.|
 | [**Chart description**](#chart-description) | All contributed charts must have a chart description in chart.yaml. This will be displayed in the ICP catalog and should be meaningful. |
 | [**Required chart keywords**](#required-chart-keywords) | Chart keywords are used by the IBM Cloud Private user interface, some of which are critical to the user interface's function. |
-| [**tillerVersion and kubeVersion constraints**](#tillerversion-and-kubeversion-constraint) | Add `tillerVersion` and `kubeVersion` to Chart.yaml that follow the Semantic Versioning 2.0.0 format (`>=MAJOR.MINOR.PATCH`); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on. |
+| [**tillerVersion and kubeVersion constraints**](#tillerversion-and-kubeversion-constraint) | Add `tillerVersion` and `kubeVersion` to Chart.yaml that follow the Semantic Versioning 2.0.0 format (`>=MAJOR.MINOR.PATCH`); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Tiller and Kubernetes that this chart has been verified to work on. |
 | [**License**](#license) | The chart itself be Apache 2.0 licensed, and must contain the Apache 2.0 license in the LICENSE file at the root of the chart. The chart may also package additional license files, such as the license for the product being deployed, in the LICENSES directory. Both the LICENSE file and files in the LICENSES directory will be displayed to the user for agreement when deploying through the IBM Cloud Private user interface.|
 | [**README.md**](#readmemd) | In the IBM Cloud Private GUI, when a user clicks on a tile corresponding to a chart in the catalog, the README.md for that chart is used to generate the chart's front page. Given the important role that the README.md plays in ICP's user experience, all contributed charts must contain a README.md file, and it must provide all of the information needed for users to understand how to configure, deploy, and otherwise use a chart. Mandatory information includes complete descriptions of all input parameters as well as sections for [image security](#image-security), [pod security](#pod-security) and a [support statement](#support-statement). |
 | [**NOTES.txt**](#notestxt) | Include NOTES.txt with instructions to display usage notes, next steps, &amp; relevant information. |
@@ -72,7 +72,7 @@ These guidelines are intended to augment the [Helm best practices](https://docs.
 | [**Architecture based node affinity**](#architecture-based-node-affinity) | Pods must specify node affinity based on supported architectures even if there is only one supported architecture. |
 | ***Life cycle***| This section of the table contains life cycle related requirements.|
 | [**Compatible with latest ICP**](#compatible-with-latest-icp) | Charts must be tested for compatibility with the latest releases of ICP within 60 days of general availability. |
-| [**Avoid hard-coded version constraints**](#avoid-hard-coded-version-constraints) | Avoid setting kubeVersion of tillerVersion to a single specific version.  Instead allow for a particular version or greater. |
+| [**Avoid hard-coded version constraints**](#avoid-hard-coded-version-constraints) | Avoid setting kubeVersion and tillerVersion to a single specific version.  Instead allow for a particular version or greater. |
 | [**Liveness and Readiness probes**](#liveness-and-readiness-probes) | Workloads must enable monitoring of their own health using livenessProbes and readinessProbes. |
 
 &nbsp;
@@ -187,7 +187,7 @@ As a supplement to the required keywords, the list of optional keywords offered 
 
 ## tillerVersion and kubeVersion constraint
 
-Add `tillerVersion` and `kubeVersion` to Chart.yaml that follow the Semantic Versioning 2.0.0 format (\&gt;>=MAJOR.MINOR.PATCH); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on.
+Add `tillerVersion` and `kubeVersion` to Chart.yaml that follow the Semantic Versioning 2.0.0 format (\&gt;>=MAJOR.MINOR.PATCH); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Tiller and Kubernetes that this chart has been verified to work on.
 
 ## License
 
@@ -324,7 +324,7 @@ In an on-going basis, charts must be tested for compatibility with the latest re
 
 ## Avoid hard-coded version constraints
 
-Avoid setting kubeVersion of tillerVersion to a single specific version in both `Chart.yaml` as well as in Helm template files.  The intent is to make sure the helm chart continues to work on future versions of ICP without modification.  Instead of setting a specific version, allow for a particular version or greater:
+Avoid setting kubeVersion and tillerVersion to a single specific version in both `Chart.yaml` as well as in Helm template files.  The intent is to make sure the helm chart continues to work on future versions of ICP without modification.  Instead of setting a specific version, allow for a particular version or greater:
 ```
 tillerVersion: ">=2.5.0"
 ```
