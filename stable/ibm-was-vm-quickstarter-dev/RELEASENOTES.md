@@ -1,9 +1,11 @@
-# What's new in Chart Version 3.0.2
+# What's new in Chart Version 3.0.3
 
 The following changes apply only to the Helm chart. For a full list of product updates, see [What's new in VM Quickstarter](https://www.ibm.com/support/knowledgecenter/SSTF9X/about-whats-new.html).
 
 ## New features
-  - None.
+  - Removed the `ClusterRole` dependency from the `wasaas-devops` container. The WAS VM Quickstarter console and dashboard will now need to be registered with the IBM Cloud Private IAM component using the `/ibm_cloud_pak/pak_extensions/post-install/clusterAdministration/register_with_iam.sh` script.
+  - Reorganized the scripts in the `/ibm_cloud_pak/pak_extensions/prereqs` directory to group them by lifecycle phase and required permissions.
+  - Small ingress updates needed for IBM Cloud Private 3.2.
 
 ## Breaking Changes
   - None.
@@ -21,6 +23,7 @@ The following changes apply only to the Helm chart. For a full list of product u
 
 | Chart | Date | IBM Cloud Private Required | CAM Required | Image(s) Supported |  Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 3.0.3 | July 8, 2019 | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:3.0.3 ibmcom/wasaas-cloudsm:3.0.3 ibmcom/wasaas-wasdevaas:3.0.3 ibmcom/wasaas-console:3.0.3 couchdb:2.1.1 ibmcom/wasaas-dashboard:3.0.3 | Removed the `ClusterRole` dependency, ingress updates. |
 | 3.0.2 | Jun 3, 2019  | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:3.0.2 ibmcom/wasaas-cloudsm:3.0.2 ibmcom/wasaas-wasdevaas:3.0.2 ibmcom/wasaas-console:3.0.2 couchdb:2.1.1 ibmcom/wasaas-dashboard:3.0.2 |  |
 | 3.0.1 | May 6, 2019  | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:3.0.1 ibmcom/wasaas-cloudsm:3.0.1 ibmcom/wasaas-wasdevaas:3.0.1 ibmcom/wasaas-console:3.0.1 couchdb:2.1.1 ibmcom/wasaas-dashboard:3.0.1 | Manifest for offline archives, improved readiness and liveness probes. |
 | 3.0.0 | April 8, 2019  | >=3.1.0 | >=3.1.0 | ibmcom/wasaas-devops:3.0.0 ibmcom/wasaas-cloudsm:3.0.0 ibmcom/wasaas-wasdevaas:3.0.0 ibmcom/wasaas-console:3.0.0 couchdb:2.1.1 ibmcom/wasaas-dashboard:3.0.0 | Removed dependencies on extraneous Docker images. |

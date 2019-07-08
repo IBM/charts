@@ -25,7 +25,7 @@ The Helm chart deploys the following components:
 ## Prerequisites
 The following prerequisites apply only to deploying the Helm chart. For a detailed list of system installation prerequisites, see [WAS VM Quickstarter Prerequisites](https://www.ibm.com/support/knowledgecenter/SSTF9X/install-prerequisites.html).
 
-You must be a cluster administrator to install the Helm chart. The `wasaas-devops` container requires additional permissions to access a secret in the `services` namespace and to discover the ip address of the proxy node.
+A cluster administrator is required for OIDC registration for UI components and for creating custom cluster security policies.
 
 ### PodSecurityPolicy Requirements
 
@@ -94,18 +94,23 @@ To set up a custom PodSecurityPolicy, the cluster administrator can either manua
     - use
   ```
 
-##### Configuration scripts for custom PodSecurityPolicy
+  ##### Configuration scripts can be used to create the required resources
 
-As an alternative to manually creating the custom PodSecurityPolicy resource, the cluster administrator can use the following scripts to create and delete the required PodSecurityPolicy resources. Download the scripts from the [prereqs](https://github.com/IBM/charts/tree/master/stable/ibm-was-vm-quickstarter-dev/ibm_cloud_pak/pak_extensions/prereqs) directory.
+  Download the following scripts located at [/ibm_cloud_pak/pak_extensions/pre-install](https://github.com/IBM/charts/tree/master/stable/ibm-was-vm-quickstarter-dev/ibm_cloud_pak/pak_extensions/pre-install) directory.
 
-  - `createSecurityClusterPrereqs.sh`: Creates the PodSecurityPolicy and ClusterRole for all releases of this chart.
-  - `createSecurityNamespacePrereqs.sh`: Creates the RoleBinding for the namespace. This script takes one argument, the name of a pre-existing namespace where the chart will be installed.
+  * The pre-install instructions are located at `clusterAdministration/createSecurityClusterPrereqs.sh` for cluster administrators to create the PodSecurityPolicy and ClusterRole for all releases of this chart.
 
-       Example usage: `./createSecurityNamespacePrereqs.sh myNamespace`
-  - `deleteSecurityClusterPrereqs.sh`: Deletes the PodSecurityPolicy and ClusterRole for all releases of this chart.
-  - `deleteSecurityNamespacePrereqs.sh`: Deletes the RoleBinding for the namespace. This script takes one argument, the name of the namespace where the chart was installed.
+  * The namespace scoped instructions are located at `namespaceAdministration/createSecurityNamespacePrereqs.sh` for team administrators/operators to create the RoleBinding for the namespace. This script takes one argument; the name of a pre-existing namespace where the chart will be installed.
+    * Example usage: `./createSecurityNamespacePrereqs.sh myNamespace`
 
-       Example usage: `./deleteSecurityNamespacePrereqs.sh myNamespace`
+  ##### Configuration scripts can be used to clean up resources created
+
+  Download the following scripts located at [/ibm_cloud_pak/pak_extensions/post-delete](https://github.com/IBM/charts/tree/master/stable/ibm-was-vm-quickstarter-dev/ibm_cloud_pak/pak_extensions/post-delete) directory.
+
+  * The post-delete instructions are located at `clusterAdministration/deleteSecurityClusterPrereqs.sh` for cluster administrators to delete the PodSecurityPolicy and ClusterRole for all releases of this chart.
+
+  * The namespace scoped instructions are located at `namespaceAdministration/deleteSecurityNamespacePrereqs.sh` for team administrators/operators to delete the RoleBinding for the namespace. This script takes one argument; the name of the namespace where the chart was installed.
+    * Example usage: `./deleteSecurityNamespacePrereqs.sh myNamespace`
 
 ### Persistent Volumes
 
