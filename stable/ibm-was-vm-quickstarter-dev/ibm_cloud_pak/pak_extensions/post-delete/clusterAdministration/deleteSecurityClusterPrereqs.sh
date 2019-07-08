@@ -15,5 +15,5 @@
 # Delete the PodSecurityPolicy and ClusterRole for all releases of this chart.
 cd $(dirname $0)
 
-kubectl delete -f ibm-was-vm-quickstarter-psp.yaml
-kubectl delete -f ibm-was-vm-quickstarter-cr.yaml
+kubectl delete -f ../../pre-install/clusterAdministration/ibm-was-vm-quickstarter-psp.yaml
+kubectl delete -f ../../pre-install/clusterAdministration/ibm-was-vm-quickstarter-cr.yaml
