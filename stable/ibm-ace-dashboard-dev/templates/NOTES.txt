@@ -1,10 +1,14 @@
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
-The ACE Dashboard can be accessed via a web browser. Run the following commands to get the dashboard URL:
+The IBM App Connect Enterprise dashboard can be accessed via a web browser. Run the following commands to get the dashboard URL:
 
 {{- if .Values.hostnameIngressEnabled }}
+{{- if and .Values.tls.port }}
+export ACE_DASHBOARD_URL=$(kubectl get ingress {{ include "sch.names.fullCompName" (list . "hostname") }} -o jsonpath="{.spec.rules[0].host}"):$(kubectl get cm ibmcloud-cluster-info -o=jsonpath="{.data.proxy_ingress_https_port}" -n kube-public)$(kubectl get ingress {{ include "sch.names.fullCompName" (list . "hostname") }} -o jsonpath="{.spec.rules[0].http.paths[0].path}")
+{{- else }}
 export ACE_DASHBOARD_URL=$(kubectl get ingress {{ include "sch.names.fullCompName" (list . "hostname") }} -o jsonpath="{.spec.rules[0].host}{.spec.rules[0].http.paths[0].path}")
+{{- end }}
 {{- else }}
 export ACE_DASHBOARD_URL=$(kubectl get ingress {{ include "sch.names.fullName" (list .) }} -o jsonpath="{.status.loadBalancer.ingress[0].ip}{.spec.rules[0].http.paths[0].path}")
 {{- end }}
 
-echo "Open your web browser to https://${ACE_DASHBOARD_URL}"
+echo "Open your web browser to https://${ACE_DASHBOARD_URL%"(/|$)(.*)"}"

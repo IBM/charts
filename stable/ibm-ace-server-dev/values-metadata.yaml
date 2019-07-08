@@ -21,7 +21,7 @@ contentServerURL:
     description: "Set the URL to pull content from.  This value should be available from the ACE Dashboard when adding a server"
     type: "string"
     immutable: false
-    required: false
+    required: true
 
 # QueueManager enablement metadata
 queueManagerEnabled:
@@ -29,6 +29,15 @@ queueManagerEnabled:
     label: "Local default Queue Manager"
     description: "Run an Integration Server with an associated Queue Manager (as a StatefulSet), or a standalone Integration Server (as a deployment)"
     type: "boolean"
+
+# Grafana Dashboard deployment
+dashboardEnabled:
+    __metadata:
+      label: "Deploy the dashboard to grafana"
+      description: "Automatically deploy the dashboard into grafana"
+      type: "boolean"
+      hidden: true 
+
 
 # Image configuration metadata
 image:
@@ -87,52 +96,49 @@ arch:
     immutable: true
     required: true
 
-fsGroupGid:
+# Integration Server metadata
+integrationServer:
   __metadata:
-    label: "File system group ID"
-    description: "The file system group ID to use for volumes that support ownership management"
-    type: "string"
-    required: false
-    immutable: false
-
-# global persistence parameters
-persistence:
-  __metadata:
-    label: "Persistence settings"
-    description: "Settings for the Persistent Volumes (only applies when running with a Queue Manager)"
-  enabled:
-    __metadata:
-      label: "Enable persistence"
-      description: "Whether or not to store MQ messages and configuration on a Persistent Volume"
-      type: "boolean"
-  useDynamicProvisioning:
-    __metadata:
-      label: "Use dynamic provisioning"
-      description: "Whether or not to use Storage Classes to provision a Persistent Volume automatically"
-      type: "boolean"
-
-dataPVC:
-  __metadata:
-    label: "Data PVC"
-    description: "Settings for the Persistent Volume Claims (only applies when running with a Queue Manager)"
+    label: "Integration Server"
+    description: "Define configuration for the Integration Server"
   name:
     __metadata:
-      label: "Name"
-      description: "Name of Persistent Volume Claim, used for MQ objects and messages"
-      type: "string"
-      required: true
-  storageClassName:
-    __metadata:
-      label: "Storage Class name"
-      description: "Storage class of Persistent Volume Claim, used for MQ objects and messages"
+      label: "Integration Server name"
+      description: "ACE Integration Server name, which defaults to the Helm release name"
       type: "string"
       required: false
-  size:
+  keystoreKeyNames:
     __metadata:
-      label: "Size"
-      description: "Size of Persistent Volume Claim, used for MQ objects and messages"
+      label: "List of key aliases for the keystore"
+      description: "Comma separated list of key alias names to mount from the pre-installed secret"
       type: "string"
-      required: true
+      required: false
+  truststoreCertNames:
+    __metadata:
+      label: "List of certificate aliases for the truststore"
+      description: "Comma separated list of certificate alias names to mount from the pre-installed secret"
+      type: "string"
+      required: false
+  defaultAppName:
+    __metadata:
+      label: "Name of the default application"
+      description: "defaultAppName allows you to specifiy a name for the default application for the deployment of independent resources"
+      type: "string"
+      required: false
+  configurationSecret:
+    __metadata:
+      label: "The name of the secret to create or to use that contains the server configuration"
+      description: "The secret containing the server configuration or the name of the secret to generate"
+      type: "string"
+      immutable: false
+      required: false
+  fsGroupGid:
+    __metadata:
+      label: "File system group ID"
+      description: "The file system group ID to use for volumes that support ownership management (such as NFS)"
+      type: "string"
+      required: false
+      immutable: false
 
 # Service configuration metadata
 service:
@@ -173,15 +179,15 @@ service:
       required: true
   iP:
     __metadata:
-      label: "NodePort IP"
-      description: "This is a hostname/IP that the nodeport is connected to i.e. a workers IP"
+      label: "Proxy Node IP or FQDN"
+      description: "An IP address or DNS name that the nodeport is connected to, i.e. the proxy node's IP or fully qualified domain name (FQDN)"
       type: "string"
       required: true
 
 # Settings specific to deployments of ACE without MQ
 aceonly:
   __metadata:
-    label: "Resources for ACE (without MQ) deployments"
+    label: "Configuration for ACE (without MQ) deployments"
     description: "Configuration settings for specifying required resources when running ACE without MQ"
   # Resource requests and limits configuration metadata
   resources:
@@ -211,12 +217,19 @@ aceonly:
           description: "The memory upper limit in bytes. Specify integers with suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki."
           type: "string"
           required: true
+  # Replica count metadata. This only applies when running without MQ.
+  replicaCount:
+    __metadata:
+      label: "Replica count"
+      description: "The number of replica pods to run.  This only applies when running without a Queue Manager"
+      type: "number"
+      required: false
 
 # Settings specific to deployments of ACE with MQ
 acemq:
   __metadata:
-    label: "Resources for ACE with MQ stateful sets"
-    description: "Resources settings for the running pods"
+    label: "Configuration for ACE with MQ stateful sets"
+    description: "Configuration settings for specifying required resources when running ACE with MQ"
   # Resource requests and limits configuration metadata
   resources:
     requests:
@@ -245,65 +258,70 @@ acemq:
           description: "The memory upper limit in bytes. Specify integers with suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki."
           type: "string"
           required: true
-
-# Replica count metadata. This only applies when running without MQ.
-replicaCount:
-  __metadata:
-    label: "Replica count"
-    description: "The number of replica pods to run.  This only applies when running without a Queue Manager"
-    type: "number"
-    required: false
-
-# Queue Manager metadata
-queueManager:
-  __metadata:
-    label: "Queue manager settings"
-    description: "Settings for the Queue Manager (only applies when running with a Queue Manager)"
-  name:
+  pki:
+    keys:
+      __metadata:
+        label: "Keys"
+        description: "Certificates containing private keys to add. See Readme/values.yaml for format."
+        type: "string"
+        multiline: true
+    trust:
+      __metadata:
+        label: "Certificates"
+        description: "Certificates to add. See Readme/values.yaml for format."
+        type: "string"
+        multiline: true
+  qmname:
     __metadata:
       label: "Queue manager name"
       description: "MQ queue manager name, which defaults to the Helm release name"
       type: "string"
       required: false
-
-# Integration Server metadata
-integrationServer:
+  initVolumeAsRoot:
+    __metadata:
+      label: "Initialize MQ volume using root"
+      description: "Whether or not the storage class (such as NFS) requires root permissions to initialize"
+      type: "boolean"
+      required: true
+  
+# global persistence parameters
+persistence:
   __metadata:
-    label: "Integration Server"
-    description: "Define configuration for the Integration Server"
+    label: "Persistence settings"
+    description: "Settings for the Persistent Volumes (only applies when running with a Queue Manager)"
+  enabled:
+    __metadata:
+      label: "Enable persistence"
+      description: "Whether or not to store MQ messages and configuration on a Persistent Volume"
+      type: "boolean"
+  useDynamicProvisioning:
+    __metadata:
+      label: "Use dynamic provisioning"
+      description: "Whether or not to use Storage Classes to provision a Persistent Volume automatically"
+      type: "boolean"
+
+dataPVC:
+  __metadata:
+    label: "Data PVC"
+    description: "Settings for the Persistent Volume Claims (only applies when running with a Queue Manager)"
   name:
     __metadata:
-      label: "Integration Server name"
-      description: "ACE Integration Server name, which defaults to the Helm release name"
+      label: "Name"
+      description: "Name of Persistent Volume Claim, used for MQ objects and messages"
       type: "string"
-      required: false
-  keystoreKeyNames:
+      required: true
+  storageClassName:
     __metadata:
-      label: "List of key aliases for the keystore"
-      description: "Comma separated list of key alias names to mount from the pre-installed secret"
+      label: "Storage Class name"
+      description: "Storage class of Persistent Volume Claim, used for MQ objects and messages"
       type: "string"
       required: false
-  truststoreCertNames:
+  size:
     __metadata:
-      label: "List of certificate aliases for the truststore"
-      description: "Comma separated list of certificate alias names to mount from the pre-installed secret"
+      label: "Size"
+      description: "Size of Persistent Volume Claim, used for MQ objects and messages"
       type: "string"
-      required: false
-  defaultAppName:
-    __metadata:
-      label: "Name of the default application"
-      description: "defaultAppName allows you to specifiy a name for the default application for the deployment of independent resources"
-      type: "string"
-      required: false
-
-# The secret containing server confiration
-configurationSecret:
-  __metadata:
-    label: "The name of the secret to create or to use that contains the server configuration"
-    description: "The secret containing the server configuration or the name of the secret to generate"
-    type: "string"
-    immutable: false
-    required: false
+      required: true
 
 # log metadata section specifies settings for MQ and ACE logs
 log:
