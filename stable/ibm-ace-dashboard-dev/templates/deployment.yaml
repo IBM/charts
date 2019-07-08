@@ -120,7 +120,11 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: ACE_INGRESS_HOSTNAME
-              value: {{ .Values.tls.hostname }}
+              {{- if .Values.tls.port }}
+              value: "{{ .Values.tls.hostname }}:{{ .Values.tls.port }}"
+              {{- else }}
+              value: "{{ .Values.tls.hostname }}"
+              {{- end }}
             - name: ACE_SERVER_CHART_NAME
               value: {{ $serverChartName }}
             - name: ACE_SERVER_CHART_VERSION
@@ -149,19 +153,19 @@ spec:
             - name: CLUSTER_EXTERNAL_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "sch.names.fullCompName" (list . "oauth2-client-reg") }}
+                  name: {{ $deploymentName }}
                   key: clusterExternalUrl
             {{- if .Values.ssoEnabled }}
             - name: CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "sch.names.fullCompName" (list . "oauth2-client-reg") }}
-                  key: username
+                  name: {{ include "sch.names.fullCompName" (list . "oidc") }}
+                  key: CLIENT_ID
             - name: CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "sch.names.fullCompName" (list . "oauth2-client-reg") }}
-                  key: password
+                  name: {{ include "sch.names.fullCompName" (list . "oidc") }}
+                  key: CLIENT_SECRET
             {{- end }}
           volumeMounts:
             - name: tls
