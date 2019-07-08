@@ -60,19 +60,20 @@ These guidelines are intended to augment the [Helm best practices](https://docs.
 | [**Chart version**](#chart-version) | SemVer2 numbering must be used, as per [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#version-numbers), and any update to a chart must include an updated version number, unless the changes are to the README file only.|
 | [**Chart description**](#chart-description) | All contributed charts must have a chart description in chart.yaml. This will be displayed in the ICP catalog and should be meaningful. |
 | [**Required chart keywords**](#required-chart-keywords) | Chart keywords are used by the IBM Cloud Private user interface, some of which are critical to the user interface's function. |
-| [**tillerVersion constraint**](#tillerversion-constraint) | Add a `tillerVersion` to Chart.yaml that follows the Semantic Versioning 2.0.0 format (`>=MAJOR.MINOR.PATCH`); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on. |
+| [**tillerVersion and kubeVersion constraints**](#tillerversion-and-kubeversion-constraint) | Add `tillerVersion` and `kubeVersion` to Chart.yaml that follow the Semantic Versioning 2.0.0 format (`>=MAJOR.MINOR.PATCH`); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Tiller and Kubernetes that this chart has been verified to work on. |
 | [**License**](#license) | The chart itself be Apache 2.0 licensed, and must contain the Apache 2.0 license in the LICENSE file at the root of the chart. The chart may also package additional license files, such as the license for the product being deployed, in the LICENSES directory. Both the LICENSE file and files in the LICENSES directory will be displayed to the user for agreement when deploying through the IBM Cloud Private user interface.|
 | [**README.md**](#readmemd) | In the IBM Cloud Private GUI, when a user clicks on a tile corresponding to a chart in the catalog, the README.md for that chart is used to generate the chart's front page. Given the important role that the README.md plays in ICP's user experience, all contributed charts must contain a README.md file, and it must provide all of the information needed for users to understand how to configure, deploy, and otherwise use a chart. Mandatory information includes complete descriptions of all input parameters as well as sections for [image security](#image-security), [pod security](#pod-security) and a [support statement](#support-statement). |
 | [**NOTES.txt**](#notestxt) | Include NOTES.txt with instructions to display usage notes, next steps, &amp; relevant information. |
 | [**values-metadata.yaml**](#values-metadatayaml) | YAML file that provides formatting and validation data for each entry in `values.yaml` to the IBM Cloud Private web interface. |
 | [**ibm_cloud_pak directory**](#ibm_cloud_pak-directory) | Your helm chart must include a new subdirectory `ibm_cloud_pak` which includes additional files containing a manifest and security prereqs. |
-| [**ibm_cloud_pak/manifest.yaml**](#ibm_cloud_pakmanifestyaml) | YAML file describing the full contents of the Helm chart and allows automated creation of an offline install package for air-gapped clusters. |
+| [**ibm_cloud_pak/manifest.yaml**](#ibm_cloud_pakmanifestyaml) | YAML file describing the full contents of the Helm chart and allows automated creation of an offline install package for air-gapped clusters.  Any ServiceAccounts the chart creates must also [specify image pull secrets](#serviceaccount-image-pull-secrets). |
 | [**ibm_cloud_pak/qualification.yaml**](#ibm_cloud_pakqualificationyaml) | YAML file describing the security prereqs for the helm chart. |
-| [**Metering**](#metering-integration) | Charts should include metering annotations so that users can meter usage with the IBM Cloud Private metering service. |
+| [**Metering**](#metering-integration) | Charts must include metering annotations so that users can meter usage with the IBM Cloud Private metering service. |
+| [**Architecture based node affinity**](#architecture-based-node-affinity) | Pods must specify node affinity based on supported architectures even if there is only one supported architecture. |
 | ***Life cycle***| This section of the table contains life cycle related requirements.|
 | [**Compatible with latest ICP**](#compatible-with-latest-icp) | Charts must be tested for compatibility with the latest releases of ICP within 60 days of general availability. |
-| [**Avoid hard-coded version constraints**](#avoid-hard-coded-version-constraints) | Avoid setting kubeVersion of tillerVersion to a single specific version.  Instead allow for a particular version or greater. |
-| [**Liveness and Readiness probes**](#liveness-and-readiness-probes) | Workloads should enable monitoring of their own health using livenessProbes and readinessProbes. |
+| [**Avoid hard-coded version constraints**](#avoid-hard-coded-version-constraints) | Avoid setting kubeVersion and tillerVersion to a single specific version.  Instead allow for a particular version or greater. |
+| [**Liveness and Readiness probes**](#liveness-and-readiness-probes) | Workloads must enable monitoring of their own health using livenessProbes and readinessProbes. |
 
 &nbsp;
 
@@ -134,13 +135,15 @@ All charts must pass the `helm lint` verification tool with no errors.
 
 ## IBM Helm chart best practices
 
-Similar to the Helm CLI linter, IBM has created a linter specifically for community helm charts.  There are three levels of messages produced by the linter:  
+Similar to the Helm CLI linter, IBM has created a linter specifically for community helm charts.  There are four levels of messages produced by the linter:  
 
-`Information`: Style or cosmetic recommendations; not required for certification.
+`Information`: Style or cosmetic recommendations; not required.
 
-`Warning`: These will not prevent successful deployment but may yield inconsistencies on the platform.  Strongly recommended to address but not strictly required for certification.
+`Warning`: These will not prevent successful deployment but may yield inconsistencies on the platform.  Strongly recommended to address but not strictly required.
 
-`Error`: Error level checks are must-fix for certification.
+`Error`: Error level checks are must-fix.
+
+`Review`: Review items are handled on a case-by-case basis.
 
 The linter is run by IBM against the chart in the pull request and then output is provided as a comment.
 
@@ -149,25 +152,25 @@ The rules and descriptions for the content linter can be found here:
 
 ## Directory structure
 
-Chart source should be added to the charts/community directory. Chart archives, packaged as a .tgz file using helm package should be added to the charts/repo/community directory, which is a Helm repository.
+Chart source must be added to the charts/community directory. Chart archives, packaged as a .tgz file using helm package must be added to the charts/repo/community directory, which is a Helm repository.
 
 **Do not update** `charts/repo/community/index.yaml` **with your contribution.** `index.yaml` **is automatically updated by a build process when pull requests are processed.**
 
 ## Chart file structure
 
-Charts should follow the standard Helm file structure: Chart.yaml, values.yaml, README.md, templates, and templates/NOTES.txt should all exist and have useful contents.
+Charts must follow the standard Helm file structure: Chart.yaml, values.yaml, README.md, templates, and templates/NOTES.txt must all exist and have useful contents.
 
 ## Chart name
 
-Helm chart names should follow the [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#chart-names). The chart name must be the same as the directory that contains the chart source. Charts contributed by a company or organization may be prefixed with the company or organization name. Contributions from the community must **not** be prefixed with &quot;ibm-&quot;.
+Helm chart names must follow the [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#chart-names). The chart name must be the same as the directory that contains the chart source. Charts contributed by a company or organization may be prefixed with the company or organization name. Contributions from the community must **not** be prefixed with &quot;ibm-&quot;.
 
 ## Chart version
 
-SemVer2 numbering should be used, as per [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#version-numbers).
+SemVer2 numbering must be used, as per [Helm chart best practices](https://github.com/kubernetes/helm/blob/master/docs/chart_best_practices/conventions.md#version-numbers).
 
 ## Chart description
 
-All charts must have a chart description in chart.yaml. This will be displayed in the ICP catalog UI and should be meaningful to end users.
+All charts must have a chart description in chart.yaml. This will be displayed in the ICP catalog UI and must be meaningful to end users.
 
 ## Required chart keywords
 
@@ -184,9 +187,9 @@ Architecture Keywords:
 
 As a supplement to the required keywords, the list of optional keywords offered in [the section on recommended chart keywords](#recommended-chart-keywords) can be leveraged to provide the chart with additional categorization and catalog visibility.
 
-## tillerVersion constraint
+## tillerVersion and kubeVersion constraint
 
-Add a tillerVersion to Chart.yaml that follows the Semantic Versioning 2.0.0 format (\&gt;>=MAJOR.MINOR.PATCH); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Helm that this chart has been verified to work on.
+Add `tillerVersion` and `kubeVersion` to Chart.yaml that follow the Semantic Versioning 2.0.0 format (\&gt;>=MAJOR.MINOR.PATCH); ensure that there is no additional metadata attached to this version number. Set this constraint to the lowest version of Tiller and Kubernetes that this chart has been verified to work on.
 
 ## License
 
@@ -204,7 +207,7 @@ The README must also include a statement on the pod security policy required to 
 
 ### Support statement
 
-The README.md must include a section labeled `Support`.  This section should provide details and/or links to where users can get support for urgent issues with the product, get help, or submit issues.
+The README.md must include a section labeled `Support`.  This section must provide details and/or links to where users can get support for urgent issues with the product, get help, or submit issues.
 
 ## NOTES.txt
 
@@ -227,6 +230,21 @@ IBM Cloud Private provides tooling to [build offline binary packages](https://ww
 IBM Cloud Private also supports [importing binary packages that contain all the components (charts and images) required to deploy a product](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.2/manage_cluster/cli_catalog_commands.html#load-archive).  The contents of the binary package are then stored in the local image registry / local chart repository and the charts can then be deployed without access to the public internet.
 
 Helm charts must provide a valid manifest.yaml file and test that the ICP tooling can build the binary offline package, that the package can be installed in ICP and that the product can be deployed from that installed package.
+
+### ServiceAccount image pull secrets
+
+IBM Cloud Private creates an ImagePullSecret named `sa-<namespace>` when an image is pushed to the ICP image registry.  If your chart creates service accounts they must specify this secret to ensure image access when installing in an air-gapped environment.
+
+```
+apiVersion: v1
+kind: ServiceAccount
+imagePullSecrets:
+  - name: sa-{{ .Release.Namespace }}
+{{- if ne .Values.global.image.pullSecret "" }}
+  - name: {{ .Values.global.image.pullSecret }}
+{{- end }}
+```
+
 
 ## ibm_cloud_pak/qualification.yaml
 
@@ -256,11 +274,11 @@ prereqs:
 
 The IBM Cloud Private metering service collects usage information for containers running on IBM Cloud Private based on virtual processor cores available, capped, and/or utilized by the containerized components that make up the running workload.
 
-Virtual core information is automatically collected by a metering daemon running in the IBM Cloud Private cluster. Workloads should identify themselves to this daemon so that the appropriate metrics can be gathered and attributed to the running offering.
+Virtual core information is automatically collected by a metering daemon running in the IBM Cloud Private cluster. Workloads must identify themselves to this daemon so that the appropriate metrics can be gathered and attributed to the running offering.
 
 The metadata is used to associate metrics gathered for metering purposes with the offering deployed. The metering service simply measures metrics for the running offering, and provides historical usage data to the user through the UI and as downloadable CSV-formatted data.
 
-Workloads should specify their product ID, product name and product version for the meter reader using metadata annotations on the pods. This is defined in the spec template section of the helm chart for a specific deployment.
+Workloads must specify their product ID, product name and product version for the meter reader using metadata annotations on the pods. This is defined in the spec template section of the helm chart for a specific deployment.
 
  - A Product Name (`productName`) is the human-readable name for the offering
  - A Product Identifier (`productID`) uniquely identifies the offering (please namespace with your company or organization name to ensure uniqueness)
@@ -277,25 +295,45 @@ Workloads should specify their product ID, product name and product version for 
               productVersion: 0.1.2
 ```
 
+## Architecture based node affinity
+
+In order to prevent containers from being scheduled on nodes that do not match the supported architecture, each pod must specify [node affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#node-affinity-beta-feature) based on the supported architectures of the chart.  To make this easier charts can choose to utilize the [IBM Shared Chart helpers](https://github.com/IBM/charts/tree/master/samples/ibm-sch).  It provides a [helper function for generating nodeAffinity](https://github.com/IBM/charts/tree/master/samples/ibm-sch#nodeaffinity).
+
+If your chart does not use the IBM Shared Chart helper function it must allow users to set the architecture.  This can be as simple as an `arch` field in `Values.yaml` and then used in templates like this:
+
+```
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+```
+
 # Lifecycle
 
 ## Compatible with latest ICP
 
-Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the latest version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.  Keep in mind ICP environments are typically air-gapped, without access to the public internet.  Any configurations supported by the command line install of the helm chart must also be supported via the UI installation.  In addition, if there are any versions of IBM Cloud Private known to not work with the chart, those details should be clearly specified in the README.md under a section such as `Limitations`.  For example: `This chart is only supported on IBM Cloud Private version 3.1.0 and above.`  
+Before creating a pull request to add a chart to the IBM Community charts repository, chart owners must verify that the chart deploys as expected on the latest version of IBM Cloud Private, using both the IBM Cloud Private user interface and the Helm command line.  Keep in mind ICP environments are typically air-gapped, without access to the public internet.  Any configurations supported by the command line install of the helm chart must also be supported via the UI installation.  In addition, if there are any versions of IBM Cloud Private known to not work with the chart, those details must be clearly specified in the README.md under a section such as `Limitations`.  For example: `This chart is only supported on IBM Cloud Private version 3.1.0 and above.`  
 For a list of the available trial and Community Edition-based offerings, refer to [the "Getting Started" section in the README.md.](https://github.com/IBM/charts/blob/master/README.md#getting-started)
 
 In an on-going basis, charts must be tested for compatibility with the latest releases of ICP within 60 days of general availability.  The expectation is that the helm chart will work on all future version of ICP, without skipping versions.
 
 ## Avoid hard-coded version constraints
 
-Avoid setting kubeVersion of tillerVersion to a single specific version in both `Chart.yaml` as well as in Helm template files.  The intent is to make sure the helm chart continues to work on future versions of ICP without modification.  Instead of setting a specific version, allow for a particular version or greater:
+Avoid setting kubeVersion and tillerVersion to a single specific version in both `Chart.yaml` as well as in Helm template files.  The intent is to make sure the helm chart continues to work on future versions of ICP without modification.  Instead of setting a specific version, allow for a particular version or greater:
 ```
 tillerVersion: ">=2.5.0"
 ```
 
 ## Liveness and readiness probes
 
-Workloads should enable monitoring of their own health using livenessProbes and readinessProbes.
+Workloads must enable monitoring of their own health using livenessProbes and readinessProbes.
 
 &nbsp;
 
