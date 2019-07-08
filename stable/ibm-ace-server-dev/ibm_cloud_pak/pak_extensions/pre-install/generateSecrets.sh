@@ -97,6 +97,26 @@ if [ -s ./setdbparms.txt ]; then
   SECRET_ARGS="${SECRET_ARGS} --from-file=setdbparms=./setdbparms.txt "
 fi
 
+if [ -s ./extensions.zip ]; then
+  SECRET_ARGS="${SECRET_ARGS} --from-file=extensions=./extensions.zip "
+fi
+
+if [ -s ./switch.json ]; then
+  SECRET_ARGS="${SECRET_ARGS} --from-file=switch=./switch.json "
+fi
+
+if [ -s ./agentx.json ]; then
+  SECRET_ARGS="${SECRET_ARGS} --from-file=agentx=./agentx.json "
+fi
+
+if [ -s ./agentp.json ]; then
+  SECRET_ARGS="${SECRET_ARGS} --from-file=agentp=./agentp.json "
+fi
+
+if [ -s ./agentc.json ]; then
+  SECRET_ARGS="${SECRET_ARGS} --from-file=agentc=./agentc.json "
+fi
+
 ######################################################
 # Create the Kubernetes secret resource
 ######################################################

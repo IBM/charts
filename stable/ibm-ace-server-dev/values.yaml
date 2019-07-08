@@ -22,6 +22,8 @@ contentServerURL:
 # Whether to start an image with an MQ Queue Manager.  The Queue Manager will be used by the Integration Server
 queueManagerEnabled: false
 
+arch: amd64
+
 image:
   repository:
     # name of the ace only server image
@@ -31,16 +33,77 @@ image:
     # name of the image that runs as a job to create secrets
     configurator: ibmcom/ace-icp-configurator
   # tag is the tag to use for the container repository
-  tag: 11.0.0.4
+  tag: 11.0.0.5-amd64
   # pullPolicy of IfNotPresent causes image pulling to be skipped if it already exists. Change to Always to force a pull.
   pullPolicy: IfNotPresent
   # pullSecret is the secret to use when pulling the image from a private registry
   pullSecret:
 
-arch: amd64
+service:
+  type: NodePort
+  webuiPort: 7600
+  serverlistenerPort: 7800
+  serverlistenerTLSPort: 7843
+  iP: 
 
-# gid for the secondary group the containers should run in so that they can access NFS storage.
-fsGroupGid:
+# integrationServer section specifies settings for the ACE Integration Server
+integrationServer:
+  # name allows you to specify the name to use for the Integration Server.  Defaults to the Helm release name.
+  name:
+  # keystoreKeyNames allows you to specify a comma separated list of key alias names to mount from the pre-installed secret
+  keystoreKeyNames:
+  # truststoreCertNames allows you to specify a comma separated list of certificate alias names to mount from the pre-installed secret
+  truststoreCertNames:
+  # defaultAppName allows you to specifiy a name for the default application for the deployment of independent resources
+  defaultAppName:
+  # The secret containing server configuration
+  configurationSecret:
+  # gid for the secondary group the containers should run in so that they can access NFS storage.
+  fsGroupGid:
+
+###########################################################
+# ibm-ace-server-dev (ACE only) specific settings
+###########################################################
+aceonly:
+  # resource limits to apply to the ibm-ace-server-dev containers
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      cpu: "1"
+      memory: 1024Mi
+    limits:
+      cpu: "1"
+      memory: 1024Mi
+  # The number of pod replicas to have - note that this is only used if the MQ queue manager is NOT enabled.
+  replicaCount: 3
+
+###########################################################
+# ibm-ace-mq-server-dev (ACE w/ MQ) specific settings
+###########################################################
+acemq:
+  # resource limits to apply to the ibm-ace-mq-server-dev containers
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2048Mi
+    limits:
+      cpu: "1"
+      memory: 2048Mi
+  # pki is used to supply certificates, that are stored in Kubernetes secrets, for use with the webconsole and queue manager. 
+  # Must be supplied as an array of yaml objects in the following format:
+  # - name: <label to give certificate> (only for pki.keys)
+  #   secret:
+  #     secretName: <name of Kubernetes secret>
+  #     items:
+  #       - <certificate files to import> (for example: tls.key, tls.crt, ca.crt)
+  pki:
+    keys: []
+    trust: []
+  # name allows you to specify the name to use for the queue manager.  Defaults to the Helm release name.
+  qmname:
+  # initVolumeAsRoot specifies whether or not storage provider requires root permissions to initialize
+  initVolumeAsRoot: false 
 
 # persistence section specifies persistence settings which apply to the whole chart
 persistence:
@@ -57,59 +120,6 @@ dataPVC:
   storageClassName: ""
   ## size is the minimum size of the Persistent Volume
   size: 2Gi
-
-service:
-  type: NodePort
-  webuiPort: 7600
-  serverlistenerPort: 7800
-  serverlistenerTLSPort: 7843
-  iP: 
-
-###########################################################
-# ibm-ace-server (ACE only) specific settings
-###########################################################
-aceonly:
-  # resource limits to apply to the ibm-ace-server containers
-  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
-  resources:
-    requests:
-      cpu: "1"
-      memory: 1024Mi
-    limits:
-      cpu: "1"
-      memory: 1024Mi
-
-###########################################################
-# ibm-ace-mq-server (ACE w/ MQ) specific settings
-###########################################################
-acemq:
-  # resource limits to apply to the ibm-ace-mq-server containers
-  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
-  resources:
-    requests:
-      cpu: "1"
-      memory: 2048Mi
-    limits:
-      cpu: "1"
-      memory: 2048Mi
-
-# The number of pod replicas to have - note that this is only used if the MQ queue manager is NOT enabled.
-replicaCount: 3
-
-# The secret containing server confiration
-configurationSecret:
-
-# queueManager section specifies settings for the MQ Queue Manager
-queueManager:
-  # name allows you to specify the name to use for the queue manager.  Defaults to the Helm release name.
-  name:
-
-integrationServer:
-  name:
-  keystoreKeyNames:
-  truststoreCertNames:
-  # defaultAppName allows you to specifiy a name for the default application for the deployment of independent resources
-  defaultAppName:
 
 # log section specifies settings for MQ error logs and Integration Server console logs
 log:
@@ -133,3 +143,6 @@ readinessProbe:
   periodSeconds: 5
   timeoutSeconds: 3
   failureThreshold: 1
+
+# Grafana dashboard deployment
+dashboardEnabled: true

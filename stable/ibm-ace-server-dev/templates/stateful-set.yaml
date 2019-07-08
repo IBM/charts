@@ -20,7 +20,7 @@
 {{ $volumeClaimTemplateName := include "sch.names.volumeClaimTemplateName" (list . $pvcName $statefulSetName) }}
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{ $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
-{{ $secretName := .Values.configurationSecret | default (printf "%s-%s" $statefulSetName "configuration") }}
+{{ $secretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $statefulSetName "configuration") }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -67,7 +67,7 @@ spec:
       securityContext:
         runAsNonRoot: false
         runAsUser: 0
-        fsGroup: {{ default 1001 .Values.fsGroupGid }}
+        fsGroup: {{ default 888 .Values.integrationServer.fsGroupGid }}
       containers:
         - name: {{ $statefulSetName }}
           image: "{{ .Values.image.repository.acemq }}:{{ .Values.image.tag }}"
@@ -87,8 +87,10 @@ spec:
               value: {{ .Values.license | quote }}
             - name: USE_QMGR
               value: "true"
+            - name: DEV_QMGR
+              value: "true"
             - name: MQ_QMGR_NAME
-              value: {{ .Values.queueManager.name | default .Release.Name | replace "-" "" | quote }}
+              value: {{ .Values.acemq.qmname | default .Release.Name | replace "-" "" | quote }}
             - name: ACE_SERVER_NAME
               value: {{ print $serverName | quote }}
             - name: SERVICE_NAME
@@ -138,8 +140,6 @@ spec:
             - name: webusers
               mountPath: "/home/aceuser/initial-config/webusers"
             {{- end }}
-            - name: mqsc
-              mountPath: "/etc/mqm"
             {{- if .Values.integrationServer.keystoreKeyNames }}
             - name: keystore
               mountPath: "/home/aceuser/initial-config/keystore"
@@ -150,12 +150,18 @@ spec:
             {{- end }}
             - name: odbcini
               mountPath: "/home/aceuser/initial-config/odbcini"
+            - name: mqsc
+              mountPath: "/home/aceuser/initial-config/mqsc"
             - name: policy
               mountPath: "/home/aceuser/initial-config/policy"
             - name: serverconf
               mountPath: "/home/aceuser/initial-config/serverconf"
             - name: setdbparms
               mountPath: "/home/aceuser/initial-config/setdbparms"
+            - name: extensions
+              mountPath: "/home/aceuser/initial-config/extensions"
+            - name: agent
+              mountPath: "/home/aceuser/initial-config/agent"
             {{- if .Values.persistence.enabled }}
             - name: {{ $volumeClaimTemplateName }}
               mountPath: "/mnt/mqm"
@@ -164,11 +170,27 @@ spec:
             - name: contentservertls
               mountPath: "/home/aceuser/ssl"
             {{- end }}
+            {{- if .Values.acemq.pki.trust }}
+            {{- range $index, $source := .Values.acemq.pki.trust }}
+            - name: trust{{- $index }}
+              mountPath: "/etc/mqm/pki/trust/{{- $index }}"
+              readonly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.acemq.pki.keys }}
+            {{- range $index, $source := .Values.acemq.pki.keys }}
+            - name: {{ $source.name }}
+              mountPath: "/etc/mqm/pki/keys/{{- $source.name }}"
+              readonly: true
+            {{- end }}
+            {{- end }}
           securityContext:
+            seLinuxOptions:
+              type: spc_t
             allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false
-            runAsNonRoot: false
-            runAsUser: 0
+            runAsNonRoot: true
+            runAsUser: 888
             privileged: false
             capabilities:
               add:
@@ -210,6 +232,40 @@ spec:
 {{ toYaml .Values.acemq.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.acemq.resources.requests | indent 14 }}
+      {{- if .Values.acemq.initVolumeAsRoot }}
+      initContainers:
+        - name: qmgr-init
+          image: "{{ .Values.image.repository.acemq }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["runmqserver", "-i"]
+          env:
+          - name: LICENSE
+            value: {{ .Values.license }}
+          - name: MQ_QMGR_NAME
+            value: {{ .Values.acemq.qmname | default .Release.Name | replace "-" "" | quote }}
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "json" | quote }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+          - mountPath: "/mnt/mqm"
+            name: {{ $volumeClaimTemplateName }}
+          {{- end }}
+          securityContext:
+            seLinuxOptions:
+              type: spc_t
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            privileged: false
+            capabilities:
+              add:
+                - CHOWN
+                - FOWNER
+                - DAC_OVERRIDE
+              drop:
+                - ALL
+      {{- end }}
       volumes:
         {{- if .Values.contentServerURL }}
         - name: webusers
@@ -222,6 +278,26 @@ spec:
             - key: adminusers
               path: admin-users.txt
         {{- end }}
+        - name: extensions
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: extensions
+              path: extensions.zip
+        - name: agent
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: agentc
+              path: agentc.json
+            - key: agentp
+              path: agentp.json
+            - key: agentx
+              path: agentx.json
+            - key: switch
+              path: switch.json
         - name: mqsc
           secret:
             secretName: {{ $secretName }}
@@ -293,6 +369,36 @@ spec:
             items:
             - key: contentServerCACert
               path: cacert.pem
+        {{- end }}
+        {{- if .Values.acemq.pki.trust }}
+        {{- range $index, $source := .Values.acemq.pki.trust }}
+        {{- if $source.secret }}
+        - name: trust{{- $index }}
+          secret:
+            secretName: {{ $source.secret.secretName }}
+            defaultMode: 0440
+            items:
+            {{- range $source.secret.items }}
+              - key: {{ . }}
+                path: {{ . }}
+            {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.acemq.pki.keys }}
+        {{- range $index, $source := .Values.acemq.pki.keys }}
+        {{- if .secret }}
+        - name: {{ $source.name }}
+          secret:
+            secretName: {{ $source.secret.secretName }}
+            defaultMode: 0440
+            items:
+            {{- range $source.secret.items }}
+              - key: {{ . }}
+                path: {{ . }}
+            {{- end }}
+        {{- end }}
+        {{- end }}
         {{- end }}
   volumeClaimTemplates:
   {{- if .Values.persistence.enabled }}

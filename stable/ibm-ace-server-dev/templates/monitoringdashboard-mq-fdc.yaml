@@ -11,21 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-{{- if .Values.tls.generate }}
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
-{{- $name := include "sch.names.fullName" (list .) }}
-{{- $labels := include "sch.metadata.labels.standard" (list . "") }}
-apiVersion: certmanager.k8s.io/v1alpha1
-kind: Certificate
+{{- if and (.Capabilities.APIVersions.Has "monitoringcontroller.cloud.ibm.com/v1") .Values.dashboardEnabled .Values.queueManagerEnabled }}
+apiVersion: monitoringcontroller.cloud.ibm.com/v1
+kind: MonitoringDashboard
 metadata:
+  name: {{ include "sch.names.fullCompName" (list . "mq-fdc")}}
   labels:
-{{ $labels | indent 4 }}
-  name: {{ $name }}-tls-cert
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
 spec:
-  secretName: {{ .Values.tls.secret }}
-  dnsNames:
-  - {{ .Values.tls.hostname }}
-  issuerRef:
-    name: icp-ca-issuer
-    kind: ClusterIssuer
+  enabled: true
+  data: |-
+{{ .Files.Get "ibm_cloud_pak/pak_extensions/dashboards/mq_fdc_grafana_dashboard.json" | indent 4 }}
 {{- end }}

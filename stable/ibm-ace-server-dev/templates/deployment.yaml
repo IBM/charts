@@ -17,7 +17,7 @@
 {{ $deploymentName := include "sch.names.fullName" (list .) }}
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{ $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
-{{ $secretName := .Values.configurationSecret | default (printf "%s-%s" $deploymentName "configuration") }}
+{{ $secretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $deploymentName "configuration") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -35,7 +35,7 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .Values.aceonly.replicaCount }}
   selector:
     matchLabels:
 {{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
@@ -67,7 +67,7 @@ spec:
       securityContext:
         runAsUser: 1000
         runAsNonRoot: true
-        fsGroup: {{ default 1001 .Values.fsGroupGid }}
+        fsGroup: {{ default 1001 .Values.integrationServer.fsGroupGid }}
       containers:
         - name: {{ $deploymentName }}
           image: "{{ .Values.image.repository.aceonly }}:{{ .Values.image.tag }}"
@@ -137,6 +137,10 @@ spec:
               mountPath: "/home/aceuser/initial-config/serverconf"
             - name: setdbparms
               mountPath: "/home/aceuser/initial-config/setdbparms"
+            - name: extensions
+              mountPath: "/home/aceuser/initial-config/extensions"
+            - name: agent
+              mountPath: "/home/aceuser/initial-config/agent"
             {{- if .Values.contentServerURL }}
             - name: contentservertls
               mountPath: "/home/aceuser/ssl"
@@ -199,6 +203,26 @@ spec:
             - key: adminusers
               path: admin-users.txt
         {{- end }}
+        - name: extensions
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: extensions
+              path: extensions.zip
+        - name: agent
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: agentc
+              path: agentc.json
+            - key: agentp
+              path: agentp.json
+            - key: agentx
+              path: agentx.json
+            - key: switch
+              path: switch.json
         {{- if .Values.integrationServer.keystoreKeyNames }}
         # Marked as optional as the passphrase is not required and may not be provided
         - name: keystore
