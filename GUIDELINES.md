@@ -135,13 +135,15 @@ All charts must pass the `helm lint` verification tool with no errors.
 
 ## IBM Helm chart best practices
 
-Similar to the Helm CLI linter, IBM has created a linter specifically for community helm charts.  There are three levels of messages produced by the linter:  
+Similar to the Helm CLI linter, IBM has created a linter specifically for community helm charts.  There are four levels of messages produced by the linter:  
 
-`Information`: Style or cosmetic recommendations; not required for certification.
+`Information`: Style or cosmetic recommendations; not required.
 
-`Warning`: These will not prevent successful deployment but may yield inconsistencies on the platform.  Strongly recommended to address but not strictly required for certification.
+`Warning`: These will not prevent successful deployment but may yield inconsistencies on the platform.  Strongly recommended to address but not strictly required.
 
-`Error`: Error level checks are must-fix for certification.
+`Error`: Error level checks are must-fix.
+
+`Review`: Review items are handled on a case-by-case basis.
 
 The linter is run by IBM against the chart in the pull request and then output is provided as a comment.
 
