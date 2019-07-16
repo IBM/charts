@@ -1,6 +1,6 @@
 ###############################################################################
 # Licensed Materials - Property of IBM.
-# Copyright IBM Corporation 2018. All Rights Reserved.
+# Copyright IBM Corporation 2019. All Rights Reserved.
 # U.S. Government Users Restricted Rights - Use, duplication or disclosure
 # restricted by GSA ADP Schedule Contract with IBM Corp.
 #
@@ -10,28 +10,28 @@
 image:
   __metadata:
     label: "Image"
-    description: "Specify Docker image"
+    description: "Stored instance of a container that holds a set of software needed to run an application."
   repository:
     __metadata:
       name: "repository"
-      label: "Repository"
-      description: "Docker image repository."
+      label: "WebSphere traditional image repository"
+      description: "Docker registry to pull WebSphere traditional image from."
       type: "string"
       immutable: false
       required: true
   tag:
     __metadata:
       name: "tag"
-      label: "Tag"
-      description: "Docker image tag"
+      label: "Image tag"
+      description: "A tag is a label applied to a image in a repository. Tags are how various images in a repository are distinguished from each other."
       type: "string"
       immutable: false
       required: true
   pullPolicy:
     __metadata:
       name: "pullPolicy"
-      label: "Docker image pull policy"
-      description: "Defaults to 'Always' when the latest tag is specified. Otherwise the default is 'IfNotPresent'."
+      label: "Image pull policy"
+      description: "The default pull policy is IfNotPresent which causes the Kubelet to skip pulling an image if it already exists."
       type: "string"
       immutable: false
       required: true
@@ -42,12 +42,20 @@ image:
         value: "Never"
       - label: "IfNotPresent"
         value: "IfNotPresent"
+  pullSecrets:
+    __metadata:
+      name: "pullSecrets"
+      label: "WebSphere traditional image pull secrets"
+      description: "If using registries that require authentication, the names of the secret containing credentials"
+      type: "string"
+      required: false
   extraEnvs:
     __metadata:
       label: "Additional Environment Variables"
       description: "Additional environment variables that will be set."
       type: "string"
       immutable: false
+      required: false
   extraVolumeMounts:
     __metadata:
       label: "Extra Volume Mounts"
@@ -63,7 +71,6 @@ image:
       immutable: false
       required: false
 
-# Deployment     
 deployment:
   __metadata:
     label: "Deployment"
@@ -84,7 +91,7 @@ deployment:
       type: "string"
       immutable: false
       required: false
-# Pod
+
 pod:
   __metadata:
     label: "Pod"
@@ -129,36 +136,36 @@ service:
     __metadata:
       name: "type"
       label: "Service Type"
-      description: "Kubernetes service type exposing ports."
+      description: "An API object that describes how to access applications, such as a set of Pods, and can describe ports and load-balancers."
       type: "string"
       immutable: false
       required: true
       options:
-        - label: "Cluster IP"
+        - label: "ClusterIP"
           value: "ClusterIP"
-        - label: "Node Port"
+        - label: "NodePort"
           value: "NodePort"
   name:
     __metadata:
       name: "name"
       label: "Name"
-      description: "Kubernetes service name for HTTP."
+      description: "The name of the service."
       type: "string"
       immutable: false
-      required: true
+      required: false
   port:
     __metadata:
       name: "port"
-      label: "Port"
-      description: "The abstracted service port for HTTP, which other pods use to access this service."
+      label: "HTTP Port"
+      description: "The HTTP port that the container will expose."
       type: "number"
       immutable: false
       required: true
   targetPort:
     __metadata:
       name: "targetPort"
-      label: "Target port"
-      description: "Secured HTTP port the container accepts traffic on. Ensure that it matches the port exposed by the container."
+      label: "HTTP Target Port"
+      description: "A service can map an incoming HTTP port to the targetPort."
       type: "string"
       immutable: false
       required: false
@@ -187,7 +194,7 @@ ingress:
     __metadata:
       name: "enabled"
       label: "Enable Ingress"
-      description: "Specifies whether to enable Ingress."
+      description: "Specifies whether to use Ingress."
       type: "boolean"
       immutable: false
       required: true
@@ -195,7 +202,7 @@ ingress:
     __metadata:
       name: "rewriteTarget"
       label: "Rewrite target"
-      description: "Specifies target URI where traffic must be redirected."
+      description: "In some scenarios the exposed URL in the backend service differs from the specified path in the Ingress rule. Without a rewrite any request will return 404. To circumvent this, you can set rewrite target to the path expected by the service."
       type: "string"
       immutable: false
       required: true
@@ -203,26 +210,10 @@ ingress:
     __metadata:
       name: "path"
       label: "Path"
-      description: "Specifies path for the Ingress HTTP rule."
+      description: "Path must match the content of an incoming request before the loadbalancer directs traffic to the backend."
       type: "string"
       immutable: false
       required: true
-  annotations:
-    __metadata:
-      name: "annotations"
-      label: "Ingress Annotations"
-      description: "Custom Ingress annotations"
-      type: "string"
-      immutable: false
-      required: false
-  labels:
-    __metadata:
-      name: "labels"
-      label: "Ingress Label"
-      description: "Custom Ingress labels"
-      type: "string"
-      immutable: false
-      required: false
   hosts:
     __metadata:
       name: "hosts"
@@ -239,6 +230,22 @@ ingress:
       type: "string"
       immutable: false
       required: false
+  annotations:
+    __metadata:
+      name: "annotations"
+      label: "Ingress Annotations"
+      description: "Custom Ingress annotations"
+      type: "string"
+      immutable: false
+      required: false
+  labels:
+    __metadata:
+      name: "labels"
+      label: "Ingress Label"
+      description: "Custom Ingress labels"
+      type: "string"
+      immutable: false
+      required: false
 
 configProperties:
   __metadata:
@@ -252,51 +259,6 @@ configProperties:
       type: "string"
       immutable: false
       required: false
-replicaCount:
-  __metadata:
-    name: "replicaCount"
-    label: "Number of replicas"
-    description: "The number of desired replica pods that run simultaneously."
-    type: "number"
-    immutable: false
-    required: true
-
-autoscaling:
-  __metadata:
-    label: "Autoscaling"
-    description: "Automatically scale pods"
-  enabled:
-    __metadata:
-      name: "enabled"
-      label: "Enable automatic scaling"
-      description: "Enables a Horizontal Pod Autoscaler. Enabling this field disables the 'replicaCount' field."
-      type: "boolean"
-      immutable: false
-      required: true
-  targetCPUUtilizationPercentage:
-    __metadata:
-      name: "targetCPUUtilizationPercentage"
-      label: "Target CPU utilization percentage"
-      description: "Target average CPU utilization (represented as a percentage of requested CPU) over all the pods."
-      type: "number"
-      immutable: false
-      required: true
-  minReplicas:
-    __metadata:
-      name: "minReplicas"
-      label: "Minimum number of replicas"
-      description: "Lower limit for the number of pods that can be set by the autoscaler."
-      type: "number"
-      immutable: false
-      required: true
-  maxReplicas:
-    __metadata:
-      name: "maxReplicas"
-      label: "Maximum number of replicas"
-      description: "Upper limit for the number of pods that can be set by the autoscaler. It cannot be lower than 'minReplicas'."
-      type: "number"
-      immutable: false
-      required: true
 
 readinessProbe:
   __metadata:
@@ -335,6 +297,7 @@ readinessProbe:
         type: "string"
         immutable: false
         required: false
+
 livenessProbe:
   __metadata:
     label: "Liveness Probe"
@@ -373,113 +336,6 @@ livenessProbe:
         immutable: false
         required: false
 
-resources:
-  __metadata:
-    label: "Resources"
-    description: "Configure resource constraints"
-  constraints:
-    enabled:
-      __metadata:
-        name: "constraints.enabled"
-        label: "Enable constraints"
-        description: "Specifies whether the resource constraints are enabled."
-        type: "boolean"
-        immutable: false
-        required: true
-  limits:
-    cpu:
-      __metadata:
-        name: "limits.cpu"
-        label: "Maximum CPU"
-        description: "Describes the maximum amount of CPU allowed."
-        type: "string"
-        immutable: false
-        required: false
-    memory:
-      __metadata:
-        name: "limits.memory"
-        label: "Maximum memory"
-        description: "Describes the maximum amount of memory allowed."
-        type: "string"
-        immutable: false
-        required: false
-  requests:
-    cpu:
-      __metadata:
-        name: "requests.cpu"
-        label: "Minimum CPU"
-        description: "Describes the minimum amount of CPU required. Corresponds to 'requests.cpu' in Kubernetes."
-        type: "string"
-        immutable: false
-        required: false
-    memory:
-      __metadata:
-        name: "requests.memory"
-        label: "Minimum memory"
-        description: "Describes the minimum amount of memory required. Corresponds to 'requests.memory' in Kubernetes."
-        type: "string"
-        immutable: false
-        required: false
-
-## Arch metadata
-arch:
-  __metadata:
-    label: "Architecture scheduling preferences"
-    description: "Specify architecture scheduling preferences"
-  amd64:
-    __metadata:
-      name: "amd64"
-      label: "amd64 scheduling preference"
-      description: "Architecture preference for amd64 worker node."
-      type: "string"
-      immutable: false
-      required: true
-      options:
-      - label: "0 - Do not use"
-        value: "0 - Do not use"
-      - label: "1 - Least preferred"
-        value: "1 - Least preferred"
-      - label: "2 - No preference"
-        value: "2 - No preference"
-      - label: "3 - Most preferred"
-        value: "3 - Most preferred"
-
-  ppc64le:
-    __metadata:
-      name: "ppc64le"
-      label: "ppc64le scheduling preference"
-      description: "Architecture preference for ppc64le worker node."
-      type: "string"
-      immutable: false
-      required: true
-      options:
-      - label: "0 - Do not use"
-        value: "0 - Do not use"
-      - label: "1 - Least preferred"
-        value: "1 - Least preferred"
-      - label: "2 - No preference"
-        value: "2 - No preference"
-      - label: "3 - Most preferred"
-        value: "3 - Most preferred"
-
-  s390x:
-    __metadata:
-      name: "s390x"
-      label: "s390x scheduling preference"
-      description: "Architecture preference for s390x worker node."
-      type: "string"
-      immutable: false
-      required: true
-      options:
-      - label: "0 - Do not use"
-        value: "0 - Do not use"
-      - label: "1 - Least preferred"
-        value: "1 - Least preferred"
-      - label: "2 - No preference"
-        value: "2 - No preference"
-      - label: "3 - Most preferred"
-        value: "3 - Most preferred"
-
 # Persistence
 persistence:
   __metadata:
@@ -505,16 +361,15 @@ persistence:
     __metadata:
       name: "fsGroupGid"
       label: "File system group ID"
-      description: "The group ID added to the containers with persistent storage to allow access. Volumes that support ownership management must be owned and writable by this group ID."
-      type: "string"
+      description: "The file system group ID to use for volumes that support ownership management"
+      type: "number"
       immutable: false
       required: false
-      validation: "(^[0-9]+$)"
   useDynamicProvisioning:
     __metadata:
       name: "useDynamicProvisioning"
       label: "Use dynamic provisioning"
-      description: "If true, the persistent volume claim will use the 'storageClassName' to bind the volume. Otherwise, the selector will be used for the binding process."
+      description: "Select this checkbox to allow the cluster to automatically provision new storage resource and create PersistentVolume objects."
       type: "boolean"
       immutable: false
       required: true
@@ -553,7 +408,125 @@ logs:
     __metadata:
       name: "persistLogs"
       label: "Persist logs"
-      description: "When true, the logs will be persisted to the volume bound according to the persistence parameters."
+      description: "Select this checkbox to store server logs on a persistent volume so that the data is preserved if the pod is stopped."
       type: "boolean"
       immutable: false
       required: true
+
+replicaCount:
+  __metadata:
+    name: "replicaCount"
+    label: "Number of replicas"
+    description: "The number of desired replica pods that run simultaneously."
+    type: "number"
+    immutable: false
+    required: true
+
+autoscaling:
+  __metadata:
+    label: "Autoscaling"
+    description: "Automatically scale pods"
+  enabled:
+    __metadata:
+      name: "enabled"
+      label: "Enable automatic scaling"
+      description: "Specifies whether a horizontal pod autoscaler (HPA) is deployed. Note that enabling this field disables the Number of replicas field."
+      type: "boolean"
+      immutable: false
+      required: true
+  targetCPUUtilizationPercentage:
+    __metadata:
+      name: "targetCPUUtilizationPercentage"
+      label: "Target CPU utilization percentage"
+      description: "Target average CPU utilization (represented as a percentage of requested CPU) over all the pods."
+      type: "number"
+      immutable: false
+      required: true
+  minReplicas:
+    __metadata:
+      name: "minReplicas"
+      label: "Minimum number of replicas"
+      description: "Lower limit for the number of pods that can be set by the autoscaler."
+      type: "number"
+      immutable: false
+      required: true
+  maxReplicas:
+    __metadata:
+      name: "maxReplicas"
+      label: "Maximum number of replicas"
+      description: "Upper limit for the number of pods that can be set by the autoscaler.  Cannot be lower than the minimum number of replicas."
+      type: "number"
+      immutable: false
+      required: true
+
+resources:
+  __metadata:
+    label: "Resources"
+    description: "Resource quotas"
+  constraints:
+    enabled:
+      __metadata:
+        name: "constraints.enabled"
+        label: "Enable constraints"
+        description: "Specifies whether the resource constraints in this Helm chart are enabled."
+        type: "boolean"
+        immutable: false
+        required: true
+  limits:
+    cpu:
+      __metadata:
+        name: "limits.cpu"
+        label: "CPU limit"
+        description: "The upper limit of CPU core. Specify integers, fractions (e.g. 0.5), or millicores values(e.g. 100m, where 100m is equivalent to .1 core)."
+        type: "string"
+        immutable: false
+        required: false
+    memory:
+      __metadata:
+        name: "limits.memory"
+        label: "Memory limit"
+        description: "The memory upper limit in bytes. Specify integers with suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki."
+        type: "string"
+        immutable: false
+        required: false
+  requests:
+    cpu:
+      __metadata:
+        name: "requests.cpu"
+        label: "CPU request"
+        description: "The minimum required CPU core. Specify integers, fractions (e.g. 0.5), or millicore values(e.g. 100m, where 100m is equivalent to .1 core)."
+        type: "string"
+        immutable: false
+        required: false
+    memory:
+      __metadata:
+        name: "requests.memory"
+        label: "Memory request"
+        description: "The minimum memory in bytes. Specify integers with one of these suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki."
+        type: "string"
+        immutable: false
+        required: false
+
+## Arch metadata
+arch:
+  __metadata:
+    label: "Architecture scheduling preferences"
+    description: "Specify architecture scheduling preferences."
+
+  amd64:
+    __metadata:
+      name: "amd64"
+      label: "Intel 64-bit architecture preference for target worker node"
+      description: "Scheduling priority for using the Intel 64-bit architecture for worker nodes."
+      type: "string"
+      immutable: true
+      required: true
+      options:
+      - label: "0 - Do not use"
+        value: "0 - Do not use"
+      - label: "1 - Least preferred"
+        value: "1 - Least preferred"
+      - label: "2 - No preference"
+        value: "2 - No preference"
+      - label: "3 - Most preferred"
+        value: "3 - Most preferred"
