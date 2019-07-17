@@ -1,10 +1,7 @@
 
-# What’s new in Chart Version 1.2.0
+# What’s new in Chart Version 1.3.0
 
-1. Added support for ingress hosts.
-1. Added support for securing ingress by specifying a secret that contains a TLS private key and certificate.
-1. Added security extension points for pod and image.
-1. Updated Kibana dashboards.
+1. Added support for IBM Cloud Private with OpenShift.
 
 ## Breaking Changes
 
@@ -24,7 +21,7 @@
 Please refer to README.md
 
 ## Limitations
-
+* Currently only AMD64 (or INTEL 64bit) architecture is supported
 * Redirects (30x):
 
   When there are server initiated redirects the `Location` header might use container port (eg. 9443) instead of Ingress 
@@ -40,7 +37,7 @@ Please refer to README.md
   
 ## Known Issues
 
-* Upgrading to version 1.2.0:
+* Upgrading to version 1.3.0:
    
   Currently provided Docker images are run using user with UID of `1001` (was) and GID of `0` (root). To avoid other issues please make sure you are using latest version of base image.
 
@@ -50,10 +47,13 @@ Please refer to README.md
 
   If your pod fails to start after upgrade and your Docker image is still running as UID `1000` then set `pod.security.securityContext.runAsUser` to `1000` during upgrade.
 
+  Istio sidecar injection is not supported in namespaces associated with [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp#podsecuritypolicy-reference), [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc#securitycontextconstraint-reference) or the custom ones defined in the README file. To get around this problem, you would need to associate your namespace with [`ibm-privileged-psp`](https://ibm.biz/cpkspec-psp#podsecuritypolicy-reference) or [`ibm-privileged-scc`](https://ibm.biz/cpkspec-scc#securitycontextconstraint-reference). This because, sidecar pods must have the `NET_ADMIN` capability allowed.
+
 ## Version History
 
 | Chart | Date          | IBM Cloud Private Supported | Details                      |
 | ----- | ------------- | --------------------------- | ---------------------------- |
+| 1.3.0 | JUL 15, 2019   | >=3.1.0                     | Added support for IBM Cloud Private with OpenShift |
 | 1.2.0 | APR 19, 2019   | >=3.1.0                     | Added support for ingress hosts and secret name; Updated Kibana dashboards; Added security extension points for pod and image |
 | 1.1.0 | JAN 31, 2019   | >=3.1.0                     | Added support for more configurable parameters; Added Kibana dashboards |
 | 1.0.0 | NOV 16, 2018   | >=3.1.0                     | Initial release              |

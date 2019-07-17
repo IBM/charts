@@ -3,16 +3,29 @@
 #################################################################
 # Licensed Materials - Property of IBM
 # 5725-S17 IBM IoT MessageSight
-# (C) Copyright IBM Corp. 2018.  All Rights Reserved.
+# (C) Copyright IBM Corp. 2019.  All Rights Reserved.
 #
 # US Government Users Restricted Rights - Use, duplication or
 # disclosure restricted by GSA ADP Schedule Contract with
 # IBM Corp.
 #################################################################
 #
-# This script can be run after all releases are deleted from the cluster.
+# You need to run this once per cluster
+#
+# Example:
+#     ./deleteSecurityClusterPrereqs.sh
 #
 
-# Delete the PodSecurityPolicy and ClusterRole for all releases of this chart.
-kubectl delete -f ibm-websphere-traditional-psp.yaml
-kubectl delete -f ibm-websphere-traditional-cr.yaml
+. ../../common/kubhelper.sh
+
+
+if supports_scc; then
+  echo "Removing the SCC..."
+  kubectl delete -f ../../pre-install/clusterAdministration/ibm-websphere-traditional-scc.yaml
+fi
+
+if supports_psp; then
+    echo "Removing the PSP and ClusterRole..."
+    kubectl delete -f ../../pre-install/clusterAdministration/ibm-websphere-traditional-cr.yaml
+    kubectl delete -f ../../pre-install/clusterAdministration/ibm-websphere-traditional-psp.yaml
+fi
