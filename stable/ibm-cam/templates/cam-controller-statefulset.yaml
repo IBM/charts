@@ -1,0 +1,143 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if .Values.install.controller }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cam-controller-manager
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+    app: {{ template "fullname" . }}
+    release: "{{ .Release.Name }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+  namespace: {{ .Values.service.namespace }}
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      controller-tools.k8s.io: "1.0"
+  serviceName: cam-controller-manager-service
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        controller-tools.k8s.io: "1.0"
+        app: {{ template "fullname" . }}
+        release: "{{ .Release.Name }}"
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: "Cloud Automation Manager"
+        productID: "{{ .Values.global.id.productID }}"
+        productVersion: "{{ .Chart.AppVersion }}"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
+      terminationGracePeriodSeconds: 10
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+      - name: manager
+        args:
+        - --alsologtostderr=true
+        - --v=1
+        - --log_dir=/tmp/logs
+        envFrom:
+        - configMapRef:
+            name: common-config
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CAM_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.camAPI.camSecret.secretName }}
+              key: token
+        - name: SECRET_NAME
+          value: cam-controller-webhook-server-secret
+        image: "{{ .Values.image.repository }}icam-controller:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: Always 
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - MKNOD
+        ports:
+        - name: liveness-port
+          containerPort: 39002
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: liveness-port
+            scheme: HTTPS
+          initialDelaySeconds: 300
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: liveness-port
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 20
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /tmp/cam
+          name: cert
+          readOnly: true
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+      volumes:
+      - name: {{ .Values.camLogsPV.name }}
+      {{- if .Values.camLogsPV.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.camLogsPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camLogsPV.persistence.existingClaimName }}
+        {{- else }}
+          claimName:  {{ .Values.camLogsPV.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: {{ .Values.camAPI.certificate.certName }}
+{{- end }}

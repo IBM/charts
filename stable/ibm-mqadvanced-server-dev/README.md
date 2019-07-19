@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This chart deploys a single IBM® MQ Advanced for Developers version 9.1.2 server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
+This chart deploys a single IBM® MQ Advanced for Developers version 9.1.3 server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
 
 ## Chart Details
 
@@ -14,7 +14,7 @@ This chart will do the following:
 ## Prerequisites
 
 * Kubernetes 1.11.0 or greater, with beta APIs enabled.
-* You must create a [Secret](https://kubernetes.io/docs/concepts/configuration/secret/) in the target namespace.  This must contain the 'admin' user password and optionally the 'app' user password to use for messaging.
+* You must create a [Secret](https://kubernetes.io/docs/concepts/configuration/secret/) in the target namespace (see the **Creating a Secret to store queue manager credentials** section).  This must contain the 'admin' user password and optionally the 'app' user password to use for messaging.
 * If persistence is enabled (see the **configuration** section), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
 * If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191).
 * Operator is the minimum role required to install this chart.
@@ -142,6 +142,61 @@ This chart also defines a custom SecurityContextConstraints which can be used to
   As team admin the namespace scoped pre-install script is located at:
   - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
 
+### Creating a Secret to store queue manager credentials 
+
+When using the IBM MQ Advanced for Developers certified container, you must create a Secret in the target namespace. This must contain the 'admin' user password and optionally the 'app' user password to use for messaging.
+
+This can be achieved either through the ICP Console or on the command line using kubectl.
+
+#### Before you begin
+
+The secret will be a key: value pair with the value being a base64 encoded password string. Before you begin, convert your admin user password, and optionally your app user password, to base64 as follows:
+
+```
+$ echo -n 'my-admin-password' | base64  
+bXktYWRtaW4tcGFzc3dvcmQ=
+```
+```
+$ echo -n 'my-app-password' | base64  
+bXktYXBwLXBhc3N3b3Jk
+```
+
+#### Creating a Secret through the ICP Console
+
+- From the ICP Console, enter the left side navigation view and navigate to `Configuration > Secrets`
+- Click the `Create Secret` button
+- Enter a name for your Secret, such as `mq-secret`
+- Select the namespace where the chart is to be installed
+- Navigate to the `Data` tab and enter a name for your password, such as `adminPassword`, and enter your base64 encoded password
+- Optionally, to add an app user password, click the `Add Data` button and repeat step 
+
+#### Creating a Secret using kubectl 
+
+Before you begin you should make sure you have a command prompt open which has been configured to access your ICP cluster at your target namespace. You will need kubectl in order to access your Queue Manager: 
+
+```
+$ cloudctl login https://<Cluster_IP>:8443
+```
+
+1. Create secret file `mq-secret.yaml` containing your base64 encoded password(s) as follows:
+
+```
+apiVersion: v1
+kind: Secret
+metadata:  
+    name: mq-secret
+type: Opaque
+data:  
+    adminPassword: bXktYWRtaW4tcGFzc3dvcmQ=
+    appPassword: bXktYXBwLXBhc3N3b3Jk
+```
+
+2. Create the secret:
+
+```
+$ kubectl create -f mq-secret.yaml
+```
+
 ## Resources Required
 
 This chart uses the following resources by default:
@@ -164,7 +219,7 @@ This example assumes that you have a local Helm repository configured, called `m
 
 This example also assumes that you have created a Secret `mysecret`, containing a key `adminPassword` with your admin password.  
 
-This command accepts the [IBM MQ Advanced for Developers license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-AVCJ4S) and deploys an MQ Advanced for Developers server on the Kubernetes cluster. The **configuration** section lists the parameters that can be configured during installation.
+This command accepts the [IBM MQ Advanced for Developers license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-BBZHCQ) and deploys an MQ Advanced for Developers server on the Kubernetes cluster. The **configuration** section lists the parameters that can be configured during installation.
 
 > **Tip**: See all the resources deployed by the chart using `kubectl get all -l release=foo`
 
@@ -186,7 +241,7 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | ------------------------------- | --------------------------------------------------------------- | ------------------------------------------ |
 | `license`                       | Set to `accept` to accept the terms of the IBM license          | `"not accepted"`                           |
 | `image.repository`              | Image full name including repository                            | `ibmcom/mq`                                |
-| `image.tag`                     | Image tag                                                       | `9.1.2.0-UBI`                              |
+| `image.tag`                     | Image tag                                                       | `9.1.3.0`                                  |
 | `image.pullPolicy`              | Image pull policy                                               | `IfNotPresent`                             |
 | `image.pullSecret`              | Image pull secret, if you are using a private Docker registry   | `nil`                                      |
 | `arch.amd64`                    | Preference for installation on worker nodes with the `amd64` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler |
@@ -265,7 +320,7 @@ The MQ Advanced for Developers image includes the MQ web server.  The web server
 
 ### Supplying certificates to be used for TLS
 
-The `pki.trust` and `pki.keys` allow you to supply details of Kubernetes secrets that contain TLS certificates. By doing so the TLS certificates will be imported into the container at runtime and MQ will be configured to use them. You can supply both Certificiates which contain only a public key and certificiates that contain both public and private keys. 
+The `pki.trust` and `pki.keys` allow you to supply details of Kubernetes secrets that contain TLS certificates. By doing so the TLS certificates will be imported into the container at runtime and MQ will be configured to use them. You can supply both certificates which contain only a public key and certificates that contain both public and private keys.
 
 If you supply invalid files or invalid YAML objects then the container will terminate with an appropriate termination message. The next 2 sections will detail the requirements for supplying each type of certificate.
 
@@ -286,7 +341,7 @@ The format of the YAML objects for `pki.keys` value is as follows:
 
 or alternatively in a single line you can supply the following: `- name: mykeys, secret: {secretName: mykeysecret, items: [tls.key, tls.crt, ca.crt]}`
 
-`name` must be set to a lowercase alphanumeric value and will be used as the label for the certificate in the keystore and queue manager. 
+`name` must be set to a lowercase alphanumeric value and will be used as the label for the certificate in the keystore and queue manager.
 
 `secret.secretName` must match the name of a Kubernetes secret that contains the TLS certificates you wish to import
 
@@ -294,10 +349,10 @@ or alternatively in a single line you can supply the following: `- name: mykeys,
 
 To supply the YAML objects when deploying via Helm you should use the following: `--set pki.keys[0].name=mykeys,pki.keys[0].secret.secretName=mykeysecret,pki.keys[0].secret.items[0]=tls.key,pki.keys[0].secret.items[1]=tls.crt,pki.keys[0].secret.items[2]=ca.crt`
 
-If you supply multiple YAML objects then the queue manager will use the first object choosen by the label name alphabetically. For example if you supply the following labels: `alabel`, `blabel` and `clabel`. The queue manager and MQ Console will use the certificate with the label `alabel` for it's identity. In this queue manager this can be changed by running the MQSC command: `ALTER QMGR CERTLABL('<new label>')`.
+If you supply multiple YAML objects then the queue manager will use the first object chosen by the label name alphabetically. For example if you supply the following labels: `alabel`, `blabel` and `clabel`. The queue manager and MQ Console will use the certificate with the label `alabel` for its identity. In this queue manager this can be changed by running the MQSC command: `ALTER QMGR CERTLABL('<new label>')`.
 
 #### Supplying certficates which contain only the public key
-When supplying a Kubernetes secret that contains a certificate file with only the public key you must ensure that the secret contains files that have the extension `.crt`. For example: `tls.crt` and `ca.crt`. 
+When supplying a Kubernetes secret that contains a certificate file with only the public key you must ensure that the secret contains files that have the extension `.crt`. For example: `tls.crt` and `ca.crt`.
 
 The format of the YAML objects for `pki.trust` value is as follows:
 
@@ -316,7 +371,7 @@ or alternatively in a single line you can supply the following: `- secret: {secr
 
 To supply the YAML objects when deploying via Helm you should use the following: `--set pki.trust[0].secret.secretName=mycertificate,pki.trust[0].secret.items[0]=tls.crt`
 
-If you supply multiple YAML objects then all of the certificates specified will be added into the queue managers and MQ Console Truststore.
+If you supply multiple YAML objects then all of the certificates specified will be added into the queue manager and MQ Console Truststores.
 
 
 ## Copyright
