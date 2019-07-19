@@ -145,9 +145,9 @@ spec:
                 name: oauth-client-map
                 key: PROXY_IP
           - name: DISCOVERY_SERVER_URL
-            value: http://cam-bpd-cds:7575
+            value: https://cam-bpd-cds:7575
           - name: MODULE_SERVICE_URL
-            value: http://cam-bpd-mds:7578
+            value: https://cam-bpd-mds:7578
           - name: POD_NAME
             valueFrom:
               fieldRef:
@@ -159,10 +159,24 @@ spec:
               configMapKeyRef:
                 name: oauth-client-map
                 key: MASTER_IP
-          - name: ORPHEUS_IDENTITY_API_URL
-            value: https://$(ICP_MASTER_IP):8443/idprovider
+          - name: ICP_PORT
+            valueFrom:
+              configMapKeyRef:
+                name: common-config
+                key: ICP_PORT
+          - name: ORPHEUS_IDENTITY_ENDPOINT
+            valueFrom:
+              configMapKeyRef:
+                name: common-config
+                key: ORPHEUS_TENANT_URL
           - name: ORPHEUS_IDENTITY_URL
-            value: https://$(ICP_MASTER_IP):8443/idprovider
+            {{- if ne .Values.platform "icp"}}
+            value: $(ORPHEUS_IDENTITY_ENDPOINT)/api
+            {{- else }}
+            value: https://$(ICP_MASTER_IP):$(ICP_PORT)/idprovider
+            {{- end }}
+          - name: ORPHEUS_IDENTITY_API_URL
+            value: $(ORPHEUS_IDENTITY_URL)
           - name: wlpClientId
             valueFrom:
               secretKeyRef:
@@ -183,7 +197,20 @@ spec:
           - name: wlpCallbackUrl
             value: /cam/auth/liberty/callback
           - name: bpdCallbackUrl
+            {{- if ne .Values.platform "icp"}}
+            value: /landscaper/mcmp/callback
+            {{- else }}
             value: /landscaper/oauth/callback
+            {{- end }}
+          - name: PLATFORM
+            valueFrom:
+              configMapKeyRef:
+                name: common-config
+                key: PLATFORM
+          {{- if eq .Values.platform "mcmp" }}
+          - name: MCMP_AUTHENTICATION_URL
+            value: {{ .Values.mcmp.authenticationUrl }}
+          {{- end }}
 {{- if .Values.proxy.useProxy }}
           - name: HTTPS_PROXY
             valueFrom:

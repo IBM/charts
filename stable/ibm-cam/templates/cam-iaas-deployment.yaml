@@ -206,12 +206,26 @@ spec:
             configMapKeyRef:
               name: oauth-client-map
               key: MASTER_IP
+        - name: ICP_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: common-config
+              key: ICP_PORT
         - name: ICP_ENDPOINT
-          value: https://$(ICP_MASTER_IP):8443
-        - name: ORPHEUS_IDENTITY_API_URL
-          value: $(ICP_ENDPOINT)/idprovider
+          value: https://$(ICP_MASTER_IP):$(ICP_PORT)
+        - name: ORPHEUS_IDENTITY_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: common-config
+              key: ORPHEUS_TENANT_URL
         - name: ORPHEUS_IDENTITY_URL
+          {{- if ne .Values.platform "icp"}}
+          value: $(ORPHEUS_IDENTITY_ENDPOINT)/api
+          {{- else }}
           value: $(ICP_ENDPOINT)/idprovider
+          {{- end }}
+        - name: ORPHEUS_IDENTITY_API_URL
+          value: $(ORPHEUS_IDENTITY_URL)
         - name: PLUGIN_ENDPOINTURL_plugin_terraform
           value: https://cam-provider-terraform:7000/api
         - name: PLUGIN_ENDPOINTURL_plugin_helm
@@ -219,7 +233,9 @@ spec:
         - name: PLUGIN_ENDPOINTURL_plugin_ico
           value: https://cam-provider-ico:7020/api
         - name: PLUGIN_ENDPOINTURL_plugin_bpm
-          value: https://cam-provider-bpm:7030/api 
+          value: https://cam-provider-bpm:7030/api
+        - name: PLUGIN_ENDPOINTURL_plugin_broker
+          value: https://cam-provider-broker:7050/api   
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -242,6 +258,13 @@ spec:
           value: "true"
         {{- else }}
         - name: ACTIVATE_ICO
+          value: "false"
+        {{- end }}
+        {{- if .Values.camBrokerProvider.replicaCount }}
+        - name: ACTIVATE_BROKER
+          value: "true"
+        {{- else }}
+        - name: ACTIVATE_BROKER
           value: "false"
         {{- end }} 
         - name: ICP_PROXY_IP
@@ -325,11 +348,21 @@ spec:
           value: "{{ .Values.global.offline }}"
 {{- if .Values.global.audit }}
       - name: cam-iaas-audit
+{{- if .Values.global.legacyAudit }}
         image: "{{ .Values.auditService.image.repository }}icp-audit-service:{{ .Values.auditService.image.tag }}"
+{{- else }}
+        image: "{{ .Values.auditService.image.repository }}icp-audit-service-nr:{{ .Values.auditService.image.tag }}"
+{{- end }}
         imagePullPolicy: {{ .Values.auditService.image.pullPolicy }}
+{{- if .Values.global.legacyAudit }}
         securityContext:
           runAsNonRoot: false
           runAsUser: 0
+{{- else }}
+        securityContext:
+          fsGroup: 1000
+          runAsUser: 1000
+{{- end }}
         resources:
 {{ toYaml .Values.auditService.resources | indent 10 }}
         env:
@@ -357,7 +390,11 @@ spec:
             command:
             - sh
             - -c
+{{- if .Values.global.legacyAudit }}            
             - "service cron status"
+{{- else }}
+            - "ps -ef | grep python"
+{{- end }}
           initialDelaySeconds: 30
           timeoutSeconds: 5
         readinessProbe:
@@ -365,7 +402,11 @@ spec:
             command:
             - sh
             - -c
+{{- if .Values.global.legacyAudit }}            
             - "service cron status"
+{{- else }}
+            - "ps -ef | grep python"
+{{- end }}
           initialDelaySeconds: 5
           timeoutSeconds: 1
 {{- end }}
