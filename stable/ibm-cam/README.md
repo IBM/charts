@@ -6,33 +6,33 @@
 
 # Cloud Automation Manager Helm Chart
 
-IBM Cloud Automation Manager is a cloud management solution on IBM Cloud Private (ICP) for deploying cloud infrastructure in multiple clouds with an optimized user experience.
+IBM Cloud Automation Manager is a cloud management solution for deploying cloud infrastructure in multiple clouds with an optimized user experience.
 
 ## Introduction
 
 IBM Cloud Automation Manager uses open source Terraform to manage and deliver cloud infrastructure as code. Cloud infrastructure delivered as code is reusable, able to be placed under version control, shared across distributed teams, and it can be used to easily replicate environments.
 
-The Cloud Automation Manager content library comes pre-populated with sample templates to help you get started quickly. Use the sample templates as is or customize them as needed.  A Chef runtime environment can also be deployed using CAM for more advanced application configuration and deployment.
+The IBM Cloud Automation Manager content library comes pre-populated with sample templates to help you get started quickly. Use the sample templates as is or customize them as needed.  A Chef runtime environment can also be deployed using IBM Cloud Automation Manager for more advanced application configuration and deployment.
 
-With Cloud Automation Manager, you can provision cloud infrastructure and accelerate application delivery into IBM Cloud, Amazon EC2, VMware vSphere, VMware NSXv, VMware NSX-T, Google Cloud, Microsoft Azure, IBM PureApplication, OpenStack and Huawei cloud environments with a single user experience.
+With IBM Cloud Automation Manager, you can provision cloud infrastructure and accelerate application delivery into IBM Cloud, Amazon EC2, VMware vSphere, VMware NSXv, VMware NSX-T, Google Cloud, Microsoft Azure, IBM PureApplication, OpenStack and Huawei cloud environments with a single user experience.
 
-You can spend more time building applications and less time building environments when cloud infrastructure is delivered with automation. You are able to get started fast with pre-built infrastructure from the Cloud Automation Manager library.
+You can spend more time building applications and less time building environments when cloud infrastructure is delivered with automation. You are able to get started fast with pre-built infrastructure from the IBM Cloud Automation Manager library.
 
 ## Chart Details
 
-This chart deploys IBM Cloud Automation Manager as a number of deployments, services and an ingress.
+This chart deploys IBM Cloud Automation Manager as a number of deployments, services and a security policy.  Images are based on the Universal Base Image (UBI) and are supported to run on Red Hat OpenShift Container Platform.  
 
 ## Prerequisites
 
-IBM Cloud Automation Manager is only supported to run in IBM Cloud Private.
+IBM Cloud Automation Manager is supported to run in IBM Cloud Private or Red Hat OpenShift Container Platform. 
+
+The following IBM Cloud Private platform services are required (inculding when running on Red Hat OpenShift Container Platform) - `auth-idp`, `catalog-ui`, `cert-manager`, `helm-api`, `helm-repo`, `icp-management-ingress`, `logging`, `metering`, `monitoring`, `nginx-ingress`, `platform-ui`, `service-catalog`, `tiller`
 
 ### PodSecurityPolicy Requirements
 
-This chart must be deployed to the `services` namespace and requires a PodSecurityPolicy to be bound to that namespace.
+This chart defines a custom PodSecurityPolicy (on IBM Cloud Private) which is used to finely control the permissions/capabilities needed to deploy this chart.  It is based on the predefined PodSecurityPolicy name: [`ibm-anyuid-hostpath-psp`](https://ibm.biz/cpkspec-psp) with additional restrictions. 
 
-The predefined PodSecurityPolicy name: [`ibm-anyuid-hostpath-psp`](https://ibm.biz/cpkspec-psp) has been verified for this chart. This policy is bound to the `services` namespace by default in IBM Cloud Private.
-
-This chart also defines a custom PodSecurityPolicy which is used to finely control the permissions/capabilities needed to deploy this chart.
+During installation of the chart, the chart itself will install the following PodSecurityPolicy:
 
 - Custom PodSecurityPolicy definition:
 ```
@@ -40,12 +40,12 @@ apiVersion: extensions/v1beta1
 kind: PodSecurityPolicy
 metadata:
   labels:
-    name: cam-services-ps
+    name: cam-services-ps-{{ .Values.service.namespace }}
     app: {{ template "fullname" . }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
-  name: cam-services-psp
+  name: cam-services-psp-{{ .Values.service.namespace }}
 spec:
   privileged: false
   allowPrivilegeEscalation: false
@@ -104,28 +104,98 @@ spec:
     - projected
   ```
 
+### Red Hat OpenShift SecurityContextConstraints Requirements
+
+This chart defines a custom SecurityContextConstraints (on Red Hat OpenShift Container Platform) which is used to finely control the permissions/capabilities needed to deploy this chart.  It is based on the predefined SecurityContextConstraint name: [`ibm-anyuid-hostpath-scc`](https://ibm.biz/cpkspec-scc) with additional restrictions. 
+
+During installation of the chart, the chart itself will install the following SecurityContextConstraint:
+
+- Custom SecurityContextConstraints definition:
+```
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  annotations:
+    kubernetes.io/description: "This policy is requiring pods to run with a non-root UID, and allow host path access."
+  name: cam-services-scc-{{ .Values.service.namespace }}
+allowHostDirVolumePlugin: true
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+allowPrivilegeEscalation: true
+allowedCapabilities:
+- SETPCAP
+- AUDIT_WRITE
+- CHOWN
+- NET_RAW
+- DAC_OVERRIDE
+- FOWNER
+- FSETID
+- KILL
+- SETUID
+- SETGID
+- NET_BIND_SERVICE
+- SYS_CHROOT
+- SETFCAP
+allowedFlexVolumes: []
+allowedUnsafeSysctls: []
+defaultAddCapabilities: []
+defaultPrivilegeEscalation: true
+forbiddenSysctls:
+  - "*"
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - max: 1111
+    min: 999
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- MKNOD
+runAsUser:
+  type: MustRunAsNonRoot
+seccompProfiles:
+- docker/default
+seLinuxContext:
+  type: RunAsAny
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - max: 1111
+    min: 999
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+- nfs
+groups:
+- system:serviceaccounts:{{ .Values.service.namespace }}
+priority: 0
+```
 ## Resources Required
 
 * The minimum hardware requirements for IBM Cloud Automation Manager is a single worker node with at least 12 vCPU and 30GB of memory.
-For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.1/cam_requirements.html
+For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_requirements.html
 
-* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.1/cam_create_pv.html
+* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_create_pv.html
 
-* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.1/cam_requirements.html
+* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_requirements.html
 
 ## Installing the Chart
 
-This chart supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.1/cam_planning.html
+This chart is normally deployed to the `services` namespace but can be deployed to multiple namespaces and supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_planning.html
 
 ## Configuration
 
-For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.1.2.1/cam_installation_parameters.html
+For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_installation_parameters.html
 
 ## Limitations
 
-* IBM Cloud Automation Manager is only supported to run on an IBM Cloud Private cluster
-* Only one instance of Cloud Automation Manager may be running in the cluster
-* This chart must be deployed in the 'services' namespace.
+* IBM Cloud Automation Manager is only supported to run on an IBM Cloud Private or Red Hat OpenShift Container Platform
 
 ## Documentation
 

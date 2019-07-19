@@ -85,6 +85,14 @@ spec:
       {{- end }}
       containers:
       - name: cam-broker
+        args:
+        - -c
+        - 'curl --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" -XPATCH  -H "Accept: application/json,
+          */*" -H "Content-Type: application/strategic-merge-patch+json" https://kubernetes.default/apis/servicecatalog.k8s.io/v1beta1/clusterservicebrokers/cam-broker-{{ .Values.service.namespace }}
+          --data ''{"metadata":{"finalizers": null}}'' && /usr/bin/configBoot.sh'
+        command:
+        - /bin/sh
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -151,17 +159,31 @@ spec:
             configMapKeyRef:
               name: oauth-client-map
               key: MASTER_IP
+        - name: ICP_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: common-config
+              key: ICP_PORT
         - name: ICP_PROXY_IP
           valueFrom:
             configMapKeyRef:
               name: oauth-client-map
               key: PROXY_IP
         - name: ICP_ENDPOINT
-          value: https://$(ICP_MASTER_IP):8443
-        - name: ORPHEUS_IDENTITY_API_URL
-          value: $(ICP_ENDPOINT)/idprovider
+          value: https://$(ICP_MASTER_IP):$(ICP_PORT)
+        - name: ORPHEUS_IDENTITY_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: common-config
+              key: ORPHEUS_TENANT_URL
         - name: ORPHEUS_IDENTITY_URL
+          {{- if ne .Values.platform "icp"}}
+          value: $(ORPHEUS_IDENTITY_ENDPOINT)/api
+          {{- else }}
           value: $(ICP_ENDPOINT)/idprovider
+          {{- end }}
+        - name: ORPHEUS_IDENTITY_API_URL
+          value: $(ORPHEUS_IDENTITY_URL)
         - name: POD_NAME
           valueFrom:
             fieldRef:

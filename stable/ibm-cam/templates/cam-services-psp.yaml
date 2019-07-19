@@ -2,12 +2,12 @@ apiVersion: extensions/v1beta1
 kind: PodSecurityPolicy
 metadata:
   labels:
-    name: cam-services-ps
+    name: cam-services-ps-{{ .Values.service.namespace }}
     app: {{ template "fullname" . }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
-  name: cam-services-psp
+  name: cam-services-psp-{{ .Values.service.namespace }}
 spec:
   privileged: false
   allowPrivilegeEscalation: false
@@ -35,8 +35,16 @@ spec:
   allowedHostPaths:
     - pathPrefix: {{ .Values.auditService.config.journalPath }}
       readOnly: false
+{{- if .Values.global.legacyAudit }}
   runAsUser:
     rule: RunAsAny
+{{- else }}
+  runAsUser:
+    ranges:
+    - max: 1111
+      min: 999
+    rule: MustRunAs
+{{- end }}
 {{- else }}
   runAsUser:
     ranges:
