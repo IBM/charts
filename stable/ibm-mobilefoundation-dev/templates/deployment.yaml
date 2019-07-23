@@ -7,18 +7,12 @@
 # Contributors:
 # IBM Corporation - initial API and implementation
 ###############################################################################
-{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
 apiVersion: apps/v1
-{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
-apiVersion: apps/v1beta2
-{{- else }}
-apiVersion: apps/v1beta1
-{{- end }}
 kind: Deployment
 metadata:
   name: {{ template "fullname" . }}
   labels:
-    app: {{ template "name" . }}
+    app: {{ template "fullname" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
@@ -26,6 +20,7 @@ spec:
   selector:
     matchLabels:
       release: {{ .Release.Name }}
+  replicas: {{ .Values.replicas }}
   template:
     metadata:
       annotations:
@@ -33,24 +28,36 @@ spec:
         productID: IBMMobileFirstPlatformFoundation_8000_perpetual_00000
         productVersion: 8.0.0.0
       labels:
-        app: {{ template "name" . }}
+        app: {{ template "fullname" . }}
         chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
     spec:
       affinity:
         nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: beta.kubernetes.io/arch
-                operator: In
-                values:
-                {{- if .Values.arch }}
-                - {{ .Values.arch }}
-                {{- else }}
-                - {{ template "arch" . }}
-                {{- end }}
+          {{- include "nodeAffinity" . | indent 6 }}
+      {{/* Prefer horizontal scaling */}}    
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "fullname" . }}
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name | quote }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+{{- if .Values.keystoreSecret }}
+        - name: mfpf-certs
+          secret:
+            secretName: {{ .Values.keystoreSecret }}
+{{- end }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -58,21 +65,33 @@ spec:
         runAsNonRoot: true
         runAsUser: 1001
       containers:
-      - name: {{ .Chart.Name }}
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 9080
-          initialDelaySeconds: 200
-          timeoutSeconds: 30
+      - name: {{ template "fullname" . }}
         readinessProbe:
           httpGet:
             path: /
             port: 9080
-          initialDelaySeconds: 180
-          timeoutSeconds: 20
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
+        livenessProbe:
+          tcpSocket:
+            port: 9080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -82,14 +101,70 @@ spec:
             - ALL
         env:
           - name: WLP_LOGGING_CONSOLE_FORMAT
-            value: {{ .Values.logs.consoleFormat }}
+            value: "json"
           - name: WLP_LOGGING_CONSOLE_LOGLEVEL
-            value: {{ .Values.logs.consoleLogLevel }}
+            value: "info"
           - name : WLP_LOGGING_CONSOLE_SOURCE
-            value: {{ .Values.logs.consoleSource }}
+            value: "message,trace,accessLog,ffdc"
+          - name: RUNTIME_SVC_NAME
+            value: {{ template "fullname" . }}
+          - name: ADMIN_HOST
+            value: {{ template "fullname" . }}
+{{- if .Values.https }}
+          - name: MFPF_SERVER_PROTOCOL
+            value: "https"
+          - name: MFPF_SERVER_PORT
+            value: "9443"
+{{- else }}
+          - name: MFPF_SERVER_PROTOCOL
+            value: "http"
+          - name: MFPF_SERVER_PORT
+            value: "9080"
+{{- end }}
+          - name: ANALYTICS_SVC_NAME
+            value: {{ template "fullname" . }}
+{{- if .Values.https }}
+          - name: MFPF_ANALYTICS_PROTOCOL
+            value: "https"
+          - name: ANALYTICS_PORT
+            value: "9443"
+{{- else }}
+          - name: MFPF_ANALYTICS_PROTOCOL
+            value: "http"
+          - name: ANALYTICS_PORT
+            value: "9080"
+{{- end }}
+          - name: PUSH_SVC_NAME
+            value: {{ template "fullname" . }}
+{{- if .Values.https }}
+          - name: MFPF_PUSH_PROTOCOL
+            value: "https"
+          - name: PUSH_PORT
+            value: "9443"
+{{- else }}
+          - name: MFPF_PUSH_PROTOCOL
+            value: "http"
+          - name: PUSH_PORT
+            value: "9080"
+{{- end }}
+{{- if .Values.keystoreSecret }}
+        envFrom:
+        - secretRef:
+            name: {{ .Values.keystoreSecret }}
+{{- else}}
+          - name: KEYSTORE_PASSWORD
+            value: "worklight"
+          - name: TRUSTSTORE_PASSWORD
+            value: "worklight"
+{{- end }}
         ports:
           - containerPort: 9080
           - containerPort: 9443
           - containerPort: 9600
+        volumeMounts:
+{{- if .Values.keystoreSecret }}
+          - name: mfpf-certs
+            mountPath: /opt/ibm/wlp/usr/servers/defaultServer/resources/security
+{{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
