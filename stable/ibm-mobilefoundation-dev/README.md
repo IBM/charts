@@ -1,12 +1,15 @@
 # IBM Mobile Foundation for Developers 8.0 Helm Chart
 
  IBM Mobile Foundation for Developers 8.0 enables you to develop, test, evaluate and demonstrate Mobile Foundation applications in a non-production environment with embedded derby database. It also provides IBM MobileFoundation Analytics which gives a rich view into both your mobile landscape and server infrastructure.
+ 
 ## Introduction
 IBM Mobile Foundation is an integrated platform that helps you extend your business to mobile devices.
 
 IBM Mobile Foundation includes a comprehensive development environment, mobile-optimized runtime middleware, a private enterprise application store, and an integrated management and analytics console, all supported by various security mechanisms.
 
-For more information: [Mobile Foundation Documentation](https://www.ibm.com/support/knowledgecenter/en/SSNJXP/welcome.html)
+For more information: 
+- [Mobile Foundation Documentation](https://www.ibm.com/support/knowledgecenter/en/SSNJXP/welcome.html)
+- [Mobile Foundation on IBM Cloud Private Documentation](http://mobilefirstplatform.ibmcloud.com/tutorials/en/foundation/8.0/ibmcloud/mobilefirst-server-on-icp/)
 
 ## Chart Details
 
@@ -89,7 +92,7 @@ rules:
   - use
 
 ```
-> Note: This PodSecurityPolicy only needs to be created once. If it already exist, skip this step.
+> Note: This PodSecurityPolicy only needs to be created once. If it already exists, skip this step.
 
 The cluster admin can either paste the above PSP and ClusterRole definitions into the create resource screen in the UI or run the following two commands:
 
@@ -104,7 +107,7 @@ In ICP 3.1, you also need to create the RoleBinding:
 
 This chart uses the following resources by default:
 
-- 2 CPU core
+- 1 CPU core
 - 2 Gi memory
 
 ## Installing the Chart
@@ -135,7 +138,7 @@ From a web browser, go to the IBM Cloud Private console page and navigate to the
 
 1. Click on Menu on the Left Top of the Page
 2. Select **Workloads** > **Helm Releases**
-3. Click on the deployed *IBM MobileFoundation Server* helm release
+3. Click on the deployed *IBM Mobile Foundation* helm release
 4. Refer the **Notes** section for the procedure to access the MobileFoundation Operations Console
 
 ## Configuration
@@ -144,19 +147,23 @@ From a web browser, go to the IBM Cloud Private console page and navigate to the
 
 | Qualifier | Parameter  | Definition | Allowed Value |
 |---|---|---|---|
-| arch     |      | Worker node architecture | Worker node architecture to which this chart should be deployed. Only AMD64 platform is currently supported |
+| arch |  amd64    | amd64 worker node scheduler preference in a hybrid cluster | 3 - Most preferred (Default) |
+|      |  ppcle64  | ppc64le worker node scheduler preference in a hybrid cluster | 2 - No preference (Default) |
+|      |  s390x    | S390x worker node scheduler preference in a hybrid cluster | 2 - No preference (Default) |
 | image     | pullPolicy | Image Pull Policy | Always, Never, or IfNotPresent. Default: IfNotPresent |
 |           | repository          | Docker image name | Name of the Mobile Foundation for Developers 8.0 docker image |
 |           | tag          | Docker image tag | See Docker tag description |
-| resources | limits.cpu  | Describes the maximum amount of CPU allowed.  | Default is 2000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
-|                  | limits.memory | Describes the maximum amount of memory allowed. | Default is 4096Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory)|
-|           | requests.cpu  | Describes the minimum amount of CPU required - if not specified will default to limit (if specified) or otherwise implementation-defined value.  | Default is 2000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
-|           | requests.memory | Describes the minimum amount of memory required. If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value. | Default is 2048Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
-| logs | consoleFormat | Specifies container log output format. | Default is **json**. |
-|  | consoleLogLevel | Controls the granularity of messages that go to the container log. | Default is **info**. |
-| | consoleSource | Specify sources that are written to the container log. Use a comma separated list for multiple sources. | Default is **message, trace, accessLog, ffdc**. |
+| ingress | hostname | The external hostname or IP address to be used by external clients | Leave blank to default to the IP address of the cluster proxy node|
+|         | secret | TLS secret name| Specifies the name of the secret for the certificate that has to be used in the Ingress definition. The secret has to be pre-created using the relevant certificate and key. Mandatory if SSL/TLS is enabled. Pre-create the secret with Certificate & Key before supplying the name here |
+|         | sslPassThrough | Enable SSL passthrough | Specifies is the SSL request should be passed through to the Mobile Foundation service - SSL termination occurs in the Mobile Foundation service. Default: false |
+| https     |  | https communication | false (default) or true |
+| replicas |  | The number of instances (pods) of Mobile Foundation that need to be created | Positive integer (Default: 1) |
+| keystoreSecret |   | Refer the configuration section to pre-create the secret with keystores and their passwords.|
+| resources | limits.cpu  | Describes the maximum amount of CPU allowed.  | Default is 1000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
+|                  | limits.memory | Describes the maximum amount of memory allowed. | Default is 2048Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory)|
+|           | requests.cpu  | Describes the minimum amount of CPU required - if not specified will default to limit (if specified) or otherwise implementation-defined value.  | Default is 750m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu) |
+|           | requests.memory | Describes the minimum amount of memory required. If not specified, the memory amount will default to the limit (if specified) or the implementation-defined value. | Default is 1024Mi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
 
 
 ## Limitations
-This Helm chart is provided only for development and testing purposes.
-Data is stored in embedded derby database.
+This Mobile Foundation chart restricts the deployment to a single pod. This Helm chart is provided only for development and testing purposes. Mobile Foundation data is stored in embedded derby database. This data is not persisted to any other location and will be lost if the helm deployment is deleted.
