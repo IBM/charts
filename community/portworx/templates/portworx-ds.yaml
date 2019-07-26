@@ -24,7 +24,6 @@
 {{- $etcdKey := .Values.etcd.key | default "none" }}
 {{- $consulToken := .Values.consul.token | default "none" }}
 {{- $etcdEndPoints := .Values.kvdb }}
-{{- $misc := .Values.misc | default "" | split " " }}
 
 apiVersion: apps/v1
 kind: DaemonSet
@@ -32,13 +31,8 @@ metadata:
   name: portworx
   namespace: kube-system
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
     name: portworx
+{{- include "px.labels" . | nindent 4 }}
   annotations:
     portworx.com/install-source: helm/{{.Release.Service}}-r{{.Release.Revision}}
     portworx.com/helm-vars: chart="{{.Chart.Name}}-{{.Chart.Version}}"{{range $k, $v := .Values }}{{if $v}},{{ $k }}="{{ $v }}"{{end}}{{end}}
@@ -56,14 +50,8 @@ spec:
       annotations:
         helm.sh/charts: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
       labels:
-        heritage: {{ .Release.Service }}
-        release: {{ .Release.Name }}
-        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-        app.kubernetes.io/instance: {{.Release.Name | quote }}
-        app.kubernetes.io/name: {{ template "name" . }}
-        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
         name: portworx
-        # {{- include "px.labels" . | indent 8 }}
+{{- include "px.labels" . | nindent 8 }}
     spec:
       affinity:
         nodeAffinity:
@@ -74,13 +62,8 @@ spec:
                 operator: NotIn
                 values:
                 - "false"
-              {{- if (.Values.openshiftInstall) and (eq .Values.openshiftInstall true)}}
-              - key: openshift-infra
-                operator: DoesNotExist
-              {{- else if (not .Values.deployOnMaster) or (eq .Values.deployOnMaster false)}}
               - key: node-role.kubernetes.io/master
                 operator: DoesNotExist
-              {{- end }}
       hostNetwork: true
       hostPID: true
       {{- if not (eq $registrySecret "none") }}
@@ -166,12 +149,6 @@ spec:
               "-acltoken", "{{ $consulToken }}",
               {{- end -}}
 
-              {{- if .misc }}
-                {{- range $index, $name := $misc }}
-              "{{ $name }}",
-                {{- end }}
-              {{ end -}}
-
               "-x", "kubernetes",
               {{- if ne $metadataSize 0 }}
               "-metadata" "{{ printf "size=%d" (int64 $metadataSize) }}",
@@ -194,11 +171,7 @@ spec:
             - name: REGISTRY_CONFIG
               valueFrom:
                 secretKeyRef:
-                {{- if (semverCompare ">=1.9-0" .Capabilities.KubeVersion.GitVersion) or (.Values.openshiftInstall and semverCompare ">=1.8-0" .Capabilities.KubeVersion.GitVersion) }}
                   key: ".dockerconfigjson"
-                {{- else }}
-                  key: ".dockercfg"
-                {{- end }}
                   name: "{{ $registrySecret }}"
             {{- end }}
 
@@ -240,7 +213,6 @@ spec:
               mountPath: /etc/pwx
             - name: cores
               mountPath: /var/cores
-          {{- if eq (.Values.deploymentType | upper | lower) "oci" }}
             - name: optpwx
               mountPath: /opt/pwx
             - name: sysdmount
@@ -255,44 +227,8 @@ spec:
               mountPath: /var/run/dbus
             - name: hostproc
               mountPath: /host_proc              
-          {{- else if eq (.Values.deploymentType | upper | lower) "docker" }}
-            - name: dev
-              mountPath: /dev
-            - name: optpwx
-              mountPath: /export_bin
-            - name: dockerplugins
-              mountPath: /run/docker/plugins
-            - name: hostproc
-              mountPath: /hostproc
-          {{- if semverCompare "< 1.10-0" .Capabilities.KubeVersion.GitVersion }}
-            - name: libosd
-              mountPath: /var/lib/osd:shared
-          {{- if (.Values.openshiftInstall) and (eq .Values.openshiftInstall true)}}
-            - name: kubelet
-              mountPath: /var/lib/origin/openshift.local.volumes:shared
-          {{- else }}
-            - name: kubelet
-              mountPath: /var/lib/kubelet:shared
-          {{- end }}
-
-          {{- else }}
-            - name: libosd
-              mountPath: /var/lib/osd
-              mountPropagation: "Bidirectional"
-          {{- if (.Values.openshiftInstall) and (eq .Values.openshiftInstall true)}}
-            - name: kubelet
-              mountPath: /var/lib/origin/openshift.local.volumes
-              mountPropagation: "Bidirectional"
-          {{- else }}
-            - name: kubelet
-              mountPath: /var/lib/kubelet
-              mountPropagation: "Bidirectional"
-          {{- end }}
-
-          {{- end }}
             - name: src
               mountPath: /usr/src
-          {{- end }}
 
           {{- if eq $csi true }}
         - name: csi-driver-registrar
