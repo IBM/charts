@@ -1,4 +1,3 @@
-{{- if (.Values.stork) and (eq .Values.stork true)}}
 {{- $customRegistryURL := .Values.customRegistryURL | default "none" }}
 {{- $registrySecret := .Values.registrySecret | default "none" }}
 
@@ -8,43 +7,12 @@ metadata:
   name: stork-config
   namespace: kube-system
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
 data:
   policy.cfg: |-
     {
       "kind": "Policy",
       "apiVersion": "v1",
-{{- if semverCompare "< 1.10-0" .Capabilities.KubeVersion.GitVersion }}
-      "predicates": [
-{{- if semverCompare "< 1.9-0" .Capabilities.KubeVersion.GitVersion }}
-        {"name": "NoVolumeNodeConflict"},
-{{- end}}
-        {"name": "MaxAzureDiskVolumeCount"},
-        {"name": "NoVolumeZoneConflict"},
-        {"name": "PodToleratesNodeTaints"},
-        {"name": "CheckNodeMemoryPressure"},
-        {"name": "MaxEBSVolumeCount"},
-        {"name": "MaxGCEPDVolumeCount"},
-        {"name": "MatchInterPodAffinity"},
-        {"name": "NoDiskConflict"},
-        {"name": "GeneralPredicates"},
-        {"name": "CheckNodeDiskPressure"}
-      ],
-      "priorities": [
-        {"name": "NodeAffinityPriority", "weight": 1},
-        {"name": "TaintTolerationPriority", "weight": 1},
-        {"name": "SelectorSpreadPriority", "weight": 1},
-        {"name": "InterPodAffinityPriority", "weight": 1},
-        {"name": "LeastRequestedPriority", "weight": 1},
-        {"name": "BalancedResourceAllocation", "weight": 1},
-        {"name": "NodePreferAvoidPodsPriority", "weight": 1}
-      ],
-{{- end}}
       "extenders": [
         {
           "urlPrefix": "http://stork-service.kube-system.svc.cluster.local:8099",
@@ -66,21 +34,16 @@ metadata:
   labels:
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
+imagePullSecrets:
+    {{ .registrySecret }}
 ---
 kind: ClusterRole
-apiVersion: {{ template "rbac.apiVersion" . }}
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: stork-role
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
     resources: ["pods", "pods/exec"]
@@ -132,16 +95,11 @@ rules:
     verbs: ["list", "get"]
 ---
 kind: ClusterRoleBinding
-apiVersion: {{ template "rbac.apiVersion" . }}
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: stork-role-binding
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
 subjects:
 - kind: ServiceAccount
   name: stork-account
@@ -157,12 +115,7 @@ metadata:
   name: stork-service
   namespace: kube-system
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
 spec:
   selector:
     name: stork
@@ -178,12 +131,7 @@ metadata:
     scheduler.alpha.kubernetes.io/critical-pod: ""
   labels:
     tier: control-plane
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
   name: stork
   namespace: kube-system
 spec:
@@ -203,12 +151,7 @@ spec:
       labels:
         name: stork
         tier: control-plane
-        heritage: {{ .Release.Service }}
-        release: {{ .Release.Name }}
-        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-        app.kubernetes.io/instance: {{.Release.Name | quote }}
-        app.kubernetes.io/name: {{ template "name" . }}
-        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 8 }}
     spec:
       {{- if not (eq $registrySecret "none") }}
       imagePullSecrets:
@@ -244,12 +187,7 @@ apiVersion: storage.k8s.io/v1
 metadata:
   name: stork-snapshot-sc
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
 provisioner: stork-snapshot
 ---
 apiVersion: v1
@@ -258,24 +196,16 @@ metadata:
   name: stork-scheduler-account
   namespace: kube-system
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
+imagePullSecrets:
+    {{ .registrySecret }}
 ---
 kind: ClusterRole
-apiVersion: {{ template "rbac.apiVersion" . }}
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: stork-scheduler-role
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
     resources: ["endpoints"]
@@ -325,16 +255,11 @@ rules:
     verbs: ["get", "list", "watch"]
 ---
 kind: ClusterRoleBinding
-apiVersion: {{ template "rbac.apiVersion" . }}
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: stork-scheduler-role-binding
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
 subjects:
 - kind: ServiceAccount
   name: stork-scheduler-account
@@ -350,12 +275,7 @@ metadata:
   labels:
     component: scheduler
     tier: control-plane
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-    app.kubernetes.io/instance: {{.Release.Name | quote }}
-    app.kubernetes.io/name: {{ template "name" . }}
-    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 4 }}
   name: stork-scheduler
   namespace: kube-system
 spec:
@@ -368,12 +288,7 @@ spec:
       labels:
         component: scheduler
         tier: control-plane
-        heritage: {{ .Release.Service }}
-        release: {{ .Release.Name }}
-        app.kubernetes.io/managed-by: {{.Release.Service | quote }}
-        app.kubernetes.io/instance: {{.Release.Name | quote }}
-        app.kubernetes.io/name: {{ template "name" . }}
-        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+{{- include "px.labels" . | nindent 8 }}
         app: stork-scheduler
       name: stork-scheduler
     spec:
@@ -412,4 +327,3 @@ spec:
               topologyKey: "kubernetes.io/hostname"
       hostPID: false
       serviceAccountName: stork-scheduler-account
-{{- end }}

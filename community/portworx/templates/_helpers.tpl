@@ -1,28 +1,13 @@
-{{/* Gets the correct API Version based on the version of the cluster
-*/}}
-
-{{- define "rbac.apiVersion" -}}
-{{- if semverCompare ">= 1.8-0" .Capabilities.KubeVersion.GitVersion -}}
-"rbac.authorization.k8s.io/v1"
-{{- else -}}
-"rbac.authorization.k8s.io/v1beta1"
-{{- end -}}
-{{- end -}}
-
-{{- define "name" -}}
+{{- define "px.appName" -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "px.labels" -}}
-chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-heritage: {{ .Release.Service | quote }}
-release: {{ .Release.Name | quote }}
-{{- end -}}
-
-{{- define "driveOpts" }}
-{{ $v := .Values.installOptions.drives | split "," }}
-{{$v._0}}
+app.kubernetes.io/managed-by: {{.Release.Service | quote }}
+app.kubernetes.io/instance: {{.Release.Name | quote }}
+app.kubernetes.io/name: {{ template "px.appName" . }}
+helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 {{- end -}}
 
 {{- define "px.kubernetesVersion" -}}
@@ -33,24 +18,12 @@ release: {{ .Release.Name | quote }}
 {{- define "px.getImage" -}}
 {{- if (.Values.customRegistryURL) -}}
     {{- if (eq "/" (.Values.customRegistryURL | regexFind "/")) -}}
-        {{- if .Values.openshiftInstall -}}
-            {{ cat (trim .Values.customRegistryURL) "/px-monitor" | replace " " ""}}
-        {{- else -}}
-            {{ cat (trim .Values.customRegistryURL) "/oci-monitor" | replace " " ""}}
-        {{- end -}}
+        {{ cat (trim .Values.customRegistryURL) "/oci-monitor" | replace " " ""}}
     {{- else -}}
-        {{- if .Values.openshiftInstall -}}
-            {{cat (trim .Values.customRegistryURL) "/portworx/px-monitor" | replace " " ""}}
-        {{- else -}}
-            {{cat (trim .Values.customRegistryURL) "/portworx/oci-monitor" | replace " " ""}}
-        {{- end -}}
+        {{cat (trim .Values.customRegistryURL) "/portworx/oci-monitor" | replace " " ""}}
     {{- end -}}
 {{- else -}}
-    {{- if .Values.openshiftInstall -}}
-        {{ "registry.connect.redhat.com/portworx/px-monitor" }}
-    {{- else -}}
-        {{ "portworx/oci-monitor" }}
-    {{- end -}}
+    {{ "portworx/oci-monitor" }}
 {{- end -}}
 {{- end -}}
 
@@ -99,14 +72,6 @@ release: {{ .Release.Name | quote }}
     {{- end -}}
 {{- else -}}
         {{ "portworx" }}
-{{- end -}}
-{{- end -}}
-
-{{- define "px.registryConfigType" -}}
-{{- if semverCompare ">=1.9-0" .Capabilities.KubeVersion.GitVersion -}}
-".dockerconfigjson"
-{{- else -}}
-".dockercfg"
 {{- end -}}
 {{- end -}}
 
