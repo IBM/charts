@@ -1,6 +1,6 @@
-# What’s new in Chart Version 1.9.8
+# What’s new in Chart Version 1.9.9
 ### IBM Cloud Private Enhancements 
- - Transformation Advisor now supported on IBM Cloud Private on Redhat OpenShift 
+ - Java applications can now be grouped into business applications to provide a consolidated view of complexity, effort and dependencies
 
 # Fixes
 
@@ -14,6 +14,7 @@
 # Version History
 | Chart | Date | ICP Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.9.9 | Jul 26, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.9 ibmcom/transformation-advisor-server:1.9.9 ibmcom/transformation-advisor-ui:1.9.9 | None | Support business app       |
 | 1.9.8 | Jun 28, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.8 ibmcom/transformation-advisor-server:1.9.8 ibmcom/transformation-advisor-ui:1.9.8 | None | Support ICP on OpenShift   |
 | 1.9.7 | Jun 10, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.7 ibmcom/transformation-advisor-server:1.9.7 ibmcom/transformation-advisor-ui:1.9.7 | None | Ingress fix for ICP 3.2    |
 | 1.9.6 | May 20, 2019| >=2.1.0.3 | ibmcom/transformation-advisor-db:1.9.6 ibmcom/transformation-advisor-server:1.9.6 ibmcom/transformation-advisor-ui:1.9.6 | None | TA Local, DC Enhancements  |
