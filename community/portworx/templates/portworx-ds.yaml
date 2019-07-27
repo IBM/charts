@@ -22,7 +22,6 @@
 {{- $etcdCA := .Values.etcd.ca | default "none" }}
 {{- $etcdCert := .Values.etcd.cert | default "none" }}
 {{- $etcdKey := .Values.etcd.key | default "none" }}
-{{- $consulToken := .Values.consul.token | default "none" }}
 {{- $etcdEndPoints := .Values.kvdb }}
 
 apiVersion: apps/v1
@@ -145,10 +144,6 @@ spec:
               "-key", "{{ $etcdKey }}",
               {{- end -}}
 
-              {{- if ne $consulToken "none" }}
-              "-acltoken", "{{ $consulToken }}",
-              {{- end -}}
-
               "-x", "kubernetes",
               {{- if ne $metadataSize 0 }}
               "-metadata" "{{ printf "size=%d" (int64 $metadataSize) }}",
@@ -191,13 +186,8 @@ spec:
             periodSeconds: 10
             httpGet:
               host: 127.0.0.1
-          {{- if eq (.Values.deploymentType | upper | lower) "oci" }}
               path: /health
               port: 9015
-          {{- else }}
-              path: /v1/cluster/nodehealth
-              port: 9001
-          {{- end}}
           securityContext:
             privileged: true
           volumeMounts:
@@ -227,9 +217,10 @@ spec:
               mountPath: /var/run/dbus
             - name: hostproc
               mountPath: /host_proc              
-            - name: src
-              mountPath: /usr/src
-
+            - name: criosock
+              mountPath: /var/run/crio
+            - name: crioconf
+              mountPath: /etc/crictl.yaml
           {{- if eq $csi true }}
         - name: csi-driver-registrar
           imagePullPolicy: Always
@@ -286,7 +277,6 @@ spec:
         - name: cores
           hostPath:
             path: /var/cores
-        {{- if eq (.Values.deploymentType | upper | lower) "oci" }}
         - name: optpwx
           hostPath:
             path: /opt/pwx
@@ -305,32 +295,9 @@ spec:
         - name: hostproc
           hostPath:
             path: /proc
-        {{- else if eq (.Values.deploymentType | upper | lower) "docker" }}
-        - name: libosd
+        - name: criosock
           hostPath:
-            path: /var/lib/osd
-        - name: optpwx
+            path: /var/run/crio
+        - name: crioconf
           hostPath:
-            path: /opt/pwx/bin
-        - name: dev
-          hostPath:
-            path: /dev
-        {{- if (.Values.openshiftInstall) and (eq .Values.openshiftInstall true)}}
-        - name: kubelet
-          hostPath:
-            path: /var/lib/origin/openshift.local.volumes
-        {{- else }}
-        - name: kubelet
-          hostPath:
-            path: /var/lib/kubelet
-        {{- end }}
-         - name: src
-          hostPath:
-            path: /usr/src
-         - name: dockerplugins
-          hostPath:
-            path: /run/docker/plugins
-        - name: hostproc
-          hostPath:
-            path: /proc
-        {{- end }}
+            path: /etc/crictl.yaml
