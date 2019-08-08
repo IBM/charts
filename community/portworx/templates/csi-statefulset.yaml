@@ -1,0 +1,50 @@
+{{- if (.Values.csi) and (eq .Values.csi true)}}
+kind: StatefulSet
+apiVersion: apps/v1beta1
+metadata:
+  name: px-csi-ext
+  namespace: kube-system
+  labels:
+{{- include "px.labels" . | nindent 4 }}
+spec:
+  serviceName: "px-csi-service"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: px-csi-driver
+{{- include "px.labels" . | nindent 4 }}
+    spec:
+      serviceAccount: px-csi-account
+      containers:
+        - name: csi-external-provisioner
+          imagePullPolicy: Always
+          image: "{{ template "px.getcsiImages" . }}/csi-provisioner:v0.2.0"
+          args:
+            - "--v=5"
+            - "--provisioner=com.openstorage.pxd"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-attacher
+          imagePullPolicy: Always
+          image: "{{ template "px.getcsiImages" . }}/csi-attacher:v0.2.0"
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/com.openstorage.pxd
+            type: DirectoryOrCreate
+{{- end }}
