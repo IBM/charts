@@ -37,7 +37,7 @@ We truncate at 10 chars for the name as we reach a limit when PVCs for the state
 
 {{/*
 Check if tag contains specific platform suffix and if not set based on kube platform
-
+*/}}
 {{- define "platform" -}}
 {{- if not .Values.arch }}
   {{- if (eq "linux/amd64" .Capabilities.KubeVersion.Platform) }}
@@ -54,7 +54,6 @@ Check if tag contains specific platform suffix and if not set based on kube plat
   {{- end -}}
 {{- end -}}
 {{- end -}}
-*/}}
 
 {{/*
 Test solution to leave platform blank so that nothing is concatenated to the image.repository string
