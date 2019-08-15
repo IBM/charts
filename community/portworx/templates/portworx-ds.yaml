@@ -17,7 +17,7 @@
 {{- $internalKVDB := .Values.internalKVDB | default false }}
 {{- $csi := .Values.csi | default false }}
 
-{{- $etcdCredentials := .Values.etcd.credentials | default "none:none" }}
+{{- $etcdCredentials := .Values.etcd.credentials | default "none" }}
 {{- $etcdCertPath := .Values.etcd.certPath | default "none" }}
 {{- $etcdCA := .Values.etcd.ca | default "none" }}
 {{- $etcdCert := .Values.etcd.cert | default "none" }}
@@ -47,7 +47,7 @@ spec:
   template:
     metadata:
       annotations:
-        helm.sh/charts: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+{{- include "px.metering.annotations" . | nindent 8 }}
       labels:
         name: portworx
 {{- include "px.labels" . | nindent 8 }}
@@ -63,6 +63,11 @@ spec:
                 - "false"
               - key: node-role.kubernetes.io/master
                 operator: DoesNotExist
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
       hostNetwork: true
       hostPID: true
       {{- if not (eq $registrySecret "none") }}
@@ -128,8 +133,8 @@ spec:
               "-m", "{{ $managementInterface }}",
               {{- end -}}
 
-              {{- if ne $etcdCredentials "none:none" }}
-              "-userpwd", "{{ $etcdCredentials }}",
+              {{- if ne $etcdCredentials "none" }}
+              "-userpwd", "$ETCD_USERNAME:$ETCD_PASSWORD",
               {{- end -}}
 
               {{- if ne $etcdCA "none" }}
@@ -174,6 +179,18 @@ spec:
                   key: ".dockerconfigjson"
                   name: "{{ $registrySecret }}"
             {{- end }}
+           {{- if not (eq $etcdCredentials "none") }}
+            - name: ETCD_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: "username"
+                  name: "{{ $etcdCredentials }}"
+            - name: ETCD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: "password"
+                  name: "{{ $etcdCredentials }}"
+            {{- end }}
 
             {{- if eq $csi true }}
             - name: CSI_ENDPOINT
@@ -195,6 +212,10 @@ spec:
               port: 9015
           securityContext:
             privileged: true
+            allowPrivilegeEscalation: true
+            capabilities:
+              drop:
+              - ALL
           volumeMounts:
           {{- if not (eq $etcdCertPath "none") }}
             - mountPath: /etc/pwx/etcdcerts
@@ -248,7 +269,6 @@ spec:
             - name: csi-driver-path
               mountPath: /csi
            {{- end }}
-
       restartPolicy: Always
       serviceAccountName: px-account
       volumes:
