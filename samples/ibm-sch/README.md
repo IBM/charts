@@ -30,14 +30,14 @@ There are two ways to include ibm-sch with your chart:
    dependencies:
    - name: ibm-sch
      repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-     version: "^1.2.11"
+     version: "^1.2.12"
      alias: sch
      condition: global.sch.enabled
    ```
 
    Explanation of parameters:
    - Set the alias to `sch` to guarantee that all functions will work successfully.
-   - Set the version to `^1.2.11` to download the latest `1.x.x` version of ibm-sch.
+   - Set the version to `^1.2.12` to download the latest `1.x.x` version of ibm-sch.
    - Use a condition parameter to only install ibm-sch when intended. For example, if your chart is able to be installed standalone and as a subchart, then you want ibm-sch to be enabled when your chart is installed standalone, but you want to use the parent chart's ibm-sch when it is installed as a subchart. To achieve this, you would set `global.sch.enabled` to true in the subchart and false in the parent chart.
 
 1. Download the source and copy it into your charts directory
@@ -760,17 +760,17 @@ The secret generation code creates a Job resource that uses a container image to
 dependencies:
   - name: ibm-sch
     repository: "@sch"
-    version: "^1.2.11"
+    version: "^1.2.12"
     alias: sch
 ```
 
 2. The container image used by the secret generator must be added to ibm_cloud_pak/manifest.yaml so that `cloudctl catalog create-archive` will include the image in the archive for airgap installation.
 
 ```
-- image: opencontent-common-utils:1.1.2-amd64
+- image: opencontent-common-utils:1.1.2
   references:
-  - repository: opencontent-common-utils:1.1.2-amd64
-    pull-repository: ibmcom/opencontent-common-utils:1.1.2-amd64
+  - repository: opencontent-common-utils:1.1.2
+    pull-repository: ibmcom/opencontent-common-utils:1.1.2
     pull-authorization:
       username:
         env: ARTIFACTORY_USER

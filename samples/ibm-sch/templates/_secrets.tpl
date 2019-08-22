@@ -22,10 +22,10 @@ Usage of "sch.secretGen.*" requires the following:
 1. The container image used by the secret generator must be added to ibm_cloud_pak/manifest.yaml:
 
    ```
-   - image: opencontent-common-utils:1.1.2-amd64
+   - image: opencontent-common-utils:1.1.2
      references:
-     - repository: opencontent-common-utils:1.1.2-amd64
-       pull-repository: ibmcom/opencontent-common-utils:1.1.2-amd64
+     - repository: opencontent-common-utils:1.1.2
+       pull-repository: ibmcom/opencontent-common-utils:1.1.2
    ```
 
 1. PodSecurityPolicy Requirements
@@ -248,7 +248,7 @@ spec:
           limits:
             memory: 200Mi
             cpu: '.5'
-        image: "{{ if $secretGenRoot.Values.image.repository }}{{ trimSuffix "/" $secretGenRoot.Values.image.repository }}/{{ end }}{{ $secretGenRoot.Values.image.name }}:{{ $secretGenRoot.Values.image.tag }}"
+        image: "{{ if $secretGenRoot.Values.global.image.repository }}{{ trimSuffix "/" $secretGenRoot.Values.global.image.repository }}/{{ end }}{{ $secretGenRoot.Values.image.name }}:{{ $secretGenRoot.Values.image.tag }}"
         imagePullPolicy: {{ $secretGenRoot.Values.image.pullPolicy }}
         volumeMounts:
         - name: tls-out
