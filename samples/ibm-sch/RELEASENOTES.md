@@ -1,8 +1,8 @@
-# What's new in Chart Version 1.2.11
-* Updated the secret generation image to be the Universal Base Image
+# What's new in Chart Version 1.2.12
+* Updated the secret generation tool to support Power and s390x in addition to amd64.
 
 # Fixes
-* Fixed the way that the image path is resolved for the secret generation yaml
+* No new fixes
 
 # Prerequisites
 * Kubernetes version 1.9 or greater
@@ -16,6 +16,7 @@
 # Version History
 | Chart  | Date     | Kubernetes Required | Details |
 |--------|----------|---------------------|---------|
+| 1.2.12 | 09/19/19 | >=1.9.0 | Updated secret generation to support Power and s390x |
 | 1.2.11 | 06/25/19 | >=1.9.0 | Updated secret generation image and bug fixes |
 | 1.2.10 | 05/29/19 | >=1.9.0 | Updated secret generation image and bug fixes |
 | 1.2.9  | 05/10/19 | >=1.9.0 | Added secret generation support |
