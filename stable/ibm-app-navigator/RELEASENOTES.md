@@ -1,9 +1,8 @@
 # What’s new...
 
-### Latest: Chart Version 1.0.0
+### Latest: Chart Version 1.0.1
 
-1. Initial release of the chart for IBM Application Navigator.
-1. Docker images referenced by the chart are based on the Universal Base Image (UBI).
+1. Some minor bug fixes.
 
 ## Breaking Changes
 * None
@@ -32,4 +31,5 @@ Please refer to README.md.
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.0.1 | Aug 20, 2019 | >=1.12.4 | app-nav-api:1.0.1, app-nav-ui:1.0.1, app-nav-controller:1.0.1, app-nav-was-controller:1.0.1, app-nav-init:1.0.1, app-nav-cmds:1.0.1 |  | Minor bug fixes |
 | 1.0.0 | Jun 21, 2019 | >=1.12.4 | app-nav-api:1.0.0, app-nav-ui:1.0.0, app-nav-controller:1.0.0, app-nav-was-controller:1.0.0, app-nav-init:1.0.0, app-nav-cmds:1.0.0 |  | Initial release |
