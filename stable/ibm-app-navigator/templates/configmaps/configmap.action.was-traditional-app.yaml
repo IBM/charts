@@ -35,7 +35,7 @@ data:
           "text.nls":"action.url.was.traditional.klog.text",
           "description":"View WebSphere Kibana problem dashboard to see logs",
           "description.nls":"action.url.was.traditional.klog.desc",
-          "url-pattern":"${snippet.geturlw(${builtin.kibana-url},${builtin.liberty-problems-dashboard},${func.kubectlGet(WAS-Traditional-App,${resource.$.metadata.name},--namespace,${resource.$.metadata.namespace},-o,json)})}",
+          "url-pattern":"${snippet.geturlw(${builtin.kibana-url},${builtin.liberty-problems-dashboard},${func.kubectlGet(WAS-Traditional-App,${resource.$.metadata.name},--namespace,${resource.$.metadata.namespace},-o,json)},${func.kubectlGet(WAS-ND-Cell,${resource.$.metadata.labels['was-nd-cell']},--namespace,${resource.$.metadata.namespace},-o,jsonpath=${snippet.cellname()})})}",
           "open-window": "tab"
         }
       ] 
@@ -74,7 +74,10 @@ data:
          "status": "function status() {
                        return '{.status}';
                    }",
-         "geturlw": "function geturlw(kibanaUrl,dashboard,WASApp) { 
+         "cellname": "function cellname() {
+                       return '{.status.cellName}';
+                   }",
+         "geturlw": "function geturlw(kibanaUrl,dashboard,WASApp,cellName) { 
           var System = Java.type('java.lang.System');
 
           var wasJSON= JSON.parse(WASApp);
@@ -89,7 +92,7 @@ data:
 
               dashboardUrl+=\"%7B%22bool%22:%7B%22must%22:%5B%7B%22term%22:%7B%22ibm_cellName.keyword%22:%22\";
 
-              dashboardUrl+=metadata.labels['was-nd-cell'];
+              dashboardUrl+=cellName;
 
               dashboardUrl+=\"%22%7D%7D,%7B%22term%22:%7B%22ibm_nodeName.keyword%22:%22\";
 
@@ -110,7 +113,7 @@ data:
 
               dashboardUrl+=\"(bool:(must:!((term:(ibm_cellName.keyword:\"; 
               
-              dashboardUrl+=metadata.labels['was-nd-cell'];
+              dashboardUrl+=cellName;
               
               dashboardUrl+=\")),(term:(ibm_nodeName.keyword:\";
             

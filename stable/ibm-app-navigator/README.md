@@ -1,6 +1,6 @@
 # IBM Application Navigator Helm Chart
 
-## Introduction 
+## Introduction
 
 IBM Application Navigator is a tool that compliments the IBM Private Cloud console, providing visualization, inspection, and interaction with the deployed resources that comprise an application.
 
@@ -33,7 +33,7 @@ IBM Application Navigator is stateless and does not require any persistent volum
 - Installs a `Service` and optionally an `Ingress` to route traffic to the IBM Application Navigator UI.
 - Installs multiple `ConfigMaps` that manage the configuration of IBM Application Navigator.
 
-Note the IBM Application Navigator containers are configured to run on IBM Cloud Private's management node. 
+Note the IBM Application Navigator containers are configured to run on IBM Cloud Private's management node.
 
 ### Prerequisites
 
@@ -120,7 +120,7 @@ Download the following scripts located at /ibm_cloud_pak/pak_extensions/post-del
 ### Installing the Chart
 
 To install the chart with the release name `app-nav`:
-    
+
 For example:
   ```bash
   helm install --tls ibm-charts/ibm-app-navigator --name app-nav --namespace <namespace>
@@ -128,11 +128,11 @@ For example:
 
 To specify any extra parameters you can use the `--set` option or create a `yaml` file with the parameters and specify it using the `-f` option on the command line.
 
-Alternatively, you can install the chart from the catalog in the IBM Cloud Private console. 
+Alternatively, you can install the chart from the catalog in the IBM Cloud Private console.
 
 > For a complete list of supported parameters, please take a look at the table in the [Configuration](#configuration) section below.
 
-It is recommended that the chart only be installed once per cluster. 
+It is recommended that the chart only be installed once per cluster.
 
 ## Verifying the chart
 
@@ -143,12 +143,12 @@ To verify the chart, you need a system with kubectl and helm installed and confi
   helm list --namespace <namespace>
   helm status --tls app-nav --namespace <namespace>
   ```
-    
+
 2. Get the name of the pods that were deployed with ibm-app-navigator by issuing the following command:
   ```bash
   kubectl get pod -n <namespace>
   ```
-    
+
 3. For each of the pods, check under Events to see whether images were successfully pulled and that the containers were created and started by issuing the following command with the specific pod name:
   ```bash
   kubectl describe pod <pod name> -n <namespace>
@@ -164,26 +164,26 @@ To verify the chart, you need a system with kubectl and helm installed and confi
   helm delete --tls --purge app-nav --namespace <namespace>
   ```
 
-### Configuration 
+### Configuration
 
 | Parameter | Description | Default |
 |---|---|---|
 | `appNavApi.repository` | Docker registry to pull the Application Navigator API image from. | `ibmcom/app-nav-api` |
-| `appNavApi.tag` | Application Navigator API image tag. | `1.0.0` |
+| `appNavApi.tag` | Application Navigator API image tag. | `1.0.1` |
 | `appNavApi.resources.constraints.enabled` | Specifies whether resource constraints are enabled for the Application Navigator API.  | `false` |
 | `appNavApi.resources.requests.cpu` | The minimum required CPU core for the Application Navigator API. Specify integers, fractions (e.g. 0.5), or millicore values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavApi.resources.requests.memory` | Describes the minimum amount of memory required for the Application Navigator API. Corresponds to requests.memory in Kubernetes. If not specified it will default to maximum memory (if specified) or otherwise implementation-defined value. | `512Mi` |
 | `appNavApi.resources.limits.cpu` | The upper limit of CPU core for the Application Navigator API. Specify integers, fractions (e.g. 0.5), or millicores values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavApi.resources.limits.memory` | The memory upper limit in bytes for the Application Navigator API. Specify integers with suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki. | `512Mi` |
 | `appNavController.repository` | Docker registry to pull the Application Navigator Controller image from. | `ibmcom/app-nav-controller` |
-| `appNavController.tag` | Application Navigator Controller image tag. | `1.0.0` |
+| `appNavController.tag` | Application Navigator Controller image tag. | `1.0.1` |
 | `appNavController.resources.constraints.enabled` | Specifies whether resource constraints are enabled for the Application Navigator Controller.  | `false` |
 | `appNavController.resources.requests.cpu` | The minimum required CPU core for the Application Navigator Controller. Specify integers, fractions (e.g. 0.5), or millicore values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavController.resources.requests.memory` | Describes the minimum amount of memory required for the Application Navigator Controller. Corresponds to requests.memory in Kubernetes. If not specified it will default to maximum memory (if specified) or otherwise implementation-defined value. | `512Mi` |
 | `appNavController.resources.limits.cpu` | The upper limit of CPU core for the Application Navigator Controller. Specify integers, fractions (e.g. 0.5), or millicores values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavController.resources.limits.memory` | The memory upper limit in bytes for the Application Navigator Controller. Specify integers with suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki. | `512Mi` |
 | `appNavUI.repository` | Docker registry to pull the Application Navigator UI image from. | `ibmcom/app-nav-ui` |
-| `appNavUI.tag` | Application Navigator UI image tag. | `1.0.0` |
+| `appNavUI.tag` | Application Navigator UI image tag. | `1.0.1` |
 | `appNavUI.service.type` | Service type (`ClusterIP` or `NodePort`) for access to the Application Navigator UI. Always use `ClusterIP` if authentication is required. | `ClusterIP` |
 | `appNavUI.resources.constraints.enabled` | Specifies whether resource constraints are enabled for the Application Navigator UI.  | `false` |
 | `appNavUI.resources.requests.cpu` | The minimum required CPU core for the Application Navigator UI. Specify integers, fractions (e.g. 0.5), or millicore values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
@@ -191,21 +191,21 @@ To verify the chart, you need a system with kubectl and helm installed and confi
 | `appNavUI.resources.limits.cpu` | The upper limit of CPU core for the Application Navigator UI. Specify integers, fractions (e.g. 0.5), or millicores values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavUI.resources.limits.memory` | The memory upper limit in bytes for the Application Navigator UI. Specify integers with suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki. | `512Mi` |
 | `appNavWASController.repository` | Docker registry to pull the Application Navigator WAS Controller image from. | `ibmcom/app-nav-was-controller` |
-| `appNavWASController.tag` | Application Navigator WAS Controller image tag. | `1.0.0` |
+| `appNavWASController.tag` | Application Navigator WAS Controller image tag. | `1.0.1` |
 | `appNavWASController.resources.constraints.enabled` | Specifies whether resource constraints are enabled for the Application Navigator WAS Controller.  | `false` |
 | `appNavWASController.resources.requests.cpu` | The minimum required CPU core for the Application Navigator WAS Controller. Specify integers, fractions (e.g. 0.5), or millicore values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavWASController.resources.requests.memory` | Describes the minimum amount of memory required for the Application Navigator WAS Controller. Corresponds to requests.memory in Kubernetes. If not specified it will default to maximum memory (if specified) or otherwise implementation-defined value. | `512Mi` |
 | `appNavWASController.resources.limits.cpu` | The upper limit of CPU core for the Application Navigator WAS Controller. Specify integers, fractions (e.g. 0.5), or millicores values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavWASController.resources.limits.memory` | The memory upper limit in bytes for the Application Navigator WAS Controller. Specify integers with suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki. | `512Mi` |
 | `appNavInit.repository` | Docker registry to pull the Application Navigator Init image from. | `ibmcom/app-nav-init` |
-| `appNavInit.tag` | Application Navigator Init image tag. | `1.0.0` |
+| `appNavInit.tag` | Application Navigator Init image tag. | `1.0.1` |
 | `appNavInit.resources.constraints.enabled` | Specifies whether resource constraints are enabled for the Application Navigator Init.  | `false` |
 | `appNavInit.resources.requests.cpu` | The minimum required CPU core for the Application Navigator Init. Specify integers, fractions (e.g. 0.5), or millicore values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavInit.resources.requests.memory` | Describes the minimum amount of memory required for the Application Navigator Init. Corresponds to requests.memory in Kubernetes. If not specified it will default to maximum memory (if specified) or otherwise implementation-defined value. | `512Mi` |
 | `appNavInit.resources.limits.cpu` | The upper limit of CPU core for the Application Navigator Init. Specify integers, fractions (e.g. 0.5), or millicores values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavInit.resources.limits.memory` | The memory upper limit in bytes for the Application Navigator Init. Specify integers with suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki. | `512Mi` |
 | `appNavCmds.repository` | Docker registry to pull the Application Navigator Commands image from. | `ibmcom/app-nav-cmds` |
-| `appNavCmds.tag` | Application Navigator Commands image tag. | `1.0.0` |
+| `appNavCmds.tag` | Application Navigator Commands image tag. | `1.0.1` |
 | `appNavCmds.resources.constraints.enabled` | Specifies whether resource constraints are enabled for the Application Navigator Commands.  | `false` |
 | `appNavCmds.resources.requests.cpu` | The minimum required CPU core for the Application Navigator Commands. Specify integers, fractions (e.g. 0.5), or millicore values(e.g. 100m, where 100m is equivalent to .1 core). | `500m` |
 | `appNavCmds.resources.requests.memory` | Describes the minimum amount of memory required for the Application Navigator Commands. Corresponds to requests.memory in Kubernetes. If not specified it will default to maximum memory (if specified) or otherwise implementation-defined value. | `512Mi` |
@@ -222,4 +222,4 @@ To verify the chart, you need a system with kubectl and helm installed and confi
 See RELEASENOTES.md.
 
 ## Documentation
-[Using the IBM Application Navigator](https://www.ibm.com/support/knowledgecenter/SSEQTP_9.0.5/com.ibm.websphere.base.doc/ae/ccld_appnav.html)
+[Using the IBM Application Navigator](https://www.ibm.com/support/knowledgecenter/en/SSAW57_9.0.5/com.ibm.websphere.nd.multiplatform.doc/ae/ccld_appnav.html)
