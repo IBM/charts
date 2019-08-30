@@ -1,9 +1,9 @@
 ## What's new...
-DataPower 2018.4.1.6 \
-L2 certification \
-Set admin password with adminUserSecret
+DataPower 2018.4.1.7 \
+Change snmpState metadata to conform to other config states
 
 ## Fixes
+snmpState now conforms to other config states.
 
 ## Prerequisites
 None
@@ -17,6 +17,7 @@ See README.md
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ------------ | ------- | ---------------------------------- | ---- | -------------------------------------------------------------- |
+| 3.0.2 | Aug 23, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.7.312001 | None | snmpState |
 | 3.0.1 | Jun 28, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.6.309660 | None | L2 cert, adminUserSecret |
 | 3.0.0 | Apr 19, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.4.307525 | Changed label scheme | 2018.4.1.4, pull secrets, health check, ssh permissions |
 | 2.0.5 | Mar 08, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.3.306649 | None | 2018.4.1.3, use secret for https keys/certs, ILMT annotations |
