@@ -21,7 +21,7 @@ Container Image Security is enabled by default in ICP 3.1 and above. Hence add t
 
 ### PodSecurityPolicy Requirements
 
-This chart requires a `PodSecurityPolicy` role to be bound to the target namespace prior to installation.  On IBM Cloud Private, choose the predefined [ibm-anyuid-hostaccess-psp](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md) PodSecurityPolicy.
+This chart requires a `PodSecurityPolicy` role to be bound to the target namespace prior to installation.  On IBM Cloud Private, choose the following Custom PodSecurityPolicy definition: [ibm-anyuid-hostaccess-psp](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/ibm-anyuid-hostaccess-psp.yaml).
 
 ## Limitations
 * The portworx helm chart can only be deployed in the kube-system namespace. Hence use "kube-system" in the "Target namespace" during configuration.

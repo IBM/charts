@@ -10,6 +10,12 @@ app.kubernetes.io/name: {{ template "px.appName" . }}
 helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
 {{- end -}}
 
+{{- define "px.metering.annotations" -}}
+productName: "PX-Enterprise"
+productID: com.portworx.enterprise
+productVersion: {{ .Values.imageVersion }}
+{{- end -}}
+
 {{- define "px.kubernetesVersion" -}}
 {{$version := .Capabilities.KubeVersion.GitVersion | regexFind "^v\\d+\\.\\d+\\.\\d+"}}{{$version}}
 {{- end -}}
