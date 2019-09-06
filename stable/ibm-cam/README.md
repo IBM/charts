@@ -40,12 +40,12 @@ apiVersion: extensions/v1beta1
 kind: PodSecurityPolicy
 metadata:
   labels:
-    name: cam-services-ps-{{ .Values.service.namespace }}
+    name: cam-services-ps-{{ .Release.Namespace }}
     app: {{ template "fullname" . }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
-  name: cam-services-psp-{{ .Values.service.namespace }}
+  name: cam-services-psp-{{ .Release.Namespace }}
 spec:
   privileged: false
   allowPrivilegeEscalation: false
@@ -117,7 +117,7 @@ kind: SecurityContextConstraints
 metadata:
   annotations:
     kubernetes.io/description: "This policy is requiring pods to run with a non-root UID, and allow host path access."
-  name: cam-services-scc-{{ .Values.service.namespace }}
+  name: cam-services-scc-{{ .Release.Namespace }}
 allowHostDirVolumePlugin: true
 allowHostIPC: false
 allowHostNetwork: false
@@ -173,25 +173,25 @@ volumes:
 - secret
 - nfs
 groups:
-- system:serviceaccounts:{{ .Values.service.namespace }}
+- system:serviceaccounts:{{ .Release.Namespace }}
 priority: 0
 ```
 ## Resources Required
 
 * The minimum hardware requirements for IBM Cloud Automation Manager is a single worker node with at least 12 vCPU and 30GB of memory.
-For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_requirements.html
+For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.1.0/cam_requirements.html
 
-* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_create_pv.html
+* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.1.0/cam_create_pv.html
 
-* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_requirements.html
+* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.1.0/cam_requirements.html
 
 ## Installing the Chart
 
-This chart is normally deployed to the `services` namespace but can be deployed to multiple namespaces and supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_planning.html
+This chart is normally deployed to the `services` namespace but can be deployed to multiple namespaces and supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.1.0/cam_planning.html
 
 ## Configuration
 
-For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.0.0/cam_installation_parameters.html
+For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_3.2.1.0/cam_installation_parameters.html
 
 ## Limitations
 
