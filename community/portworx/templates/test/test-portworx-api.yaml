@@ -1,0 +1,34 @@
+{{- $registrySecret := .Values.registrySecret | default "none" }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-api-test-{{ randAlphaNum 5 | lower }}"
+  namespace: kube-system
+  labels:
+{{- include "px.labels" . | nindent 4 }}
+    name: px-test-pod
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+  {{- if not (eq $registrySecret "none") }}
+  imagePullSecrets:
+    - name: {{ $registrySecret }}
+  {{- end }}
+  containers:
+    - name: {{ .Release.Name }}-api-test
+      image: busybox:latest
+      command: ["wget", "portworx-service.kube-system.svc:9001/status"]
+      securityContext:
+        capabilities:
+          drop:
+          - ALL
+  restartPolicy: Never

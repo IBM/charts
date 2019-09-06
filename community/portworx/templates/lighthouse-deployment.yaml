@@ -22,7 +22,18 @@ spec:
       labels:
         tier: px-web-console
 {{- include "px.labels" . | nindent 8 }}
+      annotations:
+{{- include "px.metering.annotations" . | nindent 8 }}
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
       initContainers:
       - name: config-init
         image: "{{ template "px.getLighthouseImages" . }}/lh-config-sync:{{.Values.lighthouseSyncVersion}}"
@@ -32,6 +43,10 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /config/lh
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
       containers:
       - name: px-lighthouse
         image: "{{ template "px.getLighthouseImages" . }}/px-lighthouse:{{ required "A valid lighthouse image version is required" .Values.lighthouseVersion}}"
@@ -43,6 +58,10 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /config/lh
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
       - name: config-sync
         image: "{{ template "px.getLighthouseImages" . }}/lh-config-sync:{{.Values.lighthouseSyncVersion}}"
         imagePullPolicy: Always
@@ -51,9 +70,17 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /config/lh
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
       - name: stork-connector
         image: "{{ template "px.getLighthouseImages" . }}/lh-stork-connector:{{.Values.lighthouseStorkConnectorVersion}}"
         imagePullPolicy: Always
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
       serviceAccountName: px-lh-account
       volumes:
       - name: config
