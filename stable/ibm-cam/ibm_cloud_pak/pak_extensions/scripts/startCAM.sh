@@ -29,6 +29,7 @@ else
   exit 1;
 fi
 
+# Start deployments
 # Read any saved replica count values generated from the stop command
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 if [ -f $DIR/saved_replicas.txt ]; then
@@ -53,6 +54,31 @@ for deployment in $deployments; do
   fi
   echo "Starting $name with replica count of $count"
   kubectl scale -n $NAMESPACE deployment $name --replicas=$count 1>/dev/null &
+done
+
+# Start statefulsets
+if [ -f $DIR/statefulset_saved_replicas.txt ]; then
+  echo "Using saved replica counts in $DIR/statefulset_saved_replicas.txt"
+  statefulsets=$(cat $DIR/statefulset_saved_replicas.txt)
+else
+  echo 'Unable to find saved replica counts; will default to a value of 1'
+  statefulsets=$(kubectl get statefulsets -n $NAMESPACE -l release=$camRelease -o custom-columns=NAME:.metadata.name)
+fi
+
+# Set internal field separator to newline, so we loop over each line in the output
+IFS=$'\n'
+for statefulset in $statefulsets; do
+  name=$(echo $statefulset | awk '{print $1}')
+  count=$(echo $statefulset | awk '{print $2}')
+  if [ -z "$count" ]; then
+    count=1
+  fi
+  if [ $count == 0 ]; then
+    echo 'Saved value of count was zero, will use 1 instead'
+    count=1
+  fi
+  echo "Starting $name with replica count of $count"
+  kubectl scale -n $NAMESPACE statefulset $name --replicas=$count 1>/dev/null &
 done
 
 # Wait for all pods to start

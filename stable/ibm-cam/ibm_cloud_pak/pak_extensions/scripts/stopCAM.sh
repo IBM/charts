@@ -29,7 +29,8 @@ else
   exit 1;
 fi
 
-# Save the current replica counts, so that we can start the same number later
+# Stop deployments
+# Save the current deployment replica counts, so that we can start the same number later
 # Protect against overwritting the counts if stop is run more than once in a row.
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 some_stopped=$(kubectl get -n $NAMESPACE deploy -l release=$camRelease -o custom-columns=NAME:.metadata.name,DESIRED:spec.replicas --no-headers | grep 0)
@@ -49,6 +50,29 @@ for deployment in $(kubectl get deployments -n $NAMESPACE -l release=$camRelease
   else   
     echo "Stopping $name"
     kubectl scale -n $NAMESPACE deployment $name --replicas=0 1>/dev/null &
+  fi
+done
+
+# Stop statefulsets
+# Save the current statefulset replica counts, so that we can start the same number later
+# Protect against overwritting the counts if stop is run more than once in a row.
+some_stopped=$(kubectl get -n $NAMESPACE statefulset -l release=$camRelease -o custom-columns=NAME:.metadata.name,DESIRED:spec.replicas --no-headers | grep 0)
+if [ -n "$some_stopped" -a -f "statefulset_saved_replicas.txt" ]; then
+  echo 'At least one pod is already stopped and a statefulset_saved_replicas.txt file already exists; will not overwrite'
+else
+  kubectl get -n $NAMESPACE statefulset -l release=$camRelease -o custom-columns=NAME:.metadata.name,DESIRED:spec.replicas --no-headers > $DIR/statefulset_saved_replicas.txt
+fi
+
+# Set the field separator to newline so the loop will process a full line at a time
+IFS=$'\n'
+for statefulset in $(kubectl get statefulsets -n $NAMESPACE -l release=$camRelease -o custom-columns=NAME:.metadata.name,DESIRED:spec.replicas --no-headers); do
+  name=$(echo $statefulset | awk '{print $1}')
+  count=$(echo $statefulset | awk '{print $2}')
+  if [ $count == 0 ]; then
+    echo "$name already stopped"
+  else
+    echo "Stopping $name"
+    kubectl scale -n $NAMESPACE statefulset $name --replicas=0 1>/dev/null &
   fi
 done
 
