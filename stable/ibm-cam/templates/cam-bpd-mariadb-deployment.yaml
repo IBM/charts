@@ -18,7 +18,7 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
-  namespace: {{ .Values.service.namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   selector:
     matchLabels:
@@ -112,7 +112,7 @@ spec:
             - sh
             - -c
             - "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD}"
-          initialDelaySeconds: 30
+          initialDelaySeconds: 75
           timeoutSeconds: 20
         readinessProbe:
           exec:
@@ -120,12 +120,17 @@ spec:
             - sh
             - -c
             - "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD}"
-          initialDelaySeconds: 30
+          initialDelaySeconds: 75
           timeoutSeconds: 20
         volumeMounts:
         - name: {{ .Values.camBPDAppDataPV.name }}
           mountPath: /var/lib/mysql
           subPath: mysql
+        - name: cam-cert
+          mountPath: /usr/src/app/certs
+          readOnly: true
+        - name: {{ .Values.camLogsPV.name }}
+          mountPath: /var/camlog
       {{- if .Values.global.image.secretName }}
       {{- if ne .Values.global.image.secretName "default"}}
       imagePullSecrets:
@@ -133,6 +138,9 @@ spec:
       {{- end }}
       {{- end }}
       volumes:
+      - name: cam-cert
+        secret:
+          secretName: {{ .Values.camAPI.certificate.certName }}
       - name: "{{ .Values.camBPDAppDataPV.name }}"
       {{- if .Values.camBPDAppDataPV.persistence.enabled }}
         persistentVolumeClaim:
@@ -140,6 +148,17 @@ spec:
           claimName: {{ .Values.camBPDAppDataPV.persistence.existingClaimName }}
         {{- else }}
           claimName: {{ .Values.camBPDAppDataPV.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name:  {{ .Values.camLogsPV.name }}
+      {{- if .Values.camLogsPV.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.camLogsPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camLogsPV.persistence.existingClaimName }}
+        {{- else }}
+          claimName:  {{ .Values.camLogsPV.name }}
         {{- end }}
       {{- else }}
         emptyDir: {}

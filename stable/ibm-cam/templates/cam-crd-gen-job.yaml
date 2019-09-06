@@ -1,0 +1,398 @@
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: template-crd-gen-job
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+  labels:
+    name: template-crd-gen-job
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  backoffLimit: 5 
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: template-crd-gen-job
+      labels:
+        name: template-crd-gen-job
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+       - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+      containers:
+      - name: template-crd-gen
+        image: "{{ .Values.image.repository }}icam-tenant-api:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - MKNOD
+        command:
+        - "/bin/bash" 
+        - -c
+        - |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apiextensions.k8s.io/v1beta1
+          kind: CustomResourceDefinition
+          metadata:
+            creationTimestamp: null
+            labels:
+              controller-tools.k8s.io: "1.0"
+            name: templates.cloudautomationmgr.ibm.com
+          spec:
+            additionalPrinterColumns:
+            - JSONPath: .metadata.creationTimestamp
+              name: Age
+              type: date
+            - JSONPath: .status.action
+              description: Last Action Performed
+              format: byte
+              name: Action
+              type: string
+            - JSONPath: .status.status
+              description: Status of Last Action
+              format: byte
+              name: Status
+              type: string
+            group: cloudautomationmgr.ibm.com
+            names:
+              kind: Template
+              plural: templates
+            scope: Namespaced
+            subresources:
+              status: {}
+            validation:
+              openAPIV3Schema:
+                properties:
+                  apiVersion:
+                    description: 'APIVersion defines the versioned schema of this representation
+                      of an object. Servers should convert recognized schemas to the latest
+                      internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+                    type: string
+                  kind:
+                    description: 'Kind is a string value representing the REST resource this
+                      object represents. Servers may infer this from the endpoint the client
+                      submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                    type: string
+                  metadata:
+                    type: object
+                  spec:
+                    properties:
+                      camAPIKey:
+                        type: string
+                      camApiPort:
+                        format: int64
+                        type: integer
+                      camAuthPort:
+                        format: int64
+                        type: integer
+                      camHost:
+                        type: string
+                      camPassword:
+                        type: string
+                      camUsername:
+                        type: string
+                      connection:
+                        type: string
+                      secrets:
+                        properties:
+                          env:
+                            properties:
+                              apikey:
+                                type: string
+                              password:
+                                type: string
+                              username:
+                                type: string
+                            type: object
+                        type: object
+                      template:
+                        properties:
+                          name:
+                            type: string
+                          parameters:
+                            properties:
+                              parameters:
+                                type: object
+                              parametersWithString:
+                                type: object
+                              parametersWithStringList:
+                                type: object
+                              parametersWithStringMap:
+                                type: object
+                              sharedParameters:
+                                items:
+                                  properties:
+                                    dataType:
+                                      type: string
+                                    name:
+                                      type: string
+                                  required:
+                                  - name
+                                  - dataType
+                                  type: object
+                                type: array
+                            type: object
+                          version:
+                            type: string
+                        required:
+                        - name
+                        - version
+                        - parameters
+                        type: object
+                    required:
+                    - connection
+                    - template
+                    type: object
+                  status:
+                    properties:
+                      action:
+                        type: string
+                      conditions:
+                        items:
+                          properties:
+                            lastTransitionTime:
+                              description: The last time the condition transitioned from one
+                                status to another.
+                              format: date-time
+                              type: string
+                            message:
+                              description: A human readable message indicating details about
+                                the transition.
+                              type: string
+                            reason:
+                              description: The reason for the condition's last transition.
+                              type: string
+                            status:
+                              description: Status of the condition, one of True, False, Unknown.
+                              type: string
+                            type:
+                              description: Type of condition, e.g Complete or Failed.
+                              type: string
+                          required:
+                          - type
+                          - status
+                          type: object
+                        type: array
+                      message:
+                        type: string
+                      outputs:
+                        items:
+                          properties:
+                            name:
+                              type: string
+                            type:
+                              type: string
+                            value:
+                              type: string
+                          type: object
+                        type: array
+                      stackID:
+                        type: string
+                      status:
+                        type: string
+                    required:
+                    - status
+                    - action
+                    - message
+                    - stackID
+                    type: object
+            version: v1alpha1
+          status:
+            acceptedNames:
+              kind: ""
+              plural: ""
+            conditions: []
+            storedVersions: []
+          EOF
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apiextensions.k8s.io/v1beta1
+          kind: CustomResourceDefinition
+          metadata:
+            creationTimestamp: null
+            labels:
+              controller-tools.k8s.io: "1.0"
+            name: services.cloudautomationmgr.ibm.com
+          spec:
+            additionalPrinterColumns:
+            - JSONPath: .metadata.creationTimestamp
+              name: Age
+              type: date
+            - JSONPath: .status.action
+              description: Last Action Performed
+              format: byte
+              name: Action
+              type: string
+            - JSONPath: .status.status
+              description: Status of Last Action
+              format: byte
+              name: Status
+              type: string
+            group: cloudautomationmgr.ibm.com
+            names:
+              kind: Service
+              plural: services
+            scope: Namespaced
+            subresources:
+              status: {}
+            validation:
+              openAPIV3Schema:
+                properties:
+                  apiVersion:
+                    description: 'APIVersion defines the versioned schema of this representation
+                      of an object. Servers should convert recognized schemas to the latest
+                      internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+                    type: string
+                  kind:
+                    description: 'Kind is a string value representing the REST resource this
+                      object represents. Servers may infer this from the endpoint the client
+                      submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                    type: string
+                  metadata:
+                    type: object
+                  spec:
+                    properties:
+                      camAPIKey:
+                        type: string
+                      camApiPort:
+                        format: int64
+                        type: integer
+                      camAuthPort:
+                        format: int64
+                        type: integer
+                      camHost:
+                        type: string
+                      camPassword:
+                        type: string
+                      camUsername:
+                        type: string
+                      secrets:
+                        properties:
+                          env:
+                            properties:
+                              apikey:
+                                type: string
+                              password:
+                                type: string
+                              username:
+                                type: string
+                            type: object
+                        type: object
+                      service:
+                        properties:
+                          action:
+                            type: string
+                          name:
+                            type: string
+                          parameters:
+                            properties:
+                              specifications:
+                                properties:
+                                  parameters:
+                                    type: object
+                                type: object
+                            required:
+                            - specifications
+                            type: object
+                        required:
+                        - name
+                        - action
+                        - parameters
+                        type: object
+                    required:
+                    - service
+                    type: object
+                  status:
+                    properties:
+                      action:
+                        type: string
+                      conditions:
+                        items:
+                          properties:
+                            lastTransitionTime:
+                              description: The last time the condition transitioned from one
+                                status to another.
+                              format: date-time
+                              type: string
+                            message:
+                              description: A human readable message indicating details about
+                                the transition.
+                              type: string
+                            reason:
+                              description: The reason for the condition's last transition.
+                              type: string
+                            status:
+                              description: Status of the condition, one of True, False, Unknown.
+                              type: string
+                            type:
+                              description: Type of condition, e.g Complete or Failed.
+                              type: string
+                          required:
+                          - type
+                          - status
+                          type: object
+                        type: array
+                      message:
+                        type: string
+                      outputs:
+                        type: object
+                      serviceID:
+                        type: string
+                      status:
+                        type: string
+                    required:
+                    - status
+                    - action
+                    - message
+                    - serviceID
+                    type: object
+            version: v1alpha1
+          status:
+            acceptedNames:
+              kind: ""
+              plural: ""
+            conditions: []
+            storedVersions: []
+          EOF
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 100m
+      restartPolicy: Never
