@@ -1,20 +1,14 @@
 # Breaking Changes
 None
 
-# What’s new in Chart Version 1.0.8
+# What’s new in Chart Version 1.0.9
 
-With ibm-object-storage-plugin chart version 1.0.8, the following new
+With ibm-object-storage-plugin chart version 1.0.9, the following new
 features are available:
-* Updated chart to set cpu and memory limits for object-storage plugin pods.
-* Updated registry URL to `icr.io`.
-* Updated helm repo from `iks-charts` to `ibm-charts`.
-* Updated chart to create storageclasses with `tls-cipher-suite` as per worker node's operating system family(`Debian/Red Hat`).
-* Updated `ibmc` plugin to use `--set workerOS=<debian | redhat>`, while installing/upgrading object-storage plugin, depending on worker node's operating system family.
-* README Update.
-* Configured readiness probes in plugin and driver containers.
+* Setting 'default_acl=private' in driver, when using HMAC credentials.
 
 # Fixes
-* Build images on Red Hat UBI (Universal Base Image) for red-hat-openshift support.
+* Upgraded GoLang to v1.12.9 for fixing GoLang vulnerability issue.
 
 # Prerequisites
 Install tiller with service-account due to some RBAC issue (helm version: >=2.9.1). Follow instructions [here](https://cloud.ibm.com/docs/containers/cs_integrations.html#helm).
@@ -28,6 +22,7 @@ For install/upgrade, follow instructions [here](https://cloud.ibm.com/docs/conta
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.0.9 | Sep 09, 2019| >=1.10.1 | 1.8.8 | None | Upgraded GoLang to v1.12.9 for fixing GoLang vulnerability issue, Setting 'default_acl=private' in driver, when using HMAC credentials; GoLang: v1.12.9 |
 | 1.0.8 | Jun 24, 2019| >=1.10.1 | 1.8.7 | None | Updated chart to set cpu and memory limits for object-storage plugin pods, Updated registry URL to `icr.io`, Updated helm repo from `iks-charts` to `ibm-charts`, Updated chart to create storageclasses with `tls-cipher-suite` as per worker node's operating system family(`Debian/Red Hat`), Updated `ibmc` plugin to use `--set workerOS=<debian / redhat>` while installing/upgrading object-storage plugin depending on worker node's operating system family, Build images on Red Hat UBI (Universal Base Image) for red-hat-openshift support, README Update; Readiness probes configured in driver/plugin containers; GoLang: v1.12.1 |
 | 1.0.7 | May 17, 2019| >=1.10.1 | 1.8.6 | None | Allow late binding and dynamic provisioning of volume, Updated helm chart to deploy on managed openshift on IBM Kubernetes Service(IKS), Updated `ibmc` plugin to install/uninstall chart `without tiller`, Updated `ibmc` plugin to install specific version of the chart, Updated `ibmc` plugin to fix the issue while installing the chart with lower version of `kubectl` client; GoLang: v1.12.1 |
 | 1.0.6 | May 02, 2019| >=1.10.1 | 1.8.6 | None | Use ibm-cos-sdk instead of AWS SDK; Mask IAM credentials in driver log; Change helm repo from ibm to iks-charts  |
