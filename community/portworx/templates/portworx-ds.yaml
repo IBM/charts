@@ -17,11 +17,7 @@
 {{- $internalKVDB := .Values.internalKVDB | default false }}
 {{- $csi := .Values.csi | default false }}
 
-{{- $etcdCredentials := .Values.etcd.credentials | default "none" }}
-{{- $etcdCertPath := .Values.etcd.certPath | default "none" }}
-{{- $etcdCA := .Values.etcd.ca | default "none" }}
-{{- $etcdCert := .Values.etcd.cert | default "none" }}
-{{- $etcdKey := .Values.etcd.key | default "none" }}
+{{- $etcdSecret := .Values.etcd.secret | default "none" }}
 {{- $etcdEndPoints := .Values.kvdb }}
 
 apiVersion: apps/v1
@@ -133,20 +129,9 @@ spec:
               "-m", "{{ $managementInterface }}",
               {{- end -}}
 
-              {{- if ne $etcdCredentials "none" }}
-              "-userpwd", "$ETCD_USERNAME:$ETCD_PASSWORD",
-              {{- end -}}
-
-              {{- if ne $etcdCA "none" }}
-              "-ca", "{{ $etcdCA }}",
-              {{- end -}}
-
-              {{- if ne $etcdCert "none" }}
-              "-cert", "{{ $etcdCert }}",
-              {{- end -}}
-
-              {{- if ne $etcdKey "none" }}
-              "-key", "{{ $etcdKey }}",
+              {{- if ne $etcdSecret "none" }}
+              "-userpwd", "$(ETCD_USERNAME):$(ETCD_PASSWORD)",
+              "-ca", "/etc/pwx/etcdcerts/ca.pem",
               {{- end -}}
 
               "-x", "kubernetes",
@@ -179,17 +164,17 @@ spec:
                   key: ".dockerconfigjson"
                   name: "{{ $registrySecret }}"
             {{- end }}
-           {{- if not (eq $etcdCredentials "none") }}
+           {{- if not (eq $etcdSecret "none") }}
             - name: ETCD_USERNAME
               valueFrom:
                 secretKeyRef:
                   key: "username"
-                  name: "{{ $etcdCredentials }}"
+                  name: "{{ $etcdSecret }}"
             - name: ETCD_PASSWORD
               valueFrom:
                 secretKeyRef:
                   key: "password"
-                  name: "{{ $etcdCredentials }}"
+                  name: "{{ $etcdSecret }}"
             {{- end }}
 
             {{- if eq $csi true }}
@@ -217,7 +202,7 @@ spec:
               drop:
               - ALL
           volumeMounts:
-          {{- if not (eq $etcdCertPath "none") }}
+          {{- if not (eq $etcdSecret "none") }}
             - mountPath: /etc/pwx/etcdcerts
               name: etcdcerts
           {{- end }}
@@ -272,17 +257,13 @@ spec:
       restartPolicy: Always
       serviceAccountName: px-account
       volumes:
-          {{- if not (eq $etcdCertPath "none") }}
+          {{- if not (eq $etcdSecret "none") }}
         - name: etcdcerts
           secret:
-            secretName: px-etcd-certs
+            secretName: {{ $etcdSecret }}
             items:
             - key: ca.pem
               path: ca.pem
-            - key: client.pem
-              path: client.pem
-            - key: client-key.pem
-              path: client-key.key
           {{- end}}
         - name: dockersock
           hostPath:
