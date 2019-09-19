@@ -380,7 +380,7 @@ spec:
           limits:
             memory: 200Mi
             cpu: '.5'
-        image: "{{ if $secretGenRoot.Values.image.repository }}{{ trimSuffix "/" $secretGenRoot.Values.image.repository }}/{{ end }}{{ $secretGenRoot.Values.image.name }}:{{ $secretGenRoot.Values.image.tag }}"
+        image: "{{ if $secretGenRoot.Values.global.image.repository }}{{ trimSuffix "/" $secretGenRoot.Values.global.image.repository }}/{{ end }}{{ $secretGenRoot.Values.image.name }}:{{ $secretGenRoot.Values.image.tag }}"
         imagePullPolicy: {{ $secretGenRoot.Values.image.pullPolicy }}
         command:
         - /bin/bash
