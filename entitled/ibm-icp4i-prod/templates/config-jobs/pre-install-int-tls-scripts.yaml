@@ -1,0 +1,65 @@
+{{- include "sch.config.init" (list . ) }}
+{{- $scriptsName := include "sch.names.fullCompName" (list . "int-tls-scripts") }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $scriptsName }}
+  labels:
+    app: {{ template "icip-navigator.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+data:
+  generate-internal-tls.sh: |
+    #!/bin/sh
+    #
+    # The following environment variables need to be set prior to running:
+    #
+    # INTERNAL_CERT_SECRET_NAME - Name for the internal TLS cert secret
+    # RELEASE_NAME - the name of the helm release
+
+    echo "============================================"
+    echo "Creating key and cert files for internal TLS";
+    echo "============================================"
+
+    openssl genrsa 4096 > /tmp/tls.key
+    openssl req -new -x509 -nodes -sha256 -days 3650 -key /tmp/tls.key -config req.conf > /tmp/tls.crt
+    cat /tmp/tls.key | base64 > /tmp/tls-double-encoded.key
+    cat /tmp/tls.crt | base64 > /tmp/tls-double-encoded.crt
+
+    if [[ $? == 1 ]]; then
+      echo "Internal certificate generation failed"
+      exit 1
+    fi
+
+    echo "Deleting existing secret"
+    /usr/local/bin/kubectl delete secret $INTERNAL_CERT_SECRET_NAME
+
+    # Fail if we can't create objects
+    set -e
+
+    echo "Creating secret"
+    /usr/local/bin/kubectl create secret generic $INTERNAL_CERT_SECRET_NAME --from-file /tmp/tls.key --from-file /tmp/tls.crt --from-file /tmp/tls-double-encoded.key --from-file /tmp/tls-double-encoded.crt
+    echo "Setting labels"
+    /usr/local/bin/kubectl label secret $INTERNAL_CERT_SECRET_NAME release=$RELEASE_NAME
+  req.conf: |
+    [req]
+    distinguished_name = req_distinguished_name
+    req_extensions = v3_req
+    prompt = no
+    [req_distinguished_name]
+    C = UK
+    ST = Hampshire
+    L = Hursley
+    O = IBM
+    OU = Integration
+    CN = *.svc
+    [v3_req]
+    keyUsage = keyEncipherment, dataEncipherment
+    extendedKeyUsage = serverAuth
+    subjectAltName = @alt_names
+    [alt_names]
+    DNS.1 = *.svc

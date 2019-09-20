@@ -1,0 +1,114 @@
+{{- include "sch.config.init" (list . ) }}
+{{- $scriptsName := include "sch.names.fullCompName" (list . "oauth-scripts") }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $scriptsName }}
+  labels:
+    app: {{ template "icip-navigator.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+data:
+  oauth.sh: |
+    #!/bin/sh
+    #
+    # The following environment variables need to be set prior to running:
+    #
+    # RELEASE_NAME - the name of the helm release
+    # NAMESPACE - the namespace of the helm release
+    # OIDC_CLIENT_NAME - Name for the oidc client object
+    # OIDC_SECRET_NAME - Name for the oidc sercret object
+    # ICP4I_CONFIGMAP_NAME - Name for the ICP4I configmap object
+    # INTERNAL_CERT_SECRET_NAME - Name for the internal TLS cert secret
+    # PLATFORM_HOSTNAME - Hostname specified for ingress
+    # INGRESS_PATH - Path specified for ingress
+    # CALLBACK_URI - Callback path for the OIDC dance
+
+    addIfNew() {
+      case ",$1," in
+        *",$2,"*) echo "$1" ;;
+        *) echo "$1,$2"
+      esac
+    }
+
+    echo "======================"
+    echo "OIDC registration job";
+    echo "======================"
+
+    OIDC_CLIENT_TEMPLATE="oidc-client.yaml.template"
+    OIDC_CLIENT_INSTANCE="/tmp/oidc-client.yaml"
+
+    CLUSTER_ADDRESS=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.cluster_address}" -n kube-public`
+    CLUSTER_PORT=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.cluster_router_https_port}" -n kube-public`
+    PROXY_ADDRESS=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.proxy_address}" -n kube-public`
+    PROXY_PORT=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.proxy_ingress_https_port}" -n kube-public`
+    CLUSTER_NAME=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.cluster_name}" -n kube-public`
+
+    # Calculate the CRN
+    CRN="crn:v1:icp:private:k8:$LCUSTER_NAME:n/$NAMESPACE:r/$RELEASE_NAME::"
+
+    # Create the values that will be plumbed into the registration template.
+
+    # Build up redirect URIs
+    if [ $PROXY_PORT == "443" ]; then
+      OPTIONAL_PROXY_PORT=""
+    else
+      OPTIONAL_PROXY_PORT=":${PROXY_PORT}"
+    fi
+
+    TRUSTED_URI_PREFIXES="\"https://$PROXY_ADDRESS\""
+    POST_LOGOUT_REDIRECT_URIS="\"https://$PROXY_ADDRESS/$INGRESS_PATH/logout\""
+    REDIRECT_URIS="\"https://$PROXY_ADDRESS/$INGRESS_PATH/$CALLBACK_URI\""
+
+    if [ ! -z "${PLATFORM_HOSTNAME}" ]; then
+      POST_LOGOUT_REDIRECT_URIS=$(addIfNew "$POST_LOGOUT_REDIRECT_URIS" "\"https://${PLATFORM_HOSTNAME}${OPTIONAL_PROXY_PORT}/$INGRESS_PATH/logout\"")
+      TRUSTED_URI_PREFIXES=$(addIfNew "$TRUSTED_URI_PREFIXES" "\"https://$PROXY_ADDRESS\"")
+      REDIRECT_URIS=$(addIfNew "$REDIRECT_URIS" "\"https://${PLATFORM_HOSTNAME}${OPTIONAL_PROXY_PORT}/$INGRESS_PATH/$CALLBACK_URI\"")
+    fi
+
+    echo "======================"
+    echo "Configured endpoints"
+    echo "======================"
+    echo "POST_LOGOUT_REDIRECT_URIS: $POST_LOGOUT_REDIRECT_URIS"
+    echo "TRUSTED_URI_PREFIXES: $TRUSTED_URI_PREFIXES"
+    echo "REDIRECT_URIS: $REDIRECT_URIS"
+    echo "External end point : $PROXY_ADDRESS"
+    echo "PLATFORM_HOSTNAME : $PLATFORM_HOSTNAME"
+    echo "CRN : $CRN"
+    echo "======================"
+
+    sed -e "s|OIDC_CLIENT_NAME|$OIDC_CLIENT_NAME|g" -e "s|OIDC_SECRET_NAME|$OIDC_SECRET_NAME|g" -e "s|POST_LOGOUT_REDIRECT_URIS|$POST_LOGOUT_REDIRECT_URIS|g" -e "s|TRUSTED_URI_PREFIXES|$TRUSTED_URI_PREFIXES|g" -e "s|REDIRECT_URIS|$REDIRECT_URIS|g" "$OIDC_CLIENT_TEMPLATE" > "$OIDC_CLIENT_INSTANCE"
+
+    kubectl apply -f "$OIDC_CLIENT_INSTANCE"
+
+    if [[ $? -ne 0 ]]; then
+      echo "Could not create OIDC registration client object"
+      exit 1
+    fi
+
+    echo "Deleting existing configmap"
+    /usr/local/bin/kubectl delete configmap $ICP4I_CONFIGMAP_NAME
+
+    # Fail if we can't create objects
+    set -e
+
+    echo "Creating configmap"
+    /usr/local/bin/kubectl create configmap $ICP4I_CONFIGMAP_NAME --from-literal=clusterExternalHost=$CLUSTER_ADDRESS --from-literal=clusterExternalPort=$CLUSTER_PORT --from-literal=crn=$CRN --from-literal=proxy_ingress_https_port=$PROXY_PORT
+    echo "Setting labels"
+    /usr/local/bin/kubectl label configmap $ICP4I_CONFIGMAP_NAME release=$RELEASE_NAME
+
+  oidc-client.yaml.template: |
+    apiVersion: oidc.security.ibm.com/v1
+    kind: Client
+    metadata:
+      name: OIDC_CLIENT_NAME
+    spec:
+      secret: OIDC_SECRET_NAME
+      oidcLibertyClient:
+        post_logout_redirect_uris: [POST_LOGOUT_REDIRECT_URIS]
+        trusted_uri_prefixes: [TRUSTED_URI_PREFIXES]
+        redirect_uris: [REDIRECT_URIS]

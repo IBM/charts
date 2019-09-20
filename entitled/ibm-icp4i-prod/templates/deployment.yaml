@@ -1,0 +1,213 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+###############################################################################
+{{- include "sch.config.init" (list . ) }}
+{{- $deploymentName := include "sch.names.fullName" (list .) }}
+{{- $oidcSecretName :=  printf "%s-%s" (include "icip-navigator.fullname" . )  "oidc-secret" }}
+{{- $icp4iConfigmapName :=  printf "%s-%s" (include "icip-navigator.fullname" . )  "configmap" }}
+{{- $intTlsSecretName :=  printf "%s-%s" (include "icip-navigator.fullname" . )  "int-secret" }}
+{{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "cip")) }}
+{{- $serverChartName := .sch.chart.serverChartName }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "icip-navigator.fullname" . }}
+  labels:
+    app: {{ template "icip-navigator.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "icip-navigator.name" . }}-{{ .Release.Name }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+          {{- if .Values.productionDeployment }}
+            productName: IBM Cloud Pak for Integration
+            productID: 5737_I89_ICP4I_nonChargeable
+            productVersion: 2019.2.3
+          {{else }}
+            productName: IBM Cloud Pak for Integration (non-production)
+            productID: 5737_I89_ICP4I_nonProd_nonChargeable
+            productVersion: 2019.2.3
+          {{- end }}
+      labels:
+{{ $labels | indent 8 }}
+        app: {{ template "icip-navigator.name" . }}-{{ .Release.Name }}
+        release: {{ .Release.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - "{{ template "icip-navigator.name" . }}-{{ .Release.Name }}"
+              topologyKey: kubernetes.io/hostname
+      serviceAccountName: {{ template "icip-navigator.fullname" . }}-serviceaccount
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: "{{ .Chart.Name }}-navigator"
+          image: "{{ .Values.image.navigator }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 5055
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5055
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5055
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 2
+          env:
+            - name: INGRESS_PATH
+              value: {{ .Values.tls.ingresspath }}
+            - name: CIP_SERVICES_ENDPOINT
+              value: "https://icp4i-services-{{ .Release.Namespace }}.{{ .Release.Namespace }}.svc:3000"
+            - name: CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcSecretName }}
+                  key: CLIENT_ID
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcSecretName }}
+                  key: CLIENT_SECRET
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $intTlsSecretName }}
+                  key: tls.key
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $intTlsSecretName }}
+                  key: tls.crt
+            - name: CLUSTER_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: clusterExternalHost
+            - name: CLUSTER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: clusterExternalPort
+          resources:
+{{ toYaml .Values.resources.navigator | indent 12 }}
+        - name: "{{ .Chart.Name }}-services"
+          image: "{{ .Values.image.services }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /v1/config
+              port: 3000
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /v1/config
+              port: 3000
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 2
+          env:
+            - name: NAVIGATOR_HOST
+              value: {{ .Values.tls.hostname }}
+            - name: CIP_VERSION
+              value: {{ .Chart.Version }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: INGRESS_PATH
+              value: {{ .Values.tls.ingresspath }}
+            - name: CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcSecretName }}
+                  key: CLIENT_ID
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcSecretName }}
+                  key: CLIENT_SECRET
+            - name: CLUSTER_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: clusterExternalHost
+            - name: CLUSTER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: clusterExternalPort
+            - name: PROXY_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: proxy_ingress_https_port
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $intTlsSecretName }}
+                  key: tls.key
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $intTlsSecretName }}
+                  key: tls.crt
+          resources:
+{{ toYaml .Values.resources.services | indent 12 }}

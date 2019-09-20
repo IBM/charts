@@ -1,0 +1,69 @@
+{{- include "sch.config.init" (list . ) }}
+{{- $scriptsName := include "sch.names.fullCompName" (list . "ext-tls-scripts") }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $scriptsName }}
+  labels:
+    app: {{ template "icip-navigator.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+data:
+  generate-external-tls.sh: |
+    #!/bin/sh
+    #
+    # The following environment variables need to be set prior to running:
+    #
+    # EXTERNAL_CERT_SECRET_NAME - Name for the external TLS cert secret
+    # PLATFORM_HOSTNAME - Hostname specified for ingress
+    # RELEASE_NAME - the name of the helm release
+
+    REQ_TEMPLATE="req.conf.template"
+    REQ_INSTANCE="/tmp/req.conf"
+
+    echo "============================================"
+    echo "Creating key and cert files for external TLS";
+    echo "============================================"
+
+    sed -e "s|PLATFORM_HOSTNAME|$PLATFORM_HOSTNAME|g" "$REQ_TEMPLATE" > "$REQ_INSTANCE"
+
+    openssl genrsa 4096 > /tmp/tls.key
+    openssl req -new -x509 -nodes -sha256 -days 3650 -key /tmp/tls.key -config "$REQ_INSTANCE" > /tmp/tls.crt
+
+    if [[ $? == 1 ]]; then
+      echo "External certificate generation failed"
+      exit 1
+    fi
+
+    echo "Deleting existing secret"
+    /usr/local/bin/kubectl delete secret $EXTERNAL_CERT_SECRET_NAME
+
+    # Fail if we can't create objects
+    set -e
+
+    echo "Creating secret"
+    /usr/local/bin/kubectl create secret tls $EXTERNAL_CERT_SECRET_NAME --key /tmp/tls.key --cert /tmp/tls.crt
+    echo "Setting labels"
+    /usr/local/bin/kubectl label secret $EXTERNAL_CERT_SECRET_NAME release=$RELEASE_NAME
+  req.conf.template: |
+    [req]
+    distinguished_name = req_distinguished_name
+    req_extensions = v3_req
+    prompt = no
+    [req_distinguished_name]
+    C = UK
+    ST = Hampshire
+    L = Hursley
+    O = IBM
+    OU = Integration
+    CN = ICP4I
+    [v3_req]
+    keyUsage = keyEncipherment, dataEncipherment
+    extendedKeyUsage = serverAuth
+    subjectAltName = @alt_names
+    [alt_names]
+    DNS.1 = PLATFORM_HOSTNAME
