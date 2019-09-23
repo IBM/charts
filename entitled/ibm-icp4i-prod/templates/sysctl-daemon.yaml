@@ -1,0 +1,90 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+###############################################################################
+{{- include "sch.config.init" (list . ) }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "") }}
+{{- $sysctlPodLabels := include "sch.metadata.labels.standard" (list . "sysctl") }}
+{{- $name := include "sch.names.fullName" (list .) }}
+{{- $saName := include "sch.names.fullCompName" (list . "sysctl-serviceaccount") }}
+{{- if .Values.sysctlDaemon }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $name }}-daemon
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ $sysctlPodLabels | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{ $sysctlPodLabels | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      serviceAccountName: {{ $saName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - command:
+        - sh
+        - -c
+        - "if [ \"$(cat /proc/sys/vm/max_map_count)\" -lt \"1048576\" ] ; then echo \"vm.max_map_count was less than 1048576, increasing to that value.\" && echo -n 1048576 > /proc/sys/vm/max_map_count; fi; while true; do sleep 100000; done"
+        image: "{{  regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.configurator "${1}cp/icp4i/"  }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: {{ $name }}-sysctld
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "if [ \"$(cat /proc/sys/vm/max_map_count)\" -lt \"1048576\" ] ; then false; else true; fi;"
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "cat /proc/sys/vm/max_map_count"
+          initialDelaySeconds: 5
+          periodSeconds: 3000
+        resources:
+          limits:
+            cpu: 10m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 50Mi
+        securityContext:
+          privileged: true
+          allowPrivilegeEscalation: true
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+{{- end }}

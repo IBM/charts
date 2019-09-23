@@ -1,0 +1,203 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+###############################################################################
+{{- include "sch.config.init" (list . ) }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "") }}
+{{- $icp4iPodLabels := include "sch.metadata.labels.standard" (list . "icp4i") }}
+{{- $name := include "sch.names.fullName" (list .) }}
+{{- $oidcSecretName :=  printf "%s-%s" (include "icip-navigator.fullname" . )  "oidc-secret" }}
+{{- $icp4iConfigmapName :=  printf "%s-%s" (include "icip-navigator.fullname" . )  "configmap" }}
+{{- $intTlsSecretName :=  printf "%s-%s" (include "icip-navigator.fullname" . )  "int-tls-secret" }}
+{{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
+{{- $serverChartName := .sch.chart.serverChartName }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    icp4i.ibm.com/product: platform-navigator
+    icp4i.ibm.com/release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ $icp4iPodLabels | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{ $icp4iPodLabels | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - "{{ template "icip-navigator.name" . }}-{{ .Release.Name }}"
+              topologyKey: kubernetes.io/hostname
+      serviceAccountName: {{ $saName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: "{{ .Chart.Name }}-navigator"
+          image: "{{  regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.navigator "${1}cp/icp4i/"  }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 1001
+{{- end }}
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 5055
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5055
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5055
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 2
+          env:
+            - name: INGRESS_PATH
+              value: {{ .Values.tls.ingresspath }}
+            - name: CIP_SERVICES_ENDPOINT
+              value: "https://icp4i-services-{{ .Release.Namespace }}.{{ .Release.Namespace }}.svc:3000"
+            - name: CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcSecretName }}
+                  key: CLIENT_ID
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcSecretName }}
+                  key: CLIENT_SECRET
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $intTlsSecretName }}
+                  key: tls.key
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $intTlsSecretName }}
+                  key: tls.crt
+            - name: CLUSTER_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: clusterExternalHost
+            - name: CLUSTER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: clusterExternalPort
+          resources:
+{{ toYaml .Values.resources.navigator | indent 12 }}
+        - name: "{{ .Chart.Name }}-services"
+          image: "{{  regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.services "${1}cp/icp4i/"  }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 1001
+{{- end }}
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /v1/config
+              port: 3000
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /v1/config
+              port: 3000
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 2
+          env:
+            - name: NAVIGATOR_HOST
+              value: {{ .Values.tls.hostname }}
+            - name: CIP_VERSION
+              value: {{ .Chart.Version }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: INGRESS_PATH
+              value: {{ .Values.tls.ingresspath }}
+            - name: CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcSecretName }}
+                  key: CLIENT_ID
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcSecretName }}
+                  key: CLIENT_SECRET
+            - name: CLUSTER_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: clusterExternalHost
+            - name: CLUSTER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: clusterExternalPort
+            - name: PROXY_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: proxy_ingress_https_port
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $intTlsSecretName }}
+                  key: tls.key
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $intTlsSecretName }}
+                  key: tls.crt
+{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            - name: IS_RHEL
+              value: "1"
+{{- end }}
+          resources:
+{{ toYaml .Values.resources.services | indent 12 }}
