@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: "{{ .Release.Name }}-test"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  serviceAccountName: {{ template "ibm-apiconnect-cip.serviceAccountName" . }}
+  containers:
+    - name: "{{ .Release.Name }}-test-apim-ingress"
+{{- if .Values.operator.registry }}
+      image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- else }}
+      image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- end }}
+      imagePullPolicy: {{ index .Values.operator.pullPolicy }}
+      command: ["bash", "-c", 'curl -ksSf https://{{ .Values.management.platformApiEndpoint }}/admin > /dev/null']
+      resources:
+{{ include "ibm-apiconnect-cip.resources" . | indent 8 }}
+      securityContext:
+{{ include "ibm-apiconnect-cip.securityContext" . | indent 8 }}
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+              - {{ .Values.operator.arch }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+{{ include "ibm-apiconnect-cip.podSecurityContext" . | indent 4 }}
