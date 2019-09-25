@@ -1,0 +1,190 @@
+# The values variable below picks the pattern-specific config options from
+# values.yaml. For example, if patternName is "webApplicationProxy" it will pick
+# the webApplicationProxy config options from the map structure in values.yaml.
+{{- $values := index .Values .Values.patternName }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-datapower-icp4i.fullname" . }}
+  labels:
+    helm.sh/chart: {{ .Chart.Name}}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/name: {{ template "ibm-datapower-icp4i.fullname" . }}
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.datapower.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ template "ibm-datapower-icp4i.fullname" . }}
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: {{ .Chart.Name}}-{{ .Chart.Version | replace "+" "_" }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        app.kubernetes.io/name: {{ template "ibm-datapower-icp4i.fullname" . }}
+      annotations:
+{{- if eq .Values.datapower.image.license "Production" }}
+        productName: 'IBM Cloud Pak for Integration - DataPower Gateway (Chargeable)'
+        productID: 'DPGateway_5737_I89_ICP4I_chargeable'
+{{- else if eq .Values.datapower.image.license "Nonproduction" }}
+        productName: 'IBM Cloud Pak for Integration (non-production) - DataPower Gateway (Chargeable)'
+        productID: 'DPGateway_5737_I89_ICP4I_nonProd_chargeable'
+{{- end }}
+        productVersion: "{{ .Values.datapower.image.version }}-{{ .Values.datapower.image.license }}"
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/snmp'
+        prometheus.io/port: '63512'
+        prometheus.io/target: '127.0.0.1:{{ .Values.datapower.snmpPort }}'
+        prometheus.io/module: 'dpStatusMIB'
+    spec:
+{{- if .Values.datapower.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.datapower.image.pullSecret }}
+{{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+      containers:
+      - name: {{ .Chart.Name }}
+        image: {{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.datapower.image.repository "${1}cp/icp4i/datapower/" }}:{{ .Values.datapower.image.version }}-{{ .Values.datapower.image.license }}
+        imagePullPolicy: {{ .Values.datapower.image.pullPolicy }}
+        command:
+          - sh
+          - -c
+          - |
+            cp -r /opt/ibm/datapower/init/config/. /drouter/config/
+{{- if .Values.datapower.adminUserSecret }}
+            sh /opt/ibm/datapower/init/admin-user/init-admin-user.sh
+{{- end }}
+            exec /start.sh --log-format {{ .Values.datapower.env.defaultLogFormat }}
+        stdin: true
+        tty: true
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+# Dynamically increase the user permissions of the DataPower container when SSH is enabled.
+{{- if eq .Values.datapower.gatewaySshState "enabled" }}
+          runAsNonRoot: false
+          runAsUser: 0
+{{- else }}
+          runAsNonRoot: true
+          runAsUser: 101
+{{- end }}
+          capabilities:
+            drop:
+            - ALL
+# Add capabilities needed for SSH only when SSH is enabled
+{{- if eq .Values.datapower.gatewaySshState "enabled" }}
+            add:
+            - SETGID
+            - SETUID
+            - SYS_CHROOT
+{{- end }}
+        resources:
+          limits:
+            cpu: {{ .Values.datapower.resources.limits.cpu }}
+            memory: {{ .Values.datapower.resources.limits.memory | quote }}
+          requests:
+            cpu: {{ .Values.datapower.resources.requests.cpu}}
+            memory: {{ .Values.datapower.resources.requests.memory | quote }}
+        env:
+        - name: DATAPOWER_ACCEPT_LICENSE
+          value: "true"
+        - name: DATAPOWER_INTERACTIVE
+          value: "true"
+        - name: DATAPOWER_LOG_COLOR
+          value: "false"
+{{- if .Values.datapower.env.workerThreads }}
+{{- if gt .Values.datapower.env.workerThreads 0.0 }}
+        - name: DATAPOWER_WORKER_THREADS
+          value: {{ .Values.datapower.env.workerThreads | quote }}
+{{- end }}
+{{- end }}
+{{- if ne .Values.patternName "none"}}
+        livenessProbe:
+          exec:
+            command:
+            - pgrep
+            - drouter
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: health
+            scheme: HTTP
+          initialDelaySeconds: 120
+          timeoutSeconds: 5
+          periodSeconds: 10
+        ports:
+        - name: service
+          containerPort: {{ $values.containerPort }}
+        - name: health
+          containerPort: 7878
+        volumeMounts:
+            - mountPath: "/opt/ibm/datapower/init/config"
+              name: {{ template "ibm-datapower-icp4i.fullname" . }}-init-config-volume
+            - mountPath: "/drouter/config"
+              name: {{ template "ibm-datapower-icp4i.fullname" . }}-config-volume
+            - mountPath: "/drouter/local/health"
+              name: {{ template "ibm-datapower-icp4i.fullname" . }}-health
+{{- if .Values.crypto.frontsideSecret }}
+            - mountPath: "/drouter/secure/usrcerts/{{ .Values.patternName }}"
+              name: {{ template "ibm-datapower-icp4i.fullname" . }}-secret-volume
+{{- end }}
+{{- if .Values.datapower.adminUserSecret }}
+            - name: init-admin-user
+              mountPath: /opt/ibm/datapower/init/admin-user
+            - name: init-admin-user-secret
+              mountPath: /opt/ibm/datapower/init/admin-user-secret
+{{- end }}
+      volumes:
+        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-config-volume
+          emptyDir: {}
+        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-init-config-volume
+          configMap:
+            name: {{ template "ibm-datapower-icp4i.fullname" . }}-config
+            items:
+            - key: {{ .Values.patternName }}.cfg
+              path: "{{ .Values.patternName }}/{{ .Values.patternName }}.cfg"
+            - key: auto-user.cfg
+              path: "auto-user.cfg"
+            - key: auto-startup.cfg
+              path: "auto-startup.cfg"
+            - key: health-check.cfg
+              path: "health-check.cfg"
+        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-health
+          configMap:
+            name: {{ template "ibm-datapower-icp4i.fullname" . }}-static-health
+
+{{- if .Values.crypto.frontsideSecret }}
+        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-secret-volume
+          secret:
+            secretName: {{ .Values.crypto.frontsideSecret }}
+{{- end }}
+{{- if .Values.datapower.adminUserSecret }}
+        - name: init-admin-user
+          configMap:
+            name: {{ template "ibm-datapower-icp4i.fullname" . }}-static-init-admin-user
+        - name: init-admin-user-secret
+          secret:
+            secretName: {{ .Values.datapower.adminUserSecret }}
+{{- end }}
+
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: "beta.kubernetes.io/arch"
+                  operator: In
+                  values: ["amd64"]
+{{- end }}
