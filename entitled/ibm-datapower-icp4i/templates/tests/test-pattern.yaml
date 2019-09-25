@@ -1,0 +1,59 @@
+{{- $helmTest := default "disabled" .Values.helmTestOverride }}
+{{- if ne $helmTest "disabled" }}
+{{- $values := index .Values .Values.patternName }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-{{ .Values.patternName | lower }}-test
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-{{ .Chart.Name }}-test
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+         - matchExpressions:
+           - key: "beta.kubernetes.io/arch"
+             operator: In
+             values: ["amd64"]
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+  containers:
+  - name: {{ .Release.Name | lower }}-{{ .Values.patternName | lower }}-test
+    image: "radial/busyboxplus:curl"
+    resources:
+      limits:
+        memory: 2Gi
+        cpu: 2
+      requests:
+        memory: 2Gi
+        cpu: 2
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      runAsNonRoot: true
+      runAsUser: 101
+      capabilities:
+        drop:
+        - ALL
+    env:
+      - name: DP_PORT
+        value: {{ $values.containerPort | quote }}
+{{-  if .Values.crypto.frontsideSecret }}
+    command: ["sh", "-c", "curl -k https://{{ .Release.Name }}-{{ .Chart.Name }}:$DP_PORT"]
+{{- else }}
+    command: ["sh", "-c", "curl -k http://{{ .Release.Name }}-{{ .Chart.Name }}:$DP_PORT"]
+{{- end }}
+  restartPolicy: Never
+{{- end }}
