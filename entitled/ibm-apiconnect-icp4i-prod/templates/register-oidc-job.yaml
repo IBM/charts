@@ -1,0 +1,97 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ template "ibm-apiconnect-cip.fullname" . }}-register-oidc-{{ .Release.Revision }}"
+  labels:
+    app: {{ template "ibm-apiconnect-cip.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: {{ template "ibm-apiconnect-cip.name" . }}-register-oidc
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-apiconnect-cip.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: {{ template "ibm-apiconnect-cip.name" . }}-register-oidc
+      annotations:
+        productName: {{ template "ibm-apiconnect-cip.productName" . }}
+        productID: {{ template "ibm-apiconnect-cip.productID" . }}
+        productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
+    spec:
+      serviceAccountName: {{ template "ibm-apiconnect-cip.serviceAccountName" . }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.operator.arch }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "ibm-apiconnect-cip.podSecurityContext" . | indent 8 }}
+      restartPolicy: Never
+      initContainers:
+        - name: wait
+{{- if .Values.operator.registry }}
+          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- else }}
+          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.operator.pullPolicy }}
+          command: [ "bash", "-c", "sleep 600" ]
+          resources:
+{{ include "ibm-apiconnect-cip.resources" . | indent 12 }}
+          securityContext:
+{{ include "ibm-apiconnect-cip.securityContext" . | indent 12 }}
+        - name: "cluster-wait"
+{{- if .Values.operator.registry }}
+          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- else }}
+          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- end }}
+          imagePullPolicy: {{ index .Values.operator.pullPolicy }}
+          command: ["bash", "-c", "until [ \"$(kubectl get apiconnectcluster {{ .Release.Name }}-apic-cluster -o json | jq .status.Ready)\" == \"true\" ]; do echo waiting for cluster to be ready; sleep 15; done;"]
+          resources:
+{{ include "ibm-apiconnect-cip.resources" . | indent 12 }}
+          securityContext:
+{{ include "ibm-apiconnect-cip.securityContext" . | indent 12 }}
+      containers:
+        - name: "register-oidc"
+{{- if .Values.operator.registry }}
+          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- else }}
+          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.operator.pullPolicy }}
+{{- if .Release.IsInstall }}
+          command: [ "/home/apic/init-files/register-oidc.sh", "install"]
+{{- else }}
+          command: [ "/home/apic/init-files/register-oidc.sh", "upgrade"]
+{{- end }}
+          resources:
+{{ include "ibm-apiconnect-cip.resources" . | indent 12 }}
+          securityContext:
+{{ include "ibm-apiconnect-cip.securityContext" . | indent 12 }}
+          workingDir: /home/apic
+          volumeMounts:
+          - name: init-files
+            mountPath: "/home/apic/init-files"      
+      volumes:    
+      - name: init-files
+        projected:
+          sources:
+          - configMap:
+              name: {{ template "ibm-apiconnect-cip.fullname" . }}-cr-files
+              items:
+                - key: register-oidc
+                  path: register-oidc.sh
+                  mode: 0750
