@@ -1,0 +1,81 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# A simple test for validating Helm installs of IBM Event Streams by checking
+# that we can connect to all expected ports
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $namePrefix := "service-test" -}}
+{{- $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
+{{ $compName := "service-test" -}}
+{{ $networkPolicyLabel := "kafka" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $networkPolicyLabel) -}}
+{{ $kafkaHeadless := .sch.chart.components.kafka.headless.name -}}
+{{ $kafkaHeadlessName :=  (include "sch.names.fullCompName" (list . $kafkaHeadless)) -}}
+{{ $zookeeperConfig := include "sch.config.init" (list . "zookeeper.sch.chart.config.values" ) -}}
+{{ $zookeeperHeadless := .sch.chart.components.zookeeper.headless.name -}}
+{{ $zookeeperHeadlessName :=  (include "sch.names.fullCompName" (list . $zookeeperHeadless)) }}
+{{ $zookeeperReplicas := int .sch.config.zookeeper.replicas -}}
+{{ $kafkaReplicas := int .Values.kafka.brokers -}}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $name | quote }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ $labels | indent 4 }}
+    serviceSelector: {{ $namePrefix | quote }}
+spec:
+  {{- if .Values.global.image.pullSecret }}
+  imagePullSecrets:
+    - name: {{ .Values.global.image.pullSecret }}
+  {{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: {{ $defaultUser }}
+    fsGroup: 405
+  affinity:
+{{ include "customNodeaffinity"  (list .) | indent 4 }}
+  restartPolicy: Never
+  containers:
+    - name: "helm-test"
+      image: {{ include "eventstreams.image" (list . "eventstreams-vanilla" .Values.global.image.imageTags.vanillaTag) | quote }}
+      imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 405
+        capabilities:
+          drop:
+          - ALL
+      env:
+        {{- include "license.accept.env.ref" . | indent 6 }}
+        - name: kafkaReplicas
+          value: {{ $kafkaReplicas | quote }}
+        - name: zookeeperReplicas
+          value: {{ $zookeeperReplicas | quote }}
+      command:
+        - /bin/sh
+        - -c
+        - "echo checking Kafka and ZooKeeper services are accessible; \
+          set -e; \
+          for i in `seq 0 $(($kafkaReplicas-1))`; do nc -w2 -v {{ .Release.Name }}-ibm-es-kafka-broker-svc-${i} 8092; done; \
+          for i in `seq 0 $(($zookeeperReplicas-1))`; do nc -w2 -v {{ .Release.Name }}-ibm-es-zookeeper-fixed-ip-svc-${i} 2181; done; \
+          echo Test complete"
