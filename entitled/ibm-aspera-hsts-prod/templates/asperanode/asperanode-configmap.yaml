@@ -1,0 +1,82 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.configMap ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+data:
+  aspera.conf: |
+    <?xml version='1.0' encoding='UTF-8'?>
+    <CONF version="2">
+        <server>
+            <db_type>ha_redis</db_type>
+            <db_host>{{ template "hsts.hosts.redis" . }}</db_host>
+            <db_port>{{ template "hsts.ports.redis" . }}</db_port>
+            <https_port>{{ .Values.asperanode.httpsPort }}</https_port>
+            <activity_logging>true</activity_logging>
+            <aej_logging>true</aej_logging>
+            <aej_host>{{ template "hsts.hosts.aej" . }}</aej_host>
+            <aej_port>{{ template "hsts.ports.aej" . }}</aej_port>
+            <cluster_id>{{ template "hsts.values.clusterId" . }}</cluster_id>
+            <server_name>{{ .Values.rproxy.address }}</server_name>
+            <transfers_share_request>false</transfers_share_request>
+            <files_recursive_counts_enabled>true</files_recursive_counts_enabled>
+            <files_recursive_counts_workers>1</files_recursive_counts_workers>
+        </server>
+        <default>
+            <logging>
+                <directory>/opt/aspera/var/log</directory>
+            </logging>
+            <authorization>
+                <transfer>
+                    <in>
+                        <value>deny</value>
+                    </in>
+                    <out>
+                        <value>deny</value>
+                    </out>
+                </transfer>
+            </authorization>
+            <file_system>
+                <pre_calculate_job_size>yes</pre_calculate_job_size>
+            </file_system>
+            <transfer>
+                <protocol_options>
+                    <!-- <chunk_size>8388608</chunk_size> -->
+                </protocol_options>
+            </transfer>
+        </default>
+        <aaa>
+            <realms>
+                <realm>
+                    <users>
+                        <user>
+                            <name>xfer</name>
+                            <authorization>
+                                <transfer>
+                                    <in>
+                                        <value>allow</value>
+                                    </in>
+                                    <out>
+                                        <value>allow</value>
+                                    </out>
+                                </transfer>
+                            </authorization>
+                            <file_system>
+                                <access>
+                                    <paths>
+                                        <path>
+                                            <restrictions>
+                                                <restriction>*</restriction>
+                                            </restrictions>
+                                        </path>
+                                    </paths>
+                                </access>
+                            </file_system>
+                        </user>
+                    </users>
+                </realm>
+            </realms>
+        </aaa>
+    </CONF>
