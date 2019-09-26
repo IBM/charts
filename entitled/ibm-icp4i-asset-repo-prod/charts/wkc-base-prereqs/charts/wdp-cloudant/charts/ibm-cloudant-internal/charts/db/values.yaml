@@ -1,0 +1,155 @@
+systemdatabases:
+  - _replicator
+  - stats
+  - tally
+  - users
+
+logging:
+  level: notice
+
+storage:
+  db:
+    storage_class: "glusterfs" #it gets overwritten
+    requests:
+      storage: #20Gi
+
+pvcName: datadir
+
+dbpods:
+  ulimit:
+    core_file_size: 0
+    stack_size: 8388608
+    max_processes: 516285
+    max_open_files: 16384
+  erlang:
+    max_ports: 16384
+    cookie: monster
+    etsLimit: 100000
+    asyncThreads: 16
+    processLimit: 1048576
+  couchdb:
+    maxDocumentSize: 67108864
+    maxAttachmentSize: 'infinity'
+    maxHttpRequestSize: 67108864
+    maxDocumentIdLength: 7168
+    updateLRUOnRead: 'true'
+    idleGroupTimeout: 3600000
+    idleCheckTimeout: 'infinity'
+    OSProcessTimeout: 5000
+    maxDbsOpen: 500
+    deleteAfterRename: 'true'
+    enableDatabaseRecovery: 'false'
+    fileCompression: 'snappy'
+  dbcore:
+    ioq:
+      concurrency: 10
+    cluster:
+      q_disabled: false
+      n_disabled: true
+      q: 8
+      r: 2
+      w: 2
+    fabric:
+      requestTimeout: 60000
+    smoosh:
+      ratioDbsMinPriority: 2.0
+      ratioViewsMinPriority: 2.0
+    replicator:
+      # Scheduling interval in milliseconds. During each reschedule cycle scheduler
+      # might start or stop up to "max_churn" number of jobs.
+      interval: 60000
+      # Number of actively running replications. Making this too high could cause
+      # performance issues. Making it too low could mean replications jobs might
+      # not have enough time to make progress before getting unscheduled again.
+      maxJobs: 50
+
+      # Maximum number of replications to start and stop during rescheduling. This
+      # parameter along with "interval" defines the rate of job replacement. During
+      # startup, however a much larger number of jobs could be started (up to
+      # max_jobs) in short period of time.
+      maxChurn: 20
+
+      # Each replication job maintains a log historic events such as "added",
+      # "started", "crashed". That is used to determine the appropriate exponential
+      # backoff for crashed jobs, as well as to calculate metrics.
+      # This parameter defines how many of those events to keep. If this parameter
+      # is too large it will consume memory in couch_replicator_scheduler ets
+      # table and will also increase the CPU load during each reschedule cycle. If
+      # it is too low, it could mean less accurate statistics or skewed exponential
+      # backoff algorithm results.
+      maxHistory: 20
+
+      # If cluster membership changes, for example during rolling reboots, replicator
+      # will rescan all the *_replicator database shards to re-evaluate ownership of
+      # each replication job. During a rolling reboot, cluster membership will
+      # typically change 2*(n-1) times for an n-node cluster. To avoid needlessly
+      # rescanning on each event, this parameter defines a minimum amount of time
+      # (in seconds) to wait after last membership change before rescanning.
+      # The optimal value should be just high enough to include the time of one
+      # node to restart and re-join the cluster.
+      # Also, this parameter obsoletes the need to set and manage the corresponding
+      # behavior of "upgrade_in_progress" flag as it pertains to replication.
+      clusterQuietPeriod: 500
+
+      # During initial node startup, how long to wait (in seconds) before starting
+      # to monitor cluster for membership changes. The optimal value is long enough
+      # for cluster membership to stabilize after initial startup, such that a newly
+      # added node then does not trigger another rescan after "cluster_quiet_period".
+      clusterStartPeriod: 5
+
+      # Update docs flag enables writing state transition to replication documents.
+      # This behavior closely emulates previous replicator behavior. However it is
+      # not fully compatible as "failed" state will be written instead of "error" in
+      # some instances. Toggling this at runtime does not immediately update all the
+      # replication document states. Only new replications and replications which
+      # change state will be updated. To force all existing replication documents to
+      # update on a node, would have to restart the replicator application.
+      updateDocs: false
+
+      # Limit maximum document ID length allowed to replicate from source to
+      # target. Use this option to restrict spreading a of document with an
+      # abnormally large ID through the system. Document with IDs larger than this
+      # will be skipped over and replication doc_write_failures count will be bumped
+      # up.
+      # There is a related max_document_id_length setting in the couchdb section which
+      # puts an upper limit on document ID length during document creation or update.
+      # Consider changing that setting as well when changing this one.
+      maxDocumentIdLength: 7168
+    queryServer:
+      OSProcessLimit: 1500
+      OSProcessSoftLimit: 50
+    ken:
+      batchChannels: 5
+      incrementalChannels: 25
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+db:
+  image:
+    repository: cdi-db
+    tag: latest
+clouseau:
+  image:
+    repository: cdi-clouseau
+    tag: latest
+
+global:
+  docker:
+    registry: cdtrainbow-registry
+  images:
+    pullPolicy: Always
+    registry: registry.ng.bluemix.net/cdtrainbow
+  replicas:
+    db: 3
+  cloudant:
+    username: ""
+    password: ""
+    singleNode: false
+  antiAffinity:
+    required: false
+    topologyKey: kubernetes.io/hostname
+  inMemoryOnly: false

@@ -1,0 +1,210 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "asset-sync") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "asset-sync") }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  minReadySeconds: 5
+  progressDeadlineSeconds: 480
+  replicas: {{ .Values.assetSync.replicas }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 40%
+    type: "RollingUpdate"
+  selector:
+    matchLabels:
+{{ $labels | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.global.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      securityContext:
+        fsGroup: 3000
+        runAsUser: 0
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . "asset-sync-serviceaccount") }}
+      imagePullSecrets:
+        - name: {{ .Values.global.images.pullSecret }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - "{{ .Release.Name }}-asset-sync"
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      initContainers:
+      - command:
+        - bash
+        - -c
+        - |
+          groupadd --gid 998 default
+          useradd -u 1001 -g 998 -c 'Default User' -d /opt/app-root -s /bin/bash default
+          chown -R default:default /opt/app-root
+          mkdir -p /mnt/assets
+          chown default:default /mnt/assets
+          chmod ug+rwx /mnt/assets
+        image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.configurator }}
+        imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+        name: init-container
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - CHOWN
+            - FOWNER
+            - DAC_OVERRIDE
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          seLinuxOptions:
+            type: spc_t
+        volumeMounts:
+        - mountPath: /mnt/assets
+          name: asset-sync-pv
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 250m
+      containers:
+      - name: {{ .Release.Name }}-asset-sync
+        image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.assetSync }}
+        imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 250m
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: "/health/readiness"
+            port: 3000
+            scheme: "HTTPS"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: "/health/liveness"
+            port: 3000
+            scheme: "HTTPS"
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+          timeoutSeconds: 5
+          initialDelaySeconds: 8
+        env:
+          - name: "MASTER_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: clusterExternalHost
+          - name: "OPTIONAL_MASTER_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: optionalClusterExternalPort
+          - name: config__catalog_api
+            value: "https://{{ .Release.Name }}-catalog-api.{{ .Release.Namespace }}.svc:443"
+          - name: config__git_working_directory
+            value: /mnt/assets
+          - name: config__portal_catalog
+            value: "https://{{ .Release.Name }}-portal-catalog.{{ .Release.Namespace }}.svc/{{ .Values.global.tls.ingresspath }}/data/catalogs"
+          - name: config__asset_files_api
+            value: "https://{{ .Release.Name }}-asset-files-api.{{ .Release.Namespace }}.svc:443"
+          - name: auth__enabled
+            value: "true"
+          - name: auth__icp__clientId
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "oidc-secret") }}
+                key: CLIENT_ID
+          - name: auth__icp__clientSecret
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "oidc-secret") }}
+                key: CLIENT_SECRET
+          - name: auth__icp__iamUrl
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: iamUrl
+          - name: auth__icp__serviceIdAuth
+            valueFrom:
+              secretKeyRef:
+                key: api-key
+                name: {{ .Release.Name }}-service-id
+          - name: auth__icp__serviceTokenUrl
+            value: https://$(MASTER_HOST)$(OPTIONAL_MASTER_PORT)/iam-token/oidc/token
+          - name: config__git_ssh_private_key
+            valueFrom:
+              secretKeyRef:
+                key: id_rsa
+                name: {{ include "sch.names.fullCompName" (list . "ssh-keypair") }}
+          - name: config__git_ssh_public_key
+            valueFrom:
+              secretKeyRef:
+                key: id_rsa.pub
+                name: {{ include "sch.names.fullCompName" (list . "ssh-keypair") }}
+          - name: TLS_CERT
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "int-tls-secret") }}
+                key: tls.crt
+          - name: TLS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "int-tls-secret") }}
+                key: tls.key
+          - name: asset_sync_image_name
+            value: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.assetSync }}
+          - name: persistent_volume_claim
+            value: {{ .Release.Name }}-asset-sync-pvc
+          - name: service_account_name
+            value: {{ include "sch.names.fullCompName" (list . "asset-sync-serviceaccount") }}
+          - name: release_name
+            value: {{ .Release.Name }}
+          - name: namespace
+            value: {{ .Release.Namespace }}
+        volumeMounts:
+          - mountPath: "/mnt/assets"
+            name: asset-sync-pv
+      volumes:
+        - name: asset-sync-pv
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-asset-sync-pvc
+            readOnly: false
