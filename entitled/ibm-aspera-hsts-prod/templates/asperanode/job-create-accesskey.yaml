@@ -1,0 +1,94 @@
+{{- if .Release.IsInstall -}}
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.job.createAccessKey ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  parallelism: 1
+  backoffLimit: 1
+  completions: 1
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.asperanode.job.createAccessKey) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 8000
+      restartPolicy: Never
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      initContainers:
+      - name: asperanode-info
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.probe" . }}
+        envFrom:
+          - secretRef:
+              name: {{ include "hsts.secret.nodeAdmin" . }}
+          - secretRef:
+              name: {{ include "hsts.secret.accessKey" . }}
+        command:
+        - /bin/bash
+        - -c
+        - >-
+          until
+              timeout 3 /usr/bin/curl -ki -u $(NODE_USER):$(NODE_PASS) "https://{{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.service.api ) }}:{{ .Values.asperanode.httpsPort }}/info";
+              do echo Waiting for asperanode API ...;
+              sleep 1;
+           done
+      containers:
+        - name: accesskey-create
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 8000
+            capabilities:
+              drop:
+              - ALL
+          image: {{ include "hsts.image.probe" . }}
+          envFrom:
+            - secretRef:
+                name: {{ include "hsts.secret.nodeAdmin" . }}
+            - secretRef:
+                name: {{ include "hsts.secret.accessKey" . }}
+          command: ["/usr/bin/curl"]
+          args:
+            - "-ki"
+            - "-u"
+            - $(NODE_USER):$(NODE_PASS)
+            - "https://{{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.service.api ) }}:{{ .Values.asperanode.httpsPort }}/access_keys"
+            - "-X"
+            - "POST"
+            - "-d"
+            - |
+              {{- $storage := dict "type" "local" "path" .Values.persistence.mountPath }}
+              {{- $config := merge (fromYaml (include "hsts.default.accessKeyConfig" . )) .Values.asperanode.accessKeyConfig -}}
+              {{- $accessKey := dict "id" "$(ACCESS_KEY_ID)" "secret" "$(ACCESS_KEY_SECRET)" "storage" $storage "configuration" $config }}
+{{ toPrettyJson $accessKey | indent 14}}
+{{- end -}}

@@ -1,0 +1,32 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.httpProxy.compName ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.httpProxy.compName) | indent 4 }}
+data:
+  HTTP_PROXY_LISTEN: {{ .Values.httpProxy.listenAddr | quote }}
+  HTTP_PROXY_PROTOCOL: "HTTPS"
+  HTTP_PROXY_ROUTES: |
+    [
+      {
+        "path": "/ops/transfers",
+        "method": "POST",
+        "service": {
+          "type": "LOADBALANCER",
+          "host": {{ include "sch.names.fullCompName" (list . .sch.chart.components.nodedLoadbalancer.compName ) | quote }},
+          "port": {{ .Values.nodedLoadbalancer.service.port }},
+          "protocol": "https"
+        }
+      },
+      {
+        "path": ".*",
+        "method": ".*",
+        "service": {
+          "host": {{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.service.api ) | quote }},
+          "port": {{ .Values.asperanode.httpsPort }},
+          "protocol": "https"
+        }
+      }
+    ]
