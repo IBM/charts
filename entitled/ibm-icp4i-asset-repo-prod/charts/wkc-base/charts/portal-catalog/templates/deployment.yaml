@@ -1,0 +1,354 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "portal-catalog.fullname" . }}
+  labels:
+    app: {{ template "portal-catalog.fullname" . }}
+    chart: {{ template "portal-catalog.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    icp4i.ibm.com/product: asset-repo
+    icp4i.ibm.com/release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.service.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "portal-catalog.fullname" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.global.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}       
+      labels:
+        app: {{ template "portal-catalog.fullname" . }}
+        chart: {{ template "portal-catalog.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        run: {{ template "portal-catalog.fullname" . }}
+    spec:
+      affinity:
+      {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ template "portal-catalog.fullname" . }}
+        {{- if .Values.image.branch }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.version }}-{{ .Values.image.branch }}"
+        {{- else }}
+        image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.portalCatalog }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+        ports:
+          - containerPort: {{ .Values.service.targetport }}
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /{{ .Values.global.tls.ingresspath }}{{ .Values.probes.livenessProbe.path }}
+            port: {{ .Values.probes.livenessProbe.port }}
+            scheme: {{ .Values.probes.livenessProbe.scheme }}
+          initialDelaySeconds: {{ .Values.probes.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.probes.livenessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.probes.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.probes.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.probes.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /{{ .Values.global.tls.ingresspath }}{{ .Values.probes.readinessProbe.path }}
+            port: {{ .Values.probes.readinessProbe.port }}
+            scheme: {{ .Values.probes.readinessProbe.scheme }}
+          initialDelaySeconds: {{ .Values.probes.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.probes.readinessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.probes.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.probes.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.probes.readinessProbe.failureThreshold }}
+        resources:
+          limits:
+            cpu: {{ .Values.service.cpuLimits }}
+            memory: {{ .Values.service.memoryLimits }}
+          requests:
+            cpu: {{ .Values.service.cpuRequests }}
+            memory: {{ .Values.service.memoryRequests }}
+        env:
+          - name: "PROPERTY_PREFIX"
+            value: "icip_prod_"
+          - name: auth__certs__selfSignedKey
+            valueFrom:
+              secretKeyRef:
+                key: tls-double-encoded.key
+                name: {{ include "sch.names.fullCompName" (list . "int-tls-secret") }}
+          - name: auth__certs__selfSignedCert
+            valueFrom:
+              secretKeyRef:
+                key: tls-double-encoded.crt
+                name: {{ include "sch.names.fullCompName" (list . "int-tls-secret") }}
+          - name: NEW_RELIC_LICENSE_KEY
+            valueFrom:
+              secretKeyRef:
+                key: NEW_RELIC_LICENSE_KEY
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+                optional: true
+          - name: auth__UAA__clientSecret
+            valueFrom:
+              secretKeyRef:
+                key: auth__UAA__clientSecret
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+                optional: true
+          - name: auth__crypto__password
+            valueFrom:
+              secretKeyRef:
+                key: auth__crypto__password
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+          - name: auth__iamId__clientSecret
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "oidc-secret") }}
+                key: CLIENT_SECRET
+          - name: auth__iamId__clientId
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "oidc-secret") }}
+                key: CLIENT_ID
+          - name: auth__iamId__iamUrl
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: iamUrl
+          - name: auth__iamId__crn
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: crn
+          - name: auth__iamId__icp
+            value: "true"
+          - name: auth__serviceId__apiKey
+            valueFrom:
+              secretKeyRef:
+                key: api-key
+                name: {{ .Release.Name }}-service-id
+          - name: auth__wdpWhitelist__token
+            valueFrom:
+              secretKeyRef:
+                key: auth__wdpWhitelist__token
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+                optional: true
+          - name: auth__activityTracker__authToken
+            valueFrom:
+              secretKeyRef:
+                key: YP_ACTIVITY_TRACKER_TOKEN
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+                optional: true
+          - name: auth__profileNext__clientSecret
+            valueFrom:
+              secretKeyRef:
+                key: YP_PROFILE_NEXT_CLIENT_SECRET
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+                optional: true
+          - name: config__composeRedis__cryptoPassword
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "redis-ha-secret") }}
+                key: auth
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "redis-ha-secret") }}
+                key: auth
+          - name: config__composeRedis__url
+            value: redis://:$(REDIS_PASSWORD)@{{ .Release.Name }}-redis-ha-master-svc.{{ .Release.Namespace }}.svc:6379
+          - name: auth__redisCacheServer__url
+            value: redis://:$(REDIS_PASSWORD)@{{ .Release.Name }}-redis-ha-master-svc.{{ .Release.Namespace }}.svc:6379
+          - name: config__composeRedis__tlsServer
+            valueFrom:
+              secretKeyRef:
+                key: config__composeRedis__tlsServer
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+                optional: true
+          - name: config__composeRedis__certificate
+            valueFrom:
+              secretKeyRef:
+                key: config__composeRedis__certificate
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+                optional: true
+          - name: config__session__secret
+            valueFrom:
+              secretKeyRef:
+                key: config__session__secret
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+          - name: WDP_SERVICE_ID_CREDENTIAL
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-service-id
+                key: api-key
+                optional: true
+          - name: auth__COSObjectStorage__accessKey
+            valueFrom:
+              secretKeyRef:
+                name: wkc-minio
+                key: accesskey
+                optional: true
+          - name: auth__COSObjectStorage__secretKey
+            valueFrom:
+              secretKeyRef:
+                name: wkc-minio
+                key: secretkey
+                optional: true
+          {{- if eq .Values.env.DEPLOYMENT_TARGET "cloud" }}
+          - name: CUSTOM_DOMAIN
+            value: {{ .Values.env.CUSTOM_DOMAIN | quote }}
+          - name: ZEN_DOMAIN
+            value: {{ .Values.env.ZEN_DOMAIN | quote }}
+          {{- else}}
+          - name: CUSTOM_DOMAIN
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "wdp-config") }}
+                key: host
+          - name: ZEN_DOMAIN
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "wdp-config") }}
+                key: icp4d-host
+          {{- end}}
+          - name: APP_ENV_ENABLE_METRIC_REPORTING
+            value: {{ .Values.env.APP_ENV_ENABLE_METRIC_REPORTING | default false | quote }}
+          - name: isNLUsentiment_Displayed
+            value: {{ .Values.env.isNLUsentiment_Displayed | default false | quote }}
+          - name: APP_ENV_LOG_TO_SLACK
+            value: {{ .Values.env.APP_ENV_LOG_TO_SLACK | default false | quote }}
+          - name: APP_ENV_SLACK_CHANNEL
+            value: "wdp-catalog-ui-crash"
+          - name: APP_ENV_SLACK_CRASH_HOOK
+            value: "https://notUsedByICP4I"
+          - name: APP_ENV_SUBDOMAIN
+            value: {{ .Values.env.APP_ENV_SUBDOMAIN | quote }}
+          - name: DEPLOY_TIMESTAMP
+            value: {{ date "Mon Jan/02/2006-3:04:05 PM" .Release.Time }}
+          - name: APP_NAME
+            value: CatalogUI-{{ .Values.image.version }}
+          - name: DOMAIN
+            value: {{ .Values.env.DOMAIN | quote }}
+          - name: EXT_DOMAIN
+            value: "mybluemix.net"
+          - name: GLOBAL_DOMAIN
+            value: "bluemix.net"
+          - name: NODE_ENV
+            value: "production"
+          - name: NODE_MODULES_CACHE
+            value: "false"
+          - name: PRODUCTION
+            value: "true"
+          - name: STAGE
+            value: {{ .Values.env.STAGE | quote }}
+          - name: auth__COSObjectStorage__endpoint
+            value: {{ .Values.env.auth__COSObjectStorage__endpoint | quote }}
+          - name: auth__COSObjectStorage__locationConstraint
+            value: {{ .Values.env.auth__COSObjectStorage__location | quote }}
+          - name: auth__UAA__clientId
+            value: "cdsx"
+          - name: auth__wdpWhitelist__user
+            value: "arrona"
+          - name: config__roles
+            value: "true"
+          - name: config__session__key
+            value: "datacatalog"
+          - name: config__entitlements
+            value: {{ .Values.env.config__entitlements | default false | quote }}
+          - name: rabbitmq__enabled
+            value: {{ .Values.env.config__rabbitmq | default false | quote }}
+          - name: auth__activityTracker__region
+            value: {{ .Values.env.auth__activityTracker__region | quote }}
+          - name: auth__activityTracker__projectID
+            value: {{ .Values.env.auth__activityTracker__projectID }}
+          - name: isK8S
+            value: "true"
+          - name: DEPLOYMENT_TARGET
+            value: {{ .Values.env.DEPLOYMENT_TARGET | default "cloud" | quote }}
+          - name: APP_ROOT
+            value: /{{ .Values.global.tls.ingresspath }}
+          - name: IS_UGI_ENV
+            value: {{ .Values.env.IS_UGI_ENV | default "false" | quote }}
+          - name: config__profileNext__url
+            value: "https://connect.ibm.com:1443/mapi"
+          - name: config__profileNext__certificate
+            valueFrom:
+              secretKeyRef:
+                key: config__profileNext__certificate
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+                optional: true
+          - name: config__profileNext__key
+            valueFrom:
+              secretKeyRef:
+                key: config__profileNext__key
+                name: {{ include "sch.names.fullCompName" (list . "portal-catalog-secret") }}
+                optional: true
+          - name: "MASTER_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: clusterExternalHost 
+          - name: "OPTIONAL_MASTER_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: optionalClusterExternalPort 
+          - name: "OPTIONAL_PROXY_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: optional_proxy_ingress_https_port 
+          - name: "NAMESPACE"
+            value: {{ .Release.Namespace }}
+          - name: "RELEASE_NAME"
+            value: {{ .Release.Name }}
+          - name: "ICP_CLIENT_SECRET"
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "oidc-secret") }}
+                key: CLIENT_SECRET
+          - name: "ICP_CLIENT_ID"
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "oidc-secret") }}
+                key: CLIENT_ID
+          - name: config__commonLogin__url
+            value: "https://{{ .Values.global.tls.hostname }}$(OPTIONAL_PROXY_PORT)/{{ .Values.global.tls.ingresspath }}"
+          - name: TLS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "int-tls-secret") }}
+                key: tls.key
+          - name: TLS_CERT
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "int-tls-secret") }}
+                key: tls.crt
+          - name: NODE_TLS_REJECT_UNAUTHORIZED
+            value: "0"
+          - name: config__cip
+            value: "true"
+          - name: config__cipServicesEndpoint
+            value: "https://icp4i-services-{{ .Values.global.icp4iNamespace }}.{{ .Values.global.icp4iNamespace }}.svc:3000"
+          - name: config__catalogApi__url
+            value: "https://{{ .Release.Name }}-catalog-api.{{ .Release.Namespace }}.svc:443"
+          - name: config__assetFileApi__url
+            value: "https://{{ .Release.Name }}-asset-files-api.{{ .Release.Namespace }}.svc:443"
+          - name: config__commonApi__url
+            value: "https://{{ .Release.Name }}-portal-common-api.{{ .Release.Namespace }}.svc:443"
+          - name: config__userProfileApi__url
+            value: "https://{{ .Release.Name }}-portal-common-api.{{ .Release.Namespace }}.svc:443"
+          - name: auth__iamId__serviceTokenUrl
+            value: "https://$(MASTER_HOST)$(OPTIONAL_MASTER_PORT)/iam-token/oidc/token"
+          - name: config__commonUI__url
+            value: "https://{{ .Release.Name }}-portal-catalog.{{ .Release.Namespace }}.svc:443/{{ .Values.global.tls.ingresspath }}"
+          - name: config__assetRemoteSyncApi__url
+            value: "https://{{ .Release.Name }}-asset-sync.{{ .Release.Namespace }}.svc:443"
+      {{- if .Values.global.images.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.images.pullSecret | quote }}
+      {{- end}}
+      securityContext:
+        runAsUser: 0

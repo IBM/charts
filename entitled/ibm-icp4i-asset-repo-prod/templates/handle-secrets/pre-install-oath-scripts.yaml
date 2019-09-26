@@ -1,0 +1,114 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $scriptsName := include "sch.names.fullCompName" (list . "oauth-scripts") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "oauth")) }}
+{{- $oidcClientName := include "sch.names.fullCompName" (list . "oidc-client") }}
+{{- $oidcSecretName := include "sch.names.fullCompName" (list . "oidc-secret") }}
+{{- $arConfigmapName := include "sch.names.fullCompName" (list . "configmap") }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $scriptsName }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+data:
+  oauth.sh: |
+    #!/bin/sh
+
+    addIfNew() {
+      case ",$1," in
+        *",$2,"*) echo "$1" ;;
+        *) echo "$1,$2"
+      esac
+    }
+
+    echo "======================"
+    echo "OIDC registration job";
+    echo "======================"
+
+    OIDC_CLIENT_TEMPLATE="oidc-client.yaml.template"
+    OIDC_CLIENT_INSTANCE="/tmp/oidc-client.yaml"
+
+    CLUSTER_ADDRESS=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.cluster_address}" -n kube-public`
+    CLUSTER_PORT=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.cluster_router_https_port}" -n kube-public`
+    PROXY_ADDRESS=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.proxy_address}" -n kube-public`
+    PROXY_PORT=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.proxy_ingress_https_port}" -n kube-public`
+    CLUSTER_NAME=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.cluster_name}" -n kube-public`
+
+    # Calculate the CRN
+    # https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.2.0/user_management/iam_platform.html
+    CRN="crn:v1:icp:private:k8:$CLUSTER_NAME:n/{{ .Release.Namespace }}:r/{{ .Release.Name }}::"
+
+
+    # Create the values that will be plumbed into the registration template.
+    if [ $CLUSTER_PORT == "443" ]; then
+      OPTIONAL_CLUSTER_PORT=""
+    else
+      OPTIONAL_CLUSTER_PORT=":${CLUSTER_PORT}"
+    fi
+
+    if [ $PROXY_PORT == "443" ]; then
+      OPTIONAL_PROXY_PORT=""
+    else
+      OPTIONAL_PROXY_PORT=":${PROXY_PORT}"
+    fi
+
+    # Build up redirect URIs
+    TRUSTED_URI_PREFIXES="\"https://$PROXY_ADDRESS\""
+    POST_LOGOUT_REDIRECT_URIS="\"https://$PROXY_ADDRESS/{{ .Values.global.tls.ingresspath }}/logout\""
+    REDIRECT_URIS="\"https://$PROXY_ADDRESS/{{ .Values.global.tls.ingresspath }}/catalog/auth/iamid/callback\""
+    POST_LOGOUT_REDIRECT_URIS=$(addIfNew "$POST_LOGOUT_REDIRECT_URIS" "\"https://{{ .Values.global.tls.hostname }}${OPTIONAL_PROXY_PORT}/{{ .Values.global.tls.ingresspath }}/logout\"")
+    REDIRECT_URIS=$(addIfNew "$REDIRECT_URIS" "\"https://{{ .Values.global.tls.hostname }}${OPTIONAL_PROXY_PORT}/{{ .Values.global.tls.ingresspath }}/catalog/auth/iamid/callback\"")
+
+    # Calculate the iam url
+    # https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.2.0/user_management/iam_platform.html
+    IAM_URL="https://${CLUSTER_ADDRESS}${OPTIONAL_CLUSTER_PORT}"
+
+    echo "======================"
+    echo "Configured endpoints"
+    echo "======================"
+    echo "POST_LOGOUT_REDIRECT_URIS: $POST_LOGOUT_REDIRECT_URIS"
+    echo "TRUSTED_URI_PREFIXES: $TRUSTED_URI_PREFIXES"
+    echo "REDIRECT_URIS: $REDIRECT_URIS"
+    echo "External end point : $PROXY_ADDRESS"
+    echo "PLATFORM_HOSTNAME : {{ .Values.global.tls.hostname }}"
+    echo "CRN : $CRN"
+    echo "IAM_URL : $IAM_URL"
+    echo "CLUSTER_NAME : $CLUSTER_NAME"
+    echo "======================"
+
+    sed -e "s|POST_LOGOUT_REDIRECT_URIS|$POST_LOGOUT_REDIRECT_URIS|g" -e "s|TRUSTED_URI_PREFIXES|$TRUSTED_URI_PREFIXES|g" -e "s|REDIRECT_URIS|$REDIRECT_URIS|g" "$OIDC_CLIENT_TEMPLATE" > "$OIDC_CLIENT_INSTANCE"
+
+    kubectl apply -f "$OIDC_CLIENT_INSTANCE"
+
+    if [[ $? -ne 0 ]]; then
+      echo "Could not create OIDC registration client object"
+      exit 1
+    fi
+
+    echo "Deleting existing configmap"
+    /usr/local/bin/kubectl delete configmap {{ $arConfigmapName }}
+
+    # Fail if we can't create objects
+    set -e
+
+    echo "Creating configmap"
+    /usr/local/bin/kubectl create configmap {{ $arConfigmapName }} --from-literal=clusterExternalHost=$CLUSTER_ADDRESS --from-literal=clusterExternalPort=$CLUSTER_PORT --from-literal=optionalClusterExternalPort=$OPTIONAL_CLUSTER_PORT --from-literal=clusterName=$CLUSTER_NAME --from-literal=crn=$CRN --from-literal=iamUrl=$IAM_URL --from-literal=proxy_ingress_https_port=$PROXY_PORT --from-literal=optional_proxy_ingress_https_port=$OPTIONAL_PROXY_PORT
+    echo "Setting labels"
+    /usr/local/bin/kubectl label configmap {{ $arConfigmapName }} release={{ .Release.Name }}
+
+  oidc-client.yaml.template: |
+    apiVersion: oidc.security.ibm.com/v1
+    kind: Client
+    metadata:
+      name: {{ $oidcClientName }}
+      labels:
+        release: {{ .Release.Name }}
+    spec:
+      secret: {{ $oidcSecretName }}
+      oidcLibertyClient:
+        post_logout_redirect_uris: [POST_LOGOUT_REDIRECT_URIS]
+        trusted_uri_prefixes: [TRUSTED_URI_PREFIXES]
+        redirect_uris: [REDIRECT_URIS]
