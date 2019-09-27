@@ -1,0 +1,202 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.compName ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.ascpSwarm.compName) | indent 4 }}
+data:
+  swarm-pod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: {{ default (include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.prefix )) .Values.ascpSwarm.config.member.name.prefix }}-__UUID__
+      namespace: {{ .Release.Namespace }}
+      annotations:
+        checksum/aspera-conf-configmap: {{ include (print $.Template.BasePath "/asperanode/asperanode-configmap.yaml") . |  sha256sum | trunc 63 }}
+        checksum/asconfigurator: {{ tpl (toYaml .Values.asperaconfig) . | sha256sum | trunc 63 }}
+        checksum/sshd-secret: {{ tpl (toYaml .Values.sshdKeysSecret) . | sha256sum | trunc 63 }}
+        checksum/authorizedKeys: {{ tpl (toYaml .Values.receiver.authorizedKeys) . | sha256sum | trunc 63 }}
+        kompose.cmd: kompose convert -c -f docker-compose-json.yml
+        kompose.version: 1.9.0 (HEAD)
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.receiver.compName) | indent 8 }}
+        service: {{ include "sch.names.fullCompName" (list . .sch.chart.components.receiver.compName ) | quote }}
+        uuid: __UUID__
+    spec:
+      nodeName: __NODE__
+      serviceAccountName: {{ .Values.rbac.serviceAccountName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      hostPorts:
+        - min: 34001
+          max: 34101
+      securityContext:
+        fsGroup: {{ .Values.persistence.fsGroup }}
+        runAsNonRoot: true
+        runAsUser: 8000
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      initContainers:
+      - name: authorizedkeys
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.receiverSwarm" . }}
+        imagePullPolicy: {{ .Values.receiver.swarm.image.pullPolicy }}
+        volumeMounts:
+        - name: authorized-keys
+          mountPath: "/tmp/keys"
+        command: ["/bin/sh","-c"]
+        args: ["
+                {{- if (.Values.receiver.authorizedKeys) -}}
+                  {{- range $k := .Values.receiver.authorizedKeys }}
+                    {{- if eq (empty $k) false }}
+                echo '{{ $k }}' >> /tmp/keys/authorized_keys &&
+                    {{ end -}}
+                  {{- end -}}
+                {{ end }}
+                cat /opt/aspera/var/aspera_tokenauth_id_rsa.pub >> /tmp/keys/authorized_keys
+              "]
+{{ include "hsts.spec.init.asperaconf" (list .) | indent 6 }}
+      - name: firstboot
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.firstboot" . }}
+        imagePullPolicy: {{ .Values.firstboot.image.pullPolicy }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.receiver.env.compName ) | quote }}
+        env:
+        - name: FIRSTBOOT_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: FIRSTBOOT_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: FIRSTBOOT_TO_CONFIGURE
+          value: "BIND_SERVER NODE_ID SERVER_NAME VLINKS"
+        - name: FIRSTBOOT_UUID
+          value: __UUID__
+        volumeMounts:
+        - name: aspera-conf
+          mountPath: "/opt/aspera/etc/aspera.conf"
+          subPath: aspera.conf
+      containers:
+{{ include "hsts.spec.container.ascplog" . | indent 6 }}
+      - name: receiver
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.receiverSwarm" . }}
+        imagePullPolicy: {{ .Values.receiver.swarm.image.pullPolicy }}
+        resources:
+          requests:
+            memory: {{ .Values.receiver.swarm.resources.requests.memory }}
+            cpu: {{ .Values.receiver.swarm.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.receiver.swarm.resources.limits.memory }}
+            cpu: {{ .Values.receiver.swarm.resources.limits.cpu }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.receiver.env.compName ) | quote }}
+        env:
+        - name: TRANSFER_MONITOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: TRANSFER_MONITOR_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        ports:
+        - name: fasptcp
+          protocol: TCP
+          containerPort: 33001
+          hostPort: __HOST_PORT__
+        - name: faspudp
+          protocol: UDP
+          containerPort: 33001
+          hostPort: __HOST_PORT__
+        readinessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: fasptcp
+        livenessProbe:
+          initialDelaySeconds: 20
+          tcpSocket:
+            port: fasptcp
+        volumeMounts:
+        - name: hsts-storage
+          mountPath: {{ .Values.persistence.mountPath }}
+        - name: sshd-keys
+          mountPath: "/etc/ssh/ssh_host_rsa_key"
+          subPath: ssh_host_rsa_key
+        - name: sshd-keys
+          mountPath: "/etc/ssh/ssh_host_rsa_key.pub"
+          subPath: ssh_host_rsa_key.pub
+        - name: aspera-conf
+          mountPath: "/opt/aspera/etc/aspera.conf"
+          subPath: aspera.conf
+        - name: external-process-log
+          mountPath: /opt/aspera/var/log
+        - name: receiver-config
+          mountPath: "/etc/ssh/sshd_config"
+          subPath: sshd_config
+        - name: license-secret
+          mountPath: "/opt/aspera/etc/aspera-license"
+          subPath: ASPERA_LICENSE
+        - name: authorized-keys
+          mountPath: "/home/xfer/.ssh/authorized_keys"
+          subPath: authorized_keys
+      restartPolicy: Always
+      volumes:
+{{ include "hsts.spec.volumes.common" . | indent 6 }}
+      - name: sshd-keys
+        secret:
+          secretName: {{ include "hsts.secret.sshdKeys" . }}
+          defaultMode: 0600
+          items:
+          - key: ssh_host_rsa_key
+            path: ssh_host_rsa_key
+            mode: 0600
+          - key: ssh_host_rsa_key.pub
+            path: ssh_host_rsa_key.pub
+            mode: 0644
+      - name: authorized-keys
+        emptyDir: {}
+      - name: receiver-config
+        configMap:
+          name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.receiver.compName ) | quote }}
+    status: {}

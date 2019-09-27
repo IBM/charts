@@ -1,0 +1,53 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.test.asperanode.info ) | quote }}
+  annotations:
+    "helm.sh/hook": test-success
+    {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 4 }}
+    {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 4 }}
+    {{- end }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.test.asperanode.info) | indent 4 }}
+    app: test
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 8000
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+  restartPolicy: Never
+  {{- if .Values.image.pullSecret }}
+  imagePullSecrets:
+  - name: {{ .Values.image.pullSecret }}
+  {{- end }}
+  containers:
+    - name: asperanode-info
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 8000
+        capabilities:
+          drop:
+          - ALL
+      image: {{ include "hsts.image.probe" . }}
+      envFrom:
+        - secretRef:
+            name: {{ include "hsts.secret.nodeAdmin" . }}
+        - secretRef:
+            name: {{ include "hsts.secret.accessKey" . }}
+      command: ["/usr/bin/curl"]
+      args:
+        - "-ki"
+        - "-u"
+        - $(NODE_USER):$(NODE_PASS)
+        - "https://{{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.service.api ) }}:{{ .Values.asperanode.httpsPort }}/info"
+{{  include "hsts.resources.static.tiny" . | indent 6 }}

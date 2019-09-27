@@ -1,0 +1,138 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+{{- $component := .sch.chart.components.asperanode.deployment.transfer -}}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.nodedSwarm.compName ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.nodedSwarm.compName) | indent 4 }}
+data:
+  swarm-pod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: {{ default (include "sch.names.fullCompName" (list . .sch.chart.components.nodedSwarm.prefix )) .Values.nodedSwarm.config.member.name.prefix }}-__UUID__
+      namespace: {{ .Release.Namespace }}
+      annotations:
+        checksum/aspera-conf-configmap: {{ include (print $.Template.BasePath "/asperanode/asperanode-configmap.yaml") . |  sha256sum | trunc 63 }}
+        checksum/asconfigurator: {{ tpl (toYaml .Values.asperaconfig) . | sha256sum | trunc 63 }}
+        checksum/server-secret: {{ tpl (toYaml .Values.asperanode.serverSecret) . | sha256sum | trunc 63 }}
+        kompose.cmd: kompose convert -c -f docker-compose-json.yml
+        kompose.version: 1.9.0 (HEAD)
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . $component) | indent 8 }}
+        service: {{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.service.transfer ) | quote }}
+        uuid: __UUID__
+    spec:
+      nodeName: __NODE__
+      serviceAccountName: {{ .Values.rbac.serviceAccountName }}
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      volumes:
+{{ include "hsts.spec.volumes.common" . | indent 6 }}
+      initContainers:
+{{ include "hsts.spec.init.asperacert" . | indent 6 }}
+{{ include "hsts.spec.init.probe.redisMaster" . | indent 6 }}
+{{ include "hsts.spec.init.probe.aej" . | indent 6 }}
+{{ include "hsts.spec.init.asperaconf" (list .) | indent 6 }}
+      - name: firstboot
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.firstboot" . }}
+        imagePullPolicy: {{ .Values.firstboot.image.pullPolicy }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.nodedSwarm.member.env.compName ) | quote }}
+        env:
+        - name: FIRSTBOOT_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: FIRSTBOOT_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: FIRSTBOOT_TO_CONFIGURE
+          value: "NODE_ID VLINKS"
+        - name: FIRSTBOOT_UUID
+          value: __UUID__
+        volumeMounts:
+        - name: aspera-conf
+          mountPath: "/opt/aspera/etc/aspera.conf"
+          subPath: aspera.conf
+      containers:
+{{ include "hsts.spec.container.ascplog" . | indent 6 }}
+{{ include "hsts.spec.container.nodelog" . | indent 6 }}
+      - name: asperanode
+        securityContext:
+          fsGroup: {{ .Values.persistence.fsGroup }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.nodedSwarmMember" . }}
+        imagePullPolicy: {{ .Values.nodedSwarmMember.image.pullPolicy }}
+        env:
+        - name: TRANSFER_MONITOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: TRANSFER_MONITOR_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: external-process-log
+          mountPath: /opt/aspera/var/log
+        - name: hsts-storage
+          mountPath: {{ .Values.persistence.mountPath }}
+        - name: aspera-conf
+          mountPath: "/opt/aspera/etc/aspera.conf"
+          subPath: aspera.conf
+        - name: license-secret
+          mountPath: "/opt/aspera/etc/aspera-license"
+          subPath: ASPERA_LICENSE
+        - name: asperanoded-cert
+          mountPath: "/opt/aspera/etc/aspera_server_key.pem"
+          subPath: tls.key
+        - name: aspera-conf
+          mountPath: "/opt/aspera/etc/aspera_server_cert.pem"
+          subPath: aspera_server_cert.pem
+        - name: asperanoded-cert
+          mountPath: "/opt/aspera/etc/aspera_server_cert.chain"
+          subPath: tls.crt
+        ports:
+        - name: node-port
+          containerPort: {{ .Values.asperanode.httpsPort }}
+        readinessProbe:
+          initialDelaySeconds: 2
+          httpGet:
+            path: /ping
+            port: node-port
+            scheme: HTTPS
+        livenessProbe:
+          initialDelaySeconds: 20
+          httpGet:
+            path: /ping
+            port: node-port
+            scheme: HTTPS

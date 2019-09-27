@@ -1,0 +1,151 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.compName ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.ascpSwarm.compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.ascpSwarm.replicas }}
+  selector:
+    matchLabels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.ascpSwarm.compName) | indent 6 }}
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  template:
+    metadata:
+      annotations:
+        checksum/ascp-swarm-configmap: {{ include (print $.Template.BasePath "/ascp-swarm/ascp-swarm-configmap.yaml") . |  sha256sum | trunc 63 }}
+        checksum/receiver-configmap: {{ include (print $.Template.BasePath "/ascp-swarm/receiver-configmap.yaml") . |  sha256sum | trunc 63 }}
+        checksum/receiver-env: {{ include (print $.Template.BasePath "/ascp-swarm/receiver-env.yaml") . |  sha256sum | trunc 63 }}
+        checksum/ascp-swarm-env: {{ include (print $.Template.BasePath "/ascp-swarm/ascp-swarm-env.yaml") . |  sha256sum | trunc 63 }}
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.ascpSwarm.compName) | indent 8 }}
+        service: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.compName ) | quote }}
+    spec:
+      serviceAccountName: {{ .Values.rbac.serviceAccountName }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: service
+                  operator: In
+                  values:
+                  - {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.compName ) | quote }}
+              topologyKey: "kubernetes.io/hostname"
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 8000
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      containers:
+      - name: election
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 200Mi
+            cpu: '.01'
+          limits:
+            memory: 400Mi
+            cpu: '.1'
+        image: {{ include "hsts.image.election" . }}
+        imagePullPolicy: {{ .Values.election.image.pullPolicy }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.env.compName ) | quote }}
+        env:
+        - name: LEADER_ELECTION_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: LEADER_ELECTION_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: HELM_RELEASE
+          value: {{ .Release.Name | quote }}
+        ports:
+        - name: api
+          containerPort: 9000
+        readinessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: api
+        livenessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: api
+      - name: swarm
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.swarm" . }}
+        imagePullPolicy: {{ .Values.swarm.image.pullPolicy }}
+        resources:
+          requests:
+            memory: 200Mi
+            cpu: '.01'
+          limits:
+            memory: 400Mi
+            cpu: '.1'
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.env.compName ) | quote }}
+        env:
+        - name: SWARM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: HELM_RELEASE
+          value: {{ .Release.Name | quote }}
+        ports:
+        - name: api
+          containerPort: 8000
+        readinessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: api
+        livenessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: api
+        volumeMounts:
+        - name: swarm-config
+          mountPath: "/opt/aspera/swarm/etc/swarm-pod.yaml"
+          subPath: swarm-pod.yaml
+      volumes:
+      - name: swarm-config
+        configMap:
+          name:	{{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.compName ) | quote }}
+      - name: dependency-to-lock
+        configMap:
+          name: {{ include "hsts.locks.ascpSwarm" . }}

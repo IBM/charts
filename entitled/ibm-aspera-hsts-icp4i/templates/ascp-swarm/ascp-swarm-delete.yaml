@@ -1,0 +1,60 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.delete.compName ) | quote }}
+  annotations:
+    helm.sh/hook: post-delete
+    helm.sh/hook-delete-policy: hook-succeeded
+    helm.sh/hook-weight: "1"
+  labels:
+{{  include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.ascpSwarm.delete.compName ) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 8000
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      serviceAccountName: {{ .Values.rbac.serviceAccountName }}
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      containers:
+      - name: kubectl
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.utils" . }}
+        imagePullPolicy: {{ .Values.utils.image.pullPolicy }}
+        env:
+        - name: SWARM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        command:
+          - "kubectl"
+          - "delete"
+          - "pods"
+          - "-l"
+          - "service={{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.member.compName )}}"
+          - "-n"
+          - $(SWARM_NAMESPACE)
+{{  include "hsts.resources.static.small" . | indent 8 }}
+      restartPolicy: Never
