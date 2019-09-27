@@ -1,0 +1,30 @@
+{{- if eq .Values.sms.enable true }}
+{{- if eq .Values.sms.persistence.volume.logs.enable true }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := "sms" }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-{{ .Values.sms.persistence.volume.logs.name }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+{{- if .Values.sms.persistence.volume.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.sms.persistence.volume.logs.storageClassName | quote }}
+{{- else }}
+  storageClassName: {{ default "" .Values.sms.persistence.volume.logs.storageClassName | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.sms.persistence.volume.logs.size | quote }}
+  selector:
+    matchLabels:
+      name: {{ .Values.sms.persistence.volume.logs.name }}
+  accessModes:
+  - ReadWriteMany
+{{- end }}
+{{- end }}

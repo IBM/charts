@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-{{- if not .Values.queueManagerEnabled }}
+{{- if ne .Values.imageType "acemqserver"}}
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
 {{ $deploymentName := include "sch.names.fullName" (list .) }}
+{{ $designerFlowsName := include "sch.names.fullCompName" (list . "designer-flows") }}
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
-{{ $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
 {{ $secretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $deploymentName "configuration") }}
+{{ $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -70,7 +71,11 @@ spec:
         fsGroup: {{ default 1001 .Values.integrationServer.fsGroupGid }}
       containers:
         - name: {{ $deploymentName }}
-          image: "{{ .Values.image.repository.aceonly }}:{{ .Values.image.tag }}"
+          {{- if eq .Values.imageType "ace"}}
+          image: "{{ .Values.image.aceonly }}-{{ .Values.arch }}"
+          {{- else }}
+          image: "{{ .Values.image.acemqclient }}-{{ .Values.arch }}"
+          {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
           - containerPort: {{ .Values.service.webuiPort }}
@@ -145,6 +150,12 @@ spec:
             - name: contentservertls
               mountPath: "/home/aceuser/ssl"
             {{- end }}
+            {{- if .Values.designerFlowsEnabled }}
+            - name: tmp
+              mountPath: "/tmp"
+            - name: workdir
+              mountPath: "/home/aceuser/ace-server"
+            {{- end }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
@@ -191,6 +202,53 @@ spec:
 {{ toYaml .Values.aceonly.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.aceonly.resources.requests | indent 14 }}
+        {{- if .Values.designerFlowsEnabled }}
+        - name: "{{ $designerFlowsName }}"
+          image: "{{ .Values.image.designerflows }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ACE_VERSION
+              value: {{ .Values.image.tag }}
+            - name: bunyan__logfile__filename
+              value: "/opt/ibm/app/ace-server/log/integration_server.{{ $serverName }}.designer_flows.txt"
+          volumeMounts:
+            - name: tmp
+              mountPath: "/tmp"
+            - name: workdir
+              mountPath: "/opt/ibm/app/ace-server"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          # Set liveness probe to determine if the designer flow sidecar is running
+          livenessProbe:
+            exec:
+              command:
+                - "/readiness/ready.sh"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the designer flow sidecar is running
+          readinessProbe:
+            exec:
+              command:
+                - "/readiness/ready.sh"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+            limits:
+{{ toYaml .Values.designerflows.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.designerflows.resources.requests | indent 14 }}
+        {{- end }}
       volumes:
         {{- if .Values.contentServerURL }}
         - name: webusers
@@ -198,10 +256,16 @@ spec:
             secretName: {{ $deploymentName }}
             optional: true
             items:
-            - key: viewerusers
-              path: viewer-users.txt
             - key: adminusers
               path: admin-users.txt
+            - key: operatorusers
+              path: operator-users.txt
+            - key: viewerusers
+              path: viewer-users.txt
+            - key: editorusers
+              path: editor-users.txt
+            - key: auditusers
+              path: audit-users.txt
         {{- end }}
         - name: extensions
           secret:
@@ -287,5 +351,11 @@ spec:
             items:
             - key: contentServerCACert
               path: cacert.pem
+        {{- end }}
+        {{- if .Values.designerFlowsEnabled }}
+        - name: tmp
+          emptyDir: {}
+        - name: workdir
+          emptyDir: {}
         {{- end }}
 {{- end }}

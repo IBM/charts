@@ -1,0 +1,36 @@
+{{- if eq .Values.sms.enable true }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := "sms" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    ports:
+    {{- if eq .Values.sms.networkPolicy.disableNonSecurePort false }}
+    - protocol: TCP
+      port: {{ .Values.sms.image.containerPort }}
+    {{- end }}
+    - protocol: TCP
+      port: {{ .Values.sms.image.containerPortTls }}
+  egress:
+  - to:
+    ports:
+    {{- if eq .Values.sms.networkPolicy.disableNonSecurePort false }}
+    - protocol: TCP
+      port: {{ .Values.sms.image.containerPort }}
+    {{- end }}
+    - protocol: TCP
+      port: {{ .Values.sms.image.containerPortTls }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 -}}
+{{- end }}

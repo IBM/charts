@@ -1,37 +1,30 @@
-###############################################################################
-# Licensed Materials - Property of IBM.
-# Copyright IBM Corporation 2018, 2019. All Rights Reserved.
-# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
-# restricted by GSA ADP Schedule Contract with IBM Corp.
-#
-# Contributors:
-#  IBM Corporation
-###############################################################################
-
+{{- if eq .Values.sip.enable true }}
 {{- if eq .Values.persistence.recordingsVolume.enablePersistentRecordings true }}
-kind: PersistentVolumeClaim
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := "sip" }}
 apiVersion: v1
+kind: PersistentVolumeClaim
 metadata:
   name: {{ .Release.Name }}-{{ .Values.persistence.recordingsVolume.name }}
   labels:
-    app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}" 
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
 spec:
-  {{- if .Values.persistence.useDynamicProvisioning }}
+{{- if .Values.persistence.useDynamicProvisioning }}
   ## if present, use the storageClassName from the values.yaml, else use the
   ## default storageClass setup by kube Administrator
   ##
   ## setting storageClassName to nil means use the default storage class
   storageClassName: {{ default nil .Values.persistence.recordingsVolume.storageClassName | quote }}
-  {{- else }}
+{{- else }}
   storageClassName: {{ default "" .Values.persistence.recordingsVolume.storageClassName | quote }}
-  {{- end }}
-  
+{{- end }}
   resources:
     requests:
       storage: {{ .Values.persistence.recordingsVolume.size | quote }}
+  selector:
+    matchLabels:
+      name: {{ .Values.persistence.recordingsVolume.name }}  
   accessModes:
   - ReadWriteMany
+{{- end }}
 {{- end }}
