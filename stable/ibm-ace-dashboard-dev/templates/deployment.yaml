@@ -60,10 +60,48 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
-        fsGroup: {{ default 1000 .Values.fsGroupGid }}
+        fsGroup: {{ default 1000 .Values.security.fsGroupGid }}
+      {{- if .Values.security.initVolumeAsRoot }}
+      initContainers:
+      - command:
+        - bash
+        - -c
+        - |
+          groupadd --gid 1000 node
+          useradd -u 1000 -g 1000 -c 'Node User' -d /home/node -s /bin/bash node
+          chown -R node:node /home/node
+          mkdir -p /mnt/data/content
+          chown node:node /mnt/data/content
+          chmod ug+rwx /mnt/data/content
+        image: "{{ .Values.image.configurator }}-{{ .Values.arch }}"
+        name: {{ include "sch.names.fullCompName" (list . "content-server-init") }}
+        securityContext:
+          seLinuxOptions:
+            type: spc_t
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          capabilities:
+            add:
+              - CHOWN
+              - FOWNER
+              - DAC_OVERRIDE
+            drop:
+              - ALL
+        volumeMounts:
+        - mountPath: /mnt/data
+          name: content
+        resources:
+          limits:
+{{ toYaml .Values.configurator.resources.limits | indent 14 }}
+          requests:
+{{ toYaml .Values.configurator.resources.requests | indent 14 }}
+      {{- end }}
       containers:
         - name: {{ include "sch.names.fullCompName" (list . "content-server") }}
-          image: "{{ .Values.image.contentServer }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.contentServer }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: rootStoreDirectory
@@ -82,10 +120,10 @@ spec:
               mountPath: /home/node/ssl
               readOnly: true
             - name: content
-              mountPath: /home/node/content
+              mountPath: /mnt/data
           securityContext:
             privileged: false
-            readOnlyRootFilesystem: true
+            readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
             runAsNonRoot: true
             runAsUser: 1000
@@ -115,8 +153,18 @@ spec:
 {{ toYaml .Values.contentServer.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.contentServer.resources.requests | indent 14 }}
+          command:
+          - bash
+          - -c
+          - |
+            {{- if .Values.security.initVolumeAsRoot }}{{ else }}
+            mkdir /mnt/data/content
+            {{- end }}
+            rmdir /home/node/content
+            ln -s /mnt/data/content /home/node/content
+            node server.js
         - name: {{ include "sch.names.fullCompName" (list . "control-ui") }}
-          image: "{{ .Values.image.controlUI }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.controlUI }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: ACE_INGRESS_HOSTNAME
@@ -167,6 +215,8 @@ spec:
                   name: {{ include "sch.names.fullCompName" (list . "oidc") }}
                   key: CLIENT_SECRET
             {{- end }}
+            - name: ACE_DASHBOARD_ROLE
+              value: {{ .Values.defaultRole | quote }}
           volumeMounts:
             - name: tls
               mountPath: /home/node/ssl
