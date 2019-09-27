@@ -1,5 +1,5 @@
-# What's new in Helm chart 2.2.0
-The version 2.2.0 of the Helm chart installs version 8.10.2.0 of IBM Operational Decision Manager. For a complete list of new features in this release, go to [What's new](https://www.ibm.com/support/knowledgecenter/en/SSQP76_8.10.x/com.ibm.odm.icp/topics/con_whats_new8102.html)
+# What's new in Helm chart 2.2.1
+The version 2.2.1 of the Helm chart installs version 8.10.2.1 of IBM Operational Decision Manager. For a complete list of new features in this release, go to [What's new](https://www.ibm.com/support/knowledgecenter/en/SSQP76_8.10.x/com.ibm.odm.icp/topics/con_whats_new8102.html)
 
 # Prerequisites
 1. Kubernetes 1.11 or higher, with Helm 2.9.1 or higher.
@@ -21,6 +21,7 @@ Otherwise, the database is recreated with the original sample data and you lose 
 # Version History
 | Chart | Date     | Details                           |
 | ----- | -------- | --------------------------------- |
+| 2.2.1 | Sept 2019 | Network policy security isolation |
 | 2.2.0 | June 2019 | ODM 8.10.2 release - UBI base image |
 | 2.1.0 | March 2019 | ODM 8.10.1 release - Support for non-root  |
 | 2.0.0 | Dec 2018 | New release ODM 8.10.0.0               |
