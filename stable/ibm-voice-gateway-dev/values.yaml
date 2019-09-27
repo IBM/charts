@@ -1,125 +1,283 @@
-###############################################################################
-# Licensed Materials - Property of IBM.
-# Copyright IBM Corporation 2018, 2019. All Rights Reserved.
-# U.S. Government Users Restricted Rights - Use, duplication or disclosure
-# restricted by GSA ADP Schedule Contract with IBM Corp.
-#
-# Contributors:
-#  IBM Corporation
-###############################################################################
+---
+global:
+  sch:
+    enabled: true
+  image:
+    repository: 'ibmcom'
+    pullSecrets: ''
+  disableSslCertValidation: false
 
-arch:
-    amd64: "3 - Most preferred"
+arch: 'amd64'
+runAsUser: 1001
+schConfigName: 'voice-gateway.sch.chart.config.values'
 
-productName: "IBM Voice Gateway"
+addon:
+  displayName: 'Watson Voice Gateway'
+  icon: 'https://broker.voiceagent.cloud.ibm.com/images/vgaas_icon_32.svg'
+  version: ''
+  shortDescription: 'Watson Voice Gateway provides a way to integrate a set of orchestrated Watson services with a public or private telephone network by using the Session Initiation Protocol (SIP). It also provides support for SMS integration via twillio.'
+  longDescription: 'Watson Voice Gateway provides a way to integrate a set of orchestrated Watson services with a public or private telephone network by using the Session Initiation Protocol (SIP). The voice gateway enables direct voice interactions over a telephone or through an SMS enabled device with a cognitive self-service agent or the ability to transcribe a phone call between a caller and agent in real-time, enabling the ability to process the conversation with analytics for real-time agent feedback.'
+  deployDocs: 'https://www.ibm.com/support/knowledgecenter/en/SS4U29/deployicp.html'
+  productDocs: 'https://www.ibm.com/support/knowledgecenter/en/SS4U29/welcome_voicegateway.html'
+  serviceId: 'voice-gateway'
+  zenNamespace: 'zen'
 
 replicaCount: 1
 
-## Node labels for pod assignment
-## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
-nodeSelector: {}
+tenantConfigSecretName: 'vgw-tenantconfig-secret'
 
-tenantConfigSecretName: "vgw-tenantconfig-secret"
+sip:
+  enable: true
+  resources:
+    requests:
+      cpu: 250m
+      memory: 250Mi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+
+  codecs:
+    g729:
+      enable: false
+      image:
+        name: 'voice-gateway-codec-g729'
+        containerName: 'vgw-codec-g729'
+        tag: '1.0.3.0'
+      resources:
+        requests:
+          cpu: 250m
+          memory: 250Mi
+        limits:
+          cpu: 1000m
+          memory: 4Gi
 
 image:
-    sipOrchestrator:
-        repository: "ibmcom/voice-gateway-so"
-        containerName: "vgw-sip-orchestrator"
-        tag: "1.0.2.0"
-    mediaRelay:
-        repository: "ibmcom/voice-gateway-mr"
-        containerName: "vgw-media-relay"
-        tag: "1.0.2.0"
-    pullPolicy: "Always"
-    imagePullSecrets: ""
+  sipOrchestrator:
+    name: 'voice-gateway-so'
+    containerName: 'vgw-sip-orchestrator'
+    tag: '1.0.3.0'
+  mediaRelay:
+    name: 'voice-gateway-mr'
+    containerName: 'vgw-media-relay'
+    tag: '1.0.3.0'
+  pullPolicy: 'IfNotPresent'
 
 persistence:
-    useDynamicProvisioning: false
-    recordingsVolume:
-        enablePersistentRecordings: false
-        name: "recordings"
-        storageClassName: ""
-        size: 2Gi
-    logsVolume:
-        enablePersistentLogs: false
-        name: "persistent-logs"
-        storageClassName: ""
-        size: 2Gi
+  useDynamicProvisioning: false
+  recordingsVolume:
+    enablePersistentRecordings: false
+    name: 'recordings'
+    storageClassName: ''
+    size: 2Gi
+  logsVolume:
+    enablePersistentLogs: false
+    name: 'persistent-logs'
+    storageClassName: ''
+    size: 2Gi
 
 mediaRelayEnvVariables:
-    mediaRelayWsHost: "0.0.0.0"
-    mediaRelayWsPort: 8080
-    rtpUdpPortRange: "16384-16394"
-    clusterWorkers: 1
-    maxSessions: "0"
-    enableRecording: false
-    stereoRecording: false
+  mediaRelayWsHost: '0.0.0.0'
+  mediaRelayWsPort: 8080
+  rtpUdpPortRange: '16384-16394'
+  clusterWorkers: 1
+  maxSessions: '0'
+  enableRecording: false
+  stereoRecording: false
+  readinessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 20
+    timeoutSeconds: 20
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 35
+    timeoutSeconds: 20
+  mediaRelayLogLevel: 'INFO'
+  mediaRelayLogRotationFileCount: 10
+  mediaRelayLogRotationPeriod: '1d'
+  rtpPacketLossReportingThreshold: 1000
 
-    mediaRelayLogLevel: "INFO"
-    mediaRelayLogRotationFileCount: 10
-    mediaRelayLogRotationPeriod: "1d"
-    rtpPacketLossReportingThreshold: 1000
+  proxyType: 'http'
+  proxyHost:
+  proxyPort:
+  proxyUsername:
+  proxyPasswordSecret:
+  watsonSttEnableProxy: true
+  watsonTtsEnableProxy: true
+  musicOnHoldEnableProxy: false
 
-    proxyType: "http"
-    proxyHost: 
-    proxyPort: 
-    proxyUsername: 
-    proxyPasswordSecret:
-    watsonSttEnableProxy: true
-    watsonTtsEnableProxy: true
-    musicOnHoldEnableProxy: false
+  enableMrcp: false
+  unimrcpConfigSecretName: unimrcp-config-secret
+  mrcpv2SipPort: 5555
 
-    enableMrcp: false
-    unimrcpConfigSecretName: unimrcp-config-secret
-    mrcpv2SipPort: 5555
+  enableSsl: false
+  sslClientCACertSecret: client-ca-cert-secret
 
-    enableSsl: false
-    sslClientCACertSecret: client-ca-cert-secret
-
-    enableMutualAuth: false
-    sslClientPkcs12FileSecret: ssl-client-pkcs12-file-secret
-    sslClientPassphraseSecret: ssl-client-passphrase-secret
+  enableMutualAuth: false
+  sslClientPkcs12FileSecret: ssl-client-pkcs12-file-secret
+  sslClientPassphraseSecret: ssl-client-passphrase-secret
 
 sipOrchestratorEnvVariables:
-    httpHost: "127.0.0.1"
-    secureAdminInterface: false
-    adminCredentialSecret: admin-credentials
-    mediaRelayHost: "localhost:8080"
-    sipPort: 5060
-    sipPortTcp: 5060
-    sipPortTls: 5061
+  httpHost: '*'
+  httpPort: 9086
+  httpPortTls: 9446
+  secureAdminInterface: false
+  adminCredentialSecret: admin-credentials
+  mediaRelayHost: 'localhost:8080'
+  sipPort: 5060
+  sipPortTcp: 5060
+  sipPortTls: 5061
+  readinessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 20
+    timeoutSeconds: 20
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 35
+    timeoutSeconds: 20
+  logLevel: 'info'
+  logMaxFiles: 5
+  logMaxFileSize: 100
+  enableAuditMessages: true
+  enableTranscriptionAuditMessages: false
+  latencyReportingThreshold: 1000
+  relayLatencyReportingThreshold: 1000
 
-    logLevel: "info"
-    logMaxFiles: 5
-    logMaxFileSize: 100
-    enableAuditMessages: true
-    enableTranscriptionAuditMessages: false
-    latencyReportingThreshold: 1000
-    relayLatencyReportingThreshold: 1000
+  proxyHost:
+  proxyPort:
+  proxyUsername:
+  proxyPasswordSecret:
+  trustedIpList:
 
-    proxyHost: 
-    proxyPort: 
-    proxyUsername: 
-    proxyPasswordSecret:
-    trustedIpList: 
-    
-    cmrHealthCheckFailErrCode: 
+  cmrHealthCheckFailErrCode:
 
-    consoleLogFormat: "json"
-    consoleLogLevel: "info"
-    consoleLogSource: "message,trace,accessLog,ffdc"
+  consoleLogFormat: 'json'
+  consoleLogLevel: 'info'
+  consoleLogSource: 'message,trace,accessLog,ffdc'
 
-    enableSslorMutualAuth: false
-    sslKeyTrustStoreSecret: trust-store-file-secret
-    sslFileType: "JKS"
-    sslPassphraseSecret: ssl-passphrase-secret
+  enableSslorMutualAuth: false
+  sslKeyTrustStoreSecret: trust-store-file-secret
+  sslFileType: 'JKS'
+  sslPassphraseSecret: ssl-passphrase-secret
 
-    enableMetricsAuth: false
-    metricsSamplingInterval: 600
-    
+  enableMetricsAuth: false
+  metricsSamplingInterval: 600
+
 metering:
-    meteringApiKeySecret: metering-api-key-secret
-    meteringEnabled: true
-    icpMasterNodeIP: "mycluster.icp"
-    meteringServerURL: "https://mycluster.icp:8443/meteringapi"
+  apiKeySecret: metering-api-key-secret
+  enable: true
+  icpMasterNodeIP: 'mycluster.icp'
+  serverURL: 'https://mycluster.icp:8443/meteringapi'
 
+# SMS Gateway
+sms:
+  enable: false
+  replicas: 1
+  image:
+    name: 'voice-gateway-sms'
+    containerName: 'vgw-sms-gateway'
+    containerPort: 9080
+    servicePort: 30087
+    containerPortTls: 9443
+    servicePortTls: 30047
+    tag: '1.0.3.0'
+    pullPolicy: 'IfNotPresent'
+  resources:
+    requests:
+      cpu: 250m
+      memory: 250Mi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+  networkPolicy:
+    disableNonSecurePort: false
+
+  tenantConfigSecretName: 'smsgw-tenantconfig-secret'
+
+  persistence:
+    volume:
+      useDynamicProvisioning: false
+      logs:
+        enable: false
+        name: 'sms-persistent-logs'
+        storageClassName: ''
+        size: 2Gi
+      transReports:
+        enable: false
+        name: 'transcription-reports'
+        storageClassName: ''
+        size: 2Gi
+      usageReports:
+        enable: false
+        name: 'usage-reports'
+        storageClassName: ''
+        size: 2Gi
+
+  # Tracing and logging
+  logging:
+    level: 'info'
+    maxFiles: 5
+    maxFileSize: 100
+    enableTranscriptionMessages: true
+    latencyReportingThreshold: 1000
+    hideCallerID: false
+
+  secureReadinessInterface: false
+  readinessCredentialSecret: admin-credentials
+
+  readinessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 20
+    timeoutSeconds: 20
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 35
+
+  # SMS provider proxy
+  providerProxy:
+    enable: false
+    host: 'provider-proxy-host'
+    port: '5000'
+    username: 'provider-proxy-username'
+    passwordSecret:
+
+  # Watson Assistant proxy
+  assistantProxy:
+    enable: false
+    host: 'assistant-proxy-host'
+    port: '5001'
+    username: 'assistant-proxy-username'
+    passwordSecret:
+
+  # CloudantProxy
+  cloudantProxy:
+    enable: false
+    url: 'cloudant-proxy-url'
+    username: 'cloudant-proxy-username'
+    passwordSecret:
+
+  # Secure connect to WA / SMS provider
+  ssl:
+    enable: false
+    keyStoreFileSecret: key-store-file-secret
+    keyStorePassphraseSecret: ssl-passphrase-secret
+    keyFileType: 'JKS'
+
+    trustStoreFileSecret: trust-store-file-secret
+    trustStorePassphraseSecret: ssl-trust-passphrase-secret
+    trustFileType: 'JKS'
+
+  # Reporting
+  reporting:
+    enable: false
+    host: 'reporting-host'
+    enableLimitOnReportingBackupFiles: false
+    usageReportingMaxBackupFiles: 100
+    transcriptionReportingMaxBackupFiles: 1000
+    maxEventsToBatch: 500
+
+# Test container
+test:
+  image:
+    name: 'opencontent-common-utils'
+    tag: '1.1.2-amd64'
+    pullPolicy: 'IfNotPresent'

@@ -8,16 +8,16 @@ IBM® App Connect Enterprise is a market-leading lightweight enterprise integrat
 
 ## Chart Details
 
-This chart deploys a single IBM App Connect Enterprise for Developers Integration Server into a Kubernetes environment.
+This chart deploys a single IBM App Connect Enterprise for Developers integration server into a Kubernetes environment.
 
 ## Prerequisites
 
-* Kubernetes 1.11.0 or greater, with beta APIs enabled
+* Kubernetes 1.11.0 or later, with beta APIs enabled
 * A user with operator role is required to install the chart
-* If persistence is enabled (see configuration), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster
+* If persistence is enabled (see configuration), you must either create a persistent volume; or specify a storage class if classes are defined in your cluster
 * If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191)
 
-To separate secrets from the Helm release, a secret can be pre-installed with the following shape and referenced from the Helm chart with the `integrationServer.configurationSecret` value. Substitute `<alias>` with a reference to your certificate:
+To separate secrets from the Helm release, a secret can be preinstalled with the following shape and referenced from the Helm chart with the `integrationServer.configurationSecret` value. Substitute `<alias>` with a reference to your certificate:
 ```
 apiVersion: v1
 kind: Secret
@@ -82,28 +82,28 @@ data:
 
 The following table describes the secret keys:
 
-| Key                              | Description                                                        |
-| -------------------------------- | ------------------------------------------------------------------ |
-| `agentc`                        | Multi-line value containing a agentc.json file                     |
-| `agentp`                        | Multi-line value containing a agentp.json file                     |
-| `agentx`                        | Multi-line value containing a agentx.json file                     |
-| `extensions`                    | Multi-line value containing an extensions.zip file                 |
-| `keystoreCert-<alias>`          | Multi-line value containing the certificate in PEM format          |
-| `keystoreKey-<alias>`           | Multi-line value containing the private key in PEM format          |
-| `keystorePass-<alias>`          | The passphrase for the private key being imported, if there is one |
-| `keystorePassword`              | A password to set for the Integration Server's keystore            |
-| `mqsc`                          | Multi-line value containing an mqsc file to run against the Queue Manager |
-| `odbcini`                       | Multi-line value containing an odbc.ini file for the Integration Server to define any ODBC data connections |
-| `policy`                        | Multi-line value containing a policy to apply                      |
-| `policyDescriptor`              | Multi-line value containing the policy descriptor file             |
-| `serverconf`                    | Multi-line value containing a server.conf.yaml                     |
-| `setdbparms`                    | Multi-line value containing the `{ResourceName} {UserId} {Password}` to pass to [mqsisetdbparms command](https://www.ibm.com/support/knowledgecenter/en/SSTTDS_11.0.0/com.ibm.etools.mft.doc/an09155_.htm)     |
-| `serverconf`                    | Multi-line value containing a server.conf.yaml                     |
-| `switch`                        | Multi-line value containing a switch.json                          |
-| `truststoreCert-<alias>`        | Multi-line value containing the trust certificate in PEM format    |
-| `truststorePassword`            | A password to set for the Integration Server's truststore          |
+| Key                             | Description                                                        |
+| ------------------------------- | ------------------------------------------------------------------ |
+| `agentc`                        | Multi-line value containing a agentc.json file.                     |
+| `agentp`                        | Multi-line value containing a agentp.json file.                     |
+| `agentx`                        | Multi-line value containing a agentx.json file.                     |
+| `extensions`                    | Multi-line value containing an extensions.zip file.                 |
+| `keystoreCert-<alias>`          | Multi-line value containing the certificate in PEM format.          |
+| `keystoreKey-<alias>`           | Multi-line value containing the private key in PEM format.          |
+| `keystorePass-<alias>`          | The passphrase for the private key being imported, if there is one. |
+| `keystorePassword`              | A password to set for the integration server's keystore.            |
+| `mqsc`                          | Multi-line value containing an mqsc file to run against the queue manager. |
+| `odbcini`                       | Multi-line value containing an odbc.ini file for the integration server to define any ODBC data connections. |
+| `policy`                        | Multi-line value containing a policy to apply.                      |
+| `policyDescriptor`              | Multi-line value containing the policy descriptor file.             |
+| `serverconf`                    | Multi-line value containing a server.conf.yaml.                     |
+| `setdbparms`                    | This supports 2 formats: Each line which starts mqsisetdbparms will be run as written, or each line should specify the <resource> <userId> <password>, separated by a single space |
+| `serverconf`                    | Multi-line value containing a server.conf.yaml.                     |
+| `switch`                        | Multi-line value containing a switch.json.                          |
+| `truststoreCert-<alias>`        | Multi-line value containing the trust certificate in PEM format.    |
+| `truststorePassword`            | A password to set for the integration server's truststore.          |
 
-If using `ibm-ace-dashboard-prod` for managing Integration Servers then further instructions and helper script are provided when adding a server. A full set of working example secrets can be found in the pak_extensions/pre-install directory.
+If using `ibm-ace-dashboard-dev` for managing integration servers then further instructions and helper script are provided when adding a server. A full set of working example secrets can be found in the pak_extensions/pre-install directory.
 
 ### PodSecurityPolicy Requirements
 
@@ -155,23 +155,11 @@ spec:
 
 This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster-scoped, as well as namespace-scoped, pre- and post-actions that need to occur.
 
+The predefined SecurityContextConstraints [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart. If your target namespace is not bound to this SecurityContextConstraints resource you can bind it with the following command:
 
-#### Running an ACE-only Integration Server
-
-The predefined SecurityContextConstraints [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart when creating an ACE-only (no MQ) integration server; if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
-
-Run the following command to add the service account of the Integration server to the anyuid scc - `oc adm policy add-scc-to-user ibm-anyuid-scc system:serviceaccount:<namespace>:<releaseName>-ibm-ace-server-prod-serviceaccount`, e.g. for release name `ace-nomq` in `default` namespace:
+`oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:<namespace>` For example, for release into the `default` namespace:
 ``` 
-oc adm policy add-scc-to-user ibm-anyuid-scc system:serviceaccount:default:ace-nomq-ibm-ace-server-prod-serviceaccount
-```
-
-#### Running an ACE & MQ Integration Server
-
-The predefined SecurityContextConstraints [`ibm-privileged-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart when creating an ACE & MQ integration server; if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
-
-Run the following command to add the service account of the Integration server to the privileged scc. - `oc adm policy add-scc-to-user ibm-privileged-scc system:serviceaccount:<namespace>:<releaseName>-ibm-ace-server-prod-serviceaccount`, e.g. for release name `ace-mq` in `default` namespace:
-```
-oc adm policy add-scc-to-user ibm-privileged-scc system:serviceaccount:default:ace-mq-ibm-ace-server-prod-serviceaccount
+oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:default
 ```
 
 ## Resources Required
@@ -182,13 +170,18 @@ This chart uses the following resources by default:
 * 1 GiB memory without MQ
 * 2 GiB memory with MQ
 
-See the [configuration] section for how to configure these values.
+If a sidecar container for running flows authored in App Connect Designer is deployed into the pod, the following resources will also be used by default:
+
+* 1 CPU core
+* 256 MiB memory
+
+See the configuration section below for how to configure these values.
 
 ## Installing the Chart
 
-**Deploying an IBM App Connect Enterprise Integration Server directly with this chart will instantiate an empty Integration Server. Bar files will have to be manually deployed to this server, and those bar file deployments will not persist across a restarted pod.**
+**Deploying an IBM App Connect Enterprise integration server directly with this chart will instantiate an empty integration server. BAR files will have to be manually deployed to this server, and those BAR file deployments will not persist across a restarted pod.**
 
-**Alternatively, go back to the catalog to install an IBM App Connect Enterprise Dashboard (`ibm-ace-dashboard-dev`). This dashboard provides a UI to upload BAR files and deploy and manage Integration Servers.**
+**Alternatively, go back to the catalog to install an IBM App Connect Enterprise dashboard (`ibm-ace-dashboard-dev`). This dashboard provides a UI to upload BAR files and deploy and manage integration servers.**
 
 If using a private Docker registry, an image pull secret needs to be created before installing the chart. Supply the name of the secret as the value for `image.pullSecret`.
 
@@ -198,7 +191,7 @@ To install the chart with the release name `ace-server-dev`:
 helm install --name ace-server-dev ibm-ace-server-dev --set license=accept --tls
 ```
 
-This command accepts the IBM App Connect Enterprise license and deploys an IBM App Connect Enterprise Integration Server on the Kubernetes cluster.  Note that this will deploy an empty Integration Server.  If you have an IBM App Connect Enterprise Dashboard, you can get a content server URL and set it in the release with the following command:
+This command accepts the IBM App Connect Enterprise license and deploys an IBM App Connect Enterprise integration server on the Kubernetes cluster.  Note that this will deploy an empty integration server.  If you have an IBM App Connect Enterprise dashboard, you can get a content server URL and set it in the release with the following command:
 
 ```
 helm install --name ace-server-dev ibm-ace-server-dev --set license=accept --set contentServerURL="{your content server URL}" --tls
@@ -206,11 +199,15 @@ helm install --name ace-server-dev ibm-ace-server-dev --set license=accept --set
 
 The configuration section lists the parameters that can be configured during installation.
 
-> **Tip**: See all the resources deployed by the chart using kubectl get all -l release=ace-server-dev
+ **Tip**: See all the resources deployed by the chart by using `kubectl get all -l release=ace-server-dev`.
 
 ## Verifying the Chart
 
-See the instruction (from NOTES.txt within chart) after the helm installation completes for chart verification. The instruction can also be viewed by running the command: helm status my-release --tls.
+See the instruction (from NOTES.txt in the chart) after the helm installation completes for chart verification. The instruction can also be viewed by running the command:
+
+```
+helm status ace-server-dev --tls`
+```
 
 ## Uninstalling the Chart
 
@@ -220,52 +217,65 @@ To uninstall/delete the `ace-server-dev` release:
 helm delete --purge ace-server-dev --tls
 ```
 
-The command removes all the Kubernetes components associated with the chart, except any Persistent Volume Claims (PVCs). This is the default behaviour of Kubernetes, and ensures that valuable data is not deleted.
+The command removes all the Kubernetes components associated with the chart, except any persistent volume claims (PVCs). This is the default behaviour of Kubernetes, and ensures that valuable data is not deleted.
 
 ## Configuration
 The following table lists the configurable parameters of the `ibm-ace-server-dev` chart and their default values.
 
 | Parameter                        | Description                                     | Default                                                    |
 | -------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
-| `license`                        | Set to `accept` to accept the terms of the IBM license  | `Not accepted`                                     |
-| `contentServerURL`               | URL provided by the ACE dashboard to pull resources from | `nil`                                                |
-| `queueManagerEnabled`            | Boolean toggle for whether to run a StatefulSet with an MQ Queue Manager associated with the ACE Integration Server, or a Deployment without an MQ Queue Manager| `false` |
-| `image.tag`                      | Image tag                                       | `11.0.0.5-amd64`                                                 |
-| `image.pullPolicy`               | Image pull policy                               | `IfNotPresent`                                             |
-| `image.pullSecret`               | Image pull secret, if you are using a private Docker registry | `nil`                                        |
-| `arch`                           | Architecture scheduling preference for worker node (only amd64 supported) - read only | `amd64`              |
-| `persistence.enabled`            | Use Persistent Volumes for all defined volumes  | `true`                                                     |
-| `persistence.useDynamicProvisioning`| Use dynamic provisioning (storage classes) for all volumes | `true`                                       |
-| `dataPVC.name`                   | Suffix for the Persistent Volume Claim name     | `data`                                                     |
-| `dataPVC.storageClassName`       | Storage class of volume for main MQ data (under /var/mqm) | `nil`                                            |
-| `dataPVC.size`                   | Size of volume for main MQ data (under /var/mqm) | `2Gi`                                                     |
-| `service.type`                   | Kubernetes service type exposing ports          | `NodePort`                                                 |
-| `service.webuiPort`              | Web UI port number - read only                  | `7600`                                                     |
-| `service.serverlistenerPort`     | Http server listener port number - read only    | `7800`                                                     |
-| `service.serverlistenerTLSPort`  | Https server listener port number - read only   | `7843`                                                     |
-| `service.iP`                     | This is a hostname/IP that the nodeport is connected to i.e. a workers IP    | `nil`               |
-| `aceonly.resources.limits.cpu`        | Kubernetes CPU limit for the container when running a server without MQ      | `1`                      |
-| `aceonly.resources.limits.memory`     | Kubernetes memory limit for the container when running a server without MQ   | `1024Mi`                 |
-| `aceonly.resources.requests.cpu`      | Kubernetes CPU request for the container when running a server without MQ    | `1`                      |
-| `aceonly.resources.requests.memory`   | Kubernetes memory request for the container when running a server without MQ | `1024Mi`                 |
-| `aceonly.replicaCount`                | When running without a Queue Manager, set how many replicas of the deployment pod to run | `3`  
-| `acemq.resources.limits.cpu`      | Kubernetes CPU limit for the container when running a server with MQ      | `1`                             |
-| `acemq.resources.limits.memory`   | Kubernetes memory limit for the container when running a server with MQ   | `2048Mi`                        |
-| `acemq.resources.requests.cpu`    | Kubernetes CPU request for the container when running a server with MQ    | `1`                             |
-| `acemq.resources.requests.memory` | Kubernetes memory request for the container when running a server with MQ | `2048Mi`                        |
-| `acemq.pki.keys`                      | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates with private keys. See section titled "Supplying certificates to be used for TLS" for more details  | `[]` |
-| `acemq.pki.trust`                     | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates. See section titled "Supplying certificates to be used for TLS" for more details  | `[]` |
-| `acemq.qmname`              | MQ Queue Manager name                           | Helm release name                                          |
-| `acemq.initVolumeAsRoot`              | Whether or not the storage class (such as NFS) requires root permissions to initialize"                           | Initialize MQ volume using root                                          | `false`
-| `nameOverride`                  | Set to partially override the resource names used in this chart | `ibm-mq`                                   |
-| `integrationServer.name`         | ACE Integration Server name                     | Helm release name                                          |
-| `integrationServer.defaultAppName`         | Allows you to specify a name for the default application for the deployment of independent resources                     | `nil`     
-| `integrationServer.configurationSecret`            | The name of the secret to create or to use that contains the server configuration | `nil`  
-| `integrationServer.fsGroupGid`                     | File system group ID for volumes that support ownership management (such as NFS) | `nil`  |
-| `log.format`                     | Output log format on container's console. Either `json` or `basic` | `json`                                  |
-| `metrics.enabled`                | Enable Prometheus metrics for the Queue Manager and Integration Server | `true`                              |
-| `livenessProbe.initialDelaySeconds` | The initial delay before starting the liveness probe. Useful for slower systems that take longer to start the Queue Manager |	`360` |
-| `readinessProbe.initialDelaySeconds` | The initial delay before starting the readiness probe |	`10`                                            |
+| `license`                        | Set to `accept` to accept the terms of the IBM license.  | `Not accepted`                                     |
+| `contentServerURL`               | URL provided by the App Connect Enterprise dashboard to pull resources from. | `nil`                      |
+| `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
+| `designerFlowsEnabled`           | Boolean toggle for whether to deploy a sidecar container into the pod for running flows authored in App Connect Designer. | `false` |
+| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `ibm-ace-server-dev:11.0.0.5.1` |
+| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `ibm-ace-mqclient-server-dev:11.0.0.5.1`         |
+| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `ibm-ace-mq-server-dev:11.0.0.5.1`               |
+| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `ibm-ace-icp-configurator-dev:11.0.0.5.1` |
+| `image.designerflows`             | Image repository and tag for the App Connect Enterprise designer flows image.    | `ibm-ace-designer-flows-dev:11.0.0.5.1` |
+| `image.pullPolicy`               | Image pull policy.                               | `IfNotPresent`                                             |
+| `image.pullSecret`               | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
+| `arch`                           | Architecture scheduling preference for worker node (only amd64 supported) - read only. | `amd64`              |
+| `persistence.enabled`            | Use Persistent Volumes for all defined volumes.  | `true`                                                     |
+| `persistence.useDynamicProvisioning`| Use dynamic provisioning (storage classes) for all volumes. | `true`                                       |
+| `dataPVC.name`                   | Suffix for the Persistent Volume Claim name.     | `data`                                                     |
+| `dataPVC.storageClassName`       | Storage class of volume for main MQ data (under /var/mqm). | `nil`                                     |
+| `dataPVC.size`                   | Size of volume for main MQ data (under /var/mqm). | `2Gi`                                                     |
+| `service.type`                   | Kubernetes service type exposing ports.          | `NodePort`                                                 |
+| `service.webuiPort`              | Web UI port number - read only.                   | `7600`                                                    |
+| `service.serverlistenerPort`     | HTTP server listener port number - read only.     | `7800`                                                    |
+| `service.serverlistenerTLSPort`  | HTTPS server listener port number - read only.    | `7843`                                                    |
+| `service.customPorts`            | Used for configuring custom ports on the service. | `nil`                                                    |
+| `service.switchAgentCPort`       | Port used by the Switch for agentC calls, normally 9010.   | `nil`                                            |
+| `service.switchAgentPPort`       | Port used by the Switch for agentP calls, normally 9011.   | `nil`                                            |
+| `service.switchAdminPort`        | Port used by the Switch for admin calls, normally 9012.    | `nil`                                            |
+| `service.iP`                     | An IP address or DNS name that the nodeport is connected to, that is, the proxy node's IP or fully qualified domain name (FQDN). | `nil`               |
+| `aceonly.resources.limits.cpu`        | Kubernetes CPU limit for the container when running a server without MQ.      | `1`                                                       |
+| `aceonly.resources.limits.memory`     | Kubernetes memory limit for the container when running a server without MQ.   | `1024Mi`                                                  |
+| `aceonly.resources.requests.cpu`      | Kubernetes CPU request for the container when running a server without MQ.    | `1`                                                       |
+| `aceonly.resources.requests.memory`   | Kubernetes memory request for the container when running a server without MQ. | `1024Mi`                                                  |
+| `aceonly.replicaCount`                | When running without a queue manager, set how many replicas of the deployment pod to run. | `3`               |
+| `acemq.resources.limits.cpu`      | Kubernetes CPU limit for the container when running a server with MQ.      | `1`                                                       |
+| `acemq.resources.limits.memory`   | Kubernetes memory limit for the container when running a server with MQ.   | `2048Mi`                                                  |
+| `acemq.resources.requests.cpu`    | Kubernetes CPU request for the container when running a server with MQ.    | `1`                                                       |
+| `acemq.resources.requests.memory` | Kubernetes memory request for the container when running a server with MQ. | `2048Mi`                                                  |
+| `acemq.pki.keys`                      | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates with private keys. See section titled "Supplying certificates to be used for TLS" for more details.  | `[]` |
+| `acemq.pki.trust`                     | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates. See section titled "Supplying certificates to be used for TLS" for more details.  | `[]` |
+| `acemq.qmname`              | MQ queue manager name.                           | Helm release name.                                          |
+| `acemq.initVolumeAsRoot`              | Whether or not the storage class (such as NFS) requires root permissions to initialize.                           | Initialize MQ volume using root.                                          | `true`
+| `nameOverride`                  | Set to partially override the resource names used in this chart. | `ibm-mq`                                   |
+| `designerflows.resources.limits.cpu`        | Kubernetes CPU limit for the sidecar container for running flows authored in App Connect Designer.      | `1`                      |
+| `designerflows.resources.limits.memory`     | Kubernetes memory limit for the sidecar container for running flows authored in App Connect Designer.   | `256Mi`                 |
+| `designerflows.resources.requests.cpu`      | Kubernetes CPU request for the sidecar container for running flows authored in App Connect Designer.    | `1`                      |
+| `designerflows.resources.requests.memory`   | Kubernetes memory request for the sidecar container for running flows authored in App Connect Designer. | `256Mi`                 |
+| `integrationServer.name`         | App Connect Enterprise integration server name.                     | Helm release name.                                          |
+| `integrationServer.defaultAppName`         | Allows you to specify a name for the default application for the deployment of independent resources.                     | `nil`                                          |
+| `integrationServer.configurationSecret`            | The name of the secret to create or to use that contains the server configuration. | `nil`                    |
+| `integrationServer.fsGroupGid`                     | File system group ID for volumes that support ownership management (such as NFS). | `nil`  |
+| `log.format`                     | Output log format on container's console. Either `json` or `basic`. | `json`                                         |
+| `metrics.enabled`                | Enable Prometheus metrics for the queue manager and integration server. | `true`                              |
+| `livenessProbe.initialDelaySeconds` | The initial delay before starting the liveness probe. Useful for slower systems that take longer to start the queue manager. |	`360` |
+| `readinessProbe.initialDelaySeconds` | The initial delay before starting the readiness probe. |	`10` |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
@@ -273,24 +283,28 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 
 ## Storage
 
-When Queue Manager is enabled, the chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) for the storage of MQ configuration data and messages.  By using a Persistent Volume based on network-attached storage, Kubernetes can re-schedule the MQ server onto a different worker node. You should not use "hostPath" or "local" volumes, because this will not allow moving between nodes. The default size of the persistent volume claim is 2Gi.
+When choosing to deploy the 'App Connect Enterprise with MQ Server' image (`imageType=acemqserver`) the chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) for the storage of MQ configuration data and messages.  By using a persistent volume (PV) based on network-attached storage, Kubernetes can re-schedule the MQ server onto a different worker node. You should not use "hostPath" or "local" volumes, because this will not allow moving between nodes. The default size of the persistent volume claim is 2Gi.
 
-Performance requirements will vary widely based on workload, but as a guideline, use a Storage Class which allows for at least 200 IOPS (based on 16 KB block size with a 50/50 read/write mix).
+Performance requirements will vary widely based on workload, but as a guideline, use a storage class which allows for at least 200 IOPS (based on a block size of 16 KB with a 50/50 read/write mix).
 
 For volumes that support ownership management, such as NFS, specify the group ID of the group owning the persistent volumes' file systems using the `integrationServer.fsGroupGid` parameter. NFS and some other storage classes also require the `acemq.initVolumeAsRoot` parameter to be enabled so that root permissions can be used to initialize the volume for MQ.
 
-**If not using Dynamic Provisioning:** The only requirement is to have an available Persistent Volume (a PV that is not already bound). No Persistent Volume Claim (PVC) needs to be created, the installation of this chart will automatically create it and bind it to an available PV. The name entered in `dataPVC.name` will become part of the final name of the PVC created by the chart. Supply a `dataPVC.size` no bigger than the size of the Persistent Volume created previously so the volume is claimed by the PVC.
+**If not using dynamic provisioning:** You only need to have an available PV, that is, one that is not already bound). You do not need to create a persistent volume claim (PVC); installation of this chart automatically creates it and binds it to an available PV. The name entered in dataPVC.name will become part of the final name of the PVC created by the chart. Supply a dataPVC.size that is no bigger than the size of the PV created previously so that the volume is claimed by the PVC.
 
 ## Resources Required
 
 This chart uses the following resources per pod by default:
 
-- ACE server without an associated Queue Manager:
+- Using the 'App Connect Enterprise only' or 'App Connect Enterprise with MQ Client' images (`aceonly` or `acemqclient`):
    - 1 CPU core
    - 1024 Mi memory
-- ACE server with an associated Queue Manager:
+- Using the 'App Connect Enterprise with MQ Server' image (`acemqserver`):
    - 1 CPU core
    - 2048 Mi memory
+   
+If a sidecar container for running flows authored in App Connect Designer is deployed into the pod, the following resources will additionally be used for that container by default:
+* 1 CPU core
+* 256Mi memory
 
 See the configuration section for how to configure these values.
 
@@ -308,18 +322,26 @@ kubectl logs foo-ibm-mq-0 | jq -r '.ibm_datetime + " " + .message'
 
 ## Limitations
 
-This delivery includes sample code which makes provision for *future* use of Multi Instance of MQ in a High Avaialbility scenario. This *full feature* is not available for production in this release but is intended to be available in the near future
+### MQ Highly Available Setup Scenario
+
+This delivery includes sample code which makes provision for *future* use of MQ multi-instance queue managers in a high availability scenario. This *full feature* is not available for production in this release but is intended to be available in the near future.
+
+### Upgrade Notes
+
+This chart has replaced the *Local default Queue Manager* checkbox with a *Which type of image to run* dropown list. That's because this chart now comes with an additional Docker image, the App Connect Enterprise with MQ client image. Users of Server 2.0.0 and later releases, can reuse existing values when upgrading but must ensure that the new option has the correct value to maintain your image selection.
+
+This chart has changed the way we specify images. Previously we used a common tag across all images. In this release we have moved to including the tag with the name of the image. If you have customised the image name you will need to make sure that when upgrading you include the image tag on the appropriate image value
 
 ## Documentation
 
 ### Supplying certificates to be used for TLS for MQ
 
-The `pki.trust` and `pki.keys` allow you to supply details of Kubernetes secrets that contain TLS certificates. By doing so the TLS certificates will be imported into the container at runtime and MQ will be configured to use them. You can both supply certificates which contain only a public key and certificates that contain both public and private keys. 
+The `pki.trust` and `pki.keys` allow you to supply details of Kubernetes secrets that contain TLS certificates. The TLS certificates are imported into the container at runtime and MQ will be configured to use them. You can supply certificates that contain only a public key and certificates that contain both public and private keys. 
 
-If you supply invalid files or invalid YAML objects then the container will terminate with an appropriate termination message. The next 2 sections will detail the requirements for supplying each type of certificate.
+If you supply invalid files or invalid YAML objects, the container terminates with an appropriate message. The following two sections detail the requirements for supplying each type of certificate.
 
-#### Supplying certificates which contain the public and private keys
-When supplying a Kubernetes secret that contains certificate files for both the public and private key you must ensure that the secret contains a file that ends in `.crt` and a file that ends in `.key` named the same. For example: `tls.crt` and `tls.key`. The extension of the file denotes whether the file is the public key (`.crt`) or the private key (`.key`) and must be correct. If your certificate has been issued by a Certificate Authority, then the certificate from the CA must be included as a separate file with the `.crt` extension. For example: `ca.crt`.
+#### Supplying certificates that contain the public and private keys
+When supplying a Kubernetes secret that contains certificate files for both the public and private key, ensure that the secret contains two files with the same name, one with a suffix of `.crt` and the other with a suffix of `.key`. For example: `tls.crt` and `tls.key`. The extension of the file denotes whether the file is the public key (`.crt`) or the private key (`.key`) and must be correct. If your certificate has been issued by a Certificate Authority, then the certificate from the CA must be included as a separate file with the `.crt` extension. For example: `ca.crt`.
 
 The format of the YAML objects for `pki.keys` value is as follows:
 
@@ -333,11 +355,15 @@ The format of the YAML objects for `pki.keys` value is as follows:
       - ca.crt
 ```
 
-or alternatively in a single line you can supply the following: `- name: mykey, secret: {secretName: mykeysecret, items: [tls.key, tls.crt, ca.crt]}`
+or, alternatively, in a single line, you can supply the following: 
 
-`name` must be set to a lowercase alphanumeric value and will be used as the label for the certificate in the keystore and queue manager. 
+```YAML
+- name: mykey, secret: {secretName: mykeysecret, items: [tls.key, tls.crt, ca.crt]}
+```
 
-`secret.secretName` must match the name of a Kubernetes secret that contains the TLS certificates you wish to import
+`name` must be a lowercase alphanumeric value and is used as the label for the certificate in the keystore and queue manager.
+
+`secret.secretName` must match the name of a Kubernetes secret that contains the TLS certificates you wish to import.
 
 `secret.items` must list the TLS certificate files contained in `secret.secretName` you want to import.
 
@@ -347,7 +373,7 @@ To supply the YAML objects when deploying via Helm you should use the following:
 If you supply multiple YAML objects then the queue manager will use the first object chosen by the label name alphabetically. For example if you supply the following labels: `alabel`, `blabel` and `clabel`. The queue manager and MQ Console will use the certificate with the label `alabel` for its identity. In this queue manager this can be changed by running the MQSC command: `ALTER QMGR CERTLABL('<new label>')`.
 
 #### Supplying certficates which contain only the public key
-When supplying a Kubernetes secret that contains a certificate file with only the public key you must ensure that the secret contains files that have the extension `.crt`. For example: `tls.crt` and `ca.crt`. 
+When supplying a Kubernetes secret that contains a certificate file with only the public key, ensure that the secret contains files that have the extension `.crt`. For example: `tls.crt` and `ca.crt`. 
 
 The format of the YAML objects for `pki.trust` value is as follows:
 
@@ -364,9 +390,14 @@ or alternatively in a single line you can supply the following: `- secret: {secr
 
 `secret.items` must list the TLS certificate files contained in `secret.secretName` you want to add.
 
-To supply the YAML objects when deploying via Helm you should use the following: `--set pki.trust[0].secret.secretName=mycertificate,pki.trust[0].secret.items[0]=tls.crt`
+To supply the YAML objects when deploying by using Helm you should use the following:
+
+```YAML
+--set pki.trust[0].secret.secretName=mycertificate,pki.trust[0].secret.items[0]=tls.crt
+```
 
 If you supply multiple YAML objects then all of the certificates specified will be added into the queue managers and MQ Console Truststore.
+
 
 [View the IBM App Connect Enterprise Dockerfile repository on Github](https://github.com/ot4i/ace-docker)
 

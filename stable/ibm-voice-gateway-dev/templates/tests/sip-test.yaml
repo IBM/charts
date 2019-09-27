@@ -1,0 +1,60 @@
+{{- if eq .Values.sip.enable true }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . "sip-test-container") }}
+{{- $compName := "sip-test" }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: true
+  hostPID: false
+  hostIPC: false
+  {{- if .Values.global.image.pullSecrets }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecrets }}
+  {{- end }}
+  securityContext:
+    runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+    runAsUser: 100
+{{- end }}
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    image: "{{ .Values.global.image.repository }}/{{ .Values.test.image.name }}:{{ .Values.test.image.tag }}"
+    imagePullPolicy: "{{ .Values.test.image.pullPolicy }}"
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+      runAsUser: 100
+{{- end }}
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        memory: 100Mi
+        cpu: '.2'
+      limits:
+        memory: 200Mi
+        cpu: '.5'
+    env:
+    - name: SIP_HOST
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.hostIP
+    - name: SIP_PORT
+      value: "{{ .Values.sipOrchestratorEnvVariables.sipPort }}"
+    command: ["sh", "-c", 'nc -vz $SIP_HOST $SIP_PORT; echo $?']
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+{{- end }}

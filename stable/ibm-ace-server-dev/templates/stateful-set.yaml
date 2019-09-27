@@ -11,16 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-{{- if .Values.queueManagerEnabled }}
+{{- if eq .Values.imageType "acemqserver" }}
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{ $pvcName := .Values.dataPVC.name }}
 {{ $statefulSetName := include "sch.names.statefulSetName" (list .) }}
+{{ $designerFlowsName := include "sch.names.fullCompName" (list . "designer-flows") }}
+{{ $secretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $statefulSetName "configuration") }}
 {{ $volumeClaimTemplateName := include "sch.names.volumeClaimTemplateName" (list . $pvcName $statefulSetName) }}
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{ $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
-{{ $secretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $statefulSetName "configuration") }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -65,12 +65,10 @@ spec:
       hostPID: false
       hostIPC: false
       securityContext:
-        runAsNonRoot: false
-        runAsUser: 0
         fsGroup: {{ default 888 .Values.integrationServer.fsGroupGid }}
       containers:
         - name: {{ $statefulSetName }}
-          image: "{{ .Values.image.repository.acemq }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.acemq }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
           - containerPort: {{ .Values.service.webuiPort }}
@@ -123,6 +121,10 @@ spec:
                    name: {{ $secretName }}
                    optional: true
                    key: truststorePassword
+            - name: ACE_DEFAULT_APPLICATION_NAME
+              value: {{ .Values.integrationServer.defaultAppName | quote }}
+            - name: MQ_EPHEMERAL_PREFIX
+              value: "/run/mqm"
             - name: MQ_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -184,6 +186,12 @@ spec:
               readonly: true
             {{- end }}
             {{- end }}
+            {{- if .Values.designerFlowsEnabled }}
+            - name: tmp
+              mountPath: "/tmp"
+            - name: workdir
+              mountPath: "/home/aceuser/ace-server"
+            {{- end }}
           securityContext:
             seLinuxOptions:
               type: spc_t
@@ -232,10 +240,57 @@ spec:
 {{ toYaml .Values.acemq.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.acemq.resources.requests | indent 14 }}
+          {{- if .Values.designerFlowsEnabled }}
+        - name: "{{ $designerFlowsName }}"
+          image: "{{ .Values.image.designerflows }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ACE_VERSION
+              value: {{ .Values.image.tag }}
+            - name: bunyan__logfile__filename
+              value: "/opt/ibm/app/ace-server/log/integration_server.{{ $serverName }}.designer_flows.txt"
+          volumeMounts:
+            - name: tmp
+              mountPath: "/tmp"
+            - name: workdir
+              mountPath: "/opt/ibm/app/ace-server"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          # Set liveness probe to determine if the designer flow sidecar is running
+          livenessProbe:
+            exec:
+              command:
+                - "/readiness/ready.sh"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the designer flow sidecar is running
+          readinessProbe:
+            exec:
+              command:
+                - "/readiness/ready.sh"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+            limits:
+{{ toYaml .Values.designerflows.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.designerflows.resources.requests | indent 14 }}
+          {{- end }}
       {{- if .Values.acemq.initVolumeAsRoot }}
       initContainers:
         - name: qmgr-init
-          image: "{{ .Values.image.repository.acemq }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.acemq }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["runmqserver", "-i"]
           env:
@@ -265,6 +320,13 @@ spec:
                 - DAC_OVERRIDE
               drop:
                 - ALL
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 256m
+              memory: 128Mi  
       {{- end }}
       volumes:
         {{- if .Values.contentServerURL }}
@@ -273,10 +335,16 @@ spec:
             secretName: {{ $statefulSetName }}
             optional: true
             items:
-            - key: viewerusers
-              path: viewer-users.txt
             - key: adminusers
               path: admin-users.txt
+            - key: operatorusers
+              path: operator-users.txt
+            - key: viewerusers
+              path: viewer-users.txt
+            - key: editorusers
+              path: editor-users.txt
+            - key: auditusers
+              path: audit-users.txt
         {{- end }}
         - name: extensions
           secret:
@@ -387,7 +455,7 @@ spec:
         {{- end }}
         {{- if .Values.acemq.pki.keys }}
         {{- range $index, $source := .Values.acemq.pki.keys }}
-        {{- if .secret }}
+        {{- if $source.secret }}
         - name: {{ $source.name }}
           secret:
             secretName: {{ $source.secret.secretName }}
@@ -399,6 +467,12 @@ spec:
             {{- end }}
         {{- end }}
         {{- end }}
+        {{- end }}
+        {{- if .Values.designerFlowsEnabled }}
+        - name: tmp
+          emptyDir: {}
+        - name: workdir
+          emptyDir: {}
         {{- end }}
   volumeClaimTemplates:
   {{- if .Values.persistence.enabled }}
