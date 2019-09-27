@@ -1,0 +1,85 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.nodedLoadbalancer.compName ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.nodedLoadbalancer.compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.nodedLoadbalancer.replicas }}
+  selector:
+    matchLabels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.nodedLoadbalancer.compName) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/noded-loadbalancer-configmap: {{ include (print $.Template.BasePath "/noded-loadbalancer/noded-loadbalancer-configmap.yaml") . |  sha256sum | trunc 63 }}
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.nodedLoadbalancer.compName) | indent 8 }}
+        service: {{ include "sch.names.fullCompName" (list . .sch.chart.components.nodedLoadbalancer.compName ) | quote }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: service
+                  operator: In
+                  values:
+                  - {{ include "sch.names.fullCompName" (list . .sch.chart.components.nodedLoadbalancer.compName ) | quote }}
+              topologyKey: "kubernetes.io/hostname"
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 8000
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      initContainers:
+{{ include "hsts.spec.init.probe.nodedSwarm" . | indent 6 }}
+{{ include "hsts.spec.init.probe.stats" . | indent 6 }}
+      containers:
+      - name: loadbalancer
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: '.001'
+          limits:
+            memory: 150Mi
+            cpu: '.05'
+        image: {{ include "hsts.image.loadbalancer" . }}
+        imagePullPolicy: {{ .Values.loadbalancer.image.pullPolicy }}
+        ports:
+        - name: loadbalancer
+          containerPort: 8000
+        readinessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: loadbalancer
+        livenessProbe:
+          initialDelaySeconds: 20
+          tcpSocket:
+            port: loadbalancer
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.nodedLoadbalancer.compName ) | quote }}

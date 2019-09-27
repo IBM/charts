@@ -1,0 +1,62 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+{{- $component := .sch.chart.components.asperanode.deployment.api -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $component ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $component) | indent 4 }}
+spec:
+  replicas: {{ .Values.asperanode.nodeCount }}
+  selector:
+    matchLabels:
+{{  include "sch.metadata.labels.standard" (list . $component) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/aspera-conf-configmap: {{ include (print $.Template.BasePath "/asperanode/asperanode-configmap.yaml") . |  sha256sum | trunc 63 }}
+        checksum/asconfigurator: {{ tpl (toYaml .Values.asperaconfig) . | sha256sum | trunc 63 }}
+        checksum/server-secret: {{ tpl (toYaml .Values.asperanode.serverSecret) . | sha256sum | trunc 63 }}
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . $component) | indent 8 }}
+        service: {{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.service.api ) | quote }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        fsGroup: {{ .Values.persistence.fsGroup }}
+        runAsNonRoot: true
+        runAsUser: 8000
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: service
+                  operator: In
+                  values:
+                  - {{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.service.api ) | quote }}
+              topologyKey: "kubernetes.io/hostname"
+      volumes:
+{{ include "hsts.spec.volumes.common" . | indent 6 }}
+      initContainers:
+{{ include "hsts.spec.init.asperacert" . | indent 6 }}
+{{ include "hsts.spec.init.probe.redisMaster" . | indent 6 }}
+{{ include "hsts.spec.init.probe.aej" . | indent 6 }}
+{{ include "hsts.spec.init.asperaconf" (list .) | indent 6 }}
+      containers:
+{{ include "hsts.spec.container.nodelog" . | indent 6 }}
+{{ include "hsts.spec.container.asperanode" . | indent 6 }}
