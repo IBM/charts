@@ -48,7 +48,7 @@ If you want to create your own decision services from scratch, you need to insta
 ### PodSecurityPolicy Requirements
 
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement, a specific cluster and namespace might have to be scoped.
-The predefined PodSecurityPolicy name [ibm-restricted-psp](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md) has been verifed for this chart. If your target namespace is bound to this PodSecurityPolicy, you can proceed to install the chart.
+The predefined PodSecurityPolicy name [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp) has been verifed for this chart. If your target namespace is bound to this PodSecurityPolicy, you can proceed to install the chart.
 
 
 This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the ICP user interface.

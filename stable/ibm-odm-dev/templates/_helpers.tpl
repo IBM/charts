@@ -24,6 +24,11 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "odm.network-policy.fullname" -}}
+{{- $name := default "odm-network-policy" .Values.nameOverride -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "odm-baiemitterconfig-secret-volume.fullname" -}}
 {{- printf "%s-%s" .Release.Name "odm-baiemitterconfig-secret-volume" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
