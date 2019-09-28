@@ -80,9 +80,13 @@ spec:
           capabilities:
             drop:
             - ALL
+        resources:
+{{ include "cem.resources.comp.size.data" (list . "as" "resources") | indent 10 }}
       - name: migratedata
         image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.rba.as.image.name }}:{{ .Values.commonimages.rba.as.image.tag }}"
-        command: ["sh", "-c", "npm run migration"]
+        # ignore if subscription migrations were failing, but crash on coding or configuration issue
+        # existing subscriptions could have issues while migrating, if data was not deleted, but secrets were regenerated during a new installation
+        command: ["sh", "-c", "npm run migration; RC=$?; if [ ${RC} -eq 2 ]; then exit 0; else exit ${RC}; fi"]
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -92,8 +96,14 @@ spec:
           capabilities:
             drop:
             - ALL
+        resources:
+{{ include "cem.resources.comp.size.data" (list . "as" "resources") | indent 10 }}
         env:
 {{ include "rbaas.env" . | indent 8 }}
+{{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
       containers:
       - name: rba-as
         image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.rba.as.image.name }}:{{ .Values.commonimages.rba.as.image.tag }}"
@@ -114,13 +124,18 @@ spec:
         - containerPort: 3080
           protocol: TCP
         livenessProbe:
-          tcpSocket:
+          httpGet:
+            path: /bmhealth
             port: 3080
+            scheme: {{ include "cem.service.protocol" (list . "cem.services.rbaas") | upper | quote }}
           initialDelaySeconds: 120
           periodSeconds: 30
+          successThreshold: 1
         readinessProbe:
-          tcpSocket:
+          httpGet:
+            path: /bmhealth
             port: 3080
+            scheme: {{ include "cem.service.protocol" (list . "cem.services.rbaas") | upper | quote }}
           initialDelaySeconds: 20
           periodSeconds: 30
         resources:

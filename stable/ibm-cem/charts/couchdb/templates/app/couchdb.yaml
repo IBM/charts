@@ -74,7 +74,7 @@ spec:
 {{- if eq .Values.global.privileged true }}
       initContainers:
       - name: set-volume-permissions
-        image: {{ include "couchdb.getImageRepo" . }}/hdm-couchdb:{{ .Values.image.tag }}
+        image: {{ include "couchdb.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}
         command: ["sh", "-c", "chown -R couchdb:couchdb /opt/couchdb/data"]
         securityContext:
           runAsUser: 0
@@ -85,9 +85,13 @@ spec:
         - name: {{ $cdbConfigTemplateName }}
           mountPath: /opt/couchdb/etc/default.d
 {{- end }}
+{{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
       containers:
         - name: couchdb
-          image: {{ include "couchdb.getImageRepo" . }}/hdm-couchdb:{{ .Values.image.tag }}
+          image: {{ include "couchdb.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: false
@@ -128,13 +132,8 @@ spec:
                 secretKeyRef:
                   name: '{{ template "couchdb.releasename" . }}-{{ .Values.secretName }}'
                   key: secret
- {{ if eq (include "couchdb.autoClusterConfigSetting" .) "true" }}
-            - name: ERL_FLAGS
-              value: " -name couchdb@$(POD_NAME).$(RELEASE_NAME)-couchdb.$(NAMESPACE).svc.cluster.local -setcookie monster "
- {{ else }}
             - name: ERL_FLAGS
               value: " -setcookie monster "
- {{ end }}
           resources:
 {{ include "couchdb.comp.size.data" (list . "couchdb" "resources") | indent 12 }}
           livenessProbe:
@@ -154,38 +153,6 @@ spec:
               mountPath: /opt/couchdb/data
             - name: {{ $cdbConfigTemplateName }}
               mountPath: /opt/couchdb/etc/default.d
- {{ if eq (include "couchdb.autoClusterConfigSetting" .) "true" }}
-        - name: cluster-config
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            privileged: false
-            readOnlyRootFilesystem: false
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: 1001
-            capabilities:
-              drop:
-              - ALL
-          image: "{{ include "couchdb.getImageRepo" . }}/hdm-{{ .Values.sidecarImage.name }}:{{ .Values.sidecarImage.tag }}"
-          env:
-            - name: AUTO_CLUSTER_CONFIG
-              value: "true"
-            - name: POD_NAMESPACE
-              value: {{ .Release.Namespace }}
-            - name: COUCHDB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: '{{ template "couchdb.releasename" . }}-{{ .Values.secretName }}'
-                  key: username
-            - name: COUCHDB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: '{{ template "couchdb.releasename" . }}-{{ .Values.secretName }}'
-                  key: password
-            - name: SERVICE_NAME
-              value: {{ $serviceName }}
-{{ include "couchdb.sidecar.probes" . | indent 10}}
-{{ end }}
       volumes:
         - name: {{ $cdbConfigTemplateName }}
           configMap:

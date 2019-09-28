@@ -5,7 +5,7 @@ kafka:
     kafkaHeapOpts: "-Xms512M -Xmx512M"
     resources:
       requests:
-        memory: "600Mi"
+        memory: "800Mi"
         cpu: "0.2"
       limits:
         memory: "800Mi"
@@ -15,7 +15,7 @@ kafka:
     kafkaHeapOpts: "-Xms1G -Xmx1G"
     resources:
       requests:
-        memory: "1200Mi"
+        memory: "1600Mi"
         cpu: "0.5"
       limits:
         memory: "1600Mi"

@@ -494,7 +494,7 @@
 - name: AUTH_PROVIDER_MODE
   value: '{{ .Values.auth.type }}'
 - name: AUTH_REDIRECT_URIS
-  value: 'https://{{ .Values.global.ingress.domain }}{{ if ne .Values.global.ingress.port 443.0 }}:{{ .Values.global.ingress.port }}{{ end }}/{{ .Values.global.ingress.prefix }}cemui,{{ include "cem.services.rba" . }},{{ include "cem.services.uiserver" . }},{{ include "cem.services.apm" . }},https://{{ .Values.global.ingress.domain }}{{ if ne .Values.global.ingress.port 443.0 }}:{{ .Values.global.ingress.port }}{{ end }}/{{ .Values.global.ingress.prefix }}apmui/auth/cemusers/redirect'
+  value: 'https://{{ .Values.global.ingress.domain }}{{ if ne .Values.global.ingress.port 443.0 }}:{{ .Values.global.ingress.port }}{{ end }}/{{ include "cem.ingress.prefix" . }}cemui,{{ include "cem.services.rba" . }},{{ include "cem.services.uiserver" . }},{{ include "cem.services.apm" . }},https://{{ .Values.global.ingress.domain }}{{ if ne .Values.global.ingress.port 443.0 }}:{{ .Values.global.ingress.port }}{{ end }}/{{ include "cem.ingress.prefix" . }}apmui/auth/cemusers/redirect,https://{{ .Values.global.ingress.domain }}{{ if ne .Values.global.ingress.port 443.0 }}:{{ .Values.global.ingress.port }}{{ end }}/{{ include "cem.ingress.prefix" . }}apmui/callback'
 - name: BLUEMIX_API_URL
   value: 'https://api.REGION.bluemix.net'
 - name: BLUEMIX_CONSOLE_URL
@@ -557,6 +557,12 @@
     secretKeyRef:
       name: '{{ template "cem.releasename" . }}-cem-cemusers-cred-secret'
       key: oidcclientsecret
+- name: AUTH_ICP_IAMROLE_MANAGER
+  value: '^crn:v1:icp:private:iam::::role:(Account|Cluster)?Administrator$'
+- name: AUTH_ICP_IAMROLE_ENGINEER
+  value: '^crn:v1:icp:private:iam::::role:Editor$'
+- name: AUTH_ICP_IAMROLE_USER
+  value: '^crn:v1:icp:private:iam::::role:(Operator|Viewer)$'
 - name: SYSLOG_TARGETS
   value: '[]'
 - name: COMMON_SERVICEMONITOR_RETRY_INTERVAL
@@ -1639,6 +1645,8 @@
   value: 'false'
 - name: CEMSERVICEBROKER_APIURL
   value: '{{ include "cem.services.cemapi" . }}'
+- name: MCM_HEADERURL
+  value: '{{ .Values.global.masterIP }}:{{ .Values.global.masterPort }}'
 - name: UI_MAX_LISTENERS
   value: '200'
 - name: UI_XSRF_BACKWARD
@@ -1905,6 +1913,13 @@
   value: 'https://kafka-rest-prod01.messagehub.services.us-south.bluemix.net:443'
 - name: MH_MQLIGHT_LOOKUP_URL
   value: 'https://mqlight-lookup-prod01.messagehub.services.us-south.bluemix.net/Lookup?serviceId=INSTANCE_ID'
+- name: MCMSEARCH_SEARCHURL
+  value: 'https://search-search-api.kube-system.svc:4010/searchapi/graphql'
+- name: MCMSEARCH_SERVICEAPIKEY
+  valueFrom:
+    secretKeyRef:
+      name: '{{ template "cem.releasename" . }}-cem-service-secret'
+      key: cem-service-apikey
 {{- end -}}
 
 {{- define "cloudeventmanagement.notificationprocessor.env" -}}
@@ -2138,6 +2153,8 @@
     secretKeyRef:
       name: '{{ template "cem.releasename" . }}-cem-model-secret'
       key: hkeyvalue
+- name: SYSLOG_TARGETS
+  value: '[]'
 - name: USAGE_NOTIFY_PERCENTS
   value: '75,90,100'
 {{- end -}}

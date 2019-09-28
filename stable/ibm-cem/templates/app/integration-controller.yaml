@@ -78,6 +78,8 @@ spec:
           capabilities:
             drop:
             - ALL
+        resources:
+{{ include "cem.resources.comp.size.data" (list . "integrationcontroller" "resources") | indent 10 }}
       - name: waitforredis
         image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.integrationcontroller.image.name }}:{{ .Values.commonimages.integrationcontroller.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ include "cem.services.redissentinelsvc" . }}; do echo waiting for redis $i;i=$((i+1)); sleep 2; done;"]
@@ -90,6 +92,12 @@ spec:
           capabilities:
             drop:
             - ALL
+        resources:
+{{ include "cem.resources.comp.size.data" (list . "integrationcontroller" "resources") | indent 10 }}
+{{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
       containers:
       - name: {{ template "cem.releasename" . }}-integration-controller
         image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.integrationcontroller.image.name }}:{{ .Values.commonimages.integrationcontroller.image.tag }}"
@@ -138,7 +146,9 @@ spec:
         - name: VCAP_APPLICATION
           value: '{}'
         - name: INGRESS_PREFIX
-          value: '{{ .Values.global.ingress.prefix }}'
+          value: '{{ include "cem.ingress.prefix" . }}'
+        - name: INGRESS_APIPREFIX
+          value: '{{ include "cem.ingress.api.prefix" . }}'
         - name: INGRESS_DOMAIN
           value: '{{ .Values.global.ingress.domain }}'
         - name: INGRESS_PORT

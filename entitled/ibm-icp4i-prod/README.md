@@ -32,13 +32,13 @@ This is a Helm chart for the IBM Cloud Pak for Integration Navigator. It provide
 
 ## Prerequisites
 * Red Hat OpenShift version 3.11.
-* IBM Cloud Private fix pack 3.2.0.1908 or higher.
+* IBM Cloud Private fix pack 3.2.0.1907.
 * A user with cluster administrator role is required to install the chart.
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements	
 This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.	
 
-The predefined SecurityContextConstraints name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+The predefined SecurityContextConstraints name: [`ibm-privileged-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
 
 This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied instructions/scripts in the pak_extension pre-install directory.
 
@@ -49,50 +49,43 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     kind: SecurityContextConstraints
     metadata:
       annotations:
-        kubernetes.io/description: "This policy is the most restrictive, 
-          requiring pods to run with a non-root UID, and preventing pods from accessing the host." 
-        cloudpak.ibm.com/version: "1.0.0"
+        kubernetes.io/description: "This policy grants access to all privileged 
+          host features and allows a pod to run with any 
+          UID and GID and any volume.
+          WARNING:  This policy is the least restrictive and 
+          should only be used for cluster administration.
+          Use with caution."
+        cloudpak.ibm.com/version: "1.1.0"
       name: ibm-icp4i-prod-scc
-    allowHostDirVolumePlugin: false
-    allowHostIPC: false
-    allowHostNetwork: false
-    allowHostPID: false
-    allowHostPorts: false
-    allowPrivilegedContainer: false
-    allowPrivilegeEscalation: false
-    allowedCapabilities: []
+    allowHostDirVolumePlugin: true
+    allowHostIPC: true
+    allowHostNetwork: true
+    allowHostPID: true
+    allowHostPorts: true
+    allowPrivilegedContainer: true
+    allowPrivilegeEscalation: true
+    allowedCapabilities: 
+    - '*'
     allowedFlexVolumes: []
-    allowedUnsafeSysctls: []
+    allowedUnsafeSysctls: 
+    - '*'
     defaultAddCapabilities: []
-    defaultPrivilegeEscalation: false
-    forbiddenSysctls:
-      - "*"
+    defaultAllowPrivilegeEscalation: true
+    forbiddenSysctls: []
     fsGroup:
-      type: MustRunAs
-      ranges:
-      - max: 65535
-        min: 1
+      type: RunAsAny
     readOnlyRootFilesystem: false
-    requiredDropCapabilities:
-    - ALL
+    requiredDropCapabilities: []
     runAsUser:
-      type: MustRunAsNonRoot
+      type: RunAsAny
     seccompProfiles:
-    - docker/default
+    - '*'
     seLinuxContext:
       type: RunAsAny
     supplementalGroups:
-      type: MustRunAs
-      ranges:
-      - max: 65535
-        min: 1
+      type: RunAsAny
     volumes:
-    - configMap
-    - downwardAPI
-    - emptyDir
-    - persistentVolumeClaim
-    - projected
-    - secret
+    - '*'
     priority: 0
     ```
 

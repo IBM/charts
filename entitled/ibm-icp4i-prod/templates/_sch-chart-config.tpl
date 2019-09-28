@@ -29,11 +29,11 @@ sch:
     meteringProd:
       productName: IBM Cloud Pak for Integration
       productID: 5737_I89_ICP4I_nonChargeable
-      productVersion: 2019.3.1
+      productVersion: 2019.3.2
     meteringNonProd:
       productName: IBM Cloud Pak for Integration (non-production)
       productID: 5737_I89_ICP4I_nonProd_nonChargeable
-      productVersion: 2019.3.1
+      productVersion: 2019.3.2
     components:
       dashboard:
         name: "dashboard"

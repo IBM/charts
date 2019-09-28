@@ -87,12 +87,19 @@ spec:
       initContainers:
 {{- if eq .Values.global.privileged true }}
       - name: set-volume-permissions
-        image: "{{ include "zookeeper.getImageRepo" . }}/hdm-zookeeper:{{ .Values.image.tag }}"
+        image: "{{ include "zookeeper.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ["sh", "-c", "chown -R zookeeper:zookeeper /var/lib/zookeeper/"]
         securityContext:
           runAsNonRoot: false
           runAsUser: 0
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
         volumeMounts:
         - name: {{ $zkconfigTemplateName }}
           mountPath: /opt/zookeeper/conf
@@ -100,7 +107,7 @@ spec:
           mountPath: /var/lib/zookeeper/data
 {{- end }}
       - name: init-config
-        image: "{{ include "zookeeper.getImageRepo" . }}/hdm-zookeeper:{{ .Values.image.tag }}"
+        image: "{{ include "zookeeper.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ['/bin/bash', '/opt/zookeeper/conf/init.sh']
         volumeMounts:
@@ -117,9 +124,20 @@ spec:
           capabilities:
             drop:
             - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
+{{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
       containers:
       - name: {{ include "sch.names.fullCompName" (list .) | quote }}
-        image: "{{ include "zookeeper.getImageRepo" . }}/hdm-zookeeper:{{ .Values.image.tag }}"
+        image: "{{ include "zookeeper.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: 2181

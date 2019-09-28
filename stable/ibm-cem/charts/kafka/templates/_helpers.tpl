@@ -37,13 +37,13 @@ This is used to configure Kafka, depending on global.kafka.clientEncryption, glo
 */}}
 {{- define "kafka.advertisedListeners" -}}
 {{- if .Values.global.kafka.allowInsecure -}}
-  {{- printf "PLAINTEXT://$POD_IP:9092," -}}
+  {{- printf "PLAINTEXT://$HOSTNAME.%s-kafka.%s.svc.$CLUSTERDOMAIN:9092," .Release.Name .Release.Namespace -}}
   {{ if kindIs "slice" .Values.advertisedListeners }}
     {{- printf "PLAINTEXT_EXTERNAL://${EXTERNAL_KAFKA_HOSTNAME}:${EXTERNAL_KAFKA_PORT}," }}
   {{- end -}}
 {{- end -}}
 {{- if .Values.global.kafka.clientEncryption -}}
-  {{- printf "SASL_SSL://$POD_IP:9093," -}}
+  {{- printf "SASL_SSL://$HOSTNAME.%s-kafka.%s.svc.$CLUSTERDOMAIN:9093," .Release.Name .Release.Namespace -}}
   {{- if kindIs "slice" .Values.advertisedListeners }}
     {{- printf "SASL_SSL_EXTERNAL://${EXTERNAL_KAFKA_HOSTNAME}:${EXTERNAL_KAFKA_SECURE_PORT}," }}
   {{- end -}}

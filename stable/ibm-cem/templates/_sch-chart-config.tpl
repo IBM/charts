@@ -12,6 +12,9 @@ additional configuration values used by the Shared Configurable Helpers.
 sch:
   chart:
     appName: {{ .Chart.Name }}
+    components:
+      dashboard:
+        name: resource-overview
 {{- end -}}
 
 {{- define "ibm-cem.data" -}}
