@@ -1,6 +1,5 @@
 {{/*********************************************************** {COPYRIGHT-TOP} ****
-* Licensed Materials - Property of IBM
-*
+* Licensed Materials - Property of IBM *
 * "Restricted Materials of IBM"
 *
 *  5737-H89, 5737-H64
@@ -12,6 +11,7 @@
 ********************************************************* {COPYRIGHT-END} ****/}}
 {{- $compName := "event-analytics-ui-service-monitor-test" -}}
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- $appFullName := include "sch.names.fullName" (list .) -}}
 {{- $testName := include "sch.names.fullCompName" (list . $compName) -}}
 apiVersion: v1
 kind: Pod
@@ -47,16 +47,24 @@ spec:
             {{- range $arch := .Values.arch }}
               - {{ $arch -}}
             {{ end }}
+{{ if .Values.global.image.pullSecret }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
   containers:
     - name: "cem-helm-tests"
       image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.cemusers.image.name }}:{{ .Values.commonimages.cemusers.image.tag }}"
-      env:
-        - name: test_url
-          value: '{{ include "cem.services.uiserver" . }}'
-        - name: test_port
-          value: "443"
       imagePullPolicy: IfNotPresent
-      command: ["sh", "-c", "curl $test_url/servicemonitor"]
+{{- if .Values.global.internalTLS.enabled }}
+      volumeMounts:
+      - name: servercrt
+        mountPath: /app/keys
+{{- end }}
+      command: ["node"]
+      args: ["service-monitor-check.js", "{{ include "cem.services.uiserver" . | trimSuffix "/" }}/servicemonitor"]
+      env:
+      - name: NODE_EXTRA_CA_CERTS
+        value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
       securityContext:
         privileged: false
         readOnlyRootFilesystem: false
@@ -66,4 +74,18 @@ spec:
         capabilities:
           drop:
           - ALL
+      resources:
+{{ include "cem.resources.comp.size.data" (list . "eventanalyticsui" "resources") | indent 8 }}
   restartPolicy: Never
+{{- if .Values.global.internalTLS.enabled }}
+  volumes:
+  - name: servercrt
+    secret:
+      defaultMode: 0444
+      items:
+      - key: tls.crt
+        path: server.crt
+      - key: tls.key
+        path: server.key
+      secretName: {{ $appFullName }}-certificate
+{{- end }}

@@ -51,11 +51,11 @@ data:
       "redirect_uris":[
          "https://{{ .Values.global.masterIP }}:{{ .Values.global.masterPort }}/auth/liberty/callback",
          {{- if eq .Values.global.ingress.port 443.0 }}
-         "https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}",
-         "https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}users/api/authprovider/v1/icp/return",
+         "https://{{ .Values.global.ingress.domain }}/{{ include "cem.ingress.prefix" . }}",
+         "https://{{ .Values.global.ingress.domain }}/{{ include "cem.ingress.prefix" . }}users/api/authprovider/v1/icp/return",
          {{- end }}
-         "https://{{ .Values.global.ingress.domain }}:{{ .Values.global.ingress.port }}/{{ .Values.global.ingress.prefix }}",
-         "https://{{ .Values.global.ingress.domain }}:{{ .Values.global.ingress.port }}/{{ .Values.global.ingress.prefix }}users/api/authprovider/v1/icp/return"
+         "https://{{ .Values.global.ingress.domain }}:{{ .Values.global.ingress.port }}/{{ include "cem.ingress.prefix" . }}",
+         "https://{{ .Values.global.ingress.domain }}:{{ .Values.global.ingress.port }}/{{ include "cem.ingress.prefix" . }}users/api/authprovider/v1/icp/return"
       ]
     }
   oidc_reg.sh: |-
@@ -133,3 +133,72 @@ data:
     echo
     echo Done.
     exit $RETVAL
+  registerServicePolicy.sh: |-
+    #!/bin/bash
+
+    #validate no: of args
+    if [ "$#" -ne 2 ]; then
+      echo "USAGE: registerServicePolicy.sh SERVICEID ACCESSTOKEN"
+      echo
+      echo "Run as cluster admin from your master node to register policies for Cloud App Management."
+      echo
+      exit 1
+    else
+      echo "Registering IBM Cloud Event Management identity ..."
+    fi
+
+    SERVICE_ID="$1"
+    SERVICE_ID="$(base64 --decode <<< $SERVICE_ID)"
+    if [ -z "$SERVICE_ID" ] ; then
+       echo "✖ Error: SERVICE_ID not valid!" >&2;
+       echo
+       exit 1
+    fi
+
+    ACCESS_TOKEN=$2
+    if [ -z "$ACCESS_TOKEN" ] ; then
+       echo "✖ Error: ACCESS_TOKEN not valid!" >&2;
+       echo
+       exit 1
+    fi
+
+    MASTER_NODE_IP=icp-management-ingress.kube-system:{{ .Values.global.masterPort }}
+
+    #Check registration
+    echo "Checking service policy registration..."
+    POLREG_CHECK_RESULT="$(curl -k -X GET --header 'Accept: application/json' --header "Authorization: Bearer ${ACCESS_TOKEN}" "https://${MASTER_NODE_IP}/iam-pap/acms/v1/scopes/n%252Fkube-system/service_ids/$SERVICE_ID/policies")"
+
+    RETVAL=1
+    if [[ $POLREG_CHECK_RESULT = *"errors"* ]]; then
+       echo "✖ Error: checking policy registration, policies will not be registered"
+       echo $POLREG_CHECK_RESULT
+    fi
+
+    if [[ $POLREG_CHECK_RESULT = *"ClusterAdministrator"* ]]; then
+      echo "✔ Policies already registered..."
+      echo
+      RETVAL=0
+    fi
+
+    if [[ $POLREG_CHECK_RESULT = *"[]"* ]]; then
+
+        echo "Adding first policy registration"
+        RESPCODE=`curl --silent --output /dev/null --write-out %{http_code} -k -X POST --header 'Content-Type: application/json' --header 'Accept: application/json' --header "Authorization: Bearer ${ACCESS_TOKEN}" -d '{"resources":[{"namespaceId":"kube-system","serviceName":"idmgmt"}],"roles":[{"id":"crn:v1:icp:private:iam::::role:ClusterAdministrator"},{"id":"crn:v1:icp:private:iam::::role:Administrator"}]}' "https://${MASTER_NODE_IP}/iam-pap/acms/v1/scopes/n%252Fkube-system/service_ids/$SERVICE_ID/policies"`
+        if [ "$RESPCODE" = "201" ]; then
+          RETVAL=0
+        else
+          echo "Unable to perform policy registration with response code of $RESPCODE"
+        fi
+
+        echo "Adding second policy registration"
+        RESPCODE=`curl --silent --output /dev/null --write-out %{http_code} -k -X POST --header 'Content-Type: application/json' --header 'Accept: application/json' --header "Authorization: Bearer ${ACCESS_TOKEN}" -d '{"resources":[{"namespaceId":"kube-system","serviceName":"identity"}],"roles":[{"id":"crn:v1:icp:private:iam::::role:ClusterAdministrator"},{"id":"crn:v1:icp:private:iam::::role:Administrator"}]}' "https://${MASTER_NODE_IP}/iam-pap/acms/v1/scopes/n%252Fkube-system/service_ids/$SERVICE_ID/policies"`
+        if [ "$RESPCODE" = "201" ]; then
+          RETVAL=0
+        else
+          echo "Unable to perform policy registration with response code of $RESPCODE"
+        fi
+    fi
+
+    echo Done
+
+      

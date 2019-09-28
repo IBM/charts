@@ -43,7 +43,7 @@ https://console-mp.us-south.alertnotification.cloud.ibm.com
 {{- end }}
 
 {{ define "cem.services.apm" -}}
-http://{{ template "cem.releasename" . }}-amui.{{ .Release.Namespace }}.svc:3000
+http://{{ template "cem.releasename" . }}-amui.{{ .Release.Namespace }}.svc:3006
 {{- end }}
 
 {{ define "cem.services.brokers" -}}
@@ -55,9 +55,9 @@ http://{{ template "cem.releasename" . }}-amui.{{ .Release.Namespace }}.svc:3000
 {{- if ne .Values.global.ingress.apidomain "" -}}
 https://{{ .Values.global.ingress.apidomain }}/api
 {{- else if ne (.Values.global.ingress.port|toString) "443" -}}
-https://{{ .Values.global.ingress.domain }}:{{ .Values.global.ingress.port }}/{{ .Values.global.ingress.prefix }}api
+https://{{ .Values.global.ingress.domain }}:{{ .Values.global.ingress.port }}/{{ include "cem.ingress.api.prefix" . }}api
 {{- else -}}
-https://{{ .Values.global.ingress.domain }}/{{ .Values.global.ingress.prefix }}api
+https://{{ .Values.global.ingress.domain }}/{{ include "cem.ingress.api.prefix" . }}api
 {{- end }}
 {{- end }}
 
@@ -156,7 +156,18 @@ Ingress rule for a single host, used below
 {{ $prefix := . | rest| first -}}
 {{ $service := . | rest | rest | first -}}
 {{ $port := . | rest | rest | rest | first -}}
-- path: /{{ $context.Values.global.ingress.prefix }}{{ $prefix }}
+- path: /{{ include "cem.ingress.prefix" $context }}{{ $prefix }}
+  backend:
+    serviceName: {{ include "sch.names.fullCompName" (list $context $service) }}
+    servicePort: {{ $port }}
+{{- end }}
+
+{{ define "cem.ingress.api.rule" -}}
+{{ $context :=  . | first -}}
+{{ $prefix := . | rest| first -}}
+{{ $service := . | rest | rest | first -}}
+{{ $port := . | rest | rest | rest | first -}}
+- path: /{{ include "cem.ingress.api.prefix" $context }}{{ $prefix }}
   backend:
     serviceName: {{ include "sch.names.fullCompName" (list $context $service) }}
     servicePort: {{ $port }}
@@ -176,15 +187,15 @@ Use the ingress rule above for each service attached to ingress.
 {{ include "cem.ingress.rule" (list . "rbarb/" "rba-rbs" 3005) }}
 {{- end }}
 {{ define "cem.ingress.apirules" -}}
-{{ include "cem.ingress.rule" (list . "api/eventPolicies/" "eventpreprocessor" 3051) }}
-{{ include "cem.ingress.rule" (list . "api/eventPoliciesSpecification/" "eventpreprocessor" 3051) }}
-{{ include "cem.ingress.rule" (list . "api/events/" "eventpreprocessor" 3051) }}
-{{ include "cem.ingress.rule" (list . "api/incidentPolicies/" "incidentprocessor" 6006) }}
-{{ include "cem.ingress.rule" (list . "api/incidentquery/" "incidentprocessor" 6006) }}
-{{ include "cem.ingress.rule" (list . "api/notificationTemplates/" "channelservices" 3091) }}
-{{ include "cem.ingress.rule" (list . "api/spec/incidentPolicies/" "incidentprocessor" 6006) }}
-{{ include "cem.ingress.rule" (list . "api/v1/rba/" "rba-rbs" 3005) }}
-{{ include "cem.ingress.rule" (list . "api-gateway/" "rba-rbs" 3005) }}
+{{ include "cem.ingress.api.rule" (list . "api/eventPolicies/" "eventpreprocessor" 3051) }}
+{{ include "cem.ingress.api.rule" (list . "api/eventPoliciesSpecification/" "eventpreprocessor" 3051) }}
+{{ include "cem.ingress.api.rule" (list . "api/events/" "eventpreprocessor" 3051) }}
+{{ include "cem.ingress.api.rule" (list . "api/incidentPolicies/" "incidentprocessor" 6006) }}
+{{ include "cem.ingress.api.rule" (list . "api/incidentquery/" "incidentprocessor" 6006) }}
+{{ include "cem.ingress.api.rule" (list . "api/notificationTemplates/" "channelservices" 3091) }}
+{{ include "cem.ingress.api.rule" (list . "api/spec/incidentPolicies/" "incidentprocessor" 6006) }}
+{{ include "cem.ingress.api.rule" (list . "api/v1/rba/" "rba-rbs" 3005) }}
+{{ include "cem.ingress.api.rule" (list . "api-gateway/" "rba-rbs" 3005) }}
 {{- end }}
 
 {{/*

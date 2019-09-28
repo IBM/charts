@@ -19,23 +19,30 @@ metadata:
   {{- if eq .Values.productName "Event Management on IKS" }}
   {{- else if eq (include "cem.mcm" .) "true" }}
   annotations:
-    icp.management.ibm.com/rewrite-target: /
     kubernetes.io/ingress.class: ibm-icp-management
+    icp.management.ibm.com/configuration-snippet: |
+      rewrite "(?i)/cem/(.*)" /$1 break;
     {{- if .Values.global.internalTLS.enabled }}
     icp.management.ibm.com/secure-backends: "true"
     {{- end }}
-  {{- else if eq .Values.global.ingress.domain "" }}
+  {{- else }}
   annotations:
+    ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    {{- if ne .Values.global.ingress.prefix "" }}
+    ingress.kubernetes.io/configuration-snippet: |
+      rewrite "(?i)/{{ .Values.global.ingress.prefix }}(.*)" /$1 break;
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      rewrite "(?i)/{{ .Values.global.ingress.prefix }}(.*)" /$1 break;
+    {{- end }}
+    {{- if eq .Values.global.ingress.domain "" }}
     ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    {{- end }}
     {{- if .Values.global.internalTLS.enabled }}
     ingress.kubernetes.io/backend-protocol: "HTTPS"
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
     {{- end }}
-  {{- else if .Values.global.internalTLS.enabled }}
-  annotations:
-    ingress.kubernetes.io/backend-protocol: "HTTPS"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
   {{- end }}
   labels:
 {{ include "sch.metadata.labels.standard" (list .) | indent 4 }}

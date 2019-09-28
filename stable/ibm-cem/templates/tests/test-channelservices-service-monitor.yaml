@@ -12,6 +12,7 @@
 ********************************************************* {COPYRIGHT-END} ****/}}
 {{- $compName := "channelservices-service-monitor-test" -}}
 {{- include "sch.config.init" (list . "cem.sch.chart.config.values") -}}
+{{- $appFullName := include "sch.names.fullName" (list .) -}}
 {{- $testName := include "sch.names.fullCompName" (list . $compName) -}}
 apiVersion: v1
 kind: Pod
@@ -47,18 +48,24 @@ spec:
             {{- range $arch := .Values.arch }}
               - {{ $arch -}}
             {{ end }}
+{{ if .Values.global.image.pullSecret }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
   containers:
     - name: "cem-helm-tests"
-      image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.channelservices.image.name }}:{{ .Values.commonimages.channelservices.image.tag }}"
-      env:
-        - name: test_url
-          value: '{{ include "cem.services.channelservices" . }}'
-        - name: test_port
-          value: "443"
-        - name: test_port_local
-          value: "3091"
+      image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.cemusers.image.name }}:{{ .Values.commonimages.cemusers.image.tag }}"
       imagePullPolicy: IfNotPresent
-      command: ["sh", "-c", "curl $test_url/servicemonitor"]
+{{- if .Values.global.internalTLS.enabled }}
+      volumeMounts:
+      - name: servercrt
+        mountPath: /app/keys
+{{- end }}
+      command: ["node"]
+      args: ["service-monitor-check.js", "{{ include "cem.services.channelservices" . | trimSuffix "/" }}/servicemonitor"]
+      env:
+      - name: NODE_EXTRA_CA_CERTS
+        value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
       securityContext:
         privileged: false
         readOnlyRootFilesystem: false
@@ -68,4 +75,18 @@ spec:
         capabilities:
           drop:
           - ALL
+      resources:
+{{ include "cem.resources.comp.size.data" (list . "channelservices" "resources") | indent 8 }}
   restartPolicy: Never
+{{- if .Values.global.internalTLS.enabled }}
+  volumes:
+  - name: servercrt
+    secret:
+      defaultMode: 0444
+      items:
+      - key: tls.crt
+        path: server.crt
+      - key: tls.key
+        path: server.key
+      secretName: {{ $appFullName }}-certificate
+{{- end }}
