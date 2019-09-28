@@ -86,6 +86,8 @@ spec:
         env:
         - name: RELEASE
           value: '{{ template "cem.releasename" . }}'
+        resources:
+{{ include "cem.resources.comp.size.data" (list . "cemusers" "resources") | indent 10 }}
       - name: waitforcouchdb
         image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.cemusers.image.name }}:{{ .Values.commonimages.cemusers.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ template "cem.releasename" . }}-couchdb.{{ .Release.Namespace }}.svc; do echo waiting for couchdb $i;i=$((i+1)); sleep 2; done;"]
@@ -98,6 +100,8 @@ spec:
           capabilities:
             drop:
             - ALL
+        resources:
+{{ include "cem.resources.comp.size.data" (list . "cemusers" "resources") | indent 10 }}
       - name: waitforredis
         image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.cemusers.image.name }}:{{ .Values.commonimages.cemusers.image.tag }}"
         command: ["sh", "-c", "i=1;until getent hosts {{ include "cem.services.redissentinelsvc" . }}; do echo waiting for redis $i;i=$((i+1)); sleep 2; done;"]
@@ -110,6 +114,12 @@ spec:
           capabilities:
             drop:
             - ALL
+        resources:
+{{ include "cem.resources.comp.size.data" (list . "cemusers" "resources") | indent 10 }}
+{{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
       containers:
       - name: cem-users
         image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.cemusers.image.name }}:{{ .Values.commonimages.cemusers.image.tag }}"
@@ -158,7 +168,9 @@ spec:
         - name: VCAP_APPLICATION
           value: '{}'
         - name: INGRESS_PREFIX
-          value: '{{ .Values.global.ingress.prefix }}'
+          value: '{{ include "cem.ingress.prefix" . }}'
+        - name: INGRESS_APIPREFIX
+          value: '{{ include "cem.ingress.api.prefix" . }}'
         - name: INGRESS_DOMAIN
           value: '{{ .Values.global.ingress.domain }}'
         - name: INGRESS_PORT

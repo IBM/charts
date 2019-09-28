@@ -39,7 +39,7 @@
 - name: RBA_RBS_CEMFEEDBACK_URL
   value: {{ include "cem.services.incidentprocessor" . }}/api/incidents/v1
 - name: RBA_RBS_CEMUIPROXYPREFIX
-  value: '/{{ .Values.global.ingress.prefix }}cemui/proxy/rba'
+  value: '/{{ include "cem.ingress.prefix" . }}cemui/proxy/rba'
 - name: RBA_RBS_MAIL_NOTIFICATION_CEMTYPE
   value: '{{ .Values.email.type }}'
 {{ if eq .Values.email.type "smtp" }}
@@ -76,6 +76,20 @@
   value: 'rba'
 - name: RBA_RBS_KAFKA_CONSUMER_CLIENTID
   value: 'RBA'
+- name: RBA_RBS_KAFKA_BACKLOG_TOPIC
+  value: 'rba-farb-backlog'
+- name: RBA_RBS_KAFKA_BACKLOG_PARTITIONS
+  value: '6'
+- name: RBA_RBS_KAFKA_BACKLOG_REPLICATION
+  value: '{{ .Values.global.kafka.clusterSize }}'
+- name: RBA_RBS_KAFKA_BACKLOG_CONFIG
+  value: 'retention.ms=-1'
+- name: RBA_RBS_KAFKA_BACKLOG_GROUPID
+  value: 'rba'
+- name: RBA_RBS_KAFKA_BACKLOG_CLIENTID
+  value: 'RBA'
+- name: RBA_RBS_KAFKA_ADMINURL
+  value: '{{ include "cem.services.kafkaadmin" . }}'
 - name: VCAP_APP_HOST
   value: {{ template "cem.releasename" . }}-rba-rbs.{{ .Release.Namespace }}.svc
 - name: RBA_DEPLOYMODE
@@ -150,7 +164,7 @@
 - name: RBA_RBS_LOG_WRITETOFILE_ENABLED
   value: 'false'
 - name: INGRESS_PREFIX
-  value: '{{ .Values.global.ingress.prefix }}'
+  value: '{{ include "cem.ingress.prefix" . }}'
 - name: INGRESS_DOMAIN
   value: '{{ .Values.global.ingress.domain }}'
 {{- end }}
@@ -224,7 +238,7 @@
 - name: RBA_AS_LOG_PATH
   value: ''
 - name: INGRESS_PREFIX
-  value: '{{ .Values.global.ingress.prefix }}'
+  value: '{{ include "cem.ingress.prefix" . }}'
 - name: INGRESS_DOMAIN
   value: '{{ .Values.global.ingress.domain }}'
 - name: INGRESS_PORT

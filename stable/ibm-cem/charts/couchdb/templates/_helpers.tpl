@@ -36,15 +36,3 @@ corresponding to environmentSize setting
     {{- .Values.clusterSize }}
   {{- end }}
 {{- end }}
-
-{{/*
-check if autoClusterConfig.enabled == "environmentSizeDefault" and if so use value in _resouces.tpl
-corresponding to environmentSize setting
-*/}}
-{{- define "couchdb.autoClusterConfigSetting" -}}
-  {{- if eq ( .Values.autoClusterConfig.enabled | toString) "environmentSizeDefault" }}
-    {{- include "couchdb.comp.size.data" (list . "couchdb" "autoClusterConfig.enabled") }}
-  {{- else }}
-    {{- .Values.autoClusterConfig.enabled }}
-  {{- end }}
-{{- end }}

@@ -262,12 +262,12 @@ ibmRedis:
     label: "IBM Redis"
     name: "Redis"
     description: "IBM Redis Community Chart Configuration"
-  image:
-    name:
+  auth:
+    authSecretName:
       __metadata:
-        name: "name"
-        label: "Image Name"
-        description: "The ibm-redis image name"
+        name: "authSecretname"
+        label: "Authentication Secret Name"
+        description: "The secret name that ibm-redis will use instead of generating one itself"
         type: "string"
         immutable: false
         hidden: true
@@ -278,22 +278,6 @@ ibmRedis:
         label: "Enabled"
         description: "Enable/disable persistence for ibm-redis subchart only"
         type: "boolean"
-        immutable: false
-        hidden: true
-    storageClassName:
-      __metadata:
-        name: "storageClassName"
-        label: "Storage Class Name"
-        description: "The name of StorageClass to be used to create persistent volume claim"
-        type: "string"
-        immutable: false
-        hidden: true
-    size:
-      __metadata:
-        name: "size"
-        label: "PV Storage Size"
-        description: "Storage Size for persistent volume to be created. Defaults to 2Gi"
-        type: "string"
         immutable: false
         hidden: true
   replicas:
@@ -518,6 +502,14 @@ zookeeper:
   __metadata:
     label: "Zookeeper"
     description: "Zookeeper Configuration"
+  image:
+    name:
+      __metadata:
+        label: "Zookeeper image name"
+        description: "Zookeeper image name. DO NOT EDIT"
+        type: "string"
+        hidden: true
+        immutable: true
   clusterSize:
     __metadata:
       label: "Replica Count"
@@ -530,6 +522,23 @@ kafka:
   __metadata:
     label: "Kafka"
     description: "Kafka Configuration"
+  image:
+    name:
+      __metadata:
+        label: "Kafka image name"
+        description: "Kafka image name. DO NOT EDIT"
+        type: "string"
+        hidden: true
+        immutable: true
+  kafkarest:
+    image:
+      name:
+        __metadata:
+          label: "Kafkarest image name"
+          description: "Kafkarest image name. DO NOT EDIT"
+          type: "string"
+          hidden: true
+          immutable: true
   ## The kafka client credentials
   client:
     username:
@@ -546,36 +555,12 @@ kafka:
         type: "password"
         hidden: true
         immutable: true
-  ## The kafka administrative credentials
-  admin:
-    username:
-      __metadata:
-        label: "Kafka Admin Username"
-        description: "kafka admin username. DO NOT EDIT"
-        type: "string"
-        hidden: true
-        immutable: true
-    password:
-      __metadata:
-        label: "Kafka Admin Password"
-        description: "kafka admin password. DO NOT EDIT"
-        type: "password"
-        hidden: true
-        immutable: true
   ssl:
     enabled:
       __metadata:
         label: "SSL enabled"
         description: "Enable Kafka SSL. DO NOT EDIT."
         type: "boolean"
-        hidden: true
-        immutable: true
-    # SSL with kafka isn't used (yet)
-    secret:
-      __metadata:
-        label: "Kafka TLS Secret"
-        description: "kafka tls secret. DO NOT EDIT"
-        type: "string"
         hidden: true
         immutable: true
     password:
@@ -591,6 +576,14 @@ couchdb:
   __metadata:
     label: "CouchDB"
     description: "CouchDB Configuration"
+  image:
+    name:
+      __metadata:
+        label: "Couchdb image name"
+        description: "Couchdb image name. DO NOT EDIT"
+        type: "string"
+        hidden: true
+        immutable: true
   ## The CouchDB cluster initial cluster size
   clusterSize:
     __metadata:
@@ -598,17 +591,6 @@ couchdb:
       type: "number"
       description: "Number of pod replicas"
       required: true
-  ## If enabled, nodes are automatically added to the couchdb cluster when
-  ## couchdb pods are started.
-  autoClusterConfig:
-    enabled:
-      __metadata:
-        label: "Auto Cluster Config"
-        description: >
-          Allows you to scale up the Couchbd stateful set automatically using
-          the kubernetes scale command. Refer to the documentation for more
-          information.
-        type: "boolean"
 
   ## The number of shards and replicas of data
   numShards:
@@ -645,6 +627,28 @@ couchdb:
       type: "string"
       hidden: true
       immutable: true
+  couchdbConfig:
+    couchdb:
+      os_process_timeout:
+        __metadata:
+          label: "CouchDB Timeout"
+          description: "Millisecond before CouchDB timeout from a request"
+          type: "number"
+          immutable: true
+
+# Cassandra dependency
+cassandra:
+  __metadata:
+    label: "Cassandra"
+    description: "Cassandra Configuration"
+  image:
+    name:
+      __metadata:
+        label: "Cassandra image name"
+        description: "Cassandra image name. DO NOT EDIT"
+        type: "string"
+        hidden: true
+        immutable: true
 
 # Authentication (IKS DEVELOPMENT / TESTING only)
 auth:
@@ -812,6 +816,19 @@ nexmo:
       description: >
         Numbers from countries to which messages must not be sent
       type: "string"
+
+dashboard:
+  __metadata:
+    label: "Grafana Dashboard"
+    description: "Grafana Dashboard Configuration"
+  enabled:
+    __metadata:
+      label: "Enable"
+      description: "Allow the import of Grafana example dashboards."
+      type: "boolean"
+      hidden: false
+      immutable: false
+
 global: # Properties in here can be accessed by the main chart and by all subcharts
   __metadata:
     label: "Global properties"
@@ -922,6 +939,13 @@ global: # Properties in here can be accessed by the main chart and by all subcha
         description: "Used to configure the kafkarest insecure port number"
         hidden: true
         type: "number"
+  rbac:
+    serviceAccountName:
+      __metadata:
+        label: "Service Account Name"
+        description: "Service account name used by ibmRedis"
+        type: "string"
+        hidden: true
   persistence:
     enabled:
       __metadata:
@@ -1109,6 +1133,8 @@ global: # Properties in here can be accessed by the main chart and by all subcha
           used to give each a different path.  E.g. if global.ingress.domain is
           'cem.example.com' and global.ingress.prefix is 'mycem/', the UI end point
           will be https://cem.example.com/mycem/cemui.
+          Has no effect in Event Management for IBM Multicloud Manager or
+          IBM Cloud App Management for Multicloud Manager.
         type: "string"
     # If installing into an ingress controller that has a specified port number
     # that is different than the default (443), then the port number can be

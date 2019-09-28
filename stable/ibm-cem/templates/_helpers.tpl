@@ -33,6 +33,20 @@
   {{- end }}
 {{- end -}}
 
+{{- define "cem.ingress.prefix" }}
+  {{- if ne (include "cem.mcm" .) "true" }}
+    {{- .Values.global.ingress.prefix }}
+  {{- end }}
+{{- end -}}
+
+{{- define "cem.ingress.api.prefix" }}
+  {{- if ne (include "cem.mcm" .) "true" }}
+    {{- .Values.global.ingress.prefix }}
+  {{- else -}}
+    cem/
+  {{- end }}
+{{- end -}}
+
 {{/*
     Try to avoid scheduling the pod on a node that is running an instance of a
     given pod type. Normally this is used to avoid scheduling two pods of the

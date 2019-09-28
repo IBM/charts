@@ -78,6 +78,8 @@ spec:
           capabilities:
             drop:
             - ALL
+        resources:
+{{ include "cem.resources.comp.size.data" (list . "schedulingui" "resources") | indent 10 }}
       - name: waitforkafka
         image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.schedulingui.image.name }}:{{ .Values.commonimages.schedulingui.image.tag }}"
         command: ["sh", "-c", "i=1;until [ `getent hosts {{ template "cem.releasename" . }}-kafka.{{ .Release.Namespace }}.svc | wc -l` -gt 0 ]; do echo waiting for kafka $i;i=$((i+1)); sleep 10; done;"]
@@ -90,6 +92,12 @@ spec:
           capabilities:
             drop:
             - ALL
+        resources:
+{{ include "cem.resources.comp.size.data" (list . "schedulingui" "resources") | indent 10 }}
+{{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
       containers:
       - name: scheduling-ui
         image: "{{ include "cem.getImageRepo" . }}/{{ .Values.commonimages.schedulingui.image.name }}:{{ .Values.commonimages.schedulingui.image.tag }}"
@@ -138,7 +146,9 @@ spec:
         - name: VCAP_APPLICATION
           value: '{}'
         - name: INGRESS_PREFIX
-          value: '{{ .Values.global.ingress.prefix }}'
+          value: '{{ include "cem.ingress.prefix" . }}'
+        - name: INGRESS_APIPREFIX
+          value: '{{ include "cem.ingress.api.prefix" . }}'
         - name: INGRESS_DOMAIN
           value: '{{ .Values.global.ingress.domain }}'
         - name: INGRESS_PORT

@@ -18,8 +18,6 @@ resources:
 {{- define "couchdb.sizeData" -}}
 couchdb:
   size0:
-    autoClusterConfig:
-      enabled: false
     replicas: 1
     resources:
       limits:
@@ -28,9 +26,25 @@ couchdb:
       requests:
         memory: 600Mi
         cpu: 200m
+  size0_amd64:
+    replicas: 1
+    resources:
+      limits:
+        memory: 800Mi
+        cpu: 1000m
+      requests:
+        memory: 600Mi
+        cpu: 200m
+  size0_ppc64le:
+    replicas: 1
+    resources:
+      limits:
+        memory: 800Mi
+        cpu: 500m
+      requests:
+        memory: 600Mi
+        cpu: 100m
   size1:
-    autoClusterConfig:
-      enabled: true
     replicas: 3
     resources:
       limits:
@@ -39,6 +53,24 @@ couchdb:
       requests:
         memory: 1200Mi
         cpu: 1000m
+  size1_amd64:
+    replicas: 3
+    resources:
+      limits:
+        memory: 2800Mi
+        cpu: 8000m
+      requests:
+        memory: 1200Mi
+        cpu: 1000m
+  size1_ppc64le:
+    replicas: 3
+    resources:
+      limits:
+        memory: 2800Mi
+        cpu: 4000m
+      requests:
+        memory: 1200Mi
+        cpu: 500m
 {{- end -}}
 
 {{- define "couchdb.comp.size.data" -}}

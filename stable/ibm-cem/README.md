@@ -59,6 +59,7 @@ Secrets:
 * cem-integrationcontroller-cred-secret
 * cem-model-secret
 * cem-nexmo-auth-secret
+* cem-service-secret
 * rba-devops-secret
 * rba-jwt-secret
 
@@ -201,71 +202,8 @@ This chart also defines a custom `PodSecurityPolicy` which can be used to finely
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
 
-This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
-
-The predefined `SecurityContextConstraints` name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this `SecurityContextConstraints` resource you can proceed to install the chart.
-
-#### Creating the required resources
-
-This chart defines a custom `SecurityContextConstraints` which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom `SecurityContextConstraints` resource using the supplied instructions or scripts in the `ibm_cloud_pak/pak_extensions/prereqs` directory.
-
-* From the user interface, you can copy and paste the following snippets to enable the custom `SecurityContextConstraints`
-  * Custom `SecurityContextConstraints` definition:
-
-  ```yaml
-  apiVersion: security.openshift.io/v1
-  kind: SecurityContextConstraints
-  metadata:
-    annotations:
-      kubernetes.io/description: "This policy is the most restrictive,
-        requiring pods to run with a non-root UID, and preventing pods from accessing the host."
-      cloudpak.ibm.com/version: "1.0.0"
-    name: ibm-restricted-scc
-  allowHostDirVolumePlugin: false
-  allowHostIPC: false
-  allowHostNetwork: false
-  allowHostPID: false
-  allowHostPorts: false
-  allowPrivilegedContainer: false
-  allowPrivilegeEscalation: false
-  allowedCapabilities: []
-  allowedFlexVolumes: []
-  allowedUnsafeSysctls: []
-  defaultAddCapabilities: []
-  defaultPrivilegeEscalation: false
-  forbiddenSysctls:
-    - "*"
-  fsGroup:
-    type: MustRunAs
-    ranges:
-    - max: 65535
-      min: 1
-  readOnlyRootFilesystem: false
-  requiredDropCapabilities:
-  - ALL
-  runAsUser:
-    type: MustRunAsNonRoot
-  seccompProfiles:
-  - docker/default
-  seLinuxContext:
-    type: RunAsAny
-  supplementalGroups:
-    type: MustRunAs
-    ranges:
-    - max: 65535
-      min: 1
-  volumes:
-  - configMap
-  - downwardAPI
-  - emptyDir
-  - persistentVolumeClaim
-  - projected
-  - secret
-  priority: 11 # default anyuid has priority 10
-  ```
-
-* From the command line, you can run the setup scripts included under `ibm_cloud_pak/pak_extensions/prereqs` to create namespace and apply `SecurityContextConstraints` to the namespace
-  * `ibm_cloud_pak/pak_extensions/prereqs/createSccAndNamespace.sh --namespace [namespace]`
+This chart requires an extra resource `SecurityContextConstraints` to be bound to the target namespace during installation. This requirement is met with a `pre-install` [helm hook](https://github.com/helm/helm/blob/master/docs/charts_hooks.md) that installs `SecurityContextConstraints` prior to installing any other resources.
+The predefined `SecurityContextConstraints` name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) `SecurityContextConstraints` would be used to finely control the permissions/capabilities needed to deploy this chart. Please see `ibm-restricted-scc.yaml` under `templates/scc` folder for more information.
 
 ### Resources Required
 #### System resources, based on various install size parameters.
@@ -327,31 +265,31 @@ The following tables lists the global configurable parameters of the cloud-event
 | Parameter | Description | Default | 
 |-----------|-------------|---------| 
 | `commonimages.brokers.image.name` | Brokers image name. DO NOT EDIT | hdm-brokers | 
-| `commonimages.brokers.image.tag` | Brokers image tag. DO NOT EDIT | 1.5.1-20190619T081550Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.brokers.image.tag` | Brokers image tag. DO NOT EDIT | 1.6.0-20190916T150432Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.cemusers.image.name` | CEM Users image name. DO NOT EDIT | hdm-cem-users | 
-| `commonimages.cemusers.image.tag` | CEM Users image tag. DO NOT EDIT | 1.5.1-20190619T221411Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.cemusers.image.tag` | CEM Users image tag. DO NOT EDIT | 1.6.0-20190920T180607Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.channelservices.image.name` | channelservices image name. DO NOT EDIT | hdm-channelservices | 
-| `commonimages.channelservices.image.tag` | channelservices image tag. DO NOT EDIT | 1.5.1-20190603T154346Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.channelservices.image.tag` | channelservices image tag. DO NOT EDIT | 1.6.0-20190916T141359Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.datalayer.image.name` | Datalayer image name. DO NOT EDIT | hdm-datalayer | 
-| `commonimages.datalayer.image.tag` | Datalayer image tag. DO NOT EDIT | 1.5.1-20190613T065828Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.datalayer.image.tag` | Datalayer image tag. DO NOT EDIT | 1.6.0-20190916T141430Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.eventanalyticsui.image.name` | eventanalyticsui image name. DO NOT EDIT | hdm-event-analytics-ui | 
-| `commonimages.eventanalyticsui.image.tag` | eventanalyticsui image tag. DO NOT EDIT | 1.5.1-20190619T231410Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.eventanalyticsui.image.tag` | eventanalyticsui image tag. DO NOT EDIT | 1.6.0-20190921T013634Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.eventpreprocessor.image.name` | eventpreprocessor image name. DO NOT EDIT | hdm-eventpreprocessor | 
-| `commonimages.eventpreprocessor.image.tag` | eventpreprocessor image tag. DO NOT EDIT | 1.5.1-20190604T064047Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.eventpreprocessor.image.tag` | eventpreprocessor image tag. DO NOT EDIT | 1.6.0-20190916T155924Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.incidentprocessor.image.name` | incidentprocessor image name. DO NOT EDIT | hdm-incidentprocessor | 
-| `commonimages.incidentprocessor.image.tag` | incidentprocessor image tag. DO NOT EDIT | 1.5.1-20190604T064101Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.incidentprocessor.image.tag` | incidentprocessor image tag. DO NOT EDIT | 1.6.0-20190916T141514Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.notificationprocessor.image.name` | notificationprocessor image name. DO NOT EDIT | hdm-notificationprocessor | 
-| `commonimages.notificationprocessor.image.tag` | notificationprocessor image tag. DO NOT EDIT | 1.5.1-20190605T151130Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.notificationprocessor.image.tag` | notificationprocessor image tag. DO NOT EDIT | 1.6.0-20190916T141541Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.integrationcontroller.image.name` | integrationcontroller image name. DO NOT EDIT | hdm-integration-controller | 
-| `commonimages.integrationcontroller.image.tag` | integrationcontroller image tag. DO NOT EDIT | 1.5.1-20190603T141054Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.integrationcontroller.image.tag` | integrationcontroller image tag. DO NOT EDIT | 1.6.0-20190916T141527Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.normalizer.image.name` | normalizer image name. DO NOT EDIT | hdm-normalizer | 
-| `commonimages.normalizer.image.tag` | normalizer image tag. DO NOT EDIT | 1.5.1-20190611T033133Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.normalizer.image.tag` | normalizer image tag. DO NOT EDIT | 1.6.0-20190916T140807Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.schedulingui.image.name` | schedulingui image name. DO NOT EDIT | hdm-scheduling-ui | 
-| `commonimages.schedulingui.image.tag` | schedulingui image tag. DO NOT EDIT | 1.5.1-20190606T192546Z-multi-arch-L-MOCR-BC2KPL | 
+| `commonimages.schedulingui.image.tag` | schedulingui image tag. DO NOT EDIT | 1.6.0-20190916T141553Z-multi-arch-L-MOCR-BFEERH | 
 | `commonimages.rba.rbs.image.name` | rba-rbs image name. DO NOT EDIT | hdm-icp-rba-rbs | 
-| `commonimages.rba.rbs.image.tag` | rba-rbs image tag. DO NOT EDIT | 1.16.0-ubi7-minimal-20190607T094727Z-L-MOCR-BC2KPL | 
+| `commonimages.rba.rbs.image.tag` | rba-rbs image tag. DO NOT EDIT | 1.17.1-ubi-minimal-20190917T135737Z-L-MOCR-BFEERH | 
 | `commonimages.rba.as.image.name` | rba-as image name. DO NOT EDIT | hdm-icp-rba-as | 
-| `commonimages.rba.as.image.tag` | rba-as image tag. DO NOT EDIT | 1.16.0-ubi7-minimal-20190607T094727Z-L-MOCR-BC2KPL | 
+| `commonimages.rba.as.image.tag` | rba-as image tag. DO NOT EDIT | 1.17.0-ubi-minimal-20190917T135737Z-L-MOCR-BFEERH | 
 | `productName` | Product Name. Recommended NOT to be changed. | IBM Cloud Event Management | 
 | `license` | Must be set to "accept" to proceed with installation. Defaults to Not Accepted. | not accepted | 
 | `ibmRedis.replicas.servers` | Number of redis server replica to deploy. Defaults to 1 | 1 | 
@@ -374,9 +312,9 @@ The following tables lists the global configurable parameters of the cloud-event
 | `rba.as.updateStrategy` | In case of release upgrades a migration task might require downtime to prevent inconsistencies (select Recreate). If no data is migrated, no downtime is necessary (select RollingUpdate) | Recreate | 
 | `zookeeper.clusterSize` | Number of pod replicas | 1 | 
 | `couchdb.clusterSize` | Number of pod replicas | 1 | 
-| `couchdb.autoClusterConfig.enabled` | Allows you to scale up the Couchbd stateful set automatically using the kubernetes scale command. Refer to the documentation for more information. | true | 
 | `couchdb.numShards` | This is equivalent to the 'q' parameter in the '[cluster]' section in default.ini and specifies the number of shards. See the [cluster] section documentation in the Couchdb document for details on this parameter. You are recommended to leave it as default unless you increase the number of stateful set replicas to 3 or more. Cloud Event Management uses the default sharding value of 8 shards. This allows up to 8 replicas. Consult couchdb documentation for details on these parameters. | 8 | 
 | `couchdb.numReplicas` | This is equivalent to the 'n' parameter  in the '[cluster]' section in default.ini and specifies the number of replicas of each document. See the Couchdb documentation for advice on what this should be set to. You are recommended to leave this as the default unless you increase the number of stateful set replicas to more than 3. Cloud Event Management uses the default sharding value of 3 replicas. This allows up to 8 replicas. Consult couchdb documentation for details on these parameters. | 3 | 
+| `couchdb.couchdbConfig.couchdb.os_process_timeout` | Millisecond before CouchDB timeout from a request | 60000 | 
 | `email.mail` | Set this property to the Email address that should be shown as the sender (From) of the message. | noreply-your-company-notification@your-company.com | 
 | `email.type` | Set this property to "smtp" to use a mail relay server. This requires setting the other smtp-prefixed properties as well. Set to "direct" (default) to send directly to the recipient's server. Use "api" if the "sendgrid" service is available. This requires the "apikey" property also to be set. If "smtp" or "apikey" is set, ensure you create the associated secret with the credentials as described in the chart readme. | direct | 
 | `email.smtphost` | When "type" is set to "smtp", set this to the host name of your smtp server used for mail relay. |  | 
@@ -388,6 +326,7 @@ The following tables lists the global configurable parameters of the cloud-event
 | `nexmo.voice` | Set this to the Nexmo number from which to send Voice messages |  | 
 | `nexmo.numbers` | Override numbers used for selected countries. Property names are country codes, values are objects with "voice" and "sms" properties' | {} | 
 | `nexmo.countryblacklist` | Numbers from countries to which messages must not be sent | [] | 
+| `dashboard.enabled` | Allow the import of Grafana example dashboards. | false | 
 | `global.image.repository` | Link to the registry containing all CEM services images |  | 
 | `global.image.pullSecret` | If the image registry requires authentication create a docker-registry secret with the Docker credentials and set this value to the name of that secret. Leave empty when using a public registry. |  | 
 | `global.masterIP` | ICP - Master IP |  | 
@@ -415,7 +354,7 @@ The following tables lists the global configurable parameters of the cloud-event
 | `global.affinity.podAntiAffinity.weight` | Controls the weighting of the requirement to schedule apart pods running the same service to improve resilience. Unless you are using other affinity or anti-affinity rules you do not need to adjust this parameter. | 50 | 
 | `global.ingress.domain` | Domain must be set to the fully qualified domain name (FQDN) of the CEM service. This FQDN must resolve to the IP address of the IBM® Cloud Private proxy host running the ingress controller.  This normally requires a DNS entry, for testing /etc/hosts on any client host may be updated. |  | 
 | `global.ingress.tlsSecret` | If tlsSecret is the empty string CEM will use the default TLS certificate installed on the ingress controller. If this certificate does not match the value of Domain browsers and other clients will raise security warnings. For production use a TLS certificate for the FQDN should be obtained from a well known certificate authority and installed in a TLS secret in the namespace. tlsSecret must be set to the name of this secret. |  | 
-| `global.ingress.prefix` | If multiple releases of CEM are installed in a single IBM® Cloud Private each should be given a different FQDN, and each should have a TLS certificate installed. If the same FQDN is used for each release, or tlsSecret is left empty for any release, global.ingress.prefix may be used to give each a different path.  E.g. if global.ingress.domain is 'cem.example.com' and global.ingress.prefix is 'mycem/', the UI end point will be https://cem.example.com/mycem/cemui. |  | 
+| `global.ingress.prefix` | If multiple releases of CEM are installed in a single IBM® Cloud Private each should be given a different FQDN, and each should have a TLS certificate installed. If the same FQDN is used for each release, or tlsSecret is left empty for any release, global.ingress.prefix may be used to give each a different path.  E.g. if global.ingress.domain is 'cem.example.com' and global.ingress.prefix is 'mycem/', the UI end point will be https://cem.example.com/mycem/cemui. Has no effect in Event Management for IBM Multicloud Manager or IBM Cloud App Management for Multicloud Manager. |  | 
 | `global.ingress.port` | If installing into an ingress controller that has a specified port number that is different than the default (443), then the port number can be specified here. Normally, this port should be the default value. | 443 | 
 | `cemservicebroker.suffix` | If multiple Cloud Event Management products are installed causing multiple cluster service broker registrations, a suffix will be required to separate out the instances so more than one cluster service broker can be registered within a single IBM® Cloud Private environment. If not specified, no suffix will be added to the cluster service broker registered service. |  | 
 | `icpbroker.adminusername` | The name of the cluster administrator user.  This is the name that will be added to subscriptions  (required for MCM). | admin | 
