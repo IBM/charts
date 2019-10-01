@@ -10,8 +10,9 @@
 
 # Fixes
 
-- SSO fix for ICP IAM bug
-- Updated go-toolset to version 1.11.13
+- 4.0.2: SSO fix for ICP 3.2.1 IAM change
+- 4.0.1: SSO fix for ICP IAM bug
+- 4.0.1: Updated go-toolset to version 1.11.13
 
 # Prerequisites
 
@@ -26,6 +27,7 @@
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 4.0.2 | October 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | SSO fix for ICP 3.2.1 IAM change; README updates |
 | 4.0.1 | September 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | SSO fix for ICP IAM bug; Updated go-toolset to version 1.11.13 |
 | 4.0.0 | September 2019 | >= 1.11.0 | = MQ 9.1.3.0 | ICP4I Namespace | Entitled Catalog & Registry; Header-as-a-Service |
 | 3.0.1 | August 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated UBI 7 base image |

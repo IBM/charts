@@ -8,89 +8,26 @@ This chart deploys a single IBM® MQ version 9.1.3 Advanced server (Queue Manage
 
 This chart will do the following:
 
-* Create a single MQ server (Queue Manager) using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with one or two replicas depending on whether multi-instance queue managers are enabled.  Kubernetes will ensure that if it fails for some reason, it will be restarted, possibly on a different worker node.
+* Create a single MQ server (Queue Manager) using a [Stateful Set](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with one or two replicas depending on whether multi-instance queue managers are enabled.  Kubernetes will ensure that if it fails for some reason, it will be restarted, possibly on a different worker node.
 * Create a [Service](https://kubernetes.io/docs/concepts/services-networking/service/).  This is used to ensure that MQ client applications have a consistent IP address to connect to, regardless of where the Queue Manager is actually running.
+* Create a [Job](https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/) to register the Queue Manager with the IBM Identity and Access Manager, for single sign-on
+* Create a [Service Account](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/), [Role and Role Binding](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) to secure what permissions the running container has.
+* Create a pre-upgrade and a post-delete Job, Role and Role Binding
+* [Optional] Create additional [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) for use with a multi-instance Queue Manager.
+* [Optional] Create a metrics [Service](https://kubernetes.io/docs/concepts/services-networking/service/) for accessing Queue Manager metrics.
 
 ## Prerequisites
 
-* Kubernetes 1.11.0 or greater.
-* If persistence is enabled (see the **configuration** section), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
-* If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191).
+* Red Hat OpenShift 3.11 (Kubernetes 1.11)
+* If persistence is enabled (see the **configuration** section), then you either need to create a Persistent Volume, or specify a Storage Class if classes are defined in your cluster.
 * Administrator is the minimum role required to install this chart.
 * The following IBM Platform Core Services are required: `tiller` & `auth-idp`.
-
-### PodSecurityPolicy Requirements
-
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre-install actions that need to occur.
-
-The predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp) has been verified for this chart, if your target namespace is bound to this PodSecurityPolicy you can proceed to install the chart.
-
-This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the IBM Cloud Private user interface or the supplied scripts in the `pak_extensions` pre-install directory.
-
-- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
-
-  - Custom PodSecurityPolicy definition:
-    ```
-    apiVersion: policy/v1beta1
-    kind: PodSecurityPolicy
-    metadata:
-      name: ibm-mq-integration-psp
-    spec:
-      allowPrivilegeEscalation: true
-      fsGroup:
-        rule: RunAsAny
-      requiredDropCapabilities:
-      - MKNOD
-      allowedCapabilities:
-      - CHOWN
-      - FOWNER
-      - DAC_OVERRIDE
-      runAsUser:
-        rule: RunAsAny
-      seLinux:
-        rule: RunAsAny
-      supplementalGroups:
-        rule: RunAsAny
-      volumes:
-      - secret
-      - configMap
-      - persistentVolumeClaim
-      forbiddenSysctls:
-      - '*'
-      ```
-
-  - Custom ClusterRole for the custom PodSecurityPolicy:
-      ```
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: ibm-mq-integration-clusterrole
-      rules:
-      - apiGroups:
-        - extensions
-        resourceNames:
-        - ibm-mq-integration-psp
-        resources:
-        - podsecuritypolicies
-        verbs:
-        - use
-      ```
-
-- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
-
-  As a cluster admin the pre-install script is located at:
-  - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
-
-  As team admin the namespace scoped pre-install script is located at:
-  - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
 
 This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre-install actions that need to occur.
 
-The predefined SecurityContextConstraints name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
-
-This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied scripts in the `pak_extensions` pre-install directory.
+This chart defines a custom SecurityContextConstraints which should be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied scripts in the `pak_extensions` pre-install directory.
 
   - Custom SecurityContextConstraints definition:
     ```
@@ -129,7 +66,7 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     priority: 0
     ```
 
-- From the command line, you can run the setup scripts included under pak_extensions (untar the downloaded archive to extract the pak_extensions directory)
+- From the command line, you can run the setup scripts included under [pak_extensions](https://github.com/IBM/charts/tree/master/entitled/ibm-mqadvanced-server-integration-prod/ibm_cloud_pak/pak_extensions)
 
   As a cluster admin the pre-install script is located at:
   - pre-install/clusterAdministration/createSecurityClusterPrereqs.sh
@@ -265,49 +202,21 @@ Deployments of multi-instance queue managers and queue managers with separate st
 
 ## Limitations
 
-It is not generally recommended that you change the number of replicas in the StatefulSet from the default value of 1.  Setting the number of replicas creates multiple Queue Managers.  The recommended way to scale MQ is by deploying this chart multiple times and connecting the Queue Managers together using MQ configuration — see [Architectures based on multiple queue managers](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.0.0/com.ibm.mq.pla.doc/q004720_.htm).  If you choose to set a different number of replicas on the StatefulSet, connections to each Queue Manager will be routed via a single IP address from the Kubernetes Service.  Connections to multiple replicas via a Service are load balanced, typically on a round-robin basis.  If you do this, you need to take great care not to create an affinity between an MQ client and server, because a client might get disconnected, and then re-connect to a different server.  See Chapter 7 of the [IBM MQ as a Service Redpaper](https://www.redbooks.ibm.com/redpapers/pdfs/redp5209.pdf)
+You must not manually change the number of replicas in the StatefulSet.  The number of replicas controls whether or not multi-instance queue managers are used, and are changed in conjunction with other settings.
 
-It is not recommended to change the number of replicas in the StatefulSet after initial deployment.  This will cause the addition or deletion of Queue Managers, which can result in loss of messages.
+The recommended way to scale MQ is by deploying this chart multiple times and connecting the Queue Managers together using MQ configuration, such as MQ clusters — see [Architectures based on multiple queue managers](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.0.0/com.ibm.mq.pla.doc/q004720_.htm).
 
 ## Documentation
 
 ### Configuring MQ objects
 
-You have two major options for configuring the MQ queue manager itself:
+You have the following major options for configuring the MQ queue manager itself:
 
-1. Use existing tools, such as `runmqsc`, MQ Explorer or the MQ Command Server to configure your queue manager directly.
+1. Use the MQ web console interactively
 2. Create a new image layer with your configuration baked-in
+3. Configure remote administration over messaging, and use existing tools, such as `runmqsc`, MQ Explorer or the MQ Command Server.
 
-#### Configuring MQ using existing tools
-
-You will need to create any administrative entry point to your Queue Manager. This can be completed by either manually running kubectl commands to execute `runmqsc` and configure your entry point or creating a new image which automatically does this. At a minimum you will need to:
-
-* Create a user with MQ administrative permissions (is a member of the `mqm` group) which you can use to log into your Queue Manager.
-* Enable `ADOPTCTX` so we use the user for authorization as well as authentication when connecting a MQ Application.
-* Refresh the security configuration so the new `ADOPTCTX` value becomes active
-* Create a channel to use as our entrypoint.
-* Create a channel authentication rule to allow access for administrative users to connect through the channel.
-
-For the above minimum you, should execute the following commands through a shell prompt on the pod.  If you choose to do this then you should replace `mquser` with your own username:
-
-```sh
-useradd --gid mqm mquser
-passwd mquser
-runmqsc <QM Name>
-```
-
-Then in the `runmqsc` program, you could execute the following MQSC commands:
-
-```
-DEFINE CHANNEL('EXAMPLE.ENTRYPOINT') CHLTYPE(SVRCONN)
-ALTER AUTHINFO(SYSTEM.DEFAULT.AUTHINFO.IDPWOS) AUTHTYPE(IDPWOS) ADOPTCTX(YES)
-REFRESH SECURITY(*) TYPE(CONNAUTH)
-SET CHLAUTH('EXAMPLE.ENTRYPOINT') TYPE(BLOCKUSER) USERLIST('nobody')
-```
-
-At this point you could now connect a MQ Explorer or other remote MQ administrative client using the channel `EXAMPLE.ENTRYPOINT` and user `mquser`.
-
-> **Tip**: If you are using a client that has a compatibility mode option for user authentication to connect to your IBM MQ Queue Manager. Make sure you have compatibility mode turned off.
+The REST administrative API is not currently supported.
 
 #### Configuring MQ using a new image layer
 
@@ -362,6 +271,7 @@ Next create a `Dockerfile` that expands on the MQ Advanced Server image to creat
 ```dockerfile
 FROM <IMAGE NAME>
 # Add the admin user as a member of the mqm group and set their password
+USER root
 RUN useradd admin -G mqm \
     && echo admin:passw0rd | chpasswd \
 # Create the mqclient group
@@ -370,6 +280,7 @@ RUN useradd admin -G mqm \
     && useradd app -G mqclient \
     && echo app:passw0rd | chpasswd
 # Copy the configuration script to /etc/mqm where it will be picked up automatically
+USER mqm
 COPY config.mqsc /etc/mqm/
 ```
 
