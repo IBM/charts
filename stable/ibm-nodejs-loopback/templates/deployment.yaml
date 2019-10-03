@@ -1,0 +1,93 @@
+{{- include "sch.config.init" (list . "nodejsLoopbackRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.nodejsLoopback.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+{{- if .Values.deployment.labels }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.deployment.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+{{- end }}
+  selector:
+    matchLabels:
+      release: "{{ .Release.Name }}"
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+{{- if .Values.pod.labels }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- if .Values.pod.annotations }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+    spec:
+      {{- /* please look at _sch-chart-config.tpl for what is being injected here */ -}}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+{{- if .Values.pod.extraVolumes }}
+{{ toYaml . | indent 6 }}
+{{- end }}
+      {{ if .Values.rbac.install }}
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . $compName) }}-sa
+      {{ end }}
+      affinity:
+      {{- /* nodeaffinity for github.com charts, remove the following for PPA charts */}}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+{{- if .Values.pod.security }}
+{{ toYaml .Values.pod.security | indent 6 }}
+{{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- /* image key for github.com charts */}}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+            {{- /* please look at _sch-chart-config.tpl for what is being injected here */ -}}
+{{- if .Values.image.security }}
+{{ toYaml .Values.image.security | indent 10 }}
+{{- else }}
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 10 -}}
+{{- end }}
+          ports:
+            - containerPort: {{ .Values.service.externalPort }}
+              #hostPort: not set
+              #hostIP: not set
+          volumeMounts:
+            - name: index-vol
+              mountPath: /usr/share/nodejsLoopback/html
+          livenessProbe:
+            initialDelaySeconds: {{ .Values.image.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.image.livenessProbe.periodSeconds }}
+            httpGet:
+              path: "{{ .Values.image.livenessProbe.httpGet.path }}"
+              port: {{ .Values.service.externalPort }}
+          readinessProbe:
+            initialDelaySeconds: {{ .Values.image.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.image.readinessProbe.periodSeconds }}
+            httpGet:
+              path: "{{ .Values.image.readinessProbe.httpGet.path }}"
+              port: {{ .Values.service.externalPort }}
+{{- if .Values.image.extraVolumeMounts }}
+          extraVolumeMounts:
+{{ toYaml . | indent 12 }}
+{{- end}}
+{{- if .Values.image.extraEnvs }}
+          env:
+{{ toYaml . | indent 12 }}
+{{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+        - name: index-vol
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.configmap.name) | quote }}
