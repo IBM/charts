@@ -1,0 +1,29 @@
+{{- include "sch.config.init" (list . "nodejsLoopbackRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.nodejsLoopback.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "health-test" -}}
+{{- $fullCompName := include "sch.names.fullCompName" (list . $compName) }}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) }}
+{{- $serviceName := .Values.service.name | trunc 63 | lower | trimSuffix "-" | default $fullCompName }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $fullTestCompName }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 2 }}
+  restartPolicy: Never
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    image: alpine:3.8
+    command: ["sh", "-c", "wget -qO/dev/null http://{{ $serviceName }}:{{ .Values.service.externalPort }}"]
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.helmTestPodSecurityContext) | indent 4 }}
+  {{ if .Values.rbac.install }}
+  serviceAccountName: {{ include "sch.names.fullCompName" (list . $compName) }}-sa
+  {{ end }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
