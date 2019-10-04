@@ -8,7 +8,7 @@
 
 # Fixes
 
-- None
+- Updated go-toolset to version 1.11.13
 
 # Prerequisites
 
@@ -23,6 +23,8 @@
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 4.1.2 | September 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated go-toolset to version 1.11.13 |
+| 4.1.1 | August 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated UBI 7 base image |
 | 4.1.0 | July 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated to IBM MQ 9.1.3 |
 | 4.0.0 | June 2019 | >= 1.11.0 | = MQ 9.1.2.0 | Now runs as user ID 888; Password secret required; Verification of MQSC files | Added support for multi-instance queue managers; Custom labels; Image based on UBI; Added TLS certificates mechanism |
 | 3.0.1 | March 2019 | >= 1.9 | = MQ 9.1.2.0 | None | Fix capabilities when running init volume as root |
