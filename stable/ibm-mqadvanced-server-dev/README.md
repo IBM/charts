@@ -8,15 +8,16 @@ This chart deploys a single IBM® MQ Advanced for Developers version 9.1.3 serve
 
 This chart will do the following:
 
-* Create a single MQ server (Queue Manager) using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with exactly one replica.  Kubernetes will ensure that if it fails for some reason, it will be restarted, possibly on a different worker node.
+* Create a single MQ server (Queue Manager) using a [Stateful Set](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with one or two replicas depending on whether multi-instance queue managers are enabled.  Kubernetes will ensure that if it fails for some reason, it will be restarted, possibly on a different worker node.
 * Create a [Service](https://kubernetes.io/docs/concepts/services-networking/service/).  This is used to ensure that MQ client applications have a consistent IP address to connect to, regardless of where the Queue Manager is actually running.
+* [Optional] Create additional [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) for use with a multi-instance Queue Manager.
+* [Optional] Create a metrics [Service](https://kubernetes.io/docs/concepts/services-networking/service/) for accessing Queue Manager metrics.
 
 ## Prerequisites
 
 * Kubernetes 1.11.0 or greater, with beta APIs enabled.
 * You must create a [Secret](https://kubernetes.io/docs/concepts/configuration/secret/) in the target namespace (see the **Creating a Secret to store queue manager credentials** section).  This must contain the 'admin' user password and optionally the 'app' user password to use for messaging.
 * If persistence is enabled (see the **configuration** section), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
-* If you are using SELinux you must meet the [MQ requirements](https://www-01.ibm.com/support/docview.wss?uid=swg21714191).
 * Operator is the minimum role required to install this chart.
 * The following IBM Platform Core Service is required: `tiller`
 
@@ -142,7 +143,7 @@ This chart also defines a custom SecurityContextConstraints which can be used to
   As team admin the namespace scoped pre-install script is located at:
   - pre-install/namespaceAdministration/createSecurityNamespacePrereqs.sh
 
-### Creating a Secret to store queue manager credentials 
+### Creating a Secret to store queue manager credentials
 
 When using the IBM MQ Advanced for Developers certified container, you must create a Secret in the target namespace. This must contain the 'admin' user password and optionally the 'app' user password to use for messaging.
 
@@ -168,7 +169,7 @@ bXktYXBwLXBhc3N3b3Jk
 - Enter a name for your Secret, such as `mq-secret`
 - Select the namespace where the chart is to be installed
 - Navigate to the `Data` tab and enter a name for your password, such as `adminPassword`, and enter your base64 encoded password
-- Optionally, to add an app user password, click the `Add Data` button and repeat step 
+- Optionally, to add an app user password, click the `Add Data` button and repeat step
 
 #### Creating a Secret using kubectl 
 
@@ -241,7 +242,7 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | ------------------------------- | --------------------------------------------------------------- | ------------------------------------------ |
 | `license`                       | Set to `accept` to accept the terms of the IBM license          | `"not accepted"`                           |
 | `image.repository`              | Image full name including repository                            | `ibmcom/mq`                                |
-| `image.tag`                     | Image tag                                                       | `9.1.3.0`                                  |
+| `image.tag`                     | Image tag                                                       | `9.1.3.0-r2`                                  |
 | `image.pullPolicy`              | Image pull policy                                               | `IfNotPresent`                             |
 | `image.pullSecret`              | Image pull secret, if you are using a private Docker registry   | `nil`                                      |
 | `arch.amd64`                    | Preference for installation on worker nodes with the `amd64` CPU architecture.  One of: "0 - Do not use", "1 - Least preferred", "2 - No preference", "3 - Most preferred" | `2 - No preference` - worker node is chosen by scheduler |
@@ -298,15 +299,21 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 
 ## Storage
 
-The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) for the storage of MQ configuration data and messages.  By using a Persistent Volume based on network-attached storage, Kubernetes can re-schedule the MQ server onto a different worker node.  You should not use "hostPath" or "local" volumes, because this will not allow moving between nodes.
+The chart mounts [Persistent Volumes](http://kubernetes.io/docs/user-guide/persistent-volumes/) for the storage of MQ configuration data and messages.  By using Persistent Volumes based on network-attached storage, Kubernetes can re-schedule the MQ server onto a different worker node.  You should not use "hostPath" or "local" volumes, because this will not allow moving between nodes.
 
 Performance requirements will vary widely based on workload, but as a guideline, use a Storage Class which allows for at least 200 IOPS (based on 16 KB block size with a 50/50 read/write mix).
 
+Deployments of multi-instance queue managers and queue managers with separate storage (for transaction logs and/or queue manager data) require that all Persistent Volumes be located in the same zone.  If you have a multi-zone cluster, and the storage provider does not replicate Persistent Volumes across failure domains (availability zones), then your cluster administrator will need to create a set of customized storage classes.
+
+- A customized storage class will be required for each zone in which you wish to deploy an MQ instance.
+- Each customized storage class should specify zone/region information as documented by your cloud provider.
+- When deploying a queue manager you need to specify the storage class name for each Persistent Volume Claim. This must be set to the name of the customized storage class for your chosen zone.  For example, for a multi-instance queue manager you must set `dataPVC.storageClassName`, `logPVC.storageClassName` and `qmPVC.storageClassName`.
+
 ## Limitations
 
-It is not generally recommended that you change the number of replicas in the StatefulSet from the default value of 1.  Setting the number of replicas creates multiple Queue Managers.  The recommended way to scale MQ is by deploying this chart multiple times and connecting the Queue Managers together using MQ configuration — see [Architectures based on multiple queue managers](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.0.0/com.ibm.mq.pla.doc/q004720_.htm).  If you choose to set a different number of replicas on the StatefulSet, connections to each Queue Manager will be routed via a single IP address from the Kubernetes Service.  Connections to multiple replicas via a Service are load balanced, typically on a round-robin basis.  If you do this, you need to take great care not to create an affinity between an MQ client and server, because a client might get disconnected, and then re-connect to a different server.  See Chapter 7 of the [IBM MQ as a Service Redpaper](https://www.redbooks.ibm.com/redpapers/pdfs/redp5209.pdf)
+You must not manually change the number of replicas in the StatefulSet.  The number of replicas controls whether or not multi-instance queue managers are used, and are changed in conjunction with other settings.
 
-It is not recommended to change the number of replicas in the StatefulSet after initial deployment.  This will cause the addition or deletion of Queue Managers, which can result in loss of messages.
+The recommended way to scale MQ is by deploying this chart multiple times and connecting the Queue Managers together using MQ configuration, such as MQ clusters — see [Architectures based on multiple queue managers](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.0.0/com.ibm.mq.pla.doc/q004720_.htm).
 
 ## Documentation
 
