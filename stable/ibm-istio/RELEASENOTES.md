@@ -1,12 +1,12 @@
-# What's new in Chart Version 1.2.2
+# What's new in Chart Version 1.1.7
 
-These release notes describe what’s different between Istio 1.1.7 and Istio 1.2.2
+These release notes describe what’s different between Istio 1.1.0 and Istio 1.1.7
 
-**NOTE:** This helm chart is using [Istio 1.2.2 release](https://github.com/istio/istio/releases/tag/1.2.2).
+**NOTE:** This helm chart is using [Istio 1.1.7 release](https://github.com/istio/istio/releases/tag/1.1.7).
 
 # Fixes
 
-**Note** Check the [Istio 1.2.2 official release note](https://istio.io/about/notes/1.2.2/) for the detailed fixes and new features about 1.2.2 release.
+**Note** Check the [Istio 1.1.7 officical release note](https://istio.io/about/notes/1.1.7/) for the detailed fixes and new features about 1.1.7 release.
 
 # Prerequisites
 
@@ -22,7 +22,6 @@ These release notes describe what’s different between Istio 1.1.7 and Istio 1.
 
 | Chart Version | Community Chart Version | Date | Kubernetes Version Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ----- | ---- | --------------------------- | ------------------ | ---------------- | ------- |
-| 1.2.2 | 1.2.2 | October 10, 2019| >= 1.9  | ibmcom/istio-proxyv2:1.2.2, ibmcom/istio-proxy_init:1.2.2, ibmcom/kubectl:v1.13.9, ibmcom/istio-citadel:1.2.2, ibmcom/istio-galley:1.2.2, ibmcom/istio-mixer:1.2.2, ibmcom/istio-pilot:1.2.2, ibmcom/istio-sidecar_injector:1.2.2, ibmcom/istio-cni:1.2.2, ibmcom/istio-node-agent-k8s:1.2.2, ibmcom/coredns:1.2.6.1, ibmcom/istio-coredns-plugin:0.2-istio-1.2, ibmcom/grafana:5.2.0-f4, ibmcom/prometheus:v2.8.0-f1, ibmcom/jaegertracing-all-in-one:1.9, ibmcom/zipkin:v2.13.0, ibmcom/kiali:v0.20.0, ibmcom/icp-cert-manager-controller:0.7.0.1 | None | new features and architectural improvement |
 | 1.1.7 | 1.1.7 | June 10, 2019| >= 1.9  | ibmcom/istio-proxyv2:1.1.7, ibmcom/istio-proxy_init:1.1.7, ibmcom/kubectl:v1.13.5, ibmcom/istio-citadel:1.1.7, ibmcom/istio-galley:1.1.7, ibmcom/istio-mixer:1.1.7, ibmcom/istio-servicegraph:1.1.7, ibmcom/istio-pilot:1.1.7, ibmcom/istio-sidecar_injector:1.1.7, ibmcom/istio-cni:1.1.7, ibmcom/istio-node-agent-k8s:1.1.7, ibmcom/coredns:1.2.6, ibmcom/istio-coredns-plugin:0.2-istio-1.1, ibmcom/grafana:5.2.0-f3, ibmcom/prometheus:v2.8.0, ibmcom/jaegertracing-all-in-one:1.9, ibmcom/kiali:v0.16.2, ibmcom/icp-cert-manager-controller:0.7.0 | None | new features and architectural improvement |
 | 1.1.0 | 1.1.0 | May 28, 2019| >= 1.9  | ibmcom/istio-proxyv2:1.1.0, ibmcom/istio-proxy_init:1.1.0, ibmcom/kubectl:v1.13.5, ibmcom/istio-citadel:1.1.0, ibmcom/istio-galley:1.1.0, ibmcom/istio-mixer:1.1.0, ibmcom/istio-servicegraph:1.1.0, ibmcom/istio-pilot:1.1.0, ibmcom/istio-sidecar_injector:1.1.0, ibmcom/istio-cni:1.1.0, ibmcom/istio-node-agent-k8s:1.1.0, ibmcom/coredns:1.2.6, ibmcom/istio-coredns-plugin:0.2-istio-1.1, ibmcom/grafana:5.2.0-f3, ibmcom/busybox:1.30.1, ibmcom/prometheus:v2.8.0, ibmcom/jaegertracing-all-in-one:1.9, ibmcom/kiali:v0.14, ibmcom/icp-cert-manager-controller:0.7.0 | None | new features and architectural improvement |
 | 1.0.6 | 1.0.2 | May 20, 2019| >= 1.9  | ibmcom/istio-proxyv2:1.0.2.3, ibmcom/istio-proxy_init:1.0.2.2, ibmcom/kubectl:v1.13.5, ibmcom/istio-grafana:1.0.2.2, ibmcom/istio-citadel:1.0.2, ibmcom/istio-galley:1.0.2, ibmcom/istio-mixer:1.0.2, ibmcom/istio-servicegraph:1.0.2, ibmcom/istio-pilot:1.0.2.2, ibmcom/istio-sidecar_injector:1.0.2, ibmcom/prom-statsd-exporter:v0.6.0, ibmcom/prometheus:v2.8.0, ibmcom/jaegertracing-all-in-one:1.5, ibmcom/kiali:v0.8.0.1, ibmcom/cert-manager:v0.3.1 | None | addresses critical vulnerability issues |

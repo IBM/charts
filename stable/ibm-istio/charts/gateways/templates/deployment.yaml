@@ -1,7 +1,7 @@
 {{- range $key, $spec := .Values }}
 {{- if ne $key "enabled" }}
 {{- if $spec.enabled }}
-apiVersion: apps/v1
+apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: {{ $key }}
@@ -21,11 +21,6 @@ spec:
   replicas: 1
 {{- end }}
 {{- end }}
-  selector:
-    matchLabels:
-      {{- range $key, $val := $spec.labels }}
-      {{ $key }}: {{ $val }}
-      {{- end }}
   template:
     metadata:
       labels:
@@ -36,7 +31,6 @@ spec:
         {{ $key }}: {{ $val }}
         {{- end }}
       annotations:
-        seccomp.security.alpha.kubernetes.io/pod: docker/default
         sidecar.istio.io/inject: "false"
         productName: {{ $key }}
         productID: {{ $key }}_{{ $.Chart.Version }}_apachev2_00000
@@ -245,7 +239,7 @@ spec:
           volumeMounts:
           {{- if $.Values.global.sds.enabled }}
           - name: sdsudspath
-            mountPath: /var/run/sds
+            mountPath: /var/run/sds/uds_path
             readOnly: true
           {{- if $.Values.global.sds.useTrustworthyJwt }}
           - name: istio-token
@@ -279,7 +273,8 @@ spec:
       {{- if $.Values.global.sds.enabled }}
       - name: sdsudspath
         hostPath:
-          path: /var/run/sds
+          path: /var/run/sds/uds_path
+          type: Socket
       {{- if $.Values.global.sds.useTrustworthyJwt }}
       - name: istio-token
         projected:
