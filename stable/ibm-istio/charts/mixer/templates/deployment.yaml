@@ -9,20 +9,6 @@
         secret:
           secretName: istio.istio-mixer-service-account
           optional: true
-      {{- if $.Values.global.sds.enabled }}
-      - hostPath:
-          path: /var/run/sds
-        name: sds-uds-path
-      {{- if $.Values.global.sds.useTrustworthyJwt }}
-      - name: istio-token
-        projected:
-          sources:
-          - serviceAccountToken:
-              audience: {{ $.Values.global.trustDomain }}
-              expirationSeconds: 43200
-              path: istio-token
-      {{- end }}
-      {{- end }}
       - name: uds-socket
         emptyDir: {}
       - name: policy-adapter-secret
@@ -67,11 +53,6 @@
           - --useAdapterCRDs=true
           {{- else }}
           - --useAdapterCRDs=false
-          {{- end }}
-          {{- if $.Values.templates.useTemplateCRDs }}
-          - --useTemplateCRDs=true
-          {{- else }}
-          - --useTemplateCRDs=false
           {{- end }}
           {{- if $.Values.global.tracer.zipkin.address }}
           - --trace_zipkin_url=http://{{- $.Values.global.tracer.zipkin.address }}/api/v1/spans
@@ -180,15 +161,6 @@
         - name: istio-certs
           mountPath: /etc/certs
           readOnly: true
-        {{- if $.Values.global.sds.enabled }}
-        - name: sds-uds-path
-          mountPath: /var/run/sds
-          readOnly: true
-        {{- if $.Values.global.sds.useTrustworthyJwt }}
-        - name: istio-token
-          mountPath: /var/run/secrets/tokens
-        {{- end }}
-        {{- end }}
         - name: uds-socket
           mountPath: /sock
         - name: policy-adapter-secret
@@ -204,20 +176,6 @@
         secret:
           secretName: istio.istio-mixer-service-account
           optional: true
-      {{- if $.Values.global.sds.enabled }}
-      - hostPath:
-          path: /var/run/sds
-        name: sds-uds-path
-      {{- if $.Values.global.sds.useTrustworthyJwt }}
-      - name: istio-token
-        projected:
-          sources:
-          - serviceAccountToken:
-              audience: {{ $.Values.global.trustDomain }}
-              expirationSeconds: 43200
-              path: istio-token
-      {{- end }}
-      {{- end }}
       - name: uds-socket
         emptyDir: {}
       - name: telemetry-adapter-secret
@@ -265,11 +223,6 @@
           - --useAdapterCRDs=true
           {{- else }}
           - --useAdapterCRDs=false
-          {{- end }}
-          {{- if $.Values.templates.useTemplateCRDs }}
-          - --useTemplateCRDs=true
-          {{- else }}
-          - --useTemplateCRDs=false
           {{- end }}
           {{- if $.Values.global.tracer.zipkin.address }}
           - --trace_zipkin_url=http://{{- $.Values.global.tracer.zipkin.address }}/api/v1/spans
@@ -382,15 +335,6 @@
         - name: istio-certs
           mountPath: /etc/certs
           readOnly: true
-        {{- if $.Values.global.sds.enabled }}
-        - name: sds-uds-path
-          mountPath: /var/run/sds
-          readOnly: true
-        {{- if $.Values.global.sds.useTrustworthyJwt }}
-        - name: istio-token
-          mountPath: /var/run/secrets/tokens
-        {{- end }}
-        {{- end }}
         - name: uds-socket
           mountPath: /sock
 {{- end }}
@@ -399,7 +343,7 @@
 {{- range $key, $spec := .Values }}
 {{- if or (eq $key "policy") (eq $key "telemetry") }}
 {{- if $spec.enabled }}
-apiVersion: apps/v1
+apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: istio-{{ $key }}
@@ -436,7 +380,6 @@ spec:
         istio: mixer
         istio-mixer-type: {{ $key }}
       annotations:
-        seccomp.security.alpha.kubernetes.io/pod: docker/default
         sidecar.istio.io/inject: "false"
         productName: {{ $key }}
         productID: {{ $key }}_{{ $.Chart.Version }}_apachev2_00000

@@ -1,76 +1,60 @@
-# TODO: the original template has service account, roles, etc
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: prometheus
+  name: servicegraph
   namespace: {{ .Release.Namespace }}
   labels:
-    app: prometheus
-    chart: {{ template "prometheus.chart" . }}
+    app: servicegraph
+    chart: {{ template "servicegraph.chart" . }}
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.replicaCount }}
-  selector:
-    matchLabels:
-      app: prometheus
   template:
     metadata:
       labels:
-        app: prometheus
-        chart: {{ template "prometheus.chart" . }}
+        app: servicegraph
+        chart: {{ template "servicegraph.chart" . }}
         heritage: {{ .Release.Service }}
         release: {{ .Release.Name }}
       annotations:
         sidecar.istio.io/inject: "false"
-        productName: prometheus
-        productID: prometheus_{{ .Chart.Version }}_apachev2_00000
+        productName: servicegraph
+        productID: servicegraph_{{ .Chart.Version }}_apachev2_00000
         productVersion: {{ .Chart.Version }}
     spec:
-      serviceAccountName: prometheus
 {{- if .Values.global.priorityClassName }}
       priorityClassName: "{{ .Values.global.priorityClassName }}"
 {{- end }}
+      imagePullSecrets:
+        - name: sa-{{ .Release.Namespace }}
+{{- if .Values.global.imagePullSecrets }}
+{{- range .Values.global.imagePullSecrets }}
+        - name: {{ . }}
+{{- end }}
+{{- end }}
       containers:
-        - name: prometheus
+        - name: servicegraph
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-          args:
-            - '--storage.tsdb.retention={{ .Values.retention }}'
-            - '--config.file=/etc/prometheus/prometheus.yml'
           ports:
-            - containerPort: 9090
-              name: http
+            - containerPort: 8088
+          args:
+          - --prometheusAddr={{- .Values.prometheusAddr }}
           livenessProbe:
             httpGet:
-              path: /-/healthy
-              port: 9090
+              path: /graph
+              port: 8088
           readinessProbe:
             httpGet:
-              path: /-/ready
-              port: 9090
+              path: /graph
+              port: 8088
           resources:
 {{- if .Values.resources }}
 {{ toYaml .Values.resources | indent 12 }}
 {{- else }}
 {{ toYaml .Values.global.defaultResources | indent 12 }}
 {{- end }}
-          volumeMounts:
-          - name: config-volume
-            mountPath: /etc/prometheus
-          - mountPath: /etc/istio-certs
-            name: istio-certs
-      volumes:
-      - name: config-volume
-        configMap:
-          name: prometheus
-      - name: istio-certs
-        secret:
-{{- if not .Values.security.enabled }}
-          defaultMode: 420
-{{- end }}
-          optional: true
-          secretName: istio.default
       affinity:
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "podAntiAffinity" . | indent 6 }}
