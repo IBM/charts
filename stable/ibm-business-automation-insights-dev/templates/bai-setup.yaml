@@ -1,0 +1,230 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-bai-setup
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+        productName: "IBM Business Automation Insights"
+        productID: "BAIID"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "ibm-bai.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: bai-setup
+    spec:
+{{ include "bai.nodeaffinity" . | indent 6 }}
+{{- if and .Values.imageCredentials .Values.imageCredentials.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.imageCredentials .Values.imageCredentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-bai-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+      initContainers:
+        - name: wait-elasticsearch
+          image: {{ .Values.initImage.image.repository }}:{{ .Values.initImage.image.tag }}
+          {{- if .Values.imagePullPolicy }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          {{- end}}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 20181
+          env:
+          - name: ELASTICSEARCH_URL
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-bai-env
+                key: elasticsearch-url
+          command: ['sh', '-c',
+              'until curl -k -X GET -m 30 ${ELASTICSEARCH_URL} ;
+              do echo Waiting for elasticsearch to start...; sleep 2; done;']
+      containers:
+      - name: es-bootstrap
+        image: {{ .Values.setup.image.repository }}:{{ .Values.setup.image.tag }}
+        {{- if .Values.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        {{- end}}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 20181
+        resources:
+          {{ if .Values.setup.resources }}
+          requests:
+            {{ if .Values.setup.resources.requests }}
+            memory: {{ .Values.setup.resources.requests.memory | default "50Mi" | quote }}
+            cpu: {{ .Values.setup.resources.requests.cpu | default "200m" | quote }}
+            {{ else }}
+            memory: "50Mi"
+            cpu: "200m"
+            {{ end }}
+          limits:
+            {{ if .Values.setup.resources.limits }}
+            memory: {{ .Values.setup.resources.limits.memory | default "120Mi" | quote }}
+            {{ else }}
+            memory: "120Mi"
+            {{ end }}
+          {{ else }}
+          requests:
+            memory: "50Mi"
+            cpu: "200m"
+          limits:
+            memory: "120Mi"
+          {{ end }}
+        env:
+        - name: ELASTICSEARCH_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: elasticsearch-url
+        - name: ELASTICSEARCH_USERNAME
+          valueFrom:
+{{- if .Values.elasticsearch.install }}
+  {{- if index .Values "ibm-dba-ek" "ekSecret"  }}
+            secretKeyRef:
+              name: {{ index .Values "ibm-dba-ek" "ekSecret" }}
+  {{- else }}
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+  {{- end}}
+{{- else }}
+  {{- if .Values.baiSecret  }}
+            secretKeyRef:
+              name: {{ .Values.baiSecret }}
+  {{- else }}
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+  {{- end}}
+{{- end}}
+              key: elasticsearch-username
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+{{- if .Values.elasticsearch.install }}
+  {{- if index .Values "ibm-dba-ek" "ekSecret"  }}
+              name: {{ index .Values "ibm-dba-ek" "ekSecret" }}
+  {{- else }}
+              name: {{ .Release.Name }}-bai-secrets
+  {{- end}}
+{{- else }}
+  {{- if .Values.baiSecret  }}
+              name: {{ .Values.baiSecret }}
+  {{- else }}
+              name: {{ .Release.Name }}-bai-secrets
+  {{- end}}
+{{- end}}
+              key: elasticsearch-password
+        - name: KAFKA_USERNAME
+          valueFrom:
+{{- if .Values.baiSecret }}
+            secretKeyRef:
+              name: {{ .Values.baiSecret }}
+{{- else }}
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+{{- end}}
+              key: kafka-username
+        - name: KAFKA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+{{- if .Values.baiSecret }}
+              name: {{ .Values.baiSecret }}
+{{- else }}
+              name: {{ .Release.Name }}-bai-secrets
+{{- end}}
+              key: kafka-password
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: kafka-bootstrap-servers
+        - name: KAFKA_SECURITY_PROTOCOL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: kafka-security-protocol
+        - name: KAFKA_SASL_KERBEROS_SERVICE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: kafka-sasl-kerberos-service-name
+        - name: KAFKA_KRB5_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-enable-kafka
+        - name: KAFKA_KRB5_REALM
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-realm
+        - name: KAFKA_KRB5_KDC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-kdc
+        - name: KAFKA_KRB5_PRINCIPAL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-principal
+        - name: KAFKA_KRB5_KEYTAB
+          value: "/etc/krb5/kafka.keytab"
+        - name: KAFKA_INGRESS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: ingress-topic
+        - name: KAFKA_EGRESS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: egress-topic
+        - name: KAFKA_SERVICE_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: service-topic
+        volumeMounts:
+        - name: kerberos-keytabs
+          mountPath: /etc/krb5
+          readOnly: true
+        - name: setup-ssl
+          mountPath: /etc/setup-ssl
+          readOnly: true
+      volumes:
+      - name: kerberos-keytabs
+        secret:
+{{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+{{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+{{- end}}
+          optional: true
+          items:
+          - key: flink-security-krb5-keytab
+            path: kafka.keytab
+      - name: setup-ssl
+        secret:
+{{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+{{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+{{- end }}
+          optional: true
+          items:
+          - key: kafka-ca-cert
+            path: kafka-ca.pem
+      restartPolicy: Never

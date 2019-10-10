@@ -1,0 +1,168 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "elasticsearch.fullname" .  }}
+    component: {{ template "client.fullname" . }}
+    release: {{ .Release.Name }}
+    role: client
+    chart: {{ .Chart.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "client.fullname" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "elasticsearch.fullname" . }}
+      component: {{ template "client.fullname" . }}
+      role: client
+      heritage: {{ .Release.Service }}
+      release: {{ .Release.Name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  minReadySeconds: 5
+  progressDeadlineSeconds: 900
+  template:
+    metadata:
+      annotations:
+        {{ include "client.restart" . }}
+        productName: "IBM Business Automation Insights"
+        productID: "BAIID"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "elasticsearch.fullname" . }}
+        component: {{ template "client.fullname" . }}
+        role: client
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+    spec:
+{{ include "elasticsearch.nodeaffinity" . | indent 6 }}
+    {{- if eq .Values.elasticsearch.client.antiAffinity "hard" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: {{ template "elasticsearch.fullname" . }}
+                  component: {{ template "client.fullname" . }}
+                  role: client
+                  heritage: {{ .Release.Service }}
+                  release: {{ .Release.Name }}
+    {{- else if eq .Values.elasticsearch.client.antiAffinity "soft" }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: {{ template "elasticsearch.fullname" . }}
+                  component: {{ template "client.fullname" . }}
+                  role: client
+                  heritage: {{ .Release.Service }}
+                  release: {{ .Release.Name }}
+    {{- end }}
+{{- if .Values.image.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.image.credentials .Values.image.credentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-ibm-dba-ek-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ .Release.Name }}-bai-psp-sa
+{{ include "elasticsearch.initContainers.client" . | indent 6 }}
+      containers:
+      - name: es-client
+        command: ["/bin/bash", "/scripts/entrypoint.sh"]
+        image: {{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /_cluster/health
+            port: 9200
+            httpHeaders:
+              - name: Authorization
+                value: Basic {{ template "ibm-dba-ek.basicauth" . }}
+          initialDelaySeconds: {{ .Values.elasticsearch.probeInitialDelay }}
+        livenessProbe:
+          tcpSocket:
+            port: 9300
+          initialDelaySeconds: {{ .Values.elasticsearch.probeInitialDelay }}
+        resources:
+          limits:
+            memory: {{ .Values.elasticsearch.client.resources.limits.memory | quote}}
+            cpu: {{ .Values.elasticsearch.client.resources.limits.cpu | quote}}
+          requests:
+            memory: {{ .Values.elasticsearch.client.resources.requests.memory | quote}}
+            cpu: {{ .Values.elasticsearch.client.resources.requests.cpu | quote}}
+        env:
+        - name: ELASTICSEARCH_USERNAME
+{{- if .Values.ekSecret }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.ekSecret }}
+              key: elasticsearch-username
+{{- else }}
+          value: {{ .Values.kibana.username }}
+{{- end}}
+        - name: ELASTICSEARCH_PASSWORD
+{{- if .Values.ekSecret }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.ekSecret }}
+              key: elasticsearch-password
+{{- else }}
+          value: {{ .Values.kibana.password }}
+{{- end}}
+        - name: ES_JAVA_OPTS
+          value: "-Xms{{ .Values.elasticsearch.client.heapSize }} -Xmx{{ .Values.elasticsearch.client.heapSize }}"
+        - name: CFG_BASEDIR
+          value: /usr/share/elasticsearch
+        ports:
+        - containerPort: 9200
+          name: es-rest
+          protocol: TCP
+        - containerPort: 9300
+          name: transport
+          protocol: TCP
+        volumeMounts:
+        - name: entrypoint
+          mountPath: /scripts
+        - name: config
+          mountPath: /usr/share/elasticsearch/ibm-dba-ek-config/elasticsearch.yml
+          subPath: elasticsearch.yml
+{{- if  .Values.security.openDistroConfigSecret }}
+        - name: security-config
+          mountPath: /usr/share/elasticsearch/init-security-config
+{{- end }}
+      volumes:
+        - name: entrypoint
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-entrypoint
+            defaultMode: 365
+            items:
+              - key: entrypoint.sh
+                path: entrypoint.sh
+        - name: config
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-config
+            items:
+              - key: client.yml
+                path: elasticsearch.yml
+              - key: log4j2.properties
+                path: log4j2.properties
+{{- if  .Values.security.openDistroConfigSecret }}
+        - name: security-config
+          secret:
+            secretName: {{ .Values.security.openDistroConfigSecret }}
+{{- end }}

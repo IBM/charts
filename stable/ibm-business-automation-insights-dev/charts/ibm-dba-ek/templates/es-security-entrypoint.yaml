@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "elasticsearch.fullname" . }}-security-entrypoint
+  labels:
+    app: {{ template "elasticsearch.fullname" . }}
+    chart: {{ .Chart.Name }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    component: {{ template "security-config-job.fullname" . }}
+    role: security-config
+data:
+  entrypoint.sh: |
+    #!/bin/bash
+    # The Security plugin stores its configuration-including users, roles, and permissions-in an index on the
+    # Elasticsearch cluster (.opendistro_security).
+    # It is possible to customize the Open Distro security config through a secret that contains files related to the
+    # Open Distro security plugin configuration. All the keys contained in this secret will be copied as files in
+    # `/usr/share/elasticsearch/plugins/opendistro_security/securityconfig` directory to override the default
+    # configuration, and `/usr/share/elasticsearch/plugins/opendistro_security/tools/securityadmin.sh` will be run to
+    # setup the `.opendistro_security` index. For more detail see the Open Distro fo Elasticsearch documentation:
+    # (https://opendistro.github.io/for-elasticsearch-docs/docs/security/security-admin/)
+    #
+    # CF (for tutorial): https://github.com/opendistro/for-elasticsearch-docs/issues/5
+
+    ES_CLUSTER_URL=https://{{ template "master.fullname" . }}:9300
+    ES_CREDS=$ELASTICSEARCH_USERNAME:$ELASTICSEARCH_PASSWORD
+    set +e
+    echo -e "\n[$(date)] Trying to reach Elasticsearch transport..."
+    curl -X GET $ES_CLUSTER_URL -k --fail
+    while [ "$?" -ne "58" ]; do
+      echo "[$(date)] Elasticsearch transport layer not ready yet..."
+        sleep 5
+        curl -X GET $ES_CLUSTER_URL -k --fail
+    done
+
+    set -e
+    echo -e "\n[$(date)] Setting up security config..."
+
+    custom_config_files=$(ls /usr/share/elasticsearch/init-security-config)
+
+    if [ ! -z "$custom_config_files" ]; then
+      echo -e "\n[$(date)] Custom config files: $custom_config_files"
+      mkdir /usr/share/elasticsearch/config/security/custom
+      for file in $custom_config_files ; do
+        if [[ $file == *.yml ]]; then
+          echo -e "\n[$(date)] Copying $file in /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/"
+          cp -f /usr/share/elasticsearch/init-security-config/$file /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/
+          chmod 0655 /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/$file
+        else
+          echo -e "\n[$(date)] Copying $file in /usr/share/elasticsearch/config/security/custom/"
+          cp /usr/share/elasticsearch/init-security-config/$file /usr/share/elasticsearch/config/security/custom/
+          chmod 0600 /usr/share/elasticsearch/config/security/custom/$file
+        fi
+      done
+      chmod 0700 /usr/share/elasticsearch/config/security/custom
+    fi
+
+    if [[ $(egrep -c "^(.*#.*|    )kibana:" /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/config.yml) = 1 ]]; then
+      echo -e "\n[$(date)] Modifying existing multitenancy settings..."
+      sed -i -e "s/^.*kibana:/    kibana:/" \
+               -e "s/^.*multitenancy_enabled:.*$/      multitenancy_enabled: ${KIBANA_MULTITENANCY}/" \
+               -e "s/^.*server_username: \(.*\)$/      server_username: ${ELASTICSEARCH_USERNAME}/" \
+               -e "s/^.*index: \(.*\)$/      index: \1/" \
+               -e "s/^.*do_not_fail_on_forbidden: \(.*\)$/      do_not_fail_on_forbidden: \1/" /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/config.yml
+    elif [[ $(egrep -c "^    kibana:"/usr/share/elasticsearch/plugins/opendistro_security/securityconfig/config.yml) = 0 ]]; then
+      echo -e "\n[$(date)] Generating default multitenancy settings..."
+      sed -i "/dynamic:/a\    # Auto-generated default multitenant configuration\n    kibana:\n      multitenancy_enabled: ${KIBANA_MULTITENANCY}\n      server_username: ${ELASTICSEARCH_USERNAME}\n      index: .kibana\n      do_not_fail_on_forbidden: false" /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/config.yml
+    fi
+    
+    echo -e "\n[$(date)] Preparing execution of securityadmin.sh..."
+    
+    chmod +x /usr/share/elasticsearch/plugins/opendistro_security/tools/securityadmin.sh
+    cmd="/usr/share/elasticsearch/plugins/opendistro_security/tools/securityadmin.sh -cd /usr/share/elasticsearch/plugins/opendistro_security/securityconfig -h {{ template "master.fullname" . }} -cn {{ template "elasticsearch.fullname" . }} -accept-red-cluster "
+    default_args="-nhnv -cacert /usr/share/elasticsearch/config/security/root-ca.pem -cert /usr/share/elasticsearch/config/security/kirk.pem -key /usr/share/elasticsearch/config/security/kirk-key.pem"
+    
+    {{- if .Values.security.openDistroConfigSecret }}
+    if [ -f /usr/share/elasticsearch/init-security-config/security-admin-sh-args ]; then
+      echo -e "\n[$(date)] Retrieving custom arguments for security-admin.sh ..."
+      cmd+=$(< /usr/share/elasticsearch/init-security-config/security-admin-sh-args)
+    else
+       cmd+="$default_args"
+    fi
+    {{- else }}
+    cmd+="$default_args"
+    {{- end }}
+
+    echo -e "\n[$(date)] Executing securityadmin.sh..."
+    eval $cmd
+    
+    echo -e "\n[$(date)] Security config has been initialized..."

@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test-es-health"
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+  labels:
+    app: {{ template "elasticsearch.fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: {{ .Release.Name }}
+    heritage: "{{ .Release.Service }}"
+    component: "es-test"
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
+{{- if .Values.image.imagePullSecret }}
+  imagePullSecrets:
+    - name: {{ .Values.image.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.image.credentials .Values.image.credentials.registry }}
+  imagePullSecrets:
+    - name: {{ .Release.Name }}-ibm-dba-ek-docker-secret
+  {{- end }}
+{{- end }}
+  serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+  containers:
+  - name: {{ .Release.Name }}-test-es-health
+    image: {{ .Values.elasticsearch.init.image.repository }}:{{ .Values.elasticsearch.init.image.tag }}
+    env:
+    - name: "ES_HOST"
+      value: "{{ template "client.fullname" . }}"
+    - name: "ES_PORT"
+      value: "9200"
+    - name: ES_USERNAME
+{{- if .Values.ekSecret }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.ekSecret }}
+          key: elasticsearch-username
+{{- else }}
+      value: {{ .Values.kibana.username }}
+{{- end}}
+    - name: ES_PASSWORD
+{{- if .Values.ekSecret }}
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.ekSecret }}
+            key: elasticsearch-password
+{{- else }}
+      value: {{ .Values.kibana.password }}
+{{- end}}
+    command: ["sh", "-c", "echo $ES_HOST && echo $ES_PORT && curl https://$ES_HOST:$ES_PORT -u $ES_USERNAME:$ES_PASSWORD --insecure"]
+  restartPolicy: Never
