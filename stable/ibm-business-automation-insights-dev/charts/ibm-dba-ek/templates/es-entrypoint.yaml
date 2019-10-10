@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "elasticsearch.fullname" . }}-entrypoint
+  labels:
+    app: {{ template "elasticsearch.fullname" . }}
+    chart: {{ .Chart.Name }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    component: {{ template "elasticsearch.fullname" . }}
+data:
+  entrypoint.sh: |
+     #!/bin/bash
+
+     set -e
+
+     echo -e "\n[$(date)] Setting production-ready ulimits"
+     # https://www.elastic.co/guide/en/elasticsearch/reference/current/file-descriptors.html
+     ulimit -n 65536
+     # https://www.elastic.co/guide/en/elasticsearch/reference/current/max-number-of-threads.html
+     ulimit -u 4096
+
+     echo -e "\n[$(date)] Setting elasticsearch.yml"
+     cp /usr/share/elasticsearch/ibm-dba-ek-config/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
+
+
+     # Merge the opendistro security properties into elasticsearch.yml  
+     {{- if .Values.security.openDistroConfigSecret }}
+     if [ -f /usr/share/elasticsearch/init-security-config/opendistro-elasticsearch.yml ]; then
+       echo -e "\n[$(date)] Replacing elasticsearch.yml open-distro section"
+       COMMENT_START='######## Start OpenDistro for Elasticsearch Security Demo Configuration ########'
+       COMMENT_END='######## End OpenDistro for Elasticsearch Security Demo Configuration ########'
+       sed -i -e "$ r /usr/share/elasticsearch/init-security-config/opendistro-elasticsearch.yml" -e "/${COMMENT_START}/,/${COMMENT_END}/ {d}" /usr/share/elasticsearch/config/elasticsearch.yml
+       echo -e "\n[$(date)] Modified /usr/share/elasticsearch/config/elasticsearch.yml with /usr/share/elasticsearch/init-security-config/opendistro-elasticsearch.yml"
+
+       custom_config_files=$(ls /usr/share/elasticsearch/init-security-config)
+
+       if [ ! -z "$custom_config_files" ]; then
+         echo -e "\n[$(date)] Custom config files: $custom_config_files"
+         mkdir /usr/share/elasticsearch/config/security/custom
+         for file in $custom_config_files ; do
+           if [[ $file == *.yml ]]; then
+             echo -e "\n[$(date)] Ignoring  $file"
+           else
+             echo -e "\n[$(date)] Copying $file in /usr/share/elasticsearch/config/security/custom/"
+             cp /usr/share/elasticsearch/init-security-config/$file /usr/share/elasticsearch/config/security/custom
+             chmod 0600 /usr/share/elasticsearch/config/security/custom/$file
+           fi
+         done
+         chmod 0700 /usr/share/elasticsearch/config/security/custom
+       fi
+     fi
+
+     {{- end}}
+
+     # Running command to start elasticsearch
+     # passing all inputs of this entry point script to the es-docker startup script
+     # NOTE: this entry point script is run as root; but executes the es-docker
+     # startup script as the elasticsearch user, passing all the root environment-variables
+     # to the elasticsearch user
+
+     exec /docker-entrypoint.sh "$@"
+      

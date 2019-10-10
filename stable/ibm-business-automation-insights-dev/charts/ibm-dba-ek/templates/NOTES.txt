@@ -1,0 +1,51 @@
+{{ .Files.Get "LICENSES/LICENSE-LI" }}
+
+On first launch, Kibana will take several minutes to complete an optimization phase. During that time you will likely have connection errors.
+{{- if eq .Values.kibana.serviceType "NodePort"}}
+
+Kibana is exposed as a NodePort service. To get the URL to access Kibana, run the following commands:
+
+  export NODE_IP=$(kubectl cluster-info | grep "catalog" | awk 'match($0, /([0-9]{1,3}\.){3}[0-9]{1,3}/) { print substr( $0, RSTART, RLENGTH )}')
+  export KIBANA_NODE_PORT=$(kubectl get svc --namespace {{ .Release.Namespace }} "{{ .Release.Name }}-ibm-dba-ek-kibana" -o 'jsonpath={.spec.ports[?(@.targetPort=="kibana-ui")].nodePort}')
+  echo https://$NODE_IP:$KIBANA_NODE_PORT
+
+{{- end }}
+{{- if eq .Values.kibana.serviceType "ClusterIP"}}
+
+Kibana is exposed as a ClusterIP service. You cannot access it outside of Kubernetes and you should create an Ingress Controller to expose it externally. The URL to access Kibana is the following:
+
+  https://{{ .Release.Name }}-ibm-dba-ek-kibana:5602
+
+{{- end }}
+{{- if eq .Values.elasticsearch.client.serviceType "NodePort"}}
+
+Elasticsearch REST API is exposed as a NodePort service. To get the URL to access Elasticsearch REST API, run the following commands:
+
+  export NODE_IP=$(kubectl cluster-info | grep "catalog" | awk 'match($0, /([0-9]{1,3}\.){3}[0-9]{1,3}/) { print substr( $0, RSTART, RLENGTH )}')
+  export ES_NODE_PORT=$(kubectl get svc --namespace {{ .Release.Namespace }} "{{ .Release.Name }}-ibm-dba-ek-client" -o 'jsonpath={.spec.ports[?(@.targetPort=="es-rest")].nodePort'})
+  echo https://$NODE_IP:$ES_NODE_PORT
+
+{{- end }}
+{{- if eq .Values.elasticsearch.client.serviceType "ClusterIP"}}
+
+Elasticsearch REST API is exposed as a ClusterIP service. You cannot access it outside of Kubernetes and you should create an Ingress Controller to expose it externally. The URL to access the Elasticsearch REST API  is the following:
+
+  https://{{ .Release.Name }}-ibm-dba-ek-client:9201
+
+{{- end }}
+{{- if eq .Values.security.initOpenDistroConfig true }}
+{{- if .Values.security.openDistroConfigSecret }}
+
+You can access Kibana and the Elasticsearch REST API with the credentials that you provided as input through the `openDistroConfigSecret` value.
+
+{{- else }}
+
+You can use the following login/password to authenticate against Kibana and the Elasticsearch REST API:
+- admin/passw0rd (admin role)
+- demo/demo (readall and kibanauser roles)
+
+{{- end }}
+{{- else }}
+The Open distro for Elasticsearch security config is unchanged.
+{{- end }}
+

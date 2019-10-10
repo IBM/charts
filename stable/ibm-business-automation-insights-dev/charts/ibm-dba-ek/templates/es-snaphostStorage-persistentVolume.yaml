@@ -1,0 +1,26 @@
+{{ if and (eq .Values.elasticsearch.data.snapshotStorage.enabled true) (not .Values.elasticsearch.data.snapshotStorage.existingClaimName) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ .Release.Name }}-es-snapshot-storage-pvc
+  labels:
+    app: {{ template "ibm-dba-ek.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  {{- if and (.Values.elasticsearch.data.snapshotStorage.useDynamicProvisioning) (eq true .Values.elasticsearch.data.snapshotStorage.useDynamicProvisioning) }}
+    {{- if .Values.elasticsearch.data.snapshotStorage.storageClassName }}
+  storageClassName: {{ .Values.elasticsearch.data.snapshotStorage.storageClassName | quote }}
+    {{- else }}
+  ## using dynamic provisioning with default storage class
+    {{- end }}
+  {{- else }}
+  storageClassName: {{ default "" .Values.elasticsearch.data.snapshotStorage.storageClassName | quote }}
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ .Values.elasticsearch.data.snapshotStorage.size | quote}}
+{{- end }}

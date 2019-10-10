@@ -1,0 +1,570 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-bai-flink-jobmanager
+  labels:
+      app: {{ template "ibm-bai.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  selector:
+    matchLabels:
+        app: {{ template "ibm-bai.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: bai-jobmanager
+  template:
+    metadata:
+      annotations:
+        {{ include "jobManager.restart" . }}
+        productName: "IBM Business Automation Insights"
+        productID: "BAIID"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "ibm-bai.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: bai-jobmanager
+    spec:
+{{ include "bai.nodeaffinity" . | indent 6 }}
+{{- if and .Values.imageCredentials .Values.imageCredentials.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.imageCredentials .Values.imageCredentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-bai-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+      containers:
+      - name: jobmanager
+        image: {{ .Values.flink.image.repository }}:{{ .Values.flink.image.tag }}
+        {{- if .Values.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        {{- end}}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 9999
+        args:
+        - jobmanager
+        ports:
+        - containerPort: 6123
+          name: rpc
+        - containerPort: 6124
+          name: blob
+        - containerPort: 6125
+          name: query
+        - containerPort: 8081
+          name: ui-rest
+        readinessProbe:
+          exec:
+            command:
+              - "check-jobmanager.sh"
+              - {{ .Release.Name }}
+              - {{ .Values.flink.zookeeper.replicas | quote }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /taskmanagers
+            port: ui-rest
+          initialDelaySeconds: {{ .Values.flink.jobManagerLivenessInitialDelaySeconds }}
+          periodSeconds: 10
+          failureThreshold: 3
+        resources:
+          requests:
+            {{- if .Values.flink.jobManagerMemoryRequest }}
+            memory: {{ .Values.flink.jobManagerMemoryRequest }}Mi
+            {{- else }}
+            memory: 256Mi
+            {{- end }}
+            {{- if .Values.flink.jobManagerCPURequest }}
+            cpu: {{ .Values.flink.jobManagerCPURequest }}m
+            {{- else }}
+            cpu: 100m
+            {{- end }}
+          limits:
+            {{- if .Values.flink.jobManagerMemoryLimit }}
+            memory: {{ .Values.flink.jobManagerMemoryLimit }}Mi
+            {{- else }}
+            memory: 1280Mi
+            {{- end }}
+        env:
+        - name: JOB_MANAGER_RPC_ADDRESS
+          value: {{ .Release.Name }}-bai-flink-jobmanager
+        - name: ZOOKEEPER_ADDRESS
+          value: {{ .Release.Name }}-bai-flink-zk-cs
+        - name: INGRESS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: ingress-topic
+        - name: EGRESS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: egress-topic
+        - name: SERVICE_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: service-topic
+        - name: SSL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+  {{- if .Values.baiSecret }}
+              name: {{ .Values.baiSecret }}
+  {{- else }}
+              name: {{ .Release.Name }}-bai-secrets
+  {{- end }}
+              key: flink-ssl-password
+        - name: HEAP_MEMORY
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-heap-memory
+        - name: FLINK_SECURITY_KRB5_ENABLE_KAFKA
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-enable-kafka
+        - name: FLINK_SECURITY_KRB5_ENABLE_HDFS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-enable-hdfs
+        - name: FLINK_SECURITY_KRB5_REALM
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-realm
+        - name: FLINK_SECURITY_KRB5_KDC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-kdc
+        - name: FLINK_SECURITY_KRB5_PRINCIPAL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-principal
+        - name: TAIGA_FEATURES
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: bai-features
+        volumeMounts:
+        - mountPath: /opt/flink/conf/log4j-console.properties
+          name: flink-log4j
+          subPath: log4j-console.properties
+        - mountPath: /opt/flink/conf/log4j-cli.properties
+          name: flink-log4j
+          subPath: log4j-cli.properties
+        - name: flink-ssl
+          mountPath: /etc/flink-ssl
+          readOnly: true
+        - name: nfs-storage
+          mountPath: /mnt/pv
+        - name: kerberos-keytabs
+          mountPath: /etc/krb5
+          readOnly: true
+        {{- if .Values.flink.hadoopConfigMap }}
+        - name: hadoop-config
+          mountPath: /etc/hadoop/core-site.xml
+          subPath: core-site.xml
+        - name: hadoop-config
+          mountPath: /etc/hadoop/hdfs-site.xml
+          subPath: hdfs-site.xml
+        {{- end}}
+      volumes:
+      - name: flink-log4j
+        configMap:
+          name: {{ template "flink.configmap.name" . }}
+          items:
+            - key: log4j-console.properties
+              path: log4j-console.properties
+            - key: log4j-cli.properties
+              path: log4j-cli.properties
+      - name: kerberos-keytabs
+        secret:
+{{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+{{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+{{- end}}
+          optional: true
+          items:
+          - key: flink-security-krb5-keytab
+            path: flink.keytab
+      - name: flink-ssl
+        secret:
+{{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+{{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+{{- end }}
+          items:
+          - key: flink-ssl-keystore
+            path: pods.keystore
+          - key: flink-ssl-truststore
+            path: ca.truststore
+          - key: flink-ssl-internal-keystore
+            path: internal.keystore
+          - key: kafka-server-cert
+            path: kafka-server-cert
+          - key: elasticsearch-server-cert
+            path: elasticsearch-server-cert
+      - name: nfs-storage
+        persistentVolumeClaim:
+          {{- if .Values.flinkPv.existingClaimName }}
+            claimName: {{ .Values.flinkPv.existingClaimName }}
+          {{- else }}
+            claimName: {{ .Release.Name }}-bai-pvc
+          {{- end }}
+      {{- if .Values.flink.hadoopConfigMap }}
+      - name: hadoop-config
+        configMap:
+          name: {{ .Values.flink.hadoopConfigMap }}
+          items:
+          - key: core-site.xml
+            path: core-site.xml
+          - key: hdfs-site.xml
+            path: hdfs-site.xml
+      {{- end}}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-bai-flink-taskmanager
+  labels:
+      app: {{ template "ibm-bai.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "ibm-bai.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      component: bai-taskmanager
+  serviceName: {{ .Release.Name }}-bai-flink-taskmanager-svc
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+
+  replicas: {{ add (int .Values.bpmn.install) (int .Values.bawadv.install) (int .Values.icm.install) (int .Values.odm.install) (int .Values.content.install) (int .Values.baiw.install) }}
+
+  template:
+    metadata:
+      annotations:
+        {{ include "taskManager.restart" . }}
+        productName: "IBM Business Automation Insights"
+        productID: "BAIID"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "ibm-bai.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: bai-taskmanager
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: {{ template "ibm-bai.name" . }}
+                  chart: {{ .Chart.Name }}
+                  release: {{ .Release.Name }}
+                  heritage: {{ .Release.Service }}
+                  component: bai-taskmanager
+              topologyKey: kubernetes.io/hostname
+{{- if and .Values.imageCredentials .Values.imageCredentials.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.imageCredentials .Values.imageCredentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-bai-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+      containers:
+      - name: taskmanager
+        image: {{ .Values.flink.image.repository }}:{{ .Values.flink.image.tag }}
+        {{- if .Values.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        {{- end}}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 9999
+        args:
+        - taskmanager
+        ports:
+        - containerPort: 6121
+          name: data
+        - containerPort: 6122
+          name: rpc
+        - containerPort: 6125
+          name: query
+        readinessProbe:
+          exec:
+            command: ['sh', '-c',
+                    'wget https://{{ .Release.Name }}-bai-flink-jobmanager:8081/taskmanagers -qO- -T 5 --no-check-certificate | grep `hostname`']
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command: ['sh', '-c',
+                    'ps aux | grep -v grep | grep "TaskManagerRunner"']
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+          requests:
+            {{- if .Values.flink.taskManagerMemory }}
+            memory: {{ min 1280 .Values.flink.taskManagerMemory }}Mi
+            {{- else }}
+            memory: 1280Mi
+            {{- end }}
+            {{- if .Values.flink.taskManagerCPU }}
+            cpu: {{ min 1 .Values.flink.taskManagerCPU }}
+            {{- else }}
+            cpu: {{ 1 }}
+            {{- end }}
+          limits:
+
+            {{- if .Values.flink.taskManagerMemory }}
+            memory: {{ min 1536 .Values.flink.taskManagerMemory }}Mi
+            {{- else }}
+            memory: 1536Mi
+            {{- end }}
+            {{- if .Values.flink.taskManagerCPU }}
+            cpu: {{ min 1 .Values.flink.taskManagerCPU }}
+            {{- else }}
+            cpu: 1
+            {{- end }}
+
+        env:
+        - name: JOB_MANAGER_RPC_ADDRESS
+          value: {{ .Release.Name }}-bai-flink-jobmanager
+        - name: ZOOKEEPER_ADDRESS
+          value: {{ .Release.Name }}-bai-flink-zk-cs
+        - name: SSL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-bai-secrets
+              key: flink-ssl-password
+        - name: HEAP_MEMORY
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-heap-memory
+        - name: FLINK_SECURITY_KRB5_ENABLE_KAFKA
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-enable-kafka
+        - name: FLINK_SECURITY_KRB5_ENABLE_HDFS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-enable-hdfs
+        - name: FLINK_SECURITY_KRB5_REALM
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-realm
+        - name: FLINK_SECURITY_KRB5_KDC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-kdc
+        - name: FLINK_SECURITY_KRB5_PRINCIPAL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-principal
+        - name: INGRESS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: ingress-topic
+        - name: EGRESS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: egress-topic
+        - name: SERVICE_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: service-topic
+        - name: CPU_CORES
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-taskmanager-cpu-cores
+        - name: TAIGA_FEATURES
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: bai-features
+        volumeMounts:
+        - mountPath: /opt/flink/conf/log4j-console.properties
+          name: flink-log4j
+          subPath: log4j-console.properties
+        - mountPath: /opt/flink/conf/log4j-cli.properties
+          name: flink-log4j
+          subPath: log4j-cli.properties
+        - name: flink-ssl
+          mountPath: /etc/flink-ssl
+          readOnly: true
+        - name: nfs-storage
+          mountPath: /mnt/pv
+        - name: kerberos-keytabs
+          mountPath: /etc/krb5
+          readOnly: true
+        {{- if .Values.flink.rocksDbPropertiesConfigMap }}
+        - name: rocksdb-config-volume
+          mountPath: /etc/rocksdb/config
+        {{- end }}
+        {{- if .Values.flink.hadoopConfigMap }}
+        - name: hadoop-config
+          mountPath: /etc/hadoop/core-site.xml
+          subPath: core-site.xml
+        - name: hadoop-config
+          mountPath: /etc/hadoop/hdfs-site.xml
+          subPath: hdfs-site.xml
+        {{- end}}
+      volumes:
+      - name: flink-log4j
+        configMap:
+          name: {{ template "flink.configmap.name" . }}
+          items:
+            - key: log4j-console.properties
+              path: log4j-console.properties
+            - key: log4j-cli.properties
+              path: log4j-cli.properties
+      - name: kerberos-keytabs
+        secret:
+{{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+{{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+{{- end}}
+          optional: true
+          items:
+          - key: flink-security-krb5-keytab
+            path: flink.keytab
+      {{- if .Values.flink.rocksDbPropertiesConfigMap }}
+      - name: rocksdb-config-volume
+        configMap:
+          name: {{ .Values.flink.rocksDbPropertiesConfigMap }}
+      {{- end }}
+      - name: flink-ssl
+        secret:
+        {{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+        {{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+        {{- end }}
+          items:
+          - key: flink-ssl-keystore
+            path: pods.keystore
+          - key: flink-ssl-truststore
+            path: ca.truststore
+          - key: flink-ssl-internal-keystore
+            path: internal.keystore
+          - key: kafka-server-cert
+            path: kafka-server-cert
+          - key: elasticsearch-server-cert
+            path: elasticsearch-server-cert
+      - name: nfs-storage
+        persistentVolumeClaim:
+          {{- if .Values.flinkPv.existingClaimName }}
+            claimName: {{ .Values.flinkPv.existingClaimName }}
+          {{- else }}
+            claimName: {{ .Release.Name }}-bai-pvc
+          {{- end }}
+      {{- if .Values.flink.hadoopConfigMap }}
+      - name: hadoop-config
+        configMap:
+          name: {{ .Values.flink.hadoopConfigMap }}
+          items:
+          - key: core-site.xml
+            path: core-site.xml
+          - key: hdfs-site.xml
+            path: hdfs-site.xml
+      {{- end}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-bai-flink-taskmanager-svc
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  ports:
+  - port: 6121
+    name: data
+  - port: 6122
+    name: rpc
+  - port: 6125
+    name: query
+  clusterIP: None
+  selector:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: bai-taskmanager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-bai-flink-jobmanager
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  ports:
+  - name: rpc
+    port: 6123
+  - name: blob
+    port: 6124
+  - name: query
+    port: 6125
+  - name: ui-rest
+    port: 8081
+  selector:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: bai-jobmanager

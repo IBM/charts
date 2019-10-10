@@ -1,0 +1,52 @@
+{{- if .Values.bawadv.install -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-bai-bawadv
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      annotations:
+        productName: "IBM Business Automation Insights"
+        productID: "BAIID"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "ibm-bai.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: bai-bawadv
+    spec:
+{{ include "bai.nodeaffinity" . | indent 6 }}
+{{- if and .Values.imageCredentials .Values.imageCredentials.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.imageCredentials .Values.imageCredentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-bai-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+{{ include "jobs.initContainers" (dict "Values" .Values "Release" .Release "ESTemplateName" "bawadv-summaries") | indent 6 }}
+      containers:
+      - name: bai-bawadv
+        image: {{ .Values.bawadv.image.repository }}:{{ .Values.bawadv.image.tag }}
+        {{- if .Values.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        {{- end}}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 9999
+{{ include "jobs.probes" . | indent 8 }}
+{{ include "jobs.envVars" (dict "Values" .Values "Release" .Release "Parallelism" .Values.bawadv.parallelism "RecoveryPath" .Values.bawadv.recoveryPath) | indent 8 }}
+{{ include "jobs.volumeMounts" . | indent 8 }}
+{{ include "jobs.volumes" . | indent 6 }}
+      restartPolicy: Never
+{{- end }}

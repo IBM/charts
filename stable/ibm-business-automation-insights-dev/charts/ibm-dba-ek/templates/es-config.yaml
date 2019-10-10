@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "elasticsearch.fullname" . }}-config
+  labels:
+    app: {{ template "elasticsearch.fullname" . }}
+    chart: {{ .Chart.Name }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    component: {{ template "elasticsearch.fullname" . }}
+data:
+  master.yml: |-
+{{ include "elasticsearch.config" . | indent 4 }}
+    node.master: true
+    node.data: false
+    {{- if .Values.elasticsearch.data.snapshotStorage.enabled }}
+    path.repo: ["/mnt/snapshots"]
+    {{- end }}
+
+  data.yml: |-
+{{ include "elasticsearch.config" . | indent 4 }}
+    node.master: false
+    node.data: true
+    {{- if .Values.elasticsearch.data.snapshotStorage.enabled }}
+    path.repo: ["/mnt/snapshots"]
+    {{- end }}
+
+  client.yml: |-
+{{ include "elasticsearch.config" . | indent 4 }}
+    node.master: false
+    node.data: false
+    http.port: 9200
+
+  log4j2.properties: |
+    status = error
+    appender.console.type = Console
+    appender.console.name = console
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n
+
+    rootLogger.level = info
+    rootLogger.appenderRef.console.ref = console
