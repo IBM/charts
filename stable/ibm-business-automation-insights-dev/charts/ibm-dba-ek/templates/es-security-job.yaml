@@ -1,0 +1,90 @@
+{{ if eq .Values.security.initOpenDistroConfig true -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "security-config-job.fullname" . }}
+  labels:
+    app: {{ template "elasticsearch.fullname" . }}
+    chart: {{ .Chart.Name }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    component: {{ template "security-config-job.fullname" . }}
+    role: security-config
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+        productName: "IBM Business Automation Insights"
+        productID: "BAIID"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "elasticsearch.fullname" . }}
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+        component: {{ template "security-config-job.fullname" . }}
+        role: security-config
+    spec:
+{{ include "elasticsearch.nodeaffinity" . | indent 6 }}
+{{- if .Values.image.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.imagePullSecret }}
+{{- else }}
+{{- if and .Values.image.credentials .Values.image.credentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-ibm-dba-ek-docker-secret
+{{- end }}
+{{- end }}
+      serviceAccountName: {{ .Values.security.serviceAccountName | default "default" }}
+      restartPolicy: Never
+      containers:
+      - name: es-security-config
+        command: ["/bin/bash", "/scripts/entrypoint.sh"]
+        image: {{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+         runAsNonRoot: true
+         runAsUser: 1000
+        env:
+        - name: ELASTICSEARCH_USERNAME
+          {{- if .Values.ekSecret }}
+          valueFrom:
+           secretKeyRef:
+             name: {{ .Values.ekSecret }}
+             key: elasticsearch-username
+          {{- else }}
+          value: {{ .Values.kibana.username }}
+          {{- end}}
+        - name: ELASTICSEARCH_PASSWORD
+          {{- if .Values.ekSecret }}
+          valueFrom:
+           secretKeyRef:
+             name: {{ .Values.ekSecret }}
+             key: elasticsearch-password
+          {{- else }}
+          value: {{ .Values.kibana.password }}
+          {{- end}}
+        - name: KIBANA_MULTITENANCY
+          value: {{ default "false" .Values.kibana.multitenancy | quote }}
+        volumeMounts:
+        - name: init-security-config
+          mountPath: /usr/share/elasticsearch/init-security-config
+        - name: entrypoint
+          mountPath: /scripts
+      volumes:
+      - name: init-security-config
+        secret:
+        {{- if .Values.security.openDistroConfigSecret }}
+          secretName: {{  .Values.security.openDistroConfigSecret }}
+        {{- else }}
+          secretName: {{ template "elasticsearch.fullname" . }}-security-config
+        {{- end }}
+      - name: entrypoint
+        configMap:
+          name: {{ template "elasticsearch.fullname" . }}-security-entrypoint
+          defaultMode: 365
+          items:
+            - key: entrypoint.sh
+              path: entrypoint.sh
+{{- end }}

@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-bai-env
+  labels:
+      app: {{ template "ibm-bai.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+data:
+{{- if .Values.settings.egress }}
+  bai-features: "kafka-egress"
+{{- else }}
+  bai-features: ""
+{{- end }}
+{{- include "elasticsearch.cfg" . | indent 2 }}
+  storage-batch-size: {{ int .Values.flink.batchSize | quote }}
+  storage-inactive-bucket-check-interval-ms: {{ .Values.flink.checkInterval | quote }}
+  storage-inactive-bucket-threshold-ms: {{ .Values.flink.bucketThreshold | quote}}
+
+  storage-bucket-url: ""
+  {{- if .Values.flink.taskManagerHeapMemory }}
+  flink-heap-memory: {{ min 1024 .Values.flink.taskManagerHeapMemory | quote }}
+  {{- else }}
+  flink-heap-memory: "1024"
+  {{- end }}
+  flink-taskmanager-cpu-cores: "1"
+
+  flink-job-checkpointing-interval: {{ .Values.flink.jobCheckpointingInterval | quote }}
+  flink-job-elasticsearch-max-actions: "10"
+
+  flink-security-krb5-enable-kafka: "false"
+  flink-security-krb5-enable-hdfs: "false"
+
+  flink-security-krb5-realm: {{ .Values.kerberos.realm | quote }}
+  flink-security-krb5-kdc: {{ .Values.kerberos.kdc | quote }}
+  flink-security-krb5-principal: {{ .Values.kerberos.principal | quote }}
+{{- if not .Values.baiSecret }}
+  admin-username: {{ .Values.admin.username }}
+  kafka-username: {{ .Values.kafka.username | quote }}
+{{- end }}
+  kafka-bootstrap-servers: {{ .Values.kafka.bootstrapServers | quote }}
+  kafka-security-protocol: {{ .Values.kafka.securityProtocol }}
+  kafka-sasl-kerberos-service-name: {{ .Values.kafka.saslKerberosServiceName | quote }}
+  ingress-topic: {{ .Values.settings.ingressTopic | default (printf "%s-%s" .Release.Name "ibm-bai-ingress") }}
+  egress-topic: {{ .Values.settings.egressTopic | default (printf "%s-%s" .Release.Name "ibm-bai-egress") }}
+  service-topic: {{ .Values.settings.serviceTopic | default (printf "%s-%s" .Release.Name "ibm-bai-service") }}
+  bpmn-end-aggregation-delay: {{ .Values.bpmn.endAggregationDelay | quote }}
+  es-config-version: 1.3.3

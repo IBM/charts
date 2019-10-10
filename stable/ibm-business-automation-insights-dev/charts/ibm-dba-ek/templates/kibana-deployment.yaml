@@ -1,0 +1,177 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "elasticsearch.fullname" . }}
+    component: {{ template "kibana.fullname" . }}
+    release: {{ .Release.Name }}
+    role: kibana
+    chart: {{ .Chart.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "kibana.fullname" . }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "elasticsearch.fullname" . }}
+      component: {{ template "kibana.fullname" . }}
+      release: {{ .Release.Name }}
+      role: kibana
+      heritage: {{ .Release.Service }}
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  minReadySeconds: 5
+  progressDeadlineSeconds: 900
+  template:
+    metadata:
+      annotations:
+        {{ include "kibana.restart" . }}
+        productName: "IBM Business Automation Insights"
+        productID: "BAIID"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "elasticsearch.fullname" . }}
+        component: {{ template "kibana.fullname" . }}
+        role: kibana
+        release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "elasticsearch.nodeaffinity" . | indent 6 }}
+      # Required for multi-platform config
+      securityContext:
+        fsGroup: 1000
+{{- if .Values.image.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.image (and .Values.image.credentials .Values.image.credentials.registry) }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-ibm-dba-ek-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+      initContainers:
+        - name: wait-es-data-nodes
+          image: {{ .Values.elasticsearch.init.image.repository }}:{{ .Values.elasticsearch.init.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          env:
+          - name: ELASTICSEARCH_URL
+            value: https://{{ template "client.fullname" . }}:9200
+          - name: KIBANA_USERNAME
+{{- if .Values.ekSecret }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.ekSecret }}
+                key: elasticsearch-username
+{{- else }}
+            value: {{ .Values.kibana.username }}
+{{- end}}
+          - name: KIBANA_PASSWORD
+{{- if .Values.ekSecret }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.ekSecret }}
+                key: elasticsearch-password
+{{- else }}
+            value: {{ .Values.kibana.password }}
+{{- end}}
+          command: ['sh', '-c','
+            [[ "${ELASTICSEARCH_URL: -1}" == "/" ]] && ELASTICSEARCH_URL=${ELASTICSEARCH_URL:$i:-1};
+            healthUrl=$ELASTICSEARCH_URL/_cluster/health;
+            expectedStr=\"number_of_data_nodes\":1
+
+            while :; do
+              echo "[`date`] Waiting for Elasticsearch data nodes availability...";
+              curl -s -k -X GET -m 30 $healthUrl -u $KIBANA_USERNAME:$KIBANA_PASSWORD | grep $expectedStr;
+              if [[ "$?" == "0" ]]; then
+                printf "\n[`date`] Elasticsearch cluster data nodes have all joined the cluster.\n";
+                break;
+              fi;
+              sleep 5;
+            done;
+          ']
+      containers:
+      - name: kibana
+        image: {{ .Values.kibana.image.repository }}:{{ .Values.kibana.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /app/kibana
+            port: 5601
+            httpHeaders:
+              - name: Authorization
+                value: Basic {{ template "ibm-dba-ek.basicauth" . }}
+          initialDelaySeconds: {{ .Values.kibana.probeInitialDelay  }}
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /app/kibana
+            port: 5601
+            httpHeaders:
+              - name: Authorization
+                value: Basic {{ template "ibm-dba-ek.basicauth" . }}
+          initialDelaySeconds: {{ .Values.kibana.probeInitialDelay  }}
+        ports:
+        - containerPort: 5601
+          name: kibana-ui
+          protocol: TCP
+        volumeMounts:
+        - name: security-config
+          mountPath: /usr/share/kibana/config
+        - name: tls-config
+          mountPath: /usr/share/kibana/config/tls
+        resources:
+          limits:
+            memory: {{ .Values.kibana.resources.limits.memory | quote}}
+            cpu: {{ .Values.kibana.resources.limits.cpu | quote}}
+          requests:
+            memory: {{ .Values.kibana.resources.requests.memory | quote}}
+            cpu: {{ .Values.kibana.resources.requests.cpu | quote}}
+        env:
+        - name: CFG_BASEDIR
+          value: /usr/share/kibana
+        - name: RELEASE_NAME 
+          value: {{ .Release.Name }}
+        - name: KIBANA_MULTITENANCY
+          value: {{ default "false" .Values.kibana.multitenancy | quote }}
+        - name: KIBANA_USERNAME
+{{- if .Values.ekSecret }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.ekSecret }}
+              key: elasticsearch-username
+{{- else }}
+          value: {{ .Values.kibana.username }}
+{{- end}}
+        - name: KIBANA_PASSWORD
+{{- if .Values.ekSecret }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.ekSecret }}
+              key: elasticsearch-password
+{{- else }}
+          value: {{ .Values.kibana.password }}
+{{- end}}
+      volumes:
+        - name: security-config
+          secret:
+{{- if .Values.security.openDistroKibanaConfigSecret }}
+            secretName: {{ .Values.security.openDistroKibanaConfigSecret }}
+{{- else }}
+            secretName: {{ template "kibana.fullname" . }}-security-config
+{{- end }}
+        - name: tls-config
+          secret:
+            secretName: {{ template "elasticsearch.fullname" . }}-tls
+      restartPolicy: Always
