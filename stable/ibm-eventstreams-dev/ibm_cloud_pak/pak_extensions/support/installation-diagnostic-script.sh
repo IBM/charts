@@ -58,7 +58,7 @@ restartPodsIfOld() {
             age=$(kubectl get pod -n$NAMESPACE $pod | awk '{printf $5 "\n"}' | grep -e '[h|d]' | cat)
             if [[ $age ]]; then
             echo "Pod older than 1 hour, restarting pod $pod"
-            kubectl delete pod $pod
+            kubectl delete pod $pod -n$NAMESPACE
             waitPods=true
             fi
         done
@@ -81,7 +81,7 @@ fi
 checkIamSecretApiKeyExists() {
     echo "-----------------------------------------"
     echo "..Checking the ibm-es-iam-secret API Key"
-    testName="IAM Secret"
+    testName="IAM Secret Api Key"
     iamSecretName=$(kubectl get secrets -n$NAMESPACE --no-headers -l app=ibm-es,component=security,release=$RELEASENAME -o custom-columns=NAME:.metadata.name 2>&1)
     if [[ $iamSecretName =~ "not found" ]]
     then
@@ -100,6 +100,39 @@ checkIamSecretApiKeyExists() {
         else
             echo "....API Key found"
             testPassed $testName
+        fi
+    fi
+}
+
+# If the service-ID in ibm-es-iam-secret does not exist or if it fails this test will fail
+checkIamSecretServiceID() {
+    echo "-----------------------------------------"
+    echo "..Checking the ibm-es-iam-secret Service ID"
+    testName="IAM Secret Service ID"
+    if [[ $iamSecretName =~ "not found" ]]
+    then
+        echo "No IAM secret found in namespace $NAMESPACE, please contact support."
+        testFailed $testName
+    elif [[ $oauthSecret =~ "\"$RELEASENAME-ibm-es-oauth-secret\" is forbidden" ]]
+    then
+        echo "User does not have the authority to view secrets. Unable to check IAM Secret configuration."
+    else
+        serviceIdName=$(kubectl get secrets -n$NAMESPACE $iamSecretName -o jsonpath="{.metadata.annotations['ibm\.com/iam-service\.id']}")
+        serviceIdValue=$(kubectl get secrets -n$NAMESPACE $iamSecretName -o jsonpath="{.data['$serviceIdName']}" | base64 --decode)
+        trimmedServiceIdValue=${serviceIdValue:4}
+        if [[ -z $serviceIdValue ]]
+        then
+            echo "No service-id found in [$iamSecretName] secret, please contact support."
+            testFailed $testName
+        else
+            echo "....Service ID found"
+            if  curl -k -X GET -H "Accept: application/json" -H "Authorization: Bearer $USER_ACCESS_TOKEN" https://$MASTER_IP:8443/iam-token/serviceids/$trimmedServiceIdValue | grep "error"
+            then
+                echo "The service has failed"
+                testFailed $testName
+            else
+                testPassed $testName
+            fi
         fi
     fi
 }
@@ -224,18 +257,16 @@ checkSecurityRoleMappings() {
 checkAccessControllerLogs() {
     echo "--------------------------------------------"
     echo "..Checking AccessController logs for errors"
-    accessControllerPods=`kubectl get pods -o name | grep access-controller`
+    accessControllerPods=`kubectl get pods -o name -n$NAMESPACE | grep access-controller`
 
     testName="Access Controller logs"
     testPassed=true
     for acpod in $accessControllerPods; do
-        podoutput=`kubectl logs $acpod -c access-controller --tail 50 -n$NAMESPACE | grep '"error":'`
+        podoutput=`kubectl logs $acpod -c access-controller -n$NAMESPACE | grep '"error":' | wc -l`
 
         if [ $? == 0 ]
         then
-        echo "!!--Errors found in $acpod log:"
-        echo "(Last 50 lines of logs):"
-        echo $podoutput
+        echo "!!-- $podoutput Errors found in $acpod log, see tmpLogs/$acpod/access-controller.log"
         testPassed=false
     else
         echo "....No errors found in $acpod log."
@@ -378,7 +409,7 @@ checkPodsInCrashLoopBackOff() {
             for container in ${badContainers[@]}
             do
                 echo "Container: $container"
-                kubectl logs -n$NAMESPACE ${podsCrashLoopBackoff[$i]} $container --previous | tail -n 15
+                kubectl logs -n$NAMESPACE ${podsCrashLoopBackoff[$i]} $container --previous | tail -n 50
                 echo ""
             done
         done
@@ -529,8 +560,11 @@ echo "Printing release candidate tag"
 kubectl get deployment -n "${NAMESPACE}" "${RELEASENAME}-ibm-es-access-controller-deploy" -o=jsonpath='{.spec.template.metadata.annotations.releaseCandidate}'
 echo ""
 echo "-------------------------------"
-echo "Printing current state "
-kubectl get pods -n$NAMESPACE
+echo "Printing node information"
+kubectl get nodes --show-labels
+echo "-------------------------------"
+echo "Printing current pod state "
+kubectl get pods -n$NAMESPACE -o wide -L zone
 echo "-------------------------------"
 echo "Starting release diagnostics"
 checkReleasenameAndNamespaceValid
@@ -542,6 +576,8 @@ checkRegisteredOAuthEndpoints
 getCurrentUserRole
 
 checkIamSecretApiKeyExists
+
+checkIamSecretServiceID
 
 checkSecurityRoleMappings
 

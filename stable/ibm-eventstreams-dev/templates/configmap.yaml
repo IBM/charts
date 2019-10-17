@@ -19,16 +19,27 @@
 {{ $compName := .sch.chart.components.kafka.compName -}}
 {{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
 # Services allowing access to individual ZooKeeper pods - there will be one of these for each node
-{{ $zookeeperFixedIPService := .sch.chart.components.zookeeper.fixed.name -}}
-{{ $zookeeperFixedIPServiceName := include "sch.names.fullCompName" (list . $zookeeperFixedIPService) -}}
+{{ $zookeeperHeadless := .sch.chart.components.zookeeper.internalHeadless.name -}}
+{{ $zookeeperHeadlessName := include "sch.names.fullCompName" (list . $zookeeperHeadless) -}}
 # import port definitions
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $portdefs := .sch.config.ports }}
 # Define a tlsEnabled var from Values.
 {{- include "sch.config.init" (list . "tls.sch.chart.config.values") -}}
 {{ $tlsEnabled := .sch.config.tlsInternal.enabled | quote }}
+# External Kafka headless service name
+{{ $kafkaHeadlessSvcPrefix := .sch.chart.components.kafka.internalHeadless.name -}}
+{{ $kafkaHeadlessSvc := include "sch.names.fullCompName" (list . $kafkaHeadlessSvcPrefix ) -}}
 # k8s configuration
 {{ $clusterName := .Values.global.k8s.clusterName -}}
+
+{{ $release := .Release }}
+{{ $values := .Values }}
+{{ $zkStsNamePrefix := .sch.chart.components.zookeeper.statefulSet.name -}}
+{{ $zkStatefulSetName := include "sch.names.statefulSetName" (list . $zkStsNamePrefix) -}}
+{{ $stsNamePrefix := .sch.chart.components.kafka.statefulSet.name -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $stsNamePrefix) -}}
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -38,7 +49,7 @@ metadata:
 data:
   connectionTimeoutMs: "3600000"
   # Set revision to current time (filling remaining nanoseconds) so config-map is re-read on upgrade
-  revision: "{{ .Release.Time.Seconds }}999999999"
+  revision: "{{ $release.Time.Seconds }}999999999"
   tlsHandshakeTimeoutMs: "10000"
   tarpitDuration: "0"
   traceLevel: "0"
@@ -51,17 +62,17 @@ data:
       {{ $uniquePort := $index | add1 }}
       {
         "Port": 10{{ $uniquePort }}00,
-        "Service": "{{ $zookeeperFixedIPServiceName }}-{{ $index }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.zookeeper.client }}",
+        "Service": "{{ $zkStatefulSetName }}-{{ $index }}.{{ $zookeeperHeadlessName }}.{{ $release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.zookeeper.client }}",
         "TLSIn": "disabled",
         "TLSOut": {{ $tlsEnabled }}
       },
       {{- end -}}
-      {{- $brokers := (.Values.kafka.brokers | int) -}}
+      {{- $brokers := ($values.kafka.brokers | int) -}}
       {{- range $index, $_ := until $brokers -}}
       {{ $formattedPort := printf "%03d" $index }}
       {
         "Port": 11{{ $formattedPort }},
-        "Service": "{{ $.Release.Name }}-ibm-es-kafka-sts-{{ $index }}.{{ $.Release.Name }}-ibm-es-kafka-headless-svc.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.kafka.internalKafkaIntercept }}",
+        "Service": "{{ $statefulSetName }}-{{ $index }}.{{ $kafkaHeadlessSvc }}.{{ $release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.kafka.internalKafkaIntercept }}",
         "TLSIn": "disabled",
         "TLSOut": {{ $tlsEnabled }}
       },

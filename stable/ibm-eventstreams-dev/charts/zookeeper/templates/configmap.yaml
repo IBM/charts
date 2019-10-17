@@ -20,9 +20,11 @@
 {{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
 # number of Zookeeper servers
 {{ $rep := int .sch.config.zookeeper.replicas -}}
-# Services allowing access to individual ZooKeeper pods - there will be one of these for each node
-{{ $zookeeperFixedIPService := .sch.chart.components.zookeeper.fixed.name -}}
-{{ $zookeeperFixedIPServiceName := include "sch.names.fullCompName" (list . $zookeeperFixedIPService) -}}
+# Service allowing access to individual ZooKeeper pods when unready
+{{ $zookeeperInternalHeadless := .sch.chart.components.zookeeper.internalHeadless.name -}}
+{{ $zookeeperInternalHeadlessName := include "sch.names.fullCompName" (list . $zookeeperInternalHeadless) -}}
+{{ $stsNamePrefix := .sch.chart.components.zookeeper.statefulSet.name -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $stsNamePrefix) -}}
 # import port definitions
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $portdefs := .sch.config.ports }}
@@ -71,12 +73,12 @@ data:
       {{ $uniquePort := $index | add1 }}
       {
         "Port": 10{{ $uniquePort }}00,
-        "Service": "{{ $zookeeperFixedIPServiceName }}-{{ $index }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.zookeeper.server }}",
+        "Service": "{{ $statefulSetName }}-{{ $index }}.{{ $zookeeperInternalHeadlessName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.zookeeper.server }}",
         "TLSIn": "disabled",
         "TLSOut": {{ $tlsEnabled }}
       },{
         "Port": 10{{ $uniquePort }}01,
-        "Service": "{{ $zookeeperFixedIPServiceName }}-{{ $index }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.zookeeper.election }}",
+        "Service": "{{ $statefulSetName }}-{{ $index }}.{{ $zookeeperInternalHeadlessName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.zookeeper.election }}",
         "TLSIn": "disabled",
         "TLSOut": {{ $tlsEnabled }}
       }{{- if lt $uniquePort $zkservers -}},{{- end -}} 

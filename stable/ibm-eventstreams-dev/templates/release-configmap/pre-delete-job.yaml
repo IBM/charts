@@ -14,6 +14,7 @@
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
 {{ $namePrefix := .sch.chart.components.essential.releaseDeleteJob.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 # Component is essential
@@ -22,14 +23,9 @@
 # Name of the new temporary service account
 {{ $serviceAccount := .sch.chart.components.essential.releaseServiceAccount.name -}}
 {{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount) -}}
-# Name of the new image pull secret
-{{ $imagePullSecret := .sch.chart.components.essential.imagePullSecret.name -}}
-{{ $imagePullSecretName := include "sch.names.fullCompName" (list . $imagePullSecret) -}}
 # Name of configmap to delete
 {{ $releaseConfigMap := .sch.chart.components.essential.releaseConfigMap.name -}}
 {{ $releaseConfigMapName := include "sch.names.fullCompName" (list . $releaseConfigMap) -}}
-# Default user for security context
-{{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -49,18 +45,13 @@ spec:
         job: {{ $name | quote }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
-      {{- if .Values.global.image.pullSecret }}
-      imagePullSecrets:
-        - name: {{ .Values.global.image.pullSecret }}
-      {{- end }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
-        runAsNonRoot: true
-        runAsUser: {{ $defaultUser }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.pod) | indent 8 }}
       affinity:
-{{ include "customNodeaffinity" (list .) | indent 8 }}
+{{ include "ibm-eventstreams.customNodeaffinity" (list .) | indent 8 }}
       restartPolicy: Never
       containers:
         - name: {{ $name | quote }}
@@ -69,14 +60,7 @@ spec:
           env:
             {{- include "license.accept.env.ref" . | indent 12 }}
           securityContext:
-            privileged: false
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: {{ $defaultUser }}
-            capabilities:
-              drop:
-              - ALL
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
           command:
             - sh
             - -c

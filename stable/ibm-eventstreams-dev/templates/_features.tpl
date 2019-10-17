@@ -1,4 +1,4 @@
-{{- define "features" }}
+{{- define "ibm-eventstreams.features" }}
   replicator:
     {{- if eq .sch.chart.edition "dev" }}
     enabled: false
