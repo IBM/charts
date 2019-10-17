@@ -24,6 +24,8 @@ global:
           value: "amd64"
         - label: "s390x platforms"
           value: "s390x"
+        - label: "ppc64le platforms"
+          value: "ppc64le"
 
   security:
     tlsInternal:
@@ -38,6 +40,26 @@ global:
             value: "disabled"
           - label: "Enabled"
             value: "enabled"
+    managementIngressPort:
+      __metadata:
+        label: "Management ingress port"
+        description: "Secure cluster port for management services"
+        type: "number"
+        immutable: false
+        hidden: true
+    externalCertificateLabel:
+      __metadata:
+        label: "External Certificate Label"
+        description: "Label for external certificates. If this value changes, and the Certificate Type is 'selfsigned', the auto generated external certificates will be updated. If the Certificate Type is 'provided', the new values supplied will replace the existing certificates."
+        type: "string"
+        required: false
+        hidden: true
+    internalCertificateLabel:
+      __metadata:
+        label: "Internal Certificate Label"
+        description: "Label for Event Streams internal certificates. If this value changes, new certificates will be generated and replace the existing certificates."
+        type: "string"
+        hidden: true
 
   k8s:
     clusterName:
@@ -46,6 +68,99 @@ global:
         description: "If you have changed the default DNS domain name from cluster.local in your Kubernetes installation, then this field must be set to the same value. It will not be possible to change this post installation"
         type: "string"
         required: true
+    apiPort:
+      __metadata:
+        label: "Kubernetes api port"
+        description: "The port kubernetes is running on"
+        type: "number"
+        immutable: false
+        required: true
+        hidden: true
+
+  zones:
+    count:
+      __metadata:
+        label: "Number of zones"
+        description: "The number of zones to deploy Event Streams across."
+        type: "number"
+        required: true
+    safe:
+      __metadata:
+        label: "Safe Mode"
+        description: "Safety lock to stop unsafe zone configuration."
+        type: "boolean"
+        required: true
+        hidden: true
+
+    labels:
+      __metadata:
+        label: "Zone Labels"
+        description: 'Array containing the labels for each zone, e.g. ["es-zone-0","es-zone-1","es-zone-2"]'
+        type: "string"
+        required: true
+    apiLabel:
+      __metadata:
+        label: "Zone node label"
+        description: "Label used to identify the Kubernetes nodes available in each zone."
+        type: "string"
+        required: true
+        hidden: true
+    zooKeeperLabel:
+      __metadata:
+        label: "Zookeeper node label"
+        description: "Label used for specifying Kubernetes nodes eligible for hosting Zookeeper."
+        type: "string"
+        required: true
+        hidden: true
+    kafkaLabel:
+      __metadata:
+        label: "Kafka node label"
+        description: "Label used for specifying Kubernetes nodes eligible for hosting Kafka."
+        type: "string"
+        required: true
+        hidden: true
+    accessControllerReplicas:
+      __metadata:
+        label: "Number of Access Controller replicas in each zone"
+        description: "The number of Access Controller replicas to deploy. To ensure high availability, consider increasing the number depending on your requirements."
+        type: "number"
+        required: true
+        hidden: true
+    restProxyReplicas:
+      __metadata:
+        label: "Number of Rest Proxys replicas in each zone"
+        description: "The number of Rest Proxy replicas to deploy. To ensure high availability, consider increasing the number depending on your requirements."
+        type: "number"
+        required: true
+        hidden: true
+    restProducerReplicas:
+      __metadata:
+        label: "Number of Rest Producer replicas in each zone"
+        description: "The number of Rest Producer replicas to deploy. To ensure high availability, consider increasing the number depending on your requirements."
+        type: "number"
+        required: true
+        hidden: true
+    restReplicas:
+      __metadata:
+        label: "Number of Rest replicas in each zone"
+        description: "The number of Rest replicas to deploy. To ensure high availability, consider increasing the number depending on your requirements."
+        type: "number"
+        required: true
+        hidden: true
+    proxyReplicas:
+      __metadata:
+        label: "Number of Edge Proxy replicas in each zone"
+        description: "The number of Edge Proxy replicas to deploy. To ensure high availability, consider increasing the number depending on your requirements."
+        type: "number"
+        required: true
+        hidden: true
+
+  generateClusterRoles:
+    __metadata:
+      label: "Generate cluster roles"
+      description: "Generate a cluster role and cluster rolebinding with your Event Streams installation. Must be cleared if you are installing as a Team Administrator."
+      type: "boolean"
+      required: true
 
   ## Image configuration metadata
   image:
@@ -201,9 +316,9 @@ global:
           required: true
           immutable: false
           hidden: true
-      initTag:
+      clientauthProxyTag:
         __metadata:
-          label: "Init image tag"
+          label: "SSL client auth proxy image tag"
           type: "string"
           description: "A tag is a label applied to a image in a repository. Tags are how various images in a repository are distinguished from each other."
           required: true
@@ -633,6 +748,18 @@ global:
             required: true
             hidden: true
 
+## Dashboard configuration
+dashboard:
+  __metadata:
+    label: " IBM Cloud Private monitoring service"
+    description: "You can monitor your Event Streams instance from IBM Cloud Private by using the dashboards Event Streams provides to the IBM Cloud Private monitoring service."
+  enabled:
+    __metadata:
+      label: "Export the Event Streams dashboards"
+      description: "Create Grafana dashboards in the IBM Cloud Private monitoring service to view information about Event Streams health, including Kafka health and performance details."
+      type: "boolean"
+      required: false
+
 ## Telemetry configuration
 telemetry:
   __metadata:
@@ -658,8 +785,8 @@ persistence:
       required: true
   useDynamicProvisioning:
     __metadata:
-      label: "Use dynamic provisioning for Apache Kafka"
-      description: "Select this checkbox to allow the cluster to automatically provision new storage resource and create PersistentVolume objects for Apache Kafka"
+      label: Enable storage class for Apache Kafka"
+      description: "Select this checkbox to define the storage class details for your persistent volume claims that are used for Apache Kafka."
       type: "boolean"
       required: true
   dataPVC:
@@ -846,7 +973,7 @@ kafka:
     __metadata:
       name: "brokers"
       label: "Kafka brokers"
-      description: "Number of brokers in the Kafka cluster. There must be a minimum of 3 brokers"
+      description: "Number of brokers in the Kafka cluster. There must be a minimum of 3 brokers. If multi-zone support has been enabled, this will be the number of brokers across all zones, it is recommended this is a multiple of the zone count."
       type: "number"
       immutable: false
       required: true
@@ -913,8 +1040,8 @@ zookeeper:
         required: true
     useDynamicProvisioning:
       __metadata:
-        label: "Use dynamic provisioning for ZooKeeper servers"
-        description: "Select this checkbox to allow the cluster to automatically provision new storage resource and create PersistentVolume objects for Apache ZooKeeper."
+        label: "Enable storage class for ZooKeeper servers"
+        description: "Select this checkbox to define the storage class details for your persistent volume claims that are used for Apache ZooKeeper."
         type: "boolean"
         required: true
   dataPVC:
@@ -948,6 +1075,12 @@ proxy:
       type: "string"
       required: false
       validation: "(^\\S*$)"
+  upgradeToRoutes:
+    __metadata:
+      label: "Upgrade to OpenShift Routes"
+      description: "Choose to upgrade from NodePorts to OpenShift Routes for external access. Note: This will require all clients to change certificates and bootstrap addresses."
+      type: "boolean"
+      hidden: true
 
 ## TLS info
 tls:
@@ -957,31 +1090,39 @@ tls:
   type:
     __metadata:
       label: "Certificate type"
-      description: "Choose whether to supply the necessary certificate details, or have a self-signed certificate generated"
+      description: "Choose whether to supply the necessary certificate details, read them from a secret, or have a self-signed certificate generated"
       type: "string"
       required: true
       immutable: false
       options:
-        - label: "provided"
+        - label: "secret"
+          value: "secret"
+        - label: "provided (deprecated)"
           value: "provided"
         - label: "selfsigned"
           value: "selfsigned"
+  secretName:
+    __metadata:
+      label: "Secret containing provided TLS certificates"
+      description: "Secret in the release namespace which contains a key, certificate and CA certificate to use for TLS. Setting this value allows certificate and key details to be read from the named secret."
+      type: "string"
+      required: false
   key:
     __metadata:
       label: "Private key"
-      description: "Base64-encoded TLS private key"
+      description: "If you set Certificate type to 'provided', enter the base64-encoded private key. If set to 'secret', enter the key name in the secret (default key name is 'key')."
       type: "string"
       required: false
   cert:
     __metadata:
-      label: "TLS certificate"
-      description: "Base64-encoded TLS certificate"
+      label: "Public certificate"
+      description: "If you set Certificate type to 'provided', enter the base64-encoded public certificate. If set to 'secret', enter the key name in the secret (default key name is 'cert')."
       type: "string"
       required: false
   cacert:
     __metadata:
       label: "CA certificate"
-      description: "Base64-encoded CA certificate/bundle"
+      description: "If you set Certificate type to 'provided', enter the base64-encoded CA certificate. If set to 'secret', enter the key name in the secret (default key name is 'cacert')."
       type: "string"
       required: false
 
@@ -1036,10 +1177,21 @@ schema-registry:
         required: true
     useDynamicProvisioning:
       __metadata:
-        label: "Use dynamic provisioning for Schema Registry API servers"
-        description: "Select this checkbox to allow the cluster to automatically provision new storage resource and create PersistentVolume objects for schemas."
+        label: "Enable storage class for Schema Registry API servers"
+        description: "Select this checkbox to define the storage class details for your persistent volume claims that are used for schemas."
         type: "boolean"
         required: true
+    mode:
+      __metadata:
+        label: "Storage Mode"
+        description: "Choose the storage mode of the persistence to use"
+        type: "string"
+        required: true
+        options:
+          - label: "ReadWriteMany"
+            value: "ReadWriteMany"
+          - label: "ReadWriteOnce"
+            value: "ReadWriteOnce"
   dataPVC:
     name:
       __metadata:

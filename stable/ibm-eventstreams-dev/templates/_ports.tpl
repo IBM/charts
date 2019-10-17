@@ -64,6 +64,7 @@ sch:
 
       collector:
         # metrics sent from kafka pod by metrics proxy
+        prometheus: 8888
         api: 7888
         apiInternal: 6888
 
@@ -76,7 +77,7 @@ sch:
       rest:
         # Port number that the Service uses to expose the REST API in the cluster
         server: 9443
-        # Port number that the proxy container will listen on, used for liveness checks
+        # Port number that the proxy container will listen on, used for liveness and readiness checks
         health: 9443
         # Port number that the proxy container will listen on, this will be wired to a randomly generated node port
         proxy: 32000
@@ -88,6 +89,10 @@ sch:
         internal: 9443
         # Port number that the proxy container will listen on, used for liveness checks
         health: 32010
+
+      clientauthproxy:
+        # Port number that the Service uses to securely expose the clientauth proxy externally
+        external: 32001
 
       restproducer:
         # Port number that the Service uses to expose the REST Producer API in the cluster
@@ -126,4 +131,8 @@ sch:
       #well known, standard ports e.g. 80, 443
       wellknown:
         dns: 53
+
+      # port used to access ICP4I platform services
+      icp4iplatformservices:
+        server: 3000
 {{- end -}}

@@ -27,6 +27,7 @@ sch:
       compNameTruncLength: 25
 
   chart:
+
     # This override allows all IBM Event Streams subcharts to be labelled
     #  consistently as part of the same overall application
     appName: "ibm-es"
@@ -36,9 +37,6 @@ sch:
       prod: "IBM Event Streams"
       foundation-prod: "IBM Event Streams Foundation Edition"
       icp4i-prod: "IBM Cloud Pak for Integration - Event Streams"
-      prerelease-prod: "IBM Event Streams pre-release"
-
-    productVersion: 2019.2.1
 
     # Use the old convention for standard Kubernetes labels, as switching
     # to the new labels would break upgrades
@@ -54,48 +52,48 @@ sch:
     components:
 
       #
-      # Components for copying secret from Release Namespace to kube-system
+      # Components for defining Roles and Role Bindings
       #
       essential:
         # component label for all the essential release wide resources
         compName: "essential"
-        networkPolicy: "access-jobs"
-        networkPolicyDefault: "access-default-deny"
-        # all of the resources deployed by the secret secretsCopierClusterRole
+        networkPolicyDefault: "default-access"
         preInstallSA:
           name: "pre-install-sa"
-        secretCopierClusterRole:
-          name: "secret-copy-cr"
-        secretCopierClusterRoleBindingReleaseNamespace:
-          name: "secret-copy-crb-ns"
-        secretCopierClusterRoleBindingKubeSystem:
-          name: "secret-copy-crb-sys"
-        secretCopierJob:
-          name: "secret-copy-job"
-        imagePullSecret:
-          name: "secret-copy-secret"
-        secretsDeleterSA:
-          name: "secrets-deleter-sa"
-        secretsDeleterClusterRole:
-          name: "secrets-deleter-cr"
-        secretsDeleterRoleBindingNamespace:
-          name: "secrets-deleter-crb-ns"
-        secretsDeleterRoleBindingSystem:
-          name: "secrets-deleter-crb-sys"
+        preInstallRole:
+          name: "pre-install-role"
+        preInstallRoleBinding:
+          name: "pre-install-rb"
+        postDeleteSA:
+          name: "post-delete-sa"
+        postDeleteRole:
+          name: "post-delete-role"
+        postDeleteRoleBinding:
+          name: "post-delete-rb"
         secretsDeleterJob:
           name: "secrets-deleter-job"
         certGenJob:
           name: "cert-gen-job"
+        certGenDeleterJob:
+          name: "cert-gen-deleter-job"
+        zonesTopologyJob:
+          name: "zones-topology-job"
+        zonesTopologyJobConfigMap:
+          name: "zones-topology-job-cm"
+        zonesTopologyClusterRole:
+          name: "zones-topology-clusterrole"
+        zonesTopologyClusterRoleBinding:
+          name: "zones-topology-crb"
         oauthJobDeleterJob:
           name: "oauth-jobdeleter-job"
+        oauthClientDeleterJob:
+          name: "oauth-client-deleter-job"
         releaseConfigMap:
           name: "release-cm"
         releaseCreateJob:
           name: "release-cm-creater-job"
         releasePortsPatcherJob:
           name: "release-cm-addport-job"
-        releasePortsDeleterJob:
-          name: "release-cm-delport-job"
         releasePatcherJob:
           name: "release-cm-patcher-job"
         releaseDeleteJob:
@@ -106,7 +104,10 @@ sch:
           name: "release-cm-rolebinding"
         releaseServiceAccount:
           name: "release-cm-sa"
-
+        labelPodsRole:
+          name: "pod-labeler-role"
+        labelPodsRoleBinding:
+          name: "pod-labeler-rolebinding"
 
       #
       # Components relating to the Kafka cluster
@@ -114,22 +115,18 @@ sch:
       kafka:
         # component label for all the Kafka-related resources
         compName: "kafka"
-        kafkaVersion: "2.2.0"
-        kafkaInternalVersion: "2.2"
+        kafkaVersion: "2.3.0"
+        kafkaInternalVersion: "2.3"
         networkPolicy: "kafka-access"
         # all of the resources deployed by the Kafka charts
         statefulSet:
           name: "kafka-sts"
-        headless:
+        internalHeadless:
           name: "kafka-headless-svc"
-        brokerService:
-          name: "kafka-broker-svc"
+        externalHeadless:
+          name: "kafka-external-headless-svc"
         metricsConfigMap:
           name: "metrics-cm"
-        podManagerRole:
-          name: "pod-manager-role"
-        podManagerRoleBinding:
-          name: "pod-manager-rolebinding"
         serviceAccount:
           name: "kafka-sa"
         jmxSecret:
@@ -213,10 +210,10 @@ sch:
         # all of the resources deployed by the ZooKeeper charts
         statefulSet:
           name: "zookeeper-sts"
-        headless:
+        internalHeadless:
           name: "zookeeper-headless-svc"
-        fixed:
-          name: "zookeeper-fixed-ip-svc"
+        externalHeadless:
+          name: "zookeeper-external-headless-svc"
         configMap:
           name: "zookeeper-cm"
         configPath: "/config"
@@ -228,7 +225,11 @@ sch:
         # component label for all the proxy-related resources
         compName: "proxy"
         networkPolicy: "proxy-access"
+        brokerPrefix: "brk"
+        internalPrefix: "INTERNAL"
         # all of the resources deployed by the proxy charts
+        route:
+          name: "proxy-route"
         secret:
           name: "proxy-secret"
         service:
@@ -305,6 +306,10 @@ sch:
         # component label for all the ui-proxy-related resources
         compName: "restproxy"
         # all of the resources deployed by the rest-proxy charts
+        adminRestRoute:
+          name: "rest-route"
+        clientAuthRoute:
+          name: "clientauth-route"
         externalservice:
           name: "rest-proxy-external-svc"
         internalservice:
@@ -314,6 +319,10 @@ sch:
         networkPolicy: "rest-proxy-access"
         serviceAccount:
           name: "rest-proxy-sa"
+        adminRestPort:
+          name: "admin-rest-https"
+        clientAuthPort:
+          name: "clientauth-rest-https"
 
       #
       # Components relating to the REST Producer API
@@ -337,6 +346,8 @@ sch:
         compName: "ui"
         networkPolicy: "ui-access"
         # all of the resources deployed by the UI charts
+        route:
+          name: "ui-route"
         service:
           name: "ui-svc"
         deployment:
@@ -348,9 +359,18 @@ sch:
         oauth2ClientRegistration:
           name: "ui-oauth2-client-reg"
         oauthSecret:
-          name: "oauth-secret"
+          name: "oauth-v2-secret"
         serviceAccount:
           name: "ui-sa"
+        oauth:
+          role:
+            name: "oauth-role"
+          roleBinding:
+            name: "oauth-rolebinding"
+          serviceAccount:
+            name: "oauth-sa"
+          client:
+            name: "oauth-registration"
 
       #
       # Components relating to ICP IAM Security
@@ -377,6 +397,8 @@ sch:
             name: "access-controller-deploy"
           serviceAccount:
             name: "access-controller-sa"
+        managementIngress:
+          dnsName: "icp-management-ingress.kube-system"
 
       #
       # Components relating to Telemetry
@@ -411,6 +433,33 @@ sch:
           name: "schemaregistry-role"
         roleBinding:
           name: "schemaregistry-rolebinding"
+
+      #
+      # Components relating to the Grafana Dashboards
+      #
+      dashboard:
+        default: 
+          name: "default-dashboard"
+        performance:
+          name: "performance-dashboard"
+
+      #
+      # Components relating to prometheus
+      #
+      prometheus:
+        # component label for all the Schema Registry resources
+        compName: "prometheus"
+        
+      #
+      # Components relating to the Helm Tests
+      #
+      helmTests:
+        # component label for all the essential release wide resources
+        compName: "test"
+        testServicesPod:
+          name: "test-services-po"
+        serviceAccount:
+          name: "test-sa"
 
 
 {{- end -}}
