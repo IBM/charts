@@ -12,6 +12,7 @@
 ###############################################################################
 # Defines a config map that allows configuration of the proxy
 ###############################################################################
+{{ $root := . -}}
 {{ if eq .Values.license "accept" -}}
 {{ $kafkaconfig := include "sch.config.init" (list . "kafka.listeners.sch.chart.config.values") -}}
 {{ $namePrefix := .sch.chart.components.proxy.configMap.name -}}
@@ -25,10 +26,15 @@
 {{ $service := .sch.chart.components.proxy.service.name -}}
 {{ $serviceName := include "sch.names.fullCompName" (list . $service) -}}
 # Names of Kafka elements to refer to
-{{ $kafkaHeadless := .sch.chart.components.kafka.headless.name -}}
-{{ $kafkaHeadlessName := include "sch.names.fullCompName" (list . $kafkaHeadless) -}}
-{{ $kafkaService := .sch.chart.components.kafka.brokerService.name -}}
-{{ $kafkaServiceName := include "sch.names.fullCompName" (list . $kafkaService) -}}
+{{ $kafkaExternalHeadless := .sch.chart.components.kafka.externalHeadless.name -}}
+{{ $kafkaExternalHeadlessName := include "sch.names.fullCompName" (list . $kafkaExternalHeadless) -}}
+{{ $kafkaInternalHeadless := .sch.chart.components.kafka.internalHeadless.name -}}
+{{ $kafkaInternalHeadlessName := include "sch.names.fullCompName" (list . $kafkaInternalHeadless) -}}
+{{ $stsNamePrefix := .sch.chart.components.kafka.statefulSet.name -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $stsNamePrefix) -}}
+# this is the route that is providing networking to the Edge Proxy service
+{{- $proxyNamePrefix := .sch.chart.components.proxy.route.name -}}
+{{- $proxyName := include "sch.names.fullCompName" (list . $proxyNamePrefix) -}}
 {{ $restProxyService := .sch.chart.components.restproxy.internalservice.name -}}
 {{ $restProxyServiceName := include "sch.names.fullCompName" (list . $restProxyService) -}}
 # Get the list of Kafka Listener Ports. We'll need to create node ports for each of these.
@@ -58,21 +64,24 @@ metadata:
   labels:
 {{ $labels | indent 4 }}
 data:
-  adminService: "{{ $restProxyServiceName }}.{{ .Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.restproxy.internal }}"
+  adminService: "{{ $restProxyServiceName }}.{{ $root.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.restproxy.internal }}"
   adminServiceProtocol: "https"
   bootstrapServers: "[]"
+  namespace: {{ $.Release.Namespace | quote }}
+  brokerRoutePrefix: "{{ $proxyName }}-broker-"
+  bootstrapRoutePrefix: "{{ $proxyName }}-bootstrap"
   # The string that sandwiches the broker ID between a '.'
   # e.g. [release]-[chart_name]-kafka-broker-svc-[broker_id].<namespace>:[port]
-  brokerService: "-{{ $kafkaService }}-"
-  headlessService: "-{{ $kafkaHeadless }}."
+  brokerService: "-{{ $kafkaInternalHeadless }}"
+  headlessService: ".*-ibm-es-kafka-external-headl(ess-svc|-[0-9a-f]{4}).{{ $root.Release.Namespace }}.*"
   serviceName: {{ $serviceName | quote }}
   connectionTimeoutMs: "3600000"
   externalAccessEnabled: "true"
-  externalHostOrIP: "{{ .Values.proxy.externalEndpoint }}"
+  externalHostOrIP: "{{ $root.Values.proxy.externalEndpoint | trim }}"
   # Set revision to current time (filling remaining nanoseconds) so config-map is re-read on upgrade
-  revision: "{{ .Release.Time.Seconds }}999999999"
+  revision: "{{ $root.Release.Time.Seconds }}999999999"
   internalAdvertisedListeners: "{{ $kafkaInternalAdvertisedListeners }}"
-  {{- if eq .Values.global.security.tlsInternal "enabled" }}
+  {{- if eq $root.Values.global.security.tlsInternal "enabled" }}
   # must use the latest version of the listeners if running in secure mode
   interBrokerListener: "INTERNAL://127.0.0.1:11%03d"
   {{- else }}
@@ -83,6 +92,7 @@ data:
   tlsEnabled: "true"
   logFormat: "json"
   closeOnSwitch: "false"
+  proxyReplicasOverride: {{ include "edgeproxy.replicas.for.zone" (list $root $root.Values.global.zones.proxyReplicas) | quote }}
   listenerTypes: |
     [
       {{- $kafkalisteners := dict "types" (list) -}}
@@ -105,7 +115,7 @@ data:
       {
         "Port": 0,
         "NodePort": 0,
-        "Service": "{{ $kafkaHeadlessName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.kafka.externalProxySecure }}",
+        "Service": "{{ $kafkaExternalHeadlessName }}.{{ $root.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.kafka.externalProxySecure }}",
         "TLSIn": "enabled",
         "TLSOut": {{ $tlsEnabled }}
       }
@@ -120,7 +130,7 @@ data:
       ,{
         "Port": 0,
         "NodePort": 0,
-        "Service": "{{ $kafkaServiceName }}-{{ $brokerIndex }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $ports._1 }}",
+        "Service": "{{ $statefulSetName }}-{{ $brokerIndex }}.{{ $kafkaInternalHeadlessName }}.{{ $root.Release.Namespace }}.svc.{{ $clusterName }}:{{ $ports._1 }}",
         "TLSIn": "enabled",
         "TLSOut": {{ $tlsEnabled }}
       }
@@ -130,7 +140,7 @@ data:
       ,{
         "Port": 0,
         "NodePort": 0,
-        "Service": "{{ $kafkaServiceName }}-{{ $brokerIndex }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portType._2 }}",
+        "Service": "{{ $statefulSetName }}-{{ $brokerIndex }}.{{ $kafkaInternalHeadlessName }}.{{ $root.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portType._2 }}",
         "TLSIn": "enabled",
         "TLSOut": {{ $tlsEnabled }}
       }

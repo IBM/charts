@@ -16,4 +16,7 @@ sch:
       # The mounted external rest proxy port key and file name
       restProxyExternalPort: restProxyExternalPort
 
+      # The mounted external rest proxy port key and file name
+      externalAddress: EXTERNAL_ENDPOINT
+
 {{- end -}}

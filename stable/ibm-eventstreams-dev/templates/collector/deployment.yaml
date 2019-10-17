@@ -14,6 +14,7 @@
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
 {{ $namePrefix := .sch.chart.components.collector.deployment.name -}}
 {{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
 {{ $compName := .sch.chart.components.collector.compName -}}
@@ -26,20 +27,22 @@
 # import port definitions
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $ports := .sch.config.ports }}
-# Default user for security context
-{{ $defaultUser := .sch.securityContext.defaultUser -}}
 # TLS Proxy config map name
 {{ $tlsConfigMap := .sch.chart.components.collector.configMap.name -}}
 {{ $tlsConfigMapName := include "sch.names.fullCompName" (list . $tlsConfigMap ) }}
 # Secrets with the certificates to use
 {{ $proxySecret := .sch.chart.components.proxy.secret.name -}}
 {{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecret ) -}}
+# Internal configmap name for cluster env vars
+{{ $releaseConfigMap := .sch.chart.components.essential.releaseConfigMap.name -}}
+{{ $releaseConfigMapName := include "sch.names.fullCompName" (list . $releaseConfigMap) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: "{{ $name }}"
   labels:
 {{ $labels | indent 4 }}
+    internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
     node: "0"
 spec:
   replicas: 1
@@ -52,24 +55,20 @@ spec:
       namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
       labels:
 {{ $labels | indent 8 }}
+        internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
         node: "0"
       annotations:
         prometheus.io/scrape: 'true'
-        prometheus.io/port: '{{ $ports.prometheus.collector }}'
+        prometheus.io/port: '{{ $ports.collector.prometheus }}'
         prometheus.io/scheme: https
-{{ include "metering" (list . ) | indent 8 }}
+{{ include "ibm-eventstreams.metering" (list . ) | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
-      {{- if .Values.global.image.pullSecret }}
-      imagePullSecrets:
-        - name: {{ .Values.global.image.pullSecret }}
-      {{- end }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
-        runAsNonRoot: true
-        runAsUser: {{ $defaultUser }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.pod) | indent 8 }}
       volumes:
       {{- include "license.accept.ref" . | indent 6 }}
         - name: tlsproxy-config-map
@@ -79,24 +78,28 @@ spec:
           secret:
             secretName: {{ $proxySecretName }}
             items:
-            - key: podtls.cert
+            - key: podtls.cacert
               path: ca-certificates.crt
       affinity:
-{{ include "customNodeaffinity"  (list .) | indent 8 }}
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+{{- include "ibm-eventstreams.archMatchExpression"  (list .) | indent 16 }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+{{- if eq (int (include "zones.to.template" (list .)) ) 2 }}
+{{- include "ibm-eventstreams.zoneMatchExpression"  (list . 0) | indent 16 }}
+{{- end }}
       containers:
 # tls proxy sidecar - encrypts traffic to elastic search
         - name: tls-proxy
           image: {{ include "eventstreams.image" (list . "eventstreams-proxy" .Values.global.image.imageTags.proxyTag) | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           securityContext:
-            privileged: false
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: {{ $defaultUser }}
-            capabilities:
-              drop:
-              - ALL
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
           resources:
             requests:
 {{ toYaml .Values.global.resources.tlsProxy.requests | indent 14 }}
@@ -154,14 +157,7 @@ spec:
             requests:
 {{ toYaml .Values.global.resources.collector.requests | indent 14 }}
           securityContext:
-            privileged: false
-            readOnlyRootFilesystem: false
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: {{ $defaultUser }}
-            capabilities:
-              drop:
-              - ALL
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerWritableFilesystem) | indent 12 }}
           readinessProbe:
             httpGet:
               path: /health
@@ -202,4 +198,8 @@ spec:
               value: {{ $ports.collector.apiInternal | quote }}
             - name: METRICS_PORT
               value: {{ $ports.prometheus.collector | quote }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: CONFIGMAP
+              value: {{ $releaseConfigMapName | quote }}
 {{- end -}}

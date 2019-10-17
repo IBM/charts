@@ -14,9 +14,10 @@
 ###############################################################################
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
 {{- include "sch.config.init" (list . "schemaregistry.sch.chart.config.values" ) -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
 {{ $namePrefix := .sch.chart.components.schemaregistry.statefulSet.name -}}
-{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
-{{ $id := (include "asDnsLabel" .Release.Name) -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $namePrefix ) -}}
+{{ $id := (include "ibm-eventstreams.asDnsLabel" .Release.Name) -}}
 # Component is 'schemaregistry' as this makes up part of implementing the Schema Registry
 {{ $compName := .sch.chart.components.schemaregistry.compName -}}
 {{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
@@ -47,27 +48,31 @@
 # Access Controller service name
 {{ $accessControllerService := .sch.chart.components.security.accesscontroller.service.name -}}
 {{ $accessControllerServiceName := include "sch.names.fullCompName" (list . $accessControllerService) -}}
-# Oauth secret containing the cluster name
-{{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
-{{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
 # Default user for security context
 {{ $defaultUser := .sch.securityContext.defaultUser -}}
 # pvc name
 {{ $pvcNamePrefix := .sch.chart.components.schemaregistry.persistentVolumeClaim.name -}}
 {{ $pvcName := printf "%s-%s-%s-%s" .Release.Name .sch.chart.appName $pvcNamePrefix .Values.dataPVC.name -}} # datadir-release-ibm-es-schemaregistry-sts
+# k8s configuration
+{{ $clusterName := .Values.global.k8s.clusterName -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ $name | quote }}
+  name: {{ $statefulSetName | quote }}
   namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
   labels:
 {{ $labels | indent 4 }}
+    internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
 spec:
   {{- if lt (int .Values.replicas) 0 }}
     {{ fail "Configuration error: Minimum of 1 schema registry worker is required." }}
   {{- end }}
   {{- if .Values.persistence.enabled }}
+    {{- if and .Values.persistence.mode (eq .Values.persistence.mode "ReadWriteOnce")}}
+  replicas: 1
+    {{- else}}
   replicas: {{ default 2 (int .Values.replicas) }}
+    {{- end }}
   {{- else }}
     {{- if gt (int .Values.replicas) 1 }}
       {{ fail "Configuration error: Maximum of 1 schema registry worker if persistence is not enabled." }}
@@ -84,21 +89,17 @@ spec:
       namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
       labels:
 {{ $labels | indent 8 }}
+        internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
       annotations:
-{{ include "metering" (list . ) | indent 8 }}
+{{ include "ibm-eventstreams.metering" (list . ) | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName | quote }}
-      {{- if .Values.global.image.pullSecret }}
-      imagePullSecrets:
-        - name: {{ .Values.global.image.pullSecret }}
-      {{- end }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
-        runAsNonRoot: true
-        runAsUser: {{ $defaultUser }}        
-{{ include "fsGroupGid" (list . ) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.pod) | indent 8 }}
+{{ include "ibm-eventstreams.fsGroupGid" (list . ) | indent 8 }}
       volumes:
         - name: release-configmap-volume
           configMap:
@@ -108,6 +109,15 @@ spec:
               path: restProxyExternalPort
         - name: tempdir
           emptyDir: {}
+{{- if not .Values.persistence.enabled }}
+  # Validate persistence
+  {{- if .Values.persistence.useDynamicProvisioning }}
+    {{ fail "Cannot use dynamic provisioning with persistence disabled" }}
+  {{- end  }}
+  {{- if not (eq .Values.dataPVC.storageClassName "") }}
+    {{ fail "Cannot use a storage class if persistence disabled" }}
+  {{- end  }}
+{{- end  }}
 {{- if .Values.persistence.enabled }}
         - name: shared
           persistentVolumeClaim:
@@ -118,20 +128,13 @@ spec:
 {{- end }}
       {{- include "license.accept.ref" . | indent 6 }}
       affinity:
-{{ include "customNodeaffinity"  (list .) | indent 8 }}
+{{ include "ibm-eventstreams.customNodeaffinity"  (list .) | indent 8 }}
       containers:
         - name: "schemaregistry"
           image: {{ include "eventstreams.image" (list . "eventstreams-registry" .Values.global.image.imageTags.registryTag) | quote }}
           imagePullPolicy: {{ .Values.global.image.pullPolicy }}
           securityContext:
-            privileged: false
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: {{ $defaultUser }}
-            capabilities:
-              drop:
-              - ALL
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
           resources:
             limits:
 {{ toYaml .Values.resources.limits | indent 14 }}
@@ -199,18 +202,20 @@ spec:
             - name: ACCESS_CONTROLLER_PROTOCOL
               value: "https"
             - name: ACCESS_CONTROLLER_SERVICE_NAME
-              value: {{ $accessControllerServiceName | quote }}
+              value: "{{ $accessControllerServiceName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}"
             - name: ACCESS_CONTROLLER_SERVICE_PORT
               value: {{ $ports.security.accessController | quote }}
             - name: ACCESS_CONTROLLER_AUTHZ_URL
               value: "/v1/auth"
             - name: NAMESPACE
               value: {{ .Release.Namespace | quote }}
+            - name: CONFIGMAP
+              value: {{ $releaseConfigMapName | quote }}
             - name: CLUSTER_NAME
               valueFrom:
-                secretKeyRef:
-                  name: {{ $oauthSecretName }}
-                  key: "clusterName"
+                configMapKeyRef:
+                  name: {{ $releaseConfigMapName }}
+                  key: "CLUSTER_NAME"
             - name: TRACE_LEVEL
               value: "INFO"
         - name: "avroservice"
@@ -222,14 +227,7 @@ spec:
             requests:
 {{ toYaml .Values.avroServiceResources.requests | indent 14 }}
           securityContext:
-            privileged: false
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: {{ $defaultUser }}
-            capabilities:
-              drop:
-              - ALL
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
           readinessProbe:
             tcpSocket:
               port: {{ $ports.schemaregistry.javaServer }}

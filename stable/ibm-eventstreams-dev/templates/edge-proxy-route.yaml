@@ -1,0 +1,84 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the route that enables OpenShift router networking to the UI service 
+###############################################################################
+{{ $root := . -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{ $kafkaconfig:= include "sch.config.init" (list . "kafka.listeners.sch.chart.config.values") -}}
+{{ $listenerPorts := .sch.config.kafka.protocols -}}
+{{ $listeners := $listenerPorts | splitList "," -}}
+# this is the service that is providing access to Edge Proxy
+{{- $proxySvcNamePrefix := .sch.chart.components.proxy.service.name -}}
+{{- $proxySvcName := include "sch.names.fullCompName" (list . $proxySvcNamePrefix) }}
+# this is the route that is providing networking to the Edge Proxy service
+{{- $proxyNamePrefix := .sch.chart.components.proxy.route.name -}}
+{{- $proxyName := include "sch.names.fullCompName" (list . $proxyNamePrefix) -}}
+{{- $brokerPrefix := .sch.chart.components.proxy.brokerPrefix }}
+# Component is 'proxy' as this makes up part of implementing the Edge Proxy proxy
+{{ $compName := .sch.chart.components.proxy.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# OCP Router Domain - apps.<cluster-name>.<root-domain>
+{{- $domain := $root.Values.proxy.externalEndpoint -}}
+{{- if (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: "{{ $proxyName }}-bootstrap"
+  namespace: {{ $root.Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  subdomain: ''
+  to:
+    kind: Service
+    name: {{ $proxySvcName | quote }}
+    weight: 100
+  port:
+    targetPort: bootstrap
+  tls:
+    termination: passthrough
+    insecureEdgeTerminationPolicy: None
+  wildcardPolicy: None
+---
+# number of Kafka brokers in the cluster
+{{- $rep := int $root.Values.kafka.brokers -}}
+{{- range $index, $e := until $rep }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: "{{ $proxyName }}-broker-{{ $index }}"
+  namespace: {{ $root.Release.Namespace | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  subdomain: ''
+  to:
+    kind: Service
+    name: {{ $proxySvcName | quote }}
+    weight: 100
+  port:
+    {{- range $listenerIndex, $listenerType := $listeners -}}
+    {{- $portType := split ":" $listenerType -}}
+    {{- if not (hasPrefix "INTERNAL" $portType._0) }}
+    targetPort: "{{ $brokerPrefix }}{{ $index }}-{{ $portType._0 | lower }}"
+    {{- end }}
+    {{- end }}
+  tls:
+    termination: passthrough
+    insecureEdgeTerminationPolicy: None
+  wildcardPolicy: None
+{{- if lt $index (sub $rep 1) }}
+---
+{{- end -}}
+{{- end }}
+{{- end }}

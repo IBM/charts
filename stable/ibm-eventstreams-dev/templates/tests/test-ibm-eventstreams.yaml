@@ -14,18 +14,27 @@
 # that we can connect to all expected ports
 ###############################################################################
 {{- include "sch.config.init" (list . "sch.chart.config.values") -}}
-{{- $namePrefix := "service-test" -}}
+{{- $namePrefix :=  .sch.chart.components.helmTests.testServicesPod.name -}}
 {{- $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
-{{ $compName := "service-test" -}}
+{{ $compName := .sch.chart.components.helmTests.compName -}}
+{{ $serviceAccount := .sch.chart.components.helmTests.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
 {{ $networkPolicyLabel := "kafka" -}}
 {{ $labels := include "sch.metadata.labels.standard" (list . $networkPolicyLabel) -}}
-{{ $kafkaHeadless := .sch.chart.components.kafka.headless.name -}}
+{{ $kafkaHeadless := .sch.chart.components.kafka.internalHeadless.name -}}
 {{ $kafkaHeadlessName :=  (include "sch.names.fullCompName" (list . $kafkaHeadless)) -}}
-{{ $zookeeperConfig := include "sch.config.init" (list . "zookeeper.sch.chart.config.values" ) -}}
-{{ $zookeeperHeadless := .sch.chart.components.zookeeper.headless.name -}}
+{{ $kafkaStsNamePrefix := .sch.chart.components.kafka.statefulSet.name -}}
+{{ $kafkaStatefulSetName := include "sch.names.statefulSetName" (list . $kafkaStsNamePrefix) -}}
+{{ $zookeeperHeadless := .sch.chart.components.zookeeper.internalHeadless.name -}}
 {{ $zookeeperHeadlessName :=  (include "sch.names.fullCompName" (list . $zookeeperHeadless)) }}
+{{ $zookeeperStsNamePrefix := .sch.chart.components.zookeeper.statefulSet.name -}}
+{{ $zookeeperStatefulSetName := include "sch.names.statefulSetName" (list . $zookeeperStsNamePrefix) -}}
+# init config for zookeeper replicas
+{{ $zookeeperConfig := include "sch.config.init" (list . "zookeeper.sch.chart.config.values" ) -}}
 {{ $zookeeperReplicas := int .sch.config.zookeeper.replicas -}}
 {{ $kafkaReplicas := int .Values.kafka.brokers -}}
+# k8s configuration
+{{ $clusterName := .Values.global.k8s.clusterName -}}
 # Default user for security context
 {{ $defaultUser := .sch.securityContext.defaultUser -}}
 apiVersion: v1
@@ -38,10 +47,7 @@ metadata:
 {{ $labels | indent 4 }}
     serviceSelector: {{ $namePrefix | quote }}
 spec:
-  {{- if .Values.global.image.pullSecret }}
-  imagePullSecrets:
-    - name: {{ .Values.global.image.pullSecret }}
-  {{- end }}
+  serviceAccountName: {{ $serviceAccountName | quote }}
   hostNetwork: false
   hostPID: false
   hostIPC: false
@@ -50,7 +56,7 @@ spec:
     runAsUser: {{ $defaultUser }}
     fsGroup: 405
   affinity:
-{{ include "customNodeaffinity"  (list .) | indent 4 }}
+{{ include "ibm-eventstreams.customNodeaffinity"  (list .) | indent 4 }}
   restartPolicy: Never
   containers:
     - name: "helm-test"
@@ -76,6 +82,6 @@ spec:
         - -c
         - "echo checking Kafka and ZooKeeper services are accessible; \
           set -e; \
-          for i in `seq 0 $(($kafkaReplicas-1))`; do nc -w2 -v {{ .Release.Name }}-ibm-es-kafka-broker-svc-${i} 8092; done; \
-          for i in `seq 0 $(($zookeeperReplicas-1))`; do nc -w2 -v {{ .Release.Name }}-ibm-es-zookeeper-fixed-ip-svc-${i} 2181; done; \
+          for i in `seq 0 $(($kafkaReplicas-1))`; do nc -w2 -v {{ $kafkaStatefulSetName }}-${i}.{{ $kafkaHeadlessName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }} 8092; done; \
+          for i in `seq 0 $(($zookeeperReplicas-1))`; do nc -w2 -v {{ $zookeeperStatefulSetName }}-${i}.{{ $zookeeperHeadlessName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }} 2181; done; \
           echo Test complete"

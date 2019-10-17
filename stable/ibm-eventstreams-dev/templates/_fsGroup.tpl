@@ -1,4 +1,4 @@
-{{- define "fsGroupGid" -}}
+{{- define "ibm-eventstreams.fsGroupGid" -}}
   {{- $params := . -}}
   {{- /* root context required for accessing other sch files */ -}}
   {{- $root := first $params -}}
