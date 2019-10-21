@@ -101,13 +101,14 @@ License Metric Tool.
 
 Licensing parameters include:
 
+- **cloudpakName:** the Cloud Pak name (optional if not a Cloud Pak)
+- **cloudpakId:** the Cloud Pak ID (optional if not a Cloud Pak)
+- **cloudpakVersion:** the Cloud Pak version (optional if not a Cloud Pak)
 - **productMetric:** the install-based metric (PROCESSOR_VALUE_UNIT,
   VIRTUAL_PROCESSOR_CORE, RESOURCE_VALUE_UNIT, etc.)
 - **productChargedContainers:** which containers are affected ("All", "", or a
   list of container names)
-- **productFlexpointBundle:** the Flexpoint Bundle for this license (optional)
-- **productSlmLocation:** the path to the SLM folder in each affected
-  container (optional)
+- **productCloudpakRatio:** the license ratio for this product when it is part of a Cloud Pak (optional)
 
 Note: When passing licensing values to the `sch.metadata.annotations.metering`
 declaration, values for all parameters must be specified. Use `""` and `nil` for
@@ -117,7 +118,6 @@ included in the output.
 
 __Config Values Used:__
 - passed as argument
-
 __Parameters input as an list of values:__
 - the root context (required)
 - config values map of annotations (required)
@@ -159,17 +159,19 @@ sch:
       productVersion: "1.0.0.0"
       productMetric: "PROCESSOR_VALUE_UNIT"
       productChargedContainers: "All"
-      productFlexpointBundle: "IBM Flexbundle One"
-      productSlmLocation: "container1$/opt/ibm/product/slmtags;container2$/var/slmtags"
+      productCloudpakRatio: "8:1"
+      cloudpakName: "Reference Cloud Pak"
+      cloudpakId: "4df52d2cdc374ba09f631a650ad2c6cf"
+      cloudpakVersion: "3.0"
 {{- end -}}
 ```
 used in template as follows:
 ```
       annotations:
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering .Values.ilmt.productMetric .Values.ilmt.productFlexpointBundle (list "container1" "container2" ) (list "container1$/path/to/slm" "container2$/path/to/slm")) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering .Values.ilmt.productMetric .Values.ilmt.productCloudpakRatio (list "container1" "container2" )) | indent 8 }}
 or
       annotations:
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil nil) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
 ```
 */ -}}
 
@@ -178,7 +180,7 @@ or
   {{- $top := first $params -}}
   {{- if (gt (len $params) 1) -}}
     {{- $metering := (index $params 1) -}}
-    {{- $excluded := (list "productChargedContainers" "productSlmLocation" "productMetric" "productFlexpointBundle")}}
+    {{- $excluded := (list "productChargedContainers" "productMetric" "productCloudpakRatio")}}
     {{- range $k, $v := $metering }}
       {{- /* Handle these ilmt parameters outside of the loop */ -}}
       {{- if not (has $k $excluded) }}
@@ -186,20 +188,15 @@ or
       {{- end }}
     {{- end }}
     {{- /* Future note: This section could be less clunky with Helm 2.12 which can handle parameter reassignment via `=` */}}
-    {{- if (eq (len $params) 6) }}
+    {{- if (eq (len $params) 5) }}
 productMetric: {{ (index $params 2) | default $metering.productMetric | quote }}
-      {{- if or (index $params 3) (hasKey $metering "productFlexpointBundle") }}
-productFlexpointBundle: {{ (index $params 3) | default $metering.productFlexpointBundle | quote }}
+      {{- if or (index $params 3) (hasKey $metering "productCloudpakRatio") }}
+productCloudpakRatio: {{ (index $params 3) | default $metering.productCloudpakRatio | quote }}
       {{- end }}
       {{- if (index $params 4) }}
 productChargedContainers: {{ (index $params 4) | join ";" }}
       {{- else if (hasKey $metering "productChargedContainers")}}
 productChargedContainers: {{ $metering.productChargedContainers | quote }}
-      {{- end }}
-      {{- if (index $params 5) }}
-productSlmLocation: {{ (index $params 5) | join ";" }}
-      {{- else if (hasKey $metering "productSlmLocation")}}
-productSlmLocation: {{ $metering.productSlmLocation | quote }}
       {{- end }}
     {{- end }}
   {{- end -}}

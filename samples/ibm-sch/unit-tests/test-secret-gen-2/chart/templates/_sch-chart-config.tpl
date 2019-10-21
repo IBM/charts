@@ -16,7 +16,7 @@ sch:
       - name: mychart.myhost.com
         create: {{ empty .Values.tlsSecret }}
         type: tls
-        cn: mychart.myhost.com
+        cn: mychart.myhost.thisdomainwillbegreaterthansixtyfourcharacterslong.com
     components:
       common:
         name: "test01-common"
