@@ -1,8 +1,8 @@
-# What's new in Chart Version 1.2.13
-* Bug fixes
+# What's new in Chart Version 1.2.14
+* Added subject alternative names to secret gen tool and license advisor metering annotations
 
 # Fixes
-* Cleaned up the secret generation parameters
+* Updated secret generation parameters to specify subject alternative names
 
 # Prerequisites
 * Kubernetes version 1.9 or greater
@@ -16,6 +16,7 @@
 # Version History
 | Chart  | Date     | Kubernetes Required | Details |
 |--------|----------|---------------------|---------|
+| 1.2.14 | 10/08/19 | >=1.9.0 | Added subject alternative names to secret gen tool and updated metering annotations for license advisor |
 | 1.2.13 | 09/17/19 | >=1.9.0 | Cleaned up secret generation image parameters |
 | 1.2.12 | 08/19/19 | >=1.9.0 | Updated secret generation to support Power and s390x |
 | 1.2.11 | 06/25/19 | >=1.9.0 | Updated secret generation image and bug fixes |

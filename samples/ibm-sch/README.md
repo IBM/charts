@@ -30,14 +30,14 @@ There are two ways to include ibm-sch with your chart:
    dependencies:
    - name: ibm-sch
      repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-     version: "^1.2.13"
+     version: "^1.2.14"
      alias: sch
      condition: global.sch.enabled
    ```
 
    Explanation of parameters:
    - Set the alias to `sch` to guarantee that all functions will work successfully.
-   - Set the version to `^1.2.13` to download the latest `1.x.x` version of ibm-sch.
+   - Set the version to `^1.2.14` to download the latest `1.x.x` version of ibm-sch.
    - Use a condition parameter to only install ibm-sch when intended. For example, if your chart is able to be installed standalone and as a subchart, then you want ibm-sch to be enabled when your chart is installed standalone, but you want to use the parent chart's ibm-sch when it is installed as a subchart. To achieve this, you would set `global.sch.enabled` to true in the subchart and false in the parent chart.
 
 1. Download the source and copy it into your charts directory
@@ -843,6 +843,14 @@ Specify a list of secrets to be generated in the `sch.chart.secretGen` parameter
 The TLS secret generated is a self-signed CA certificate.
 
 In the event that a generic secret needs to generated in a different manner, the function used to generate the secret can be overridden. See the second example below for more information.
+
+Notes:
+
+- The cn parameter for a TLS secret has been deprecated. Specifying domains should be
+done with the sans (Subject Alternate Name) parameter. 
+- If the sans parameter is specified, then the cn parameter will be ignored.
+- The first entry in the sans array will be set to the CN parametr in the subject if
+it is 64 characters or smaller in length.
 
 __Values Used__
 - None

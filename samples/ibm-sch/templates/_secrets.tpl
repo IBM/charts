@@ -114,6 +114,14 @@ In the event that a generic secret needs to generated in a different manner, the
 function used to generate the secret can be overridden. See the second example
 below for more information.
 
+Notes:
+
+- The cn parameter for a TLS secret has been deprecated. Specifying domains should be
+done with the sans (Subject Alternate Name) parameter. 
+- If the sans parameter is specified, then the cn parameter will be ignored.
+- The first entry in the sans array will be set to the CN parameter in the subject if
+it is 64 characters or smaller in length.
+
 __Values Used__
 - None
 
@@ -145,7 +153,10 @@ sch:
       - name: mysql.myhost.com # this will include the suffix in the format of <name>-<suffix>
         create: {{ empty .Values.tlsSecret }}
         type: tls
-        cn: mysql.myhost.com
+        cn: mysql.myhost.com  # cn is deprecated. Use sans.
+        sans:
+        - mysql.myhost.com
+        - redis.myhost.com
 {{- end -}}
 ```
 used in template as follows:
@@ -310,7 +321,10 @@ sch:
       - name: mysql.myhost.com # this will include the suffix in the format of <name>-<suffix>
         create: {{ empty .Values.tlsSecret }}
         type: tls
-        cn: mysql.myhost.com
+        cn: mysql.myhost.com  # cn is deprecated. Use sans.
+        sans:
+        - mysql.myhost.com
+        - redis.myhost.com
 {{- end -}}
 ```
 used in template as follows:
@@ -430,9 +444,30 @@ EOF
 {{- $labels := index $params 1 -}}
 {{- $overwriteExisting := index $params 2 -}}
 {{- $tlsOutPath := (list "/tmp/secretGen/tls" $secret.name ) | join "/" -}}
-openssl genrsa -out {{ $tlsOutPath }}.key 2048
-openssl req -x509 -new -nodes -key {{ $tlsOutPath }}.key -subj "/CN={{ $secret.cn }}" -days 3650 -reqexts v3_req -extensions v3_ca -out {{ $tlsOutPath }}.crt
-
+{{- /* If a list of subject alt names have been specified, build the openssl request using them */}}
+{{- if and (hasKey $secret "sans") (eq (typeOf $secret.sans) "[]interface {}") }}
+  {{- if (gt (len $secret.sans) 0) -}}
+    {{- $cmd := printf "openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes -reqexts v3_req -extensions v3_ca -keyout %s.key -out %s.crt" $tlsOutPath $tlsOutPath -}}
+    {{- $sansJoin := join ",DNS:" $secret.sans }}
+    {{- $sans := printf "-addext subjectAltName=DNS:%s" $sansJoin }}
+    {{- if lt (len (index $secret.sans 0)) 65 -}}
+{{- printf "%s %s -subj \"/O=IBM/C=US/ST=MN/CN=%s\"" $cmd $sans (index $secret.sans 0) }}
+    {{- else }}
+{{- printf "%s %s -subj \"/O=IBM/C=US/ST=MN\"" $cmd $sans }}
+    {{- end }}
+  {{- end }}
+{{- /* If a list of subject alt names have not been specified, try to build the openssl request using the deprecated cn */}}
+{{- else if hasKey $secret "cn" }}
+  {{- $cmd := printf "openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes -reqexts v3_req -extensions v3_ca -addext subjectAltName=DNS:%s -keyout %s.key -out %s.crt" $secret.cn $tlsOutPath $tlsOutPath }}
+  {{- if gt (len $secret.cn) 64 }}
+{{- printf "%s -subj \"/O=IBM/C=US/ST=MN\"" $cmd }}
+  {{- else }}
+{{- printf "%s -subj \"/O=IBM/C=US/ST=MN/CN=%s\"" $cmd $secret.cn -}}
+  {{- end }}
+{{- else }}
+{{- /* Neither cn nor sans was specified. Fail the request. */}}
+{{- fail (printf "No cn or sans property specified for secret %s" $secret.name) }}
+{{- end }}
 {{ if eq $overwriteExisting true }}
 cat <<EOF | kubectl apply -f -
 {{- else }}
@@ -450,3 +485,4 @@ data:
   tls.key: $(cat {{ $tlsOutPath }}.key | base64 | tr -d '\n')
 EOF
 {{- end }}
+
