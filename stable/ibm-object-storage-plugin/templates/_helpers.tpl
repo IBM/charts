@@ -27,7 +27,7 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 Namespace to use for chart deployment.
 */}}
 {{- define "ibm-object-storage-plugin.namespace" -}}
-    {{- if contains "IKS" (.Values.provider | quote | upper) }}
+    {{- if contains "CLASSIC" (.Values.provider | quote | upper) }}
         {{- "kube-system" -}}
     {{- else -}}
         {{- .Release.Namespace -}}

@@ -4,6 +4,9 @@ A Helm plugin that installs or upgrades Helm charts in IBM K8S Service
 
 * https://docs.helm.sh/helm/#helm-ibmc
 
+## Fixes
+  * With v1.0.6, `ibmc` helm plugin supports installation of object-storage-plugin on `vpc-classic` clusters.
+
 ## Installation
   * `helm repo add ibm-charts https://icr.io/helm/ibm-charts`
   * `helm repo update`
