@@ -365,7 +365,11 @@ fi
 # Check cluster provider (ICP or IKS)
 if [[ `kubectl get nodes -o yaml | grep 'node-role\.kubernetes\.io'` == "" || \
   `kubectl get nodes -o yaml | grep 'node-role\.kubernetes\.io/\(compute\|infra\)'` != "" ]]; then
-  CLUSTER_PROVIDER="IKS"
+  if [[ `kubectl get nodes -o yaml | grep 'ibm-cloud\.kubernetes\.io/iaas-provider\: \(gc\|g2\|ng\)'` != "" ]]; then
+    CLUSTER_PROVIDER="VPC-CLASSIC"
+  else
+    CLUSTER_PROVIDER="CLASSIC"
+  fi
   DC_NAME=$(kubectl get cm cluster-info -n kube-system -o jsonpath='{.data.cluster-config\.json}' | grep datacenter | awk -F ': ' '{print $2}' | sed 's/\"//g' |sed 's/,//g')
 elif [[ `kubectl get nodes -o yaml | grep 'node-role\.kubernetes\.io/\(etcd\|master\|management\|worker\|proxy\|va\)'` != "" ]]; then
   CLUSTER_PROVIDER="ICP"
@@ -385,7 +389,7 @@ fi
 
 if [ "$COMMAND" == "install" ]; then
   echo "Installing the Helm chart..."
-  if [ "$CLUSTER_PROVIDER" == "IKS" ]; then
+  if [[ "$CLUSTER_PROVIDER" == *"CLASSIC" ]]; then
     echo "DC: ${DC_NAME}"
   fi
   echo "Chart: $CHARTREFERENCE"
@@ -423,7 +427,7 @@ if [ "$COMMAND" == "install" ]; then
   exit 0
 elif [[ "$COMMAND" == "upgrade" ]]; then
   echo "Upgrading the Helm chart..."
-  if [ "$CLUSTER_PROVIDER" == "IKS" ]; then
+  if [[ "$CLUSTER_PROVIDER" == *"CLASSIC" ]]; then
     echo "DC: ${DC_NAME}"
   fi
   echo "Chart: $CHARTREFERENCE"
@@ -462,7 +466,7 @@ elif [[ "$COMMAND" == "upgrade" ]]; then
 elif [ "$COMMAND" == "template" ]; then
   if [ "$DELETE" != "TRUE" ]; then
     echo "Rendering the Helm chart templates..."
-    if [ "$CLUSTER_PROVIDER" == "IKS" ]; then
+    if [[ "$CLUSTER_PROVIDER" == *"CLASSIC" ]]; then
       echo "DC: ${DC_NAME}"
     fi
     echo "Chart: $CHARTREFERENCE"
