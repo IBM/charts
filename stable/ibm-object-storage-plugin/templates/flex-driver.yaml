@@ -5,9 +5,11 @@ metadata:
   namespace: {{ template "ibm-object-storage-plugin.namespace" . }}
   labels:
     app: {{ template "ibm-object-storage-plugin.drivername" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/name: {{ template "ibm-object-storage-plugin.drivername" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
     release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
 spec:
   updateStrategy:
     rollingUpdate:
@@ -20,9 +22,11 @@ spec:
     metadata:
       labels:
         app: {{ template "ibm-object-storage-plugin.drivername" . }}
-        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/name: {{ template "ibm-object-storage-plugin.drivername" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
         release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
       annotations:
         productID: "IBMCloudObjectStoragePlugin_{{ .Chart.AppVersion }}_Apache02_00000"
         productName: "ibmcloud-object-storage-plugin"
@@ -51,11 +55,11 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "200m"
+              memory: {{ .Values.resource.memory }}
+              cpu: {{ .Values.resource.cpu }}
             limits:
-              memory: "128Mi"
-              cpu: "200m"
+              memory: {{ .Values.resource.memory }}
+              cpu: {{ .Values.resource.cpu }}
           securityContext:
             capabilities:
               drop: ["ALL"]
@@ -88,8 +92,16 @@ spec:
                name: sysd-run
              - mountPath: /host/local
                name: usr-local
-             - mountPath: /hostroot
-               name: root-fs
+             - mountPath: /host/etc
+               name: etc-mount
+               readOnly: true
+             - mountPath: /hostetc/ssh
+               name: etc-ssh-mount
+             - mountPath: /host/.ssh
+               name: sshkeys-mount
+             - mountPath: /host/log
+               name: host-logs
+               readOnly: true
       volumes:
         - name: kube-driver
           hostPath:
@@ -100,6 +112,15 @@ spec:
         - name: usr-local
           hostPath:
              path: /usr/local
-        - name: root-fs
+        - name: etc-mount
           hostPath:
-             path: /
+             path: /etc
+        - name: etc-ssh-mount
+          hostPath:
+             path: /etc/ssh
+        - name: sshkeys-mount
+          hostPath:
+             path: /root/.ssh
+        - name: host-logs
+          hostPath:
+             path: /var/log
