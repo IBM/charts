@@ -1,4 +1,6 @@
 # IBM® IoT MessageSight™ Developer Edition
+_THIS CHART IS NOW DEPRECATED. Here’s what you need to know: On November 30th, 2019 the helm chart for IBM IoT Messagesight Developer Edition will no longer be supported and will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart._
+
 IBM IoT MessageSight is a messaging application that is designed to process large volumes of events in near real-time and to handle
 many concurrently connected devices, such as sensors or mobile devices.
 
