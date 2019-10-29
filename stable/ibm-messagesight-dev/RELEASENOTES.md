@@ -1,9 +1,12 @@
 ## What's new...
 
 ## Latest: Chart Version 1.0.1
-- Update to latest IBM IoT MessageSight iFix.
+- The IBM® IoT MessageSight Developer Edition Helm chart is now deprecated and will be removed from IBM's public helm repository on github.com on November 30th, 2019.  
 
 ## Older Releases 
+
+### v1.0.1
+- Update to latest IBM IoT MessageSight iFix.
 
 ### v1.0.0
 - Initial release.
@@ -20,5 +23,6 @@ See README.md for details.
 
 | Chart | Date        | ICP Required | Image(s) Supported | Details |
 | ----- | ----------- | ------------ | ------------------ | ------- |
+| 1.0.2 | October 2019 | >=2.1.0.3    | imaserver:2.0.0.2.20180919-1627 imawebui:2.0.0.2.20180919-1627 | 2.0.0.2-IBM-IMA-IFIT26386 |
 | 1.0.1 | September 2018| >=2.1.0.3    | imaserver:2.0.0.2.20180919-1627 imawebui:2.0.0.2.20180919-1627 | 2.0.0.2-IBM-IMA-IFIT26386 |
 | 1.0.0 | September 2018| >=2.1.0.3    | imaserver:2.0.0.2.20180618-2257 imawebui:2.0.0.2.20180618-2257 | Initial Chart |
