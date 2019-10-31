@@ -13,17 +13,19 @@
 # limitations under the License.
 {{- if ne .Values.imageType "acemqserver" }}
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
-{{ $deploymentName := include "sch.names.fullName" (list .) }}
-{{ $designerFlowsName := include "sch.names.fullCompName" (list . "designer-flows") }}
+{{- $deploymentName := include "sch.names.fullName" (list . ) }}
+{{- $designerFlowsName := include "sch.names.fullCompName" (list . "designer-flows") }}
+{{- $tracingAgentName := include "sch.names.fullCompName" (list . "od-tracing-agent") }}
+{{- $tracingCollectorName := include "sch.names.fullCompName" (list . "od-tracing-collector") }}
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
-{{ $secretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $deploymentName "configuration") }}
-{{ $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
+{{- $secretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $deploymentName "configuration") }}
+{{- $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $deploymentName }}
   labels:
-{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+{{ include "sch.metadata.labels.standard" (list . ) | indent 4 }}
   annotations:
     appconnectenterprise: 'icp4i'
 {{- if .Values.contentServerURL }}
@@ -49,7 +51,7 @@ spec:
         {{- end }}
       name: {{ $deploymentName }}
       labels:
-{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+{{ include "sch.metadata.labels.standard" (list . ) | indent 8 }}
     spec:
       affinity:
         nodeAffinity:
@@ -110,6 +112,8 @@ spec:
               value: {{ .Values.log.format | default "json" | quote }}
             - name: ACE_ENABLE_METRICS
               value: {{ .Values.metrics.enabled | default true | quote }}
+            - name: ACE_ENABLE_OPEN_TRACING
+              value: {{ .Values.odTracingConfig.enabled | default false | quote }}
             - name: MQSI_OVERRIDE_HOSTNAME
               value: {{ .Values.service.iP }}
             - name: "ACE_KEYSTORE_PASSWORD"
@@ -126,6 +130,8 @@ spec:
                    key: truststorePassword
             - name: ACE_DEFAULT_APPLICATION_NAME
               value: {{ .Values.integrationServer.defaultAppName | quote }}
+            - name: DEFAULT_CONTENT_SERVER
+              value: "true"
           volumeMounts:
             {{- if .Values.contentServerURL }}
             - name: webusers
@@ -151,6 +157,8 @@ spec:
               mountPath: "/home/aceuser/initial-config/extensions"
             - name: agent
               mountPath: "/home/aceuser/initial-config/agent"
+            - name: ssl
+              mountPath: "/home/aceuser/initial-config/ssl"
             {{- if .Values.contentServerURL }}
             - name: contentservertls
               mountPath: "/home/aceuser/ssl"
@@ -254,11 +262,153 @@ spec:
             requests:
 {{ toYaml .Values.designerflows.resources.requests | indent 14 }}
         {{- end }}
+        {{- if .Values.odTracingConfig.enabled }}
+        # OD Agent
+        - name: "{{ $tracingAgentName }}"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.odTracingConfig.odAgentImageRepository "${1}cp/icp4i/ace/" }}:{{ .Values.odTracingConfig.odAgentImageTag }}-{{ .Values.arch }}"
+          volumeMounts:
+            - name: icp4i-od-ca-certificate
+              mountPath: "/usr/share/jaeger/ca/certs" 
+          command: ["/go/bin/agent-linux"]
+          args: 
+            - "--jaeger.tags=sourceNamespace={{ .Release.Namespace }}"
+          ports:
+            - containerPort: 5775
+              protocol: UDP
+            - containerPort: 6831
+              protocol: UDP
+            - containerPort: 6832
+              protocol: UDP
+            - containerPort: 5778
+              protocol: TCP            
+          env:
+            - name: COLLECTOR_HOST_PORT
+              value : {{ template "odTracing.collector.host-port" . }}
+            - name: REPORTER_TYPE
+              value : "grpc"
+            - name: REPORTER_GRPC_HOST_PORT
+              value : {{ template "odTracing.collector.grpc-host-port" . }}              
+            - name: REPORTER_GRPC_TLS
+              value : "false"
+            - name: OD_SOURCE_NAMESPACE  
+              value : {{ .Release.Namespace }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 256m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /?service=health
+              port: 5778
+            initialDelaySeconds: {{ .Values.odTracingConfig.odAgentReadinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odAgentReadinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odAgentReadinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odAgentReadinessProbe.failureThreshold }}
+          livenessProbe:
+            tcpSocket:
+              port: 5778
+            initialDelaySeconds: {{ .Values.odTracingConfig.odAgentLivenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odAgentLivenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odAgentLivenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odAgentLivenessProbe.failureThreshold }}
+        # OD Collector
+        - name: "{{ $tracingCollectorName }}"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.odTracingConfig.odCollectorImageRepository "${1}cp/icp4i/ace/" }}:{{ .Values.odTracingConfig.odCollectorImageTag }}-{{ .Values.arch }}"
+          volumeMounts:
+            - name: icp4i-od-ca-certificate
+              mountPath: "/usr/share/jaeger/ca/certs" 
+          ports:            
+            - containerPort: 14250
+              name: grpc
+              protocol: TCP
+            - containerPort: 14267
+              name: tchannel
+              protocol: TCP
+            - containerPort: 14268
+              name: http
+              protocol: TCP
+            - containerPort: 14269
+              name: healthcheck
+              protocol: TCP
+            - containerPort: 9411
+              name: zipkin
+              protocol: TCP
+            - containerPort: 14987
+              name: liveliness
+              protocol: TCP
+          env:            
+            - name: SPAN_STORAGE_TYPE
+              value: elasticsearch            
+            - name: ES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "odTracing.collector.elasticsearch-secret-name" . }}
+                  key: password
+            - name: ES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "odTracing.collector.elasticsearch-secret-name" . }}
+                  key: username
+            - name: ES_SERVER_URLS
+              value: {{ template "odTracing.collector.elasticsearch-url" . }} 
+            - name: ES_TLS_CA     
+              value: '/usr/share/jaeger/ca/certs/icp4i-od-cacert.pem'          
+            - name: COLLECTOR_PORT
+              value: "14267"
+            - name: COLLECTOR_HTTP_PORT
+              value: "14268"
+            - name: COLLECTOR_ZIPKIN_HTTP_PORT
+              value: "9411"
+            - name: COLLECTOR_GRPC_TLS
+              value: "false"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              drop:
+                - ALL  
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 256m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              port: 14269
+            initialDelaySeconds: {{ .Values.odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odCollectorReadinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odCollectorReadinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odCollectorReadinessProbe.failureThreshold }}
+          livenessProbe:
+            tcpSocket:
+              port: 14987
+            initialDelaySeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odCollectorLivenessProbe.failureThreshold }}
+        {{- end }} 
       volumes:
         {{- if .Values.contentServerURL }}
         - name: webusers
           secret:
-            secretName: {{ $deploymentName }}
+            secretName: {{ include "sch.names.fullName" (list .) }} 
             optional: true
             items:
             - key: adminusers
@@ -349,6 +499,17 @@ spec:
             items:
             - key: setdbparms
               path: setdbparms.txt
+        - name: ssl
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: ca.crt
+              path: ca.crt.pem
+            - key: tls.key
+              path: tls.key.pem
+            - key: tls.crt
+              path: tls.crt.pem
         {{- if .Values.contentServerURL }}
         - name: contentservertls
           secret:
@@ -363,4 +524,10 @@ spec:
         - name: workdir
           emptyDir: {}
         {{- end }}
+        {{- if .Values.odTracingConfig.enabled }}
+        - name: icp4i-od-ca-certificate
+          secret:
+            secretName: icp4i-od-store-cred
+            optional: true
+        {{ end }}
 {{- end }}

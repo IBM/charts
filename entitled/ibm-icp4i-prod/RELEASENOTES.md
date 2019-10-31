@@ -2,9 +2,7 @@
 None
 
 ## What’s new...
-* Support for entitled registry
-* Support for global cloud catalog
-* Automatically set the `vm.max_map_count` sysctl setting to a minimum of 1048576 on worker nodes
+* Support for Operations Dashboard
 
 ## Fixes
 None
@@ -20,6 +18,7 @@ See [README.md](README.md).
 ## Version History
 | Chart Version | Date Released  | Kubernetes Required | Images Supported                                                   | Breaking Changes | Details                                                                   |
 | ------------- | -------------- | ------------------- | ------------------------------------------------------------------ | ---------------- | ------------------------------------------------------------------------- |
+| 2.2.0         | Oct 28th, 2019 | \>=1.11             | icip-navigator:2.2.0, icip-configurator:2.2.0, icip-services:2.2.0 | N/A              | Support for Operations Dashboard                                          |
 | 2.1.2         | Oct 4th, 2019  | \>=1.11             | icip-navigator:2.1.1, icip-configurator:2.1.1, icip-services:2.1.1 | N/A              | Updated license                                                           |
 | 2.1.1         | Sep 27th, 2019 | \>=1.11             | icip-navigator:2.1.0, icip-configurator:2.1.0, icip-services:2.1.0 | N/A              | Fixes                                                                     |
 | 2.1.0         | Sep 27th, 2019 | \>=1.11             | icip-navigator:2.1.0, icip-configurator:2.1.0, icip-services:2.1.0 | N/A              | Support for entitled registry and global cloud catalog.                   |

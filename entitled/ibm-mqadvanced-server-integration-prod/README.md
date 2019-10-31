@@ -15,6 +15,7 @@ This chart will do the following:
 * Create a pre-upgrade and a post-delete Job, Role and Role Binding
 * [Optional] Create additional [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) for use with a multi-instance Queue Manager.
 * [Optional] Create a metrics [Service](https://kubernetes.io/docs/concepts/services-networking/service/) for accessing Queue Manager metrics.
+* [Optional] Create a Job to register the Queue Manager with the Operations Dashboard.
 
 ## Prerequisites
 
@@ -27,7 +28,9 @@ This chart will do the following:
 
 This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre-install actions that need to occur.
 
-This chart defines a custom SecurityContextConstraints which should be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied scripts in the `pak_extensions` pre-install directory.
+The predefined SecurityContextConstraints name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+
+This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied scripts in the `pak_extensions` pre-install directory.
 
   - Custom SecurityContextConstraints definition:
     ```
@@ -165,6 +168,16 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `readinessProbe.failureThreshold` | Minimum consecutive failures for the probe to be considered failed after having succeeded | 1              |
 | `log.format`                    | Error log format on container's console.  Either `json` or `basic` | `json`                                  |
 | `log.debug`                     | Enables additional log output for debug purposes                | `false`                                    |
+| `odTracingConfig.enabled`       | Whether or not to enable the OD for this release                | `false`                                    |
+| `odTracingConfig.odAgentImageRepository` | Repository where the OD agent image is located         | `OD agent image`                           |
+| `odTracingConfig.odAgentImageTag` | The tag for the Docker image for the OD agent                 | `Tag of OD agent image`                    |
+| `odTracingConfig.odAgentLivenessProbe.initialDelaySeconds` | How long to wait before starting the probe | `10`                                 |
+| `odTracingConfig.odAgentReadinessProbe.initialDelaySeconds` | How long to wait before the probe is ready | `10`                                |
+| `odTracingConfig.odCollectorImageRepository` | Repository where the OD collector image is located | `OD collector image`                       |
+| `odTracingConfig.odCollectorImageTag` | The tag for the Docker image for the OD collector         | `Tag of OD collector image`                |
+| `odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds` | How long to wait before starting the probe | `10`                             |
+| `odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds` | How long to wait before the probe is ready | `10`                            |
+| `odTracingConfig.odTracingNamespace` | Namespace where the Operation Dashboard was released       | `""`                                       |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
@@ -350,6 +363,30 @@ or alternatively in a single line you can supply the following: `- secret: {secr
 To supply the YAML objects when deploying via Helm you should use the following: `--set pki.trust[0].secret.secretName=mycertificate,pki.trust[0].secret.items[0]=tls.crt`
 
 If you supply multiple YAML objects then all of the certificates specified will be added into the queue manager and MQ Console Truststores.
+
+###  Configuring Operations Dashboard(OD)
+
+You can enable this feature by setting `odTracingConfig.enabled=true` option. By default, this feature will be disabled.  
+
+Users may note that this feature when enabled will run two sidecar containers [Agent and Collector containers] additionally with the queue manager container in the pod. These sidecar containers will be available in same repository as the MQ's image and will use same pull policy/secret as the MQ's image. These sidecar containers will have following resource limits and requests, users must ensure to make the neccessary resources available.
+- CPU Limit : 500m
+- Memory Limit: 512Mi
+- CPU Request: 256m
+- Memory Request: 128Mi
+
+Users will also notice an additional `odtracing-registration` job that performs registration of current queue manager as a service with the Operations Dashboard. Administrators will have additional steps to execute once the `odtracing-registration` job shows its status as completed:
+
+1. Log into Operations Dashboard UI and go to Menu --> Manage settings
+
+2. Manage setting displays all the registration requests, find your request based on the `odtracing-registration` job name. This name can be found from the pod list of current deployment in your namespace.
+
+3. Approve the registration request. This brings up a popup window with `kubectl` command to create a secret required by the Operations Dashboard collector for sending logs to Operations Dashboard server.
+
+4. Copy the commands and execute them against the namespace running your queue manager pod in your cluster.
+
+5. Registration activity is required once per namespace and will remain valid for any number of queue manager deployments within the namespace.
+
+This completes the configuration of MQ for Operations Dashboard. Messaging operations with the queue manager will now be traced and activity can be visualized on your Operations Dashboard UI.
 
 ## Copyright
 
