@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: icp4i-od-install-assist-job
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "3"   
+spec:
+  template:
+    metadata:
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/component: icp4i-od-manager
+    spec:
+      serviceAccountName: od-sec-{{ .Release.Namespace }}
+      containers:
+        - name: icp4i-od-install-assist
+          image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdInstallAssist }}"
+          imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+          command: [ "sh", "-c" ]
+          args: ["/usr/local/bin/od4ici_generate_secrets.sh"]    
+          env:
+            - name: OD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OD_SERVER_NAME
+              value: {{ .Values.ingress.odUiHost }}
+      restartPolicy: Never
+  backoffLimit: 10
+  
