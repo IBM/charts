@@ -29,9 +29,10 @@ sch:
     meteringProd:
       productName: IBM Cloud Pak for Integration - IBM App Connect Enterprise (Chargeable)
       productID: IBMAppConnectEnterprise_5737_I89_ICP4I_chargeable
-      productVersion: 11.0.0.5
+      productVersion: "11.0.0.6"
     meteringNonProd:
       productName: IBM Cloud Pak for Integration (Non-production) - IBM App Connect Enterprise (Chargeable)
       productID: IBMAppConnectEnterprise_5737_I89_ICP4I_nonProd_chargeable
-      productVersion: 11.0.0.5
+      productVersion: "11.0.0.6"
+    labelType: prefixed
 {{- end -}}

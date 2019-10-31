@@ -29,6 +29,7 @@ data:
   agentc:
   agentp:
   agentx:
+  ca.crt:
   appPassword:
   extensions:
   keystoreCert-<alias>:
@@ -42,6 +43,8 @@ data:
   serverconf:
   setdbparms:
   switch:
+  tls.cert
+  tls.key
   truststoreCert-<alias>:
   truststorePassword:
 ```
@@ -59,6 +62,7 @@ data:
   agentc:
   agentp:
   agentx:
+  ca.crt:
   appPassword:
   extensions:
   keystoreCert-MyCert1:
@@ -75,6 +79,8 @@ data:
   serverconf:
   setdbparms:
   switch:
+  tls.cert
+  tls.key
   truststoreCert-MyCert1:
   truststoreCert-MyCert2:
   truststorePassword:
@@ -87,6 +93,7 @@ The following table describes the secret keys:
 | `agentc`                        | Multi-line value containing a agentc.json file.                     |
 | `agentp`                        | Multi-line value containing a agentp.json file.                     |
 | `agentx`                        | Multi-line value containing a agentx.json file.                     |
+| `ca.crt`                         | The ca certificate in PEM format (will be copied into /home/aceuser/aceserver/tls on startup)  |
 | `extensions`                    | Multi-line value containing an extensions.zip file.                 |
 | `keystoreCert-<alias>`          | Multi-line value containing the certificate in PEM format.          |
 | `keystoreKey-<alias>`           | Multi-line value containing the private key in PEM format.          |
@@ -100,6 +107,8 @@ The following table describes the secret keys:
 | `setdbparms`                    | This supports 2 formats: Each line which starts mqsisetdbparms will be run as written, or each line should specify the <resource> <userId> <password>, separated by a single space |
 | `serverconf`                    | Multi-line value containing a server.conf.yaml.                     |
 | `switch`                        | Multi-line value containing a switch.json.                          |
+| `tls.key`                        | The tls key in PEM format (will be copied into /home/aceuser/aceserver/tls on startup) |
+| `tls.crt`                        | The tls certificate in PEM format (will be copied into /home/aceuser/aceserver/tls on startup) |
 | `truststoreCert-<alias>`        | Multi-line value containing the trust certificate in PEM format.    |
 | `truststorePassword`            | A password to set for the integration server's truststore.          |
 
@@ -115,6 +124,49 @@ The predefined SecurityContextConstraints [`ibm-anyuid-scc`](https://ibm.biz/cpk
 
 ```bash
 oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:default
+```
+
+* Custom SecurityContextConstraints definition:
+
+```
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: ibm-ace-scc
+spec:
+  allowPrivilegeEscalation: true
+  fsGroup:
+    rule: RunAsAny
+  requiredDropCapabilities:
+  - MKNOD
+  allowedCapabilities:
+  - SETPCAP
+  - AUDIT_WRITE
+  - CHOWN
+  - NET_RAW
+  - DAC_OVERRIDE
+  - FOWNER
+  - FSETID
+  - KILL
+  - SETUID
+  - SETGID
+  - NET_BIND_SERVICE
+  - SYS_CHROOT
+  - SETFCAP
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - configMap
+  - emptyDir
+  - projected
+  - secret
+  - persistentVolumeClaim
+  forbiddenSysctls:
+  - '*'
 ```
 
 ## Resources Required
@@ -160,7 +212,7 @@ The configuration section lists the parameters that can be configured during ins
 
 See the instruction (from NOTES.txt in the chart) after the helm installation completes for chart verification. The instruction can also be viewed by running the command:
 
-```bash
+```
 helm status ace-server --tls`
 ```
 
@@ -184,11 +236,11 @@ The following table lists the configurable parameters of the `ibm-ace-server-icp
 | `productionDeployment`           | Boolean toggle for whether App Connect Enterprise server is being run in a production environment or a pre-production environment. | `true`  |
 | `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
 | `designerFlowsEnabled`           | Boolean toggle for whether to deploy a sidecar container into the pod for running flows authored in App Connect Designer. | `false` |
-| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-server-prod:11.0.0.5.1` |
-| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-mqclient-server-prod:11.0.0.5.1`         |
-| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `cp.icr.io/cp/icp4i/ace/ibm-ace-mq-server-prod:11.0.0.5.1`               |
-| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-icp-configurator-prod:11.0.0.5.1` |
-| `image.designerflows`             | Image repository and tag for the App Connect Enterprise designer flows image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-designer-flows-prod:11.0.0.5.1` |
+| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-server-prod:11.0.0.6` |
+| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-mqclient-server-prod:11.0.0.6`         |
+| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `cp.icr.io/cp/icp4i/ace/ibm-ace-mq-server-prod:11.0.0.6`               |
+| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-icp-configurator-prod:11.0.0.6` |
+| `image.designerflows`             | Image repository and tag for the App Connect Enterprise designer flows image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-designer-flows-prod:11.0.0.6` |
 | `image.pullPolicy`               | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`               | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                           | Architecture scheduling preference for worker node (only amd64 supported) - read only. | `amd64`              |
@@ -232,6 +284,16 @@ The following table lists the configurable parameters of the `ibm-ace-server-icp
 | `metrics.enabled`                | Enable Prometheus metrics for the queue manager and integration server. | `true`                              |
 | `livenessProbe.initialDelaySeconds` | The initial delay before starting the liveness probe. Useful for slower systems that take longer to start the queue manager. |	`360` |
 | `readinessProbe.initialDelaySeconds` | The initial delay before starting the readiness probe. |	`10` |
+| `odTracingConfig.enabled`                                        | Whether or not to enable the OD for this release      | `false`               |
+| `odTracingConfig.odAgentImageRepository`                         | Repository where the OD agent image is located        | `cp.icr.io/cp/icp4i/ace/icp4i-od-agent` |
+| `odTracingConfig.odAgentImageTag`                                | The tag for the Docker image for the OD agent         | `1.0.0`               |
+| `odTracingConfig.odAgentLivenessProbe.initialDelaySeconds`       | How long to wait before starting the probe            | `60`                  |
+| `odTracingConfig.odAgentReadinessProbe.initialDelaySeconds`      | How long to wait before the probe is ready            | `10`                  |
+| `odTracingConfig.odCollectorImageRepository`                     | Repository where the OD collector image is located    | `cp.icr.io/cp/icp4i/ace/icp4i-od-collector` |
+| `odTracingConfig.odCollectorImageTag`                            | The tag for the Docker image for the OD collector     | `1.0.0`               |
+| `odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds`   | How long to wait before starting the probe            | `60`                  |
+| `odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds`  | How long to wait before the probe is ready            | `10`                  |
+| `odTracingConfig.odTracingNamespace`                             | Namespace where the Operation Dashboard was released  | `nil`                 |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 

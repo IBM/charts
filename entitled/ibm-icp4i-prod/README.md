@@ -179,7 +179,7 @@ The following table lists the configurable parameters of the navigator chart and
 | `image.services`                       | ICP4I Services docker image                     | `icip-services`              |
 | `image.pullPolicy`                     | Image pull policy                               | `IfNotPresent`               |
 | `image.pullSecret`                     | Image pull secret                               | `nil`                        |
-| `image.tag`                            | ICP4I image tag                                 | `2.1.1`                      |
+| `image.tag`                            | ICP4I image tag                                 | `2.2.0`                      |
 | `sysctlDaemon`                         | Update vm.max_map_count on worker nodes         | `true`                       |
 | `resources.jobs.requests.cpu`          | Jobs CPU resource requests                      | `0.25`                       |
 | `resources.jobs.requests.memory`       | Jobs memory resource requests                   | `256Mi`                      |
