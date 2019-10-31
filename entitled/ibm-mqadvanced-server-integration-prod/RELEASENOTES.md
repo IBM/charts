@@ -1,18 +1,14 @@
 # Breaking Changes
 
-- If you are upgrading from a previous release, you will need to set `icp4i.namespace` to the namespace where the platform navigator is installed.
+- None
 
-# What’s new in the MQ Advanced for Cloud Pak for Integration Chart, Version 4.0.x
+# What’s new in the MQ Advanced for Cloud Pak for Integration Chart, Version 4.1.x
 
-- Added support for deploying through the Entitled Catalog & Registry
-- Added MQ Web Console support for Header-as-a-Service
-- Enabled `initVolumeAsRoot` by default
+- Added tracing using the Operations Dashboard
 
 # Fixes
 
-- 4.0.2: SSO fix for ICP 3.2.1 IAM change
-- 4.0.1: SSO fix for ICP IAM bug
-- 4.0.1: Updated go-toolset to version 1.11.13
+- None
 
 # Prerequisites
 
@@ -27,6 +23,7 @@
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 4.1.0 | October 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Operations Dashboard |
 | 4.0.2 | October 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | SSO fix for ICP 3.2.1 IAM change; README updates |
 | 4.0.1 | September 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | SSO fix for ICP IAM bug; Updated go-toolset to version 1.11.13 |
 | 4.0.0 | September 2019 | >= 1.11.0 | = MQ 9.1.3.0 | ICP4I Namespace | Entitled Catalog & Registry; Header-as-a-Service |

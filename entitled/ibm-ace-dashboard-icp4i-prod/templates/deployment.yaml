@@ -71,11 +71,11 @@ spec:
         - bash
         - -c
         - |
-          groupadd --gid 1000 node
-          useradd -u 1000 -g 1000 -c 'Node User' -d /home/node -s /bin/bash node
-          chown -R node:node /home/node
+          groupadd --gid 1000 contentserver
+          useradd -u 1000 -g 1000 -c 'ACE Content Server User' -d /home/contentserver -s /bin/bash contentserver
+          chown -R contentserver:contentserver /home/contentserver
           mkdir -p /mnt/data/content
-          chown node:node /mnt/data/content
+          chown contentserver:contentserver /mnt/data/content
           chmod ug+rwx /mnt/data/content
         image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.configurator "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
         name: {{ include "sch.names.fullCompName" (list . "content-server-init") }}
@@ -109,9 +109,9 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: rootStoreDirectory
-              value: /home/node/content
+              value: /home/contentserver/content
             - name: certDirectory
-              value: /home/node/ssl
+              value: /home/contentserver/ssl
             - name: ibmAceControlApiKey
               valueFrom:
                 secretKeyRef:
@@ -121,10 +121,10 @@ spec:
               value: {{ .Values.log.format | default "json" | quote }}
           volumeMounts:
             - name: tls
-              mountPath: /home/node/ssl
+              mountPath: /home/contentserver/ssl
               readOnly: true
             - name: content
-              mountPath: /mnt/data 
+              mountPath: /mnt/data
           securityContext:
             privileged: false
             readOnlyRootFilesystem: false
@@ -164,16 +164,15 @@ spec:
             {{- if .Values.security.initVolumeAsRoot }}{{ else }}
             mkdir /mnt/data/content
             {{- end }}
-            rmdir /home/node/content
-            ln -s /mnt/data/content /home/node/content
-            node server.js
+            ln -s /mnt/data/content /home/contentserver/content
+            server
         - name: {{ include "sch.names.fullCompName" (list . "control-ui") }}
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.controlUI "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: ACE_ICP4I
               value: "true"
-            - name: CIP_SERVICES_ENDOPOINT
+            - name: CIP_SERVICES_ENDPOINT
               value: https://icp4i-services-{{ .Values.icp4iNamespace }}.{{ .Values.icp4iNamespace }}.svc:3000
             - name: ACE_INGRESS_HOSTNAME
               {{- if .Values.tls.port }}
@@ -188,9 +187,9 @@ spec:
             - name: ACE_SERVER_CHARTS_LOCATION
               value: {{ .Values.serverChartLocation }}
             - name: ACE_DASHBOARD_KEY_FILE
-              value: /home/node/ssl/controlui-pri.key
+              value: /home/dashboardui/ssl/controlui-pri.key
             - name: ACE_DASHBOARD_CERT_FILE
-              value: /home/node/ssl/controlui-cert.pem
+              value: /home/dashboardui/ssl/controlui-cert.pem
             - name: ACE_DASHBOARD_NAMESPACE
               value: {{ .Release.Namespace | quote }}
             - name: ACE_DASHBOARD_SSO_ENABLED
@@ -227,7 +226,7 @@ spec:
               value: {{ .Values.defaultRole | quote }}
           volumeMounts:
             - name: tls
-              mountPath: /home/node/ssl
+              mountPath: /home/dashboardui/ssl
               readOnly: true
           securityContext:
             privileged: false
