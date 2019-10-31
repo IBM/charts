@@ -14,7 +14,11 @@ spec:
         mode:              {{ .Values.global.mode }}
         namespace:         {{ .Release.Namespace }}
         registry:          {{ regexReplaceAll "/$" .Values.global.registry "" }}
+        {{- if .Values.global.registrySecret }}
         registry-secret:   {{ .Values.global.registrySecret }}
+        {{- else }}
+        registry-secret: ibm-entitlement-key
+        {{- end }}
         storage-class:     {{ .Values.management.storageClass | default .Values.global.storageClass }}
       SubsystemProperties:
         secret-name: {{ .Release.Name }}-apic-cluster-management
@@ -56,7 +60,11 @@ spec:
         mode:              {{ .Values.global.mode }}
         namespace:         {{ .Release.Namespace }}
         registry:          {{ regexReplaceAll "/$" .Values.global.registry "" }}
+        {{- if .Values.global.registrySecret }}
         registry-secret:   {{ .Values.global.registrySecret }}
+        {{- else }}
+        registry-secret: ibm-entitlement-key
+        {{- end }}
         storage-class:     {{ .Values.portal.storageClass | default .Values.global.storageClass }}
       SubsystemProperties:
         secret-name: {{ .Release.Name }}-apic-cluster-portal
@@ -90,7 +98,11 @@ spec:
         mode:              {{ .Values.global.mode }}
         namespace:         {{ .Release.Namespace }}
         registry:          {{ regexReplaceAll "/$" .Values.global.registry "" }}
+        {{- if .Values.global.registrySecret }}
         registry-secret:   {{ .Values.global.registrySecret }}
+        {{- else }}
+        registry-secret: ibm-entitlement-key
+        {{- end }}
         storage-class:     {{ .Values.analytics.storageClass | default .Values.global.storageClass }}
       SubsystemProperties:
         secret-name: {{ .Release.Name }}-apic-cluster-analytics
@@ -120,7 +132,11 @@ spec:
         mode:              {{ .Values.global.mode }}
         namespace:         {{ .Release.Namespace }}
         registry:          ""
+        {{- if .Values.global.registrySecret }}
         registry-secret:   {{ .Values.global.registrySecret }}
+        {{- else }}
+        registry-secret: ibm-entitlement-key
+        {{- end }}
         storage-class:     {{ .Values.gateway.storageClass | default .Values.global.storageClass }}
       SubsystemProperties:
         secret-name: {{ .Release.Name }}-apic-cluster-gateway

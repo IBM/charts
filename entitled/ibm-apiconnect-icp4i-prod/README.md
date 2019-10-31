@@ -355,6 +355,12 @@ $ kubectl delete pvc -l release=my-release
 | `gateway.imageTag`                             | Docker tag for gateway image                                                      |                |
 | `gateway.monitoringImage`                      | Gateway monitoring image                                                          |                |
 | `gateway.monitoringImageTag`                   | Docker image tag for gateway monitoring image                                     |                |
+| `gateway.odTracing.enabled`                    | Enable IBM Cloud Pak For Integration Operations Dashboard                         | `false`        |
+| `gateway.odTracing.odManagerNamespace`         | Namespace where the Operations Dashboard is running                               | `tracing`      |
+| `gateway.odTracing.odAgentImage          `     | OD agent image                                                                    |                |
+| `gateway.odTracing.odAgentImageTag`            | Docker image tag for OD agent                                                     |                |
+| `gateway.odTracing.odCollectorImage`           | OD collector image                                                                |                |
+| `gateway.odTracing.odCollectorImageTag`        | Docker image tag for OD collector                                                 |                |
 | `gateway.imagePullPolicy`                      | Docker image pull policy for gateway images (Always/IfNotPresent)                 | `IfNotPresent` |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
