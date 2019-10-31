@@ -1,5 +1,7 @@
 # Microclimate
 
+_THIS CHART IS NOW DEPRECATED_. Here's what you need to know. On December 1st, 2019 the helm chart for Microclimate will no longer be supported and will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart. The evolution of Microclimate will be delivered via Kabanero Enterprise, a supported offering included as part of IBM Cloud Paks for Applications. Kabanero Enterprise, and IBM Cloud Paks for Applications are the next generation application development platforms that help developers design, develop, deploy and manage their cloud-native applications with speed and control.
+
 ## Introduction
 
 Microclimate is an end to end development environment that lets you rapidly create, edit, and deploy applications.
