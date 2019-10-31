@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
+{{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 apiVersion: v1
 kind: Pod
 metadata:
   name: "{{ .Release.Name }}-dashboard-test"
   labels:
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    app: {{ include "sch.names.fullName" (list .) }}-test
+{{ include "sch.metadata.labels.standard" (list . "test") | indent 4 }}
   annotations:
     "helm.sh/hook": test-success
 spec:
@@ -39,6 +37,7 @@ spec:
   securityContext:
     runAsNonRoot: true
     runAsUser: 405
+  serviceAccountName: {{ $saName }}
   containers:
   - name: "{{ .Release.Name }}-test"
     image: alpine:3.8
@@ -52,10 +51,10 @@ spec:
         drop:
         - ALL
     command:
-      - "sh"
+      - sh
     args:
-      - "-xc"
-      - "timeout -t 60 /bin/sh -c \"until nc -v -w1 -z {{ include "sch.names.fullName" (list .) }} 8300; do sleep 1; done\""
+      - -xc
+      - timeout -t 60 /bin/sh -c "until nc -v -w1 -z {{ include "sch.names.fullName" (list .) }} 8300; do sleep 1; done"
     resources:
       requests:
         cpu: "250m"

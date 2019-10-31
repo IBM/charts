@@ -30,6 +30,7 @@ data:
   agentp:
   agentx:
   appPassword:
+  ca.crt:
   extensions:
   keystoreCert-<alias>:
   keystoreKey-<alias>:
@@ -42,6 +43,8 @@ data:
   serverconf:
   setdbparms:
   switch:
+  tls.cert
+  tls.key
   truststoreCert-<alias>:
   truststorePassword:
 ```
@@ -60,6 +63,7 @@ data:
   agentp:
   agentx:
   appPassword:
+  ca.crt:
   extensions:
   keystoreCert-MyCert1:
   keystoreKey-MyCert1:
@@ -87,6 +91,7 @@ The following table describes the secret keys:
 | `agentc`                        | Multi-line value containing a agentc.json file.                     |
 | `agentp`                        | Multi-line value containing a agentp.json file.                     |
 | `agentx`                        | Multi-line value containing a agentx.json file.                     |
+| `ca.crt`                         | The ca certificate in PEM format (will be copied into /home/aceuser/aceserver/tls on startup)  |
 | `extensions`                    | Multi-line value containing an extensions.zip file.                 |
 | `keystoreCert-<alias>`          | Multi-line value containing the certificate in PEM format.          |
 | `keystoreKey-<alias>`           | Multi-line value containing the private key in PEM format.          |
@@ -100,21 +105,31 @@ The following table describes the secret keys:
 | `setdbparms`                    | This supports 2 formats: Each line which starts mqsisetdbparms will be run as written, or each line should specify the <resource> <userId> <password>, separated by a single space |
 | `serverconf`                    | Multi-line value containing a server.conf.yaml.                     |
 | `switch`                        | Multi-line value containing a switch.json.                          |
+| `tls.key`                        | The tls key in PEM format (will be copied into /home/aceuser/aceserver/tls on startup) |
+| `tls.crt`                        | The tls certificate in PEM format (will be copied into /home/aceuser/aceserver/tls on startup) |
 | `truststoreCert-<alias>`        | Multi-line value containing the trust certificate in PEM format.    |
 | `truststorePassword`            | A password to set for the integration server's truststore.          |
 
 If using `ibm-ace-dashboard-dev` for managing integration servers then further instructions and helper script are provided when adding a server. A full set of working example secrets can be found in the pak_extensions/pre-install directory.
 
-### PodSecurityPolicy Requirements
+### Red Hat OpenShift SecurityContextConstraints Requirements
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp) PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
-* Custom PodSecurityPolicy definition:
+This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster-scoped, as well as namespace-scoped, pre- and post-actions that need to occur.
+
+The predefined SecurityContextConstraints [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart. If your target namespace is not bound to this SecurityContextConstraints resource you can bind it with the following command:
+
+`oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:<namespace>` For example, for release into the `default` namespace:
+``` 
+oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:default
+```
+
+* Custom SecurityContextConstraints definition:
 
 ```
-apiVersion: extensions/v1beta1
-kind: PodSecurityPolicy
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
 metadata:
-  name: ibm-ace-psp
+  name: ibm-ace-scc
 spec:
   allowPrivilegeEscalation: true
   fsGroup:
@@ -149,17 +164,6 @@ spec:
   - persistentVolumeClaim
   forbiddenSysctls:
   - '*'
-```
-
-### Red Hat OpenShift SecurityContextConstraints Requirements
-
-This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster-scoped, as well as namespace-scoped, pre- and post-actions that need to occur.
-
-The predefined SecurityContextConstraints [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart. If your target namespace is not bound to this SecurityContextConstraints resource you can bind it with the following command:
-
-`oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:<namespace>` For example, for release into the `default` namespace:
-``` 
-oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:default
 ```
 
 ## Resources Required
@@ -228,11 +232,11 @@ The following table lists the configurable parameters of the `ibm-ace-server-dev
 | `contentServerURL`               | URL provided by the App Connect Enterprise dashboard to pull resources from. | `nil`                      |
 | `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
 | `designerFlowsEnabled`           | Boolean toggle for whether to deploy a sidecar container into the pod for running flows authored in App Connect Designer. | `false` |
-| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `ibm-ace-server-dev:11.0.0.5.1` |
-| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `ibm-ace-mqclient-server-dev:11.0.0.5.1`         |
-| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `ibm-ace-mq-server-dev:11.0.0.5.1`               |
-| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `ibm-ace-icp-configurator-dev:11.0.0.5.1` |
-| `image.designerflows`             | Image repository and tag for the App Connect Enterprise designer flows image.    | `ibm-ace-designer-flows-dev:11.0.0.5.1` |
+| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `ibm-ace-server-dev:11.0.0.6` |
+| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `ibm-ace-mqclient-server-dev:11.0.0.6`         |
+| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `ibm-ace-mq-server-dev:11.0.0.6`               |
+| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `ibm-ace-icp-configurator-dev:11.0.0.6` |
+| `image.designerflows`             | Image repository and tag for the App Connect Enterprise designer flows image.    | `ibm-ace-designer-flows-dev:11.0.0.6` |
 | `image.pullPolicy`               | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`               | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                           | Architecture scheduling preference for worker node (only amd64 supported) - read only. | `amd64`              |
@@ -276,6 +280,16 @@ The following table lists the configurable parameters of the `ibm-ace-server-dev
 | `metrics.enabled`                | Enable Prometheus metrics for the queue manager and integration server. | `true`                              |
 | `livenessProbe.initialDelaySeconds` | The initial delay before starting the liveness probe. Useful for slower systems that take longer to start the queue manager. |	`360` |
 | `readinessProbe.initialDelaySeconds` | The initial delay before starting the readiness probe. |	`10` |
+| `odTracingConfig.enabled`                                        | Whether or not to enable the OD for this release      | `false`                   |
+| `odTracingConfig.odAgentImageRepository`                         | Repository where the OD agent image is located        | `ibmcom/ace-od-agent`     |
+| `odTracingConfig.odAgentImageTag`                                | The tag for the Docker image for the OD agent         | `1.0.0`                   |
+| `odTracingConfig.odAgentLivenessProbe.initialDelaySeconds`       | How long to wait before starting the probe            | `60`                      |
+| `odTracingConfig.odAgentReadinessProbe.initialDelaySeconds`      | How long to wait before the probe is ready            | `10`                      |
+| `odTracingConfig.odCollectorImageRepository`                     | Repository where the OD collector image is located    | `ibmcom/ace-od-collector` |
+| `odTracingConfig.odCollectorImageTag`                            | The tag for the Docker image for the OD collector     | `1.0.0`                   |
+| `odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds`   | How long to wait before starting the probe            | `60`                      |
+| `odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds`  | How long to wait before the probe is ready            | `10`                      |
+| `odTracingConfig.odTracingNamespace`                             | Namespace where the Operation Dashboard was released  | ``                        |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 

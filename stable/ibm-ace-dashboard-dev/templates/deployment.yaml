@@ -67,11 +67,11 @@ spec:
         - bash
         - -c
         - |
-          groupadd --gid 1000 node
-          useradd -u 1000 -g 1000 -c 'Node User' -d /home/node -s /bin/bash node
-          chown -R node:node /home/node
+          groupadd --gid 1000 contentserver
+          useradd -u 1000 -g 1000 -c 'ACE Content Server User' -d /home/contentserver -s /bin/bash contentserver
+          chown -R contentserver:contentserver /home/contentserver
           mkdir -p /mnt/data/content
-          chown node:node /mnt/data/content
+          chown contentserver:contentserver /mnt/data/content
           chmod ug+rwx /mnt/data/content
         image: "{{ .Values.image.configurator }}-{{ .Values.arch }}"
         name: {{ include "sch.names.fullCompName" (list . "content-server-init") }}
@@ -105,9 +105,9 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: rootStoreDirectory
-              value: /home/node/content
+              value: /home/contentserver/content
             - name: certDirectory
-              value: /home/node/ssl
+              value: /home/contentserver/ssl
             - name: ibmAceControlApiKey
               valueFrom:
                 secretKeyRef:
@@ -117,7 +117,7 @@ spec:
               value: {{ .Values.log.format | default "json" | quote }}
           volumeMounts:
             - name: tls
-              mountPath: /home/node/ssl
+              mountPath: /home/contentserver/ssl
               readOnly: true
             - name: content
               mountPath: /mnt/data
@@ -130,7 +130,7 @@ spec:
             capabilities:
               drop:
               - ALL
-          # Set liveness probe to determine if the Integration Server is running
+          # Set liveness probe to determine if the integration server is running
           livenessProbe:
             exec:
               command:
@@ -139,7 +139,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 1
-          # Set readiness probe to determine if the Integration Server admin endpoint is running
+          # Set readiness probe to determine if the integration server admin endpoint is running
           readinessProbe:
             exec:
               command:
@@ -160,9 +160,8 @@ spec:
             {{- if .Values.security.initVolumeAsRoot }}{{ else }}
             mkdir /mnt/data/content
             {{- end }}
-            rmdir /home/node/content
-            ln -s /mnt/data/content /home/node/content
-            node server.js
+            ln -s /mnt/data/content /home/contentserver/content
+            server
         - name: {{ include "sch.names.fullCompName" (list . "control-ui") }}
           image: "{{ .Values.image.controlUI }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -180,9 +179,9 @@ spec:
             - name: ACE_SERVER_CHARTS_LOCATION
               value: "ibm-charts"
             - name: ACE_DASHBOARD_KEY_FILE
-              value: /home/node/ssl/controlui-pri.key
+              value: /home/dashboardui/ssl/controlui-pri.key
             - name: ACE_DASHBOARD_CERT_FILE
-              value: /home/node/ssl/controlui-cert.pem
+              value: /home/dashboardui/ssl/controlui-cert.pem
             - name: ACE_DASHBOARD_NAMESPACE
               value: {{ .Release.Namespace | quote }}
             - name: ACE_DASHBOARD_SSO_ENABLED
@@ -219,7 +218,7 @@ spec:
               value: {{ .Values.defaultRole | quote }}
           volumeMounts:
             - name: tls
-              mountPath: /home/node/ssl
+              mountPath: /home/dashboardui/ssl
               readOnly: true
           securityContext:
             privileged: false
@@ -230,7 +229,7 @@ spec:
             capabilities:
               drop:
               - ALL
-          # Set liveness probe to determine if the Integration Server is running
+          # Set liveness probe to determine if the integration server is running
           livenessProbe:
             httpGet:
               path: /apiv2/system
@@ -240,7 +239,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 1
-          # Set readiness probe to determine if the Integration Server admin endpoint is running
+          # Set readiness probe to determine if the integration server admin endpoint is running
           readinessProbe:
             httpGet:
               path: /apiv2/system
