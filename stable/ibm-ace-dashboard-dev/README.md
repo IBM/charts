@@ -4,7 +4,7 @@
 
 **Important:**
 * Only one dashboard can be installed per namespace.
-* If using a private Docker registry an image pull secret needs to be created before installing the chart.
+* If using a private Docker registry, an image pull secret needs to be created before installing the chart.
 
 ## Introduction
 
@@ -22,18 +22,24 @@ This chart deploys a single IBM App Connect Enterprise (Developer Edition) dashb
   * You must either create a persistent volume, or specify a storage class if classes are defined in your cluster.
   * The storage class must support read-write-many
 
+## Red Hat OpenShift SecurityContextConstraints Requirements
 
+This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
 
-## PodSecurityPolicy Requirements
+The predefined SecurityContextConstraints [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart. If your target namespace is not bound to this SecurityContextConstraints resource you can bind it with the following command:
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation.  Choose either the predefined [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp) PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
-* Custom PodSecurityPolicy definition:
-
+`oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:<namespace>` For example, for release into the `default` namespace:
+```code
+oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:default
 ```
-apiVersion: extensions/v1beta1
-kind: PodSecurityPolicy
+
+* Custom SecurityContextConstraints definition:
+
+```yaml
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
 metadata:
-  name: ibm-ace-psp
+  name: ibm-ace-scc
 spec:
   allowPrivilegeEscalation: true
   fsGroup:
@@ -70,17 +76,6 @@ spec:
   - '*'
 ```
 
-## Red Hat OpenShift SecurityContextConstraints Requirements
-
-This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
-
-The predefined SecurityContextConstraints [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart. If your target namespace is not bound to this SecurityContextConstraints resource you can bind it with the following command:
-
-`oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:<namespace>` For example, for release into the `default` namespace:
-``` 
-oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:default
-```
-
 ## Installing the Chart
 
 Only one dashboard can be installed per namespace.
@@ -115,9 +110,9 @@ The following table lists the configurable parameters of the `ibm-ace-dashboard-
 
 | Parameter                                 | Description                                     | Default                                                    |
 | ----------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
-| `image.contentServer`                     | Content server Docker image                     | `ibmcom/ace-content-server:11.0.0.5.1`                     |
-| `image.controlUI`                         | Control UI Docker image                     | `ibmcom/ace-dashboard:11.0.0.5.1`                          |
-| `image.configurator`                      | Configurator Docker image                    | `ibmcom/ace-icp-configurator:11.0.0.5.1`                   |
+| `image.contentServer`                     | Content server Docker image                     | `ibmcom/ace-content-server:11.0.0.6`                     |
+| `image.controlUI`                         | Control UI Docker image                     | `ibmcom/ace-dashboard:11.0.0.6`                          |
+| `image.configurator`                      | Configurator Docker image                    | `ibmcom/ace-icp-configurator:11.0.0.6`                   |
 | `image.pullPolicy`                        | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`                        | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                                    | Architecture scheduling preference for worker node (only amd64 supported) - readonly. | `amd64`               |
@@ -171,7 +166,7 @@ The `log.format` value controls whether the format of the output logs is:
 
 ## Limitations
 
- The dashboard is not supported on Safari running on either macOS or iOS.
+The dashboard is not supported on Safari running on either macOS or iOS.
 
 ## Documentation
 
