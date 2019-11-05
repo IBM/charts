@@ -18,6 +18,7 @@ See [README.md](README.md).
 ## Version History
 | Chart Version | Date Released  | Kubernetes Required | Images Supported                                                   | Breaking Changes | Details                                                                   |
 | ------------- | -------------- | ------------------- | ------------------------------------------------------------------ | ---------------- | ------------------------------------------------------------------------- |
+| 2.2.1         | Nov 5th, 2019 | \>=1.11             | icip-navigator:2.2.0, icip-configurator:2.2.0, icip-services:2.2.0 | N/A              | Add icons                                          |
 | 2.2.0         | Oct 28th, 2019 | \>=1.11             | icip-navigator:2.2.0, icip-configurator:2.2.0, icip-services:2.2.0 | N/A              | Support for Operations Dashboard                                          |
 | 2.1.2         | Oct 4th, 2019  | \>=1.11             | icip-navigator:2.1.1, icip-configurator:2.1.1, icip-services:2.1.1 | N/A              | Updated license                                                           |
 | 2.1.1         | Sep 27th, 2019 | \>=1.11             | icip-navigator:2.1.0, icip-configurator:2.1.0, icip-services:2.1.0 | N/A              | Fixes                                                                     |
