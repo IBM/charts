@@ -1,0 +1,27 @@
+{{ if and .Values.persistence.enabled (not .Values.appDataVolume.existingClaimName) -}}
+{{- include "sch.config.init" (list . "ibm-ucd-prod.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ $fullName }}-{{ .Values.appDataVolume.name }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  {{- if .Values.persistence.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.appDataVolume.storageClassName | quote }}
+  {{- else }}
+  ## disable dynamic provisioning
+  storageClassName: ""
+  {{- end }}
+
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: {{ .Values.appDataVolume.size | quote }}
+{{- end }}

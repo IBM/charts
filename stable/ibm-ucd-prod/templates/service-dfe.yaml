@@ -1,0 +1,27 @@
+{{- include "sch.config.init" (list . "ibm-ucd-prod.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}-dfe
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "dfe") | indent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    {{- if .Values.secureConnections.required }}
+    - port: 8443
+      targetPort: 8443
+      protocol: TCP
+      name: https-dfe
+    {{- else }}
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http-dfe
+    {{- end }}
+  selector:
+    app.kubernetes.io/name: "{{ include "sch.names.appName" (list .) }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/component: "dfe"
+  sessionAffinity: ClientIP
