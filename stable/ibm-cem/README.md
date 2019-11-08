@@ -1,5 +1,10 @@
 # IBM Cloud Event Management Community Edition
 
+## Deprecation with Alternative
+THIS CHART IS NOW DEPRECATED. On Nov. 9th, 2019 the helm chart will no longer be supported and will be removed from IBM's public helm repository on github.com.
+To continue to use the features and functionality of IBM Cloud Event Management Community Edition
+please move to IBM Cloud App Management (ICAM), Netcool Operations Insight (NOI) or Cloud Pak for MCM (CP4MCM).
+
 ## Introduction
 * Use the IBM® Cloud Event Management Community Edition service to set up real-time incident management for your services, applications, and infrastructure.
 * Restore service and resolve operational incidents fast!
