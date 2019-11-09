@@ -1,0 +1,35 @@
+{{- include "sch.config.init" (list . "ibm-ucd-prod.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "srv") | indent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    {{- if .Values.secureConnections.required }}
+    - port: 8443
+      targetPort: 8443
+      protocol: TCP
+      name: https
+    {{- else }}
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+    {{- end }}
+    - port: 7918
+      targetPort: 7918
+      protocol: TCP
+      name: jms
+    - port: 7919
+      targetPort: 7919
+      protocol: TCP
+      name: wss
+  selector:
+    app.kubernetes.io/name: "{{ include "sch.names.appName" (list .) }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/component: "srv"
+  sessionAffinity: ClientIP
