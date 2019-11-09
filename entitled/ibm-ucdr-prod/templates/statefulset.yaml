@@ -1,0 +1,120 @@
+{{- include "sch.config.init" (list . "ibm-ucdr-prod.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "rly") | indent 4 }}
+spec:
+  serviceName: {{ $fullName }}-hl
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "rly") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "rly") | indent 8 }}
+        ucdcomp: {{ .Release.Name }}-relay
+      annotations:
+        productName: "UrbanCode Deploy Agent Relay"
+        productID: "CC0QYML"
+        productVersion: "7.0.4.1"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      affinity:
+      {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: ucdcomp
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}-relay
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 7916
+        - containerPort: 20080
+        - containerPort: 20081
+        readinessProbe:
+          tcpSocket:
+            port: 20080
+          initialDelaySeconds: 20
+          periodSeconds: 20
+        livenessProbe:
+          tcpSocket:
+            port: 20080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        env:
+          - name: JMS_PROXY_SERVER
+            value: "{{ .Values.serverHostPort }}"
+          - name: CODESTATION_ENABLE_REPLICATION
+            value: "{{ .Values.codeStationReplication.enabled }}"
+          - name: CODESTATION_PERSIST_CACHE
+            value: "{{ .Values.codeStationReplication.persisted }}"
+          - name: CODESTATION_MAX_CACHE_SIZE
+            value: "{{ .Values.codeStationReplication.maxCacheSize }}"
+          - name: CODESTATION_SERVER_URL
+            value: "{{ .Values.codeStationReplication.serverUrl }}"
+          - name: CODESTATION_SERVER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secret.name }}
+                name: {{ .Values.secret.name }}
+                {{- else }}
+                name: {{ .Release.Name }}-secrets
+                {{- end }}
+                key: cspassword
+          - name: CODESTATION_GEOTAGS
+            value: "{{ .Values.codeStationReplication.geotags }}"
+        volumeMounts:
+          - name: "{{ $fullName }}-{{ .Values.confVolume.name }}"
+            mountPath: "/opt/ibm-ucd/agentrelay/configs"
+        resources:
+          {{- if .Values.resources.constraints.enabled}}
+          limits:
+{{ toYaml .Values.resources.limits | indent 12 }}
+          requests:
+{{ toYaml .Values.resources.requests | indent 12 }}
+          {{- end }}
+      {{- if .Values.image.secret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.secret }}
+      {{- end }}
+      volumes:
+      - name: "{{ $fullName }}-{{ .Values.confVolume.name }}"
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.confVolume.existingClaimName }}
+          claimName: {{ .Values.confVolume.existingClaimName }}
+        {{- else }}
+          claimName: {{ $fullName }}-{{ .Values.confVolume.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+
