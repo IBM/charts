@@ -1,0 +1,48 @@
+{{- include "sch.config.init" (list . "ibm-ucda-prod.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+{{- $helmTest := default "disabled" .Values.helmTestOverride }}
+{{- if ne $helmTest "disabled" }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $fullName }}-listagents-test"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+    type: "test"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+  {{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+  containers:
+    - name: "{{ $fullName }}-wget-test"
+      image: alpine:3.8
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1001
+        capabilities:
+          drop:
+          - ALL
+      resources:
+        {{- if .Values.resources.constraints.enabled}}
+        limits:
+{{ toYaml .Values.resources.limits | indent 10 }}
+        requests:
+{{ toYaml .Values.resources.requests | indent 10 }}
+        {{- end }}
+      command: ["sh", "-c", "wget --no-check-certificate https://admin:admin@ucds-{{ $fullName | replace "ucda" "ucd" }}:8443/cli/agentCLI -O -"]  # pragma: whitelist secret
+  {{- if .Values.image.secret }}
+  imagePullSecrets:
+  - name: {{ .Values.image.secret }}
+  {{- end }}
+  restartPolicy: Never
+{{- end }}
