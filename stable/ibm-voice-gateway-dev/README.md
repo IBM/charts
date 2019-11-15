@@ -345,15 +345,15 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `tenantConfigSecretName`                                       | Tenant Config secret name                             | `vgw-tenantconfig-secret`       |
 | `image.sipOrchestrator.name`                             | Sip Orchestrator docker image name                           | `voice-gateway-so`       |
 | `image.sipOrchestrator.containerName`                          | Sip Orchestrator container name                       | `vgw-sip-orchestrator`          |
-| `image.sipOrchestrator.tag`                                    | Sip Orchestrator docker image tag                     | `1.0.3.0`                       |
+| `image.sipOrchestrator.tag`                                    | Sip Orchestrator docker image tag                     | `1.0.4.0`                       |
 | `image.mediaRelay.name`                                  | Media Relay docker image name                                | `voice-gateway-mr`       |
 | `image.mediaRelay.containerName`                               | Media Relay container name                            | `vgw-media-relay`               |
-| `image.mediaRelay.tag`                                         | Media Relay docker image tag                          | `1.0.3.0`                       |
+| `image.mediaRelay.tag`                                         | Media Relay docker image tag                          | `1.0.4.0`                       |
 | `image.pullPolicy`                                             | Image pull policy                                     | `IfNotPresent`                        |
 | `sip.codecs.g729.enable`                                       | Enable G729 Codec Service                   | `false`                           |
 | `sip.codecs.image.name`                                       | G729 Codec Service docker image name                   | `voice-gateway-codec-g729`                           |
 | `sip.codecs.image.containerName`                                       | G729 Codec Service container name                   | `vgw-codec-g729`                           |
-| `sip.codecs.image.tag`                                       | G729 Codec Service docker image tag                   | `1.0.3.0`                           |
+| `sip.codecs.image.tag`                                       | G729 Codec Service docker image tag                   | `1.0.4.0`                           |
 | `sip.codecs.g729.resources.requests.cpu`                                                   | CPU resource request                                  | `1000m`                          |
 | `sip.codecs.g729.resources.requests.memory`                                                   | Memory resource request                                  | `4Gi`                          |
 | `sip.codecs.g729.resources.limits.cpu`                                                   | CPU resource limit                                  | `2000m`                          |
@@ -433,10 +433,15 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
 | `sms.tenantConfigSecretName`                                   | Tenant Config secret name                             | `smsgw-tenantconfig-secret`     |
 | `sms.image.name`                                         | SMS Gateway docker image name                                | `voice-gateway-sms`      |
 | `sms.image.containerName`                                      | SMS Gateway container name                            | `vgw-sms-gateway`               |
-| `sms.image.tag`                                                | SMS Gateway docker image tag                          | `1.0.3.0`                       |
+| `sms.image.tag`                                                | SMS Gateway docker image tag                          | `1.0.4.0`                       |
 | `sms.image.containerPort`                                      | SMS Gateway for TCP                                   | `9080`                          |
+| `sms.image.servicePort`                                      | Service Port for TCP connection                                   | `30087`                          |
 | `sms.image.containerPortTls`                                   | SMS Gateway for TLS                                   | `9443`                          |
+| `sms.image.servicePortTls`                                   | Service Port for TLS connection                                   | `30047`                          |
 | `sms.image.pullPolicy`                                         | Image pull policy                                     | `IfNotPresent`                  |
+| `sms.networkPolicy.smsProviderPort`                  | SMS Provider Port                                     | `80`                  |
+| `sms.networkPolicy.smsProviderPortTls`             | SMS Provider TLS Port                                     | `443`                  |
+| `sms.networkPolicy.disableNonSecurePort`                    | Disable Non Secure Port. Recommended to be enabled in Production Environment                            | `true`                  |
 | `sms.persistence.volume.useDynamicProvisioning`                | Dynamic provisioning setup                            | `false`                         |
 | `sms.persistence.volume.logs.enable`                           | Enable persistent volume for logs                     | `false`                         |
 | `sms.persistence.volume.logs.name`                             | Name of the persistent volume claim                   | `sms-persistent-logs`           |
@@ -603,7 +608,7 @@ The following table lists the configurable parameters of the ibm-voice-gateway-d
     capacity:
       storage: 4Gi
     accessModes:
-      - ReadWriteMany
+      - ReadWriteOnce
     persistentVolumeReclaimPolicy: Retain
     hostPath:
       path: <PATH>
