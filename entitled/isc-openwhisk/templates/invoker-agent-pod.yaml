@@ -1,0 +1,72 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+{{ if .Values.invoker.containerFactory.kubernetes.agent.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ .Release.Name }}-invoker-agent
+  labels:
+    name: {{ .Release.Name }}-invoker-agent
+{{ include "openwhisk.label_boilerplate" .| indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      name: {{ .Release.Name }}-invoker-agent
+  template:
+    metadata:
+      labels:
+        name: {{ .Release.Name }}-invoker-agent
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+    spec:
+      restartPolicy: Always
+      hostNetwork: true
+
+      affinity:
+{{ include "openwhisk.affinity.invoker" . | indent 8 }}
+
+{{- if .Values.toleration.enabled }}
+      tolerations:
+{{ include "openwhisk.toleration.invoker" . | indent 8 }}
+{{- end }}
+
+      volumes:
+{{ include "openwhisk.docker_volumes" . | indent 6 }}
+      - name: userlogs
+        emptyDir: {}
+      - name: scripts-dir
+        configMap:
+          name: {{ .Release.Name }}-invoker-scripts
+
+      initContainers:
+      # Pull images for all default runtimes before starting invoker
+{{ include "openwhisk.docker_pull_runtimes" . | indent 6 }}
+{{ include "openwhisk.docker.imagePullSecrets" . | indent 6 }}
+      containers:
+      - name: invoker-agent
+        image: "{{- .Values.docker.registry.name -}}{{- .Values.invoker.containerFactory.kubernetes.agent.imageName -}}:{{- .Values.invoker.containerFactory.kubernetes.agent.imageTag -}}"
+        imagePullPolicy: {{ .Values.invoker.containerFactory.kubernetes.agent.imagePullPolicy | quote }}
+        securityContext:
+          privileged: true
+        ports:
+        - name: agent
+          containerPort: {{ .Values.invoker.containerFactory.kubernetes.agent.port }}
+        volumeMounts:
+{{ include "openwhisk.docker_volume_mounts" . | indent 8 }}
+        - name: userlogs
+          mountPath: "/action-logs"
+{{- end }}

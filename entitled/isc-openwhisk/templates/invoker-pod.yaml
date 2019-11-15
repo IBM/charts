@@ -1,0 +1,217 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+{{- if not .Values.controller.lean }}
+{{- if eq .Values.invoker.containerFactory.impl "docker" }}
+apiVersion: apps/v1
+kind: DaemonSet
+{{- else if eq .Values.invoker.containerFactory.impl "kubernetes" }}
+apiVersion: apps/v1
+kind: StatefulSet
+{{- end }}
+metadata:
+  name: {{ .Release.Name }}-invoker
+  labels:
+    name: {{ .Release.Name }}-invoker
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}    
+spec:
+{{- if eq .Values.invoker.containerFactory.impl "kubernetes" }}
+  podManagementPolicy: "Parallel"
+  serviceName: {{ .Release.Name }}-invoker
+  replicas: {{ .Values.invoker.containerFactory.kubernetes.replicaCount }}
+{{- end }}
+  selector:
+    matchLabels:
+      name: {{ .Release.Name }}-invoker
+  template:
+    metadata:
+      labels:
+        name: {{ .Release.Name }}-invoker
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+      annotations:
+        productID: {{ include "ibm-isc-openwhisk.chart" . }}
+        productName: {{ include "ibm-isc-openwhisk.chart" . }}
+        productVersion: {{ $.Release.Name }}   
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsNonRoot: true
+{{- if eq .Values.invoker.containerFactory.impl "kubernetes" }}
+      serviceAccountName: {{ .Release.Name }}-invoker
+{{- end }}
+      restartPolicy: {{ .Values.invoker.restartPolicy }}
+
+      affinity:
+{{ include "openwhisk.affinity.invoker" . | indent 8 }}
+{{- if eq .Values.invoker.containerFactory.impl "kubernetes" }}
+{{ include "openwhisk.affinity.selfAntiAffinity" ( printf "%s-invoker" .Release.Name ) | indent 8 }}
+{{- end }}
+
+{{- if .Values.toleration.enabled }}
+      tolerations:
+{{ include "openwhisk.toleration.invoker" . | indent 8 }}
+{{- end }}
+
+{{ include "openwhisk.invoker.volumes" . }}
+
+      initContainers:
+{{- if eq .Values.invoker.containerFactory.impl "docker" }}
+      # Pull images for all default runtimes before starting invoker
+{{ include "openwhisk.docker_pull_runtimes" . | indent 6 }}
+{{- end }}
+      # Wait for a controller to be up (which implies kafka, zookeeper, couchdb are all up as well).
+{{ include "openwhisk.readiness.waitForController" . | indent 6 }}
+{{ include "openwhisk.docker.imagePullSecrets" . | indent 6 }}
+      containers:
+      - name: invoker
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        image: "{{- .Values.docker.registry.name -}}{{- .Values.invoker.imageName -}}:{{- .Values.invoker.imageTag -}}"
+        imagePullPolicy: {{ .Values.invoker.imagePullPolicy | quote }}
+{{- if and (eq .Values.invoker.containerFactory.impl "docker") .Values.invoker.containerFactory.networkConfig.dns.inheritInvokerConfig }}
+        command: [ "/bin/bash", "-c", ". /invoker-scripts/configureDNS.sh && /init.sh --uniqueName $INVOKER_NAME" ]
+{{- else }}
+        command: [ "/bin/bash", "-c", "/init.sh --uniqueName $INVOKER_NAME" ]
+{{- end }}
+        env:
+          - name: "PORT"
+            value: {{ .Values.invoker.port | quote }}
+
+          # Needed by invoker to set the environment variable __OW_API_HOST in action containers
+{{ include "openwhisk.invoker.apihost" . | indent 10 }}
+
+{{- if not .Values.invoker.containerFactory.networkConfig.dns.inheritInvokerConfig }}
+{{- if ne .Values.invoker.containerFactory.networkConfig.dns.overrides.nameservers "" }}
+          # DNS Server(s) to be used by action containers
+  {{- range $index, $element := splitList " " .Values.invoker.containerFactory.networkConfig.dns.overrides.nameservers }}
+          - name: "CONFIG_whisk_containerFactory_containerArgs_dnsServers_{{ $index }}"
+            value: {{ $element | quote }}
+  {{- end }}
+{{- end }}
+{{- if ne .Values.invoker.containerFactory.networkConfig.dns.overrides.search "" }}
+          # DNS search path to be used by action containers
+  {{- range $index, $element := splitList " " .Values.invoker.containerFactory.networkConfig.dns.overrides.search }}
+          - name: "CONFIG_whisk_containerFactory_containerArgs_dnsSearch_{{ $index }}"
+            value: {{ $element | quote }}
+  {{- end }}
+{{- end }}
+{{- if ne .Values.invoker.containerFactory.networkConfig.dns.overrides.options "" }}
+          # DNS options to be used by action containers
+  {{- range $index, $element := splitList " " .Values.invoker.containerFactory.networkConfig.dns.overrides.options }}
+          - name: "CONFIG_whisk_containerFactory_containerArgs_dnsOptions_{{ $index }}"
+            value: {{ $element | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
+          - name: "CONFIG_whisk_containerFactory_containerArgs_network"
+            value: {{ .Values.invoker.containerFactory.networkConfig.name | quote }}
+
+          - name: "CONFIG_whisk_containerFactory_containerArgs_extraEnvVars_0"
+            value: "__OW_ALLOW_CONCURRENT={{ .Values.invoker.containerFactory.enableConcurrency }}"
+
+          - name: "CONFIG_whisk_containerFactory_runtimesRegistry_url"
+            value: "" # "{{ .Values.docker.registry.name }}" - set custom registry for images here
+
+          # Invoker name is the name of the node (DaemonSet) or pod (StatefulSet)
+          - name: "INVOKER_NAME"
+            valueFrom:
+              fieldRef:
+                fieldPath: {{ if eq .Values.invoker.containerFactory.impl "docker" }} spec.nodeName {{ else }} metadata.name {{ end }}
+
+          # Java options
+          - name: "JAVA_OPTS"
+            value: "-Xmx{{- .Values.invoker.jvmHeapMB -}}M {{ .Values.invoker.jvmOptions }}"
+
+          # Invoker options
+          - name: "INVOKER_OPTS"
+            value: "{{ .Values.invoker.options }} {{ include "openwhisk.invoker.add_opts" . }}"
+
+{{ if .Values.invoker.containerFactory.kubernetes.agent.enabled }}
+          - name: "CONFIG_whisk_kubernetes_invokerAgent_enabled"
+            value:  "TRUE"
+          - name: "CONFIG_whisk_kubernetes_invokerAgent_port"
+            value: {{ .Values.invoker.containerFactory.kubernetes.agent.port | quote }}
+{{ end }}
+
+          # action runtimes
+          - name: "RUNTIMES_MANIFEST"
+            value: {{ template "openwhisk.runtimes_manifest" . }}
+
+          # Action limits
+{{ include "openwhisk.limitsEnvVars" . | indent 10 }}
+
+          # Default to empty logs dir. This is because logs should go to stdout
+          - name: "WHISK_LOGS_DIR"
+            value: ""
+
+          # this version is the day it is deployed,
+          - name:  "CONFIG_whisk_info_date"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-whisk.config
+                key: whisk_info_date
+
+          # properties for DB connection
+{{ include "openwhisk.dbEnvVars" . | indent 10 }}
+
+          # properties for kafka connection
+          - name: "KAFKA_HOSTS"
+            value: "{{ include "openwhisk.kafka_connect" . }}"
+{{ include "openwhisk.kafkaConfigEnvVars" . | indent 10 }}
+
+          # properties for zookeeper connection
+          - name: "ZOOKEEPER_HOSTS"
+            value: "{{ include "openwhisk.zookeeper_connect" . }}"
+{{ if .Values.metrics.prometheusEnabled }}
+          - name: "OPENWHISK_ENCODED_CONFIG"
+            value: {{ template "openwhisk.whiskconfig" . }}
+{{ end }}
+{{ if or .Values.metrics.kamonEnabled .Values.metrics.prometheusEnabled }}
+          - name: "METRICS_KAMON"
+            value: "true"
+{{ end }}
+{{ if and .Values.metrics.kamonTags .Values.metrics.prometheusEnabled }}
+          - name: "METRICS_KAMON_TAGS"
+            value: "true"
+{{ end }}
+{{ if .Values.metrics.userMetricsEnabled }}
+          - name: "CONFIG_whisk_userEvents_enabled"
+            value: "true"
+{{ end }}
+        ports:
+        - name: invoker
+          containerPort: {{ .Values.invoker.port }}
+{{ include "openwhisk.invoker.volume_mounts" . }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                 - "amd64"          
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false    
+{{- end }}

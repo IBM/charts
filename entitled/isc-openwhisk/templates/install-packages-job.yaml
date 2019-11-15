@@ -1,0 +1,176 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-install-packages
+  labels:
+    name: {{ .Release.Name }}-install-packages
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: {{ .Release.Name }}-install-packages
+      labels:
+        name: {{ .Release.Name }}-install-packages
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+      annotations:
+        productID: {{ include "ibm-isc-openwhisk.chart" . }}
+        productName: {{ include "ibm-isc-openwhisk.chart" . }}
+        productVersion: {{ $.Release.Name }}   
+    spec:
+      serviceAccountName: {{ include "openwhisk.serviceAccountName" . }}
+      securityContext:
+        runAsUser: 1001
+        runAsNonRoot: true
+      restartPolicy: Never
+      volumes:
+      - name: task-dir
+        configMap:
+          name: {{ .Release.Name }}-install-packages-cm
+      initContainers:
+{{- if not .Values.controller.lean }}
+{{ include "openwhisk.readiness.waitForHealthyInvoker" . | indent 6 }}
+{{ end }}
+{{ include "openwhisk.docker.imagePullSecrets" . | indent 6 }}
+      containers:
+      - name: install-packages
+        securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+        image: "{{- .Values.docker.registry.name -}}{{- .Values.utility.imageName -}}:{{- .Values.utility.imageTag -}}"
+        imagePullPolicy: {{ .Values.utility.imagePullPolicy | quote }}
+        command: ["/bin/bash", "-c", "set -e; . /task/myTask.sh"]
+        volumeMounts:
+        - name: task-dir
+          mountPath: "/task/myTask.sh"
+          subPath: "myTask.sh"
+        env:
+          - name: "WHISK_AUTH"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.whisk.authSecret }} #{{ .Release.Name }}-whisk.auth
+                key: system
+          - name: "WHISK_API_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-whisk.config
+                key: whisk_api_host_url
+
+          # apigateway configuration (for installing routemgmt actions)
+          - name: "WHISK_SYSTEM_NAMESPACE"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-whisk.config
+                key: whisk_system_namespace
+          - name: "WHISK_API_GATEWAY_HOST_V2"
+            value: "http://$({{ upper .Release.Name | replace "-" "_" }}_APIGATEWAY_SERVICE_HOST):$({{ upper .Release.Name }}_APIGATEWAY_SERVICE_PORT_API)/v2"
+
+          # Provider database configuration
+          {{- if .Values.providers.db.external }}
+          # Use an external CouchDB instance for the providers
+          - name: "PROVIDER_DB_PROTOCOL"
+            value: {{ .Values.providers.db.protocol | quote }}
+          - name: "PROVIDER_DB_HOST"
+            value: {{ .Values.providers.db.host | quote }}
+          - name: "PROVIDER_DB_USERNAME"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.providers.db.secret | quote }} 
+                key: adminUsername
+          - name: "PROVIDER_DB_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.providers.db.secret | quote }} 
+                key: adminPassword
+          - name: "PROVIDER_DB_PORT"
+            value: {{ .Values.providers.db.port | quote }}
+          {{- else }}
+          # Use the internally deployed CouchDB service for the providers
+          - name: "PROVIDER_DB_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db.config
+                key: db_host
+          - name: "PROVIDER_DB_PROTOCOL"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db.config
+                key: db_protocol
+          - name: "PROVIDER_DB_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-db.config
+                key: db_port
+          - name: "PROVIDER_DB_USERNAME"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.db.secret }}
+                key: adminUsername
+          - name: "PROVIDER_DB_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.db.secret }}
+                key: adminPassword
+          {{ end }}
+
+          # Provider database table prefixes
+          - name: "ALARM_DB_PREFIX"
+            value: {{ .Values.providers.alarm.dbPrefix | quote }}
+          - name: "CLOUDANT_DB_PREFIX"
+            value: {{ .Values.providers.cloudant.dbPrefix | quote }}
+          - name: "KAFKA_DB_PREFIX"
+            value: {{ .Values.providers.kafka.dbPrefix | quote }}
+
+          # Should each of the providers be installed?
+          - name: "OW_INSTALL_ALARM_PROVIDER"
+            value: {{ if .Values.providers.alarm.enabled }} "yes" {{ else }} "no" {{ end }}
+          - name: "OW_INSTALL_CLOUDANT_PROVIDER"
+            value: {{ if .Values.providers.cloudant.enabled }} "yes" {{ else }} "no" {{ end }}
+          - name: "OW_INSTALL_KAFKA_PROVIDER"
+            value: {{ if .Values.providers.kafka.enabled }} "yes" {{ else }} "no" {{ end }}
+
+          # tags to use for git clone operations
+          - name: "OW_GIT_TAG_OPENWHISK"
+            value: {{ .Values.whisk.versions.openwhisk.gitTag | quote }}
+          - name: "OW_GIT_TAG_OPENWHISK_CATALOG"
+            value: {{ .Values.whisk.versions.openwhiskCatalog.gitTag | quote }}
+          - name: "OW_GIT_TAG_OPENWHISK_PACKAGE_ALARMS"
+            value: {{ .Values.whisk.versions.openwhiskPackageAlarms.gitTag | quote }}
+          - name: "OW_GIT_TAG_OPENWHISK_PACKAGE_CLOUDANT"
+            value: {{ .Values.whisk.versions.openwhiskPackageCloudant.gitTag | quote }}
+          - name: "OW_GIT_TAG_OPENWHISK_PACKAGE_KAFKA"
+            value: {{ .Values.whisk.versions.openwhiskPackageKafka.gitTag | quote }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                 - "amd64"          
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false        
