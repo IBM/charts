@@ -1,0 +1,184 @@
+# Create a Deployment component for Operators which inlcudes 2 containers "ansible" and "operator"  
+{{- $founationsRepo := (include "foundations.repository" .) }}
+{{- $solutionsRepo := (include "solutions.repository" .) }}
+{{- range $op,$v := .Values.global.operators }}
+{{- $ndx := index $.Values.global.images $op }}
+{{- $registry := ternary $founationsRepo $solutionsRepo (eq "middleware" $op) }}
+{{- $image := printf "%s/%s:%s" $founationsRepo $ndx.image $ndx.tag }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $op }}
+  labels:
+    name: {{ $op }}
+    app.kubernetes.io/name: {{ $op }}
+    helm.sh/chart: {{ $.Chart.Name }}
+    release: {{ $.Release.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+  annotations:
+    cloudpakId: {{ $.Values.cloudpak.id }}
+    cloudpakName: {{ $.Values.cloudpak.name }}
+    cloudpakVersion: {{ $.Values.cloudpak.version }}
+    productID: {{ $.Values.product.id }}
+    productName: {{ $.Values.product.name }}
+    productVersion: {{ $.Values.product.version }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $op }}
+  template:
+    metadata:
+      labels:
+        name: {{ $op }}
+        app.kubernetes.io/name: {{ $op }}
+        helm.sh/chart: {{ $.Chart.Name }}
+        release: {{ $.Release.Name }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/managed-by: {{ $.Release.Service }}
+      annotations:
+        cloudpakId: {{ $.Values.cloudpak.id }}
+        cloudpakName: {{ $.Values.cloudpak.name }}
+        cloudpakVersion: {{ $.Values.cloudpak.version }}
+        productID: {{ $.Values.product.id }}
+        productName: {{ $.Values.product.name }}
+        productVersion: {{ $.Values.product.version }}
+    spec:
+      serviceAccountName: ibm-isc-operators
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+      securityContext:
+        runAsUser: 1001
+        runAsNonRoot: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                 - {{ $.Values.global.arch | default "amd64" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - {{ $op }}
+            topologyKey: kubernetes.io/hostname
+      {{- if $.Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml $.Values.global.nodeSelector | nindent 8 }}
+      {{- end }}
+    {{- if $.Values.global.tolerations }}
+      tolerations:
+        {{- toYaml $.Values.global.tolerations | nindent 8 }}
+    {{- end }}
+      containers:
+        - name: ansible
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+          resources:
+          {{- toYaml $.Values.ansible.resources | nindent 14 }}
+          command:
+          - /usr/local/bin/ao-logs
+          - /tmp/ansible-operator/runner
+          - stdout
+          livenessProbe:
+            exec:
+              command: 
+              - /usr/bin/true
+          readinessProbe:
+            exec:
+              command: 
+              - /usr/bin/true
+          env:
+          {{- if $v.debug }}
+          - name: ANSIBLE_VERBOSITY
+            value: "1"
+          {{- end }}
+          - name: REPO_URL
+            value: {{ $registry }}
+          - name: REPO_PULLS
+            value: ibm-isc-pull-secret
+          - name: TILLER_NAMESPACE
+            value: kube-system
+          - name: HELM_INIT_ARGS
+            value: ""
+          - name: HELM_ARGS
+            value: "--tls"                                    
+          - name: HELM_USER 
+            value: "{{ $.Values.global.helmUser }}"
+          image: {{ $image }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy | default "IfNotPresent" }}
+          volumeMounts:
+          - mountPath: /tmp/ansible-operator/runner
+            name: runner
+            readOnly: true
+        - name: operator
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+          image: {{ $image }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy | default "IfNotPresent" }}
+          resources:
+          {{- toYaml $v.resources | nindent 14 }}
+          livenessProbe:
+            exec:
+              command: 
+              - /usr/bin/true
+          readinessProbe:
+            exec:
+              command: 
+              - /usr/bin/true
+          volumeMounts:
+          - mountPath: /tmp/ansible-operator/runner
+            name: runner
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: {{ $op }}
+            - name: REPO_URL
+              value: {{ $registry }}
+            - name: REPO_PULLS
+              value: ibm-isc-pull-secret
+            - name: TILLER_NAMESPACE
+              value: kube-system
+            - name: HELM_INIT_ARGS
+              value: ""
+            - name: HELM_ARGS
+              value: "--tls"                                    
+            - name: HELM_USER 
+              value: "{{ $.Values.global.helmUser }}"
+            - name: SOMAXCONN
+              value: "{{ $.Values.somaxconn }}"
+      imagePullSecrets:
+        - name: ibm-isc-pull-secret
+        - name: sa-{{ $.Release.Namespace }}
+      volumes:
+        - name: runner
+          emptyDir: {}
+---
+{{ end }}

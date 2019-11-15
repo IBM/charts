@@ -1,0 +1,210 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-controller
+  labels:
+    name: {{ .Release.Name }}-controller
+{{ include "openwhisk.label_boilerplate" . | indent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-controller
+  podManagementPolicy: "Parallel"
+  replicas: {{ .Values.controller.replicaCount }}
+  selector:
+    matchLabels:
+      name: {{ .Release.Name }}-controller
+  template:
+    metadata:
+      labels:
+        name: {{ .Release.Name }}-controller
+{{ include "openwhisk.label_boilerplate" . | indent 8 }}
+      annotations:
+        productID: {{ include "ibm-isc-openwhisk.chart" . }}
+        productName: {{ include "ibm-isc-openwhisk.chart" . }}
+        productVersion: {{ $.Release.Name }}  
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsNonRoot: true
+      serviceAccountName: {{ .Release.Name }}-core
+      restartPolicy: {{ .Values.controller.restartPolicy }}
+
+      {{- if .Values.affinity.enabled }}
+      affinity:
+{{ include "openwhisk.affinity.core" . | indent 8 }}
+{{ include "openwhisk.affinity.selfAntiAffinity" ( printf "%s-controller" .Release.Name ) | indent 8 }}
+      {{- end }}
+
+      {{- if .Values.toleration.enabled }}
+      tolerations:
+{{ include "openwhisk.toleration.core" . | indent 8 }}
+      {{- end }}
+
+      initContainers:
+{{- if not .Values.controller.lean }}
+      # The controller must wait for kafka and/or couchdb to be ready before it starts
+{{ include "openwhisk.readiness.waitForKafka" . | indent 6 }}
+{{- end }}
+{{ include "openwhisk.readiness.waitForCouchDB" . | indent 6 }}
+      # The lean controller requires invoker volumes mounts
+{{- if .Values.controller.lean }}
+{{ include "openwhisk.invoker.volumes" . }}
+{{- end }}
+{{ include "openwhisk.docker.imagePullSecrets" . | indent 6 }}
+
+      containers:
+      - name: controller
+        securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+        imagePullPolicy: {{ .Values.controller.imagePullPolicy | quote }}
+        image: "{{- .Values.docker.registry.name -}}{{- .Values.controller.imageName -}}:{{- .Values.controller.imageTag -}}"
+{{- if .Values.controller.lean }}
+        securityContext:
+          privileged: true
+{{- end }}
+        command: ["/bin/bash", "-c", "/init.sh `hostname | cut -d'-' -f3`"]
+        ports:
+        - name: controller
+          containerPort: {{ .Values.controller.port }}
+        - name: akka-remoting
+          containerPort: 2552
+        - name: akka-mgmt-http
+          containerPort: 19999
+{{- if .Values.controller.lean }}
+{{ include "openwhisk.invoker.volume_mounts" . }}
+{{- end }}
+        livenessProbe:
+          httpGet:
+            path: "/ping"
+            port: {{ .Values.controller.port }}
+            scheme: "HTTP"
+          initialDelaySeconds: {{ .Values.probes.controller.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.controller.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.controller.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          httpGet:
+            path: "/ping"
+            port: {{ .Values.controller.port }}
+            scheme: "HTTP"
+          initialDelaySeconds: {{ .Values.probes.controller.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.controller.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.controller.readinessProbe.timeoutSeconds }}
+        env:
+        - name: "PORT"
+          value: {{ .Values.controller.port | quote }}
+
+        - name: "TZ"
+          value: {{ .Values.docker.timezone | quote }}
+
+        - name:  "CONFIG_whisk_info_date"
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-whisk.config
+              key: whisk_info_date
+        - name: "CONFIG_whisk_info_buildNo"
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-whisk.config
+              key: whisk_info_buildNo
+
+        # Java options
+        - name: "JAVA_OPTS"
+          value: "-Xmx{{- .Values.controller.jvmHeapMB -}}M {{ .Values.controller.jvmOptions }}"
+
+        # specific controller arguments
+        - name: "CONTROLLER_OPTS"
+          value: "{{ .Values.controller.options }} {{ if .Values.controller.lean }} {{ include "openwhisk.invoker.add_opts" . }} {{ end }}"
+
+        # action runtimes
+        - name: "RUNTIMES_MANIFEST"
+          value: {{ template "openwhisk.runtimes_manifest" . }}
+
+        # Action limits
+{{ include "openwhisk.limitsEnvVars" . | indent 8 }}
+
+        - name: "CONFIG_whisk_loadbalancer_blackboxFraction"
+          value: {{ .Values.whisk.loadbalancer.blackboxFraction | quote }}
+
+        - name: "CONFIG_whisk_loadbalancer_timeoutFactor"
+          value: {{ .Values.whisk.loadbalancer.timeoutFactor | quote }}
+
+        # Kafka properties
+        - name: "KAFKA_HOSTS"
+          value: "{{ include "openwhisk.kafka_connect" . }}"
+{{ include "openwhisk.kafkaConfigEnvVars" . | indent 8 }}
+
+        # properties for DB connection
+{{ include "openwhisk.dbEnvVars" . | indent 8 }}
+
+        - name: "CONTROLLER_INSTANCES"
+          value: {{ .Values.controller.replicaCount | quote }}
+{{- if gt (int .Values.controller.replicaCount) 1 }}
+        - name: "CONFIG_whisk_cluster_useClusterBootstrap"
+          value: "true"
+        - name: "CONFIG_akka_actor_provider"
+          value: "cluster"
+        - name: "CONFIG_akka_discovery_method"
+          value: "kubernetes-api"
+        - name: "CONFIG_akka_discovery_kubernetesApi_podNamespace"
+          value: {{ .Release.Namespace | quote }}
+        - name: "CONFIG_akka_discovery_kubernetesApi_podLabelSelector"
+          value: "name={{ .Release.Name }}-controller"
+        - name: "CONFIG_akka_discovery_kubernetesApi_podPortName"
+          value: "akka-mgmt-http"
+{{- end }}
+{{- if .Values.metrics.prometheusEnabled }}
+        - name: "OPENWHISK_ENCODED_CONFIG"
+          value: {{ template "openwhisk.whiskconfig" . }}
+{{- end }}
+{{ if or .Values.metrics.kamonEnabled .Values.metrics.prometheusEnabled }}
+        - name: "METRICS_KAMON"
+          value: "true"
+{{ end }}
+{{ if or .Values.metrics.kamonTags .Values.metrics.prometheusEnabled }}
+        - name: "METRICS_KAMON_TAGS"
+          value: "true"
+{{ end }}
+{{ if .Values.metrics.userMetricsEnabled }}
+        - name: "CONFIG_whisk_userEvents_enabled"
+          value: "true"
+{{ end }}
+        # properties for lean messaging provider
+{{ include "openwhisk.lean.provider" . | indent 8 }}
+
+{{- if .Values.controller.lean }}
+{{ include "openwhisk.invoker.apihost" . | indent 8 }}
+{{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                 - "amd64"
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false 
