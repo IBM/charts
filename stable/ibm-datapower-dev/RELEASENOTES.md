@@ -1,9 +1,7 @@
 ## What's new...
-DataPower 2018.4.1.7 \
-Change snmpState metadata to conform to other config states
+DataPower 2018.4.1.8
 
 ## Fixes
-snmpState now conforms to other config states.
 
 ## Prerequisites
 None
@@ -17,6 +15,7 @@ See README.md
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ------------ | ------- | ---------------------------------- | ---- | -------------------------------------------------------------- |
+| 3.0.3 | Nov 08, 2019 | <1.16.0 | ibmcom/datapower:2018.4.1.8.314665 | None | 2018.4.1.8 refresh | 
 | 3.0.2 | Aug 23, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.7.312001 | None | snmpState |
 | 3.0.1 | Jun 28, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.6.309660 | None | L2 cert, adminUserSecret |
 | 3.0.0 | Apr 19, 2019 | >=1.9.3 | ibmcom/datapower:2018.4.1.4.307525 | Changed label scheme | 2018.4.1.4, pull secrets, health check, ssh permissions |
