@@ -1,0 +1,135 @@
+# Create a Deployment component for Ambassador service which includes 1 "ambassador" container
+{{- $ndx := $.Values.global.images.ambassador }}
+{{- $root := $.Values.global.ambassador }}
+{{- $image := printf "%s/%s:%s" (include "foundations.repository" .) $ndx.image $ndx.tag }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ambassador.fullname" . }}
+  labels:
+    name: {{ include "ambassador.name" . }}
+    app.kubernetes.io/name: {{ include "ambassador.name" . }}
+    helm.sh/chart: {{ include "ambassador.chart" . }}
+    release: {{ $.Release.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+spec:
+  replicas: {{ $root.replicaCount | default "2" }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "ambassador.name" . }}
+  template:
+    metadata:
+      labels:
+        name: {{ include "ambassador.name" . }}
+        app.kubernetes.io/name: {{ include "ambassador.name" . }}
+        helm.sh/chart: {{ include "ambassador.chart" . }}
+        release: {{ $.Release.Name }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/managed-by: {{ $.Release.Service }}
+      {{- if $root.podLabels }}
+        {{- toYaml $root.podLabels | nindent 8 }}
+      {{- end }}
+      annotations:
+      {{- if $root.podAnnotations }}
+        {{- toYaml $root.podAnnotations | nindent 8 }}
+      {{- end }}
+        productID: {{ include "ambassador.chart" . }}
+        productName: {{ include "ambassador.chart" . }}
+        productVersion: {{ $.Release.Name }}
+    spec:
+      securityContext:
+        runAsUser: 8888
+        runAsNonRoot: true
+        sysctls:
+        - name: net.core.somaxconn
+          value: "{{.Values.somaxconn }}" 
+      serviceAccountName: {{ include "ambassador.serviceAccountName" . }}
+      volumes:
+      containers:
+        - name: ambassador
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: https
+              containerPort: 8443
+            - name: admin
+              containerPort: 8877
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: AMBASSADOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- if $root.env }}
+            {{- range $key,$value := $root.env }}
+            - name: {{ $key | upper | quote}}
+              value: {{ $value | quote}}
+            {{- end }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /ambassador/v0/check_alive
+              port: admin
+            initialDelaySeconds: 30
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /ambassador/v0/check_ready
+              port: admin
+            initialDelaySeconds: 30
+            periodSeconds: 3
+          volumeMounts:
+          resources:
+            {{- toYaml $root.resources | nindent 12 }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                 - {{ .Values.global.arch | default "amd64" }}
+        {{- $aff := .Values.global.affinity | default "hard" }}
+        {{- if ne $aff "none" }}
+        podAntiAffinity:
+          {{- if eq $aff "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          {{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          {{- end }}
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - {{ include "ambassador.name" . }}
+            topologyKey: kubernetes.io/hostname
+        {{- end }}
+    {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      imagePullSecrets:
+        - name: sa-{{ $.Release.Namespace }}
+        - name: ibm-isc-pull-secret
+      dnsPolicy: "ClusterFirst"
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false

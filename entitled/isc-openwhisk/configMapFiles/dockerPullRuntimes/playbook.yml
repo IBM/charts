@@ -1,0 +1,62 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+---
+
+# Playbook to prefetch runtime action images from a docker registry for an invoker node
+# as specified by the RUNTIMES_MANIFEST environment variable
+# Note: If RUNTIMES_REGISTRY is not "", it must include a trailing '/'
+
+- hosts: localhost
+  vars:
+    docker_pull_retries: 10
+    docker_pull_delay: 10
+    runtimes_registry: "{{ lookup('env', 'RUNTIMES_REGISTRY') | default() }}"
+    runtimes_registry_username: "{{ lookup('env', 'RUNTIMES_REGISTRY_USERNAME') | default() }}"
+    runtimes_registry_password: "{{ lookup('env', 'RUNTIMES_REGISTRY_PASSWORD') | default() }}"
+    runtimes_manifest: "{{ lookup('env', 'RUNTIMES_MANIFEST') }}"
+    runtimes_manifest_json: "{{ lookup('env', 'RUNTIMES_MANIFEST') | from_json }}"
+
+  tasks:
+    - name: docker login
+      docker_login:
+        registry: "{{ runtimes_registry }}"
+        username: "{{ runtimes_registry_username }}"
+        password: "{{ runtimes_registry_password }}"
+      when: runtimes_registry != "" and runtimes_registry_password is defined
+
+    - name: "Display runtime manifest"
+      debug:
+        var: runtimes_manifest
+
+    - name: "Process runtime manifest"
+      set_fact:
+        docker_images_managed: "{{ runtimes_manifest_json.runtimes.values() | sum(start=[]) | selectattr('deprecated', 'equalto', false)  | map(attribute='image') | list | unique }}"
+        docker_images_blackbox: "{{ runtimes_manifest_json.blackboxes }}"
+
+    - name: "pull runtime action images per manifest"
+      shell: "docker pull {{runtimes_registry}}{{item.prefix}}/{{item.name}}:{{item.tag | default()}}"
+      with_items:
+        - "{{ docker_images_managed }}"
+      retries: "{{ docker_pull_retries }}"
+      delay: "{{ docker_pull_delay }}"
+
+    - name: "pull blackboxes action images per manifest"
+      shell: "docker pull {{runtimes_registry}}{{item.prefix}}/{{item.name}}:{{item.tag | default()}}"
+      with_items:
+        - "{{ docker_images_blackbox }}"
+      retries: "{{ docker_pull_retries }}"
+      delay: "{{ docker_pull_delay }}"
