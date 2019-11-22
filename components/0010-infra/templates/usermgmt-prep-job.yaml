@@ -1,0 +1,58 @@
+{{- $compName := "usermgmt-prep-job" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: usermgmt-prep-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - command:
+        - /bin/bash
+        - /usermgmt-prep.sh
+        name: usermgmt-prep-job
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.couchdb.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.usermgmt.resources | indent 12 }}
+        env:
+        - name: COUCHDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: couchdb-secrets
+              key: couchdb_username
+        - name: COUCHDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: couchdb-secrets
+              key: couchdb_password
+        volumeMounts:
+        - mountPath: /usermgmt-prep.sh
+          subPath: script.sh
+          name: usermgmt-setup-configmap
+        - mountPath: /usersData.json
+          subPath: usersData.json
+          name: usermgmt-setup-configmap
+        - mountPath: /configData.json
+          subPath: configData.json
+          name: usermgmt-setup-configmap
+        - mountPath: /userRolesData.json
+          subPath: userRolesData.json
+          name: usermgmt-setup-configmap
+      volumes:
+      - name: usermgmt-setup-configmap
+        configMap:
+          name: usermgmt-setup-configmap
+      restartPolicy: OnFailure

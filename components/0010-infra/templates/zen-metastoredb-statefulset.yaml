@@ -1,0 +1,157 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "{{ .Values.zenCoreMetaDb.Name | trunc 56 }}"
+  labels:
+    {{- include "zenhelper.labels" (list . .Values.zenCoreMetaDb.Component ) | indent 4 }}
+spec:
+  serviceName: "{{ .Values.zenCoreMetaDb.Name | trunc 56 }}"
+  replicas: {{ default 3 .Values.zenCoreMetaDb.Replicas }}
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . .Values.zenCoreMetaDb.Component ) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . .Values.zenCoreMetaDb.Component ) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8}}
+    spec:
+      serviceAccountName: {{ .Values.global.admin.sa }}
+      initContainers:
+      - name: init-container
+        securityContext:
+          runAsUser: 1000321000
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenCoreMetaDb.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.zenCoreMetaDb.Resources | indent 10 }}
+        command:
+        - "/cockroach/metastore-utils"
+        - "clean"
+      - name: init-volume-container
+        volumeMounts:
+        - mountPath: /pv-prep.sh
+          subPath: cockroach-pv-script.sh
+          name: pv-setup-configmap
+        - name: datadir
+          mountPath: /cockroach/cockroach-data
+        securityContext:
+          runAsUser: 1000321000
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.userHomePrep.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.zenCoreMetaDb.Resources | indent 10 }}
+        command:
+        - /bin/bash
+        - /pv-prep.sh    
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - "{{ .Release.Name }}-{{ .Values.zenCoreMetaDb.Component }}"
+              topologyKey: kubernetes.io/hostname
+      {{- if .Values.zenCoreMetaDb.NodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.zenCoreMetaDb.NodeSelector | indent 8 }}
+      {{- end }}
+{{- if .Values.zenCoreMetaDb.Tolerations }}
+      tolerations:
+{{ toYaml .Values.zenCoreMetaDb.Tolerations | indent 8 }}
+{{- end }}
+      containers:
+      - name: "{{ .Values.zenCoreMetaDb.Name | trunc 56 }}"
+        securityContext:
+          runAsUser: 1000321000
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenCoreMetaDb.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        ports:
+        - containerPort: {{ .Values.zenCoreMetaDb.InternalGrpcPort }}
+          name: grpc
+        - containerPort: {{ .Values.zenCoreMetaDb.InternalHttpPort }}
+          name: http
+        livenessProbe:
+          httpGet:
+            path: "/health"
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: "/health?ready=1"
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 2
+        resources:
+{{ toYaml .Values.zenCoreMetaDb.Resources | indent 10 }}
+        env:
+        - name: STATEFULSET_NAME
+          value: "{{ .Values.zenCoreMetaDb.Name | trunc 56 }}"
+        - name: STATEFULSET_FQDN
+          value: "{{ .Values.zenCoreMetaDb.Name | trunc 56 }}"
+        - name: COCKROACH_CHANNEL
+          value: kubernetes-helm
+        - name: COCKROACH_SKIP_KEY_PERMISSION_CHECK
+          value: "true"
+        volumeMounts:
+        - name: datadir
+          mountPath: /cockroach/cockroach-data
+        - mountPath: /certs
+          name: metastore-secret
+          readOnly: false
+        command:
+          - "/bin/bash"
+          - "-ecx"
+            # The use of qualified `hostname -f` is crucial:
+            # Other nodes aren't able to look up the unqualified hostname.
+          - "exec /cockroach/cockroach start --logtostderr --certs-dir=/certs --advertise-host $(hostname).${STATEFULSET_FQDN} --http-host 0.0.0.0 --http-port {{ .Values.zenCoreMetaDb.InternalHttpPort }} --port {{ .Values.zenCoreMetaDb.InternalGrpcPort }} --cache {{ .Values.zenCoreMetaDb.CacheSize }} --max-sql-memory {{ .Values.zenCoreMetaDb.MaxSQLMemory }} {{ if .Values.zenCoreMetaDb.Locality }}--locality={{.Values.zenCoreMetaDb.Locality }}{{ end }} --join {{ if .Values.zenCoreMetaDb.JoinExisting }}{{ join "," .Values.zenCoreMetaDb.JoinExisting }}{{ else }}${STATEFULSET_NAME}-0.${STATEFULSET_FQDN}:{{ .Values.zenCoreMetaDb.InternalGrpcPort }},${STATEFULSET_NAME}-1.${STATEFULSET_FQDN}:{{ .Values.zenCoreMetaDb.InternalGrpcPort }},${STATEFULSET_NAME}-2.${STATEFULSET_FQDN}:{{ .Values.zenCoreMetaDb.InternalGrpcPort }}{{ end }}"
+      # No pre-stop hook is required, a SIGTERM plus some time is all that's
+      # needed for graceful shutdown of a node.
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: pv-setup-configmap
+        configMap:
+          name: pv-setup-configmap
+      - name: datadir
+        persistentVolumeClaim:
+          claimName: datadir
+      - name: metastore-secret
+        secret:
+          secretName: metastore-secret   
+          defaultMode: 484 
+  podManagementPolicy: {{ .Values.zenCoreMetaDb.PodManagementPolicy }}
+  updateStrategy:
+{{ toYaml .Values.zenCoreMetaDb.UpdateStrategy | indent 4 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+      annotations:
+        "helm.sh/resource-policy": keep
+    spec:
+      accessModes:
+        - "ReadWriteOnce"
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+  {{- if (eq "-" .Values.zenCoreMetaDb.storageClass) }}
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+  {{else }}
+      storageClassName: {{ .Values.zenCoreMetaDb.storageClass }}
+  {{- end }}    
+{{ else }}
+      storageClassName: ""
+{{- end }}
+      resources:
+        requests:
+          storage: "{{ .Values.zenCoreMetaDb.Storage }}"
+{{- if (not .Values.global.persistence.useDynamicProvisioning ) }}
+      selector:
+        matchLabels:
+          assign-to: "{{ .Release.Namespace }}-metastoredb"
+{{- end }}

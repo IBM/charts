@@ -1,0 +1,27 @@
+{{- $compName := "dsx-influxdb" -}}
+{{ if not .Values.global.influxdbPVC.persistence.existingClaimName }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.global.influxdbPVC.persistence.defaultClaimName }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  {{- if .Values.global.persistence.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+  {{ else }}
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - {{ .Values.persistence.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ default "10Gi" .Values.global.influxdbPVC.persistence.size | quote }}
+  {{- if (not .Values.global.persistence.useDynamicProvisioning ) }}
+  selector:
+    matchLabels:
+      assign-to: "{{ .Release.Namespace }}-influxdb"
+  {{- end }}
+{{- end }}

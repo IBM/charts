@@ -1,0 +1,94 @@
+{{- if .Values.usermgmt.usermgmt_enable_localrepo }}
+{{- $compName := "couchdb" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: couchdb
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.couchdb.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" .  | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - name: couchdb-container
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.couchdb.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        env:
+        - name: COUCHDDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: couchdb-secrets
+              key: couchdb_username
+        - name: COUCHDDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: couchdb-secrets
+              key: couchdb_password
+        command: ["/bin/bash", "/files/docker-entrypoint.sh", "/opt/couchdb/bin/couchdb"]
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.couchdb.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 5984
+          protocol: TCP
+        - containerPort: 6984
+          protocol: TCP
+        volumeMounts:
+          - mountPath: /opt/couchdb/data
+            name: zen-meta-couchdb-pvc
+          - mountPath: /etc/internal-tls
+            name: internal-tls
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5984
+            scheme: HTTP
+          initialDelaySeconds: 300
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /?ready=true
+            port: 5984
+            scheme: HTTP
+          initialDelaySeconds: 40
+          periodSeconds: 30
+      securityContext:
+        runAsUser: 1000321000
+      volumes:
+      - name: internal-tls
+        secret:
+          secretName: internal-tls
+      - name: zen-meta-couchdb-pvc
+        persistentVolumeClaim:
+        {{- if .Values.couchdbSrvPVC.persistence.existingClaimName }}
+          claimName: {{ .Values.couchdbSrvPVC.persistence.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.couchdbSrvPVC.name }}
+        {{- end }}
+{{ end }}
