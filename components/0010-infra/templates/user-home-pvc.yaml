@@ -1,0 +1,27 @@
+{{ if not .Values.global.userHomePVC.persistence.existingClaimName -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "user-home-pvc"
+  labels:
+    {{- include "zenhelper.labels" (list . "user-home-pvc") | indent 4 }}
+  annotations:
+    "helm.sh/resource-policy": keep
+
+spec:
+  {{- if .Values.global.persistence.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+  {{ else }}
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ default "100Gi" .Values.global.userHomePVC.persistence.size | quote }}
+  {{- if (not .Values.global.persistence.useDynamicProvisioning ) }}
+  selector:
+    matchLabels:
+      assign-to: "{{ .Release.Namespace }}-user-home"
+  {{- end }}
+{{- end }}

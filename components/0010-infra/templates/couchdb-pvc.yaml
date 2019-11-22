@@ -1,0 +1,32 @@
+{{- if .Values.usermgmt.usermgmt_enable_localrepo }}
+{{ if not .Values.couchdbSrvPVC.persistence.existingClaimName -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.couchdbSrvPVC.name }}
+  labels:
+    {{- include "zenhelper.labels" (list . "zen-meta-couchdb-pvc") | indent 4 }}
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  {{- if .Values.global.persistence.useDynamicProvisioning }}
+  {{- if (eq "-" .Values.couchdbSrvPVC.storageClass) }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+  {{else }}
+  storageClassName: {{ .Values.couchdbSrvPVC.storageClass }}
+  {{- end }}   
+  {{ else }}
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ default "10Gi" .Values.couchdbSrvPVC.persistence.size | quote }}
+  {{- if (not .Values.global.persistence.useDynamicProvisioning ) }}
+  selector:
+    matchLabels:
+      assign-to: "{{ .Release.Namespace }}-couchdb"
+  {{- end }}
+{{- end }}
+{{ end }}

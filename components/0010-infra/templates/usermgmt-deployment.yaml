@@ -1,0 +1,100 @@
+{{- $compName := "usermgmt" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: usermgmt
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.usermgmt.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.admin.sa }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      containers:
+      - name: usermgmt-container
+        securityContext:
+          runAsUser: 1000321000
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.usermgmt.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/startup.sh"]
+        envFrom:
+        - configMapRef:
+            name: product-configmap
+        env:
+        - name: COUCHDB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: couchdb-secrets
+              key: couchdb_username
+        - name: COUCHDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: couchdb-secrets
+              key: couchdb_password
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{ if eq .Values.global.ibmProduct "zen" }}
+        - name: IBM_PRODUCT
+          value: zen
+        {{- end }}
+        - name: SHOW_K8S_MGMT
+          value: {{ or .Values.usermgmt.showK8sMgmt .Values.global.baseInstaller | quote }}
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.usermgmt.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        - containerPort: 3443
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        - mountPath: /etc/internal-tls
+          name: internal-tls
+        readinessProbe:
+          httpGet:
+            path: /?ready=true
+            port: 3443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      securityContext:
+        runAsUser: 1000321000
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+      - name: internal-tls
+        secret:
+          secretName: internal-tls
+

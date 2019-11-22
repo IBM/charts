@@ -1,0 +1,37 @@
+{{- $compName := "ibm-nginx-job" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+  name: setup-nginx-job
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      restartPolicy: "OnFailure"
+      containers:
+      - name: nginx-preinstall-job
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.nginxRepo.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/scripts/preinstall.sh"]
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        resources:
+{{ toYaml .Values.nginxRepo.resources | indent 12 }}
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}

@@ -1,0 +1,117 @@
+{{- $compName := "zen-watchdog" -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: zen-watchdog
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.zenWatchdog.replicas }}
+  strategy:
+     type: RollingUpdate
+     rollingUpdate:
+       maxSurge: 1
+       maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - name: zen-watchdog-container
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenWatchdog.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command:
+        - /core-serviceability-server
+        - --host
+        - 0.0.0.0
+        - --port
+        - "3333"
+        - --tls-host
+        - 0.0.0.0
+        - --tls-port
+        - "4444"
+        - --tls-certificate
+        - "/etc/internal-tls/tls.crt"
+        - --tls-key
+        - "/etc/internal-tls/tls.key"
+        env:
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFLUXDB_URL
+          value: https://dsx-influxdb:8086
+        - name: INFLUXDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: dsx-influxdb-auth
+              key: influxdb-user
+        - name: INFLUXDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dsx-influxdb-auth
+              key: influxdb-password
+        - name: INFLUXDB_RW_USER
+          valueFrom:
+            secretKeyRef:
+              name: dsx-influxdb-auth
+              key: influxdb-rw-user
+        - name: INFLUXDB_RW_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dsx-influxdb-auth
+              key: influxdb-rw-password
+        - name: INFLUXDB_RO_USER
+          valueFrom:
+            secretKeyRef:
+              name: dsx-influxdb-auth
+              key: influxdb-ro-user
+        - name: INFLUXDB_RO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dsx-influxdb-auth
+              key: influxdb-ro-password
+        resources:
+{{ toYaml .Values.zenWatchdog.resources | indent 12 }}
+        ports:
+        - containerPort: 3333
+          protocol: TCP
+        - containerPort: 4444
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /zen-watchdog/v1/monitor
+            port: 4444
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /zen-watchdog/v1/monitor?ready=true
+            port: 4444
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        - mountPath: /etc/internal-tls
+          name: internal-tls
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+      - name: internal-tls
+        secret:
+          secretName: internal-tls

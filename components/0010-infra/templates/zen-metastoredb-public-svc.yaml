@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # This service is meant to be used by clients of the database. It exposes a ClusterIP that will
+  # automatically load balance connections to the different database pods.
+  name: "{{ .Values.zenCoreMetaDb.Name | trunc 56 }}-public"
+  annotations:
+{{ toYaml .Values.zenCoreMetaDb.Service.annotations | indent 4 }}
+  labels:
+    {{- include "zenhelper.labels" (list . .Values.zenCoreMetaDb.Component ) | indent 4 }}
+spec:
+  type: {{ .Values.zenCoreMetaDb.Service.type }}
+  ports:
+  # The main port, served by gRPC, serves Postgres-flavor SQL, internode
+  # traffic and the cli.
+  - port: {{ .Values.zenCoreMetaDb.ExternalGrpcPort }}
+    targetPort: {{ .Values.zenCoreMetaDb.InternalGrpcPort }}
+    name: {{ .Values.zenCoreMetaDb.ExternalGrpcName }}
+  # The secondary port serves the UI as well as health and debug endpoints.
+  - port: {{ .Values.zenCoreMetaDb.ExternalHttpPort }}
+    targetPort: {{ .Values.zenCoreMetaDb.InternalHttpPort }}
+    name: {{ .Values.zenCoreMetaDb.HttpName }}
+    {{- if ne .Values.zenCoreMetaDb.InternalGrpcPort .Values.zenCoreMetaDb.ExternalGrpcPort }}
+  - port: {{ .Values.zenCoreMetaDb.InternalGrpcPort }}
+    targetPort: {{ .Values.zenCoreMetaDb.InternalGrpcPort }}
+    name: {{ .Values.zenCoreMetaDb.InternalGrpcName }}
+    {{- end }}
+  selector:
+    {{- include "zenhelper.labels" (list . .Values.zenCoreMetaDb.Component ) | indent 4 }} 

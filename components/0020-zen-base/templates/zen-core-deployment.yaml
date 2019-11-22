@@ -1,0 +1,93 @@
+{{- $compName := "zen-core" -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: zen-core
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.zenCore.replicas }}
+  strategy:
+     type: RollingUpdate
+     rollingUpdate:
+       maxSurge: 1
+       maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - name: zen-core-container
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenCore.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/scripts/startup.sh"]
+        envFrom:
+        - configMapRef:
+            name: product-configmap
+        env:
+        - name: WKC_NAV_SUPPORT
+          value: "true"
+        - name: NODE_ENV
+          value: "production"
+        - name: RELEASE_NAME
+          value: {{ .Release.Name }}
+        - name: BUILD_VERSION
+          value: {{ .Values.global.icp4dVersion}}
+        - name: BUILD_EDITION
+          value: {{ .Values.global.icp4dEdition}}
+        - name: TLS_SUPPORT
+          value: "true"
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+{{ toYaml .Values.zenCore.resources | indent 12 }}
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        - mountPath: /etc/internal-tls
+          name: internal-tls
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
+        ports:
+        - containerPort: 3003
+          protocol: TCP
+        - containerPort: 3443
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /monitor
+            port: 3443
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /monitor?ready=true
+            port: 3443
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 30
+      volumes:
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+      - name: internal-tls
+        secret:
+          secretName: internal-tls

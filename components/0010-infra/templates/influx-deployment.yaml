@@ -1,0 +1,102 @@
+{{- $compName := "dsx-influxdb" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dsx-influxdb
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  replicas: {{ .Values.influxdb.replicas }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" .  | indent 8 }}
+    spec:
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      containers:
+      - name: dsx-influxdb
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.influxdb.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ .Values.influxdb.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        ports:
+        - name: api
+          containerPort: {{ .Values.config.http.bind_address }}
+        {{ if .Values.config.admin.enabled -}}
+        - name: admin
+          containerPort: {{ .Values.config.admin.bind_address }}
+        {{- end }}
+        {{ if .Values.config.graphite.enabled -}}
+        - name: graphite
+          containerPort: {{ .Values.config.graphite.bind_address }}
+        {{- end }}
+        {{ if .Values.config.collectd.enabled -}}
+        - name: collectd
+          containerPort: {{ .Values.config.collectd.bind_address }}
+        {{- end }}
+        {{ if .Values.config.udp.enabled -}}
+        - name: udp
+          containerPort: {{ .Values.config.udp.bind_address }}
+        {{- end }}
+        {{ if .Values.config.opentsdb.enabled -}}
+        - name: opentsdb
+          containerPort: {{ .Values.config.opentsdb.bind_address }}
+        {{- end }}
+        {{ if .Values.env }}
+        env:
+{{ toYaml .Values.env | indent 10 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: api
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /ping?ready=true
+            port: api
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+        volumeMounts:
+        - name: data
+          mountPath: {{ .Values.config.storage_directory }}
+        - name: config
+          mountPath: /etc/influxdb
+        - name: internal-tls
+          mountPath: /etc/internal-tls
+      securityContext:
+        runAsUser: 1000321000
+      volumes:
+      - name: internal-tls
+        secret:
+          secretName: internal-tls
+      - name: data
+      {{- if .Values.persistence.enabled }}
+        {{- if .Values.global.influxdbPVC.persistence.existingClaimName  }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.influxdbPVC.persistence.existingClaimName }}
+        {{- else }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.influxdbPVC.persistence.defaultClaimName }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: config
+        configMap:
+          name: dsx-influxdb
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end -}}

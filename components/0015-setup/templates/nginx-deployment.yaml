@@ -1,0 +1,101 @@
+{{- $compName := "ibm-nginx" -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: ibm-nginx
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.nginxRepo.replicas }}
+  strategy:
+     type: RollingUpdate
+     rollingUpdate:
+       maxSurge: 1
+       maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+      - name: ibm-nginx-container
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.nginxRepo.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/scripts/startup.sh"]
+        envFrom:
+        - configMapRef:
+            name: product-configmap
+        env:
+        - name: RESOLVER
+          value: "{{ .Values.nginxRepo.resolver }}"
+        - name: NODE_ENV
+          value: "production"
+        {{ if eq .Values.global.ibmProduct "zen" }}
+        - name: IBM_PRODUCT
+          value: zen
+        {{- end }}
+        - name: EXPOSED_PORT
+        {{- if .Values.global.baseInstaller }}
+          value: "443"
+        {{- else }}
+          value: {{ .Values.zenProxy.externalPort | quote }}
+        {{- end }}
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        - mountPath: /etc/internal-nginx-svc-tls
+          name: internal-nginx-svc-tls
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.nginxRepo.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 8443
+          protocol: TCP
+          name: external-https
+        - containerPort: 8080
+          protocol: TCP
+          name: external-http
+        - containerPort: 12443
+          protocol: TCP
+          name: internal-https
+        - containerPort: 12080
+          protocol: TCP
+          name: internal-http
+        livenessProbe:
+          httpGet:
+            path: /diag
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /diag?ready=true
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+      - name: internal-nginx-svc-tls
+        secret:
+          secretName: internal-nginx-svc-tls

@@ -1,0 +1,52 @@
+{{- $compName := "zen-requisite-job" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: zen-requisite-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName:  {{ .Values.global.admin.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - name: zen-requisite-job
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenRequisite.image.repository }}:{{ .Values.global.image.tag }}"
+        resources:
+{{ toYaml .Values.zenRequisite.resources | indent 12 }}
+        env:
+        - name: ZEN_CORE_ROUTE_ENABLE
+          value: "{{ .Values.zenRequisite.nginxRoute }}"
+        - name: ICP4DATA_NAV
+        {{- if .Values.global.standaloneProduct }}
+          value: "false"
+        {{- else }}
+          value: "true"
+        {{- end }}
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        - mountPath: /certs
+          name: metastore-secret
+      volumes:
+      - name: metastore-secret
+        secret:
+          secretName: metastore-secret
+          defaultMode: 484
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+      restartPolicy: OnFailure
