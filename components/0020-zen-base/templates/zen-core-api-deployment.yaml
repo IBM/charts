@@ -1,0 +1,170 @@
+{{- $compName := "zen-core-api" -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: zen-core-api
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.zenCoreApi.replicas }}
+  strategy:
+     type: RollingUpdate
+     rollingUpdate:
+       maxSurge: 1
+       maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      initContainers:
+      - args: ["cp -r /user-home/_global_/security/metastore/* /tmp/metastore/; chmod -R 700 /tmp/metastore/*"]
+        command:
+        - /bin/sh
+        - '-c'
+        env:
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenRequisite.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        name: change-permissions
+        resources:
+          limits:
+            cpu: '2'
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        - mountPath: /tmp/metastore
+          name: metastore-volume
+      containers:
+      - name: zen-core-api-container
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenCoreApi.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command:
+        - /coreapi-server
+        - --host
+        - 0.0.0.0
+        - --port
+        - "3333"
+        - --read-timeout
+        - 10m
+        - --write-timeout
+        - 10m
+        - --tls-host
+        - 0.0.0.0
+        - --tls-port
+        - "4444"
+        - --tls-read-timeout
+        - 10m
+        - --tls-write-timeout
+        - 10m
+        - --tls-certificate
+        - "/etc/internal-tls/tls.crt"
+        - --tls-key
+        - "/etc/internal-tls/tls.key"
+        env:
+        - name: TILLER_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: TILLER_PORT
+          value: {{ .Values.zenCoreApi.tillerPort | quote }}
+        - name: NO_TLS
+          value: {{ .Values.zenCoreApi.noTls | quote }}
+        - name: NODE_ENV
+          value: "production"
+        - name: RELEASE_NAME
+          value: {{ .Release.Name }}
+        - name: USER
+          value: {{ .Values.zenCoreApi.database.user }}
+        - name: DATABASE_URL
+          value: {{ .Values.zenCoreApi.database.metasvc }}
+        - name: DATABASE_NAME
+          value: {{ .Values.zenCoreApi.database.name }}
+        - name: BUILD_VERSION
+          value: {{ .Values.global.icp4dVersion}}
+        - name: REQUISITE_IMAGE_PREFIX
+          value: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenRequisite.image.repository }}"
+        - name: IMAGE_PREFIX
+          value: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenCoreApi.image.repository }}"
+        - name: IMAGE_TAG
+          value: "{{ .Values.global.image.tag }}"
+        - name: BUILD_EDITION
+          value: {{ .Values.global.icp4dEdition}}
+        - name: METASTORE_CERT_DIR
+          value: "/tmp/metastore"
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+{{ toYaml .Values.zenCoreApi.resources | indent 12 }}
+        volumeMounts:
+        - mountPath: /var/run/sharedsecrets
+          name: zen-service-broker-secret
+        - mountPath: /tmp/metastore
+          name: metastore-volume
+        - mountPath: /user-home
+          name: user-home-mount
+        {{- if (not .Values.zenCoreApi.noTls ) }}
+        - mountPath: /certs
+          name: helm-secret
+          readOnly: true
+        {{- end }}
+        - mountPath: /etc/internal-tls
+          name: internal-tls
+        ports:
+        - containerPort: 3333
+          protocol: TCP
+        - containerPort: 4444
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /v1/monitor
+            port: 4444
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /v1/monitor?ready=true
+            port: 4444
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: metastore-volume
+      - name: zen-service-broker-secret
+        secret:
+          defaultMode: 420
+          secretName: zen-service-broker-secret
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+        {{- if (not .Values.zenCoreApi.noTls ) }}
+      - name: helm-secret
+        secret:
+          defaultMode: 420
+          secretName: helm-secret
+        {{- end }}
+      - name: internal-tls
+        secret:
+          secretName: internal-tls

@@ -1,0 +1,41 @@
+{{- $compName := "metastoredb-certs-job" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Values.zenCoreMetaDb.Name | trunc 56 }}-certs"
+  labels:
+    {{- include "zenhelper.labels" (list . $compName ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+      - name: init-certs
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenCoreMetaDb.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.zenCoreMetaDb.Resources | indent 10 }}
+        command:
+        - "/cockroach/metastore-utils"
+        - "certs"
+        env:
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: HOST
+          value: "{{ .Values.zenCoreMetaDb.Name | trunc 56 }}"
+        - name: PORT
+          value: "{{ .Values.zenCoreMetaDb.InternalGrpcPort }}"
+      restartPolicy: OnFailure
+

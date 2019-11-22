@@ -1,0 +1,68 @@
+{{- $compName := "pv-prep-job" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: pv-prep-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.admin.sa }}
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - command:
+        - /bin/bash
+        - /pv-prep.sh
+        name: pv-prep-job
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.userHomePrep.image.repository }}:{{ .Values.global.image.tag }}"
+        resources:
+{{ toYaml .Values.usermgmt.resources | indent 12 }}
+        env:
+        - name: ICPD_CONTROLPLANE_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - mountPath: /opt/couchdb/data
+          name: zen-meta-couchdb-pvc
+        - name: data
+          mountPath: {{ .Values.config.storage_directory }}
+        - mountPath: /user-home
+          name: user-home-mount
+        - mountPath: /pv-prep.sh
+          subPath: script.sh
+          name: pv-setup-configmap
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}
+      - name: data
+      {{- if .Values.persistence.enabled }}
+        {{- if .Values.global.influxdbPVC.persistence.existingClaimName  }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.influxdbPVC.persistence.existingClaimName }}
+        {{- else }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.influxdbPVC.persistence.defaultClaimName }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: zen-meta-couchdb-pvc
+        persistentVolumeClaim:
+        {{- if .Values.couchdbSrvPVC.persistence.existingClaimName }}
+          claimName: {{ .Values.couchdbSrvPVC.persistence.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.couchdbSrvPVC.name }}
+        {{- end }}
+      - name: pv-setup-configmap
+        configMap:
+          name: pv-setup-configmap
+      restartPolicy: OnFailure

@@ -1,0 +1,63 @@
+{{- $compName := "zen-admin" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{$compName}}
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+spec:
+  strategy:
+     type: RollingUpdate
+     rollingUpdate:
+       maxSurge: 1
+       maxUnavailable: 0
+  replicas: {{ .Values.zenAdmin.replicas }}
+  selector:
+    matchLabels:
+      {{- include "zenhelper.labels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccountName: {{ .Values.global.viewer.sa }}  
+      containers:
+      - name: zen-admin
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.zenAdmin.image.repository }}:{{ .Values.global.image.tag }}"
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: product-configmap
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+{{ toYaml .Values.zenAdmin.resources | indent 12 }}
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        livenessProbe:
+          httpGet:
+            path: /dsx-admin
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /dsx-admin?ready=true
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      {{- include "zenhelper.user-home-pvc" .  | indent 6 }}

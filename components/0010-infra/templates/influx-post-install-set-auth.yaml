@@ -1,0 +1,330 @@
+{{- if .Release.IsInstall -}}
+{{- $compName := "dsx-influxdb-auth-job" -}}
+{{- if .Values.setDefaultUser.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    {{- include "zenhelper.labels" (list . $compName) | indent 4 }}
+  name: dsx-influxdb-set-auth
+spec:
+  activeDeadlineSeconds: {{ .Values.setDefaultUser.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "zenhelper.labels" (list . $compName) | indent 8 }}
+      annotations:
+        {{- include "zenhelper.annotations" .  | indent 8 }}
+    spec:
+      affinity:
+        {{- include "zenhelper.nodeArchAffinity" . | indent 8 }}
+        {{- include "zenhelper.podAntiAffinity" (list . $compName) | indent 8 }}
+      containers:
+      - name: dsx-influxdb-set-auth
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.influxdb.image.repository }}:{{ .Values.global.image.tag }}"
+        imagePullPolicy: {{ .Values.influxdb.image.pullPolicy | quote }}
+        env:
+          - name: INFLUXDB_USER
+            valueFrom:
+              secretKeyRef:
+                name: dsx-influxdb-auth
+                key: influxdb-user
+          - name: INFLUXDB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: dsx-influxdb-auth
+                key: influxdb-password
+          - name: INFLUXDB_RW_USER
+            valueFrom:
+              secretKeyRef:
+                name: dsx-influxdb-auth
+                key: influxdb-rw-user
+          - name: INFLUXDB_RW_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: dsx-influxdb-auth
+                key: influxdb-rw-password
+          - name: INFLUXDB_RO_USER
+            valueFrom:
+              secretKeyRef:
+                name: dsx-influxdb-auth
+                key: influxdb-ro-user
+          - name: INFLUXDB_RO_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: dsx-influxdb-auth
+                key: influxdb-ro-password
+        resources:
+{{ toYaml .Values.usermgmt.resources | indent 12 }}
+        args:
+          - "/bin/sh"
+          - "-c"
+          - |
+            set -e
+            set -x
+
+            contains() {
+                case $1 in
+                    *"$2"*) return 0;
+                esac
+                return 1;
+            }
+            checkGrants(){
+                user=$1
+                permission=$2
+                database=$3
+                grants=`curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} --data-urlencode q="show grants for $user" | jq --compact-output '.results[0].series[0].values'`
+
+                if contains "$grants" "[\"$database\",\"$permission\"]"; then
+                    echo "EXISTS: $permission grant for $user on $database"
+                    return 0;
+                else
+                    echo "DOES NOT EXIST: $permission grant for $user on $database"
+                    return 1;
+                fi
+            }
+
+            checkUserExists(){
+                userVal=$1
+                users=`curl -s -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} --data-urlencode q="show users" | jq -c '.results'[0].series[0].values | grep $userVal`
+                wait
+
+                if [ -z "$users" ]; then
+                    return 1;
+                else
+                    echo "checkUserExists(): $userVal user exists!";
+                    return 0;
+                fi
+            }
+
+            checkRetentionPoliciesExist() {
+                databaseNameVal=$1
+                retentionPolicyVal=$2
+                retentionPolicyName=`curl -s -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} --data-urlencode q="show retention policies on ${databaseNameVal}" | jq -c '.results'[0].series[0].values | grep $retentionPolicyVal`
+                if [ -z $retentionPolicyName ]; then
+                    return 1;
+                else
+                    echo "checkRetentionPoliciesExist(): $retentionPolicyVal retention policy exists!";
+                    return 0;
+                fi
+            }
+
+            checkDatabaseExists(){
+                databaseNameVal=$1
+                databaseName=`curl -s -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} --data-urlencode q="show databases" | jq -c '.results'[0].series[0].values | grep $databaseNameVal`
+                wait
+
+                if [ -z $databaseName ]; then
+                    return 1;
+                else
+                    echo "checkDatabaseExists(): $databaseNameVal database exists!";
+                    return 0;
+                fi
+            }
+
+
+            echo "1. Creating ${INFLUXDB_USER} user"
+            if checkUserExists ${INFLUXDB_USER}; then
+                echo "Skipping creation of ${INFLUXDB_USER} user!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k\
+                --data-urlencode q="CREATE USER ${INFLUXDB_USER} WITH PASSWORD '${INFLUXDB_PASSWORD}' {{ .Values.setDefaultUser.user.privileges }} ";
+                wait
+
+                if checkUserExists ${INFLUXDB_USER}; then
+                    echo "${INFLUXDB_USER} user created successfully!";
+                else
+                    echo "FAILURE: ${INFLUXDB_USER} user failed to create!"
+                    exit 1
+                fi
+
+            fi
+
+            echo "2. Creating ${INFLUXDB_RW_USER} user"
+            if checkUserExists ${INFLUXDB_RW_USER}; then
+                echo "Skipping creation of ${INFLUXDB_RW_USER} user!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="CREATE USER ${INFLUXDB_RW_USER} WITH PASSWORD '${INFLUXDB_RW_PASSWORD}'  ";
+                wait
+
+                if checkUserExists ${INFLUXDB_RW_USER}; then
+                    echo "${INFLUXDB_RW_USER} user created successfully!";
+                else
+                    echo "FAILURE: ${INFLUXDB_RW_USER} user failed to create!"
+                    exit 1
+                fi
+            fi
+
+            echo "3. Creating ${INFLUXDB_RO_USER} user"
+            if checkUserExists ${INFLUXDB_RO_USER}; then
+                echo "Skipping creation of ${INFLUXDB_RO_USER} user!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="CREATE USER ${INFLUXDB_RO_USER} WITH PASSWORD '${INFLUXDB_RO_PASSWORD}' ";
+                wait
+
+                if checkUserExists ${INFLUXDB_RO_USER}; then
+                    echo "${INFLUXDB_RO_USER} user created successfully!";
+                else
+                    echo "FAILURE: ${INFLUXDB_RO_USER} user failed to create!"
+                    exit 1
+                fi
+            fi
+
+            echo "4. Creating METRICS_DEPLOYMENT database"
+            if checkDatabaseExists METRICS_DEPLOYMENT; then
+                echo "Skipping creation of METRICS_DEPLOYMENT database!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="CREATE DATABASE METRICS_DEPLOYMENT WITH DURATION {{.Values.retentionDays}}d ";
+                wait
+
+                if checkDatabaseExists METRICS_DEPLOYMENT; then
+                    echo "METRICS_DEPLOYMENT database created successfully!";
+                else
+                    "FAILURE: METRICS_DEPLOYMENT database failed to create!"
+                    exit 1
+                fi
+            fi
+
+            echo "7. Create Grants for METRICS_DEPLOYMENT"
+            if checkGrants ${INFLUXDB_RW_USER} "ALL PRIVILEGES" "METRICS_DEPLOYMENT"; then
+                echo "GRANT ALL ON METRICS_DEPLOYMENT TO ${INFLUXDB_RW_USER} already exists, skipping!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="GRANT ALL ON METRICS_DEPLOYMENT TO ${INFLUXDB_RW_USER} ";
+                wait
+            fi
+            if checkGrants ${INFLUXDB_RO_USER} "READ" "METRICS_DEPLOYMENT"; then
+                echo "GRANT READ ON METRICS_DEPLOYMENT TO ${INFLUXDB_RO_USER} already exists, skipping!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="GRANT READ ON METRICS_DEPLOYMENT TO ${INFLUXDB_RO_USER} ";
+                wait
+            fi
+
+            echo "6. Creating METRICS_EVALUATION database"
+            if checkDatabaseExists METRICS_EVALUATION; then
+                echo "Skipping creation of METRICS_EVALUATION database!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="CREATE DATABASE METRICS_EVALUATION WITH DURATION {{.Values.retentionDays}}d";
+                wait
+
+                if checkDatabaseExists METRICS_DEPLOYMENT; then
+                    echo "METRICS_DEPLOYMENT database created successfully!";
+                else
+                    "FAILURE: METRICS_DEPLOYMENT database failed to create!"
+                    exit 1
+                fi
+
+            fi
+
+            echo "7. Create Grants for METRICS_EVALUATION"
+            if checkGrants ${INFLUXDB_RW_USER} "ALL PRIVILEGES" "METRICS_EVALUATION"; then
+                echo "GRANT ALL ON METRICS_EVALUATION TO ${INFLUXDB_RW_USER} already exists, skipping!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="GRANT ALL ON METRICS_EVALUATION TO ${INFLUXDB_RW_USER}";
+                wait
+            fi
+
+            set -x
+            if checkGrants ${INFLUXDB_RO_USER} "READ" "METRICS_EVALUATION"; then
+                echo "GRANT READ ON METRICS_EVALUATION TO ${INFLUXDB_RO_USER} already exists, skipping!!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="GRANT READ ON METRICS_EVALUATION TO ${INFLUXDB_RO_USER} ";
+                wait
+            fi
+
+            echo "8 Check User Grants for all the tables"
+            if checkGrants ${INFLUXDB_RW_USER} "ALL PRIVILEGES" "METRICS_DEPLOYMENT"; then
+                echo "GRANT ALL ON METRICS_DEPLOYMENT TO ${INFLUXDB_RW_USER}, successful!";
+            else
+                echo "GRANT ALL ON METRICS_DEPLOYMENT TO ${INFLUXDB_RW_USER}, was NOT successful!";
+                exit 1
+            fi
+
+            if checkGrants ${INFLUXDB_RO_USER} "READ" "METRICS_DEPLOYMENT"; then
+                echo "GRANT READ ON METRICS_DEPLOYMENT TO ${INFLUXDB_RO_USER}, successful!";
+            else
+                echo "GRANT READ ON METRICS_DEPLOYMENT TO ${INFLUXDB_RO_USER}, was NOT successful!";
+                exit 1
+            fi
+
+            if checkGrants ${INFLUXDB_RW_USER} "ALL PRIVILEGES" "METRICS_EVALUATION"; then
+                echo "GRANT ALL ON METRICS_EVALUATION TO ${INFLUXDB_RW_USER}, successful!";
+            else
+                echo "GRANT ALL ON METRICS_EVALUATION TO ${INFLUXDB_RW_USER}, was NOT successful!";
+                exit 1
+            fi
+
+            if checkGrants ${INFLUXDB_RO_USER} "READ" "METRICS_EVALUATION"; then
+                echo "GRANT READ ON METRICS_EVALUATION TO ${INFLUXDB_RO_USER}, successful!";
+            else
+                echo "GRANT READ ON METRICS_EVALUATION TO ${INFLUXDB_RO_USER}, was NOT successful!";
+                exit 1
+            fi
+
+            echo "9. Creating WATCHDOG database"
+            if checkDatabaseExists WATCHDOG; then
+                echo "Skipping creation of WATCHDOG database!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="CREATE DATABASE WATCHDOG WITH DURATION {{.Values.retentionDays}}d ";
+                wait
+                if checkDatabaseExists WATCHDOG; then
+                    echo "WATCHDOG database created successfully!";
+                else
+                    echo "FAILURE: WATCHDOG database failed to create!"
+                    exit 1
+                fi
+            fi
+            echo "10. Creating retention policies on WATCHDOG database"
+            if checkDatabaseExists WATCHDOG; then
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="CREATE RETENTION POLICY thirty_days ON WATCHDOG DURATION 30d REPLICATION 1";
+                wait
+                if checkRetentionPoliciesExist WATCHDOG thirty_days; then
+                    echo "Retention policy thirty_days on WATCHDOG created successfully"
+                else
+                    echo "FAILURE: retention policy thirty_days on WATCHDOG database failed to create!"
+                    exit 1
+                fi
+            fi
+            echo "11. Create Grants for WATCHDOG"
+            if checkGrants ${INFLUXDB_RW_USER} "ALL PRIVILEGES" "WATCHDOG"; then
+                echo "GRANT ALL ON WATCHDOG TO ${INFLUXDB_RW_USER} already exists, skipping!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="GRANT ALL ON WATCHDOG TO ${INFLUXDB_RW_USER} ";
+                wait
+            fi
+            if checkGrants ${INFLUXDB_RO_USER} "READ" "WATCHDOG"; then
+                echo "GRANT READ ON WATCHDOG TO ${INFLUXDB_RO_USER} already exists, skipping!";
+            else
+                curl -X POST https://dsx-influxdb:{{ .Values.config.http.bind_address }}/query -k -u ${INFLUXDB_USER}:${INFLUXDB_PASSWORD} \
+                --data-urlencode q="GRANT READ ON WATCHDOG TO ${INFLUXDB_RO_USER} ";
+                wait
+            fi
+            echo "12 Check User Grants for all the tables"
+            if checkGrants ${INFLUXDB_RW_USER} "ALL PRIVILEGES" "WATCHDOG"; then
+                echo "GRANT ALL ON WATCHDOG TO ${INFLUXDB_RW_USER}, successful!";
+            else
+                echo "GRANT ALL ON WATCHDOG TO ${INFLUXDB_RW_USER}, was NOT successful!";
+                exit 1
+            fi
+            if checkGrants ${INFLUXDB_RO_USER} "READ" "WATCHDOG"; then
+                echo "GRANT READ ON WATCHDOG TO ${INFLUXDB_RO_USER}, successful!";
+            else
+                echo "GRANT READ ON WATCHDOG TO ${INFLUXDB_RO_USER}, was NOT successful!";
+                exit 1
+            fi
+
+
+            echo "done"
+      restartPolicy: {{ .Values.setDefaultUser.restartPolicy }}
+{{- end -}}
+{{- end -}}
