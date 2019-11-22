@@ -1,0 +1,84 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+{{- if or .Values.defaultBucket.enabled .Values.buckets }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.createBucket) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.createBucket) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.createBucket) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      restartPolicy: OnFailure
+{{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+{{- end }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      serviceAccountName: {{ include "sch.names.fullName" (list .) | quote }}
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.minioPodSecurityContext) | indent 8 }}
+      volumes:
+        - name: minio-configuration
+          projected:
+            sources:
+            - configMap:
+                name:  {{ include "sch.names.fullName" (list .) | quote }}
+            - secret:
+                name: {{ if (tpl .Values.existingSecret . ) }}{{ include .Values.existingSecret . }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}{{ end }}
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+        - name: cert-secret-volume-mc
+          secret:
+            secretName: {{ if (tpl .Values.tls.certSecret .) }}{{ include .Values.tls.certSecret . }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}{{ end }}
+            items:
+            - key: tls.cacrt
+              path: CAs/public.crt
+        {{ end }}
+      containers:
+      - name: minio-mc
+        image:  "{{ .Values.global.icpDockerRepo }}{{ .Values.minioClient.image.repository }}:{{ .Values.minioClient.image.tag }}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.minioContainerSecurityContext) | indent 10 }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 128Mi
+            cpu: 100m
+        command: ["/bin/sh", "/config/initialize"]
+        env:
+          - name: MINIO_ENDPOINT
+            value: {{ include "sch.names.fullCompName" (list . .sch.chart.components.service) }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+          - name: MINIO_PORT
+            value: {{ .Values.service.port | quote }}
+        volumeMounts:
+          - name: minio-configuration
+            mountPath: /config
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+          - name: cert-secret-volume-mc
+            mountPath: {{ .Values.configPathmc }}certs
+          {{ end }}
+{{- end }}

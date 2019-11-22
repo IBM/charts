@@ -1,0 +1,397 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+
+{{- $compName :=  .sch.chart.components.probe.name -}}
+{{ $repository := trimSuffix "/" .Values.image.repository -}}
+{{- $secretsDir := printf "%s%s" "/home/netcool/etc/secrets/" ( .Values.probe.transportType | lower ) -}}
+
+{{- $configName :=  .sch.chart.components.probe.config.name -}}
+{{- $configMapName := include "sch.names.fullCompName" (list . $configName) -}}
+
+{{- $netcoolSslEnabled := include "messagebus.secobj.netcoolConnectionSslEnabled" ( . ) -}}
+{{- $netcoolAuthEnabled := include "messagebus.secobj.netcoolConnectionAuthEnabled" ( . ) -}}
+{{- $netcoolSecretRequired := include "messagebus.secobj.keySecretRequired" ( . ) -}}
+
+{{- $saName := include "messagebus.rbac.serviceAccountName" ( . ) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+      app.kubernetes.io/component: {{ $compName }}
+  {{ if .Values.autoscaling.enabled -}}
+  replicas: {{ .Values.autoscaling.minReplicas | default 1 }}
+  {{- else -}}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  minReadySeconds: 45
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccountName | default $saName }}
+      automountServiceAccountToken: false
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: interfaces-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: omni.dat
+              path: omni.dat
+        - name: props-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: message_bus.props
+              path: message_bus.props
+        - name: transformer-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: transformer-file
+              path: transformer-file
+        - name: transport-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: transport-file
+              path: transport-file
+        - name: rules-file
+          configMap:
+          {{- if .Values.probe.rulesConfigmap }}
+            name: {{ .Values.probe.rulesConfigmap }}
+          {{- else }}
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+          {{- end }}
+            items:
+            - key: message_bus.rules
+              path: message_bus.rules
+        {{- if not .Values.probe.rulesConfigmap }}
+        - name: rules-file-netcool
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: message_bus_netcool.rules
+              path: message_bus_netcool.rules
+        - name: rules-file-cbe
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: message_bus_cbe.rules
+              path: message_bus_cbe.rules
+        - name: rules-file-wbe
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: message_bus_wbe.rules
+              path: message_bus_wbe.rules
+        - name: rules-file-wef
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: message_bus_wef.rules
+              path: message_bus_wef.rules
+        {{- /* rulesConfigmap end */}}
+        {{- end }}
+        - name: kafka-trans-conn-props
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: kafka-trans-conn-props
+              path: kafka-trans-conn-props
+        - name:  kafka-client-props
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: kafka-client-props
+              path: kafka-client-props
+        - name:  kafka-client-javasys-props
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: kafka-client-javasys-props
+              path: kafka-client-javasys-props
+        - name:  kafka-client-jaas
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: kafka-client-jaas
+              path: kafka-client-jaas
+        {{- if .Values.kafka.client.ssl.trustStoreSecretName }}
+        - name: kafka-client-truststore
+          secret:
+            secretName: {{ .Values.kafka.client.ssl.trustStoreSecretName }}
+            items:
+            - key: client-truststore.jks
+              path: client-truststore.jks
+        {{- /* trustStoreSecretName end */}}
+        {{- end }}
+        {{- if .Values.kafka.client.ssl.keyStoreSecretName }}
+        - name: kafka-client-keystore
+          secret:
+            secretName: {{ .Values.kafka.client.ssl.keyStoreSecretName }}
+            items:
+            - key: client-keystore.jks
+              path: client-keystore.jks
+        {{- /* keyStoreSecretName end */}}
+        {{- end }}
+        {{- if and .Values.netcool.secretName (eq $netcoolSecretRequired "true") }}
+        - name: netcool-secret
+          secret:
+            # Use a user defined pre-created secret. 
+            secretName: {{ .Values.netcool.secretName }}
+            items:
+            {{- if (eq $netcoolAuthEnabled "true") }}
+            - key: encryption.keyfile
+              path: encryption.keyfile
+            {{- end }}
+            {{- if (eq $netcoolSslEnabled "true") }}
+            - key: omni.kdb
+              path: omni.kdb
+            - key: omni.sth
+              path: omni.sth
+            {{- end }}
+        {{- end }}
+        - name: shared-dir
+          {{- /* Using emptyDir as temporary directory to modify probe configuration files. */}}
+          emptyDir: {}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        {{ if .Values.probe.setUIDandGID -}}
+        runAsUser: 1001
+        fsGroup: 2001
+        {{- end }}
+      containers:
+        - name: messagebus
+          image: "{{ .Values.image.repository}}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            {{ if .Values.probe.setUIDandGID -}}
+            runAsUser: 1001
+            {{- end }}
+            privileged: false
+            allowPrivilegeEscalation: false
+            {{/* readOnlyRootFilesystem must be false to allow probe to create interfaces file */}}
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          env:
+          - name: LICENSE
+            value: {{ .Values.license | default "not accepted" }}
+          - name: PROBE_NAME
+            value: "nco_p_message_bus"
+          - name: LC_ALL
+            value: {{ .Values.probe.locale | default "en_US.utf8" | quote }}
+          - name: TRANSPORT_TYPE
+            value: {{ .Values.probe.transportType | default "KAFKA" }}
+          - name: OBJSVR_CONN_MODE
+            value: {{ .Values.netcool.connectionMode | default "Default" }}
+          - name: KAFKA_SECY_PROTO
+            value: {{ .Values.kafka.client.securityProtocol | default "PLAINTEXT" }}
+          - name: SECRETS_DIR
+            value: {{ $secretsDir }}
+          {{- if .Values.probe.secretName }}
+          - name: PROBE_SECRET
+            value: {{ .Values.probe.secretName }}
+          - name: HTTP_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.probe.secretName }}
+                key: http_username
+          - name: HTTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.probe.secretName }}
+                key: http_password
+          - name: KAFKA_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.probe.secretName }}
+                key: kafka_username
+          - name: KAFKA_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.probe.secretName }}
+                key: kafka_password
+          {{- end }}
+          {{- if .Values.kafka.client.ssl.trustStoreSecretName }}
+          - name: KAFKA_SSL_TRUSTSTR_SECRET
+            value: {{ .Values.kafka.client.ssl.trustStoreSecretName }}
+          - name: TRUSTSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.kafka.client.ssl.trustStoreSecretName }}
+                key: truststore_password
+          {{- end }}
+          {{- if .Values.kafka.client.ssl.keyStoreSecretName }}
+          - name: KAFKA_SSL_KEYSTR_SECRET
+            value: {{ .Values.kafka.client.ssl.keyStoreSecretName }}
+          - name: KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.kafka.client.ssl.keyStoreSecretName }}
+                key: keystore_password
+          {{- end }}
+          - name: INIT
+            value: "true"
+          {{- if and (.Values.netcool.secretName) (eq $netcoolAuthEnabled "true") }}
+          - name: AUTHUSERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.netcool.secretName }}
+                key: AuthUserName
+          - name: AUTHPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.netcool.secretName }}
+                key: AuthPassword
+          - name: SECRETNAME
+            value: {{ .Values.netcool.secretName }}
+          {{- end }}
+          ports:
+            - name: nhttpd-port
+              containerPort: 8080
+          volumeMounts:
+          - name: interfaces-file
+            mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+            subPath: omni.dat
+          - name: rules-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus.rules
+            subPath: message_bus.rules
+          - name: transformer-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus_parser_config.json
+            subPath: transformer-file
+          - name: transport-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/Transport.properties
+            subPath: transport-file
+          {{- if not .Values.probe.rulesConfigmap }}
+          - name: rules-file-netcool
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus_netcool.rules
+            subPath: message_bus_netcool.rules
+          - name: rules-file-cbe
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus_cbe.rules
+            subPath: message_bus_cbe.rules
+          - name: rules-file-wbe
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus_wbe.rules
+            subPath: message_bus_wbe.rules
+          - name: rules-file-wef
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus_wef.rules
+            subPath: message_bus_wef.rules
+          {{- end }}
+          - name: kafka-trans-conn-props
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/kafkaConnectionProperties.json
+            subPath: kafka-trans-conn-props
+          - name: kafka-client-javasys-props
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/kafkaClient_javaSys.properties
+            subPath: kafka-client-javasys-props
+          - name: shared-dir
+            mountPath: /home/netcool/etc
+          - name: props-file
+            mountPath:  /home/netcool/etc/message_bus.props
+            subPath: message_bus.props
+          - name: kafka-client-jaas
+            mountPath: /home/netcool/etc/kafka_client_jaas.conf
+            subPath: kafka-client-jaas
+          - name: kafka-client-props
+            mountPath:  /home/netcool/etc/kafkaClient.properties
+            subPath: kafka-client-props
+          {{- if .Values.netcool.secretName }}
+          {{- if eq $netcoolSecretRequired "true" }}
+          {{- if (eq $netcoolAuthEnabled "true") }}
+          - name: netcool-secret
+            mountPath: /opt/IBM/tivoli/netcool/etc/security/keys/encryption.keyfile
+            subPath: encryption.keyfile
+          {{- end }}
+          {{- if (eq $netcoolSslEnabled "true") }}
+          - name: netcool-secret
+            mountPath: /opt/IBM/tivoli/netcool/etc/security/keys/omni.kdb
+            subPath: omni.kdb
+          - name: netcool-secret
+            mountPath: /opt/IBM/tivoli/netcool/etc/security/keys/omni.sth
+            subPath: omni.sth
+          {{- end }}
+          {{- /* netcoolSecretRequired end */}}
+          {{- end }}
+          {{- /* secretName end */}}
+          {{- end }}
+          {{- if .Values.kafka.client.ssl.trustStoreSecretName }}
+          - name: kafka-client-truststore
+            mountPath: {{ $secretsDir }}/client-truststore.jks
+            subPath: client-truststore.jks
+            readOnly: true
+          {{- /* trustStoreSecretName end */}}
+          {{- end }}
+          {{- if .Values.kafka.client.ssl.keyStoreSecretName }}
+          - name: kafka-client-keystore
+            mountPath: {{ $secretsDir }}/client-keystore.jks
+            subPath: client-keystore.jks
+            readOnly: true
+          {{- /* keyStoreSecretName end */}}
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:8080/probe/common
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:8080/probe/common
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{ if .Values.global.image.secretName -}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}

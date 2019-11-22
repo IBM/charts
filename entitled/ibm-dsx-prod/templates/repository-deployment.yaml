@@ -1,0 +1,84 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: repository
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: repository-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: repository-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: wml-ml
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: repository
+        run: repository-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+      - name: repository-container
+        image: {{ .Values.repository.image.repository }}:{{ .Values.repository.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        env:
+        - name: CLOUDANT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_username
+        - name: CLOUDANT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_password
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.repository.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 12508
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        livenessProbe:
+          httpGet:
+            path: /v2/artifacts/heartbeat
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /v2/artifacts/heartbeat
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

@@ -1,0 +1,26 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if and (empty .Values.externalDatabase.serverName) (empty .Values.externalCustomDatabase.datasourceRef) }}
+kind: NetworkPolicy
+apiVersion: {{ .Values.networkPolicy.apiVersion }}
+metadata:
+  name: {{ template "odm.dbserver-network-policy.fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  podSelector:
+    matchLabels:
+      run: {{ template "odm.dbserver.fullname" . }}
+  ingress:
+  # Allow web access to the UI
+  - ports:
+    - port: 9463
+  # Allow inbound connections from release pods
+  - from:
+    - podSelector:
+        matchLabels:
+          release: "{{ .Release.Name }}"
+{{- end }}
+{{- end }}

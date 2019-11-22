@@ -1,0 +1,30 @@
+{{- if .Values.service.externalFacingEnabled -}}
+{{- $name := include "ibm-iira-prod.name" . -}}
+{{- $exposedService := printf "%s-webapp-expose" $name -}}
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: {{ template "ibm-iira-prod.name" . }}
+    chart: {{ template "ibm-iira-prod.chart" . }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  name: {{ $exposedService }}
+  {{ if .Values.global.nameSpaceEnabled }}
+  namespace: {{ toYaml .Values.global.namespace }}
+  {{ end }}
+spec:
+  externalTrafficPolicy: Cluster
+  ports:
+  - nodePort: {{ .Values.service.externalNodePort }}
+    port: {{ .Values.service.frontEndPort }}
+    protocol: TCP
+    targetPort: {{ .Values.service.port }}
+  selector:
+    app: {{ template "ibm-iira-prod.name" . }}
+    release: {{ .Release.Name }}
+  sessionAffinity: None
+  type: NodePort
+status:
+  loadBalancer: {}
+{{- end }}

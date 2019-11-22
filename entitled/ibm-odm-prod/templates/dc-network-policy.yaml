@@ -1,0 +1,30 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if .Values.decisionCenter.enabled }}
+kind: NetworkPolicy
+apiVersion: {{ .Values.networkPolicy.apiVersion }}
+metadata:
+  name: {{ template "odm.dc-network-policy.fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  podSelector:
+    matchLabels:
+      run: {{ template "odm.decisioncenter.fullname" . }}
+  ingress:
+  # Allow web access to the UI
+  - ports:
+    {{- if .Values.service.enableTLS }}
+    - port: 9453
+    {{ else }}
+    - port: 9060
+    {{- end }}
+  # Allow inbound connections from release pods
+  - from:
+    - podSelector:
+        matchLabels:
+          release: "{{ .Release.Name }}"
+{{- end }}
+{{- end }}

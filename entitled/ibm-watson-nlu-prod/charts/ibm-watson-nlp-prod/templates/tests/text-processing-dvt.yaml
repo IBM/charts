@@ -1,0 +1,70 @@
+{{- include "sch.config.init" (list . "nlp.sch.chart.config.values") -}}
+{{- $icpTestCompName := printf "dvt-test" -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpTestCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $icpTestCompName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+    runAsUser: 1000
+{{- end }}
+  containers:
+    - name: {{ include "sch.names.fullCompName" (list . $icpTestCompName) }}
+      image: "{{ .Values.global.icpDockerRepo }}{{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}"
+      resources:
+        requests:
+          cpu: 250m
+          memory: 250Mi
+        limits:
+          cpu: 500m
+          memory: 500Mi
+      env:
+        - name: CLOUD_ENVIRONMENT
+          value: "icp"
+        - name: CONFIG_YAML
+          value: "/etc/dvt/config.yaml"
+        - name: TP_PORT
+          value: "{{ .Values.global.textProcessing.port }}"
+      volumeMounts:
+        - name: dvt-config
+          mountPath: /etc/dvt/config.yaml
+          subPath: dvt/config.yaml
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000
+{{- end }}
+        capabilities:
+          drop:
+          - ALL
+  volumes:
+    - name: dvt-config
+      configMap:
+        name: {{ include "sch.names.fullCompName" (list . "dvt-config") }}
+        items:
+          - key: tenant-conf
+            path: dvt/config.yaml
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+              - "amd64"
+  restartPolicy: Never
+  imagePullSecrets:
+  - name: {{ include "icp-pull-secrets" . }}

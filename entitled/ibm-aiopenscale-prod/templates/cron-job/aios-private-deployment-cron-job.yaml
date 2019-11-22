@@ -1,0 +1,89 @@
+{{ $namePrefix := "private-deployment-cleanup" -}}
+{{ $compName := "aios-cron-job" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceAccount := include "aios.serviceAccountNameEditor" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  schedule: "0 23 * * *"
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostNetwork: false
+          hostPID: false
+          hostIPC: false
+          restartPolicy: OnFailure
+          serviceAccountName: {{ $serviceAccount }}
+          affinity:
+          {{- include "aios.nodeAffinity" . | indent 10 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+          {{- if .Values.imagePullSecrets }}
+          imagePullSecrets:
+            - name: {{ .Values.imagePullSecrets }}
+          {{- end }}
+          containers:
+          - name: private-deployment-cleanup
+            image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+            imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1.5Gi
+              limits:
+                cpu: 500m
+                memory: 1.5Gi
+            securityContext:
+              privileged: false
+              readOnlyRootFilesystem: false
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              runAsUser: {{ $nonRootUser }}
+              capabilities:
+                drop:
+                - ALL
+            command:
+            - java 
+            - -Xmx1024m
+            - -cp 
+            - /home/aios/*:. 
+            - CleanUpPrivateDeployment
+            env:
+            - name: ENABLE_ICP
+              value: "true"
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn" (list . "nginx-internal") }}"
+            - name: ICP_AUTH_URL
+              value: "$(AIOS_GATEWAY_URL)/v1/preauth/validateAuth"
+            - name: ICP_WML_URL
+              value: "https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list .) }}.svc.{{ .Values.clusterDomain }}"
+            - name: ICP_WML_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.icp4DToken.secretName }}
+                  key: {{ .Values.icp4DToken.secretKey }}
+            - name: AIOS_SERVICE_CREDENTIALS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-service-secrets
+                  key: aios-service-credential
+            {{ if .Values.global.dockerRegistryPrefix }}
+            - name: ML_GATEWAY_V4_WML_API_ENABLED
+              value: "true"
+            - name: ML_GATEWAY_MIN_SHADOW_DEPLOYMENTS
+              value: "20"
+            - name: ML_GATEWAY_NUM_REPLICAS
+              value: {{ .Values.mlGatewayDiscovery.replicas | quote }}
+            {{ end }}

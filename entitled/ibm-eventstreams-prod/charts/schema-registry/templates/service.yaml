@@ -1,0 +1,41 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines a service to allow internal access to the Schema Registry REST API
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "schemaregistry.sch.chart.config.values" ) -}}
+{{ $namePrefix := .sch.chart.components.schemaregistry.service.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'schemaregistry' as this makes up part of implementing the Schema Registry
+{{ $compName := .sch.chart.components.schemaregistry.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $statefulSet := .sch.chart.components.schemaregistry.statefulSet.name -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  ports:
+    - port: {{ $ports.schemaregistry.server }}
+      targetPort: {{ $ports.schemaregistry.server }}
+      protocol: TCP
+      name: http-port
+  selector:
+    release: {{ .Release.Name | quote }}
+    serviceSelector: {{ $statefulSet | quote }}

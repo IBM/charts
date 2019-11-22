@@ -1,0 +1,179 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compGatewayName := .sch.chart.components.wex.gateway.name }}
+{{- $compGatewayLabelComponent := .sch.chart.components.wex.gateway.label.component }}
+{{- $compGatewayLabelRunStatefulset := .sch.chart.components.wex.gateway.label.runStatefulset }}
+
+{{- $compConfigmapName := .sch.chart.components.wex.configmap.name }}
+{{- $compDataPVCName := .sch.chart.components.wex.data.pvc.name }}
+{{- $compConfigName := .sch.chart.components.wex.config.name }}
+{{- $compDatabaseName := .sch.chart.components.wex.database.name }}
+{{- $compDiscoveryName := .sch.chart.components.wex.discovery.name }}
+{{- $compHdpNnName := .sch.chart.components.wex.hdp.nn.name }}
+{{- $compHdpRmName := .sch.chart.components.wex.hdp.rm.name }}
+{{- $compIngestionPVCName := .sch.chart.components.wex.ingestion.pvc.name }}
+{{- $compNlpName := .sch.chart.components.wex.nlp.name }}
+{{- $compOrchestratorName := .sch.chart.components.wex.orchestrator.name }}
+{{- $compWksmlName := .sch.chart.components.wex.wksml.name }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compGatewayName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-gateway
+    run: {{ $compGatewayLabelRunStatefulset }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "{{ .Chart.Name }}.fullname" . }}
+      component: wex-gateway
+      run: {{ $compGatewayLabelRunStatefulset }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $compGatewayName ) }}
+  replicas: {{ .Values.gateway.replica }}
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-gateway
+        run: {{ $compGatewayLabelRunStatefulset }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.gateway.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+                app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                component: wex-gateway
+                run: {{ $compGatewayLabelRunStatefulset }}
+        {{- else if eq .Values.gateway.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                  component: wex-gateway
+                  run: {{ $compGatewayLabelRunStatefulset }}
+        {{- end }}
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: gateway
+        image: "{{ .Values.general.image.core }}"
+        imagePullPolicy: {{ .Values.general.image.pullPolicy }}
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+        env:
+        - name: WEX_PORT
+          value: "60443"
+        - name: WEX_ALL_COMPONENTS
+          value: "usermgmt zing nginx wlp fluentd appbuilder"
+        - name: ZK_HOST
+          value: "{{ include "sch.names.fullCompName" (list . $compConfigName ) }}:2181"
+        - name: DEPLOYMENT_TYPE
+          value: CLUSTER
+        - name: HADOOP_CONF_DIR
+          value: /wexdata/config/hadoop
+        - name: HADOOP_NAMENODE_ADDRESS
+          value: "{{ include "sch.names.fullCompName" (list . $compHdpNnName ) }}:9000"
+        - name: YARN_RESOURCEMANAGER_HOSTNAME
+          value: "{{ include "sch.names.fullCompName" (list . $compHdpRmName ) }}"
+        - name: ORCHESTRATOR_SVC
+          value: {{ include "sch.names.fullCompName" (list . $compOrchestratorName ) }}:9521
+        - name: ORCHESTRATOR_HOST
+          value: {{ include "sch.names.fullCompName" (list . $compOrchestratorName ) }}
+        - name: ORCHESTRATOR_PORT
+          value: "9521"
+        - name: DATABASE_SVC
+          value: {{ include "sch.names.fullCompName" (list . $compDatabaseName ) }}:5986
+        - name: COUCHDB_HOST
+          value: {{ include "sch.names.fullCompName" (list . $compDatabaseName ) }}
+        - name: COUCHDB_PORT
+          value: "5986"
+        - name: COUCHDB_API_PORT
+          value: "5984"
+        - name: DISCOVERY_SVC
+          value: localhost:9080
+        - name: AMA_SOLR_HOSTNAME
+          value: "{{ include "sch.names.fullCompName" (list . $compDiscoveryName ) }}"
+        - name: AMA_SOLR_PORT
+          value: "8983"
+        - name: DCLUSTERING_SVC
+          value: {{ include "sch.names.fullCompName" (list . $compDiscoveryName ) }}:8984
+        - name: NLP_SVC
+          value: {{ include "sch.names.fullCompName" (list . $compNlpName ) }}:8393
+        - name: CONTROLLER_N_THREADS
+          value: "0"
+        - name: WKSML_HOST
+          value: {{ include "sch.names.fullCompName" (list . $compWksmlName ) }}
+        {{- if .Values.general.adminInitialPasswordSecret.use }}
+        - name: ADMIN_INITIAL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.general.adminInitialPasswordSecret.name }}
+              key: password
+        {{- end }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compConfigmapName ) }}
+        ports:
+        - name: https
+          containerPort: 60443
+          protocol: TCP
+        - name: debug
+          containerPort: 9080
+          protocol: TCP
+        resources:
+{{ toYaml .Values.gateway.resources | indent 10 }}
+        volumeMounts:
+        - name: datadir
+          mountPath: /wexdata
+        - name: userdatadir
+          mountPath: /mnt
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - ${WEX_HOME}/sbin/healthcheck.sh -w -t 600
+          initialDelaySeconds: {{ .Values.gateway.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.gateway.readinessProbe.timeoutSeconds }}
+          failureThreshold: 12
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - ${WEX_HOME}/sbin/healthcheck.sh -w -t 10
+          initialDelaySeconds: {{ .Values.gateway.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.gateway.livenessProbe.timeoutSeconds }}
+      volumes:
+      - name: datadir
+        persistentVolumeClaim:
+          claimName: {{ include "sch.names.fullCompName" (list . $compDataPVCName ) }}
+      - name: userdatadir
+      {{- if .Values.general.mount.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "sch.names.fullCompName" (list . $compIngestionPVCName ) }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+

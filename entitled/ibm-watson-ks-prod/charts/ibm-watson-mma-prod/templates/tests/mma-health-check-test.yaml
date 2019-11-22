@@ -1,0 +1,82 @@
+{{- include "sch.config.init" (list . "mma.sch.chart.config.values") -}}
+{{- $icpModelManagementApiCompName :=  .sch.chart.components.mma.name -}}
+{{- $icpModelManagementApiTestCompName := "mma-health-test" -}}
+{{- $icpPullSecrets := include "icp-pull-secrets" . -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpModelManagementApiTestCompName) }}
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: {{ include "sch.names.fullCompName" (list . $icpModelManagementApiCompName) }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 99
+  containers:
+    {{- if .Values.global.mma.database.enableV1 }}
+    # MMA v1 Health Check Test
+    - name: "{{ include "sch.names.fullCompName" (list . $icpModelManagementApiTestCompName) }}-v1"
+      image: "{{ .Values.global.icpDockerRepo }}{{ .Values.global.tests.image.repository }}:{{ .Values.global.tests.image.tag }}"
+      command: ['curl']
+      args:  ['-k', '-i', 'https://{{ include "sch.names.fullCompName" (list . $icpModelManagementApiCompName) }}:4000/natural-language-understanding/api/v1/wks/health']
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 99
+        capabilities:
+          drop:
+          - ALL
+      resources:
+        requests:
+          memory: {{ .Values.modelManagementApi.resources.requests.memory }}
+          cpu: {{ .Values.modelManagementApi.resources.requests.cpu }}
+        limits:
+          memory: {{ .Values.modelManagementApi.resources.limits.memory }}
+          cpu: {{ .Values.modelManagementApi.resources.limits.cpu }}
+    {{- end }}
+    {{- if .Values.global.mma.database.enableV2 }}
+    # MMA v2 Health Check Test
+    - name: "{{ include "sch.names.fullCompName" (list . $icpModelManagementApiTestCompName) }}-v2"
+      image: "{{ .Values.global.icpDockerRepo }}{{ .Values.global.tests.image.repository }}:{{ .Values.global.tests.image.tag }}"
+      command: ['curl']
+      args:  ['-k', '-i', 'https://{{ include "sch.names.fullCompName" (list . $icpModelManagementApiCompName) }}:4001/natural-language-understanding/api/v2/health']
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 99
+        capabilities:
+          drop:
+          - ALL
+      resources:
+        requests:
+          memory: {{ .Values.global.tests.resources.requests.memory }}
+          cpu: {{ .Values.global.tests.resources.requests.cpu }}
+        limits:
+          memory: {{ .Values.global.tests.resources.limits.memory }}
+          cpu: {{ .Values.global.tests.resources.limits.cpu }}
+    {{- end }}
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+  imagePullSecrets:
+  - name: {{ $icpPullSecrets | quote }}

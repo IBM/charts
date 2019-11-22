@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Unique key of the Deployment instance
+  name: "{{ .Values.servicename }}-tenant-tools"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.servicename }}-tenant-tools
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.servicename }}-tenant-tools
+        api-database-status: "{{ .Values.servicename }}db2eventstore-api"
+        api-db-urlprovider: "{{ .Values.servicename }}db2eventstore-urlprovider"
+        helm.sh/chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        component: eventstore
+      annotations:
+        {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      initContainers:
+      {{- include "eventstore.wait-sqllib-shared" . | indent 6 }}
+      containers:
+      - name: eventstore-tools
+        {{- if .Values.eventstoreTools.image.tag }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.eventstoreTools.image.tag }}
+        {{- else }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - /eventstore/tools/list.sh
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - /eventstore/tools/list.sh
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        env:
+        # BLUSPARK_AREA_CONFIGURATION_FILE=${BLUSPARK_AREA_BLUSPARK_CONF_IN_CONTAINER}
+        - name: BLUSPARK_AREA_CONFIGURATION_FILE
+          value: /bluspark/external_conf/bluspark.conf
+        - name: DB2DBDFT
+          value: "{{ .Values.database.name }}"
+        - name: SSH_PORT
+          value: "{{ .Values.engine.sshPort }}"
+        - name: SERVICENAME
+          value: {{ .Values.servicename }}
+        - name: RELEASENAME
+          value: {{ .Release.Name }}
+        - name: DB2INSTANCE
+          value: "{{ .Values.db2InstanceUser }}"
+        - name: RELEASE_NAMESPACE
+          value: {{ .Release.Namespace }}
+        - name: REPLICA_NUMBER
+          value: "{{ .Values.eventstoreService.replicas }}"
+        - name: SQLLIB_SHARED_UNDERFS_PATH
+          value: /eventstorefs/{{ .Values.servicename }}/db2inst1
+        # backup/restore depend on the following log configuration
+        - name: LOCAL_LOG_PATH
+          value: "/eventstore/logs"
+        - name: LOCAL_LOG_PATH_ON_HOST
+          value: "{{ .Values.disk.storagePath }}/{{ .Values.servicename }}/engine/shared_db/log"
+        # backup/restore depend on the external storage path
+        - name: EXTERNAL_STORAGE_PATH
+          value: "{{ .Values.disk.storagePath }}/{{ .Values.servicename }}/engine/utils/external_db"
+        - name: CLIENT_STOREPASS
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.servicename }}-ssl-secrets"
+              key: client_storepass
+        - name: ENGINE_STOREPASS
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Values.servicename }}-ssl-secrets"
+              key: engine_storepass
+        volumeMounts:
+        - name: bluspark-config-volume
+          mountPath: /bluspark/external_conf
+        - name: node-ssh-directory
+          mountPath: /root/.ssh:Z
+        - name: user-home-mount
+          mountPath: /user-home
+        - mountPath: /eventstorefs
+          name: storage-underfs
+        {{ if ne .Values.runtime "ICP4Data" -}}
+        - mountPath: /eventstore/ssl/certificate-secret
+          name: ssl-certificate-secret-volume
+        {{- end }}
+        # use :z label for shared between containers
+        - mountPath: /eventstore/logs:z
+          name: eventstore-logs
+      # Restart policy for all containers within the pod
+      # One of Always, OnFailure, Never. Default to Always.
+      # From env var ${UTILITIES_RESTART_POLICY}
+      restartPolicy: Always
+      volumes:
+      - name: eventstore-logs
+        hostPath:
+          path: {{ .Values.disk.storagePath }}/{{ .Values.servicename }}/engine/shared_db/log
+      # TODO use persistent volume instead ?
+      - name: bluspark-config-volume
+        configMap:
+          name: "{{ .Values.servicename }}-config-files"
+          items:
+          - key: bluspark-conf
+            path: bluspark.conf
+      - name: node-ssh-directory
+        hostPath:
+          path: /root/.ssh
+      {{ if ne .Values.runtime "ICP4Data" -}}
+      - name: ssl-certificate-secret-volume
+        secret:
+          secretName: {{ .Release.Name }}-ssl-certificate
+      {{- end }}
+      - name: storage-underfs
+        persistentVolumeClaim:
+        {{- if .Values.pvcSettings.existingClaimName }}
+          claimName: {{ .Values.pvcSettings.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.servicename }}-pvc
+        {{- end }}
+      {{- include "eventstore.user-home-pvc" .  | indent 6 }}

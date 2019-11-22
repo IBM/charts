@@ -1,0 +1,48 @@
+{{- if .Values.runtimes.preloadRuntimes }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: preload-jupytergpupy35
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  parallelism: {{ .Values.runtimes.workerNodes }}
+  completions: {{ .Values.runtimes.workerNodes }}
+  template:
+    metadata:
+      labels:
+        component: jupytergpupy35
+        run: preload-jupytergpupy35
+    spec:
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: run
+                  operator: In
+                  values:
+                  - preload-jupytergpupy35
+            topologyKey: kubernetes.io/hostname
+      containers:
+        - name: preload-jupytergpupy35-container
+          image: {{ .Values.jupyterGpuPy35.image.repository }}:{{ .Values.jupyterGpuPy35.image.tag }}
+          imagePullPolicy: IfNotPresent
+          command: ["echo", "Image {{ .Values.jupyterGpuPy35.image.repository }}:{{ .Values.jupyterGpuPy35.image.tag }} preloaded"]
+      restartPolicy: OnFailure
+{{- end }}

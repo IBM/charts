@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-css
+  labels:
+    app: {{ .Release.Name }}-css
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.css.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-css
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.common.maxSurge }}
+      maxUnavailable: {{ .Values.css.maxUnavailable }}
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-css
+        chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productID: 103bfba4a040493b8cb94bd489373ba3
+        productName: "IBM Edge Device Edition"
+        productVersion: 3.2.1
+        timestamp: '{{ date "20060102150405" .Release.Time }}'
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}-css
+      containers:
+      - name: {{ .Release.Name }}-css
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.css.image }}:{{ .Values.css.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.css.resources | indent 10 }}
+        env:
+        - name: HZN_EXCHANGE_URL
+          value: "http://{{ .Release.Name }}-exchange/v1"
+        ports:
+        - containerPort: {{ .Values.common.httpPort }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: css-config
+          mountPath: /etc/edge-sync-service
+        {{ if and .Values.remoteDBs.enableCssTLS (not .Values.localDBs.enabled) }}
+        - name: {{ .Release.Name }}-db-cert
+          mountPath: /etc/ssl/certs/{{ .Release.Name }}-trusted-certs.pem
+          subPath: {{ .Release.Name }}-trusted-certs.pem
+        {{ end }}
+      volumes:
+      - name: css-config
+        secret:
+          secretName: {{ .Release.Name }}
+          items:
+          - key: css-config
+            path: sync.conf
+      {{ if and .Values.remoteDBs.enableCssTLS (not .Values.localDBs.enabled) }}
+      - name: {{ .Release.Name }}-db-cert
+        secret:
+          secretName: edge-computing-remote-dbs
+          items:
+          - key: trusted-certs
+            path: {{ .Release.Name }}-trusted-certs.pem
+
+      {{ end }}
+      restartPolicy: Always

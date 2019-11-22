@@ -1,0 +1,125 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compIngestionName := .sch.chart.components.wex.ingestion.name }}
+{{- $compIngestionPVCName := .sch.chart.components.wex.ingestion.pvc.name }}
+{{- $compIngestionServiceHeadlessName := .sch.chart.components.wex.ingestion.service.headlessName }}
+{{- $compIngestionLabelComponent := .sch.chart.components.wex.ingestion.label.component }}
+{{- $compIngestionLabelRunStatefulset := .sch.chart.components.wex.ingestion.label.runStatefulset }}
+
+{{- $compConfigmapName := .sch.chart.components.wex.configmap.name }}
+{{- $compDataPVCName := .sch.chart.components.wex.data.pvc.name }}
+{{- $compConfigName := .sch.chart.components.wex.config.name }}
+{{- $compGatewayName := .sch.chart.components.wex.gateway.name }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compIngestionName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-ingestion
+    run: {{ $compIngestionLabelRunStatefulset }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "{{ .Chart.Name }}.fullname" . }}
+      component: wex-ingestion
+      run: {{ $compIngestionLabelRunStatefulset }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $compIngestionServiceHeadlessName ) }}
+  replicas: {{ .Values.ingestion.replica }}
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-ingestion
+        run: {{ $compIngestionLabelRunStatefulset }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.ingestion.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+                app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                component: wex-ingestion
+                run: {{ $compIngestionLabelRunStatefulset }}
+        {{- else if eq .Values.ingestion.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                  component: wex-ingestion
+                  run: {{ $compIngestionLabelRunStatefulset }}
+        {{- end }}
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: ingestion
+        image: "{{ .Values.general.image.core }}"
+        imagePullPolicy: {{ .Values.general.image.pullPolicy }}
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+        env:
+        - name: WEX_ALL_COMPONENTS
+          value: "zing"
+        - name: ZK_HOST
+          value: "{{ include "sch.names.fullCompName" (list . $compConfigName ) }}:2181"
+        - name: MANAGEMENT_SERVER_ENDPOINT
+          value: "http://{{ include "sch.names.fullCompName" (list . $compGatewayName ) }}:9080/wex/api/v1"
+        - name: CONTROLLER_N_THREADS
+          value: "{{ .Values.ingestion.numberOfCrawlerInstances }}"
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compConfigmapName ) }}
+        resources:
+{{ toYaml .Values.ingestion.resources | indent 10 }}
+        volumeMounts:
+        - name: datadir
+          mountPath: /wexdata
+        - name: userdatadir
+          mountPath: /mnt
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - ps -ef | grep -v grep | grep -q com.ibm.es.ama.zing.control.AmaIngestionController
+          initialDelaySeconds: {{ .Values.ingestion.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.ingestion.readinessProbe.timeoutSeconds }}
+          failureThreshold: 12
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - ps -ef | grep -v grep | grep -q com.ibm.es.ama.zing.control.AmaIngestionController && [[ "$(grep CK= ${WEX_DATA}/config/certs/crawler.ini)" == "$(grep CK= ${WEX_HOME}/zing/es.cfg)" ]]
+          initialDelaySeconds: {{ .Values.ingestion.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.ingestion.livenessProbe.timeoutSeconds }}
+      volumes:
+      - name: "datadir"
+        persistentVolumeClaim:
+          claimName: {{ include "sch.names.fullCompName" (list . $compDataPVCName ) }}
+      - name: "userdatadir"
+      {{- if .Values.general.mount.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "sch.names.fullCompName" (list . $compIngestionPVCName ) }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}

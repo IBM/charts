@@ -1,0 +1,225 @@
+{{- include "sch.config.init" (list . "ibmRabbitmq.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.server) | indent 4 }}
+spec:
+  serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) | quote }}
+  replicas: {{ .Values.replicas  }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.server) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.server) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.rabbitPodSecurityContext) | indent 8 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{- if tpl .Values.global.image.pullSecret . }}
+      imagePullSecrets:
+      - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+{{- end }}
+      serviceAccountName: {{ include "sch.names.fullName" (list .) | quote }}
+      initContainers:
+      - name: copy-rabbitmq-config
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.config.image.name }}:{{ .Values.config.image.tag }}"
+        imagePullPolicy:  {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.rabbitContainerSecurityContext) | indent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          cp /configmap/* /etc/rabbitmq
+          rm -f /var/lib/rabbitmq/.erlang.cookie
+        resources:
+{{ toYaml .Values.initContainer.resources | indent 12 }}
+        volumeMounts:
+          - name: configmap
+            mountPath: /configmap
+          - name: config
+            mountPath: /etc/rabbitmq
+          - name: data
+            mountPath: /var/lib/rabbitmq
+      containers:
+      - name: {{ include "sch.names.fullName" (list .) }}
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.rabbitmq.image.name }}:{{ .Values.rabbitmq.image.tag }}"
+        imagePullPolicy:  {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.rabbitContainerSecurityContext) | indent 10 }}
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: RABBITMQ_USE_LONGNAME
+          value: "true"
+        - name: RABBITMQ_NODENAME
+          value: rabbit@$(NODE_NAME).{{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+        - name: K8S_HOSTNAME_SUFFIX
+          value: .{{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+        - name: K8S_SERVICE_NAME
+          value: {{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) | quote }}
+        - name: RABBITMQ_MANAGEMENT_USER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+ {{- if not .Values.auth.authSecretName }}
+              name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) }}
+  {{- else }}
+              name: {{ .Values.auth.authSecretName }}
+  {{- end }}
+              key: rabbitmq-management-password
+        - name: RABBITMQ_ERLANG_COOKIE
+          valueFrom:
+            secretKeyRef:
+ {{- if not .Values.auth.authSecretName }}
+              name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) }}
+  {{- else }}
+              name: {{ .Values.auth.authSecretName }}
+  {{- end }}
+              key: rabbitmq-erlang-cookie
+        - name: RABBITMQ_HIPE_COMPILE
+          value: {{ .Values.rabbitmqHipeCompile | quote }}
+        - name: RABBITMQ_CTL_ERL_ARGS
+          value: "-proto_dist inet_tls "
+        - name: RABBITMQ_MANAGEMENT_SSL_CACERTFILE
+          value: "/etc/cert/cacert.pem"
+        - name: RABBITMQ_MANAGEMENT_SSL_CERTFILE
+          value: "/etc/cert/cert.pem"
+        - name: RABBITMQ_MANAGEMENT_SSL_FAIL_IF_NO_PEER_CERT
+          value: "false"
+        - name: RABBITMQ_MANAGEMENT_SSL_KEYFILE
+          value: "/etc/cert/key.pem"
+        - name: RABBITMQ_MANAGEMENT_SSL_VERIFY
+          value: "verify_none"
+        ports:
+        - name: epmd
+          containerPort: 4369
+{{- if .Values.tls.enabled }}
+        - name: ampq
+          containerPort: 5671
+        - name: dist
+          containerPort: 25671
+        - name: stats
+          containerPort: 15671
+{{- else }}
+        - name: ampq
+          containerPort: 5672
+        - name: dist
+          containerPort: 25672
+        - name: stats
+          containerPort: 15672
+{{- end }}
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - 'management_credentials=$( echo -n "{{.Values.auth.managementUsername }}:$RABBITMQ_MANAGEMENT_USER_PASSWORD" | base64 )'
+            - 'export MANAGEMENT_HEADER="Authorization: Basic $management_credentials"'
+            - 'wget -O - -q --header "$MANAGEMENT_HEADER" https://localhost:15671/api/healthchecks/node --no-check-certificate | grep -qF "{\"status\":\"ok\"}"'
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - 'management_credentials=$( echo -n "{{.Values.auth.managementUsername }}:$RABBITMQ_MANAGEMENT_USER_PASSWORD" | base64 )'
+            - 'export MANAGEMENT_HEADER="Authorization: Basic $management_credentials"'
+            - 'wget -O - -q --header "$MANAGEMENT_HEADER" https://localhost:15671/api/healthchecks/node --no-check-certificate | grep -qF "{\"status\":\"ok\"}"'
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/rabbitmq
+        - name: config
+          mountPath: /etc/rabbitmq
+          readOnly: false
+        - name: definitions
+          mountPath: /etc/definitions
+          readOnly: true
+        {{ if .Values.tls.enabled -}}
+        - name: cert
+          mountPath: /etc/cert/
+        {{ end -}}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+      volumes:
+      {{ if .Values.tls.enabled -}}
+      - name: cert
+        secret:
+  {{- if not .Values.tls.tlsSecretName }}
+          secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlssecret) | quote }}
+  {{- else }}
+          secretName: {{ .Values.tls.tlsSecretName }}
+  {{- end }}
+          defaultMode: 0644
+          items:
+          - key: tls.crt
+            path: cert.pem
+          - key: tls.key
+            path: key.pem
+          - key: tls.cacrt
+            path: cacert.pem
+      {{ end -}}
+      - name: config
+        emptyDir: {}
+      - name: configmap
+        configMap:
+          name: {{ include "sch.names.fullName" (list .) | quote }}
+      - name: definitions
+        secret:
+  {{- if not .Values.auth.authSecretName }}
+          secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) | quote }}
+  {{- else }}
+          secretName: {{ .Values.auth.authSecretName }}
+  {{- end }}
+          items:
+          - key: definitions.json
+            path: definitions.json
+      - name: data
+{{- if .Values.persistentVolume.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+  {{- if .Values.persistentVolume.useDynamicProvisioning }}
+        # if present, use the storageClassName from the values.yaml, else use the default storageClass setup by kube Administrator
+        # setting storageClassName to nil means use the default storage class
+        storageClassName: {{ default nil .Values.persistentVolume.storageClassName | quote }}
+  {{- else }}
+        # bind to an existing pv.
+        # setting storageClassName to "" disables dynamic provisioning
+        storageClassName: {{ default "" .Values.persistentVolume.storageClassName | quote }}
+    {{- if .Values.dataPVC.selector.label }}
+        # use selectors in the binding process
+        selector:
+          matchExpressions:
+            - {key: {{ .Values.dataPVC.selector.label }}, operator: In, values: [{{ .Values.dataPVC.selector.value }}]}
+    {{- end }}
+  {{- end }}
+        accessModes:
+          - {{ .Values.persistentVolume.accessModes | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.persistentVolume.size | quote }}
+{{- else }}
+        emptyDir: {}
+{{- end }}

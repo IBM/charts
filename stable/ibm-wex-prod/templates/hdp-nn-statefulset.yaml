@@ -1,0 +1,157 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compHdpNnName := .sch.chart.components.wex.hdp.nn.name }}
+{{- $compHdpRmServiceHeadlessName := .sch.chart.components.wex.hdp.rm.service.headlessName }}
+{{- $compHdpLabelComponent := .sch.chart.components.wex.hdp.label.component }}
+{{- $compHdpLabelRunNnStatefulset := .sch.chart.components.wex.hdp.label.runNnStatefulset }}
+
+{{- $compConfigmapName := .sch.chart.components.wex.configmap.name }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compHdpNnName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-hdp
+    run: {{ $compHdpLabelRunNnStatefulset }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "{{ .Chart.Name }}.fullname" . }}
+      component: wex-hdp
+      run: {{ $compHdpLabelRunNnStatefulset }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $compHdpNnName ) }}
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-hdp
+        run: {{ $compHdpLabelRunNnStatefulset }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: hdp-nn
+        image: "{{ .Values.general.image.hdp }}"
+        imagePullPolicy: {{ .Values.general.image.pullPolicy }}
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+        env:
+        - name: HADOOP_COMPONENTS
+          value: "NameNode SecondaryNameNode"
+        - name: HADOOP_NAMENODE_ADDRESS
+          value: "0.0.0.0:9000"
+        - name: YARN_RESOURCEMANAGER_HOSTNAME
+          value: "{{ include "sch.names.fullCompName" (list . $compHdpRmServiceHeadlessName ) }}"
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compConfigmapName ) }}
+        ports:
+        - name: hdfs
+          containerPort: 9000
+        - name: hdfsui
+          containerPort: 50070
+        - name: ssh
+          containerPort: 65022
+        resources:
+{{ toYaml .Values.hdp.nn.resources | indent 10 }}
+        volumeMounts:
+        - name: datadir
+          mountPath: "/wexdata/hdp"
+        readinessProbe:
+          exec:
+            command:
+            - "bash"
+            - "-c"
+            - |
+              echo "Checking NameNode"
+              curl -s http://localhost:50070/ -w "%{http_code}\n" -o /dev/null
+              if [ $? -ne 0 ]; then
+                echo "NameNode is not ready."
+                exit 1
+              fi
+              echo "Checking Secondary NameNode"
+              curl -s http://localhost:50090/ -w "%{http_code}\n" -o /dev/null
+              if [ $? -ne 0 ]; then
+                echo "Seconday NameNode is not ready."
+                exit 2
+              fi
+              echo "Checking DataNode readiness"
+              numDataNode="$( hdfs fsck / | grep "Number of data-nodes:" | cut -d ':' -f 2 | tr -d '[:space:]' )"
+              if [ "$numDataNode" -lt "{{ .Values.hdp.dfsReplication }}" ]; then
+                echo "The number of available DataNode is less than DFS replication. num=${numDataNode}"
+                hdfs fsck /
+                exit 3
+              fi
+              echo "OK"
+          initialDelaySeconds: {{ .Values.hdp.nn.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.hdp.nn.readinessProbe.timeoutSeconds }}
+          failureThreshold: 12
+        livenessProbe:
+          exec:
+            command:
+            - "bash"
+            - "-c"
+            - |
+              echo "Checking NameNode"
+              curl -s http://localhost:50070/ -w "%{http_code}\n" -o /dev/null
+              if [ $? -ne 0 ]; then
+                echo "NameNode is not running."
+                exit 1
+              fi
+              echo "Checking Secondary NameNode"
+              curl -s http://localhost:50090/ -w "%{http_code}\n" -o /dev/null
+              if [ $? -ne 0 ]; then
+                echo "Seconday NameNode is not running."
+                exit 2
+              fi
+              echo "OK"
+          initialDelaySeconds: {{ .Values.hdp.nn.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.hdp.nn.livenessProbe.timeoutSeconds }}
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-hdp
+        run: {{ $compHdpLabelRunNnStatefulset }}
+    spec:
+      {{- if .Values.general.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kubernetes Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.general.persistence.storageClassName | quote }}
+      {{- else }}
+      # bind to an existing pv.
+      # setting storageClassName to "" disables dynamic provisioning
+      storageClassName: {{ default "" .Values.general.persistence.storageClassName | quote }}
+      selector:
+        matchLabels:
+          assign-to: "wex-hdp-nn"
+        {{- if .Values.general.persistence.selector.label }}
+        matchExpressions:
+          - {key: "{{ .Values.general.persistence.selector.label }}", operator: In, values: ["{{ .Values.general.persistence.selector.value }}"]}
+        {{- end }}
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.hdp.nn.persistence.size }}

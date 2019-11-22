@@ -1,0 +1,131 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmMongodb.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.mongodbTest) | indent 4 }}
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.mongodbTest) | quote }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    {{- if .Values.affinity }}
+{{ .Values.affinity | toYaml | indent 4 }}
+    {{- else }}
+      {{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+    {{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.mongoPodSecurityContext) | indent 4 }}
+  serviceAccountName: {{ include "ibm-mongodb.serviceAccount.name" . | quote }}
+{{- if tpl .Values.global.image.pullSecret . }}
+  imagePullSecrets:
+  - name: {{ tpl .Values.global.image.pullSecret . }}
+{{- end }}
+  initContainers:
+  - name: test-framework
+    image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.test.image.name }}:{{ .Values.test.image.tag }}
+    securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.mongoContainerSecurityContext) | indent 6 }}
+    command:
+      - bash
+      - -c
+      - |
+        set -ex
+        # copy bats to tools dir
+        cp -R /opt/bats/libexec/ /tools/bats/
+        ls -l /tools/bats
+    volumeMounts:
+      - name: tools
+        mountPath: /tools
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 10m
+      limits:
+        memory: 128Mi
+        cpu: 50m
+  containers:
+  - name: mongo
+    image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.mongodb.image.name }}:{{ .Values.mongodb.image.tag }}
+    imagePullPolicy:  {{ .Values.global.image.pullPolicy }}
+    securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.mongoContainerSecurityContext) | indent 6 }}
+    command:
+      - /tools/bats/bats
+      - -t
+      - /tests/mongodb-up-test.sh
+    env:
+      - name: STATEFULSET_NAME
+        value: {{ include "sch.names.statefulSetName" (list . .sch.chart.components.server) | quote }}
+      - name: FULL_SERVICE_NAME
+        value: {{ printf "%s.%s.svc.%s" (include "sch.names.fullCompName" (list . .sch.chart.components.headless)) .Release.Namespace (tpl .Values.clusterDomain . ) | quote }}
+      - name: REPLICAS
+        value: "{{ .Values.replicas }}"
+      {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+      - name: ADMIN_USER
+        valueFrom:
+          secretKeyRef:
+          {{- if not (tpl .Values.auth.authSecretName . ) }}
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+          {{- else }}
+            name: {{ tpl .Values.auth.authSecretName . }}
+          {{- end }}
+            key: user
+      - name: ADMIN_PASSWORD
+        valueFrom:
+          secretKeyRef:
+          {{- if not (tpl .Values.auth.authSecretName . ) }}
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+          {{- else }}
+            name: {{ tpl .Values.auth.authSecretName . }}
+          {{- end }}
+            key: password
+      {{- end }}
+    volumeMounts:
+      - name: tools
+        mountPath: /tools
+      - name: tests
+        mountPath: /tests
+      {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+      - name: ca
+        mountPath: /ca
+        readOnly: true
+      {{- end }}
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+        cpu: 250m
+  volumes:
+    - name: tools
+      emptyDir: {}
+    - name: tests
+      configMap:
+        name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.mongodbTest) | quote }}
+    {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+    - name: ca
+      secret:
+#        defaultMode: 0400
+      {{- if not (tpl .Values.tls.tlsSecretName . ) }}
+        secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+      {{- else }}
+        secretName: {{ tpl .Values.tls.tlsSecretName . }}
+      {{- end }}
+    {{- end }}
+  restartPolicy: Never

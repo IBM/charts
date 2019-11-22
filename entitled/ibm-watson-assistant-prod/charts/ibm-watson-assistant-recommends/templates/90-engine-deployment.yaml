@@ -1,0 +1,339 @@
+{{- include "sch.config.init" (list . .Values.global.schConfigTemplate) -}}kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: "{{ .Release.Name }}-recommends"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:   "conversation"
+      component: "recommends"
+      slot:      "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant: PUBLIC
+
+    app: "ibm-watson-assistant-prod-1.3.0"
+    chart: "ibm-watson-assistant"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+spec:
+  replicas: {{ include "assistant.recommends.replicas" . }}
+  selector:
+    matchLabels: *primary_labels # Don't touch or extend!
+  revisionHistoryLimit: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 2
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+    spec:
+
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+      - name: data-check
+        image: "{{ if tpl ( .Values.loader.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.loader.image.repository | toString ) . ) }}{{ end }}/{{ .Values.loader.image.name }}:{{ .Values.loader.image.tag }}"
+        imagePullPolicy: {{ .Values.loader.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+        command:
+          - '/bin/bash'
+          - '-c'
+          - |
+            #!/bin/bash
+            set -e
+            echo "$mongo_cert" > /tmp/mongo_cert.crt
+            counts_uri=$(sed "s/\(.*\)admin/\1counts/" <<<"$mongo_url")
+            precomputed_uri=$(sed "s/\(.*\)admin/\1precomputed/" <<<"$mongo_url")
+            word_embeddings_uri=$(sed "s/\(.*\)admin/\1word_embeddings/" <<<"$mongo_url")
+
+            set +e
+            echo "Checking MongoDB connection"
+            until mongo --ssl --sslAllowInvalidCertificates --sslCAFile=/tmp/mongo_cert.crt --authenticationDatabase=admin "$mongo_url" --eval "rs.slaveOk();print(\"waited for connection\")"
+            do
+              echo "Waiting until MongoDB is available"
+              sleep 60
+            done
+            set -e
+            echo "MongoDB appears to be up"
+
+            IFS=',' read -r -a embeddings <<< "$word_embeddings_settings"
+            for embedding in "${embeddings[@]}"; do
+                IFS=':' read -r -a parsed <<< "$embedding"
+                lang=${parsed[0]}
+                version=${parsed[1]}
+                dimension=${parsed[2]}
+                collection=$lang"_"$version
+                counts_splits=${parsed[3]}
+                counts_documents=${parsed[4]}
+                precomputed_splits=${parsed[5]}
+                precomputed_documents=${parsed[6]}
+                word_embeddings_splits=${parsed[7]}
+                word_embeddings_documents=${parsed[8]}
+                echo "Verifying $collection"
+
+                counts=$(mongo --ssl --sslAllowInvalidCertificates --sslCAFile=/tmp/mongo_cert.crt --authenticationDatabase=admin "$counts_uri" --eval "rs.slaveOk();printjson(db.getCollection('$collection').count())" --quiet | tail -1)
+                while [ "$counts" -ne "$counts_documents" ]; do
+                  echo "$lang counts collection is not done loading, $counts vs $counts_documents"
+                  sleep 60
+                  counts=$(mongo --ssl --sslAllowInvalidCertificates --sslCAFile=/tmp/mongo_cert.crt --authenticationDatabase=admin "$counts_uri" --eval "rs.slaveOk();printjson(db.getCollection('$collection').count())" --quiet | tail -1)
+                done
+
+                precomputed=$(mongo --ssl --sslAllowInvalidCertificates --sslCAFile=/tmp/mongo_cert.crt --authenticationDatabase=admin "$precomputed_uri" --eval "rs.slaveOk();printjson(db.getCollection('$collection').count())" --quiet | tail -1)
+                while [ "$precomputed" -ne "$precomputed_documents" ]; do
+                  echo "$lang precomputed collection is not done loading, $precomputed vs $precomputed_documents"
+                  sleep 60
+                  precomputed=$(mongo --ssl --sslAllowInvalidCertificates --sslCAFile=/tmp/mongo_cert.crt --authenticationDatabase=admin "$precomputed_uri" --eval "rs.slaveOk();printjson(db.getCollection('$collection').count())" --quiet | tail -1)
+                done
+
+                word_embeddings=$(mongo --ssl --sslAllowInvalidCertificates --sslCAFile=/tmp/mongo_cert.crt --authenticationDatabase=admin "$word_embeddings_uri" --eval "rs.slaveOk();printjson(db.getCollection('$collection').count())" --quiet | tail -1)
+                while [ "$word_embeddings" -ne "$word_embeddings_documents" ]; do
+                  echo "$lang word_embeddings collection is not done loading, $word_embeddings vs $word_embeddings_documents"
+                  sleep 60
+                  word_embeddings=$(mongo --ssl --sslAllowInvalidCertificates --sslCAFile=/tmp/mongo_cert.crt --authenticationDatabase=admin "$word_embeddings_uri" --eval "rs.slaveOk();printjson(db.getCollection('$collection').count())" --quiet | tail -1)
+                done
+            done
+            rm -f /tmp/mongo_cert.crt
+            echo "All languages have been loaded"
+            exit 0
+        resources:
+          limits:
+            cpu: 1
+            memory: 2Gi
+          requests:
+            cpu: 400m
+            memory: 2Gi
+        env:
+        - name: word_embeddings_settings
+          value: "{{ include "assistant.recommends.languages" . }}"
+        - name: mongo_url
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_connection_string
+        - name: mongo_cert
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_certificate
+      containers:
+      - name: recommends-engine
+        image: "{{ if tpl ( .Values.engine.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.engine.image.repository | toString ) . ) }}{{ end }}/{{ .Values.engine.image.name }}:{{ .Values.engine.image.tag }}"
+        imagePullPolicy: {{ .Values.engine.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+      
+        resources:
+          limits:
+            cpu: 1500m
+            memory: 3Gi
+          requests:
+            cpu: 500m
+            memory: 3Gi
+        readinessProbe:
+          tcpSocket:
+            port: 9053
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 2
+        livenessProbe:
+          tcpSocket:
+            port: 9053
+          initialDelaySeconds: 120
+          timeoutSeconds: 9
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 3
+        ports:
+        - containerPort: 9053
+        env:
+        - name: bluemix_service_name
+          value: "conversation"
+        - name: cos_url
+          value: "https://s3.us-east.objectstorage.softlayer.net/wa-recommends-data"
+        - name: cos_api_key
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: cos_api_key
+        - name: mongo_url
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_connection_string
+        - name: mongo_cert
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_certificate
+        - name: metrics_enabled
+          value: "false"
+        - name: PagerDuty_enabled
+          value: "false"
+        - name: service_key
+          value: ""
+        - name: proxy_endpoint
+          value: "https://events.pagerduty.com"
+        - name: word_embeddings_settings
+          value: "{{ include "assistant.recommends.languages" . }}"
+        - name: schema
+          value: "new"
+        - name: Engines_enabled_engines
+          value: "entity_engine,intent_conflict_engine"
+        - name: icp
+          value: "true"
+        - name: DataProvider_use_dps
+          value: "false"
+        - name: store_url
+          value: "wcs-{{ .Release.Name }}.{{ .Release.Namespace }}.svc.{{ tpl .Values.clusterDomain . }}:443"
+      - name: recommends-api
+        image: "{{ if tpl ( .Values.rest.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.rest.image.repository | toString ) . ) }}{{ end }}/{{ .Values.rest.image.name }}:{{ .Values.rest.image.tag }}"
+        imagePullPolicy: {{ .Values.rest.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 60m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /v1/status
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 2
+        livenessProbe:
+          httpGet:
+            path: /v1/status
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          timeoutSeconds: 9
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 3
+        ports:
+        - containerPort: 8080
+        env:
+        - name: max_concurrent_intent_cluster_requests
+          value: "0"
+        - name: max_concurrent_intent_conflict_requests
+          value: "2"
+        - name: max_concurrent_entity_synonym_requests
+          value: "0"
+        - name: cache_enabled
+          value: "true"
+        - name: cache_store
+          value: "redis"
+        - name: redis_url
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: redis_connection_string
+        - name: cache_secret
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key:  redis_secret
+        - name: cache_clustering_ttl_seconds
+          value: "604800"
+        - name: mongo_url
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_connection_string
+        - name: mongo_cert
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: mongodb_certificate
+        - name: cos_api_key
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: cos_api_key
+        - name: SERVER_SSL_KEY_STORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: reco_key_pw
+        - name: metrics_enabled
+          value: "false"
+        - name: recommendation_pager_duty_enabled
+          value: "false"
+        - name: PAGERDUTY_URL
+          value: "https://events.pagerduty.com"
+        - name: recommendation_pager_duty_api_key
+          value: ""
+        - name: logging_level
+          value: "info"
+        - name: store_url
+          value: "wcs-{{ .Release.Name }}.{{ .Release.Namespace }}.svc.{{ tpl .Values.clusterDomain . }}:443"
+        - name: store_cert
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-recommends"
+              key: store_cert
+        - name: icp
+          value: "true"
+        - name: use_dps
+          value: "false"
+        - name: log_message_filter_enabled
+          value: "false"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+
+{{- $_ := set . "compName" "recommends" }}
+{{ include "assistant.podAntiAffinity" . | indent 8 }}
+

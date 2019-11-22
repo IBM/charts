@@ -1,0 +1,208 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: camapisvrdeploy
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  # DO NOT modify this condition
+  {{ if eq (.Values.enableHA|quote|lower) "\"true\"" }}
+  replicas: 2
+  {{ else }}
+  replicas: 1
+  {{ end }}
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      name: camapisvrdeploy
+  template:
+    metadata:
+      labels:
+        name: camapisvrdeploy
+{{ include "cam.labels" .  | indent 8 }}
+      annotations:
+{{ include "cam.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets/configmaps change
+        checksums/mysql-username: "{{ .Values.secrets.mysqlUsername | b64enc | sha256sum }}"
+        checksums/mysql-password: "{{ .Values.secrets.mysqlKey | b64enc | sha256sum }}"
+        checksums/keystore-password: "{{ .Values.secrets.keystorePassword | b64enc | sha256sum }}"
+        checksums/rabbitmq.username: "{{ .Values.secrets.rabbitmqDefaultUser | b64enc | sha256sum }}"
+        checksums/rabbitmq.password: "{{ .Values.secrets.rabbitmqDefaultPassword | b64enc | sha256sum }}"
+        {{ end }}
+        checksums/nginx.conf: {{ .Files.Get "templates/configmaps/cam-api-server-nginx.yaml" | b64enc | sha256sum }}
+    spec:
+      affinity:
+      # DO NOT modify this condition
+      {{ if and (eq (.Values.enableHA|quote|lower) "\"true\"") (not (eq (.Values.enableDevSettings|quote|lower) "\"true\"")) }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: name
+                operator: In
+                values:
+                - camapisvrdeploy
+            topologyKey: "kubernetes.io/hostname"
+      {{ end }}
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      containers:
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+      - image: {{ template "cam.readConfig" (list . "cam_apiserver") }}
+      {{ else }}
+      - image: {{ template "camicp.readConfig" (list . "cam_apiserver" .Values.imageCredentials.registry) }}
+      {{ end }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        name: camapiserver
+        resources:
+{{ include "deployClassConfig" (list . "cam_api_server") | indent 10 }}
+        env:
+          # CAM-7629: Set page size to 300 for number of rows in UI tables (default 30)
+          - name: "page_size"
+            value: "300"
+          - name: asset_service_host_ip
+            value: "mariadb"
+          - name: HOST_IP
+            value: "camservice"
+         # Ignoring the port in cam-api-service because this is hnadling in repo level
+          - name: AUTH_INTERNAL_SERVICE
+            value: "cb-core-auth-internal.{{ .Values.coreNamespace }}"
+          - name: database_user
+            valueFrom:
+              secretKeyRef:
+                name: mysql-username
+                key: mysql.username
+          - name: database_password
+            valueFrom:
+              secretKeyRef:
+                name: mysql-password
+                key: mysql.key
+          - name: KEY_STORE_FILE
+            value: /ssl/cloudMatrix.keystore
+          - name: KEY_STORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: keystore-password
+                key: password
+          - name: BROKER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-creds
+                key: rabbitmq.password
+          - name: BROKER_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-creds
+                key: rabbitmq.username
+          - name: SQL_QUERY_TIME_OUT
+            value: "{{ .Values.sqlQueryTimeOut}}"
+          # DO NOT modify this condition
+          {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+          - name: MARIADB_SERVICE_HOST
+            value: {{ .Values.secrets.mariadbServiceHost }}
+          - name: MARIADB_SERVICE_PORT
+            value: "{{ .Values.secrets.mariadbServicePort}}"
+          {{ end }}
+        ports:
+        - containerPort: 9080
+          name: camapisrv-http
+        - containerPort: 9443
+          name: camapiserver
+        volumeMounts:
+        - name: cm-keystore-file
+          mountPath: /ssl/
+        livenessProbe:
+          httpGet:
+            path: /camapi-1/health
+            port: camapisrv-http
+          initialDelaySeconds: 10
+          periodSeconds: 120
+          failureThreshold: 4
+
+        readinessProbe:
+          httpGet:
+            path: /camapi-1/health
+            port: camapisrv-http
+          initialDelaySeconds: 5
+          periodSeconds: 60
+
+      # NGINX caching proxy container:
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+      - image: {{ template "cam.readConfig" (list . "cb_nginx") }}
+      {{ else }}
+      - image: {{ template "camicp.readConfig" (list . "cb_nginx" .Values.imageCredentials.registry) }}
+      {{ end }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 100
+          capabilities:
+            add:
+            - SETGID
+            drop:
+            - ALL
+        name: camapiserver-proxy
+        ports:
+          - containerPort: 3277
+            name: http
+          - containerPort: 3276
+            name: https
+        readinessProbe:
+          tcpSocket:
+            port: 3277
+        livenessProbe:
+          tcpSocket:
+            port: 3277
+          periodSeconds: 60
+          failureThreshold: 4
+        volumeMounts:
+          - name: cam-api-server-proxy
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+          - name: cm-keystore-file
+            mountPath: /ssl/
+
+      volumes:
+      - name: cm-keystore-file
+        secret:
+          secretName: grav-certificates
+          items:
+          - key: grav.crt
+            path: _gravitant_net_2017.crt
+          - key: grav.key
+            path: _gravitant_net_2017.key
+          - key: cm.keystore
+            path: cloudMatrix.keystore
+          - key: maria_dev.crt
+            path: maria_dev.crt
+          - key: maria_dev.key
+            path: maria_dev.key
+          - key: rootca.pem
+            path: rootCA.pem
+      - name: cam-api-server-proxy
+        configMap:
+          name: cam-api-server-proxy
+      restartPolicy: Always
+      # DO NOT modify this conditional check
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

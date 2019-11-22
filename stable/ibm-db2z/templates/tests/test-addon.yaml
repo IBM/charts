@@ -1,0 +1,26 @@
+{{- include "sch.config.init" (list . "db2z.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.addon.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "test" -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+  containers:
+  - name: {{ .Release.Name }}-test
+    image: "{{ .Values.db2z.addon.image.repository }}:{{ .Values.db2z.addon.image.tag }}"
+    imagePullPolicy: {{ .Values.db2z.image.pullPolicy }}
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+    command: ["sh", "-c", "cat /content/add-ons/meta/add-ons.json", "/", ";", "exit", "0"]
+{{- include "sch.security.securityContext" (list . .sch.chart.security.containerSecurityContext) | indent 4 }}
+  restartPolicy: Never

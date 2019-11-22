@@ -1,0 +1,67 @@
+{{- include "sch.config.init" (list . "sireTraining.sch.chart.config.values") -}}
+{{- $sireg := .Values.sireg -}}
+{{- if $sireg.enabled -}}
+{{- range $langKey, $langValue := $sireg.languages -}}
+{{- $compName :=  (printf "sireg-%s" $langKey) -}}
+{{- if $langValue.enabled -}}
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list $ $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ $compName) | indent 4 }}
+spec:
+  replicas: {{ include "sireTraining.replicaCountTemplate" $ }}
+  selector:
+    matchLabels:
+      release: "{{ $.Release.Name }}"
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list $ $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list $ $.sch.chart.metering) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list $ $.sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- /* nodeaffinity for github.com charts, remove the following for PPA charts */}}
+{{- include "sch.affinity.nodeAffinity" (list $) | indent 8 }}
+{{ include "sireTraining.pullSecretTemplate" $ | indent 6 }}
+#######################################################################################################################
+########## CONTAINERS #################################################################################################
+#######################################################################################################################
+      containers:
+      - name: server
+        {{ include "sireTraining.imageTpl" (list $ $sireg) }}
+        {{ include "sireTraining.pullPolicyTemplate" $ }}
+        resources:
+          requests:
+            cpu: {{ $langValue.cpuRequestsMillis }}m
+          limits:
+            cpu: {{ $langValue.cpuLimitMillis }}m
+            memory: {{ $langValue.memoryLimitMB }}Mi
+        env:
+        - name: DDINF_FILE
+          value: "/opt/ibm/mnlp/templates/wks-{{ $langKey }}.ddinf"
+        ports:
+        - containerPort: 50443
+          name: sireg-sec-port
+        readinessProbe:
+          exec:
+            command:
+            - sire-grpc-healthcheck-client
+            - "50443"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - sire-grpc-healthcheck-client
+            - "50443"
+          initialDelaySeconds: 240
+          periodSeconds: 30
+          failureThreshold: 3
+---
+{{- end -}}
+{{- end -}}
+{{- end -}}

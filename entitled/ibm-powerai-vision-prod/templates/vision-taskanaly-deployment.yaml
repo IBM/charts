@@ -1,0 +1,70 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "shortname" . }}-taskanaly
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    run: {{ template "shortname" . }}-taskanaly-dep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ template "shortname" . }}-taskanaly-dp
+  template:
+    metadata:
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+        run: {{ template "shortname" . }}-taskanaly-dp
+      {{ include "vision-release-annotations" . | indent 6 }}
+    spec:
+      containers:
+        - name: {{ template "shortname" . }}-taskanaly
+          image: "{{ template "repoprefix" . }}powerai-vision-taskanaly:{{ .Values.image.releaseTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 5000
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /opt/powerai-vision/data
+              name: data-mount
+              subPath: data
+          livenessProbe:
+            httpGet:
+              path: /taskanalysis
+              port: http
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /taskanalysis
+              port: http
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+        beta.kubernetes.io/arch: ppc64le
+      affinity:
+      {{- include "nodeaffinity-ppc64le" . | indent 6 }}
+      volumes:
+        - name: "data-mount"
+          persistentVolumeClaim:
+          {{- if .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+            claimName: {{ .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ tpl .Values.poweraiVisionDataPvc.name . }}
+          {{- end }}
+      {{ include "imagesecrets" . | indent 6 }}

@@ -1,0 +1,192 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: {{ template "elasticsearch.fullname" . }}
+    component: {{ template "master.fullname" . }}
+    release: {{ .Release.Name }}
+    role: master
+    chart: {{ .Chart.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "master.fullname" . }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "elasticsearch.fullname" . }}
+      component: {{ template "master.fullname" . }}
+      release: {{ .Release.Name }}
+      role: master
+      heritage: {{ .Release.Service }}
+  serviceName: {{ template "master.fullname" . }}
+  replicas: {{ .Values.elasticsearch.master.replicas }}
+  updateStrategy:
+    type: RollingUpdate
+  revisionHistoryLimit: 3
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      annotations:
+        {{ include "masterData.restart" . }}
+        productName: "IBM Cloud Pak for Automation - Business Automation Insights"
+        productID: "5737-I23-BAI"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "elasticsearch.fullname" . }}
+        component: {{ template "master.fullname" . }}
+        role: master
+        release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "elasticsearch.nodeaffinity" . | indent 6 }}
+    {{- if eq .Values.elasticsearch.master.antiAffinity "hard" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: "{{ template "elasticsearch.fullname" . }}"
+                  component: "{{ template "master.fullname" . }}"
+                  release: "{{ .Release.Name }}"
+                  role: "master"
+                  heritage: "{{ .Release.Service }}"
+    {{- else if eq .Values.elasticsearch.master.antiAffinity "soft" }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: "{{ template "elasticsearch.fullname" . }}"
+                  component: "{{ template "master.fullname" . }}"
+                  release: "{{ .Release.Name }}"
+                  role: "master"
+                  heritage: "{{ .Release.Service }}"
+    {{- end }}
+      securityContext:
+        fsGroup: 1000
+{{- if .Values.image.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.image.credentials .Values.image.credentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-ibm-dba-ek-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ .Release.Name }}-bai-psp-sa
+{{ include "elasticsearch.initContainers" . | indent 6 }}
+      containers:
+      - name: es-master
+        command: ["/bin/bash", "/scripts/entrypoint.sh"]
+        image: {{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+        readinessProbe:
+          tcpSocket:
+            port: 9300
+          initialDelaySeconds: {{ .Values.elasticsearch.probeInitialDelay }}
+        livenessProbe:
+          tcpSocket:
+            port: 9300
+          initialDelaySeconds: {{ .Values.elasticsearch.probeInitialDelay }}
+        resources:
+          limits:
+            memory: {{ .Values.elasticsearch.master.resources.limits.memory | quote}}
+            cpu: {{ .Values.elasticsearch.master.resources.limits.cpu | quote}}
+          requests:
+            memory: {{ .Values.elasticsearch.master.resources.requests.memory | quote}}
+            cpu: {{ .Values.elasticsearch.master.resources.requests.cpu | quote}}
+        env:
+        - name: ES_JAVA_OPTS
+          value: "-Xms{{ .Values.elasticsearch.master.heapSize }} -Xmx{{ .Values.elasticsearch.master.heapSize }}"
+        - name: CFG_BASEDIR
+          value: /usr/share/elasticsearch
+        ports:
+        - containerPort: 9300
+          name: transport
+          protocol: TCP
+        volumeMounts:
+        - name: entrypoint
+          mountPath: /scripts
+        - name: data
+          mountPath: /usr/share/elasticsearch/data
+{{- if .Values.elasticsearch.data.snapshotStorage.enabled }}
+        - name: snapshot-storage
+          mountPath: /mnt/snapshots
+{{- end }}
+        - name: config
+          mountPath: /usr/share/elasticsearch/ibm-dba-ek-config/elasticsearch.yml
+          subPath: elasticsearch.yml
+        - name: plugin-bundle
+          mountPath: /usr/share/elasticsearch/plugin-bundles
+{{- if  .Values.security.openDistroConfigSecret }}
+        - name: security-config
+          mountPath: /usr/share/elasticsearch/init-security-config
+{{- end }}
+      volumes:
+        - name: entrypoint
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-entrypoint
+            defaultMode: 365
+            items:
+              - key: entrypoint.sh
+                path: entrypoint.sh
+        - name: config
+          configMap:
+            name: {{ template "elasticsearch.fullname" . }}-config
+            items:
+              - key: master.yml
+                path: elasticsearch.yml
+        - name: plugin-bundle
+          emptyDir:
+            medium: ""
+{{- if not .Values.elasticsearch.data.storage.persistent }}
+        - name: data
+          emptyDir:
+            medium: ""
+{{- end }}
+        {{- if .Values.elasticsearch.data.snapshotStorage.enabled }}
+        - name: snapshot-storage
+          persistentVolumeClaim:
+            {{- if .Values.elasticsearch.data.snapshotStorage.existingClaimName }}
+              claimName: {{ .Values.elasticsearch.data.snapshotStorage.existingClaimName }}
+            {{- else }}
+              claimName: {{ .Release.Name }}-es-snapshot-storage-pvc
+            {{- end }}
+        {{- end }}
+{{- if  .Values.security.openDistroConfigSecret }}
+        - name: security-config
+          secret:
+            secretName: {{ .Values.security.openDistroConfigSecret }}
+{{- end }}
+
+{{- if .Values.elasticsearch.data.storage.persistent }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app: {{ template "elasticsearch.fullname" . }}
+        chart: {{ .Chart.Name }}
+        component: {{ template "data.fullname" . }}
+        heritage: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+    spec:
+      {{- if and (.Values.elasticsearch.data.storage.useDynamicProvisioning) (eq true .Values.elasticsearch.data.storage.useDynamicProvisioning) }}
+        {{- if .Values.elasticsearch.data.storage.storageClass }}
+      storageClassName: {{ .Values.elasticsearch.data.storage.storageClass | quote }}
+        {{- else }}
+      ## using dynamic provisioning with default storageClass
+        {{- end }}
+      {{- else }}
+      storageClassName: {{ default "" .Values.elasticsearch.data.storage.storageClass | quote }}
+      {{- end }}
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.elasticsearch.data.storage.size | quote }}
+{{- end }}

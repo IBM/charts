@@ -1,0 +1,14 @@
+-{{- /*
+-"eventstreams.platform.valid" is a helper function used in the eventstreams
+-charts that validates the Chart is being installed on a supported platform/configuration
+-*/ -}}
+-{{- define "eventstreams.supported.platform" -}}
+-    {{- $params := . -}}
+-    {{- $root := first $params -}}
+-    {{- if $root.Values.checkSupportedPlatform -}}
+-        {{- /* This Chart is not supported on ppc64le currently,remove with power support */ -}}
+-        {{- if eq $root.Values.global.arch "ppc64le" -}}
+-            {{- fail "This chart is not supported on the architecture ppc64le" -}}
+-        {{- end -}}
+-    {{- end -}}
+-{{- end }}

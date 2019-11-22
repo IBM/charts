@@ -1,0 +1,89 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compDatabaseName := .sch.chart.components.wex.database.name }}
+{{- $compDatabaseLabelComponent := .sch.chart.components.wex.database.label.component }}
+{{- $compDatabaseLabelRunStatefulset := .sch.chart.components.wex.database.label.runStatefulset }}
+
+{{- $compConfigmapName := .sch.chart.components.wex.configmap.name }}
+{{- $compDataPVCName := .sch.chart.components.wex.data.pvc.name }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compDatabaseName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-database
+    run: {{ $compDatabaseLabelRunStatefulset }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "{{ .Chart.Name }}.fullname" . }}
+      component: wex-database
+      run: {{ $compDatabaseLabelRunStatefulset }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $compDatabaseName ) }}
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-database
+        run: {{ $compDatabaseLabelRunStatefulset }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: db
+        image: "{{ .Values.general.image.core }}"
+        imagePullPolicy: {{ .Values.general.image.pullPolicy }}
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+        env:
+        - name: WEX_ALL_COMPONENTS
+          value: "couchdb"
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compConfigmapName ) }}
+        ports:
+        - name: api
+          containerPort: 5986
+          protocol: TCP
+        - name: api2
+          containerPort: 5984
+          protocol: TCP
+        resources:
+{{ toYaml .Values.database.resources | indent 10 }}
+        volumeMounts:
+        - name: datadir
+          mountPath: /wexdata
+        readinessProbe:
+          httpGet:
+            path: /
+            port: api
+          initialDelaySeconds: {{ .Values.database.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.database.readinessProbe.timeoutSeconds }}
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /
+            port: api
+          initialDelaySeconds: {{ .Values.database.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.database.livenessProbe.timeoutSeconds }}
+      volumes:
+      - name: "datadir"
+        persistentVolumeClaim:
+          claimName: {{ include "sch.names.fullCompName" (list . $compDataPVCName ) }}

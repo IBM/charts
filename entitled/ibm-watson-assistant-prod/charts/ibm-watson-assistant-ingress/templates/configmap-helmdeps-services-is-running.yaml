@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ printf "%s-helm-dependency-services-ready" .Release.Name }}"
+  labels:
+    service:   "conversation"
+    component: "helm-startup-store-ready"
+    slot:      "{{ .Release.Name }}"
+    
+    app:       "ibm-watson-assistant-prod-1.3.0"
+    chart:     "ibm-watson-assistant"
+    heritage:  "{{ .Release.Service }}"
+    release:   "{{ .Release.Name }}"
+data:
+  store_ready.sh: |
+    #!/bin/sh
+    set -x
+    set -e
+    RETRIES=${RETRIES:-12}
+    EXIT_TIMEOUT=${EXIT_TIMEOUT:-0}
+    SUCCESS_THRESHOLD=${SUCCESS_THRESHOLD:-3}
+    SLEEP_TIME=${SLEEP_TIME:-5}
+
+    echo "Will try ${RETRIES} times to periodicaly reach store to see if it is healthy"
+    SUCCESS_CNT=0
+    for ITERATION in `seq ${RETRIES}` ; do
+      echo "${ITERATION} - Trying store status."
+      if curl --max-time 5 -s -k -v --fail \
+          -H "X-Watson-Origin: icp-helm-health-testing" -H "X-Watson-UserInfo: bluemix-region-id=us-south;bluemix-instance-id=health-request;" \
+           https://wcs-{{ .Release.Name }}:443/v1/status/uptime ; then
+        SUCCESS_CNT=$((SUCCESS_CNT + 1))
+        if [ ${SUCCESS_CNT} -ge ${SUCCESS_THRESHOLD} ] ; then
+          echo "PASSED -  ${SUCCESS_THRESHOLD} consecutive health checks passed. Store is ready. terminating"
+          exit 0
+        fi
+      else
+        echo "${ITERATION} -  store not ready"
+      fi
+      sleep ${SLEEP_TIME}
+    done
+
+    echo "The store did not become healthy within given period."
+    exit ${EXIT_TIMEOUT}
+
+  recommends_ready.sh: |
+    #!/bin/sh
+    set -x
+    set -e
+    RETRIES=${RETRIES:-12}
+    EXIT_TIMEOUT=${EXIT_TIMEOUT:-0}
+    SUCCESS_THRESHOLD=${SUCCESS_THRESHOLD:-3}
+    SLEEP_TIME=${SLEEP_TIME:-5}
+
+    echo "Will try ${RETRIES} times to periodicaly reach recommends to see if it is healthy"
+    SUCCESS_CNT=0
+    for ITERATION in `seq ${RETRIES}` ; do
+      echo "${ITERATION} - Trying recommends status."
+      if curl --max-time 5 -s -k -v --fail \
+          -H "X-Watson-Origin: icp-helm-health-testing" -H "X-Watson-UserInfo: bluemix-region-id=us-south;bluemix-instance-id=health-request;" \
+           https://{{ .Release.Name }}-recommends:8080/v1/status ; then
+        SUCCESS_CNT=$((SUCCESS_CNT + 1))
+        if [ ${SUCCESS_CNT} -ge ${SUCCESS_THRESHOLD} ] ; then
+          echo "PASSED -  ${SUCCESS_THRESHOLD} consecutive health checks passed. Recommends is ready. terminating"
+          exit 0
+        fi
+      else
+        echo "${ITERATION} -  recommends not ready"
+      fi
+      sleep ${SLEEP_TIME}
+    done
+
+    echo "The recommends did not become healthy within given period."
+    exit ${EXIT_TIMEOUT}

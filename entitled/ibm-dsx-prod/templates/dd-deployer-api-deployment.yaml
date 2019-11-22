@@ -1,0 +1,71 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: dd-deployer-api
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: dd-deployer-api
+    run: dd-deployer-api-deployment
+spec:
+  replicas: {{ .Values.ddDeployerApi.replicas }}
+  selector:
+    matchLabels:
+      run: dd-deployer-api-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: dd-deployer-api
+        run: dd-deployer-api-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+      - name: dd-deployer-api-container
+        image: {{ .Values.ddDeployerApi.image.repository }}:{{ .Values.ddDeployerApi.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        volumeMounts:
+        # deployments are stored in user home
+        - mountPath: /user-home
+          name: user-home-mount
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.ddDeployerApi.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 9080
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /dd-deployer-api/v1/deployer/service/ping
+            port: 9080
+            scheme: HTTP
+          initialDelaySeconds: 240
+          periodSeconds: 60
+        readinessProbe:
+          httpGet:
+            path: /dd-deployer-api/v1/deployer/service/ping
+            port: 9080
+            scheme: HTTP
+          initialDelaySeconds: 240
+          periodSeconds: 60
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

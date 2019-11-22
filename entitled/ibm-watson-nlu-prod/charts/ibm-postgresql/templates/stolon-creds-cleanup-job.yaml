@@ -1,0 +1,70 @@
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+{{- if not (include "ibm-postgresql.boolConvertor" (list .Values.keep . )) }}
+{{- if or (not (tpl .Values.auth.authSecretName . )) (and (include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . ))) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "stolon.serviceAccountName" . | quote }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+{{ include "nlu.components.imagePullSecretTemplate" . | indent 6 }}
+      containers:
+      - name: cleanup
+        image:  {{ .Values.global.icpDockerRepo }}{{ .Values.creds.image.repository }}:{{ .Values.creds.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          set -e
+{{- if not (tpl .Values.auth.authSecretName . ) }}
+          {{- $secretName := include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) }}
+          if kubectl get   secret {{ $secretName | quote }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting {{ $secretName }} ..."
+            kubectl delete secret {{ $secretName | quote }} -n {{ .Release.Namespace }}
+          else
+            echo "=>>>Secret   {{ $secretName }} does not exist (already deleted)"
+          fi
+{{- end }}
+{{- if and (include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . )) }}
+          {{- $secretName := include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) }}
+          if kubectl get   secret {{ $secretName | quote }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting {{ $secretName }} ..."
+            kubectl delete secret {{ $secretName | quote }} -n {{ .Release.Namespace }}
+          else
+            echo "=>>>Secret   {{ $secretName }} does not exist (already deleted)"
+          fi
+{{- end }}
+      restartPolicy: Never
+{{- end }}
+{{- end }}

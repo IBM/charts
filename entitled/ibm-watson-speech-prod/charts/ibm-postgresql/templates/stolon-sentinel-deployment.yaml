@@ -1,0 +1,105 @@
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list . .sch.chart.components.sentinel) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+    component: "stolon-sentinel"
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.keep . ) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 6 }}
+      component: "stolon-sentinel"
+  replicas: {{ .Values.sentinel.replicas }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 8 }}
+        component: "stolon-sentinel"
+        stolon-cluster: {{ template "stolon.clusterName" . }}
+        stolon-sentinel: "true"
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "stolon.serviceAccountName" . | quote }}
+      affinity:
+{{- include "ibm-postgresql.affinity" (list . .Values.sentinel.affinity) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresPodSecurityContext) | indent 8 }}
+{{- if .Values.sentinel.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.sentinel.nodeSelector | indent 8 }}
+{{- end }}
+
+{{- if .Values.sentinel.tolerations }}
+      tolerations:
+{{ toYaml .Values.sentinel.tolerations | indent 8 }}
+{{- end }}
+{{- if tpl .Values.global.image.pullSecret . }}
+      imagePullSecrets:
+      - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+{{- end }}
+      containers:
+      - name: sentinel
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.postgres.image.name }}:{{ .Values.postgres.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresContainerSecurityContext) | indent 10 }}
+        command:
+          - "/bin/bash"
+          - "-ec"
+          - |
+            sh -x /home/stolon/update_user_entry.sh
+            echo $(whoami)
+            exec stolon-sentinel
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: STSENTINEL_CLUSTER_NAME
+            value: {{ template "stolon.clusterName" . }}
+          - name: STSENTINEL_STORE_BACKEND
+            value: {{ .Values.store.backend | quote }}
+          {{- if eq .Values.store.backend "kubernetes" }}
+          - name: STSENTINEL_KUBE_RESOURCE_KIND
+            value: {{ default "configmap" .Values.store.kubeResourceKind  | quote }}
+          {{- else }}
+          - name: STSENTINEL_STORE_ENDPOINTS
+            value: {{ .Values.store.endpoints | quote }}
+          {{- end }}
+          - name: STSENTINEL_DEBUG
+            value: {{ .Values.debug | quote }}
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - exec stolonctl status --store-backend {{ .Values.store.backend }} --kube-resource-kind {{ default "configmap" .Values.store.kubeResourceKind }} --cluster-name {{ template "stolon.clusterName" . }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - exec stolonctl status --store-backend {{ .Values.store.backend }} --kube-resource-kind {{ default "configmap" .Values.store.kubeResourceKind }} --cluster-name {{ template "stolon.clusterName" . }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+
+        resources:
+{{ toYaml .Values.sentinel.resources | indent 10 }}

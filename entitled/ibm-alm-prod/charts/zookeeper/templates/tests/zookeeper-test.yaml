@@ -1,0 +1,49 @@
+{{- include "sch.config.init" (list . "zookeeper.sch.chart.config.values") -}}
+{{- $podName := include "sch.names.fullName" (list .) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $podName }}-test"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ $podName }}-test
+  annotations:
+    "helm.sh/hook": test-success
+    #container.apparmor.security.beta.kubernetes.io/{{ $podName }}-test: runtime/default
+    #seccomp.security.alpha.kubernetes.io/pod: docker/default
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- range $arch := .Values.arch }}
+              - {{ $arch -}}
+            {{ end }}
+  containers:
+    - name: "{{ $podName }}-test"
+      image: "{{ include "zookeeper.getImageRepo" . }}/zookeeper:{{ .Values.image.tag }}"
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command: ["sh"]   # well this is pretty useless.
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1001
+        capabilities:
+          drop:
+          - ALL
+  restartPolicy: Never

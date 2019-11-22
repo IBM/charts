@@ -1,0 +1,72 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compTestHdpName := .sch.chart.components.wex.test.hdp.name }}
+{{- $compTestHdpLabelComponent := .sch.chart.components.wex.test.hdp.label.component }}
+
+{{- $compHdpNnServiceHeadlessName := .sch.chart.components.wex.hdp.nn.service.headlessName }}
+{{- $compHdpRmServiceHeadlessName := .sch.chart.components.wex.hdp.rm.service.headlessName }}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compTestHdpName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-test-hdp
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 2 }}
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+  containers:
+    - name: "test-hdp"
+      image: "{{ .Values.general.image.core }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 6 }}
+      resources:
+{{ toYaml .Values.test.resources | indent 8 }}
+      command:
+      - 'bash'
+      - '-c'
+      - |
+        while true;
+        do
+          echo "Waiting for hdp-nn startup"
+          curl -sl -k http://{{ include "sch.names.fullCompName" (list . $compHdpNnServiceHeadlessName ) }}:50070/webhdfs/v1/?op=GETFILESTATUS | grep FileStatus
+          if [ $? -eq 0 ]
+          then
+            echo "hdp-nn has started up"
+            break
+          fi
+          sleep 1s
+        done
+
+        while true;
+        do
+          echo "Waiting for hdp-rm startup"
+          curl -sl -k http://{{ include "sch.names.fullCompName" (list . $compHdpRmServiceHeadlessName ) }}:8088/ws/v1/cluster/info | grep '"state":"STARTED"'
+          if [ $? -eq 0 ]
+          then
+            echo "hdp-rm has started up"
+            break
+          fi
+          sleep 1s
+        done
+
+        while true;
+        do
+          echo "Waiting for hdp-worker startup"
+          curl -sl -k http://{{ include "sch.names.fullCompName" (list . $compHdpRmServiceHeadlessName ) }}:8088/ws/v1/cluster/metrics | grep '"activeNodes":{{ .Values.hdp.worker.replica }}'
+          if [ $? -eq 0 ]
+          then
+            echo "hdp-worker(s) has started up"
+            break
+          fi
+          sleep 1s
+        done
+
+        echo "OK"

@@ -1,0 +1,237 @@
+{{- include "sch.config.init" (list . "sch.chart.stt_customization.config.values") -}}
+{{- $compName :=  .sch.chart.components.stt_customization.name -}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}-sql
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+   stt-customization.sql: "
+
+  CREATE DATABASE \"stt-customization\"
+      WITH
+      OWNER = stolon
+      ENCODING = 'UTF8'
+      LC_COLLATE = 'en_US.UTF-8'
+      LC_CTYPE = 'en_US.UTF-8'
+      TABLESPACE = pg_default
+      CONNECTION LIMIT = -1;
+
+  \\c stt-customization;
+
+  CREATE TABLE IF NOT EXISTS consumers
+  (
+      consumer_id uuid NOT NULL,
+      latest_heartbeat timestamp with time zone NOT NULL,
+      created_on timestamp with time zone NOT NULL,
+      assigned_job_id uuid,
+      CONSTRAINT consumers_pkey PRIMARY KEY (consumer_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS customizations
+  (
+      customization_id uuid NOT NULL,
+      parent_customization_id uuid,
+      ancestor_id uuid NOT NULL,
+      owner uuid NOT NULL,
+      name character varying(256) NOT NULL,
+      customization_type character varying(32) NOT NULL,
+      customization_language character varying(32) NOT NULL,
+      description character varying(128),
+      base_model_name character varying(256) NOT NULL,
+      base_model_version character varying(128) NOT NULL,
+      customization_status character varying(32) NOT NULL,
+      progress int,
+      upgrade_count int NOT NULL DEFAULT 0,
+      created_on timestamp with time zone NOT NULL,
+      last_modified timestamp with time zone NOT NULL,
+      data_hash_snapshot text NOT NULL DEFAULT '',
+      gdpr_deletion_initiated_on timestamp with time zone,
+      miscellaneous jsonb NOT NULL DEFAULT '{}'::jsonb,
+      error character varying(512),
+      CONSTRAINT customizations_pkey PRIMARY KEY (customization_id),
+      CONSTRAINT customizations_type_check CHECK (customization_type IN ('LANGUAGE', 'ACOUSTIC')),
+      CONSTRAINT customizations_status_check CHECK (customization_status IN ('AVAILABLE', 'FAILED', 'TRAINING', 'UPGRADING_MODEL', 'READY', 'PENDING', 'WAITING_FOR_CALLBACK', 'PREBUILT_PATCH_UPLOADED', 'EXPIRED')),
+      UNIQUE (ancestor_id, upgrade_count)
+  );
+
+  CREATE TABLE IF NOT EXISTS jobs
+  (
+      job_id uuid NOT NULL,
+      job_type character varying(32) NOT NULL,
+      job_status character varying(32) NOT NULL,
+      job_payload jsonb NOT NULL,
+      customization_id uuid NOT NULL,
+      consumer_id uuid,
+      assigned_on timestamp with time zone,
+      created_on timestamp with time zone NOT NULL,
+      latest_backend_heartbeat timestamp with time zone,
+      resubmission_count int NOT NULL DEFAULT 0,
+      CONSTRAINT jobs_pkey PRIMARY KEY (job_id),
+      CONSTRAINT job_type_check CHECK (job_type IN ('GET_OOV', 'TRAIN', 'TRAIN_AM', 'UPGRADE_MODEL', 'VALIDATE_AUDIO')),
+      CONSTRAINT job_status_check CHECK (job_status IN ('SUBMITTED', 'ASSIGNED', 'COMPLETED')),
+      CONSTRAINT jobs_customization_id_fkey FOREIGN KEY (customization_id) REFERENCES public.customizations (customization_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS corpora
+  (
+      customization_id uuid NOT NULL,
+      corpus_name character varying(128) NOT NULL,
+      corpus_version int NOT NULL,
+      corpus_status character varying(32) NOT NULL,
+      corpus_error text,
+      total_words int NOT NULL,
+      oov_words int NOT NULL,
+      gdpr_customer_id text,
+      CONSTRAINT corpora_pkey PRIMARY KEY (customization_id, corpus_name),
+      CONSTRAINT corpus_status_check CHECK (corpus_status IN ('BEING_PROCESSED', 'ANALYZED', 'DELETED', 'UNDETERMINED')),
+      CONSTRAINT corpora_customization_id_fkey FOREIGN KEY (customization_id) REFERENCES public.customizations (customization_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS grammars
+  (
+      customization_id uuid NOT NULL,
+      grammar_index int NOT NULL default 1,
+      grammar_name character varying(128) NOT NULL,
+      grammar_version int NOT NULL,
+      grammar_status character varying(32) NOT NULL,
+      grammar_content_type character varying(128) NOT NULL,
+      grammar_error text,
+      oov_words int NOT NULL,
+      gdpr_customer_id text,
+      CONSTRAINT grammars_pkey PRIMARY KEY (customization_id, grammar_name),
+      CONSTRAINT grammar_status_check CHECK (grammar_status IN ('BEING_PROCESSED', 'ANALYZED', 'DELETED', 'UNDETERMINED')),
+      CONSTRAINT grammars_customization_id_fkey FOREIGN KEY (customization_id) REFERENCES public.customizations (customization_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE CASCADE,
+      UNIQUE (customization_id, grammar_index)
+  );
+
+  CREATE TABLE IF NOT EXISTS words
+  (
+      customization_id uuid NOT NULL,
+      word text NOT NULL,
+      word_version int NOT NULL,
+      word_sounds_like text[] NOT NULL,
+      word_display_as text,
+      word_error jsonb NOT NULL,
+      word_distribution jsonb NOT NULL,
+      word_in_vocab int,
+      word_status text,
+      gdpr_customer_id text,
+      CONSTRAINT words_pkey PRIMARY KEY (customization_id, word),
+      CONSTRAINT words_in_vocab_check CHECK (word_in_vocab IN (0, 1, 2)),
+      CONSTRAINT words_status_check CHECK (word_status IN ('ADDED', 'DELETED')),
+      CONSTRAINT words_customization_id_fkey FOREIGN KEY (customization_id) REFERENCES public.customizations (customization_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS audio
+  (
+      customization_id uuid NOT NULL,
+      audio_container character varying(128) NOT NULL,
+      audio_name character varying(128) NOT NULL,
+      audio_details jsonb NOT NULL,
+      audio_duration int NOT NULL,
+      audio_content_type character varying(128) NOT NULL,
+      audio_version int NOT NULL,
+      audio_error text,
+      audio_status character varying(32) NOT NULL,
+      gdpr_customer_id text,
+      CONSTRAINT audio_pkey PRIMARY KEY (customization_id, audio_container, audio_name),
+      CONSTRAINT audio_status_check CHECK (audio_status IN ('BEING_PROCESSED', 'OK', 'INVALID', 'DELETED')),
+      CONSTRAINT audio_customization_id_fkey FOREIGN KEY (customization_id) REFERENCES public.customizations (customization_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS callbacks
+  (
+      callback_id uuid NOT NULL,
+      job_id uuid NOT NULL,
+      callback_payload text NOT NULL,
+      callback_failures_count int NOT NULL,
+      callback_failure_description text,
+      received_on timestamp with time zone NOT NULL,
+      CONSTRAINT callbacks_pkey PRIMARY KEY (callback_id)
+  );
+
+  CREATE FUNCTION public.onWordsBeforeInsertUpdate()
+      RETURNS trigger
+      LANGUAGE 'plpgsql'
+      COST 100.0
+      VOLATILE NOT LEAKPROOF
+  AS $BODY$
+
+  BEGIN
+    IF UPPER(TG_OP) = 'INSERT' OR UPPER(TG_OP) = 'UPDATE' THEN
+      IF new.word_distribution <@ '{}'::jsonb THEN
+        new.word_status := 'DELETED';
+      END IF;
+      END IF;
+
+    RETURN NEW;
+  END;
+
+  $BODY$;
+
+  CREATE OR REPLACE FUNCTION jsonb_contains_key(p_this jsonb, p_key text)
+  RETURNS boolean AS
+  $BODY$
+  begin
+      return (p_this ? p_key);
+  end;
+  $BODY$
+  LANGUAGE plpgsql VOLATILE;
+
+  CREATE OR REPLACE FUNCTION jsonb_remove_matching_keys(jo jsonb, prefix text, suffix_pattern text)
+  RETURNS jsonb AS
+  $BODY$
+  DECLARE
+      keys text[];
+    len int;
+      result jsonb;
+  BEGIN
+    SELECT
+        array_agg(t.x) INTO STRICT keys
+    FROM
+      (
+          SELECT jsonb_object_keys( jo) x
+      ) t
+    WHERE
+      POSITION(prefix IN t.x) = 1
+      AND
+          SUBSTRING(t.x FROM length(prefix) + 1) ~ suffix_pattern; -- '^\\.\\d+$';
+
+    len = COALESCE(array_length(keys, 1), 0);
+    result = jo;
+
+    FOR i IN 1..len LOOP
+      result = (result - keys[i]);
+    END LOOP;
+
+    RETURN result;
+  END;
+  $BODY$
+  LANGUAGE plpgsql VOLATILE;
+
+  CREATE TRIGGER wordsBeforeInsertUpdate BEFORE INSERT OR UPDATE
+      ON words FOR EACH ROW
+      EXECUTE PROCEDURE onWordsBeforeInsertUpdate();
+
+  CREATE INDEX customizations_owner_idx ON customizations USING btree (owner ASC NULLS LAST);
+  CREATE INDEX customizations_parent_customization_id_idx ON customizations USING btree (parent_customization_id ASC NULLS LAST);
+  CREATE INDEX customizations_ancestor_id_idx ON customizations USING btree (ancestor_id ASC NULLS LAST);
+
+  CREATE INDEX words_customization_id_idx ON words USING btree (customization_id ASC NULLS LAST);
+  CREATE INDEX words_word_status_idx ON words USING btree (word_status ASC NULLS LAST);
+  CREATE INDEX words_gdpr_customer_id_idx ON words USING btree (gdpr_customer_id ASC NULLS LAST);
+
+  CREATE INDEX corpora_customization_id_idx ON corpora USING btree (customization_id ASC NULLS LAST);
+  CREATE INDEX corpora_corpus_status_idx ON corpora USING btree (corpus_status ASC NULLS LAST);
+  CREATE INDEX corpora_gdpr_customer_id_idx ON corpora USING btree (gdpr_customer_id ASC NULLS LAST);
+
+  CREATE INDEX grammars_customization_id_idx ON grammars USING btree (customization_id ASC NULLS LAST);
+  CREATE INDEX grammars_grammar_status_idx ON grammars USING btree (grammar_status ASC NULLS LAST);
+  CREATE INDEX grammars_gdpr_customer_id_idx ON grammars USING btree (gdpr_customer_id ASC NULLS LAST);
+
+  CREATE INDEX audio_customization_id_idx ON audio USING btree (customization_id ASC NULLS LAST);
+"

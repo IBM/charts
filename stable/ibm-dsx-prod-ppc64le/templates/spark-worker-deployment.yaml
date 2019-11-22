@@ -1,0 +1,45 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.ibmPrivateCloud) -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: spark-worker
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: spark-worker-deployment
+spec:
+  replicas: {{ .Values.sparkContainer.workerReplicas }}
+  selector:
+    matchLabels:
+      run: spark-worker-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: spark
+        component: spark-worker
+        run: spark-worker-deployment-pod
+    spec:
+      containers:
+      - name: spark-worker-container
+        image: {{ .Values.sparkContainer.image.repository }}:{{ .Values.sparkContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["bash"]
+        args: ["-c", "umask 0 ; /start_worker"]
+        resources:
+{{ toYaml .Values.sparkContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 8081
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+      volumes:
+      - name: user-home-mount
+        persistentVolumeClaim:
+          {{- if .Values.userHomePvc.persistence.existingClaimName }}
+            claimName: {{ .Values.userHomePvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}-{{ .Values.userHomePvc.name }}
+          {{- end }}
+{{- end }}

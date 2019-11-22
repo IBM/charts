@@ -1,0 +1,63 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "sireTraining.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.jobq.deploymentName -}}
+{{- $jobq := .Values.jobq -}}
+{{- if $jobq.enabled -}}
+{{- if and (not .Values.global.existingServiceAccount) (not .Values.jobq.existingServiceAccount) -}}
+### ROLE
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: Role
+metadata:
+  name: {{ template "sireTraining.roleName" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+rules:
+- apiGroups:
+    - ""
+    - batch
+    - rbac.authorization.k8s.io
+  resources:
+    - pods
+    - pods/log
+    - jobs
+    - secrets
+  verbs:
+    - "*"
+
+---
+### SERVICE ACCOUNT
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ template "sireTraining.serviceAccountName" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+
+---
+### ROLE BINDING
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: {{ template "sireTraining.roleBindingName" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ template "sireTraining.roleName" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ template "sireTraining.serviceAccountName" . }}
+
+{{- end -}}
+{{- end -}}

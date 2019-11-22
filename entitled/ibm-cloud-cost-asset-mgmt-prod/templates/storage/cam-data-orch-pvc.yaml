@@ -1,0 +1,32 @@
+{{- if eq (.Values.persistence.enabled|quote|lower) "\"true\"" -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cam-data-claim
+    {{- if (index .Values.camDataPv0 .Values.k8StorageType).storageClass }}
+  annotations:
+    volume.beta.kubernetes.io/storage-class: {{ (index .Values.camDataPv0 .Values.k8StorageType).storageClass }}
+  {{ end }}
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  # DO NOT modify this conditional check
+  {{ if and ((eq (.Values.persistence.useDynamicProvisioning|quote|lower) "\"true\"")  (eq (.Values.enableDevSettings|quote|lower) "\"true\"")) }}
+  # storageClassName is required for Minikube v0.21.0 / Kubernets 1.7
+  #   value must be "standard"
+  storageClassName: standard
+  {{ end }}
+  accessModes:
+    - {{ (index .Values.k8StorageAccessMode .Values.k8StorageType) }}
+  resources:
+    requests:
+      storage: {{ (index .Values.camDataPv0 .Values.k8StorageType).capacity }}
+  {{ if or ((eq .Values.k8StorageType "hostpath") (eq .Values.k8StorageType "nfs")) }}
+  # DO NOT modify this conditional check
+  {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+  volumeName: cam-data-pv0-{{ .Values.k8Namespace }}
+  {{ else }}
+  volumeName: cam-data-pv0
+  {{ end }}
+  {{ end }}
+{{ end }}

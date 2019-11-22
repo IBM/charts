@@ -1,0 +1,25 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+{{- $tlsenabled := include "ibm-netcool-probe-messagebus-webhook-prod.performvalidation" ( . ) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  type: {{ .Values.service.probe.type }}
+  ports:
+  {{- if eq $tlsenabled "httpsOk" }}
+    - port: 443
+      name: webhook-https
+  {{- else }}
+    - port: 80
+      name: webhook-http
+  {{- end }}
+      targetPort: 4080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: {{ include "sch.names.appName" (list .) }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: {{ $compName }}

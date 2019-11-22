@@ -1,0 +1,34 @@
+################################################################################
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+################################################################################
+{{ include "sch.config.init" (list . "sch.appengine.config.values") }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "availability-test") }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "availability-test") | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{ include "appengine.constants.pod.securityContext" . | indent 2}}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+  restartPolicy: "Never"
+  serviceAccountName: {{ include "sch.names.fullCompName" (list . "deployment-access") }}
+{{ include "appengine.constants.pod.security" . | indent 2}}
+  containers:
+  - name: main
+    image: alpine:3.8
+    imagePullPolicy: IfNotPresent
+    securityContext:
+{{ include "appengine.constants.container.securityContext" . | indent 6 }}
+    resources:
+{{ .Values.resources.initContainer | toYaml | trim | indent 6}}
+    command: ["sh", "-c", "wget -T 3 --no-check-certificate -O - https://{{.Values.global.appEngine.hostname}}:{{.Values.global.appEngine.port}}"]

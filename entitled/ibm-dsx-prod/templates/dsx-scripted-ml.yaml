@@ -1,0 +1,45 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: dsx-scripted-ml
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: dsx-scripted-ml-job
+spec:
+  template:
+    metadata:
+      labels:
+        component: dsx-scripted-ml
+        run: dsx-scripted-ml-job-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+        - name: dsx-scripted-ml-container
+          image: {{ .Values.dsxScriptedML.image.repository }}:{{ .Values.dsxScriptedML.image.tag }}
+          imagePullPolicy: IfNotPresent
+          command: ["/k8s/create.sh"]
+          volumeMounts:
+            - mountPath: /user-home
+              name: user-home-mount
+      restartPolicy: OnFailure
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

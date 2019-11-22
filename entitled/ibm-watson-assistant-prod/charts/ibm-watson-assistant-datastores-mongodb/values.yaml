@@ -1,0 +1,64 @@
+config:
+  global:
+    sch:
+      enabled: false # Using sch chart from umbrella chart
+    image:
+      pullSecret: ""
+
+  resources:
+    limits:
+      # cpu limits removed for WA ICP deployments
+      memory: 6Gi
+    requests:
+      cpu: 50m
+      memory: 6Gi
+
+  
+  auth:
+    enabled: "{{ .Values.global.mongodb.auth.enabled }}"
+    # Predefined Secrets for MongoDB Authentication and Authorization
+    authSecretName: "{{ .Values.global.mongodb.auth.existingAdminSecret }}"
+
+  tls:
+    # Enable or disable MongoDB TLS support
+    enabled: "{{ .Values.global.mongodb.tls.enabled }}"
+    # Predefined Secrets for MongoDB TLS
+    tlsSecretName: "{{ .Values.global.mongodb.tls.existingCaSecret }}"
+  
+  # With WiredTiger, MongoDB utilizes both the WiredTiger internal cache and the filesystem cache.
+  # Starting in 3.4, the WiredTiger internal cache, by default, will use the larger of either: 
+  # 50% of (RAM - 1 GB), or 256 MB.
+  # Recommend to change this to 0.4 of your memory limit for container
+  wiredTigerCacheSizeGb: "2.5"
+
+  # The maximum size in megabytes for the replication operation log
+  # By default, the mongod process creates an oplog based on the maximum amount of space available. 
+  # The oplog is typically 5% of available persistent volume.
+  # Min: 990 MB, Max: 50 GB
+  # Using 15GB; goal is to start new rs from scrats without any issues
+  oplogSizeMB: 15000
+
+
+  # Enabling pod disruption budget
+  podDisruptionBudget:
+    maxUnavailable: 1
+  persistentVolume:
+    enabled: true
+
+    accessModes:
+      - ReadWriteOnce
+    size: 75Gi
+    annotations: {}
+  
+  affinityMongodb:
+    nodeAffinity:    '{{ include "assistant.mongo.ibm-mongodb.affinitiesMongodb.nodeAffinity" . }}'
+    podAntiAffinity: '{{ include "assistant.mongo.ibm-mongodb.affinitiesMongodb.podAntiAffinity" . }}'
+
+  metering:
+    productName: "IBM Watson Assistant for IBM Cloud Private for Data"
+    productID: "ICP4D-addon-53256faf537b4d4d956f0c5a24d78b08-assistant"
+    productVersion: "1.3.0"  
+
+  # if true, don't delete the datastore objects during a helm delete
+  keep: "{{ .Values.global.keepDatastores }}"
+  clusterDomain: "{{ tpl .Values.global.clusterDomain . }}"

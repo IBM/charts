@@ -1,0 +1,91 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Runs a container that registers the IBM Event Streams UI as an OAuth endpoint
+#  to allow log-ins to the Event Streams Admin UI
+###############################################################################
+{{ if and .Values.global.generateClusterRoles (gt (int .Values.global.zones.count) 1) -}}
+{{ include "zonesjob" (list .) }}
+{{ end }}
+
+{{- define "zonesjob" -}}
+{{- $context := first . -}}
+{{ if eq $context.Values.license "accept" -}}
+{{- include "sch.config.init" (list $context "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list $context "securitycontext.sch.chart.config.values") | trim -}}
+{{ $namePrefix := $context.sch.chart.components.essential.zonesTopologyJob.name -}}
+{{ $name := include "sch.names.fullCompName" (list $context $namePrefix ) -}}
+{{ $cmNamePrefix := $context.sch.chart.components.essential.zonesTopologyJobConfigMap -}}
+{{ $cmName := include "sch.names.fullCompName" (list $context $cmNamePrefix) -}}
+# Component is 'essential'
+{{ $compName := $context.sch.chart.components.essential.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list $context $compName (dict "function" "setup-zonecm")) -}}
+# Name of the new temporary service account
+{{ $serviceAccount := $context.sch.chart.components.essential.preInstallSA.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list $context $serviceAccount) -}}
+# Name of the release configmap to patch
+{{ $releaseConfigMap := $context.sch.chart.components.essential.releaseConfigMap.name -}}
+{{ $releaseConfigMapName := include "sch.names.fullCompName" (list $context $releaseConfigMap) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    # This needs to run before we deploy, as the kafka brokers need the config map to be present.
+    "helm.sh/hook": pre-install, pre-upgrade, pre-rollback
+    # We don't delete this if it fails, as the logs may be useful to diagnose a failed install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    # This needs to happen after the release map has been created - the hook weight needs to reflect this
+    "helm.sh/hook-weight": "5"
+spec:
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{- include "sch.security.securityContext" (list $context $context.sch.chart.securitycontexts.pod) | indent 8 }}
+      affinity:
+{{ include "ibm-eventstreams.customNodeaffinity"  (list $context) | indent 8 }}
+      restartPolicy: Never
+      containers:
+      - name: zone-topology-job
+        image: {{ include "eventstreams.image" (list $context "eventstreams-kubectl" $context.Values.global.image.imageTags.kubectlTag) | quote }}
+        imagePullPolicy: {{ $context.Values.global.image.pullPolicy }}
+        securityContext:
+{{- include "sch.security.securityContext" (list $context $context.sch.chart.securitycontexts.containerWritableFilesystem) | indent 12 }}
+        env:
+            {{- include "license.accept.env.ref" $context | indent 10 }}
+        # This command will find the nodes and their zones and then put the values in a config map
+        # The config map is deleted if already present as it should be created each time with the current values
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          ZONE_LABEL={{ $context.Values.global.zones.apiLabel | quote}}
+          ZONE_LABEL=${ZONE_LABEL//\./\\\.}
+          echo "Zone label : $ZONE_LABEL"
+          # extract the node zone labels in json patch format
+          update=$(kubectl get node -o jsonpath="{\"{\\\"data\\\":{ \"}{range .items[*]}{\"\\\"\"}{.metadata.name}{\"\\\":\\\"\"}{.metadata.labels.$ZONE_LABEL}{\"\\\",\"}{end}")
+          # remove the trailing comma and terminate the json
+          update=${update%?}}}
+          echo "Node zones : $update"
+          kubectl -n {{ $context.Release.Namespace | quote }} patch configmap {{ $releaseConfigMapName }} -p "$update"
+{{ end -}}
+{{ end -}}

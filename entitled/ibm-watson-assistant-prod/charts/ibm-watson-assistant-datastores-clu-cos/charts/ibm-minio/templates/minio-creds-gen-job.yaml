@@ -1,0 +1,113 @@
+---
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+{{ if .Release.IsInstall }}
+{{- if or (not (tpl .Values.existingSecret . )) (and (include "ibm-minio.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.certSecret . ))) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsGen) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 4 }}
+  annotations:
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ include "sch.names.fullName" (list .) | quote }}
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+      containers:
+      - name: cred-gen
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 128Mi
+            cpu: 100m
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+{{- if and (include "ibm-minio.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.certSecret . )) }}
+          openssl genrsa -out ca.key 2048
+          openssl req -x509 -new -nodes -key ca.key -subj "/CN={{ include "sch.names.fullName" (list .) }}" -days 3650 -reqexts v3_req -extensions v3_ca -out ca.crt
+          cat >openssl.cnf <<EOL
+          [req]
+          req_extensions = v3_req
+          distinguished_name = req_distinguished_name
+          [req_distinguished_name]
+          [ v3_req ]
+          basicConstraints = CA:FALSE
+          keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+          subjectAltName = @alt_names
+          [alt_names]
+          DNS.1 = {{ include "sch.names.fullName" (list .) }}
+          DNS.2 = *.{{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+          DNS.3 = {{ include "sch.names.fullCompName" (list . .sch.chart.components.service) }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+          DNS.4 = localhost
+          DNS.5 = 127.0.0.1
+          EOL
+          openssl genrsa -out minio.key 2048
+          openssl req -new -key minio.key -out minio.csr -subj "/CN={{ include "sch.names.fullName" (list .) }}" -config openssl.cnf
+          openssl x509 -req -in minio.csr \
+            -CA ca.crt -CAkey ca.key -CAcreateserial \
+            -out minio.crt -days 3650 -extensions v3_req -extfile openssl.cnf
+{{- end }}
+          cat <<EOF | kubectl create -n {{ .Release.Namespace }} -f -
+{{- if and (include "ibm-minio.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.certSecret . )) }}
+          apiVersion: v1
+          kind: Secret
+          type: kubernetes.io/tls
+          metadata:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+            labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+          data:
+            # keeping original keyname as training pod requires it
+            ca.crt: $(cat ca.crt | base64 | tr -d '\n')
+            tls.crt: $(cat minio.crt | base64 | tr -d '\n')
+            tls.key: $(cat minio.key | base64 | tr -d '\n')
+            tls.cacrt.str: $(sed '1d;$d' ca.crt | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+{{- if not (tpl .Values.existingSecret . ) }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+          data:
+            accesskey: $(openssl rand -hex 18 | tr -d '\n' | base64 | tr -d '\n')
+            secretkey: $(openssl rand -hex 18 | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+          EOF
+      restartPolicy: Never
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{- end }}
+{{- end }}

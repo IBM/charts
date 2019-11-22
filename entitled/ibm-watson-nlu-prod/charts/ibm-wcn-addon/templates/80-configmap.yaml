@@ -1,0 +1,187 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $root := . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+{{- if and (.Values.addon.maxDeployments) (eq (int .Values.addon.maxDeployments) 1) }}
+  name: {{ include "wcn-addon.id" . | quote }}
+{{- else }}
+  name: {{ include "sch.names.fullCompName" (list . "addon") | quote }}
+{{- end }}
+  namespace: {{ .Values.addonService.zenNamespace | quote }}
+  labels:
+    icpdata_addon_version: "{{ include "wcn-addon.version" . }}"
+    icpdata_addon: "true"
+{{ include "sch.metadata.labels.standard" (list . "addon" ) | indent 4 }}
+data:
+  add-ons.json: |
+    {
+    "{{ include "wcn-addon.id" . }}": {
+      "access_management_enable": true,
+      "category": "ai",
+      "add_on_type": "application",
+      "details": {
+        "short_description": "{{ include "wcn-addon.shortDescription" . }}",
+        "long_description": "{{ include "wcn-addon.longDescription" . }}",
+        "deploy_docs": "{{ include "wcn-addon.deployDocs" . }}",
+        "product_docs": "{{ include "wcn-addon.productDocs" . }}",
+        "iconURL": "{{ include "wcn-addon.addonService.path" . }}/images/icons/{{ .Values.addon.serviceId }}.svg",
+        "images": [
+        {{- $numImages := .Values.addon.productImages | int }}
+        {{- range $k, $v := until $numImages }}
+          "{{ include "wcn-addon.addonService.path" $root }}/images/{{ $root.Values.addon.serviceId }}/{{ $k }}.png"{{- if ne $k (sub $numImages 1) -}},{{- end }}
+        {{- end }}
+        ],
+        "service_provider_url": "https://2a5f1095cc184e3:6279b80e98234f1fbbd1b@{{- include "wcn-addon.addonService.svc" . -}}:{{ .Values.addonService.port}}",
+        "provisionURL" : "{{ include "wcn-addon.addonService.path" . }}/",
+        "openURL": "{{ include "wcn-addon.addonService.path" . }}/",
+        "accessManagementURL": "{{ include "wcn-addon.addonService.path" . }}/users",
+        "serviceDetailsURL": "{{ include "wcn-addon.addonService.path" . }}",
+        "premium": true
+      },
+      "display_name": "{{ include "wcn-addon.displayName" . }}",
+      "extensions":{},
+      "max_instances": "{{ .Values.addon.maxInstances }}",
+      "serviceability_label_name": "release",
+      "serviceability_label_value": "{{ .Release.Name }}",
+      "vendor": "IBM",
+      "versions": {
+        "{{ include "wcn-addon.version" . }}" : {
+        "description": "{{ include "wcn-addon.shortDescription" . }}",
+        "helm_location": null,
+        "state": "installed",
+        "details": {}
+        }
+      }
+      }
+    }
+  nginx.conf: |
+    # Validates that the user has access to the instance and set the X-Watson-UserInfo
+    location = {{ include "wcn-addon.addonService.path" . }}/auth {
+      internal;
+      proxy_pass_request_body off;
+      proxy_set_header  Content-Length "";
+      proxy_set_header  X-Original-URI $request_uri;
+      proxy_pass        {{ include "wcn-addon.addonService.endpoint" . }}/api/auth;
+    }
+
+    # Custom error page returning JSON
+    location @auth_error_json {
+        default_type application/json;
+        return 401 '{"code": "NotAuthorized", "message": "Access is denied due to invalid credentials"}';
+    }
+
+    # Redirects /addon to /addon/
+    location = {{ include "wcn-addon.addonService.path" . }} {
+      return 301 $scheme://$http_host{{ include "wcn-addon.addonService.path" . }}/;
+    }
+
+    # Handles /addon/ requests like icon, images, RC, GC and account mock API calls
+    # proxy the requests to the addon's k8s service
+    location {{ include "wcn-addon.addonService.path" . }}/ {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_set_header  Host $host;
+      proxy_set_header  X-Real-IP $remote_addr;
+      proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header  X-Forwarded-Proto $scheme;
+      proxy_pass {{ include "wcn-addon.addonService.endpoint" . }}/;
+    }
+{{- if .Values.additionalServices }}
+    # Handles /backend/api/{additional-routes} using the auth location defined above.
+    # Rewrites the URL in case the backend needs it,
+    # propagates the X-Watson-UserInfo from the auth location to the backend
+  {{- range $elem := .Values.additionalServices }}
+    location ~ {{ include "wcn-addon.routing.path" $ }}/instances/[^/]+/api{{ $elem.path }} {
+      auth_request     {{ include "wcn-addon.addonService.path" $ }}/auth;
+      error_page 500 = @auth_error_json;
+      auth_request_set $auth_x_watson_userinfo $upstream_http_x_watson_userinfo;
+
+      {{- range $directive := $elem.nginxDirectives }}
+      {{ $directive }}
+      {{- end }}
+      proxy_http_version 1.1;
+      proxy_set_header  Upgrade $http_upgrade;
+      proxy_set_header  Connection "upgrade";
+      proxy_set_header  Host $host;
+      proxy_set_header  X-Real-IP $remote_addr;
+      proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header  X-Forwarded-Proto $scheme;
+      proxy_set_header 'X-Watson-Userinfo' $auth_x_watson_userinfo;
+
+      rewrite ^ $request_uri;
+      rewrite {{ include "wcn-addon.routing.path" $ }}/instances/[^/]+/api{{ $elem.path }}(.*) {{ $elem.rewriteTarget }}$1 break;
+      return 404;
+      proxy_pass {{ include "wcn-addon.routing.endpoint" (list $ $elem) }}$uri;
+    }
+  {{- end }}
+{{- end }}
+
+
+{{- if not .Values.backendService.exposeAPI }}
+    # Helper location to ensure we get X-Watson-Userinfo header when exposeApi=false
+    location ~ {{ include "wcn-addon.routing.path" . }}/instances/([^/]+)/(.*)$ {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      proxy_set_header Host $host;
+      content_by_lua_block {
+        local args = ngx.var.args and "?"..ngx.var.args or "";
+        ngx.exec("{{ include "wcn-addon.routing.path" . }}-internal/instances/" .. ngx.var[1] ..  "/" .. ngx.var[2] .. args);
+      }
+    }
+{{- end }}
+    # Handles /backend using the auth location defined above.
+    # Rewrites the URL in case the backend needs it,
+    # propagates the X-Watson-UserInfo from the auth location to the backend
+    # and configure the proxy to handle bigger files and timeouts (some of our services are slow)
+{{- if .Values.backendService.exposeAPI }}
+    location ~ {{ include "wcn-addon.routing.path" . }}/instances/[^/]+/api/ {
+{{- else }}
+    location ~ {{ include "wcn-addon.routing.path" . }}-internal/instances/[^/]+/ {
+      internal;
+{{- end }}
+      auth_request     {{ include "wcn-addon.addonService.path" . }}/auth;
+      error_page 500 = @auth_error_json;
+      auth_request_set $auth_x_watson_userinfo $upstream_http_x_watson_userinfo;
+
+      {{- range $elem := .Values.backendService.nginxDirectives }}
+      {{ $elem }}
+      {{- end }}
+      proxy_http_version 1.1;
+      proxy_set_header  Upgrade $http_upgrade;
+      proxy_set_header  Connection "upgrade";
+      proxy_set_header  Host $host;
+      proxy_set_header  X-Real-IP $remote_addr;
+      proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header  X-Forwarded-Proto $scheme;
+      proxy_set_header  'X-Watson-Userinfo' $auth_x_watson_userinfo;
+      rewrite ^ $request_uri;
+{{- if .Values.backendService.exposeAPI }}
+      rewrite {{ include "wcn-addon.routing.path" . }}/instances/[^/]+/api/(.*) $1 break;
+{{- else }}
+      rewrite {{ include "wcn-addon.routing.path" . }}/instances/[^/]+/(.*) $1 break;
+{{- end }}
+      return 404;
+      proxy_pass {{ include "wcn-addon.routing.endpoint" (list . .Values.backendService) }}{{ .Values.backendService.rewriteTarget }}$uri;
+    }
+{{ if .Values.tooling.enabled }}
+    # If the service has tooling, adds the location to route traffic to it.
+    # Redirects /tooling to /tooling/
+    location {{ include "wcn-addon.routing.path" . }} {
+      return 301 $scheme://$http_host{{ include "wcn-addon.routing.path" . }}/;
+    }
+
+    # Handles /tooling/ requests using the tooling k8s service
+    # Rewrites the URL in case the tooling needs it,
+    # and configure the proxy to handle bigger files and timeouts
+    location {{ include "wcn-addon.routing.path" . }}/ {
+      access_by_lua_file /nginx_data/checkjwt.lua;
+      {{- range $elem := .Values.tooling.nginxDirectives }}
+      {{ $elem }}
+      {{- end }}
+      proxy_set_header  Host $host;
+      proxy_set_header  X-Real-IP $remote_addr;
+      proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header  X-Forwarded-Proto $scheme;
+
+      proxy_pass {{ include "wcn-addon.routing.endpoint" (list $ .Values.tooling) }}{{ .Values.tooling.rewriteTarget }};
+    }
+{{ end }}

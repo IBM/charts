@@ -1,0 +1,689 @@
+{{ $namePrefix := "nginx" -}}
+{{ $compName := "aios-nginx" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+data:
+  nginx.conf: |
+    worker_rlimit_nofile 4096;
+    events {
+      worker_connections  4096;
+    }
+    error_log /dev/stderr;
+    http {
+      client_max_body_size 50M;
+      proxy_connect_timeout 10080s;
+      proxy_send_timeout 10080;
+      proxy_read_timeout 10080;
+      proxy_buffer_size 64k;
+      proxy_buffers 16 32k;
+      proxy_busy_buffers_size 64k;
+      proxy_redirect off;
+      proxy_request_buffering off;
+      proxy_buffering off;
+      rewrite_log on;
+      # change log format to display the upstream information
+      log_format json_combined escape=json
+        '{'
+          '"time_local":"$time_local",'
+          '"remote_addr":"$remote_addr",'
+          '"remote_user":"$remote_user",'
+          '"request":"$request",'
+          '"status": "$status",'
+          '"body_bytes_sent":"$body_bytes_sent",'
+          '"request_time":"$request_time",'
+          '"http_referrer":"$http_referer",'
+          '"http_user_agent":"$http_user_agent",'
+          '"upstream_addr":"$upstream_addr"'
+        '}';
+      access_log /dev/stdout json_combined;
+
+      # needed to enable keepalive to upstream controllers
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+
+      server {
+        listen 8443 default ssl backlog=32768;
+        #listen 8080 default backlog=32768;
+        server_name "";
+
+        proxy_ssl_session_reuse on;
+        proxy_ssl_verify off;
+
+        ssl_certificate /home/aios/nginx-ca.crt;
+        ssl_certificate_key /home/aios/nginx-ca.key;
+        ssl_protocols TLSv1.2;
+        ssl_prefer_server_ciphers on;
+        ssl_ciphers 'EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA:!3DES';
+        ssl_session_timeout 10m;
+        ssl_ecdh_curve secp384r1;
+        ssl_session_cache shared:SSL:10m;
+        ssl_session_tickets off;
+
+        # Hack to convince nginx to dynamically resolve the dns entries.
+        {{ if or .Values.isICPRHOCP .Values.global.dockerRegistryPrefix }}
+        resolver kubernetes.default valid=60s ipv6=off;
+        {{ else }}
+        resolver kube-dns.kube-system;
+        {{ end }}
+
+        location /v1/model_explanations {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "explainability-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/model_explanation_configurations {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "explainability-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/fastpath {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "fast-path-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/fairness_monitoring {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "bias-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/service_bindings/[0-9a-zA-Z-]+/subscriptions/[0-9a-zA-Z-]+/deployments/[%_0-9a-zA-Z-]+/online {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "bias-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/service_bindings/[0-9a-zA-Z-]+/subscriptions/[0-9a-zA-Z-]+/configurations/fairness_monitoring/auto_detect {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "bias-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/aios_payload_logging_service/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/(payload_tables|debiased_predictions|scoring_transactions|explanation_transactions|scoring_timestamp_migration|manual_labeling_scoring_timestamp_migration) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~/v1/data_marts/[0-9a-zA-Z-]+/service_bindings/[0-9a-zA-Z-]+/subscriptions/[0-9a-zA-Z-]+/payload_table_schema {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/aios_configuration_service/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/data_marts/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1prv/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/aios_datamart_service_api/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/dimensions/(asset|deployment|zone) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/(metrics|deployment_metrics|measurement_tables|views|explanations|indexes|monitor_tables|measurements) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/service_bindings/[0-9a-zA-Z-]+/subscriptions/[0-9a-zA-Z-]+/(data_distributions|models) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/aios_payload_logging_service_api/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/(scoring_payloads|manual_labelings) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /aiopenscale/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "dashboard-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/aios_dashboard/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "dashboard-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/schedules {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_ssl_protocols TLSv1.2;
+            proxy_ssl_ciphers HIGH:!DH;
+            proxy_pass https://{{ include "aios.fqdn" (list . "scheduling-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/entitlements {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "common-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/aios_common_api {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "common-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/aios_feedback_service/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "feedback-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/(feedback_payloads|feedback_tables) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "feedback-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/service_bindings/[0-9a-zA-Z-]+/subscriptions/[0-9a-zA-Z-]+/(feedback_payloads|evaluations) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "feedback-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/explanation_tasks {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "explainability-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/ml_instances {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_ssl_protocols TLSv1.2;
+            proxy_ssl_ciphers HIGH:!DH;
+            proxy_pass https://{{ include "aios.fqdn" (list . "ml-gateway-discovery-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v2/ml_deployments {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_ssl_protocols TLSv1.2;
+            proxy_ssl_ciphers HIGH:!DH;
+            proxy_pass https://{{ include "aios.fqdn" (list . "ml-gateway-service-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z-_]+/v2/monitoring_services/quality/monitor_instances/[0-9a-zA-Z-] {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "feedback-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z-_]+/v2/monitor_instances/[0-9a-zA-Z-]+/(measurements|metrics) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z-_]+/v2/data_sets/[0-9a-zA-Z-]+/records {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z-_]+/v2/aios_payload_logging_service_api/data_set_tables {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z-_]+/v2/query/graphql {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z-_]+/v2prv/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+
+        location /auth/jwtpublic {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            set $icp4dnginx https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list .) }}.svc.{{ .Values.clusterDomain }};
+            proxy_pass $icp4dnginx;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/preauth/validateAuth {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            set $icp4dnginx https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list .) }}.svc.{{ .Values.clusterDomain }};
+            proxy_pass $icp4dnginx;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /wml/(?<baseuri>.*) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            set $icp4dwml https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list .) }}.svc.{{ .Values.clusterDomain }};
+            proxy_pass $icp4dwml/$baseuri?$args;
+            proxy_read_timeout 10m;
+        }
+
+        location /v3/wml_instances {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            set $icp4dwml https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list .) }}.svc.{{ .Values.clusterDomain }};
+            proxy_pass $icp4dwml;
+            proxy_read_timeout 10m;
+        }
+
+        location /v3/scoring/online {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            set $icp4dwml https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list .) }}.svc.{{ .Values.clusterDomain }};
+            proxy_pass $icp4dwml;
+            proxy_read_timeout 10m;
+        }
+
+        location /v4/functions {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            set $icp4dwml https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list . ) }}.svc.{{ .Values.clusterDomain }};
+            proxy_pass $icp4dwml;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/service_bindings/[0-9a-zA-Z-]+/subscriptions/[0-9a-zA-Z-]+/drift_configurations {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "drift-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/service_bindings/[0-9a-zA-Z-]+/subscriptions/[0-9a-zA-Z-]+/drift_models {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "drift-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /v1/data_marts/[0-9a-zA-Z-]+/service_bindings/[0-9a-zA-Z-]+/subscriptions/[0-9a-zA-Z-]+/drift_tasks {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "drift-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/model_drifts/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "drift-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v1/orchestration_notifications {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "notification-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/subscriptions/risk_evaluation_status {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "mrm-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/subscriptions/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/risk_evaluation_status {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "mrm-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitoring_services/mrm/monitor_instances/[0-9a-zA-Z-] {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "mrm-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /v2/mrm {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "mrm-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitoring_services/drift/monitor_instances/[0-9a-zA-Z-] {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "drift-svc") }}:9443; #drift
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitoring_services/correlations/monitor_instances/[0-9a-zA-Z-] {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "bkpicombined-svc") }}:9443; #Correlations Framework
+            proxy_read_timeout 10m;
+        }
+
+        location /openscale/v2/correlations {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "bkpicombined-svc") }}:9443; #Correlations Framework
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitoring_services/[_0-9a-zA-Z-]+/monitor_instances/[0-9a-zA-Z-] {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "bkpicombined-svc") }}:9442; #KPI Manager Service
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitor_instances/[0-9a-zA-Z-]+/runs {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "bkpicombined-svc") }}:9441; #Monitoring Manager Service
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/aios_kpi_manager_service/business_applications/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "bkpicombined-svc") }}:9442; #KPI Manager Service
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitoring_services/quality/monitor_instances/[0-9a-zA-Z-] {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "feedback-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/measurements {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitor_instances/[0-9a-zA-Z-]+/(measurements|metrics) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/data_sets/[0-9a-zA-Z-]+/(records|requests) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/aios_payload_logging_service_api/(data_set_tables|data_sets) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitor_instances/[0-9a-zA-Z-]+/runs {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "bkpicombined-svc") }}:9441; #Monitoring Manager Service
+            proxy_read_timeout 10m;
+        }
+        
+        location ~ /[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2prv/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/query/graphql {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/(secrets|data_marts|service_providers|subscriptions|feature_configurations|monitor_definitions|monitor_instances|business_applications|data_sets|integrated_systems|operational_spaces) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitoring_services/quality/monitor_instances/[0-9a-zA-Z-] {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "feedback-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/measurements {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/monitor_instances/[0-9a-zA-Z-]+/(measurements|metrics) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/data_marts/[0-9a-zA-Z-]+/buckets {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "datamart-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/data_sets/[0-9a-zA-Z-]+/(records|requests) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/aios_payload_logging_service_api/(data_set_tables|data_sets) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "payload-logging-api-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2prv/ {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/query/graphql {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location ~ /openscale/[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+-[0-9a-zA-Z]+/v2/(secrets|data_marts|service_providers|subscriptions|feature_configurations|monitor_definitions|monitor_instances|business_applications|data_sets|integrated_systems|operational_spaces) {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+
+        location /openscale/ibm/v2/out_of_the_box_monitors {
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $http_host;
+            proxy_pass https://{{ include "aios.fqdn" (list . "configuration-svc") }}:9443;
+            proxy_read_timeout 10m;
+        }
+      }
+    }

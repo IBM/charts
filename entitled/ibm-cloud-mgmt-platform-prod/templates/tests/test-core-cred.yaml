@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: core-cb-cred-svc-test
+  labels:
+    name: core-cb-cred-svc-test
+{{ include "core.test-labels" .  | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+{{ include "core.nodeaffinity" . | indent 4 }}
+{{ include "core.securityContext" .  | indent 2 }}
+{{ include "core.imagePullSecrets" .  | indent 2 }}
+  containers:
+  - name: core-cb-cred-svc-test
+  {{- template "isIcp" . -}}
+  {{- if not (.Values.isIcp) }}
+    image: {{ template "core.readConfig" (list . "cb_couchdb") }}
+  {{ else }}
+    image: {{ template "coreicp.readConfig" (list . "cb_couchdb" .Values.imageCredentials.registry) }}
+  {{ end }}
+{{ include "core.container.securityContext" . | indent 4  }}
+    command: ["sh", "-c", "curl http://cb-cred-svc:8000 --verbose"]
+  restartPolicy: Never

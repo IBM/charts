@@ -1,0 +1,3 @@
+{
+  "cnc.rules": "ALERT HighInternalServerErrorRate\n  IF (rate(cnc_frontend_service_api_Compare_response_status_5xx[2m]) + rate(cnc_frontend_service_api_EC_response_status_5xx[2m]) + rate(cnc_frontend_service_api_PDF_response_status_5xx[2m]) + rate(cnc_frontend_service_api_Tables_response_status_5xx[2m])) > 0.9\n  FOR 1m\n  LABELS {\n    severity=\"critical\"\n  }\n  ANNOTATIONS {\n    SUMMARY = \"{{$labels.app}}-{{$labels.instance}}: High error response rate detected\",\n    DESCRIPTION = \"{{$labels.app}}-{{$labels.instance}}: Error response rate is above 90% (current value is: {{ $value }})\"\n  }\n"
+}

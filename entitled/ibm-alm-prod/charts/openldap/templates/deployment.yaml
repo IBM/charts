@@ -1,0 +1,91 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      {{- if lt .Values.replicaCount 2.0 }}
+      maxUnavailable: 0
+      {{- end }}
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "sch.names.appName" (list .) }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+{{ include "alm.podSecurityContext" (list . "") | indent 6 }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+      - name: {{ include "sch.names.fullName" (list .) }}
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        ports:
+          - name: ldap-port
+            containerPort: 389
+          - name: ssl-ldap-port
+            containerPort: 636
+        livenessProbe:
+          tcpSocket:
+            port: ldap-port
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+        readinessProbe:
+          tcpSocket:
+            port: ldap-port
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+        resources:
+{{ include "alm.getResources" . | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true  # we need to sudo to start slapd
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          capabilities:
+            add:
+            - SETGID
+            - SETUID
+            - AUDIT_WRITE
+            - DAC_OVERRIDE
+            - NET_BIND_SERVICE
+            drop:
+            - ALL

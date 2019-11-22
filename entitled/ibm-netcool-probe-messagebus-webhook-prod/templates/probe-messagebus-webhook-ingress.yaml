@@ -1,0 +1,61 @@
+{{ if .Values.ingress.enabled -}}
+{{ include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{ $compName :=  .sch.chart.components.probe.name -}}
+{{ $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{ $servicePort := include "ibm-netcool-probe-messagebus-webhook-prod.getportno" . -}}
+{{ $releaseName := .Release.Name -}}
+{{ $uri := .Values.webhook.uri -}}
+{{ $tlsSecretName := .Values.ingress.tls.secretName -}}
+{{- $tlsenabled := include "ibm-netcool-probe-messagebus-webhook-prod.performvalidation" ( . ) -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ include "sch.names.fullCompName" (list .  $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  {{- if .Values.ingress.annotations }}
+  annotations:
+  {{- range $key, $value := .Values.ingress.annotations }}
+    {{ $key }}: {{ $value | quote }}
+  {{- end }}
+    {{ if ne $tlsenabled "httpsOk" -}}
+    ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    {{- end -}}
+  {{- else }}
+    {{- if ne $tlsenabled "httpsOk" }}
+  annotations: 
+    ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    {{- end -}}
+  {{- end }}
+spec:
+  rules:
+  {{- $host := (  .Values.ingress.host ) }}
+  {{- if eq $host ""  }}
+  - http:
+      paths:
+      - path: {{ include "ibm-netcool-probe-messagebus-webhook-prod.getFinalURI" . }}
+        backend:
+          serviceName: {{ $serviceName }}
+          servicePort: {{ $servicePort }}
+  {{- else }}
+  - host: {{ $releaseName }}.{{ $host }}
+    http:
+      paths:
+      - path: {{ include "ibm-netcool-probe-messagebus-webhook-prod.getFinalURI" . }}
+        backend:
+          serviceName: {{ $serviceName }}
+          servicePort: {{ $servicePort }}
+  {{- if eq $tlsenabled "httpsOk" }}
+  tls:
+  - hosts:
+    - {{ printf "%s%s%s" $releaseName "." $host }}
+    {{- if $tlsSecretName }}
+    secretName: {{ $tlsSecretName }}
+    {{- else }}
+    secretName: {{ $serviceName }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
+{{- end -}}

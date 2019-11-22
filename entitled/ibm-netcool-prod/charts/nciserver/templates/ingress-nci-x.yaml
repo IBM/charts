@@ -1,0 +1,49 @@
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{ $nodeCount := .Values.global.nciservers.replicaCount | int -}}
+{{ $global := . }}
+{{- range $i := until $nodeCount }}
+---
+{{ $externalHostname := printf "nci-%d.%s.%s" $i $global.Release.Name $global.Values.global.cluster.fqdn }}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $global.Release.Name }}-nci-{{ $i }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $global "") | indent 4 }}
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+    ingress.kubernetes.io/proxy-body-size: "0"
+    ingress.kubernetes.io/proxy-read-timeout: "{{ $global.Values.ingress.proxyReadTimeout }}"
+    ingress.kubernetes.io/proxy-send-timeout: "{{ $global.Values.ingress.proxySendTimeout }}"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "{{ $global.Values.ingress.proxyReadTimeout }}"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "{{ $global.Values.ingress.proxySendTimeout }}"
+spec:
+  tls:
+  - secretName: {{ $global.Release.Name }}-nci-{{ $i }}-tls-secret
+    hosts:
+    - {{ $externalHostname }}
+  rules:
+  - host: {{ $externalHostname }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ $global.Release.Name }}-nci-{{ $i }}
+          servicePort: {{ $global.Values.impactcore.internal.nameserverPort }}
+{{ end }}

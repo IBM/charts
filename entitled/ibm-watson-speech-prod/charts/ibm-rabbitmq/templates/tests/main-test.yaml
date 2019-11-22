@@ -1,0 +1,44 @@
+{{- include "sch.config.init" (list . "ibmRabbitmq.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name:  {{ include "sch.names.fullCompName" (list . .sch.chart.components.mainTest) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.mainTest) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  restartPolicy: Never
+  serviceAccountName: {{ include "sch.names.fullName" (list .) | quote }}
+{{- if tpl .Values.global.image.pullSecret . }}
+  imagePullSecrets:
+  - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+{{- end }}
+  securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.rabbitPodSecurityContext) | indent 4 }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+  containers:
+  - name: "main-test"
+    image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.rabbitmq.image.name }}:{{ .Values.rabbitmq.image.tag }}"
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 10m
+      limits:
+        memory: 128Mi
+        cpu: 50m
+    imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+    securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.rabbitContainerSecurityContext) | indent 6 }}
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+    env:
+      - name: RABBITMQ_HOST
+        value: {{ include "sch.names.fullCompName" (list . .sch.chart.components.service) | quote }}
+      - name: RABBITMQ_PORT
+        value: "{{ .Values.rabbitmqManagerPort }}"
+    command: ["sh", "-c", "curl -k https://$RABBITMQ_HOST:$RABBITMQ_PORT"]

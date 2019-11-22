@@ -1,0 +1,48 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.dsxlMl) -}}
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: mldeployment
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: mldeployment-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: mldeployment-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: wml-ml
+        component: mldeployment
+        run: mldeployment-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: ml-deployment-container
+        image: {{ .Values.mlDeploymentContainer.image.repository }}:{{ .Values.mlDeploymentContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.mlDeploymentContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 12551
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /v2/deployments/heartbeat
+            port: 12551
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /v2/deployments/heartbeat
+            port: 12551
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+{{- end }}

@@ -1,0 +1,179 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: camservice
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  # DO NOT modify this conditional check
+  {{ if eq (.Values.enableHA|quote|lower) "\"true\"" }}
+  replicas: 2
+  {{ else }}
+  replicas: 1
+  {{ end }}
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      name: camservice
+  template:
+    metadata:
+      labels:
+        name: camservice
+{{ include "cam.labels" .  | indent 8 }}
+      annotations:
+{{ include "cam.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets/configmaps change
+        checksums/mysql-username: "{{ .Values.secrets.mysqlUsername | b64enc | sha256sum }}"
+        checksums/mysql-password: "{{ .Values.secrets.mysqlKey | b64enc | sha256sum }}"
+        {{ end }}
+    spec:
+      affinity:
+      # DO NOT modify this conditional check
+      {{ if and (eq (.Values.enableHA|quote|lower) "\"true\"") (not (eq (.Values.enableDevSettings|quote|lower) "\"true\"")) }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: name
+                operator: In
+                values:
+                - camservice
+            topologyKey: "kubernetes.io/hostname"
+      {{ end }}
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      containers:
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+      - image: {{ template "cam.readConfig" (list . "cam_services") }}
+      {{ else }}
+      - image: {{ template "camicp.readConfig" (list . "cam_services" .Values.imageCredentials.registry) }}
+      {{ end }}
+{{ include "cam.container.securityContext.NonRoot" . | indent 8  }}
+        name: cam-service
+        resources:
+          # Maximum limits
+          limits:
+            # DO NOT modify this conditional check
+            {{ if eq (.Values.enableHA|quote|lower) "\"true\"" }}
+            memory: "1G"
+            {{ else }}
+            memory: {{ include "deployClassSingleConfig" (list . "cam_services_limits_mem" (.Values.deploymentClass|lower)) }}
+            {{ end }}
+            cpu: {{ include "deployClassSingleConfig" (list . "cam_services_limits_cpu" (.Values.deploymentClass|lower)) }}
+          # Requests (for K8 pod placement)
+          requests:
+            cpu: {{ include "deployClassSingleConfig" (list . "cam_services_requests_cpu" (.Values.deploymentClass|lower)) }} # force cpu-request to zero (otherwise defaults to limits def)
+          # DO NOT modify this conditional check
+          {{ if eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+            memory: "0" # DEV override
+          {{ else }}
+            # DO NOT modify this conditional check
+            {{ if eq (.Values.enableHA|quote|lower) "\"true\"" }}
+            memory: "1G"
+            {{ else }}
+            memory: {{ include "deployClassSingleConfig" (list . "cam_services_requests_mem" (.Values.deploymentClass|lower)) }}
+            {{ end }}
+          {{ end }}
+        readinessProbe:
+            tcpSocket:
+              port: cam-serivce
+            initialDelaySeconds: 5
+            periodSeconds: 10
+        livenessProbe:
+            httpGet:
+              path: /api/health_check/
+              port: cam-serivce
+            initialDelaySeconds: 60
+            periodSeconds: 1800
+            failureThreshold: 4
+            timeoutSeconds: 20
+        env:
+          - name: APP_SETTINGS
+            value: production
+          - name: CAM_SECRET_KEY
+            value: "H5YT3357eN@X&X2#CWuA6*mKWHr%yWVZ"
+          - name: DB_HOST
+            value: "mariadb"
+          - name: DB_PORT
+            # DO NOT modify this conditional check
+            {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+            value: "{{ .Values.secrets.mariadbServicePort}}"
+            {{ else }}
+            value: "{{ .Values.secrets.mariadbServicePort}}"
+            {{ end }}
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                key: mysql.username
+                name: mysql-username
+          - name: DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: mysql-password
+                key: mysql.key
+          - name: DB_NAME
+            value: CAM
+          - name: DB_KEY
+            value: /var/www/cam-services/maria_certs/maria_dev.key
+          - name: DB_CRT
+            value: /var/www/cam-services/maria_certs/maria_dev.crt
+          # DO NOT modify this conditional check
+          {{ if not (eq (.Values.enableDevSettings|quote|lower) "\"true\"") }}
+          # CAM_URL used for slack integration to identify server
+          - name: CAM_URL
+            value: {{ .Values.apiGatewayUrl }}
+          # CAM_SLACK_WEBHOOK_URL for slack integration
+          - name: CAM_SLACK_WEBHOOK_URL
+            valueFrom:
+              secretKeyRef:
+                name: slack-hooks
+                key: slackURL
+          {{ end }}
+          - name: ORCHESTRATOR2
+            value: "http://cam-orch-v2:4081"
+          - name: TASKMANAGER
+            value: "http://cam-task-mgr:4041"
+          - name: CONFIG_SERVICE
+            value: "http://cb-core-configuration-service.{{ .Values.coreNamespace }}:5054"
+          - name: NOTIFICATION_SERVICE
+            value: "http://cb-notification-api.{{ .Values.coreNamespace }}:5056"
+          - name: AUDIT_SERVICE
+            value: "http://cb-audit-service.{{ .Values.coreNamespace }}:80"
+          - name: AUTH_SERVICE
+            value: "http://cb-core-authorization-service.{{ .Values.coreNamespace }}:4004"
+          - name: CB_CRED_HOST
+            value: "http://cb-cred-svc.{{ .Values.coreNamespace }}"
+          - name: CB_CRED_PORT
+            value: "8000"
+          - name: AUTH_INTERNAL_SERVICE
+            value: "https://cb-core-auth-internal.{{ .Values.coreNamespace }}:4001"
+
+
+        ports:
+        - containerPort: 8000
+          name: cam-serivce
+        volumeMounts:
+        - name: cm-keystore-file
+          mountPath: /var/www/cam-services/maria_certs/
+
+      volumes:
+      - name: cm-keystore-file
+        secret:
+          secretName: grav-certificates
+          items:
+          - key: maria_dev.crt
+            path: maria_dev.crt
+          - key: maria_dev.key
+            path: maria_dev.key
+      # DO NOT modify this conditional check
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

@@ -1,0 +1,25 @@
+{{- if .Values.global.privilegedRbac.create -}}
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $privilegedRoleName := include "sch.names.fullCompName" (list . .sch.chart.components.sharedPrivilegedRole.name) -}}
+{{- $privilegedRoleBindingName := include "sch.names.fullCompName" (list . .sch.chart.components.sharedPrivilegedRoleBinding.name) -}}
+{{- $privilegedSvcAccName := include "ibmWatsonDiscovery.privilegedServiceAccountName" . -}}
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name:  {{ $privilegedRoleBindingName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-4"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+subjects:
+- kind: ServiceAccount
+  name: {{ $privilegedSvcAccName }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name:  {{ $privilegedRoleName }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end -}}

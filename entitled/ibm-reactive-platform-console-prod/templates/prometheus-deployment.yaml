@@ -1,0 +1,265 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.prometheus.compName -}}
+{{- $name := .sch.chart.components.prometheus.deployment.name -}}
+
+kind: Deployment
+apiVersion: {{ .Values.deploymentApiVersion }}
+metadata:
+  labels:
+    appName: {{ $name }}-{{ .Release.Name }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  name: prometheus-server
+spec:
+  replicas: 1
+
+  strategy:
+    # Always Recreate to ensure the PVs get released. It's not possible to have two replicas sharing a PV during deployment.
+    type: Recreate
+    # Needed for helm upgrade to succeed.
+    rollingUpdate: null
+
+  selector:
+    matchLabels:
+      run: prometheus
+      component: server
+
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: {{ template "name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: prometheus
+        # Deprecated - these should be removed eventually. Kept to support upgrades with the old labels.
+        run: prometheus
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        {{ .Values.prometheusDomain }}/scrape: "true"
+        checksum/console-api-config: {{ (.Files.Glob "console-api/*").AsConfig | sha256sum }}
+        checksum/bare-prometheus-config: {{ include (print $.Template.BasePath "/prometheus-configmap-prom.yaml") . | sha256sum }}
+
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "ibm-reactive-platform-console-prod.nodeaffinity" . | indent 6 }}
+      serviceAccountName: prometheus-server
+
+      securityContext:
+      {{ if .Values.podUID }}
+        runAsNonRoot: true
+        runAsUser: {{ .Values.podUID }}
+      {{ end }}
+
+      initContainers:
+        - name: setup
+          image: {{ .Values.alpineImage }}:{{ .Values.alpineVersion }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podUID }} 
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: {{ default .Values.defaultCPURequest }}
+              memory: {{ default .Values.defaultMemoryRequest }}
+            limits:
+              memory: {{ default .Values.defaultMemoryLimit }}
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - mkdir -p /etc/config/rules;
+              cp /etc/bare/prometheus.yml /etc/config/
+          volumeMounts:
+            - mountPath: /etc/config
+              name: config-volume
+            - mountPath: /etc/bare
+              name: bare-prometheus
+
+        # For vanilla K8s clusters, we need to match prometheus-data permissions to the prometheus user.
+        # In prometheus 2.x, this is `65534`.
+        # For Openshift the below will fail, but we can safely ignore it as Openshift remaps the user itself.
+        - name: change-prometheus-data-volume-ownership
+          image: {{ .Values.busyboxImage }}:{{ .Values.busyboxVersion }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podUID }} 
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: {{ default .Values.defaultCPURequest }}
+              memory: {{ default .Values.defaultMemoryRequest }}
+            limits:
+              memory: {{ default .Values.defaultMemoryLimit }}
+          command:
+            - sh
+            - -c
+            - "chown -Rc 65534:65534 /data 2>/dev/null || true"
+          volumeMounts:
+            - name: prometheus-data-volume
+              mountPath: /data
+              subPath: prometheus-data
+
+      {{ if .Values.imageCredentials.credentials }}
+      imagePullSecrets:
+      - name: {{ .Values.imageCredentials.credentials }}
+      {{ end }}
+
+      containers:
+        - name: console-api
+          image: {{ tpl .Values.esMonitorImage . }}:{{ .Values.esMonitorVersion }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podUID }} 
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: {{ default .Values.defaultCPURequest .Values.esMonitorCPURequest }}
+              memory: {{ default .Values.defaultMemoryRequest .Values.esMonitorMemoryRequest }}
+            limits:
+              memory: {{ default .Values.defaultMemoryLimit .Values.esMonitorMemoryLimit }}
+          args:
+            - --configPath=/etc/config/
+            - --storagePath=/monitor-data/
+            - --staticConfig=/etc/console-api/static-rules.yml
+            - --defaultMonitorsFile=/etc/console-api/default-monitors.json
+            - --prometheusTemplate=/etc/console-api/prometheus.yml
+            - --prometheusDomain={{ .Values.prometheusDomain }}
+            - --alertmanagers={{ .Values.alertManagers }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+            - name: console-api-volume
+              mountPath: /etc/console-api
+            - name: prometheus-data-volume
+              mountPath: /monitor-data
+              subPath: monitor-data
+          ports:
+            - name: metrics
+              containerPort: 8180
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /status
+              port: 8180
+              scheme: HTTP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /status
+              port: 8180
+              scheme: HTTP
+            initialDelaySeconds: 30
+
+        - name: console-api-configmap-reload
+          image: {{ tpl .Values.configMapReloadImage . }}:{{ .Values.configMapReloadVersion }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podUID }} 
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: {{ default .Values.defaultCPURequest .Values.configmapReloadCPURequest }}
+              memory: {{ default .Values.defaultMemoryRequest .Values.configmapReloadMemoryRequest }}
+            limits:
+              memory: {{ default .Values.defaultMemoryLimit .Values.configmapReloadMemoryLimit }}
+          args:
+          - --volume-dir=/etc/console-api
+          - --webhook-url=http://127.0.0.1:8180/reload
+          volumeMounts:
+          - name: console-api-volume
+            mountPath: /etc/console-api
+
+        - name: prometheus-server
+          image: {{ tpl .Values.prometheusImage . }}:{{ .Values.prometheusVersion }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podUID }} 
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: {{ default .Values.defaultCPURequest .Values.prometheusCPURequest }}
+              memory: {{ default .Values.defaultMemoryRequest .Values.prometheusMemoryRequest }}
+            limits:
+              memory: {{ default .Values.defaultMemoryLimit .Values.prometheusMemoryLimit }}
+          args:
+            - --config.file=/etc/config/prometheus.yml
+            - --storage.tsdb.path=/data
+            - --web.console.libraries=/etc/prometheus/console_libraries
+            - --web.console.templates=/etc/prometheus/consoles
+            - --web.enable-lifecycle
+            {{ if .Values.esConsoleURL -}}
+            - --web.external-url={{ .Values.esConsoleURL }}/service/prometheus
+            - --web.route-prefix=/
+            {{ end }}
+          ports:
+            - name: metrics
+              containerPort: 9090
+
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            timeoutSeconds: 30
+
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            timeoutSeconds: 30
+            initialDelaySeconds: 30
+
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+              readOnly: true
+            - name: prometheus-data-volume
+              mountPath: /data
+              subPath: prometheus-data
+
+      terminationGracePeriodSeconds: 300
+      volumes:
+        - name: config-volume
+          emptyDir: {}
+        - name: console-api-volume
+          configMap:
+            name: console-api
+        - name: prometheus-data-volume
+          {{ if .Values.usePersistentVolumes }}
+          persistentVolumeClaim:
+            claimName: prometheus-storage
+          {{ else }}
+          emptyDir: {}
+          {{ end }}
+        - name: bare-prometheus
+          configMap:
+            name: bare-prometheus

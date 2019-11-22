@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-iira-ml-prod.fullname" . }}
+  {{ if .Values.global.nameSpaceEnabled }}
+  namespace: {{ toYaml .Values.global.namespace }}
+  {{ end }}
+  labels:
+    app: {{ template "ibm-iira-ml-prod.name" . }}
+    chart: {{ template "ibm-iira-ml-prod.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-iira-ml-prod.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-iira-ml-prod.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "ibm-iira-ml-prod.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+      {{- include "ibm-iira-ml-prod.product-metering" . | indent 8 }}
+    spec:
+      volumes:
+        - name: iira-internal-tls-ml
+          secret:
+            secretName: iira-internal-tls
+            items:
+              - key: iira-ml.pem
+                path: iira-ml.pem
+              - key: iira-ml.crt
+                path: iira-ml.crt
+              - key: iira-ml.key
+                path: iira-ml.key
+              - key: iira-ca.crt
+                path: iira-ca.crt
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true 
+      affinity: 
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          serviceAccount: cpd-viewer-sa
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          env:
+            - name: use_old_model
+              value: "yes"
+          ports:
+            - name: https
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - curl -X GET -k https://localhost:8000/api/v2/metrics
+            initialDelaySeconds: 100
+            timeoutSeconds: 5
+            periodSeconds: 30
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - curl -X GET -k https://localhost:8000/api/v2/metrics
+            initialDelaySeconds: 100
+            timeoutSeconds: 5
+            periodSeconds: 30
+            failureThreshold: 30
+          volumeMounts:
+            - name: iira-internal-tls-ml
+              mountPath: "/etc/pki/tls/certs"
+              readOnly: true
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+
+

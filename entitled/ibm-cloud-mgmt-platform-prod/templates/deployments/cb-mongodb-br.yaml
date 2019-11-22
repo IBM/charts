@@ -1,0 +1,116 @@
+{{- if eq (.Values.enableBackups|quote|lower) "\"true\"" -}}
+{{ if ne (.Values.enableExternalMongoDB|quote|lower) "\"true\"" }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-mongodb-br
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cb-mongodb-br # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets change
+        checksums/mongodb.password: "{{ .Values.secrets.mongodb.password | b64enc | sha256sum }}"
+        checksums/s3.url: "{{ .Values.secretsS3Url | b64enc |sha256sum }}"
+        checksums/s3.access_key_id: "{{ .Values.secretsS3AccessKeyId | b64enc | sha256sum }}"
+        checksums/s3.secret_access_key: "{{ .Values.secretsS3SecretAccessKey | b64enc | sha256sum }}"
+        checksums/encryption_passphrase: "{{ .Values.secretsBackupPassphrase | b64enc | sha256sum }}"
+        {{ end }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+      containers:
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        - image: {{ template "core.readConfig" (list . "cb_mongodb_br") }}
+        {{ else }}
+        - image: {{ template "coreicp.readConfig" (list . "cb_mongodb_br" .Values.imageCredentials.registry) }}
+        {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop:
+              - ALL
+          name: cb-mongodb-br
+          ports:
+            - containerPort: 5000
+          env:
+            - name: S3_URL
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: s3.url
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: s3.access_key_id
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: s3.secret_access_key
+            - name: BACKUP_PASSPHRASE
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: encryption_passphrase
+            # mongodb_HOSTS -- comma separated list of hostnames
+            - name: MONGODB_HOSTS
+              value: "mongodb"
+            # For each mongodb Host, Need: mongodb_*_USER, mongodb_*_PASSWORD, mongodb_*_PORT
+            # Where '*' is the mongodb hostname (in uppercase)
+            - name: MONGODB_MONGODB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: MONGODB_MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+            - name: MONGODB_MONGODB_PORT
+              value: "27017"
+            # K8_CLUSTER and K8_NAMESPACE to uniquely identify this system
+            - name: K8_CLUSTER
+              value: "{{ .Values.k8Cluster }}"
+            - name: K8_NAMESPACE
+              value: "{{ .Release.Namespace }}"
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          resources:
+{{ include "deployClassConfig" (list . "cb_mongodb_br") | indent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthcheck/isready
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 60
+      restartPolicy: Always
+{{ end }}
+{{ end }}

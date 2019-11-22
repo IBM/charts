@@ -1,0 +1,78 @@
+{{- include "sch.config.init" (list . "ibm-dods-prod.sch.chart.config.values") -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ddScenarioApi.compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioApi.compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.ddScenarioApi.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioApi.compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioApi.compName) | indent 8 }}
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}      
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      {{- if .Values.global.serviceAccount }}
+      serviceAccountName: {{ .Values.global.serviceAccount }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "sch.security.securityContext" (list . .sch.chart.securityContextPodWAS) | indent 6 }}
+      containers:
+      - name: {{ .sch.chart.components.ddScenarioApi.compName }}-container
+        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.ddScenarioApi.image.repository }}:{{ .Values.ddScenarioApi.image.tag }}-{{ .Values.global.architecture }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        {{- include "sch.security.securityContext" (list . .sch.chart.securityContextContainerNoRoot) | indent 8 }}     
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        env:
+          - name: PROPERTY_PREFIX
+            value: "k8s_local_"
+          - name: WDP_SERVICE_ID_CREDENTIALS
+            valueFrom:
+              secretKeyRef:
+                name: wdp-service-id
+                key: service-id-credentials
+          - name: WDP_SERVICE_ID
+            valueFrom:
+              secretKeyRef:
+                name: wdp-service-id
+                key: service-id
+          - name: rabbitmq__primaryUrl
+            valueFrom:
+              secretKeyRef:
+                key: rabbitmq-url.txt
+                name: rabbitmq-url
+        resources:
+{{ toYaml .Values.ddScenarioApi.resources | indent 10 }}
+        ports:
+        - containerPort: 9443
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 2          
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 2          
+      volumes:
+        {{- include "ibm-dods-prod.user-home-pvc" .  | indent 6 }}

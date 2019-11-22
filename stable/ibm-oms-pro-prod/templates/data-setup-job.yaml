@@ -1,0 +1,102 @@
+# Licensed Materials - Property of IBM
+# IBM Order Management Software (5725-D10)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if eq (.Values.global.license | lower) "accept" }}
+{{- if and (.Values.datasetup.loadFactoryData) (eq .Values.datasetup.loadFactoryData "install") }}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+{{- $sysOverridesInitPath := "/opt/ssfs/system_overrides.properties.init" }}
+{{- $sysOverridesPath := "/opt/ssfs/runtime/properties/system_overrides.properties" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "om-chart.fullname" . }}-datasetup
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+{{- include "om-chart.nodeaffinity.onlyArch" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName | default "default" }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: {{ .Values.global.persistence.securityContext.fsGroup | default 0 }}
+        supplementalGroups: [{{ .Values.global.persistence.securityContext.supplementalGroup | default 0 }}]
+      restartPolicy: "Never"
+      containers:
+        - name: {{ template "om-chart.fullname" . }}-datasetup
+          image: "{{ .Values.global.image.repository }}/{{ .Values.omserver.image.name }}:{{ .Values.omserver.image.tag }}"
+          imagePullPolicy: {{ .Values.omserver.image.pullPolicy }}
+          env:
+          - name: OM_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: OM_RELEASE
+            value: {{ .Release.Name }}
+          - name: dbpassword
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.appSecret }}
+                key: dbpassword
+          - name: LOG_FORMAT
+            value: {{ .Values.global.log.format | default "json" }}
+{{- with .Values.global.envs }}
+{{ toYaml . | indent 10 }}
+{{- end }}
+          securityContext:
+            privileged: false
+            runAsUser: 1000
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          command: ["/bin/bash", "-c"]
+          {{- $commonArg := printf "%s %s %s %s" "/opt/ssfs/evaluateEnvs.sh" $sysOverridesInitPath $sysOverridesPath "&& "}}
+          args:
+          - '{{ $commonArg }} 
+          /opt/ssfs/runtime/docker-samples/kubernetes/bin/init.runtime.sh {{ .Values.datasetup.mode | default "create" }} && touch /shared/datasetup.complete'
+          volumeMounts:
+            - name: config
+              mountPath: "{{ $sysOverridesInitPath }}"
+              subPath: system_overrides.properties
+            - name: config
+              mountPath: "/opt/ssfs/evaluateEnvs.sh"
+              subPath: evaluateEnvs.sh
+            - name: {{ .Values.global.persistence.claims.name }}
+              mountPath: "/shared"
+            # - name: host-timezone
+            #   mountPath: /etc/localtime
+      volumes:
+        - name: config
+          configMap:
+            name: {{ template "om-chart.fullname" . }}-config
+            items:
+            - key: evaluateEnvs.sh
+              path: evaluateEnvs.sh
+              mode: 0754
+            - key: system_overrides.properties
+              path: system_overrides.properties
+        - name: secret
+          secret:
+            secretName: {{ .Values.global.appSecret }}
+        - name: {{ .Values.global.persistence.claims.name }}
+          persistentVolumeClaim:
+            claimName: {{ template "om-chart.fullname" . }}-{{ .Values.global.persistence.claims.name | lower }}
+        # - name: host-timezone
+        #   hostPath:
+        #     path: /etc/localtime
+{{- end }}
+{{- end }}

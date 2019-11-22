@@ -1,0 +1,175 @@
+# DO NOT modify this conditional check
+{{ if not (eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"") }}
+{{- template "isIcp" . -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: mariadb-deploy
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      name: mariadb-deploy
+  template:
+    metadata:
+      labels:
+        name: mariadb-deploy
+{{ include "cam.labels" .  | indent 8 }}
+      annotations:
+{{ include "cam.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets/configmaps change
+        checksums/mysql-username: "{{ .Values.secrets.mysqlUsername | b64enc | sha256sum }}"
+        checksums/mysql-password: "{{ .Values.secrets.mysqlKey | b64enc | sha256sum }}"
+        {{ end }}
+        # increment this when the configMap changes
+        checksums/mariadb-config: "3"
+    spec:
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      initContainers:
+        {{- if not (.Values.isIcp) }}
+        - image: {{ template "cam.readConfig" (list . "k8s_mariadb") }}
+        {{ else }}
+        - image: {{ template "camicp.readConfig" (list . "k8s_mariadb" .Values.imageCredentials.registry) }}
+        {{ end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add:
+              - CHOWN
+              - DAC_OVERRIDE
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+          name: mysql-upgrade
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-password
+                  key: mysql.key
+          command: ['bash', "-c", "/usr/local/bin/run-mysql-upgrade.sh"]
+          volumeMounts:
+            - name: mariadb-data
+              mountPath: /var/lib/mysql
+            - name: mariadb-tmp
+              mountPath: /tmp
+            - name: maria-cert
+              mountPath: /etc/mysql/certs
+            {{ if not (eq (.Values.enableDevSettings|quote|lower) "\"true\"") }}
+            - name: mariadb-config
+              mountPath: /etc/mysql/conf.d
+            {{ end }}
+
+      containers:
+      # DO NOT modify this conditional check
+      {{ if eq (.Values.mysqlReplication|quote|lower) "\"true\"" }}
+      {{- if not (.Values.isIcp) }}
+      - image: {{ template "cam.readConfig" (list . "ha_mariadb") }}
+      {{ else }}
+      - image: {{ template "camicp.readConfig" (list . "ha_mariadb" .Values.imageCredentials.registry) }}
+      {{ end }}
+      {{ else }}
+      {{- if not (.Values.isIcp) }}
+      - image: {{ template "cam.readConfig" (list . "k8s_mariadb") }}
+      {{ else }}
+      - image: {{ template "camicp.readConfig" (list . "k8s_mariadb" .Values.imageCredentials.registry) }}
+      {{ end }}
+      {{ end }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            add: ["SETFCAP","CHOWN","DAC_OVERRIDE"]
+            drop:
+            - ALL
+        name: mariadb
+        resources:
+          {{ if not (eq (.Values.enableDevSettings|quote|lower) "\"true\"") }}
+{{ include "deployClassConfig" (list . "cb_mariadb") | indent 10 }}
+          {{ end }}
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-password
+              key: mysql.key
+        # DO NOT modify this conditional check
+        {{ if eq (.Values.mysqlReplication|quote|lower) "\"true\"" }}
+        - name: CONFIG_FILE_NAME
+          value: "cam.cnf"
+        - name: REPL_METHOD
+          value: "mysql"
+        - name: SERVER_ID
+          value: "{{ .Values.mysqlServerId }}"
+        {{ if eq .Values.mysqlServerId 1 }}
+        - name: MYSQL_REPL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-password
+              key: mysql.key
+        {{ end }}
+        {{ end }}
+        ports:
+        - containerPort: 3168
+          name: mariadb
+        readinessProbe:
+            tcpSocket:
+              port: 3168
+        livenessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "127.0.0.1", "-P", "3168", "-u", "root",  "-p${MYSQL_ROOT_PASSWORD}", "--skip-ssl"]
+            initialDelaySeconds: 120
+            periodSeconds: 120
+            timeoutSeconds: 10
+            failureThreshold: 4
+        volumeMounts:
+        - name: mariadb-data
+          mountPath: /var/lib/mysql
+        - name: mariadb-tmp
+          mountPath: /tmp
+        - name: maria-cert
+          mountPath: /etc/mysql/certs
+        # DO NOT modify this conditional check
+        {{ if not (eq (.Values.enableDevSettings|quote|lower) "\"true\"") }}
+        - name: mariadb-config
+          mountPath: /etc/mysql/conf.d
+        {{ end }}
+      volumes:
+      - name: mariadb-data
+        persistentVolumeClaim:
+          claimName: mariadb-data-claim
+      - name: mariadb-tmp
+        persistentVolumeClaim:
+          claimName: mariadb-tmp-claim
+      - name: maria-cert
+        secret:
+          secretName: grav-certificates
+          items:
+          - key: maria_dev.crt
+            path: maria_dev.crt
+          - key: maria_dev.key
+            path: maria_dev.key
+          - key: rootca.pem
+            path: rootCA.pem
+      # DO NOT modify this conditional check
+      {{ if not (eq (.Values.enableDevSettings|quote|lower) "\"true\"") }}
+      - name: mariadb-config
+        configMap:
+          name: mariadb-config
+      {{ end }}
+{{ end }}

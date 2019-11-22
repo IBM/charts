@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cam-orch-test
+  labels:
+    name: cam-orch-test
+{{ include "cam.test-labels" .  | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  affinity:
+{{- include "cam.nodeaffinity" . | indent 4 }}
+{{ include "cam.securityContext" .  | indent 2 }}
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 2 }}
+  containers:
+  - name: cam-orch-test
+  {{- template "isIcp" . -}}
+  {{- if not (.Values.isIcp) }}
+    image: {{ template "cam.readConfig" (list . "k8_jumpbox") }}
+  {{ else }}
+    image: {{ template "camicp.readConfig" (list . "k8_jumpbox" .Values.imageCredentials.registry) }}
+  {{ end }}
+{{ include "cam.container.securityContext.NonRoot" . | indent 4  }}
+    command: ["sh", "-c", "curl http://cam-orch-v2:4081"]
+  restartPolicy: Never

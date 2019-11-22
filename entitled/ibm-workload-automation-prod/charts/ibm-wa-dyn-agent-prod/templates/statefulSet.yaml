@@ -1,0 +1,184 @@
+####################################################################
+# Licensed Materials Property of HCL*
+# (c) Copyright HCL Technologies Ltd. 2019. All rights reserved.
+#
+# * Trademark of HCL Technologies Limited
+####################################################################
+
+{{- include "sch.config.init" (list . "waagent.sch.chart.config.values") }}
+{{ $dataPvcName := .Values.persistence.dataPVC.name }}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list .) }}
+{{ $persistentVolumeClaimName := include "sch.names.volumeClaimTemplateName" (list . $dataPvcName $statefulSetName) }}
+{{ $fullName := include "sch.names.fullName" (list .) }}
+{{ $serviceName := include "sch.names.fullName" (list .) }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  updateStrategy: 
+    type: RollingUpdate
+  serviceName: {{ $serviceName }}-h
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "{{ include "sch.names.appName" (list .) }}"
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+        affinity: wa-agent
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}   
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: {{ default 999 .Values.fsGroupId }}  
+        supplementalGroups: [{{ .Values.supplementalGroupId | default 999 }}]
+      serviceAccountName: {{ .Values.global.serviceAccountName | default "default" }}              
+      affinity:
+        #schedule pod on different nodes when possible
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: affinity
+                  operator: In
+                  values:
+                  - wa-agent
+              topologyKey: kubernetes.io/hostname
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }} 
+{{- if .Values.persistence.enabled }}                
+      initContainers:
+      - name: init-config
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: {{ $persistentVolumeClaimName }}
+          mountPath: /tmp/data
+        command: [/opt/wautils/wa_populate_volume.sh]
+        args: ["-s /home/wauser -d /tmp/data"] 
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false     
+          capabilities:
+            drop:
+            - ALL   
+{{- end }}                  
+      containers:
+      - name: {{ .Chart.Name }}
+        readinessProbe:
+          exec:
+            command:
+            - /opt/wautils/wa_probe.sh
+            - agent
+            - readiness
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        livenessProbe:
+          exec:
+            command:
+            - /opt/wautils/wa_probe.sh
+            - agent
+            - liveness
+          initialDelaySeconds: {{ default 60 .Values.agent.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 60
+        env:
+        - name: LICENSE
+          value: {{ .Values.global.license | quote }}
+        - name: LANG
+          value: {{ default "en" .Values.global.language }}
+        - name: WA_DEBUG
+          value: {{ .Values.agent.containerDebug | quote }}        
+        - name: AGT_NAME
+          value: {{ .Values.agent.name | quote }}
+        - name: WA_IS_KUBE
+          value: "true"          
+        - name: WA_DEBUG_SCRIPTS
+          value: "false"           
+        {{- if .Values.agent.tz }}
+        - name: TZ
+          value: {{ .Values.agent.tz | quote }}
+        {{- end }}           
+        {{- if .Values.agent.dynamic.server.mdmhostname }}  
+        - name: SERVERHOSTNAME
+          value: {{ .Values.agent.dynamic.server.mdmhostname | quote }}  
+        - name: SERVERPORT
+          value: {{ .Values.agent.dynamic.server.port | quote }}
+        {{- else }}  
+        - name: SERVERHOSTNAME
+          value: {{ template "waMdm.ServiceName" . }} 
+        - name: SERVERPORT
+          value: "31116"        
+        {{- end }}  
+        {{- if .Values.agent.dynamic.server.bkmhostname }}
+        - name: BKMSERVERHOSTNAME
+          value: {{ .Values.agent.dynamic.server.bkmhostname | quote }}
+        {{- end }}
+        {{- if .Values.agent.dynamic.pools }}
+        - name: POOLS
+          value: {{ .Values.agent.dynamic.pools | quote }}
+        {{- end }}        
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false     
+          capabilities:
+            drop:
+            - ALL          
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+{{- if .Values.persistence.enabled }}
+        volumeMounts:
+        - name: {{ $persistentVolumeClaimName }}
+          mountPath: /home/wauser
+          subPath: wauser
+{{- if .Values.agent.dynamic.useCustomizedCert }}
+        - name: cert-bind-volume
+          mountPath: /opt/wautils/certs
+      volumes:
+      - name: cert-bind-volume
+        secret:
+          defaultMode: 0664
+          secretName: {{ .Values.agent.dynamic.certSecretName }} 
+{{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ $persistentVolumeClaimName }}
+      labels: 
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }} 
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.persistence.dataPVC.size | quote }}
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kube Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.persistence.dataPVC.storageClassName | quote }}
+      {{- else }}
+      # bind to an existing pv.
+      # setting storageClassName to "" disables dynamic provisioning 
+      storageClassName: ""
+        {{- if .Values.persistence.dataPVC.selector.label }}
+      # use selectors in the binding process
+      selector:
+        matchLabels:
+          {{ .Values.persistence.dataPVC.selector.label }}: {{ .Values.persistence.dataPVC.selector.value }}
+        {{- end }}      
+      {{- end }}
+{{- end }}

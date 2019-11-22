@@ -1,0 +1,75 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-db2ese-test"
+  annotations:
+    "helm.sh/hook": test-success
+
+  labels:
+    app.kubernetes.io/name: "{{ .Release.Name }}-db2ese-test"
+    helm.sh/chart: "{{ .Release.Name }}-db2ese-test"
+    app.kubernetes.io/managed-by: "Tiller"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+spec:
+  serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+  containers:
+  - name: {{ .Release.Name }}-db2ese-test
+    image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.db2rtcl.image.name }}-{{- include "image.edition" . -}}:{{ .Values.db2rtcl.image.tag }}
+    imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: true
+      runAsNonRoot: true
+      runAsUser: 1001
+      capabilities:
+        drop:
+        - ALL
+        add: 
+        - NET_BIND_SERVICE
+        - SYS_NICE
+        - DAC_OVERRIDE
+        - FOWNER
+        - FSETID
+        - SETGID
+        - SETUID
+        - NET_RAW
+        - AUDIT_WRITE
+    env:
+    - name: DB2_SERVICE_NAME
+      value: "{{ .Release.Name }}-db2ese-service"
+    - name: DB2_SERVICE_PORT
+      value: "50000"
+    resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "testPod" "resources") | indent 6 }} 
+  affinity:
+    nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 6 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+
+  restartPolicy: Never
+  {{- if .Values.global.image.secret }}  
+  imagePullSecrets:
+    - name: {{ .Values.global.image.secret }}
+  {{- end }}

@@ -1,0 +1,39 @@
+{{ if .Values.mfpserver.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ template "mfp.server.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ template "mfp.server.fullname" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ quote .Release.Name }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}" 
+    app.kubernetes.io/managed-by: {{ quote .Release.Service }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ template "mfp.server.fullname" . }}
+      release: {{ .Release.Name }}
+  policyTypes:
+  - Egress
+  - Ingress
+  ingress:
+  - ports:
+    - port: 9080
+      protocol: TCP
+    - port: 9443
+      protocol: TCP
+    from:
+    - namespaceSelector:
+       matchLabels:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ template "mfp.push.fullname" . }}
+          release: {{ .Release.Name }}
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ template "mfp.analytics.fullname" . }}
+          release: {{ .Release.Name }}
+  egress:
+  - {}
+{{- end }}

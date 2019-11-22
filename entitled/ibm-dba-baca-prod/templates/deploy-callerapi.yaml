@@ -1,0 +1,167 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.callerapi.name }}
+  labels:
+    app: {{ .Values.callerapi.name }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: {{ .Values.callerapi.name }}
+spec:
+  replicas: {{ default "4" .Values.callerapi.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.callerapi.name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: {{ .Values.callerapi.maxUnavailableCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.callerapi.name }}
+        release: {{ .Release.Name }}
+        component: {{ .Values.callerapi.name }}
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+    {{- range $key, $value := .Values.global.annotations }}
+        {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    spec:
+      {{- if .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.global.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end}}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: celery{{ .Values.global.namespace.name }}
+                operator: In
+                values:
+                - "baca"
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ .Values.callerapi.name }}
+              topologyKey: "kubernetes.io/hostname"
+      volumes:
+      - name: log
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.logs.claimname | quote }}
+      - name: secrets
+        secret:
+          secretName: baca-secrets{{ .Values.global.namespace.name }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 51000
+        fsGroup: 51001
+        supplementalGroups:
+          - 51001
+      containers:
+        - name: {{ .Values.callerapi.name }}
+          image: "{{ .Values.callerapi.repository }}:{{ .Values.callerapi.tag }}"
+          securityContext:
+            runAsUser: 51000
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          imagePullPolicy: {{ .Values.callerapi.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+          - name: log
+            mountPath: /var/log/{{ .Values.callerapi.name }}
+            subPath: {{ .Values.callerapi.name }}
+            readOnly: false
+          - name: secrets
+            mountPath: "/etc/certs" # This is the $HOME for celery container
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: LOG_PATH
+              value: /var/log/{{ .Values.callerapi.name }}
+            - name: LOG_LEVEL
+              value: {{ .Values.global.logs.logLevel }}
+            - name: BROKER_URL
+              value: amqps://{{ template "subchart.rabbitmq.fullname" $ }}:5671
+            - name: CERTIFICATE_DIR
+              value: "/etc/certs"
+            - name: SSL_VALIDATE
+              value: {{ .Values.global.sslValidate | quote }}
+            - name: QUEUE
+              value:  {{ .Values.callerapi.queue }}
+            - name: SERVICE_NAME
+              value: {{ .Values.callerapi.serviceName }}
+            - name: PORT
+              value: "8080"
+            - name: BROKER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-user
+            - name: BROKER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-password
+            {{- if $.Values.global.redis.HA }}
+            - name: RESULTS_URL
+              value: "sentinel://celery{{ $.Values.global.namespace.name }}-redis-ha:26379"
+            - name: RESULT_MASTER_NAME
+              value: {{  $.Values.global.redis.masterGroupName | quote }}
+            - name: REDIS_HA
+              value: "true"
+            {{- else }}
+            - name: RESULTS_URL
+              value: rediss://{{ template "subchart.redis.fullname" $ }}-master:6379
+            {{- end}}
+            - name: RESULTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-redis"
+                  key: redis-password
+          livenessProbe:
+            initialDelaySeconds: 60
+            periodSeconds: 300
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            tcpSocket:
+              port: 8080
+          readinessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 300
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command: ["curl", "-X", "GET", "https://0.0.0.0:8080","--insecure"]
+          resources:
+{{ toYaml .Values.callerapi.resources | indent 12 }}
+

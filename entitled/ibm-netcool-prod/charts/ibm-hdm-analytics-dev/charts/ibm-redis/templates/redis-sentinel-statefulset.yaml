@@ -1,0 +1,108 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmRedis.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list . .sch.chart.components.sentinel) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.sentinel) | indent 4 }}
+spec:
+  serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.sentinel) | quote }}
+  replicas: {{ include "ibmRedis.sentinel.replicationFactor" . }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.sentinel) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.sentinel) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.redisPodSecurityContext) | indent 8 }}
+      affinity:
+        {{- if .Values.affinity }}
+{{ .Values.affinity | toYaml | indent 8 }}
+        {{- else }}
+          {{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        {{- end }}
+      serviceAccountName: {{ include "ibmRedis.serviceAccountName" . | quote }}
+{{- if ne .Values.global.image.secret "" }}
+      imagePullSecrets:
+      - name: "{{ .Values.global.image.secret }}"
+      - name: "us-south-redsonja-token"
+{{- end }}
+      containers:
+      - name: sentinel
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote  }}
+        {{- if .Values.sentinel.livenessProbe.enabled}}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.redisContainerSecurityContext) | indent 10 }}
+        livenessProbe:
+          initialDelaySeconds: {{ .Values.sentinel.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.sentinel.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.sentinel.livenessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.sentinel.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.sentinel.livenessProbe.failureThreshold }}
+          exec:
+            command:
+            - redis-cli
+            - "-p"
+            - "26379"
+            - SENTINEL
+            - masters
+        {{- end }}
+        {{- if .Values.sentinel.readinessProbe.enabled}}
+        readinessProbe:
+          initialDelaySeconds: {{ .Values.sentinel.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.sentinel.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.sentinel.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.sentinel.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.sentinel.readinessProbe.failureThreshold }}
+          exec:
+            command:
+            - redis-cli
+            - "-p"
+            - "26379"
+            - SENTINEL
+            - masters
+        {{- end }}
+        resources:
+{{ include "ibmRedis.comp.size.data" (list . "sentinel" "resources") | indent 10 }}
+        env:
+          - name: PODIP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: HELM_RELEASE
+            value: {{ .Release.Name }}
+          - name: SENTINEL
+            value: "true"
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+  {{- if not (tpl .Values.auth.authSecretName . ) }}
+                name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) | quote }}
+  {{- else }}
+                name: {{ tpl .Values.auth.authSecretName . }}
+  {{- end }}
+                key: password
+          - name: REDIS_CHART_PREFIX
+            value: "{{ include "sch.names.fullName" (list .) }}-"
+        ports:
+          - containerPort: 26379

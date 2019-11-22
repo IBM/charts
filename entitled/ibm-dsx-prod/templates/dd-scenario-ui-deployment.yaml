@@ -1,0 +1,65 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: dd-scenario-ui
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: dd-scenario-ui
+    run: dd-scenario-ui-deployment
+spec:
+  replicas: {{ .Values.ddScenarioUi.replicas }}
+  selector:
+    matchLabels:
+      run: dd-scenario-ui-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: dd-scenario-ui
+        run: dd-scenario-ui-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+      - name: dd-scenario-ui-container
+        image: {{ .Values.ddScenarioUi.image.repository }}:{{ .Values.ddScenarioUi.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.ddScenarioUi.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 8449
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /decision-optimization/ping
+            port: 8449
+            scheme: HTTPS
+          initialDelaySeconds: 180
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /decision-optimization/ping
+            port: 8449
+            scheme: HTTPS
+          initialDelaySeconds: 180
+          periodSeconds: 60

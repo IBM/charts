@@ -1,0 +1,170 @@
+{{ if .Values.global.dockerRegistryPrefix }}
+{{ $namePrefix := "post-install-config-job" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $compName := "post-config" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $serviceAccountName := "cpd-editor-sa" -}}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "0"
+spec:
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: {{ $name | quote }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: "aios-kubectl"
+          image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+          resources:
+{{ toYaml .Values.ephemeralPod.resources | indent 12 }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          command: 
+            - "/bin/sh"
+            - "-ec"
+            - |
+              # create add-on configmap in cpd namespace if it doesn't exist
+              set +e
+              
+              cpdNameSpace="{{ .Values.cpd.namespace | default .Release.Namespace }}"
+              if [ "$cpdNameSpace" != "{{ .Release.Namespace }}" ]
+              then
+                echo "Current job only support installation in the same namespace as CPD."
+                # let current installation script handle configuration
+                exit 0
+              fi
+              
+              function log_msg() {
+                echo "["`date +"%Y/%m/%d %r"`"]" $1
+              }
+              
+              # Wait for kafka pods
+              function wait_kafka_ready() {
+                counter=0
+                while true
+                do
+                  count=`kubectl -n {{ .Release.Namespace }} get pods | grep kafka | grep 0/1 | wc -l`
+                  log_msg "Waiting for ${count} kafka pods to be ready"
+                  if [ $count -eq 0 ]
+                  then
+                    break;
+                  fi
+                  counter=$((counter + 1))
+                  if [ $counter -gt 25 ]
+                  then
+                    log_msg "Wait time exceeded."
+                    break;
+                  fi
+                  sleep 20
+                done
+              }
+
+              #configure kafka credentials for wml
+              function configure_wml_kafka() {
+                log_msg "Configuring {{ .Values.wmlKafkaConfigMap }}"
+                kubectl -n $cpdNameSpace get cm {{ .Values.wmlKafkaConfigMap }}
+                # Create configmap for WML
+                if [ $? -eq 0 ]; then
+                  kubectl -n {{ .Release.Namespace }} get secrets {{ template "fullname" . }}-kafka-secrets -o yaml > /tmp/ibm-aios-kafka-secrets.yaml
+                  jks_cert=`cat /tmp/ibm-aios-kafka-secrets.yaml | grep es-cert.jks | cut -c16-`
+                  pem_cert=`cat /tmp/ibm-aios-kafka-secrets.yaml | grep es-cert.pem | cut -c16-`
+                  truststorePass=`cat /tmp/ibm-aios-kafka-secrets.yaml | grep es-truststore-password | cut -c27- | base64 --decode`
+                  decoded_api_key=`cat /tmp/ibm-aios-kafka-secrets.yaml | grep es-api-key | cut -c15- | base64 --decode`
+                  servers=`cat /tmp/ibm-aios-kafka-secrets.yaml | grep es-bootstrap-server | cut -c24- | base64 --decode`
+                  serverList=(`echo $servers | tr ',' '\n'`)
+                  bootstrap_server="\"${serverList[0]}\""
+                  for (( i=1; i<${#serverList[@]}; i++ ))
+                  do
+                    serverEntry=${serverList[i]}
+                    bootstrap_server="${bootstrap_server},\"${serverEntry}\""
+                  done
+                  echo "truststorePass: ${truststorePass}"
+                  echo "bootstrap_server: ${bootstrap_server}"
+                  echo "decoded_api_key: ${decoded_api_key}"
+                  echo "jks_cert: ${jks_cert}"
+                  echo "pem_cert: ${pem_cert}"
+                  echo "commmand: kubectl -n $cpdNameSpace replace -f -"
+                  # replace current configmap
+                  cat <<EOF | kubectl -n $cpdNameSpace replace -f -
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: {{ .Values.wmlKafkaConfigMap }}
+                namespace: ${cpdNameSpace}
+              binaryData:
+                es-cert.jks: ${jks_cert}
+                es-cert.pem: ${pem_cert}
+              data:
+                password.txt: ${truststorePass}
+                kafka-credentials-es.json: |
+                  {
+                  "kafka_brokers_sasl": [
+                    ${bootstrap_server}
+                  ],
+                  "user": "user",
+                  "password": "${decoded_api_key}",
+                  "payload_topic": "aios.payload-logging.scoring"
+                  }
+              EOF
+                  wait_kafka_ready
+                  restart_wml_scoring_services
+                fi
+                log_msg "configure_wml_kafka complete"
+              }
+
+              restart_wml_scoring_services()
+              {
+                log_msg "restart_wml_scoring_services start"
+                kubectl delete pods -n $cpdNameSpace -l wml_types=runtime --include-uninitialized
+                # check one of the runtime pod for event stream loading error
+                mlib_pod=`kubectl -n $cpdNameSpace get pod | grep wml-os-rt-mllib2.2 | head -n 1 | cut -f1 -d\ `
+                if [ ! -z $mlib_pod ]
+                then
+                  kafkaError=`kubectl -n $cpdNameSpace exec $mlib_pod -c runtime-container -- head /opt/ibm/wml-online-scoring/runtimes/spark-2.1/logs/wml-online-scoring-sparkRuntime.log | grep "${WML_KAFKA_ERROR_MSG}" | wc -l`
+                  if [ $kafkaError -eq 1 ]
+                  then
+                    log_msg "WML runtime services unable to load Event Stream credentials. Restarting WML runtime services."
+                    kubectl delete pods -n $cpdNameSpace -l wml_types=runtime --include-uninitialized
+                  fi
+                fi
+                log_msg "restart_wml_scoring_services complete"
+              }
+              
+              configure_wml_kafka
+{{ end }}

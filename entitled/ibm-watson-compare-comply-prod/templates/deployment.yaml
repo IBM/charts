@@ -1,0 +1,96 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.frontend.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ template "totalworkers" . }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  revisionHistoryLimit: 2
+  minReadySeconds: 20
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+{{ include "ibm-watson-compare-comply-prod.securityKeys" . | indent 6 }}
+      {{- if ne .Values.global.imagePullSecretName "" }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+      {{- if .Values.imageOverride }}
+        image: {{ .Values.imageOverride }}
+      {{- else }}
+        image: "{{ .Values.global.icpDockerRepo }}/cnc-ingestion-functions-icp:v1.7.23"
+      {{- end }}
+{{ include "ibm-watson-compare-comply-prod.securityContext" . | indent 8 }}
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: {{ template "totalCpu" . }}
+            memory: {{ template "totalMemory" . }}
+          requests:
+            cpu: {{ template "totalCpu" . }}
+            memory: {{ template "totalMemory" . }}
+        env:
+        - name: MAX_HEAP
+          value: {{ template "serviceMemory" . }}
+        - name: STARTING_HEAP
+          value: {{ template "serviceMemory" . }}
+        volumeMounts:
+          - name: application-config
+            mountPath: "/deployments/config"
+            readOnly: true
+          {{- if .Values.tls.enabled }}
+          - name: certs
+            mountPath: "/config/secrets"
+            readOnly: true
+          {{- end }}
+        livenessProbe:
+          httpGet:
+            path: "/api/health/check"
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          timeoutSeconds: 20
+          periodSeconds: 40
+        readinessProbe:
+          httpGet:
+            path: "/api/ready/check"
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          timeoutSeconds: 20
+          periodSeconds: 2
+          failureThreshold: 1
+      volumes:
+        - name: application-config
+          configMap:
+            name: {{ .Release.Name }}-configmap
+            items:
+            - key: application.properties
+              path: application.properties
+        {{- if .Values.tls.enabled }}
+        - name: certs
+          secret:
+            secretName: {{ .Values.tls.cncTlsSecret }}
+        {{- end }}

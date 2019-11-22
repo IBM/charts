@@ -1,0 +1,83 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: dd-wmq
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: dd-wmq
+    run: dd-wmq-deployment
+spec:
+  replicas: {{ .Values.ddWmq.replicas }}
+  selector:
+    matchLabels:
+      run: dd-wmq-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: dd-wmq
+        run: dd-wmq-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+      - name: dd-wmq-container
+        image: {{ .Values.ddWmq.image.repository }}:{{ .Values.ddWmq.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        volumeMounts:
+        - mountPath: /var/mqm/qmgrs
+          name: dd-wmq-qmgrs
+        - mountPath: /var/mqm/log
+          name: dd-wmq-logs
+        env:
+          - name: NEW_RELIC_LICENSE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: dd-secrets
+                key: NEW_RELIC_LICENSE_KEY
+          - name: NEW_RELIC_APP_NAME
+            value: dd-wmq-wdp
+          - name: OAAS_log_server_ip
+            value: dd-monitor
+          - name: OAAS_wmq_queues_list
+            value: DOCKER
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.ddWmq.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 1414
+          protocol: TCP
+        livenessProbe:
+          tcpSocket:
+            port: 1414
+          initialDelaySeconds: 180
+          periodSeconds: 30
+        readinessProbe:
+          tcpSocket:
+            port: 1414
+          initialDelaySeconds: 180
+          periodSeconds: 60
+      volumes:
+        - name: dd-wmq-qmgrs
+          emptyDir: {}
+        - name: dd-wmq-logs
+          emptyDir: {}

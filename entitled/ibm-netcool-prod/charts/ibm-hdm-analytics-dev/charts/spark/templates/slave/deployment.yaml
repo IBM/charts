@@ -1,0 +1,102 @@
+{{- if .Values.slave.enabled -}}
+{{- $compName := "slave" -}}
+{{- include "sch.config.init" (list . "spark.sch.chart.config.values") -}}
+{{- $deploymentName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- $sparkmasterDeploymentName := include "sch.names.fullCompName" (list . "master") -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  strategy:
+    type: RollingUpdate
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 2
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 4
+{{- else }}
+  replicas: {{ .Values.slave.replicas }}
+{{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      name: {{ $deploymentName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+{{ include "ibmeaspark.spec.security.context" (list .)| indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      initContainers:
+      - name: {{ .Release.Name }}-sparkslave-waitformaster
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.slave.image.name }}:{{ .Values.slave.image.tag }}
+        command: ["sh", "-c", "i=1; until getent hosts {{ $sparkmasterDeploymentName }}; do echo waiting for spark-master $i; i=$((i+1)); sleep 2; done;"]
+{{ include "ibmeaspark.container.security.context" (list .)| indent 8 }}
+        resources:
+{{ include "ibmeaspark.comp.size.data" (list . "sparkslave" "resources") | indent 10 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - image: {{ include "image.docker.repository" . }}/{{ .Values.slave.image.name }}:{{ .Values.slave.image.tag }}
+        resources:
+{{ include "ibmeaspark.comp.size.data" (list . "sparkslave" "resources") | indent 10 }}
+        name: spark-slave
+        imagePullPolicy: {{ .Values.slave.pullPolicy }}
+        ports:
+        - containerPort: 8081
+{{ include "ibmeaspark.container.security.context" (list .)| indent 8 }}
+        env:
+        - name: RUN_SPARK_MASTER
+          value: "false"
+        - name: OUR_SPARK_MASTER
+          value: {{ $sparkmasterDeploymentName }}
+        - name: JAVA_NUM_CPUS
+          value: "1"
+        - name: RUN_SPARK_SLAVE
+          value: "true"
+        - name: RUN_ZOOKEEPER
+          value: "false"
+        - name: CLUSTER_ME
+          value: "true"
+        - name: LOG_LOCATIONS
+          value: "/opt/ioa-work/logs/analyticsdriver.log,/opt/ioa-work/logs/mediationdriver.log"
+          value: sparkmaster
+        - name: SPARK_WORKER_CORES
+{{- if  eq .Values.global.environmentSize  "size0" }}
+          value: "2"
+{{- else if eq .Values.global.environmentSize "size1" }}
+          value: "4"
+{{- else }}
+          value: "2"
+{{- end }}
+        - name: SPARK_WORKER_MEMORY
+{{- if  eq .Values.global.environmentSize  "size0" }}
+          value: "3072m"
+{{- else if eq .Values.global.environmentSize "size1" }}
+          value: "8000m"
+{{- else }}
+          value: "2000m"
+{{- end }}
+        livenessProbe:
+          exec:
+            command:
+            - /usr/bin/liveness.sh
+          initialDelaySeconds: 60
+          periodSeconds: 60
+        readinessProbe:
+          exec:
+            command:
+            - /usr/bin/readiness.sh
+          initialDelaySeconds: 120
+          periodSeconds: 60
+{{ end }}

@@ -1,0 +1,52 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- if .Values.slave.enabled -}}
+{{- $compName := "slave" -}}
+{{- $testCompName := "slave-test" -}}
+{{- include "sch.config.init" (list . "spark.sch.chart.config.values") -}}
+{{- $testName := include "sch.names.fullCompName" (list . $testCompName) -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $testName }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": test-success
+
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+    test: {{ $testName }}
+spec:
+{{ include "ibmeaspark.spec.security.context" (list .)| indent 2 }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+  serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+  containers:
+  - name: {{ $testName }}
+    image: {{ include "image.docker.repository" . }}/{{ .Values.slave.image.name }}:{{ .Values.slave.image.tag }}
+{{ include "ibmeaspark.container.security.context" (list .)| indent 4 }}
+    resources:
+{{ include "ibmeaspark.comp.size.data" (list . "sparktest" "resources") | indent 6 }}
+    command:
+    - /bin/sh
+    - -c
+    - 'echo `curl http://{{ $serviceName }}:8081`'
+    env:
+  restartPolicy: Never
+{{ end }}

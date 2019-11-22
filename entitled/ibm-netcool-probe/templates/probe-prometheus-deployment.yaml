@@ -1,0 +1,188 @@
+{{- if .Values.prometheusProbe.enabled -}}
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.prometheus.name -}}
+
+{{/* Probe config ConfigMap Name*/}}
+{{- $configName :=  .sch.chart.components.prometheus.configmap.config.name -}}
+{{- $configMapName := include "sch.names.fullCompName" (list . $configName) -}}
+
+{{/* Probe rules ConfigMap Name*/}}
+{{- $rulesConfigName :=  .sch.chart.components.prometheus.configmap.rules.name -}}
+{{- $rulesConfigMapName := include "sch.names.fullCompName" (list . $rulesConfigName) -}}
+
+{{/* Probe Port */}}
+{{- $probePort := 4080 -}}
+{{- $netcoolsslenabled := include "ibm-netcool-probe.netcoolConnectionSslEnabled" ( . ) -}}
+{{- $netcoolauthenabled := include "ibm-netcool-probe.netcoolConnectionAuthEnabled" ( . ) -}}
+{{- $netcoolsecretrequired := include "ibm-netcool-probe.keySecretRequired" ( . ) -}}
+
+{{- $saName := include "ibm-netcool-probe.commonServiceAccountName" ( . ) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $compName }}
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+  {{ if .Values.prometheusProbe.autoscaling.enabled -}}
+  replicas: {{ .Values.prometheusProbe.autoscaling.minReplicas | default 1 }}
+  {{- else -}}
+  replicas: {{ .Values.prometheusProbe.replicaCount }}
+  {{- end }}
+  minReadySeconds: 30
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        checksum/config.configmap: {{ include (print $.Template.BasePath "/probe-prometheus-configmap-config.yaml") . | sha256sum }}
+        checksum/rules.configmap: {{ include (print $.Template.BasePath "/probe-prometheus-configmap-rules.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ .Values.global.serviceAccountName | default $saName }}
+      automountServiceAccountToken: false
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: interfaces-file
+          configMap:
+            name: {{ $configMapName }}
+            items:
+            - key: omni.dat
+              path: omni.dat
+        - name: rules-file
+          configMap:
+            name: {{ $rulesConfigMapName }}
+            items:
+            - key: message_bus.rules
+              path: message_bus.rules
+        - name: props-file
+          configMap:
+            name: {{ $configMapName }}
+            items:
+            - key: message_bus.props
+              path: message_bus.props
+        - name: transport-file
+          configMap:
+            name: {{ $configMapName }}
+            items:
+            - key: webhookTransport.properties
+              path: webhookTransport.properties
+        {{- if and .Values.netcool.secretName (eq $netcoolsecretrequired "true") }}
+        - name: netcool-secret
+          secret:
+            # Use a user defined pre-created secret. 
+            secretName: {{ .Values.netcool.secretName }}
+            items:
+            {{- if (eq $netcoolauthenabled "true") }}
+            - key: encryption.keyfile
+              path: encryption.keyfile
+            {{- end }}
+            {{- if (eq $netcoolsslenabled "true") }}
+            - key: omni.kdb
+              path: omni.kdb
+            - key: omni.sth
+              path: omni.sth
+            {{- end }}
+        {{- end -}}
+        {{- if and (.Values.netcool.secretName) (eq $netcoolauthenabled "true") }}
+        - name: shared-dir
+          {{- /* Using emptyDir as temporary directory to modify probe configuration files. */}}
+          emptyDir: {}
+        {{- end }}
+{{ include "ibm-netcool-probe.securitySettingsDeployment" . | indent 6 }}
+      containers:
+        - name: messagebus-probe-prometheus
+          image: "{{ .Values.image.repository}}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{ include "ibm-netcool-probe.securitySettingsContainer" . | indent 10 }}
+          env:
+          - name: LICENSE
+            value: {{ .Values.license | default "not accepted" | quote }}
+          - name: PROBE_NAME
+            value: "nco_p_message_bus"
+          - name: LC_ALL
+            value: {{ .Values.probe.locale | default "en_US.utf8" | quote }}
+          {{- if and (.Values.netcool.secretName) (eq $netcoolauthenabled "true") }}
+          {{- /* Required to append credentials into props file. */}}
+          - name: INIT
+            value: "true"
+          - name: AUTHUSERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.netcool.secretName }}
+                key: AuthUserName
+          - name: AUTHPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.netcool.secretName }}
+                key: AuthPassword
+          - name: SECRETNAME
+            value: {{ .Values.netcool.secretName }}
+          {{- end }}
+          ports:
+            - containerPort: {{ $probePort }}
+          volumeMounts:
+{{ include "ibm-netcool-probe.volumeMounts" . | indent 10 }}
+          livenessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - POST
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - -d
+              - '{"alerts" : [{"liveness" : "probe-check"}]}'
+              - http://localhost:{{ $probePort }}/probe/webhook/prometheus
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - POST
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - -d
+              - '{"alerts" : [{"readiness" : "probe-check"}]}'
+              - http://localhost:{{ $probePort }}/probe/webhook/prometheus
+            initialDelaySeconds: 20
+            periodSeconds: 40
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{ if .Values.global.image.secretName -}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+{{- end -}}

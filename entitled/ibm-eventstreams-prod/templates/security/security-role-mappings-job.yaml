@@ -1,0 +1,106 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Runs a container that registers the IBM Event Streams Security URL
+# security endpoints to Role mappings
+###############################################################################
+{{ include "securityrolemappingsjob" (list .) }}
+
+{{- define "securityrolemappingsjob" -}}
+{{- $context := first . -}}
+{{- include "sch.config.init" (list $context "sch.chart.config.values") | trim -}}
+{{- include "sch.config.init" (list $context "securitycontext.sch.chart.config.values") | trim -}}
+{{ $namePrefix := $context.sch.chart.components.security.roleMappings.name -}}
+{{ $name := include "sch.names.fullCompName" (list $context $namePrefix ) -}}
+# Component is 'security'
+{{ $compName := $context.sch.chart.components.security.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list $context $compName (dict "serviceSelector" $namePrefix)) -}}
+# Service Account
+{{ $serviceAccount := $context.sch.chart.components.security.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list $context $serviceAccount ) -}}
+# IAM Secret name containing the API Key
+{{ $securityCompSecretName := $context.sch.chart.components.security.iamSecret.name -}}
+{{ $iamSecretName := include "sch.names.fullCompName" (list $context $securityCompSecretName ) -}}
+# Eventstreams IAM Service Name
+{{ $iamServiceName := $context.sch.chart.components.security.serviceName -}}
+# import security definitions
+{{- include "sch.config.init" (list $context "security.sch.chart.config.values") | trim -}}
+# Internal configmap name for cluster env vars
+{{ $releaseConfigMap := $context.sch.chart.components.essential.releaseConfigMap.name -}}
+{{ $releaseConfigMapName := include "sch.names.fullCompName" (list $context $releaseConfigMap) | quote -}}
+# Management Ingress URL
+{{ $managementIngressDNSName := $context.sch.chart.components.security.managementIngress.dnsName -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install, post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "5"
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 10
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list $context $context.Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+        job: "security-role-mappings"
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{- include "sch.security.securityContext" (list $context $context.sch.chart.securitycontexts.pod) | indent 8 }}
+      affinity:
+{{ include "ibm-eventstreams.customNodeaffinity"  (list $context) | indent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: "security-role-mapping"
+          image: {{ include "eventstreams.image" (list $context "eventstreams-role-mappings" $context.Values.global.image.imageTags.roleMappingsTag) | quote }}
+          imagePullPolicy: {{ $context.Values.global.image.pullPolicy }}
+          securityContext:
+{{- include "sch.security.securityContext" (list $context $context.sch.chart.securitycontexts.containerWritableFilesystem) | indent 12 }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: "NAMESPACE"
+              value: {{ $context.Release.Namespace | quote }}
+            - name: "RELEASE"
+              value: {{ $context.Release.Name | quote }}
+            - name: "CHART_NAME"
+              value: {{ $context.Chart.Name | quote }}
+            - name: "IAM_API_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ $iamSecretName }}"
+                  key: "{{ $iamServiceName }}-{{ $context.Release.Name }}-api-key"
+            - name: "ES_SERVICE_ID"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ $iamSecretName }}"
+                  key: "{{ $iamServiceName }}-{{ $context.Release.Name }}-service-id"
+            - name: "CLUSTER_EXTERNAL_HOST"
+              value: {{ $managementIngressDNSName | quote }}
+            - name: "CLUSTER_EXTERNAL_PORT"
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $releaseConfigMapName }}
+                  key: "CLUSTER_ROUTER_HTTPS_PORT"
+            - name: ICP_IAM_PAP_SUFFIX
+              value: {{ $context.sch.config.security.iamPAPSuffix | quote}}
+            - name: ICP_IAM_TOKEN_SUFFIX
+              value: {{ $context.sch.config.security.iamTokenSuffix | quote}}
+{{- end }}

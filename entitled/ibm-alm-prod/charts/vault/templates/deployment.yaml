@@ -1,0 +1,159 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      {{- if lt .Values.replicaCount 2.0 }}
+      maxUnavailable: 0
+      {{- end }}
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+{{ include "alm.podSecurityContext" (list . "") | indent 6 }}
+      initContainers:
+      - name: wait-for-zookeeper
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.baseImage.name}}:{{.Values.baseImage.tag}}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: SERVICE
+          value: {{ .Release.Name }}-zookeeper
+        - name: EXPECTED_COUNT
+          value: {{ .Values.global.zookeeper.clusterSize | quote }}
+        command:
+        - /bin/sh
+        - -c
+        - python3 /scripts/check-service-endpoint-count.py
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+      containers:
+      - name:  {{ include "sch.names.fullName" (list .) }}
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        command: ["vault", "server", "-config", "/vault/config/config.json"]
+        ports:
+        - containerPort: {{ .Values.service.port }}
+          name: api
+        - containerPort: 8201
+          name: cluster-address
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - /scripts/create-vault-unseal-job.sh
+        livenessProbe:
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          # Alive if it is listening for clustering traffic
+          httpGet:
+            path: /v1/sys/health?
+              {{- if .Values.readiness.readyIfSealed -}}sealedcode=204&{{- end }}
+              {{- if .Values.readiness.readyIfStandby -}}standbycode=204&{{- end }}
+              {{- if .Values.readiness.readyIfUninitialized -}}uninitcode=204&{{- end }}
+            port: {{ .Values.service.port }}
+            scheme: HTTPS
+        readinessProbe:
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          # Ready depends on preference
+          httpGet:
+            path: /v1/sys/health?
+              {{- if .Values.readiness.readyIfSealed -}}sealedcode=204&{{- end }}
+              {{- if .Values.readiness.readyIfStandby -}}standbycode=204&{{- end }}
+              {{- if .Values.readiness.readyIfUninitialized -}}uninitcode=204&{{- end }}
+            port: {{ .Values.service.port }}
+            scheme: HTTPS
+        resources:
+{{ include "alm.getResources" . | indent 10 }}
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+        # securityContext:
+        #   readOnlyRootFilesystem: true
+        #   {{- if not .Values.swapIsDisabled }}
+        #   capabilities:
+        #     add:
+        #     - IPC_LOCK
+        #   {{- end }}
+        env:
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: VAULT_CLUSTER_ADDR
+            value: "https://$(POD_IP):8201"
+          - name: VAULT_ADDR
+            value: https://$(POD_IP):{{ .Values.service.port }}
+          - name: VAULT_API_ADDR
+            value: https://$(POD_IP):{{ .Values.service.port }}
+          - name: VAULT_SKIP_VERIFY
+            value: "true"
+          - name: RELEASE
+            value: {{ .Release.Name }}
+          - name: BASE_IMAGE
+            value: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.baseImage.name}}:{{.Values.baseImage.tag}}
+          - name: CREDENTIALS_SECRET
+            value: {{ .Values.global.security.almCredentials.secretName | default (printf "%s-%s" .Release.Name "credentials-default") }}
+          - name: CERTIFICATE_SECRET
+            value: {{ .Values.global.security.almCerts.secretName | default (printf "%s-%s" .Release.Name "security-default") }}
+          - name: LDAP_SECRET
+            value: {{ .Values.global.security.ldapConfig.secretName | default (printf "%s-%s" .Release.Name "ldap-default") }}
+        volumeMounts:
+        - name: vault-config
+          mountPath: /vault/config/
+        - name: home
+          mountPath: /home/ibmalm
+        - name: vault-cert
+          mountPath: /vault/certs
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: "{{ include "sch.names.appName" (list .) }}"
+                  release: "{{ .Release.Name }}"
+      volumes:
+        - name: vault-config
+          configMap:
+            name: "{{ include "sch.names.fullName" (list .) }}"
+            defaultMode: 0755
+        - name: home
+          emptyDir: {}
+        - name: vault-cert
+          secret:
+            secretName: {{ .Values.global.security.vaultCerts.secretName | default (printf "%s-%s" .Release.Name "vault-default") }}

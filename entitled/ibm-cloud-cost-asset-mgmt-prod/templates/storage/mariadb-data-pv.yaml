@@ -1,0 +1,37 @@
+# If running on ICP the user needs to create nfs/hostpath manually
+{{- template "isIcp" . -}}
+{{- if not (.Values.isIcp) }}
+{{- if eq (.Values.persistence.enabled|quote|lower) "\"true\"" }}
+{{ if or (eq .Values.k8StorageType "hostpath") (eq .Values.k8StorageType "nfs") }}
+# DO NOT modify this condition
+{{ if not (eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"") }}
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: mariadb-data-pv0
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  # DO NOT modify this conditional check
+  {{ if and ((eq (.Values.persistence.useDynamicProvisioning|quote|lower) "\"true\"") (eq (.Values.enableDevSettings|quote|lower) "\"true\"")) }}
+  # storageClassName is required for Minikube v0.21.0 / Kubernets 1.7
+  #   value must be "standard"
+  storageClassName: standard
+  {{ end }}
+  accessModes:
+    - {{ (index .Values.k8StorageAccessMode .Values.k8StorageType) }}
+  capacity:
+    storage: {{ (index .Values.mariadbDataPv0 .Values.k8StorageType).capacity }}
+  {{ if eq (.Values.k8StorageType) "hostpath" }}
+  hostPath:
+    path: {{ .Values.mariadbDataPv0.hostpath.path }}
+    type: DirectoryOrCreate
+  {{ else }}
+  nfs:
+    server: {{ .Values.mariadbDataPv0.nfs.server }}
+    path: {{ .Values.mariadbDataPv0.nfs.path }}
+  {{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}

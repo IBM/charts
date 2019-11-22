@@ -1,0 +1,100 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ template "fullname" . }}-db2u-sqllib-shared-job"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "root.securityContext" . | indent 6 }}
+      containers:
+      - name: {{ template "fullname" . }}-db2-init
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.instdb.image.repository }}:{{ .Values.images.instdb.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.instdb.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "sqllib.containers.securityContext" . | indent 8 }}
+        command: ['/bin/sh']
+        args: ['-cx', '/Db2wh_preinit/instdb_entrypoint.sh']
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "100Mi"
+          limits:
+            memory: "512Mi"
+        env:
+        - name: SERVICENAME
+          value: "{{ .Values.servicename }}"
+        volumeMounts:
+        - mountPath: /mnt/bludata0
+          {{- if .Values.storage.storageLocation.dataStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/blumeta0/configmap
+          name: {{ template "fullname" . }}-db2u-config-volume
+      restartPolicy: Never
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      volumes:
+      {{- if .Values.storage.storageLocation.dataStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.dataStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.dataStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.dataStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-data-storage
+          {{- end }}
+        {{- end }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-meta-storage
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      - name: {{ template "fullname" . }}-db2u-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-config-files
+          items:
+          - key: db2u-db2cfg-var
+            path: db2u-config-var

@@ -1,0 +1,147 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cam-aws-ri-report
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      name: cam-aws-ri-report
+  template:
+    metadata:
+      labels:
+        name: cam-aws-ri-report
+{{ include "cam.labels" .  | indent 8 }}
+      annotations:
+{{ include "cam.icpMetering" .  | indent 8 }}
+    spec:
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      containers:
+        - name: cam-aws-ri-report
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+          image: {{ template "cam.readConfig" (list . "cam_aws_ri_report") }}
+        {{ else }}
+          image: {{ template "camicp.readConfig" (list . "cam_aws_ri_report" .Values.imageCredentials.registry) }}
+        {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1100
+            capabilities:
+              add: ["SETGID"]
+              drop:
+              - ALL
+          resources:
+{{ include "deployClassConfig" (list . "cam_aws_ri_report") | indent 12 }}
+          env:
+            - name: CAMSERVICES_URL
+              value: http://camservice:8000
+            - name: DATA_DIR
+              value: /var/cam/aws-ri-report
+            - name: CB_CRED_HOST
+              value: "http://cb-cred-svc.{{ .Values.coreNamespace }}"
+            - name: CB_CRED_PORT
+              value: "8000"
+            - name: AUTH_INTERNAL_SERVICE
+              value: "https://cb-core-auth-internal.{{ .Values.coreNamespace }}:4001"
+            - name: MARIADB_SERVICE_CERT
+              value: /etc/cam/mariadb/maria_dev.crt
+            - name: MARIADB_SERVICE_KEY
+              value: /etc/cam/mariadb/maria_dev.key
+            - name: MARIADB_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-password
+                  key: mysql.key
+            - name: MARIADB_SERVICE_USERID
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-username
+                  key: mysql.username
+            # DO NOT modify this conditional check
+            {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+            - name: MARIADB_SERVICE_HOST
+              value: "{{ .Values.secrets.mariadbServiceHost }}"
+            - name: MARIADB_SERVICE_PORT
+              value: "{{ .Values.secrets.mariadbServicePort }}"
+            {{ end }}
+            - name: RECOMMENDATION_ENGINE_DATA
+              value: /var/cam/recommendation-engine
+          ports:
+            - containerPort: 5000
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /aws-ri-report/v1/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 1800
+            failureThreshold: 4
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /aws-ri-report/v1/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 60
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: cam-data
+              mountPath: /var/cam/aws-ri-report
+              subPath: aws-ri-report
+            - name: cam-data
+              mountPath: /var/cam/recommendation-engine
+              subPath: camrecommend
+            - name: mariadb
+              mountPath: /etc/cam/mariadb
+      # trying to support upgrades and move files to be owned by non-root
+      # this logic can be removed from the templates (April 2019, for ICP N-2 releases).
+      initContainers:
+        - name: update-user-group
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+          image: {{ template "cam.readConfig" (list . "k8_jumpbox") }}
+        {{ else }}
+          image: {{ template "camicp.readConfig" (list . "k8_jumpbox" .Values.imageCredentials.registry) }}
+        {{ end }}
+{{ include "cam.container.securityContext.InitContainer" . | indent 10  }}
+          command: ['sh', '-c', 'chown -R 1100:1101 /var/cam/aws-ri-report']
+          volumeMounts:
+            - name: cam-data
+              mountPath: /var/cam/aws-ri-report
+              subPath: aws-ri-report
+      volumes:
+        - name: mariadb
+          secret:
+            secretName: grav-certificates
+            items:
+            - key: maria_dev.crt
+              path: maria_dev.crt
+            - key: maria_dev.key
+              path: maria_dev.key
+        - name: cam-data
+          persistentVolumeClaim:
+            claimName: cam-data-claim
+        - name: cm-keystore-file
+          secret:
+            secretName: grav-certificates
+            items:
+              - key: maria_dev.crt
+                path: maria_dev.crt
+              - key: maria_dev.key
+                path: maria_dev.key
+      # DO NOT modify this conditional check
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

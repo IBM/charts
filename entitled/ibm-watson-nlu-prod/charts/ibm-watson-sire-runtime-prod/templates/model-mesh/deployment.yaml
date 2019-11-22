@@ -1,0 +1,315 @@
+{{- include "sch.config.init" (list . "sireRuntime.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.sireRuntime.deploymentName -}}
+{{- $modelRuntime := .Values.modelMeshDeployment.modelRuntimeContainer -}}
+{{- $modelMesh := .Values.modelMeshDeployment.modelMeshContainer -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.modelMeshDeployment.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- /* nodeaffinity for github.com charts, remove the following for PPA charts */}}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+
+### IMAGE PULL SECRET
+{{ include "sireRuntime.pullSecretTemplate" . | indent 6 }}
+
+#######################################################################################################################
+########## VOLUMES ####################################################################################################
+#######################################################################################################################
+      volumes:
+      ### ETCD root cert
+      {{- if .Values.global.etcd.tlsSecret.fieldRootCertificate }}
+      - name: etcd-root-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.etcd.tlsSecret.nameTpl .) .Values.global.etcd.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.etcd.tlsSecret.fieldRootCertificate }}
+            path: ca.crt
+      {{- end }}
+
+      {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+      # S3 root cert
+      - name: s3-root-certificate-secret
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.s3.tlsSecret.nameTpl .) .Values.global.s3.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.s3.tlsSecret.fieldRootCertificate }}
+            path: root.pem
+       {{- end }}
+
+      ### TLS key and cert
+      # secret reference that contains the key and certificate to secure the server via TLS
+      - name: tls-secret
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.tls.secret.nameTpl .) .Values.global.tls.secret.fixedName }}
+          items:
+          - key: {{ .Values.global.tls.secret.fieldServerCertificate }}
+            path: certificate.pem
+          - key: {{ .Values.global.tls.secret.fieldServerKey }}
+            path: key.pem
+          - key: private.key.pkcs8
+            path: private.key.pkcs8
+
+      # configmap reference for the model runtime, we construct this configmap in a separate template based on .Values entries
+      - name: model-runtime-config
+        configMap:
+          name: "{{ include "sch.names.fullCompName" (list . $compName) }}-config"
+          items:
+          - key: "application_properties"
+            path: "application.properties"
+          - key: "log4j_properties"
+            path: "log4j2.xml"
+
+      # configmap reference for the model disk cache
+      - name: model-cache-config
+        configMap:
+          name: "{{ include "sch.names.fullCompName" (list . $compName) }}-config"
+          items:
+          - key: "model_cache_properties"
+            path: "janitor.properties"
+
+      # ephemeral disk storage to cache models locally, gets wiped out everytime a POD is restarted, but survives container restarts
+      - name: local-model-cache
+        emptyDir: {}
+
+      - name: model-mesh-connection-config
+        emptyDir: {}
+
+#######################################################################################################################
+########## INIT CONTAINER #################################################################################################
+#######################################################################################################################
+      initContainers:
+################################################# MODEL RUNTIME CONTAINER #############################################
+      - name: init
+        image: {{ .Values.global.icpDockerRepo }}{{ .Values.modelMeshDeployment.modelRuntimeContainer.image.repository }}:{{ .Values.modelMeshDeployment.modelRuntimeContainer.image.tag }}
+
+        {{ include "sireRuntime.pullPolicyTemplate" . }}
+        {{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContextRuntime) | indent 8 }}
+        resources:
+          limits:
+            cpu: 100m
+            memory: 50Mi
+          requests:
+            memory: 50Mi
+        command:
+        - /bin/sh
+        - -c
+        - |
+          cat << EOF > /opt/watson/mmesh/dynconfig/etcd_connection
+          {
+            "root_prefix": "sire",
+            {{ if .Values.global.etcd.tlsSecret.fieldRootCertificate }}"certificate_file":"/etc/ssl/etcd/ca.crt",{{ end }}
+            {{- if .Values.global.etcd.authEnabled }}
+            "userid": {{ required "If .Values.global.etcd.authEnabled=true, you need to set a user nanme via .Values.global.etcd.username" .Values.global.etcd.username | quote }},
+            "password": "$ETCD_PASSWORD",
+            {{- end }}
+            "endpoints":"{{ default (include .Values.global.etcd.endpointTpl .) .Values.global.etcd.endpointFixed }}"
+          }
+          EOF
+
+        {{- if .Values.global.etcd.authEnabled }}
+        env:
+        - name: ETCD_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.etcd.accessSecret.nameTpl .) .Values.global.etcd.accessSecret.fixedName }}
+              key: {{ .Values.global.etcd.accessSecret.fieldPassword }}
+        {{- end }}
+        volumeMounts:
+        - name: model-mesh-connection-config
+          mountPath: "/opt/watson/mmesh/dynconfig"
+
+#######################################################################################################################
+########## CONTAINERS #################################################################################################
+#######################################################################################################################
+      containers:
+################################################# MODEL RUNTIME CONTAINER #############################################
+      - name: model-runtime
+        image: {{ .Values.global.icpDockerRepo }}{{ .Values.modelMeshDeployment.modelRuntimeContainer.image.repository }}:{{ .Values.modelMeshDeployment.modelRuntimeContainer.image.tag }}
+
+        {{ include "sireRuntime.pullPolicyTemplate" . }}
+        {{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContextRuntime) | indent 8 }}
+        resources:
+          limits:
+            cpu: {{ $modelRuntime.cpuLimitMillis }}m
+            memory: {{ $modelRuntime.memoryLimitMB }}Mi
+          requests:
+            memory: {{ $modelRuntime.memoryLimitMB }}Mi
+        workingDir: "/opt/ibm/mnlp"
+        command:
+        - "/opt/ibm/mnlp/serve-runtime/scripts/startup/run-serve.sh"
+        volumeMounts:
+        - name: local-model-cache
+          mountPath: /mnt/local-model-cache/data
+        - name: model-cache-config
+          mountPath: /etc/model-cache-janitor/
+        - name: model-runtime-config
+          mountPath: /etc/serve-runtime/
+        - name: tls-secret
+          mountPath: /etc/ssl/serve/
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: s3-root-certificate-secret
+          mountPath: /etc/ssl/s3/
+        {{- end }}
+
+        env:
+        ### S3 STORAGE CONFIG
+        - name: S3_ENDPOINT
+          value: "{{ default (include .Values.global.s3.endpointTpl .) .Values.global.s3.endpointFixed }}"
+        - name: S3_PROFILE_IGNORE
+          value: "true"
+        - name: ROOT_CERT
+          value: /etc/ssl/serve/certificate.pem
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: AWS_CA_BUNDLE
+          value: /etc/ssl/s3/root.pem
+        {{- end }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+              key: {{ .Values.global.s3.accessSecret.fieldAccessKey }}
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+              key: {{ .Values.global.s3.accessSecret.fieldSecretKey }}
+
+        ### WORKER MANAGER CONFIG
+        - name: WORKER_MANAGER_BINARY
+          value: /opt/ibm/mnlp/serve-runtime/worker-manager/bin/sire-worker-manager
+        - name: GLOG_logtostderr
+          value: "yes"
+        - name: GLOG_stderrthreshold
+          value: "0"
+        - name: GLOG_minloglevel
+          value: "0"
+
+        ### API SERVER CONFIG
+        - name: JAVA_OPTS
+          value: "-XX:MaxDirectMemorySize=128000000 -Dio.netty.maxDirectMemory=128000000 -Xmx512m -Xms250m -Darchaius.configurationSource.additionalUrls=file:///etc/serve-runtime/application.properties -Dlog4j.configurationFile=/etc/serve-runtime/log4j2.xml"
+
+        readinessProbe:
+          exec:
+            command:
+            - grpc-health-probe
+            - -addr
+            - localhost:8980
+            - -service
+            - Process
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        livenessProbe:
+          exec:
+            command:
+            - grpc-health-probe
+            - -addr
+            - localhost:8980
+            - -service
+            - Process
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+
+################################################# MODEL MESH SIDECAR CONTAINER ########################################
+      - name: model-mesh-sidecar
+        image: {{ .Values.global.icpDockerRepo }}{{ .Values.modelMeshDeployment.modelMeshContainer.image.repository }}:{{ .Values.modelMeshDeployment.modelMeshContainer.image.tag }}
+
+        {{ include "sireRuntime.pullPolicyTemplate" . }}
+        {{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContextMesh) | indent 8 }}
+        resources:
+          requests:
+            cpu: {{ $modelMesh.cpuRequestsMillis }}m
+            memory: {{ $modelMesh.memoryLimitMB }}Mi
+          limits:
+            cpu: {{ $modelMesh.cpuLimitMillis }}m
+            memory: {{ $modelMesh.memoryLimitMB }}Mi
+        ports:
+        - name: thrift
+          containerPort: 8080
+        - name: grpc-external
+          containerPort: 8033
+
+        volumeMounts:
+        - name: model-mesh-connection-config
+          mountPath: "/opt/watson/mmesh/dynconfig"
+        - name: tls-secret
+          mountPath: /etc/ssl/serve/
+        {{- if .Values.global.etcd.tlsSecret.fieldRootCertificate }}
+        - name: etcd-root-cert
+          mountPath: /etc/ssl/etcd/
+        {{- end }}
+
+        env:
+        - name: MM_SVC_GRPC_CA_CERT_PATH
+          value: /etc/ssl/serve/certificate.pem
+        - name: MM_SVC_GRPC_PRIVATE_KEY_PATH
+          value: /etc/ssl/serve/private.key.pkcs8
+
+        - name: MM_SERVICE_NAME
+          value: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+        - name: INTERNAL_GRPC_PORT
+          value: "8980"
+        - name: MM_SVC_GRPC_PORT
+          value: "8033"
+        - name: KV_STORE
+          value: "etcd:/opt/watson/mmesh/dynconfig/etcd_connection"
+        - name: SHUTDOWN_TIMEOUT_MS
+          value: "200000"
+
+        - name: WKUBE_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WKUBE_POD_IPADDR
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: MM_LOCATION
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 8089
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 2
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8089
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 10
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /opt/watson/mmesh/stop.sh
+              - wait

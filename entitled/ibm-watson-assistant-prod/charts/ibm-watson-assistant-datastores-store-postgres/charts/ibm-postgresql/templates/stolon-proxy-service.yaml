@@ -1,0 +1,35 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.proxyService) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+    component: "stolon-proxy"
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.keep . ) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+{{- end }}
+spec:
+{{- if tpl .Values.proxy.serviceType . }}
+  type: {{ tpl .Values.proxy.serviceType . | quote }}
+{{- end }}
+  ports:
+    - name: "proxy"
+      port: {{ .Values.ports.externalPort }}
+      targetPort: {{ .Values.ports.internalPort }}
+  selector:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+    component: "stolon-proxy"
+    stolon-cluster: {{ template "stolon.clusterName" . }}

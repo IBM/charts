@@ -1,0 +1,72 @@
+# Example Lightbend Console Alertmanager config.
+
+global:
+
+# Routing rules.
+route:
+  # Default receiver.
+  receiver: team1-slack
+  # Resend unresolved alerts at this interval.
+  repeat_interval: 4h
+  # Wait for any other alerts in the same group before sending.
+  group_wait: 30s
+  # Wait before sending a new alert for a group.
+  group_interval: 5m
+  # Group alerts by namespace and workload.
+  group_by: [namespace, es_workload, severity]
+  routes:
+  # team1 Slack
+  - match:
+      es_workload: workload1
+      severity: warning
+    receiver: team1-slack
+
+  # team1 PagerDuty
+  - match:
+      es_workload: workload1
+      severity: critical
+    receiver: team1-pagerduty
+
+  # team2 PagerDuty
+  - match:
+      es_workload: workload2
+      severity: critical
+    receiver: team2-slack
+
+# Don't alert on warnings if the same alert is already critical.
+inhibit_rules:
+- source_match:
+    severity: critical
+  target_match:
+    severity: warning
+  equal: [alertname, namespace, es_workload]
+
+templates:
+# Slack notification templates.
+- '/etc/config/slack.tmpl'
+
+# Receivers.
+receivers:
+- name: team1-slack
+  slack_configs:
+  # Use Slack integrations to find the webhook at https://typesafe.slack.com/apps/A0F7XDUAZ-incoming-webhooks?next_id=0.
+  - api_url: https://slack.localhost/services/somewhere
+    channel: '#team1-alerts'
+    title: '{{ template "title.slack" . }}'
+    text: '{{ template "text.slack" . }}'
+    send_resolved: true
+
+- name: team1-pagerduty
+  pagerduty_configs:
+  - routing_key: my_secret_routing_key
+    # Remove this in actual usage. It's added to prevent sending PagerDuty alerts from local development environments.
+    url: https://pagerduty.localhost/api
+
+- name: team2-slack
+  slack_configs:
+  # Use Slack integrations to find the webhook at https://typesafe.slack.com/apps/A0F7XDUAZ-incoming-webhooks?next_id=0.
+  - api_url: https://slack.localhost/services/somewhere
+    channel: '#team2-alerts'
+    title: '{{ template "title.slack" . }}'
+    text: '{{ template "text.slack" . }}'
+    send_resolved: true

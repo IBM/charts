@@ -1,0 +1,208 @@
+# Licensed Materials - Property of IBM
+# IBM Order Management Software (5725-D10)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+# Default values for the chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  license: ""
+  image: 
+    repository: ""
+  appSecret: ""
+  database:
+    serverName: ""
+    port: ""
+    dbname: ""
+    user: ""
+    dbvendor: DB2
+    datasourceName: jdbc/OMDS
+    systemPool: true
+    schema: ""
+  serviceAccountName: default
+  customerOverrides: []
+  envs: []
+  # Example:
+  # envs:
+  # - name: FOO
+  #   valueFrom:
+  #     secretKeyRef:
+  #       key: FOO
+  #       name: secret-resource
+  # - name: BAR
+  #   value: bar
+  #- name: LICENSE
+  #  value: accept
+  #- name: LOG_DIR
+  #  value: /shared/applogs/$(OM_POD_NAME)/liberty/logs
+  #- name: WLP_OUTPUT_DIR
+  #  value: /shared/applogs/$(OM_POD_NAME)/liberty/output
+  persistence:
+    claims:
+      name: oms-common
+      # storageClassName:
+      accessMode: ReadWriteMany
+      capacity: 10
+      capacityUnit: Gi
+    securityContext:
+      fsGroup: 0
+      supplementalGroup: 0
+  mq:
+    bindingConfigName: ""
+    bindingMountPath: /opt/ssfs/.bindings
+  # Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows : 
+  #   0 - Do not use
+  #   1 - Least preferred
+  #   2 - No preference
+  #   3 - Most preferred
+  arch:
+    amd64: "2 - No preference"
+    ppc64le: "2 - No preference"
+  log:
+    format: "json"
+
+
+appserver:
+  replicaCount: 1
+  image: 
+    name: om-app
+    tag: ent-10.0.0.8
+    pullPolicy: IfNotPresent
+  config:
+    vendor: websphere
+    vendorFile: servers.properties
+    serverName: DefaultAppServer
+    jvm:
+      xms: 1024m
+      xmx: 2048m
+      params: []
+#      - -verbose:gc
+#      - -Xverbosegclog:/shared/applogs/$(OM_POD_NAME)/gclogs/%Y%m%d.%H%M%S.%pid.txt
+    database:
+      maxPoolSize: 50
+      minPoolSize: 10
+    corethreads: 20
+    maxthreads: 100
+    libertyServerXml: ""
+    libertyStartupWrapper: "/opt/ibm/helpers/runtime/docker-server.sh"
+  # give a 15 minute buffer for appserver to start before liveness probe can begin.
+  livenessCheckBeginAfterSeconds: 900
+  livenessFailRestartAfterMinutes: 10
+  service:
+    type: NodePort
+    http:
+      port: 9080
+      nodePort: 30083
+    https:
+      port: 9443
+      nodePort: 30446
+  resources:
+    requests:
+      memory: 2560Mi
+      cpu: 1
+    limits:
+      memory: 3840Mi
+      cpu: 2
+  ingress:
+    enabled: true
+    host: ""
+    ssl:
+      enabled: true
+      secretname: ""
+    controller: nginx
+    contextRoots: ["smcfs", "sbc", "sma", "isccs", "wsc", "adminCenter"]
+    annotations: {}
+#     <name>: <value>
+  podLabels: {}
+#   <labelName>: <labelValue> 
+  tolerations: []
+#  - key: "key"
+#    operator: "Exists"
+#    effect: "NoSchedule" 
+  nodeAffinity:
+# https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#node-affinity-beta-feature
+# The matchExpression for key 'kubernetes.io/arch' is automatically added based on 
+# architecture preference specified in 'global.arch'
+    requiredDuringSchedulingIgnoredDuringExecution: {}
+#      nodeSelectorTerms:
+#      - matchExpressions:
+#        - key: kubernetes.io/e2e-az-name
+#          operator: In
+#          values:
+#          - e2e-az1
+#          - e2e-az2
+# The matchExpression for key 'kubernetes.io/arch' is automatically added based on 
+# architecture preference specified in 'global.arch'
+    preferredDuringSchedulingIgnoredDuringExecution: []
+  podAffinity:
+# https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature
+    requiredDuringSchedulingIgnoredDuringExecution: []
+    preferredDuringSchedulingIgnoredDuringExecution: []
+  podAntiAffinity:
+# https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#inter-pod-affinity-and-anti-affinity-beta-feature
+    requiredDuringSchedulingIgnoredDuringExecution: []
+    preferredDuringSchedulingIgnoredDuringExecution: []
+    replicaNotOnSameNode:
+      #   prefer | require | blank
+      mode: prefer
+      # weight only used when mode is prefer
+      weightForPreference: 100
+    
+
+
+
+omserver:
+  image: 
+    name: om-agent
+    tag: ent-10.0.0.8
+    pullPolicy: IfNotPresent
+  common:
+    jvmArgs: "-Xms512m\ -Xmx1024m"
+    # "-Xms512m\ -Xmx1024m -verbose:gc -Xverbosegclog:/shared/applogs/$(OM_POD_NAME)/gclogs/%Y%m%d.%H%M%S.%pid.txt"
+    replicaCount: 1
+    resources:
+      requests:
+        memory: 1024Mi
+        cpu: 0.5
+      limits:
+        memory: 2048Mi
+        cpu: 1
+    readinessFailRestartAfterMinutes: 10
+    podLabels: {}
+    tolerations: []
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution: {}
+      preferredDuringSchedulingIgnoredDuringExecution: []
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution: []
+      preferredDuringSchedulingIgnoredDuringExecution: []
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution: []
+      preferredDuringSchedulingIgnoredDuringExecution: []
+      replicaNotOnSameNode:
+        #  prefer | require | blank
+        mode: prefer
+        # weight only used when mode is prefer
+        weightForPreference: 100
+  deployHealthMonitor: true
+  servers:
+  - group: "Default Server"
+    name: [""]
+#    jvmArgs: "-Xms512m\ -Xmx1024m"
+#    replicaCount: 1
+#    resources:
+#    podLabels: {}
+#    tolerations: []
+#    nodeAffinity:
+#    podAffinity:
+#    podAntiAffinity:
+
+
+
+datasetup:
+  loadFactoryData: ""
+  mode: create
+
+

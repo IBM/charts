@@ -1,0 +1,43 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ template "shortname" . }}-login-test
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    test: {{ template "fullname" . }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+  - name: {{ template "shortname" . }}-test
+    image: ibmcom/curl:4.0.0
+    # Confirm we can login to the PowerAI Vision instance. The test passes if
+    #   return code of the command is 0. Anything else is a failure.
+    # Note: In the arg string, {{ "x" }} variables are pre-processed by helm so
+    #   the quotes inside brackets are not escaped.
+    command: ["sh", "-c"]
+    args: ["result=$(\
+              curl -k \
+                -X POST http://{{ template "shortname" . }}-portal:9080/{{ template "shortname" . }}-api/api/tokens \
+                -H 'cache-control: no-cache' \
+                -H 'content-type: application/json;charset=UTF-8' \
+                -d '{\"grant_type\":\"password\", \
+                     \"username\":\"admin\", \
+                     \"password\":\"passw0rd\"}');
+            echo $result;
+            echo $result | grep -q success"]
+  affinity:
+  {{- include "nodeaffinity-any" . | indent 2 }}
+  restartPolicy: Never

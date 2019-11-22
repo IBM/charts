@@ -1,0 +1,180 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.optools.compName }}
+{{- $labels := include "sch.metadata.labels.standard" (list . $compName) }}
+{{- $annotations := include "sch.metadata.annotations.metering" (list . .sch.chart.metering) }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-deployer-template
+  labels:
+{{ $labels | indent 4 }}
+data:
+  settings.yaml: |
+    proxyIP: {{ .Values.app.proxyIP }}
+    db:
+      connectionurl: "{{ .Values.app.db.connectionString }}"
+      createdb: true
+      components:
+        name: "components"
+        designdocs:
+        - ./designdocs/components/service_broker.json
+        - ./designdocs/components/deployer.json
+        - ./designdocs/components/plutus.json
+        - ./designdocs/components/search_indices.json
+
+    port: 8080
+
+    loglevel: debug
+
+    tls:
+      enabled: false
+      certpath: /certs/tls.crt
+      keypath: /certs/tls.key
+
+    {{- if .Values.image.imagePullSecret }}
+    imagePullSecret: {{ .Values.image.imagePullSecret }}
+    {{- end }}
+
+    auth:
+      username: deployer
+      password: randompassword
+    
+    versions:
+      ca:
+        1.4.1:
+          default: true
+          version: 1.4.1
+          image:
+            initImage: {{ .Values.image.initImage }}
+            initTag: {{ .Values.image.initTag }}
+            caImage: {{ .Values.image.caImage }}
+            caTag: {{ .Values.image.caTag }}
+      peer:
+        1.4.1:
+          default: true
+          version: 1.4.1
+          image:
+            initImage: {{ .Values.image.initImage }}
+            initTag: {{ .Values.image.initTag }}
+            peerImage: {{ .Values.image.peerImage }}
+            peerTag: {{ .Values.image.peerTag }}
+            dindImage: {{ .Values.image.dindImage }}
+            dindTag: {{ .Values.image.dindTag }}
+            couchdbImage: {{ .Values.image.couchdbImage }}
+            couchdbTag: {{ .Values.image.couchdbTag }}
+            grpcwebImage: {{ .Values.image.grpcwebImage }}
+            grpcwebTag: {{ .Values.image.grpcwebTag }}
+            fluentdImage: {{ .Values.image.fluentdImage }}
+            fluentdTag: {{ .Values.image.fluentdTag }}
+      orderer:
+        1.4.1:
+          default: true
+          version: 1.4.1
+          image:
+            initImage: {{ .Values.image.initImage }}
+            initTag: {{ .Values.image.initTag }}
+            ordererImage: {{ .Values.image.ordererImage }}
+            ordererTag: {{ .Values.image.ordererTag }}
+            grpcwebImage: {{ .Values.image.grpcwebImage }}
+            grpcwebTag: {{ .Values.image.grpcwebTag }}
+    
+    defaults:
+      storage:
+        ca:
+          size: 1Gi
+          class: {{ .Values.dataPVC.storageClassName | default nil | quote }}
+        couchdb:
+          size: 10Gi
+          class: {{ .Values.dataPVC.storageClassName | default nil | quote }} 
+        peer:
+          size: 10Gi
+          class: {{ .Values.dataPVC.storageClassName | default nil | quote }} 
+        orderer:
+          size: 10Gi
+          class: {{ .Values.dataPVC.storageClassName | default nil | quote }} 
+      resources:
+        ca:
+          limits:
+            cpu: 100m
+            memory: 200M
+          requests:
+            cpu: 100m
+            memory: 200M
+        fluentd:
+          limits:
+            cpu: 100m
+            memory: 200M
+          requests:
+            cpu: 100m
+            memory: 200M
+        configtxlator:
+          limits:
+            cpu: 25m
+            memory: 50M
+          requests:
+            cpu: 25m
+            memory: 50M
+        couchdb:
+          limits:
+            cpu: 200m
+            memory: 400M
+          requests:
+            cpu: 200m
+            memory: 400M
+        dind:
+          limits:
+            cpu: 500m
+            memory: 1000M
+          requests:
+            cpu: 500m
+            memory: 1000M
+        fabproxy:
+          limits:
+            cpu: 100m
+            memory: 200M
+          requests:
+            cpu: 100m
+            memory: 200M
+        grpcproxy:
+          limits:
+            cpu: 100m
+            memory: 200M
+          requests:
+            cpu: 100m
+            memory: 200M
+        init:
+          limits:
+            cpu: 100m
+            memory: 200M
+          requests:
+            cpu: 100m
+            memory: 200M
+        orderer:
+          limits:
+            cpu: 250m
+            memory: 500M
+          requests:
+            cpu: 250m
+            memory: 500M
+        peer:
+          limits:
+            cpu: 200m
+            memory: 400M
+          requests:
+            cpu: 200m
+            memory: 400M
+

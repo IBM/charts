@@ -1,0 +1,234 @@
+arch:
+  amd64: "2 - No preference"
+
+## Override the name of the Chart.
+# nameOverride:
+
+postgres:
+  image:
+    name: "opencontent-postgres-stolon"
+    tag: "1.1.1"
+creds: 
+  image:
+    name: "opencontent-icp-cert-gen-1"
+    tag: "1.1.1"
+global:
+  image:
+    repository: "hyc-cp-opencontent-docker-local.artifactory.swg-devops.com"
+    pullSecret: ""
+    pullPolicy: "IfNotPresent"
+  sch:
+    # global.sch.enabled - Specifies if the ibm-sch chart should be used as sub-chart. If set to false, a compatible version of sch chart should be provided by umbrella chart.
+    enabled: true
+
+## Configuration values for Stolon.
+
+# Set custom stolon cluster name. Support templates (like "{{ .Release.Name }}" in its value )
+#clusterName: "kube-stolon"
+clusterName: ""
+
+debug: false
+
+## log slow queries
+# disabled by default
+slowQueries:
+  enabled: false
+  minDuration: 300
+
+ports:
+  internalPort: 5432
+  externalPort: 5432
+
+maxConnections: 100
+
+store:
+  ##  Backend could be one of the following:
+  ## - etcdv2
+  ## - etcdv3
+  ## - consul (should work, but not tested yet)
+  ## - kubernetes (should work, but not tested yet)
+  backend: "kubernetes"
+  ## store endpoints MUST be set for etcd/consul backends
+  endpoints: ""
+  kubeResourceKind: ""
+
+auth:
+  # auth.pgReplUsername - Name of the postgres user used internaly by the chart to replacate/synchronize keeper postgres instances. Templates like `{{ .Values.global.postgres.users.replication.userName }}` are supported.
+  pgReplUsername: "repluser"
+  # auth.pgSuperuserName - Name of the postgres user with super user/admin permissions. Templates like `{{ .Values.global.postgres.users.admin.userName }}` are supported.
+  pgSuperuserName: "stolon"
+  # auth.authSecretName - Name of the user created secret that holds passwords for the `auth.pgSuperuserName` user (key: `pg_su_password`) and for the `auth.pgReplUsername` user (key: `pg_repl_password`). Supports templates like `{{ .Release.Name }}-postgres-creds`. If empty (resp. if renders to empty value) the secret (and thus passwords) is generated. Default name of generated secret is `{{ .Release.Name }}-ibm-postgresql-auth-secret`.
+  authSecretName: ""
+
+tls:
+  # tls.enabled - Enable or disable Postgres SSL support (i.e., encrypted connection using PGSSLMODE=require). Templates like `{{ .Values.global.postgres.tls.enabled }}` are supported.
+  enabled: true
+  # tls.tlsSecretName - Name of the user created secret with private key (key: `tls.key`) and certificate (key: `tls.crt) that should be used by postgres for encrypted communication. Supports templates like `{{ .Release.Name }}-postgres-ssl-cert`. If empty (resp. if renders to empty value) the secret (and thus self-signed certificate) is generated. Default name of generated secret is `{{ .Release.Name }}-ibm-postgresql-tls-secret`.
+  tlsSecretName: ""
+
+securityContext:
+  postgres:
+    runAsUser: 1000
+    runAsGroup: 3000
+  creds:
+    runAsUser: 523
+
+# keep - if set to true, helm delete does not remove the generated resources (the postgresql database will continue to run in kubernetes but will not be managed by the helm)/
+# keep - Templates like `{{ .Values.global.keepDatastores }}` are supported.
+keep: false
+
+sentinel:
+  replicas: 3
+
+  ## Configure resource requests and limits.
+  ## ref: https://kubernetes.io/docs/user-guide/compute-resources/
+  ##
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "100m"
+      memory: "256Mi"
+
+  ## Configure nodeSelector, tolerations and affinity.
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node
+  ##
+
+  # sentinel.affinity - Affinity for sentinel pods. Only if empty the default arch based affinities are added. Support templates like '{{ include "umbrella-chart.affinityAndAntiaffinity" . }}'"
+  affinity: {}
+  nodeSelector: {}
+  tolerations: []
+
+proxy:
+  replicas: 2
+  ## Set serviceType to nodePort if needed
+  ## proxy is used to route RW requests to the master
+  # serviceType: NodePort
+  serviceType: ClusterIP
+
+  listenAddress: "0.0.0.0"
+
+  ## Configure resource requests and limits.
+  ## ref: https://kubernetes.io/docs/user-guide/compute-resources/
+  ##
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "100m"
+      memory: "256Mi"
+
+  ## Configure nodeSelector, tolerations and affinity.
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node
+  ##
+
+  # proxy.affinity - Affinity for proxy pods. Only if empty the default arch based affinities are added. Support templates like '{{ include "umbrella-chart.affinityAndAntiaffinity" . }}'"
+  affinity: {}
+  nodeSelector: {}
+  tolerations: []
+
+keeper:
+  replicas: 3
+  ## Set serviceType to nodePort if needed
+  ## keeper service is used to route RO requests to all nodes
+  # serviceType: NodePort
+  serviceType: ClusterIP
+
+  ## configure ssl for client access
+  # create certificates according to these instructions: https://www.postgresql.org/docs/9.6/static/ssl-tcp.html
+  # to enable encrypted traffic, servert.crt and server.key are required, by that name.
+  # the use of ** Client Certificates ** is not supported
+
+#By default certificates are generated if it is not provided
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "100m"
+      memory: "256Mi"
+
+  ## Configure nodeSelector, tolerations and affinity.
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node
+  ##
+
+  # keeper.affinity - Affinity for keeper pods. Only if empty the default arch based affinities are added. Support templates like '{{ include "umbrella-chart.affinityAndAntiaffinity" . }}'"
+  affinity: {}
+  nodeSelector: {}
+  tolerations: []
+
+## Persistent Volume Storage configuration.
+## ref: https://kubernetes.io/docs/user-guide/persistent-volumes
+##
+
+persistence:
+  ## Enable persistence using Persistent Volume Claims.
+  ##
+  enabled: false
+
+  # useDynamicProvisioning - if enabled the dataPVC.storageClassName volumes will be dynamicaly created (if the storage class can be created automatically).
+  #  If disabled either dataPVC.selectot.label should be specify and then the PVC will bound to precreated PV based on labels or dataPVC.storageClassName should be empty and then cluster admin has to bound the PVC to existing PV manually
+  useDynamicProvisioning: true
+
+  ## Persistent Volume Access Mode.
+  ##
+  accessMode: ReadWriteOnce
+
+  ## Persistant Volume Storage Class Name
+  #storageClassName: portworx-sc
+  storageClassName: localvolume-storage
+
+  ## Persistent Volume Storage Size.
+  ##
+  size: 10Gi
+
+dataPVC:
+  # name - name (prefix) of the created PVC
+  name: stolon-data
+
+  # selector - if you not using dynamic provisioning, you can use selectors to refine the binding process. You cannot specify a selector if your using dynamic provisioning.
+  selector:
+    # label - label that the PV should have to be boundable to created PVCs
+    label: ""
+    # value - value of the label that the PV should have to be boundable to created PVCs
+    value: ""
+
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+
+serviceAccount:
+  # serviceAccount.create - Specifies whether a ServiceAccount should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # serviceAccount.name - If not set and create is true, a name is generated (typically defaults to `{{ .Release.Name }}-ibm-postgresql`). Templates like `{{ .Values.global.serviceAccount.name }}` are supported.
+  name: ""
+
+# Readiness probe
+livenessProbe:
+  initialDelaySeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 5
+  periodSeconds: 10
+  successThreshold: 1
+
+# Readiness probe
+readinessProbe:
+  initialDelaySeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 5
+  periodSeconds: 10
+  successThreshold: 1
+
+# metering - Configures annotations for metering service (if present in the cluster). Supports string templates or dictionary type.
+#metering: "{{ .Values.global.umbrellaChartMetering | toYaml }}"
+#
+# Default values if not specified
+#  productID: PostgressqlHA_stolon_free_0000
+#  productName: PostgressqlHA
+#  productVersion: 9.6.9
+metering: {}

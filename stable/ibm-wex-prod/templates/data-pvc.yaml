@@ -1,0 +1,40 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compDataPVCName := .sch.chart.components.wex.data.pvc.name }}
+
+{{- $compOrchestratorLabelComponent := .sch.chart.components.wex.orchestrator.label.component }}
+{{- $compOrchestratorLabelrunPvc := .sch.chart.components.wex.orchestrator.label.runPvc }}
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compDataPVCName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-orchestrator
+    run: {{ $compOrchestratorLabelrunPvc }}
+spec:
+  {{- if .Values.general.persistence.useDynamicProvisioning }}
+  # if present, use the storageClassName from the values.yaml, else use the
+  # default storageClass setup by kubernetes Administrator
+  # setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.general.persistence.storageClassName | quote }}
+  {{- else }}
+  # bind to an existing pv.
+  # setting storageClassName to "" disables dynamic provisioning
+  storageClassName: {{ default "" .Values.general.persistence.storageClassName | quote }}
+  selector:
+    matchLabels:
+      assign-to: "wex-data"
+    {{- if .Values.general.persistence.selector.label }}
+    matchExpressions:
+      - {key: "{{ .Values.general.persistence.selector.label }}", operator: In, values: ["{{ .Values.general.persistence.selector.value }}"]}
+    {{- end }}
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ .Values.orchestrator.persistence.size }}

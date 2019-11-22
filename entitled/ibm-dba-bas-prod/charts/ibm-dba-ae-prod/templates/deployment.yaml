@@ -1,0 +1,177 @@
+################################################################################
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+################################################################################
+{{ include "sch.config.init" (list . "sch.appengine.config.values") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "deployment") }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "deployment") | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "deployment") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "deployment") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/ae-env.yaml") . | sha256sum }}
+    spec:
+{{ include "appengine.constants.pod.securityContext" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{- include "sch.affinity.podAntiAffinity" (list . .sch.chart.podAntiAffinity) | indent 8 }}
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . "deployment-access") }}
+{{ include "appengine.constants.pod.security" . | indent 6 }}
+      initContainers:
+      - name: dbcompatibility-init-container
+        image: {{ .Values.images.dbcompatibilityInitContainer | quote}}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote}}
+        securityContext:
+{{ include "appengine.constants.container.securityContext" . | indent 10 }}
+        resources:
+{{ .Values.resources.initContainer | toYaml | trim | indent 10 }}
+        env:
+        - name: EXPECTED_SCHEMA_VERSION
+          value: "1.0.0"
+        - name: DATABASE_TYPE
+          value: {{ .Values.database.type | quote}}
+        - name: DATABASE_HOST_NAME
+          value: {{ .Values.database.host | quote }}
+        - name: DATABASE_PORT
+          value: {{ .Values.database.port | quote }}
+        - name: DATABASE_NAME
+          value: {{ .Values.database.name | quote }}
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.adminSecretName | quote}}
+              key: AE_DATABASE_USER
+        - name: DATABASE_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.adminSecretName | quote}}
+              key: AE_DATABASE_PWD          
+        - name: DATABASE_SCHEMA
+          value: {{ .Values.database.currentSchema | quote }}
+        - name: SCHEMA_VERSION_TABLE_NAME
+          value: "SB_SYSTEM"
+        - name: SCHEMA_VERSION_KEY_NAME
+          value: "DatabaseSchemaVersion"
+        - name: SCHEMA_VERSION_KEY_COLUMN_NAME
+          value: "PROPNAME"      
+        - name: SCHEMA_VERSION_VALUE_COLUMN_NAME
+          value: "PROPVALUE"  
+        - name: MAX_RETRIES
+          value: {{ .Values.database.dbcompatibilityMaxRetries | quote}}
+        - name: RETRY_INTERVAL
+          value: {{ .Values.database.dbcompatibilityRetryInterval | quote}}            
+      - name: ssl-init-container
+        image: {{ .Values.images.tlsInitContainer | quote}}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote}}
+        securityContext:
+{{ include "appengine.constants.container.securityContext" . | indent 10 }}
+        env:
+        - name: KEYTOOL_ACTION
+          value: "GENERATE-BOTH"
+        - name: CREATE_KEYPAIR
+          value: {{ .Values.global.nonProductionMode | quote}}
+        - name: SUBJECT_ALT_NAMES
+          value: {{ .Values.global.appEngine.hostname | quote }}
+        volumeMounts:
+        - name: tls-stores
+          mountPath: /shared/tls
+        {{- if eq .Values.global.nonProductionMode true}}
+        - name: global-ca
+          mountPath: /etc/predefined-ca
+        {{- else}}
+        - name: trust-tls-volume
+          mountPath: /shared/resources/cert-trusted
+        - name: keypair-secret
+          mountPath: /shared/resources/keypair
+        {{- end}}
+        resources:
+{{ .Values.resources.initContainer | toYaml | trim | indent 10 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.images.appEngine | quote}}
+          imagePullPolicy: {{ .Values.images.pullPolicy | quote}}
+          securityContext:
+{{ include "appengine.constants.container.securityContext" . | indent 12 }}
+          env:
+          - name: RESOURCE_REGISTRY_AUTH_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.resourceRegistry.adminSecretName | quote}}
+                key: readUser
+          - name: RESOURCE_REGISTRY_AUTH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.resourceRegistry.adminSecretName | quote}}
+                key: readPassword
+          envFrom:
+          - configMapRef:
+              name: {{ include "sch.names.fullCompName" (list . "env") }}
+          - secretRef:
+              name: {{ .Values.adminSecretName | quote}}
+          volumeMounts:
+          - name: tls-stores
+            mountPath: /shared/tls
+          - name: models
+            mountPath: /usr/home/solution-server/models
+          - name: log-setting
+            mountPath: /etc/nodejs
+          resources:
+{{ .Values.resources.ae | toYaml | trim | indent 12 }}
+          ports:
+            - name: https
+              containerPort: 3001
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /k8s/liveliness
+              port: https
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /k8s/readiness
+              port: https
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.timeoutSeconds }}
+            successThreshold: {{ .Values.probes.successThreshold }}
+            failureThreshold: {{ .Values.probes.failureThreshold }}
+{{- include "appengine.imagePullSecrets" . | indent 6 }}
+      volumes:
+        - name: models
+          emptyDir: {}
+        - name: tls-stores
+          emptyDir: {}
+        {{- if eq .Values.global.nonProductionMode true}}
+        - name: global-ca
+          secret:
+            secretName: {{ .Values.global.caSecretName}}
+        {{- else}}
+        - name: keypair-secret
+          secret:
+            secretName: {{ .Values.tls.tlsSecretName }}
+{{ include "solution-server-chart.trustVolumes" (list .Values.global.caSecretName .Values.tls.tlsTrustList ) | indent 8 }}
+        {{- end}}
+        - name: log-setting
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . "file") }}

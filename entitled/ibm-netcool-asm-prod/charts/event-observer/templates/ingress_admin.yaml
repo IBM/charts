@@ -1,0 +1,34 @@
+{{- if or .Values.global.ingress.admin.enabled .Values.ingress.admin.enabled -}}
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    {{- if not .Values.global.asm.disableHTTPS }}
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    ingress.kubernetes.io/secure-backends: "true"
+    {{- end }}
+    ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  name: {{ include "sch.names.fullName" (list .) }}-{{ .Values.adminPort }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  rules:
+  - host: {{ .Values.global.ingress.domain | default nil }}
+    http:
+      paths:
+        - backend:
+            serviceName: {{ include "sch.names.fullName" (list .) }}
+            servicePort: {{ .Values.adminPort }}
+          path: /admin/{{ include "sch.names.appName" (list .) }}
+  {{- if .Values.global.ingress.tlsSecret }}
+  tls:
+  - hosts:
+    - {{ .Values.global.ingress.domain }}
+    secretName: {{ .Values.global.ingress.tlsSecret }}
+  {{- end }}
+{{- end }}

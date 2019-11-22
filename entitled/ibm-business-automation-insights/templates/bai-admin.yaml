@@ -1,0 +1,290 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-bai-admin
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.admin.replicas }}
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  selector:
+    matchLabels:
+      app: {{ template "ibm-bai.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      component: bai-admin
+  template:
+    metadata:
+      annotations:
+        {{ include "admin.restart" . }}
+        productName: "IBM Cloud Pak for Automation - Business Automation Insights"
+        productID: "5737-I23-BAI"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "ibm-bai.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: bai-admin
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: {{ template "ibm-bai.name" . }}
+                  chart: {{ .Chart.Name }}
+                  release: {{ .Release.Name }}
+                  heritage: {{ .Release.Service }}
+                  component: bai-admin
+              topologyKey: kubernetes.io/hostname
+{{- if and .Values.imageCredentials .Values.imageCredentials.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.imageCredentials .Values.imageCredentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-bai-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+      containers:
+      - name: bai-admin
+        image: {{ .Values.admin.image.repository }}:{{ .Values.admin.image.tag }}
+        {{- if .Values.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        {{- end}}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 20181
+        ports:
+        - name: admin-rest
+          containerPort: 6892
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /api/health
+            port: admin-rest
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /api/health
+            port: admin-rest
+          initialDelaySeconds: 25
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          {{ if .Values.admin.resources }}
+          requests:
+            {{ if .Values.admin.resources.requests }}
+            memory: {{ .Values.admin.resources.requests.memory | default "50Mi" | quote }}
+            cpu: {{ .Values.admin.resources.requests.cpu | default "3m" | quote }}
+            {{ else }}
+            memory: "50Mi"
+            cpu: "3m"
+            {{ end }}
+          limits:
+            {{ if .Values.admin.resources.limits }}
+            memory: {{ .Values.admin.resources.limits.memory | default "120Mi" | quote }}
+            {{ else }}
+            memory: "120Mi"
+            {{ end }}
+          {{ else }}
+          requests:
+            memory: "50Mi"
+            cpu: "3m"
+          limits:
+            memory: "120Mi"
+          {{ end }}
+        env:
+        - name: TAIGA_ADMIN_PORT
+          value: "6892"
+        - name: TAIGA_ADMIN_USER
+          valueFrom:
+{{- if .Values.baiSecret }}
+            secretKeyRef:
+              name: {{ .Values.baiSecret }}
+{{- else }}
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+{{- end}}
+              key: admin-username
+        - name: TAIGA_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+{{- if .Values.baiSecret }}
+              name: {{ .Values.baiSecret }}
+{{- else }}
+              name: {{ .Release.Name }}-bai-secrets
+{{- end}}
+              key: admin-password
+        - name: KAFKA_USERNAME
+          valueFrom:
+{{- if .Values.baiSecret }}
+            secretKeyRef:
+              name: {{ .Values.baiSecret }}
+{{- else }}
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+{{- end}}
+              key: kafka-username
+        - name: KAFKA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+{{- if .Values.baiSecret }}
+              name: {{ .Values.baiSecret }}
+{{- else }}
+              name: {{ .Release.Name }}-bai-secrets
+{{- end}}
+              key: kafka-password
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: kafka-bootstrap-servers
+        - name: KAFKA_SECURITY_PROTOCOL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: kafka-security-protocol
+        - name: KAFKA_SASL_KERBEROS_SERVICE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: kafka-sasl-kerberos-service-name
+        - name: KAFKA_KRB5_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-enable-kafka
+        - name: KAFKA_KRB5_REALM
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-realm
+        - name: KAFKA_KRB5_KDC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-kdc
+        - name: KAFKA_KRB5_PRINCIPAL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: flink-security-krb5-principal
+        - name: KAFKA_KRB5_KEYTAB
+          value: "/etc/krb5/kafka.keytab"
+        - name: KAFKA_SERVICE_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-bai-env
+              key: service-topic
+        volumeMounts:
+        - name: kerberos-keytabs
+          mountPath: /etc/krb5
+          readOnly: true
+        - name: admin-ssl
+          mountPath: /etc/admin-ssl
+          readOnly: true
+        - name: admin-server-ssl-key
+          mountPath: /usr/src/taiga-admin/src/server/resources/local-server.key
+          subPath: local-server.key
+        - name: admin-server-ssl-crt
+          mountPath: /usr/src/taiga-admin/src/server/resources/local-server.crt
+          subPath: local-server.crt
+      volumes:
+      - name: kerberos-keytabs
+        secret:
+{{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+{{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+{{- end}}
+          optional: true
+          items:
+          - key: flink-security-krb5-keytab
+            path: kafka.keytab
+      - name: admin-ssl
+        secret:
+{{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+{{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+{{- end }}
+          optional: true
+          items:
+          - key: kafka-ca-cert
+            path: kafka-ca.pem
+      - name: admin-server-ssl-key
+        secret:
+{{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+{{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+{{- end}}
+          items:
+            - key: admin-key
+              path: local-server.key
+      - name: admin-server-ssl-crt
+        secret:
+{{- if .Values.baiSecret }}
+          secretName: {{ .Values.baiSecret }}
+{{- else }}
+          secretName: {{ .Release.Name }}-bai-secrets
+{{- end}}
+          items:
+            - key: admin-cert
+              path: local-server.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-bai-admin-service
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: bai-admin
+spec:
+  selector:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: bai-admin
+  ports:
+    - name: admin-rest-https
+      protocol: TCP
+      port: 6892
+      targetPort: admin-rest
+    {{- if .Values.admin.externalPort }}
+      {{- if eq .Values.admin.serviceType "NodePort" }}
+      nodePort: {{ .Values.admin.externalPort }}
+      {{- end }}
+    {{- end }}
+  {{ if eq .Values.admin.serviceType "NodePort" }}
+  type: NodePort
+  {{ else }}
+  type: ClusterIP
+  {{ end }}

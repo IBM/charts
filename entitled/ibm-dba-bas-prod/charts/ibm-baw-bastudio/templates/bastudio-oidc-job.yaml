@@ -1,0 +1,68 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+{{ include "sch.config.init" (list . "sch.bastudio.config.values") }}
+{{ $externalUrl := (include "bastudio.serviceURL" (list .Values.global.baStudio "bastudio")) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "oidc" ) }}-{{ randNumeric 3 }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "oidc") | indent 4 }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: bastudio-oidc-init-job
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "oidc") | indent 8 }}
+    spec:
+{{ include "bastudio.constants.pod.securityContext" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . "bastudio-sa") }}
+      restartPolicy: OnFailure
+      containers:
+      - name: bastudio-container-oidc
+        image: {{ .Values.images.umsInitRegistration | quote }}
+        securityContext:
+{{ include "bastudio.constants.container.securityContext" . | indent 10 }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.resources.initProcess | indent 10 }}
+        env:
+        - name: CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: oidcClientId
+        - name: CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: oidcClientSecret
+        - name: OIDC_HOST
+          value: {{ .Values.global.ums.hostname | quote }}
+        - name: OIDC_PORT
+          value: {{ .Values.global.ums.port | quote }}
+        - name: OIDC_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName | quote }}
+              key: adminUser
+        - name: OIDC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName | quote }}
+              key: adminPassword
+        - name: REDIRECT_URIS
+          value: "regexp:https://.*/oidcclient/redirect/.*"
+        - name: POST_LOGOUT_REDIRECT_URIS
+          value: {{ printf "%s/BAStudio" $externalUrl | quote }}

@@ -1,0 +1,106 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compWksmlName := .sch.chart.components.wex.wksml.name }}
+{{- $compWksmlLabelComponent := .sch.chart.components.wex.wksml.label.component }}
+{{- $compWksmlLabelRunStatefulset := .sch.chart.components.wex.wksml.label.runStatefulset }}
+
+{{- $compConfigmapName := .sch.chart.components.wex.configmap.name }}
+{{- $compDataPVCName := .sch.chart.components.wex.data.pvc.name }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compWksmlName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-wksml
+    run: {{ $compWksmlLabelRunStatefulset }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "{{ .Chart.Name }}.fullname" . }}
+      component: wex-wksml
+      run: {{ $compWksmlLabelRunStatefulset }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $compWksmlName ) }}
+  replicas: {{ .Values.wksml.replica }}
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-wksml
+        run: {{ $compWksmlLabelRunStatefulset }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.wksml.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+                app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                component: wex-wksml
+                run: {{ $compWksmlLabelRunStatefulset }}
+        {{- else if eq .Values.wksml.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                  component: wex-wksml
+                  run: {{ $compWksmlLabelRunStatefulset }}
+        {{- end }}
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: wksml
+        image: "{{ .Values.general.image.wksml }}"
+        imagePullPolicy: {{ .Values.general.image.pullPolicy }}
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+        env:
+        - name: WEX_ALL_COMPONENTS
+          value: "wksml"
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compConfigmapName ) }}
+        ports:
+        - name: api
+          containerPort: 5193
+          protocol: TCP
+        resources:
+{{ toYaml .Values.wksml.resources | indent 10 }}
+        volumeMounts:
+        - name: datadir
+          mountPath: /wexdata
+        readinessProbe:
+          httpGet:
+            path: /sire/api/v1/models
+            port: api
+          initialDelaySeconds: {{ .Values.wksml.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.wksml.readinessProbe.timeoutSeconds }}
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /sire/api/v1/models
+            port: api
+          initialDelaySeconds: {{ .Values.wksml.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.wksml.livenessProbe.timeoutSeconds }}
+      volumes:
+      - name: "datadir"
+        persistentVolumeClaim:
+          claimName: {{ include "sch.names.fullCompName" (list . $compDataPVCName ) }}

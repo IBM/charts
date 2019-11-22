@@ -1,0 +1,45 @@
+global:
+  image:
+    repository: ""
+
+# replicas - If set to 0 the size is configured based on .global.deploymentType (defined in umbrella chart))
+replicas: 0
+
+autoscaling:
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 100
+
+# imagePullSecret - Additional image pull secret to be used for pulling images. Supports templated values
+imagePullSecret: "{{ tpl .Values.global.image.pullSecret . }}"
+
+init:
+  # init container for Mongo. If enabled it waits untils clu data are loaded in mongo, e.g. by ibm-watson-assistant-datastores-mongodb-load-clu chart
+  waitForCluMongoData: true
+  
+  # Specifications for init container etcd-running. It checks whether etcd is running and healthy, has enabled authorization and configuration entries for tas are stored there.
+  etcd:
+    image:
+      repository: "{{ tpl .Values.global.image.repository . }}"
+      name:       "conan-tools"
+      tag:        "20190809-0011"
+      pullPolicy: "IfNotPresent"
+  # Specifications for init container cos-running-check. It checks whether it is possible to connection into cos/minio.
+  cosRunning:
+    image:
+      repository: "{{ tpl .Values.global.image.repository . }}"
+      name:       "conan-tools"
+      tag:        "20190809-0011"
+      pullPolicy: "IfNotPresent"
+  # Specifications for init container mongo-clu-data-check. It checks whether all the required data has been already saved into mongodb.
+  mongoloader:
+    image:
+      repository: "{{ tpl .Values.global.image.repository . }}"
+      name:       "improve-recommendations-mongo-ubi"
+      tag:        "3.6"
+      pullPolicy: "IfNotPresent"
+
+image:
+  repository:     "{{ tpl .Values.global.image.repository . }}"
+  name:           "slad-tas-runtime"
+  tag:            "20190809-125407-4-50f2fa-wa_icp_1.3-icp-e79df21"
+  pullPolicy:     "IfNotPresent"

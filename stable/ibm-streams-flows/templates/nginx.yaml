@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streams-flows-routes
+  labels:
+    icpdata_addon: "true"
+    app.kubernetes.io/name: streams-flows-routes
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    location /streams-flows {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $streams_flows_ui streaming-pipelines-ui.$nsdomain;
+      proxy_pass https://$streams_flows_ui:443;
+    }
+    location /v2/streaming_pipelines {
+      proxy_set_header Host $host;
+      set $streams_flows_api streaming-pipelines-api.$nsdomain;
+      proxy_pass https://$streams_flows_api:443;
+    }
+    location /v2/streams_flows {
+      proxy_set_header Host $host;
+      set $streams_flows_api streaming-pipelines-api.$nsdomain;
+      proxy_pass https://$streams_flows_api:443;
+    }
+    location /v2/streams_flows/python_validator {
+      proxy_set_header Host $host;
+      set $streams_flows_python_validator streaming-pipelines-python-validator.$nsdomain;
+      proxy_pass https://$streams_flows_python_validator:443;
+    }
+    location /streams/pipelines {
+      proxy_set_header Host $host;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $streams_flows_ui streaming-pipelines-ui.$nsdomain;
+      proxy_pass https://$streams_flows_ui:443;
+    }

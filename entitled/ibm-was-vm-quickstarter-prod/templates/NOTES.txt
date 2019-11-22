@@ -1,0 +1,24 @@
+{{ include "sch.config.init" (list . "sch.chart.config.values") }}
+{{ $consoleCompName := .sch.chart.components.console.name -}}
+{{ $dashboardCompName := .sch.chart.components.dashboard.name -}}
+{{ $brokerCompName := .sch.chart.components.broker.name -}}
+
+# List of all deployed resources
+kubectl get all --namespace {{ .Release.Namespace }} -l "app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }}"
+
+# Accessing DevOps container
+export DEVOPS_POD=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "component=devops,app={{ include "sch.names.appName" (list .) }},release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+kubectl --namespace {{ .Release.Namespace }} exec -it $DEVOPS_POD bash
+
+# Broker address
+export BROKER_SERVICE_IP=$(kubectl get ingress --namespace {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . $brokerCompName) }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "WAS VM Quickstarter broker: https://$BROKER_SERVICE_IP{{ .Values.broker.ingress.path }}wasaas-broker/"
+
+# Console address
+export CONSOLE_SERVICE_IP=$(kubectl get ingress --namespace {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . $consoleCompName) }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "WAS VM Quickstarter console: https://$CONSOLE_SERVICE_IP{{ .Values.console.ingress.path }}"
+
+# Dashboard address
+export DASHBOARD_SERVICE_IP=$(kubectl get ingress --namespace {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . $dashboardCompName) }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "WAS VM Quickstarter dashboard: https://$DASHBOARD_SERVICE_IP{{ .Values.dashboard.ingress.path }}"
+

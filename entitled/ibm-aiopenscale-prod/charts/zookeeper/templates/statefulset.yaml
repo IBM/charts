@@ -1,0 +1,200 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $namePrefix := "zookeeper" -}}
+{{ $compName := "aios-zookeeper" -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $namePrefix ) -}}
+{{ $serviceName := include "sch.names.fullCompName" (list . "zookeeper-headless" ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceAccount := include "aios.serviceAccountNameAdmin" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid2" (list .) -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ $labels | indent 4 }}
+    component: server
+spec:
+  serviceName: {{ $serviceName }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  updateStrategy:
+{{ toYaml .Values.updateStrategy | indent 4 }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+      {{- include "aios.metering" . | indent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecrets }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      {{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      serviceAccountName: {{ $serviceAccount }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+      {{ if .Values.global.dockerRegistryPrefix }}
+      initContainers:
+        - name: init-volume-container
+          image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+          command: ['sh', '-c',
+                'sudo chown zensys /var/lib/zookeeper;
+                 chmod 755 /var/lib/zookeeper']
+          volumeMounts:
+          - name: data
+            mountPath: /var/lib/zookeeper
+      {{ end }}
+      containers:
+        - name: zookeeper
+          image: {{ include "aios.image" (list . .Values.image.repository .Values.image.tag) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          command:
+          - sh
+          - -ec
+          - |
+            cp /opt/ibm/zookeeper/conf/zoo.cfg $HOME/zoo.cfg
+            if [ ! -z $DISABLE_JSON_LOG ]
+            then
+              cp /opt/ibm/zookeeper/conf/log4j_plain.properties $HOME/log4j.properties
+            else
+              cp /opt/ibm/zookeeper/conf/log4j.properties $HOME/log4j.properties
+            fi
+            echo "" >> $HOME/zoo.cfg
+            echo tickTime=2000 >> $HOME/zoo.cfg
+            echo initLimit=5 >> $HOME/zoo.cfg
+            echo syncLimit=2 >> $HOME/zoo.cfg
+            for i in {1..{{ .Values.replicaCount }}}
+            do
+              index=$((i - 1))
+              echo "server.${i}={{ .Release.Name }}-ibm-aios-zookeeper-${index}.{{ .Release.Name }}-ibm-aios-zookeeper-headless.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:2888:3888" >> $HOME/zoo.cfg
+            done
+            echo "$HOME/zoo.cfg:"
+            cat $HOME/zoo.cfg
+            ID=${POD_NAME:(-1)}
+            echo $((ID + 1)) > /var/lib/zookeeper/myid
+            echo "/var/lib/zookeeper/myid:"
+            cat /var/lib/zookeeper/myid
+            exec /opt/ibm/zookeeper/bin/zkServer.sh start-foreground
+          ports:
+{{- range $key, $port := .Values.ports }}
+            - name: {{ $key }}
+{{ toYaml $port | indent 14 }}
+{{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.ports.client.containerPort }}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 6
+            successThreshold: 1
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -ec
+              - echo ruok | nc localhost {{ .Values.ports.client.containerPort }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 6
+            successThreshold: 1
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: ZK_REPLICAS
+              value: {{ .Values.replicaCount | quote }}
+            - name: HOME
+              value: "/home/aios"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/zookeeper
+            {{- range $secret := .Values.secrets }}
+              {{- if $secret.mountPath }}
+                {{- range $key := $secret.keys }}
+            - name: {{ $.Release.Name }}-{{ $secret.name }}
+              mountPath: {{ $secret.mountPath }}/{{ $key }}
+              subPath: {{ $key }}
+              readOnly: true
+                {{- end }}
+              {{- end }}
+            {{- end }}
+
+      volumes:
+        {{- if not .Values.global.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.global.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{include "sch.names.volumeClaimTemplateName" (list . "data" $statefulSetName)}}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+        {{- if or .Values.global.storageClassName .Values.global.persistence.useDynamicProvisioning }}
+        storageClassName: {{ include "aios.storageClassName" (list .) }}
+        {{- else }}
+        storageClassName: ""
+        {{- end }}
+  {{- end }}

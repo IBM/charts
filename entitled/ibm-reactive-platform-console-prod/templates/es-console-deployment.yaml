@@ -1,0 +1,125 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.esConsole.compName -}}
+{{- $name := .sch.chart.components.esConsole.deployment.name -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: es-console
+  labels:
+    appName: {{ $name }}-{{ .Release.Name }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      run: es-console
+
+  template:
+    metadata:
+      annotations:
+        checksum/es-console-config: {{ include (print $.Template.BasePath "/es-console-configmap.yaml") . | sha256sum }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: {{ template "name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: es-console
+        # Deprecated - these should be removed eventually. Kept to support upgrades with the old labels.
+        run: es-console
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{ if .Values.podUID }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.podUID }}
+      {{ end }}
+      affinity:
+      {{- include "ibm-reactive-platform-console-prod.nodeaffinity" . | indent 6 }}
+      {{ if .Values.imageCredentials.credentials }}
+      imagePullSecrets:
+      - name: {{ .Values.imageCredentials.credentials }}
+      {{ end }}
+
+      containers:
+      # Used by nginx to look up service names dynamically.
+      # go-dnsmasq has the unique property of using /etc/resolv.conf search domains.
+      - name: dnsmasq
+        image: {{ tpl .Values.goDnsmasqImage . }}:{{ .Values.goDnsmasqVersion }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: {{ .Values.podUID }} 
+          capabilities:
+            drop:
+              - ALL
+        resources:
+          requests:
+            cpu: {{ default .Values.defaultCPURequest }}
+            memory: {{ default .Values.defaultMemoryRequest }}
+          limits:
+            memory: {{ default .Values.defaultMemoryLimit }}
+        args:
+          - --listen
+          - "127.0.0.1:5353"
+          - --verbose
+          - --enable-search
+      - name: es-console
+        image: {{ tpl .Values.esConsoleImage . }}:{{ .Values.esConsoleVersion }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 5000
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - CHOWN
+            - SETGID
+            - SETUID
+        resources:
+          requests:
+            cpu: {{ default .Values.defaultCPURequest .Values.esConsoleCPURequest }}
+            memory: {{ default .Values.defaultMemoryRequest .Values.esConsoleMemoryRequest }}
+          limits:
+            memory: {{ default .Values.defaultMemoryLimit .Values.esConsoleMemoryLimit }}
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          periodSeconds: 10
+          initialDelaySeconds: 30
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          periodSeconds: 20
+          initialDelaySeconds: 120
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+        - name: ui-config
+          mountPath: /helm-data/assets/js
+
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: es-console
+          items:
+          - key: default.conf
+            path: default.conf
+      - name: ui-config
+        configMap:
+          name: es-console
+          items:
+          - key: config.js
+            path: config.js
+

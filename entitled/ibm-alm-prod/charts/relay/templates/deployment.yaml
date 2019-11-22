@@ -1,0 +1,124 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: relay
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  replicas: {{ .Values.app.numReplicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      {{- if lt .Values.app.numReplicas 2.0 }}
+      maxUnavailable: 0
+      {{- end }}
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+{{ include "alm.podSecurityContext" (list . "") | indent 6 }}
+      #https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      initContainers:
+      - name: wait-for-conductor
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.baseImage.name}}:{{.Values.baseImage.tag}}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: SERVICE
+          value: conductor
+        - name: EXPECTED_COUNT
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - python3 /scripts/check-service-endpoint-count.py
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+      containers:
+      - name: relay
+        command:
+        - /data/start.sh
+        image: "{{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        ports:
+        - containerPort: 8285
+          protocol: TCP
+        livenessProbe:
+          failureThreshold: {{ .Values.app.livenessProbe.failureThreshold }}
+          httpGet:
+            path: /management/health
+            port: 8285
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.app.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.app.livenessProbe.periodSeconds }}
+        readinessProbe:
+          failureThreshold: {{ .Values.app.readinessProbe.failureThreshold }}
+          httpGet:
+            path: /management/health
+            port: 8285
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.app.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.app.readinessProbe.periodSeconds }}
+        envFrom:
+        - configMapRef:
+            name: relay
+        env:
+        - name: JVM_OPTIONS
+          value: {{ .Values.jvmOptions }}
+        - name: INSTANCE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: LOG_FOLDER
+          value: {{ .Values.logFolder }}
+        - name: spring_cloud_config_token
+          valueFrom:
+            secretKeyRef:
+              name: {{ printf "%s-%s" .Release.Name "vault-keys" }}
+              key: alm_token
+        resources:
+{{ include "alm.getResources" . | indent 10 }}
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+        volumeMounts:
+        - name: lm-certs
+          mountPath: /var/lm/certs
+        - name: logs
+          mountPath: {{ .Values.logFolder }}
+        - name: tmp
+          mountPath: /tmp
+        - name: truststore
+          mountPath: /var/lm/truststore
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      - name: truststore
+        emptyDir: {}
+      - name: lm-certs
+        secret:
+          secretName: {{ .Values.global.security.almCerts.secretName | default (printf "%s-%s" .Release.Name "security-default") }}

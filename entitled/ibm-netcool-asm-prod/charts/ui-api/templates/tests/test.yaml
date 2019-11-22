@@ -1,0 +1,45 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullName" (list .) }}-test"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ include "sch.names.appName" (list .) }}-test
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  supplementalGroups:
+  {{- range $group := .Values.global.persistence.supplementalGroups }}
+    - {{ $group -}}
+  {{ end }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- range $arch := .Values.arch }}
+              - {{ $arch -}}
+            {{ end }}
+  containers:
+    - name: "{{ include "sch.names.fullName" (list .) }}-test"
+      image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+      command: ['/bin/sh']
+      args:  ['-c', 'curl -I -k -X GET http{{ if not .Values.global.asm.disableHTTPS }}s{{ end }}://{{ include "sch.names.fullName" (list .) }}:{{ .Values.httpPort }}/1.0/{{ include "sch.names.appName" (list .) }}/service/healthcheck | head -n 1 | grep 200']
+      resources:
+{{ include "asm.minimalPodResources" . | indent 8 }}
+      securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 8 }}
+  restartPolicy: Never

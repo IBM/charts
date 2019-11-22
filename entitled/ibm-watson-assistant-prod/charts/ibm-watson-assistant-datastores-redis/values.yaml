@@ -1,0 +1,56 @@
+global:
+  image:
+    repository: ""
+
+creds:
+  image:
+    repository: "{{ tpl .Values.global.image.repository . }}"
+    name:       "conan-tools"
+    tag:        "20190809-0011"
+    pullPolicy: "IfNotPresent"
+
+config:
+  global:
+    image:
+      secretName: "{{ .Values.global.image.pullSecret }}"
+  
+  arch:
+    amd64: "2 - No preference"
+    ppc64le: "0 - Do not use"
+  
+  nameOverride: "redis"
+
+  auth:
+    # Used by creds gen job. Not modifiable by user.
+    authSecretName: "{{ .Release.Name }}-redis-password"
+  persistence:
+    enabled: false # Redis is only in-memory cache
+
+  resources:
+    server:
+      requests:
+        memory: 128Mi
+        cpu: 25m
+      limits:
+        # cpu limits removed for WA ICP deployments
+        memory: 128Mi
+    sentinel:
+      requests:
+        memory: 50Mi
+        cpu: 10m
+      limits:
+        # cpu limits removed for WA ICP deployments
+        memory: 50Mi
+    
+  # if true, don't delete the datastore objects during a helm delete
+  keep: "{{ .Values.global.keepDatastores }}"
+
+  clusterDomain: "{{ tpl .Values.global.clusterDomain . }}"
+
+  # Enabling pod disruption budget
+  master:
+    podDisruptionBudget:
+      maxUnavailable: 1
+  sentinel:
+    podDisruptionBudget:
+      maxUnavailable: 1

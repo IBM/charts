@@ -1,0 +1,50 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.dsxlMl) -}}
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: portal-mlaas
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: portal-mlaas
+    run: portal-mlaas-deployment
+spec:
+  replicas: {{ .Values.portalMLAASContainer.replicas }}
+  selector:
+    matchLabels:
+      run: portal-mlaas-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        component: portal-mlaas
+        run: portal-mlaas-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: portal-mlaas-container
+        image: {{ .Values.portalMLAASContainer.image.repository }}:{{ .Values.portalMLAASContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.portalMLAASContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 9888
+          protocol: TCP
+        # TODO: Re-enable liveness and readiness probe
+        # livenessProbe:
+        #   httpGet:
+        #     path: /mlaas/monitor
+        #     port: 9888
+        #     scheme: HTTPS
+        #   initialDelaySeconds: 30
+        #   periodSeconds: 30
+        # readinessProbe:
+        #   httpGet:
+        #     path: /mlaas/monitor
+        #     port: 9888
+        #     scheme: HTTPS
+        #   initialDelaySeconds: 30
+        #   periodSeconds: 30
+{{- end }}

@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-janusgraph-config
+  labels:
+    app: {{ template "janusgraph.fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: {{ .Release.Name }}-janusgraph-config
+data:
+  janusgraph.properties: |-
+    gremlin.graph=org.janusgraph.core.ConfiguredGraphFactory
+    graph.graphname=ConfigurationManagementGraph
+
+    {{- range $key, $val := .Values.properties }}
+    {{ $key }}={{ $val }}
+    {{- end }}
+
+  gremlin-server.yaml: |-
+    host: 0.0.0.0
+    port: {{ include "janusgraph.port" . }}
+    scriptEvaluationTimeout: 30000
+    ssl: { enabled: {{ include "janusgraph.sslenabled" . }} }
+    channelizer: org.apache.tinkerpop.gremlin.server.channel.WebSocketChannelizer
+    graphManager: org.janusgraph.graphdb.management.JanusGraphManager
+    graphs: {
+      ConfigurationManagementGraph: conf/gremlin-server/janusgraph.properties
+    }
+    plugins:
+      - janusgraph.imports
+    scriptEngines: {
+      gremlin-groovy: {
+        imports: [java.lang.Math, com.compose.janusgraph.ToInputStream],
+        staticImports: [java.lang.Math.PI],
+        scripts: [/janusgraph-config/po-script.groovy]}}
+    serializers:
+      - { className: org.apache.tinkerpop.gremlin.driver.ser.GryoMessageSerializerV1d0, config: { ioRegistries: [org.janusgraph.graphdb.tinkerpop.JanusGraphIoRegistry] }}
+      - { className: org.apache.tinkerpop.gremlin.driver.ser.GryoLiteMessageSerializerV1d0, config: {ioRegistries: [org.janusgraph.graphdb.tinkerpop.JanusGraphIoRegistry] }}
+      - { className: org.apache.tinkerpop.gremlin.driver.ser.GryoMessageSerializerV1d0, config: { serializeResultToString: true }}
+      - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerGremlinV1d0, config: { ioRegistries: [org.janusgraph.graphdb.tinkerpop.JanusGraphIoRegistryV1d0] }}
+      - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerGremlinV2d0, config: { ioRegistries: [org.janusgraph.graphdb.tinkerpop.JanusGraphIoRegistry] }}
+      - { className: org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerV1d0, config: { ioRegistries: [org.janusgraph.graphdb.tinkerpop.JanusGraphIoRegistryV1d0] }}
+    processors:
+      - { className: org.apache.tinkerpop.gremlin.server.op.session.SessionOpProcessor, config: { sessionTimeout: 28800000 }}
+      - { className: org.apache.tinkerpop.gremlin.server.op.traversal.TraversalOpProcessor, config: { cacheExpirationTime: 600000, cacheMaxSize: 1000 }}
+    metrics: {
+      consoleReporter: {enabled: true, interval: 180000},
+      csvReporter: {enabled: true, interval: 180000, fileName: /tmp/gremlin-server-metrics.csv},
+      jmxReporter: {enabled: true},
+      slf4jReporter: {enabled: true, interval: 180000},
+      gangliaReporter: {enabled: false, interval: 180000, addressingMode: MULTICAST},
+      graphiteReporter: {enabled: false, interval: 180000}}
+    maxInitialLineLength: 4096
+    maxHeaderSize: 8192
+    maxChunkSize: 8192
+    maxContentLength: 65536
+    maxAccumulationBufferComponents: 1024
+    resultIterationBatchSize: 64
+    writeBufferLowWaterMark: 32768
+    writeBufferHighWaterMark: 65536
+  po-script.groovy: |-
+    import org.mindrot.jbcrypt.BCrypt
+    import java.util.regex.Pattern
+    import org.janusgraph.core.JanusGraphFactory
+
+    // an init script that returns a Map allows explicit setting of global bindings.
+    def globals = [:]
+
+    // defines a sample LifeCycleHook that prints some output to the Gremlin Server console.
+    // note that the name of the key in the "global" map is unimportant.
+    globals << [hook : [
+            onStartUp: { ctx ->
+                ctx.logger.info("Executed once at startup of Gremlin Server.")
+                def map = new HashMap();
+                {{- range $key, $val := .Values.properties }}
+                map.put("{{- $key -}}", "{{- $val -}}");
+                {{- end }}
+                map.put("graph.use-hostname-for-unique-instance-id", true);
+                map.put("graph.replace-instance-if-exists", true);
+                if (ConfigurationManagementGraph.getInstance().getTemplateConfiguration() != null) {
+                    ConfigurationManagementGraph.getInstance().updateTemplateConfiguration(new MapConfiguration(map));
+                    ctx.logger.info("Update existing template configuration.");
+                } else {
+                    ConfigurationManagementGraph.getInstance().createTemplateConfiguration(new MapConfiguration(map));
+                    ctx.logger.info("Create new template configuration.");
+                }
+            },
+            onShutDown: { ctx ->
+                ctx.logger.info("Executed once at shutdown of Gremlin Server.")
+            }
+    ] as LifeCycleHook]
+
+    // define the default TraversalSource to bind queries to - this one will be named "g".
+    // globals << [g : graph.traversal()]
+    globals << [:]
+binaryData:
+  compose-jg.jar: |-
+    UEsDBBQACAgIAMR6h00AAAAAAAAAAAAAAAAJAAQATUVUQS1JTkYv/soAAAMAUEsHCAAAAAACAAAAAAAAAFBLAwQUAAgICADEeodN
+    AAAAAAAAAAAAAAAAFAAAAE1FVEEtSU5GL01BTklGRVNULk1G803My0xLLS7RDUstKs7Mz7NSMNQz4OVyLkpNLElN0XWqBAlY6BnE
+    G5oaKmj4FyUm56QqOOcXFeQXJZYA1WvycvFyAQBQSwcIlldz8EQAAABFAAAAUEsDBBQACAgIAKp6h00AAAAAAAAAAAAAAAAqAAAA
+    Y29tL2NvbXBvc2UvamFudXNncmFwaC9Ub0lucHV0U3RyZWFtLmNsYXNzpVZrcxvVGX6OLXvlzdoJMjixCe7GOMSW5Ii2lKYO0MjC
+    SZzKF3RJUdKirqW1vUHeFburBNMWeqH3+72hLfCNL3wwfJAzzUz5Fmb4BfyWDtP2Oau1LMfyDENnpD173st5n/d9n3POfvSff/4L
+    wBN4W0UcV6L4moosFhUsqYhgWUUUKwqeU5CLIq9CaYkKURTleFXB1wfwPEoqruG69PyGiiF8U8ELKoZxRT7KUXxLjoZUr6qooKrC
+    xFoU6zLERhSWiht4UT5qUrIZhS1HJ4q69HkpCjcKT8bzFTQkiJsKbgnEssuZdLaczmTm8/nyfC63nJPCG8ZNI1Uz7PVU3ncte/28
+    wGDGsT3fsP2rRq1hCozliysr2VK5mJ/PldNLz5ZX0nsrjCwW84VyaFEorczvKsY6Fbn5/HIxl2kr+5+ybMt/RqB3avqqQCTjVBno
+    aNayzaXG5qrpFozVGiWDvrNg1xs+sZnGpkB56iDgzyaZboksJ9URQCaf943Ki4tGPUDAzip4WUCdf7li1n2LhVGwpeAVBd9m7r4z
+    Z3hWJd3wN/bBXAhh2qafKuay/xegYd9Zcg5EOH1fhMO8FcvLOhWjJvDA/R7XWPc11+Fi5z9VVbuHIMcEFj9jWw5DreadhlsxL1qS
+    A7FCJwfOSg8Nn8cXSJ6GW2N7NHwH3xXQOtOTFq9qmEOGTNyLm2vYvrVptrspMFlxNlP81x3PTN0w7Ia37hr1jVRhP/GmuabeQq1v
+    Njxftx1frzuW7eu+oxt6TRZZXyNgDc/gqwKX03rDM13b2DR1w67SpG543i3Hrbb8V03da9TrNcus6muOq69KIukG+6zXXcc3Kz4V
+    DOppuIC0wMndSs1t+WbadY2tDnwKXtPwPXxfwQ80/BCva/gRfixL8BOB4/dXfa5h1aqmq+Gn+JmAmNXw85bHLxT8UsOv8FsFv9Pw
+    e/yB+zTgt67hj/gT94akoeNarxiydgr+rOEv+KuG23hDw9/wuiRUUIG/y3do+AfeFEimdX+rburOmj7hBQgmdCY8weZNtGvBnG9a
+    VbMq8Hhad00v6L90MfSWj3QxdPoccNHwJTzJfbKXZ7u9sgRvCRzbUy2v3mBp94laVREYb/Nn0aixJZtmlfXvoMpwm6zLnQTalRZt
+    2VDHZePm7YpT5aIdZsfMlxpGzVtYtx3XzBgeif1Ql10jd2VXOU/JUy2ADFXZMFyPQHlW2VXDrWZac0+gr1i4WD5HzmcPGIdG3F4n
+    DtOxgZKwAg9OTXe7GaLrpi/5x0Aj3UBenyOCqetzEm2/Ua+bNhs6083ygChkpQziO+2WTB2eRhCs1caGb9VSZKr55BM8O4gxqL/p
+    8vhrv2kLtm26mRo3oYR/cjfBDt/J0LhdoS46gSEzeCu0QY7IhLtVa8hhAXiX2mRcwIGx3aDhIbWno/VIdw3PP2abI3tMz19xuaTr
+    bwmc+XRHNvswxHrsO8qOTx16WdD0suORBkf4xmC+U3F4dfS3uHsfM1tbKWDsiU55YcN1bsnLk+Fxit8hcX4yRTCGBJIgHTjrwQDn
+    ZzvmGuepjvlpzh/vmD/G7xghT30+v0jJIxx5xKAvvgPxHl8Ev8qA/kA4DFWeCXSTph8zeB/HWjzW00TvbRTuIlJK7KBvNjIauYP+
+    2xi8C6UUG9iB+kHyHo7O3MOR0Uhy5g6ObCc/hBJ5B5Hemd2Xt0JzTZrLBQa372KolHgfR5s41sQDO4htB6AlojixgOkMMIVhnMHD
+    mOIszrQSxJjEFb4VmPo1pvblwD76CU4rOHdUuSAuif/KHBV8peN3Dj1CaP9mTrNURtGL83gKTzMOL54w51cpVTjm7mK4tIMHE008
+    FBvhI8l/E8cDrCeW7mB0pomx2UhoFnuY6tFIy2a2L97Eydn+0f7YI6N9TYyP9jfxue12rcdYbRDDOOOfCRA8jQwxZIliNmi5oFSV
+    11eISg+bFpUL71ur1bfMPj/e3WGzS/Tv4ThJPz0bO8Vhgp18A8cS96DFHmV2k7fD7rzbrnyMKwGXWKfLOIEFPMpRVvgIej/BOEvZ
+    e0GwLc9iPgzj06GX49n4h2GLT8sWJ3Znj8lZPCHEHZzZXpSi5A6mP6D3SS4+yca2Ao8HpX+Oq+X4eV8gkCItnqdFia2/FoBg24YG
+    Lym4GCC4FCJ4gT4S9Kn4vpixnngiKYMuSdlMGHQIIzjeDjoScHyV7hVq1qhZZ9YbQTAFPUOXZawelkCWZwG/4ahyEZPmv8bA/wBQ
+    SwcI5MkKbZIGAADZDAAAUEsBAhQAFAAICAgAxHqHTQAAAAACAAAAAAAAAAkABAAAAAAAAAAAAAAAAAAAAE1FVEEtSU5GL/7KAABQ
+    SwECFAAUAAgICADEeodNlldz8EQAAABFAAAAFAAAAAAAAAAAAAAAAAA9AAAATUVUQS1JTkYvTUFOSUZFU1QuTUZQSwECFAAUAAgI
+    CACqeodN5MkKbZIGAADZDAAAKgAAAAAAAAAAAAAAAADDAAAAY29tL2NvbXBvc2UvamFudXNncmFwaC9Ub0lucHV0U3RyZWFtLmNs
+    YXNzUEsFBgAAAAADAAMA1QAAAK0HAAAAAA==

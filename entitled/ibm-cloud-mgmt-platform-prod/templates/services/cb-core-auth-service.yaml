@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cb-core-auth
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  {{ if eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+  type: NodePort
+  {{ else if eq (.Values.serviceType|lower) "ingress" }}
+  type: ClusterIP
+  {{ else }}
+  type: {{ .Values.serviceType }}
+  {{ end }}
+  ports:
+    - name: "443"
+      {{- if or (eq (.Values.enableDevSettings|quote|lower) "\"true\"" ) ( eq .Values.serviceType "NodePort" ) }}
+      nodePort: 30091
+      {{ end }}
+      port: 443
+      targetPort: 4000
+    - name: "8443"
+      {{- if or (eq (.Values.enableDevSettings|quote|lower) "\"true\"" ) ( eq .Values.serviceType "NodePort" ) }}
+      nodePort: 30099
+      {{ end }}
+      port: 8443
+      targetPort: 4400
+  selector:
+    name: cb-core-auth
+  {{ if eq (.Values.enableHAGateway|quote|lower) "\"true\"" }}
+  sessionAffinity: ClientIP
+  {{ end }}

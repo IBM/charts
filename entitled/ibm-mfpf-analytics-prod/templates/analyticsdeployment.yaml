@@ -1,0 +1,97 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.scaling.replicaCount }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        productName: IBM MobileFirst Platform Foundation
+        productID: IBMMobileFirstPlatformFoundation_8000_perpetual_00000
+        productVersion: 8.0.0.0
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      affinity:
+        {{- include "nodeAffinity" . | indent 6 }}
+      volumes:
+        - name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"
+          persistentVolumeClaim:
+        {{- if .Values.dataVolume.existingClaimName }}
+            claimName: {{ .Values.dataVolume.existingClaimName }}
+        {{- else if .Values.dataVolume.name  }}
+            claimName: {{ template "fullname" . }}-{{ .Values.dataVolume.name }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: config-volume
+          configMap:
+            name: {{ .Release.Name }}-configmap
+{{- if .Values.keystores.keystoresSecretName }}
+        - name: mfpf-certs
+          secret:
+            secretName: {{ .Values.keystores.keystoresSecretName }}
+{{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        readinessProbe:
+          httpGet:
+            path: /analytics/console/dashboard
+            port: 9080
+          initialDelaySeconds: 180
+          timeoutSeconds: 15
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 5
+        livenessProbe:
+          httpGet:
+            path: /analytics/console/dashboard
+            port: 9080
+          initialDelaySeconds: 180
+          timeoutSeconds: 15
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 5
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+          - name: WLP_LOGGING_CONSOLE_FORMAT
+            value: {{ .Values.logs.consoleFormat }}
+          - name: WLP_LOGGING_CONSOLE_LOGLEVEL
+            value: {{ .Values.logs.consoleLogLevel }}
+          - name : WLP_LOGGING_CONSOLE_SOURCE
+            value: {{ .Values.logs.consoleSource }}
+        ports:
+          - containerPort: 9080
+          - containerPort: 9443
+          - containerPort: 9600
+        volumeMounts:
+          - name: config-volume
+            mountPath: /opt/ibm/MobileFirst/envs/mfpenvfile
+{{- if .Values.keystores.keystoresSecretName }}
+          - name: mfpf-certs
+            mountPath: /opt/ibm/wlp/usr/servers/mfp/resources/security/certs
+{{- end }}
+          - name: "{{ template "fullname" . }}-{{ .Values.dataVolume.name }}"
+            mountPath: /analyticsData	  	        
+        resources:
+{{ toYaml .Values.resources | indent 10 }}

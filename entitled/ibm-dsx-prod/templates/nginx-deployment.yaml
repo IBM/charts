@@ -1,0 +1,99 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: ibm-nginx
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: ibm-nginx-deployment
+spec:
+  replicas: {{ .Values.nginxRepo.replicas }}
+  selector:
+    matchLabels:
+      run: ibm-nginx-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: ibm-nginx
+        run: ibm-nginx-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+      - name: ibm-nginx-container
+        image: {{ .Values.nginxRepo.image.repository }}:{{ .Values.nginxRepo.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/scripts/startup.sh"]
+        env:
+        - name: NODE_ENV
+          value: "production"
+        {{ if eq .Values.global.ibmProduct "zen" }}
+        - name: IBM_PRODUCT
+          value: zen
+        {{- end }}
+        - name: EXPOSED_PORT
+        {{- if .Values.global.baseInstaller }}
+          value: "443"
+        {{- else }}
+          value: {{ .Values.dsxservice.externalPort | quote }}
+        {{- end }}
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.nginxRepo.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 443
+          protocol: TCP
+          name: external-https
+        - containerPort: 80
+          protocol: TCP
+          name: external-http
+        - containerPort: 12443
+          protocol: TCP
+          name: internal-https
+        - containerPort: 12080
+          protocol: TCP
+          name: internal-http
+        livenessProbe:
+          httpGet:
+            path: /diag
+            port: 443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /diag
+            port: 443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

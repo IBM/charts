@@ -1,0 +1,214 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-dba-contentsearch.fullname" . }}
+  labels:
+    app: {{ template "ibm-dba-contentsearch.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-dba-contentsearch.name" . }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-dba-contentsearch.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productID: "5737-I23"
+        productName: "IBM Cloud Pak for Automation"
+        productVersion: "19.0.1"
+        productMetric: "PROCESSOR_VALUE_UNIT"
+        productChargedContainers: "All"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 50001
+        fsGroup: 50000
+        supplementalGroups:
+        - 50000
+      affinity:
+      {{- include "ibm-dba-contentsearch.nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "ibm-dba-contentsearch.name" . }}
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: {{ template "ibm-dba-contentsearch.name" . }}
+        securityContext:
+          runAsUser: 50001
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "{{ .Values.resources.requests.memory }}"
+            cpu: "{{ .Values.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.limits.memory }}"
+            cpu: "{{ .Values.resources.limits.cpu }}"
+        ports:
+        - containerPort: 8199
+          name: cssssl
+        env:
+          - name: LICENSE
+            value: {{ .Values.cssProductionSetting.license | quote }}
+          - name: PRODUCT
+            value: "DBAMC"
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "json" }}
+          - name: JVM_HEAP_XMX
+            value: {{ .Values.cssProductionSetting.jvmHeapXmx | quote }}
+{{- if .Values.monitoring.enabled }}
+          - name: MON_METRICS_WRITER_OPTION
+            value: {{ .Values.monitoringConfiguration.monMetricsWriterOpt | quote }}
+          - name: MON_METRICS_SERVICE_ENDPOINT
+            value: {{ .Values.monitoringConfiguration.monMetricsSvcEndpoint | quote }}
+          - name: MON_BMX_GROUP
+            value: {{ .Values.monitoringConfiguration.monBMXGroup | quote }}
+          - name: MON_BMX_METRICS_SCOPE_ID
+            value: {{ .Values.monitoringConfiguration.monBMXMetricsScopeID | quote }}
+          - name: MON_BMX_API_KEY
+            value: {{ .Values.monitoringConfiguration.monBMXAPIKey | quote }}
+          - name: MON_ECM_METRICS_COLLECT_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monCollectInterval | quote }}
+          - name: MON_ECM_METRICS_FLUSH_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monFlushInterval | quote }}
+{{- end }}
+{{- if .Values.logging.enabled }}
+          - name: MON_LOG_SHIPPER_OPTION
+            value: {{ .Values.loggingConfiguration.monLogShipperOpt | quote }}
+          - name: MON_LOG_SERVICE_ENDPOINT
+            value: {{ .Values.loggingConfiguration.monLogSvcEndpoint | quote }}
+          - name: MON_BMX_LOGS_LOGGING_TOKEN
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXLogsLoggingToken | quote }}
+          - name: MON_BMX_SPACE_ID
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXSpaceID | quote }}
+{{- end }}
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+        readinessProbe:
+          tcpSocket:
+            port: 8199 
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          tcpSocket:
+            port: 8199
+          initialDelaySeconds: 180
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 6
+        volumeMounts:
+{{- if and (eq .Values.dataVolume.existingPVCforCSSCfgstore .Values.dataVolume.existingPVCforCSSLogstore) (eq .Values.dataVolume.existingPVCforCSSCfgstore .Values.dataVolume.existingPVCforCSSTmpstore) (eq .Values.dataVolume.existingPVCforCSSCfgstore .Values.dataVolume.existingPVCforCSSCustomstore) }}
+          - name: "{{ .Values.dataVolume.nameforCSSCfgstore }}"
+            mountPath: "/opt/IBM/ContentSearchServices/CSS_Server/data"
+            subPath: css/CSS_Server_data/sslkeystore
+          - name: "{{ .Values.dataVolume.nameforCSSCfgstore }}"
+            mountPath: "/opt/IBM/ContentSearchServices/CSS_Server/temp"
+            subPath: css/CSS_Server_temp
+          - name: "{{ .Values.dataVolume.nameforCSSCfgstore }}"
+            mountPath: "/opt/IBM/ContentSearchServices/CSS_Server/log"
+            subPath: css/CSS_Server_log
+          - name: "{{ .Values.dataVolume.nameforCSSCfgstore }}"
+            mountPath: "/opt/IBM/ContentSearchServices/CSS_Server/config"
+            subPath: css/CSS_Server_Config
+{{- else }}
+          - name: "{{ .Values.dataVolume.nameforCSSCfgstore }}"
+            mountPath: "/opt/IBM/ContentSearchServices/CSS_Server/data"
+          - name: "{{ .Values.dataVolume.nameforCSSTmpstore }}"
+            mountPath: "/opt/IBM/ContentSearchServices/CSS_Server/temp"
+          - name: "{{ .Values.dataVolume.nameforCSSLogstore }}"
+            mountPath: "/opt/IBM/ContentSearchServices/CSS_Server/log"
+          - name: "{{ .Values.dataVolume.nameforCSSCustomstore }}"
+            mountPath: "/opt/IBM/ContentSearchServices/CSS_Server/config"
+{{- end }}
+          - name: "{{ .Values.dataVolume.nameforIndexstore }}"
+            mountPath: /opt/ibm/indexareas
+      imagePullSecrets:
+      - name: "{{ .Values.imagePullSecrets.name }}"
+      volumes:
+{{- if and (eq .Values.dataVolume.existingPVCforCSSCfgstore .Values.dataVolume.existingPVCforCSSLogstore) (eq .Values.dataVolume.existingPVCforCSSCfgstore .Values.dataVolume.existingPVCforCSSTmpstore) }}
+        - name: "{{ .Values.dataVolume.nameforCSSCfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCSSCfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- else }}
+        - name: "{{ .Values.dataVolume.nameforCSSCfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCSSCfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforCSSLogstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCSSLogstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforCSSTmpstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCSSTmpstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforCSSCustomstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCSSCustomstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- end }}
+        - name: "{{ .Values.dataVolume.nameforIndexstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforIndex }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+

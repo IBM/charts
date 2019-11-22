@@ -1,0 +1,153 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+      app.kubernetes.io/component: {{ $compName }}
+  {{ if .Values.autoscaling.enabled -}}
+  replicas: {{ .Values.autoscaling.minReplicas | default 1 }}
+  {{- else -}}
+  replicas: {{ .Values.replicaCount }}
+  {{- end  }}
+  minReadySeconds: 45
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        checksum/config.configmap: {{ include (print $.Template.BasePath "/probe-syslogd-config-configmap.yaml") . | sha256sum }}
+{{- if ne .Values.probe.rulesFile "NCKL" }}
+        checksum/rules.configmap: {{ include (print $.Template.BasePath "/probe-syslogd-rules-configmap.yaml") . | sha256sum }}
+{{- end }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - syslogd
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: interfaces-file
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list .) }}-config
+            items:
+            - key: omni.dat
+              path: omni.dat
+        - name: props-file
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list .) }}-config
+            items:
+            - key: syslogd.props
+              path: syslogd.props
+        {{- if ne .Values.probe.rulesFile "NCKL" }}
+        - name: rules-file
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list .) }}-rules
+            items:
+            - key: syslogd.rules
+              path: syslogd.rules
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 2001
+      containers:
+        - name: syslogd-probe
+          image: "{{ .Values.image.repository}}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            privileged: false
+            allowPrivilegeEscalation: false
+            {{/* readOnlyRootFilesystem must be false to allow probe to create interfaces file */ -}}
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          env:
+          - name: LICENSE
+            value: {{ .Values.license | default "not accepted" | quote }}
+          - name: PROBE_NAME
+            value: "nco_p_syslogd"
+          ports:
+            - name: syslogd-port
+              containerPort: 4514
+              protocol: UDP
+            - name: nhttpd-port
+              containerPort: 8080
+          volumeMounts:
+          - name: interfaces-file
+            mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+            subPath: omni.dat
+          - name: props-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/syslogd.props
+            subPath: syslogd.props
+          {{- if ne .Values.probe.rulesFile "NCKL" }}
+          - name: rules-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/syslogd.rules
+            subPath: syslogd.rules
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:8080/probe/common
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            {{- /* UDP communication is achieved by transmitting information without verifying the readiness or state
+            # and Syslogd probe only listens to UDP thus readinessProbe is configured to use HTTP GET
+            */}} 
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:8080/probe/common
+            initialDelaySeconds: 35
+            periodSeconds: 35
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{ if .Values.global.image.secretName -}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}

@@ -1,0 +1,126 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+{{ $serviceAccount := include "aios.serviceAccountNameEditor" (list . "redis-serviceaccount" ) }}
+{{ $namePrefix := "redis-server" -}}
+{{ $compName := "aios-redis" -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+{{ $labels | indent 4 }}
+    name: {{ template "fullname" . }}-redis-server
+    redis-node: "true"
+spec:
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  replicas: {{ .Values.redis.replicas.servers }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      name: {{ template "fullname" . }}-redis-server
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+        component: server
+        name: {{ $name }}
+        redis-node: "true"
+      annotations:
+      {{- include "aios.metering" . | indent 8 }}
+
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      {{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: {{ template "fullname" . }}
+                  release: "{{ .Release.Name }}"
+                  component: server
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+
+      serviceAccountName: {{ $serviceAccount }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      containers:
+      - name: redis
+        image: {{ include "aios.image" (list . .Values.redis.image.name .Values.redis.image.tag) | quote }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+        command: ["/bin/sh", "-c", "echo \"requirepass ${REDIS_PASSWORD}\" >> /etc/redis/master.conf; echo \"requirepass ${REDIS_PASSWORD}\" >> /etc/redis/slave.conf; echo \"masterauth ${REDIS_PASSWORD}\" >> /etc/redis/slave.conf; /usr/local/bin/redis-launcher.sh"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: {{ $nonRootUser }}
+          capabilities:
+            drop:
+            - ALL
+        {{- if .Values.redis.master.livenessProbe.enabled}}
+        livenessProbe:
+          initialDelaySeconds: {{ .Values.redis.master.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.redis.master.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.redis.master.livenessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.redis.master.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.redis.master.livenessProbe.failureThreshold }}
+          exec:
+            command:
+            - redis-cli
+            - ping
+        {{- end }}
+        {{- if .Values.redis.master.readinessProbe.enabled}}
+        readinessProbe:
+          initialDelaySeconds: {{ .Values.redis.master.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.redis.master.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.redis.master.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.redis.master.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.redis.master.readinessProbe.failureThreshold }}
+          exec:
+            command:
+            - redis-cli
+            - ping
+        {{- end }}
+        resources:
+{{ toYaml .Values.redis.resources.server | indent 10 }}
+        env:
+          - name: REDIS_SENTINEL_SERVICE_HOST
+            value: "redis-sentinel"
+          - name: REDIS_CHART_PREFIX
+            value: {{ template "fullname" . }}-redis-
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "fullname" . }}-redis-secrets
+                key: auth
+        ports:
+          - containerPort: 6379
+            protocol: TCP
+        volumeMounts:
+          - mountPath: /redis-master-data
+            name: data
+      volumes:
+      - name: data

@@ -1,0 +1,317 @@
+{{- if .Values.ingress.enabled -}}
+{{- if .Values.ingress.hostname -}}
+{{- include "sch.config.init" (list . "poRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.nginx.name -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- if .Values.graphmgmt.expose -}}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-graph
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    {{- if .Values.ingress.annotations }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      # Don't enable this graphdbmanagement on production
+      - path: /graphdbmanagement
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.graphmgmt.name) }}
+          servicePort: 9080
+
+{{- end }}          
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-tenant
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    {{- if .Values.ingress.annotations }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- else }}
+    ingress.kubernetes.io/rewrite-target: "/tenantapi/api/rest/"
+    nginx.ingress.kubernetes.io/rewrite-target: "/tenantapi/api/rest/"
+    {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /api/v1/tenant
+        backend:
+          serviceName: {{ template "tenant.service.name" . }}
+          servicePort: 9080
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-dashboard
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  {{- if .Values.ingress.annotations }}
+  annotations:
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- else }}
+  {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.dashboard.name) }}
+          servicePort: 3001
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-smm
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    {{- if .Values.ingress.annotations }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- else }}
+    ingress.kubernetes.io/rewrite-target: "/smm"
+    nginx.ingress.kubernetes.io/rewrite-target: "/smm"
+    {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /api/v1/smm
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.smm.name) }}
+          servicePort: 9080
+          
+{{- if .Values.analyticsservice.deploy -}}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-analyticsservice
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    {{- if .Values.ingress.annotations }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- else }}
+    ingress.kubernetes.io/rewrite-target: "/analytics"
+    nginx.ingress.kubernetes.io/rewrite-target: "/analytics"
+    {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /api/v1/ap
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.analyticsservice.name) }}
+          servicePort: 9080
+{{- end}}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-alertservice
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    {{- if .Values.ingress.annotations }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- else }}
+    ingress.kubernetes.io/rewrite-target: "/alertservice"
+    nginx.ingress.kubernetes.io/rewrite-target: "/alertservice"
+    {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /api/v1/alertsvc
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.as.name) }}
+          servicePort: 9080
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-ts
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    {{- if .Values.ingress.annotations }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- else }}
+    ingress.kubernetes.io/rewrite-target: "/ts"
+    nginx.ingress.kubernetes.io/rewrite-target: "/ts"
+    {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /api/v1/ts
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ts.name) }}
+          servicePort: 9080
+---       
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-up
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    {{- if .Values.ingress.annotations }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- else }}
+    ingress.kubernetes.io/rewrite-target: "/solutiondataservice"
+    nginx.ingress.kubernetes.io/rewrite-target: "/solutiondataservice"
+    {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /api/v1/up
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.up.name) }}
+          servicePort: 9080
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-docui
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  {{- if .Values.ingress.annotations }}
+  annotations:
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- else }}
+  {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /api/explorer
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.doc.name) }}
+          servicePort: 9080
+---
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}-doc
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  {{- if .Values.ingress.annotations }}
+  annotations:
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- else }}
+  {{- end }}
+spec:
+{{- if .Values.ingress.tlsenabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ template "ingress.cert.name" . }}
+{{- end}}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /api/docs
+        backend:
+          serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.doc.name) }}
+          servicePort: 9080
+---      
+{{- end -}}
+{{- end -}}

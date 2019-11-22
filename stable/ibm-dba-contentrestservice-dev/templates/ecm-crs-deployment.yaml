@@ -1,0 +1,192 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-dba-contentrestservice-dev.fullname" . }}
+  labels:
+    app: {{ template "ibm-dba-contentrestservice-dev.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-dba-contentrestservice-dev.name" . }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      name: {{ template "ibm-dba-contentrestservice-dev.fullname" . }}
+      labels:
+        app: {{ template "ibm-dba-contentrestservice-dev.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productID: "5737-I23"
+        productName: "IBM Cloud Pak for Automation"
+        productVersion: "19.0.2"
+        productMetric: "PROCESSOR_VALUE_UNIT"
+        productChargedContainers: "All"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: {{ .Values.runAsUser }}
+        fsGroup: 50000
+        supplementalGroups:
+        - 50000
+{{- end }}
+      affinity:
+      {{- include "ibm-dba-contentrestservice-dev.nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "ibm-dba-contentrestservice-dev.name" . }}
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: {{ template "ibm-dba-contentrestservice-dev.name" . }}
+        securityContext:
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: {{ .Values.runAsUser }}
+{{- end }}
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "{{ .Values.resources.requests.memory }}"
+            cpu: "{{ .Values.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.limits.memory }}"
+            cpu: "{{ .Values.resources.limits.cpu }}"
+        ports:
+        - containerPort: 9080
+          name: http
+        - containerPort: 9443
+          name: https
+        - containerPort: 9103
+          name: metrics
+        env:
+          - name: LICENSE
+            value: {{ .Values.crsProductionSetting.license | quote }}
+          - name: PRODUCT
+            value: "DBAMC"
+          - name: CPESTATICPORT
+            value: "false"
+          - name: CONTAINERTYPE
+            value: "1"
+          - name: TZ
+            value: {{ .Values.crsProductionSetting.timeZone | quote }}
+          - name: JVM_INITIAL_HEAP_PERCENTAGE
+            value: {{ .Values.crsProductionSetting.jvmInitialHeapPercentage  | quote }}
+          - name: JVM_MAX_HEAP_PERCENTAGE
+            value: {{ .Values.crsProductionSetting.jvmMaxHeapPercentage  | quote }}
+          - name: LICENSEMODEL
+            value: {{ .Values.crsProductionSetting.licenseModel | quote }}
+          - name: CPE_URI
+            value: {{ .Values.crsProductionSetting.cpeUri | quote }}
+{{- if .Values.monitoring.enabled }}
+          - name: MON_METRICS_WRITER_OPTION
+            value: {{ .Values.monitoringConfiguration.monMetricsWriterOpt | quote }}
+          - name: MON_METRICS_SERVICE_ENDPOINT
+            value: {{ .Values.monitoringConfiguration.monMetricsSvcEndpoint | quote }}
+          - name: MON_BMX_GROUP
+            value: {{ .Values.monitoringConfiguration.monBMXGroup | quote }}
+          - name: MON_BMX_METRICS_SCOPE_ID
+            value: {{ .Values.monitoringConfiguration.monBMXMetricsScopeID | quote }}
+          - name: MON_BMX_API_KEY
+            value: {{ .Values.monitoringConfiguration.monBMXAPIKey | quote }}
+          - name: MON_ECM_METRICS_COLLECT_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monCollectInterval | quote }}
+          - name: MON_ECM_METRICS_FLUSH_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monFlushInterval | quote }}
+          - name: COLLECTD_ENABLE_PLUGIN_PCH
+            value: {{ .Values.monitoringConfiguration.monEnablePluginPCH | quote }}
+          - name: COLLECTD_ENABLE_PLUGIN_MBEAN
+            value: {{ .Values.monitoringConfiguration.monEnablePluginMBean | quote }}
+{{- end }}
+{{- if .Values.logging.enabled }}
+          - name: MON_LOG_PARSE
+            value: {{ .Values.loggingConfiguration.monLogParse | quote }}
+          - name: MON_LOG_SHIPPER_OPTION
+            value: {{ .Values.loggingConfiguration.monLogShipperOpt | quote }}
+          - name: MON_LOG_SERVICE_ENDPOINT
+            value: {{ .Values.loggingConfiguration.monLogSvcEndpoint | quote }}
+          - name: MON_BMX_LOGS_LOGGING_TOKEN
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXLogsLoggingToken | quote }}
+          - name: MON_BMX_SPACE_ID
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXSpaceID | quote }}
+{{- end }}
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+        volumeMounts:
+{{- if and (eq .Values.dataVolume.existingPVCforCfgstore .Values.dataVolume.existingPVCforCfglogs)  }}
+          - name: "{{ .Values.dataVolume.nameforCfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides"
+            subPath: crs/configDropins/overrides
+          - name: "{{ .Values.dataVolume.nameforCfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/logs"
+            subPath: crs/logs
+{{- else }}
+          - name: "{{ .Values.dataVolume.nameforCfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides"
+          - name: "{{ .Values.dataVolume.nameforLogstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/logs"
+{{- end }}
+      imagePullSecrets:
+      - name: "{{ .Values.imagePullSecrets.name }}"
+      volumes:
+{{- if and (eq .Values.dataVolume.existingPVCforCfgstore .Values.dataVolume.existingPVCforCfglogs)}}
+        - name: "{{ .Values.dataVolume.nameforCfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- else }}
+        - name: "{{ .Values.dataVolume.nameforCfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforLogstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCfglogs }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+
+{{- end }}

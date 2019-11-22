@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.mongosRouter.name }}
+  labels:
+    app: {{ .Values.mongosRouter.name }}
+    heritage: {{ .Release.Service | quote }}
+    release: {{ .Release.Name | quote }}
+    chart: {{ .Values.mongosRouter.name }}
+  # namespace: {{ .Values.global.nameSpace }}
+spec:
+  replicas: {{ .Values.mongosRouter.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.mongosRouter.name }}
+  template:
+    metadata:
+      annotations:
+    {{- range $key, $value := .Values.global.annotations }}
+        {{ $key }}: {{ $value | quote }}
+    {{- end }}
+      labels:
+        app: {{ .Values.mongosRouter.name }}
+        role: mongos
+        tier: routers
+        heritage: {{ .Release.Service | quote }}
+        release: {{ .Release.Name | quote }}
+        chart: {{ .Values.mongosRouter.name }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: tier
+                  operator: In
+                  values:
+                  - routers
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: mongo{{ .Values.global.namespace.name }}
+                operator: In
+                values:
+                - "baca"
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.arch }}
+      volumes:
+      - name: secrets-volume
+        secret:
+          secretName: {{ .Values.secretVolume }} 
+      - name: sp-log-pvc
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.logs.claimname }}
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: mongos-router-container
+        image: "{{ .Values.global.mongo.image.repository }}:{{ .Values.global.mongo.image.tag }}"
+        imagePullPolicy: {{ .Values.global.mongo.image.pullPolicy }}
+        env:
+        - name: ENTRYPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "baca-mongo"
+              key: MONGOENTRYPASSWORD
+        - name: MONGO_USER
+          valueFrom:
+            secretKeyRef:
+              name: "baca-mongo"
+              key: MONGOUSER
+        - name: MONGO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "baca-mongo"
+              key: MONGOPASSWORD
+        - name: MONGO_INITDB
+          value: "bacauser"
+        - name: MONGO_SECONDDB
+          value: "cogdig"
+        - name: MONGO_TYPE
+          value: "mongodb-router" 
+        - name: CERTIFICATE_DIR
+          value: "/etc/certs"    
+        - name: CONTAINER_PORT
+          value: {{ .Values.mongosRouter.routerPort | quote}}
+        - name: CONFIG_REPL_SET
+          value: {{ .Values.mongosRouter.configReplset }}
+        - name: KUBE_NAME_SPACE
+          value: {{ .Values.global.nameSpace | quote }}
+        volumeMounts:
+          - name: secrets-volume
+            readOnly: true
+            mountPath: "/etc/certs"
+          - name: sp-log-pvc
+#            mountPath: "/var/log/mongodb"
+            mountPath: {{ .Values.global.logs.path }}{{ .Values.mongo.name }}db
+#            subPath: mongo
+            subPath: {{ .Values.mongo.name }}
+        resources: 
+{{ toYaml .Values.mongosRouter.resources | indent 10 }}
+        securityContext:
+          runAsUser: 51000
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
+        ports:
+        - containerPort: {{ .Values.mongosRouter.routerPort }}
+        livenessProbe:
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 20
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command: 
+              - bash
+              - -c
+              - source setup_env.sh && echo 'db.runCommand("ping").ok' | mongo 127.0.0.1:27017 --sslAllowInvalidCertificates  --ssl --sslPEMKeyFile $PEMFILE --sslCAFile $CERTIFICATE_PATH
+        readinessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 20
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+              - bash
+              - -c
+              - source setup_env.sh && echo 'db.runCommand("ping").ok' | mongo 127.0.0.1:27017 --sslAllowInvalidCertificates  --ssl --sslPEMKeyFile $PEMFILE --sslCAFile $CERTIFICATE_PATH

@@ -1,0 +1,106 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-core-ibus-admin
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cb-core-ibus-admin # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets change
+        checksums/couchdb.password: "{{ .Values.secrets.couchdb.password | b64enc | sha256sum }}"
+        checksums/rabbitmq.password: "{{ .Values.secrets.rabbitmq.password | b64enc | sha256sum }}"
+        {{ end }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      containers:
+        - env:
+            - name: BROKER_HOST
+              value: rabbit1
+            - name: EXCHANGE_TYPE
+              value: topic
+            - name: MQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-creds
+                  key: rabbitmq.username
+            - name: MQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-creds
+                  key: rabbitmq.password
+            - name: MDA_SUBSCRIBE_API
+              value: http://cb-core-ibus-delivery-agent:5001/mda/v1/subscriber
+            - name: DB_URL
+              value: http://mongodb:27017
+            - name: DB_TYPE
+              value: MONGO
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+            - name: DB_HOST
+              value: "mongodb"
+            - name: DB_PORT
+              value: "27017"
+            - name: CONNECT_DB_PROTOCOL
+              value: mongodb
+            - name: IBUS_SUBSCRIBERS_DB
+              value: ibus_subscribers
+            - name: connection_protocol
+              value: http
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_core_ibus_admin") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_core_ibus_admin" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "core.container.securityContext" .  | indent 10 }}
+          name: cb-core-ibus-admin
+          ports:
+            - containerPort: 4100
+          readinessProbe:
+            tcpSocket:
+              port: 4100
+          livenessProbe:
+            httpGet:
+              path: /msgsubscription/v1/health
+              port: 4100
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            failureThreshold: 4
+          resources:
+{{ include "deployClassConfig" (list . "cb_core_ibus_admin") | indent 13 }}
+      restartPolicy: Always

@@ -1,0 +1,89 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: cam-api-server-proxy
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+  namespace: {{ .Values.k8Namespace }}
+data:
+  nginx.conf: |-
+      worker_processes  1;
+      pid  /tmp/nginx.pid;
+      events {
+          worker_connections  1024;
+      }
+      http {
+          log_format compression '[$time_iso8601] - $upstream_cache_status - '
+                                     '"$request" $status $body_bytes_sent '
+                                     '"$http_referer" $request_time $upstream_response_time';
+          access_log /dev/stdout compression;
+          # Cache settings:
+          #      keys_zone: 1 MiB zone can store data for about 8,000 keys
+          #       max_size: local storage disk usage, up to 50 MiB
+          #       inactive: 10 minute auto-purge of inactive content
+          #  use_temp_path: OFF: To not use temp storage and suffer FS copies
+          proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=my_cache:1m max_size=50m
+                     inactive=10m use_temp_path=off;
+          proxy_set_header       Host $host;
+
+          # 200, 301, and 302 responses are cached, by default
+          # 30 second TTL for successes
+          # 1 minute TTL for 400
+          proxy_cache_valid      200 301 302 30s;
+          proxy_cache_valid      400         1m;
+
+          # When enabled, only one request at a time will be allowed to populate
+          # a new cache element identified according to the proxy_cache_key
+          # directive by passing a request to a proxied server.
+          proxy_cache_lock on;
+          # Use cache, even if stale -- when backend server is suffering issues
+          proxy_cache_use_stale  error timeout invalid_header updating
+                                 http_500 http_502 http_503 http_504;
+          large_client_header_buffers 4 128k;
+          client_header_buffer_size 8k;
+          
+          # HTTP server
+          server {
+              listen *:3277;
+              # cache matches on this regex
+              # Regex matches URLs of the form:
+              #    /camapi-1/costs/....
+              #    /camapi-1/assets/....
+              # excludes: .../download/...
+              location ~ ^\/camapi-1\/(costs|assets)\/(?!download).*$ {
+                  proxy_read_timeout     300;
+                  proxy_cache            my_cache;
+                  proxy_pass             http://localhost:9080;
+              }
+              # disable caching for everything else
+              location ~ / {
+                  proxy_read_timeout     300;
+                  proxy_pass             http://localhost:9080;
+              }
+          }
+          # HTTPS (SSL) server
+          server {
+              listen *:3276 ssl;
+              ssl_certificate /ssl/_gravitant_net_2017.crt;
+              ssl_certificate_key /ssl/_gravitant_net_2017.key;
+              ssl_protocols TLSv1.1 TLSv1.2;
+              ssl_ciphers 'EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH';
+              ssl_prefer_server_ciphers on;
+              ssl_session_cache shared:SSL:10m;
+              # cache matches on this regex
+              # Regex matches URLs of the form:
+              #    /camapi-1/costs/....
+              #    /camapi-1/assets/....
+              # excludes: .../download/...
+              location ~ ^\/camapi-1\/(costs|assets)\/(?!download).*$ {
+                  proxy_read_timeout     300;
+                  proxy_cache            my_cache;
+                  proxy_pass             http://localhost:9080;
+              }
+              # disable caching for everything else
+              location ~ / {
+                  proxy_read_timeout     300;
+                  proxy_pass             http://localhost:9080;
+              }
+          }
+      }

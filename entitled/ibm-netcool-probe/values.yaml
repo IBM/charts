@@ -1,0 +1,198 @@
+# Default values for IBM Netcool/OMNIbus Probe - Cloud Monitoring Integration.
+
+#############################
+# Common Parameters
+#############################
+
+# Docker image license acceptance. Must be set to "accept" to start the probes.
+license: "not accepted"
+
+image:
+  # Update repository to pull from private image repository. Image name must be "netcool-probe-messagebus".
+  repository: "netcool-probe-messagebus"
+  tag: '10.0.5.0-amd64'
+  # Update test repository to pull from private image repository. Test image name must be "netcool-integration-util".
+  testRepository: "netcool-integration-util"
+  testImageTag: '2.0.0-amd64'
+  pullPolicy: Always
+
+global:
+  image:
+    # Image Pull Secret Name. Should be set if the Service Account is not configured with an image pull secret for the
+    # specified image repository.
+    secretName: ""
+  # If the Cluster Administrator has already created a service account in the namespace, specify the name of the service account here.
+  # If left blank, the chart will automatically create a new service account in the namespace when it is deployed. This new service account will be 
+  # removed from the namespace when the chart is removed.
+  serviceAccountName: ""
+
+netcool:
+  # The connection mode to use when connecting to the Netcool/OMNIbus Object Server.
+  # Available options for connectionMode:
+  # "Default"     - No authentication and no SSL enabled. This is the default.
+  # "AuthOnly"    - Authentication enabled only. Object server must be run in secured mode. A secret 
+  #                 containing "AuthUserName", "AuthPassword" and "encryption.keyfile" is required.
+  # "SSLOnly"     - SSL enabled connection only. Object server must be configured with SSL certificates (AES_FIPS)
+  #                 and a secret containing the "omni.kdb" and "omni.sth" is required.
+  # "SSLAndAuth"  - SSL and Authentication are enabled. Object server must be run in secured mode and
+  #                 SSL certificates configured (AES_FIPS). A secret containing "omni.kdb", "omni.sth", "encryption.keyfile",
+  #                 "AuthUserName" and "AuthPassword" required.
+  # Note: These connection modes are supported when connecting to your on-premise Object Server.
+  #       For Netcool Operations Insight on ICP, you may enable IPSec to secure cluster network communications.
+  connectionMode: "default"
+  # (Required) Object Server Name that the probe should connect to. (Usually set to NCOMS or AGG_P)
+  primaryServer: ""
+  # (Required) Hostname or IP address of the primary Object Server
+  primaryHost: ""
+  # (Required) Object Server Port, usually set to 4100
+  primaryPort:
+  # Backup Object Server Name that the probe should connect to. (Usually set to AGG_B)
+  backupServer: ""
+  # Hostname or IP address of the backup Object Server
+  backupHost: ""
+  # Backup Object Server Port
+  backupPort:
+  # A pre-created secret for AuthOnly, SSLOnly or SSLAndAuth connection mode.
+  # Certain fields are required depending on the connection mode.
+  secretName: ""
+
+probe:
+  # Probe log level
+  messageLevel: warn
+
+  # The probe processes in the container are run by the netcool user. When set to true, the helm chart will specify the UID and GID values to be 
+  # assigned to the netcool user. 
+  # Otherwise if false, the netcool user will not be assigned any UID or GID by the helm chart.
+  #
+  # When the helm chart is deployed in an environment that is enforced by PodSecurityPolicies (PSP) or SecurityContextConstraints (SCC) that 
+  # requires the probe process to have a fixed UID and GID value, this parameter must be set to true. Examples of these policies is the 
+  # `ibm-restricted-psp` and `ibm-restricted-scc`.
+  # Otherwise, if the helm chart is deployed in an environment enforced by an SCC that requires the probe process to support arbitrary UIDs, 
+  # this parameter must be set to false. An example of this policy is the OpenShift `restricted` SCC.
+  setUIDandGID: true
+
+  # A comma-separated list of acceptable SSL Common Names when connecting to Object Server using SSL.
+  # This should be set when the CommonName field of the received certificate does not match 
+  # the name specified by the primaryServer property. When a backupServer is specified, 
+  # the probe will create an Object Server pair with AGG_V as the name. Set this parameter if the 
+  # Common Name of the certificate does not match AGG_V.
+  sslServerCommonName:
+
+  # Environment locale settings.
+  locale: "en_US.utf8"
+
+
+###########################
+# Logstash Probe Parameters
+###########################
+logstashProbe:
+  enabled: true
+  replicaCount: 5
+  service:
+    type: ClusterIP
+    externalPort: 80
+
+  ingress:
+    enabled: false
+
+    # Used to create Ingress record (should used with service.type: ClusterIP).
+    # Uncomment to configure multiple hostnames, annotations and tls and then
+    # install using helm command line.
+    hosts: 
+      - netcool-probe-logstash.local
+    #annotations: 
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    #tls:
+      # Secrets must be manually created in the namespace.
+      # - secretName: logstash-probe-tls
+      #   hosts:
+      #     - netcool-probe-logstash.local
+
+  # Autoscaling Configuration
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    cpuUtil: 60
+  # Pod disruption budget
+  poddisruptionbudget:
+    enabled: false
+    minAvailable: 1
+  
+
+#############################
+# Prometheus Probe Parameters
+#############################
+prometheusProbe:
+  enabled: true
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    externalPort: 80
+  ingress:
+    enabled: false
+
+    # Used to create Ingress record (should used with service.type: ClusterIP).
+    # Uncomment to configure multiple hostnames, annotations and tls and then
+    # install using helm command line.
+    hosts: 
+       - netcool-probe-prometheus.local
+    #annotations:
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    #tls:
+      # Secrets must be manually created in the namespace.
+      # - secretName: prometheus-probe-tls
+      #   hosts:
+      #     - netcool-probe-prometheus.local
+
+  # Autoscaling Configuration
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    cpuUtil: 60
+  # Pod disruption budget
+  poddisruptionbudget:
+    enabled: false
+    minAvailable: 1
+
+
+#############################
+# CEM Probe Parameters
+#############################
+cemProbe:
+  enabled: false
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    externalPort: 80
+
+  # Autoscaling Configuration
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    cpuUtil: 60
+
+  # Pod disruption budget
+  poddisruptionbudget:
+    enabled: false
+    minAvailable: 1
+
+
+#############################
+# Common Resources Settings
+#############################
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Common Node affinity settings
+# Specify architecture (amd64). Only amd64 arch is supported.
+arch: amd64

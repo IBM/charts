@@ -1,0 +1,100 @@
+{{- if .Values.ui.uiMenu.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-ui-job
+  labels:
+    app: {{ .Release.Name }}-ui-job
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation,hook-failed"
+    "helm.sh/hook-weight": "3"
+spec:
+  template:
+    metadata:
+      name: {{ .Release.Name }}-ui-job
+      labels:
+        app: {{ .Release.Name }}-ui-job
+        chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+      - name: {{ .Release.Name }}-ui-job
+        env:
+          - name: OAUTH2_CLIENT_REGISTRATION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: "platform-oidc-credentials"
+                key: OAUTH2_CLIENT_REGISTRATION_SECRET
+          - name: PORT
+            value: "{{ .Values.common.httpPort }}"
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.kubectl.image }}:{{ .Values.kubectl.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: 100m
+          limits:
+            memory: 200Mi
+            cpu: 200m
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+              - ALL
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          CLUSTER_EXTERNAL_IP=$(kubectl get configmap --namespace kube-public ibmcloud-cluster-info -o jsonpath="{.data.cluster_address}")
+          # I agree, this isn't pretty
+          CLUSTER_INTERNAL_IP=$(kubectl get configmap kube-proxy-config -o jsonpath="{.data}" | grep 'server: ' | awk -F '/|:' '{print $5}')
+          echo "$CLUSTER_INTERNAL_IP $CLUSTER_EXTERNAL_IP"
+          ls -l /{{ .Release.Name }}-ui/registration-setup.sh
+          ls -l /{{ .Release.Name }}-ui/
+          bash /{{ .Release.Name }}-ui/registration-setup.sh
+        volumeMounts:
+          - name: {{ .Release.Name }}-ui
+            mountPath: /{{ .Release.Name }}-ui/registration-setup.sh
+            subPath: registration-setup.sh
+      volumes:
+        - name: {{ .Release.Name }}-ui
+          configMap:
+            name: {{ .Release.Name }}-ui
+      nodeSelector:
+        role: "master"
+      tolerations:
+      - key: "dedicated"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+      restartPolicy: OnFailure
+{{ end }}

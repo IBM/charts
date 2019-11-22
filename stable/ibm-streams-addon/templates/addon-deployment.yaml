@@ -1,0 +1,116 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2019, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "streams-addon.deployment" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "streams-addon.deployment" . }}
+{{- include "streams-addon.defaultLabels" . | indent 4 }}
+    icpdata_addon: "true"
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "streams-addon.deployment" . }}
+      release: {{ .Release.Name }}
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "streams-addon.deployment" . }}
+{{- include "streams-addon.defaultLabels" . | indent 8 }}
+{{- include "streams-addon.serviceability" . | indent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/meta-configmap.yaml") . | sha256sum }}
+{{- include "streams-addon.metering" . | indent 8 }}
+ 
+    spec:  
+      volumes:
+        - name: meta-cm
+          configMap:
+            name: "{{ include "streams-addon.meta-configmap" . }}"
+       {{- if not .Values.zenCoreApi.noTls }}      
+        - name: helm-secret-mount
+          secret:
+            secretName: {{ .Values.zenCoreApi.helmSecrets | default "helm-secret" }}
+            items: 
+              - key: ca.cert.pem
+                path: ca.pem
+              - key: helm.cert.pem
+                path: cert.pem
+              - key: helm.key.pem
+                path: key.pem
+        {{- end }}
+{{- include "streams-addon.podGeneralSecurityPolicies" . | indent 6 }}            
+      securityContext:
+{{- include "streams-addon.podSecurityContext" . | indent 8 }}
+        
+      {{- if .Values.global.dockerPullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.global.dockerPullSecrets }}
+      {{- end }}
+
+      {{- if .Values.global.serviceAccount }}
+      serviceAccountName: {{ .Values.global.serviceAccount }}
+      {{- end }}
+
+      containers:
+      - name: {{ .Chart.Name }}
+        {{- if .Values.global.dockerRegistryPrefix }}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.addOn.image.repository }}:{{ .Values.addOn.image.tag }}"
+        {{- else }}
+        image: "{{ .Values.addOn.image.repository }}:{{ .Values.addOn.image.tag }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.global.dockerPullPolicy | default "IfNotPresent" }}
+
+        securityContext:
+{{- include "streams-addon.containerSecurityContext" . | indent 12 }}         
+        
+        ports:
+        - name: http
+          containerPort: {{ include "streams-addon.httpport" . }}
+          protocol: TCP
+        - name: https
+          containerPort: {{ include "streams-addon.httpsport" . }} 
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /add-ons/meta/add-ons.json
+            port: https
+            scheme: HTTPS
+        readinessProbe:
+          httpGet:
+            path: /add-ons/meta/add-ons.json
+            port: https
+            scheme: HTTPS
+        resources:
+          requests:
+            cpu: {{ .Values.addOn.resources.requests.cpu }}
+            memory: {{ .Values.addOn.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.addOn.resources.limits.cpu }}
+            memory: {{ .Values.addOn.resources.limits.memory }}
+        volumeMounts:
+          - name: meta-cm
+            mountPath: "/content/add-ons/meta"
+          {{- if not .Values.zenCoreApi.noTls }} 
+          - name: "helm-secret-mount"
+            mountPath: "/etc/helm"
+          {{- end }}
+
+      affinity:
+      {{- include "streams-addon.nodeaffinity" . | indent 8 }}
+ 

@@ -1,0 +1,84 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name}}-clu-load-mongo
+  labels:
+    app: {{ .Release.Name}}-clu-load-mongo
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  template:
+    metadata:
+      labels:
+        service:   "conversation"
+        component: "store_db_schema_updater"
+        slot:      "{{ .Release.Name }}"
+        app: "{{ .Release.Name}}-clu-load-mongo"
+        chart: "ibm-watson-assistant"
+        heritage: "{{ .Release.Service }}"
+        release: "{{ .Release.Name }}"
+    spec:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+        command: [ "/scripts/load-clu-data.sh" ]
+        volumeMounts:
+        - name: "init-scripts"
+          mountPath: /scripts
+        - name: "tmp"
+          mountPath: /tmp
+        env:
+          - name: mongo_cert 
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Release.Name }}-clu-config-secret"
+                key: mongodb_certificate
+          - name: mongo_url
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Release.Name }}-clu-config-secret"
+                key: mongodb_connection_string
+          - name: clu_mongo_collections
+            value: "{{ .Values.cluMongoCollections }}"
+        resources:
+          requests:
+            cpu: "{{ .Values.resources.requests.cpu }}"
+            memory: {{ .Values.resources.requests.memory }}
+          limits:
+            cpu: "{{ .Values.resources.limits.cpu }}"
+            memory: {{ .Values.resources.limits.memory }}
+      restartPolicy: Never
+      volumes:
+        - name: "init-scripts"
+          configMap:
+            name: "{{ .Release.Name}}-clu-load-mongo"
+            defaultMode: 0755
+        - name: "tmp"
+          emptyDir: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+  activeDeadlineSeconds: 86400 # 1 day, not to give up early.
+  backoffLimit: 1000

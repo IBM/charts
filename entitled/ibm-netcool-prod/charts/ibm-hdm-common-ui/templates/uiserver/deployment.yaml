@@ -1,0 +1,84 @@
+
+{{- $compName := "uiserver" -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- include "sch.config.init" (list . "ibm-hdm-common-ui.sch.chart.config.values") -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 3
+{{- else }}
+  replicas: 1
+{{- end }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+        - name: ui-content-share
+          emptyDir:
+            medium: "Memory"
+        - name: tls-keys
+          secret:
+            secretName: {{ include "sch.names.fullCompName" (list . "tls-secret") | quote }}
+            items:
+            - key: tls.crt
+              path: tls.crt
+            - key: tls.key
+              path: tls.key
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      initContainers:
+      - name: ui-content
+        image: {{ include "ibm-hdm-common-ui.image.url" (list . .Values.image) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ include "ibm-hdm-common-ui.comp.size.data" (list . "initContainer" "resources") | indent 10 }}
+        env:
+          - name: LICENSE
+            value: "{{ .Values.global.license }}"
+        volumeMounts:
+          - name: ui-content-share
+            mountPath: /share/app
+{{ include "ibm-hdm-common-ui.psp.securityContext" . | indent 8}}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: ui-server
+        image: {{ include "ibm-hdm-common-ui.image.url" (list . .Values.akora.image) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        volumeMounts:
+          - name: tls-keys
+            mountPath: /internal-tls-keys
+            readOnly: true
+          - name: ui-content-share
+            mountPath: /app
+            readOnly: true
+        resources:
+{{ include "ibm-hdm-common-ui.comp.size.data" (list . "ui" "resources") | indent 10 }}
+{{ include "ibm-hdm-common-ui.ui-server.probes" . | indent 8 }}
+{{ include "ibm-hdm-common-ui.ui-server.environment" . | indent 8 }}
+{{ include "ibm-hdm-common-ui.psp.securityContext" . | indent 8}}

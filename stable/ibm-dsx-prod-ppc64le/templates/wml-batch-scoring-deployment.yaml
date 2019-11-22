@@ -1,0 +1,49 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.dsxlMl) -}}
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: wmlbatchscoring
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: wmlbatchscoring
+    rum: wmlbatchscoring-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: wmlbatchscoring-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: wml-ml
+        component: wmlbatchscoring
+        run: wmlbatchscoring-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: wmlbatchscoring
+        image: {{ .Values.wmlBatchScoringContainer.image.repository }}:{{ .Values.wmlBatchScoringContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.wmlBatchScoringContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 12200
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /v2/batch/deployments/heartbeat
+            port: 12200
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /v2/batch/deployments/heartbeat
+            port: 12200
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+{{- end }}

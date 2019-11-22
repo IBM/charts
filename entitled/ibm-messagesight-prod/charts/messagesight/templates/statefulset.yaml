@@ -1,0 +1,220 @@
+{{- if required "Licensed usage must be specified for all MessageSight server installs and upgrades!" .Values.licensedUsage -}}
+{{- include "sch.config.init" (list . "server.sch.chart.config.values") -}}
+{{- $pvcName := "pvc" -}}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
+{{- $volumeClaimTemplateName := include "sch.names.volumeClaimTemplateName" (list . $pvcName $statefulSetName) -}}
+{{- $volumeName := include "sch.names.persistentVolumeClaimName" (list . $pvcName) -}}
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "sch.names.fullName" (list .) }}-svc
+  selector:
+    matchLabels:
+      app: {{ include "sch.names.appName" (list .) }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 8 }}
+        messagesight: server
+      annotations:
+        productVersion: {{ .Chart.AppVersion }}
+{{ if eq "Production" .Values.licensedUsage }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering.prod) | indent 8 }}
+{{ end }}
+{{ if eq "Non-Production" .Values.licensedUsage }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering.nonprod) | indent 8 }}
+{{ end }}
+# IdleStandby is intentionally undocumented until formal HA support is provided in the charts
+# and therefore, the MessageSight for ICP license does not provide language for it.
+# This option will be documented and respresented in the license for ICP when HA support is added.
+{{ if eq "IdleStandby" .Values.licensedUsage }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering.standby) | indent 8 }}
+{{ end }}
+# The intent is production MessageSight for ICP will bu used only for Production/Non-Production use cases.
+# While selecting the Developers license is a valid option (to validly avoid licensing fees for 
+# systems used strictly for development work), we currently do not anticipate this use case for ICP.
+# Customers who want/need to a subset of their PPA installs for developer-only work can set this
+# licensed usage value to Developers via the helm command line.
+{{ if eq "Developers" .Values.licensedUsage }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering.dev) | indent 8 }}
+{{ end }}
+    spec:
+      affinity:
+{{ include "server.sch.chart.nodeAffinity" (list .) | indent 8 }}
+{{ if .Values.nodeAffinity.required }}
+              - key: {{ default "messagesight" .Values.nodeAffinity.key }}
+                operator: In
+                values:
+                - {{ default "server" .Values.nodeAffinity.value }}
+{{ else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: {{ default "messagesight" .Values.nodeAffinity.key }}
+                operator: In
+                values:
+                - {{ default "server" .Values.nodeAffinity.value }}
+{{ end }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: messagesight
+                operator: In
+                values:
+                - server           
+            topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: messagesight
+                  operator: In
+                  values:
+                  - webui
+              topologyKey: kubernetes.io/hostname
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: messagesight
+          effect: NoSchedule
+{{- with .Values.tolerations }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+      terminationGracePeriodSeconds: 60
+      serviceAccount: {{ default "default" .Values.serviceAccount }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ if .Values.privilegedInstall }}
+        runAsNonRoot: false
+        runAsUser: 0
+{{ else }}
+        runAsNonRoot: true
+        runAsUser: 1000
+{{ end }}
+        supplementalGroups:
+          - 1
+{{ if .Values.persistence.supplementalGroups }}
+        {{ range .Values.persistence.supplementalGroups }}
+          - {{ . }}
+        {{ end }}
+{{ end }}
+{{ if .Values.persistence.fsGroup }}
+        fsGroup: {{ .Values.persistence.fsGroup }}
+{{ end }}
+      volumes:
+        - name: admin-secrets
+          secret:
+            secretName: {{ .Release.Name }}-messagesight-admin
+{{ if and .Values.dataPVC.existingClaimName .Values.persistence.enabled }}
+        - name: {{ $volumeName }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataPVC.existingClaimName }}
+{{ end }}
+{{ if not .Values.persistence.enabled }}
+        - name: {{ $volumeName }}
+          emptyDir: {}
+{{ end }}
+      containers:
+      - name: {{ include "sch.names.appName" (list .) }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy }}
+        securityContext:
+          readOnlyRootFilesystem: false
+          privileged: false
+          capabilities:
+            drop:
+            - ALL
+{{ if .Values.privilegedInstall }}
+          allowPrivilegeEscalation: true
+          runAsNonRoot: false
+          runAsUser: 0
+{{ else }}
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+{{ end }}
+        env:
+        - name: LICENSE
+          value: {{ .Values.global.license | default "not accepted" }}
+        - name: LICENSED_USAGE
+          value: {{ .Values.licensedUsage }}
+        - name: MESSAGESIGHT_ADMIN_PORT
+          value: {{ .Values.adminPort | quote }}
+        ports:
+        - containerPort: {{ .Values.adminPort }}
+          hostPort: {{ .Values.adminPort }}
+          name: adminport
+{{ if .Values.messagingPorts }}
+  {{- range  (.Values.messagingPorts) }}
+        - containerPort: {{ . }}
+          hostPort: {{ . }}
+          name: messaging-{{ . }}
+  {{- end }}
+{{ end }}
+        livenessProbe:
+          exec:
+            command:
+            - /opt/ibm/imaserver/bin/liveness.sh
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+            - /opt/ibm/imaserver/bin/readiness.sh
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        resources:
+          limits:
+            memory: {{ .Values.resources.limits.memory }}
+            cpu: {{ .Values.resources.limits.cpu }}
+          requests:
+            memory: {{ .Values.resources.requests.memory }}
+            cpu: {{ .Values.resources.requests.cpu }}
+        volumeMounts:
+            - mountPath: /secrets/admin
+              name: admin-secrets
+              readOnly: true
+            - mountPath: /var/messagesight
+{{ if not .Values.persistence.enabled }}
+              name: {{ $volumeName }}
+{{  else }}
+{{ if .Values.dataPVC.existingClaimName }}
+              name: {{ $volumeName }}
+{{ else }}
+              name: {{ $volumeClaimTemplateName }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ $volumeClaimTemplateName }}
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.dataPVC.size }}
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kube Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+      {{- else }}
+      storageClassName: {{ default "" .Values.dataPVC.storageClassName | quote }}
+      {{- if .Values.dataPVC.selector.label }}
+      # use selectors in the binding process
+      selector:
+        matchExpressions:
+          - {key: {{ .Values.dataPVC.selector.label }}, operator: In, values: [{{ .Values.dataPVC.selector.value }}]}
+      {{- end }}
+      {{- end }}
+{{  end }}
+{{  end }}
+{{- end -}}

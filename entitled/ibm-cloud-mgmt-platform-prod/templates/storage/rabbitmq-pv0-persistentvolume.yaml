@@ -1,0 +1,32 @@
+# If running on ICP the user needs to create nfs/hostpath manually
+{{- template "isIcp" . -}}
+{{- if not (.Values.isIcp) }}
+{{- if eq (.Values.persistence.enabled|quote|lower) "\"true\"" }}
+{{ if or (eq .Values.k8StorageType "hostpath" ) ( eq .Values.k8StorageType "nfs" ) }}
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: core-rabbitmq-pv0
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  {{ if and ((eq (.Values.persistence.useDynamicProvisioning|quote|lower) "\"true\"") ((index .Values.coreRabbitmqPv0 .Values.k8StorageType).storageClass)) }}
+  storageClassName: {{ (index .Values.coreRabbitmqPv0 .Values.k8StorageType).storageClass }}
+  {{ end }}
+  accessModes:
+    - {{ (index .Values.k8StorageAccessMode .Values.k8StorageType) }}
+  capacity:
+    storage: {{ (index .Values.coreRabbitmqPv0 .Values.k8StorageType).capacity }}
+  {{- if (eq .Values.k8StorageType "hostpath" ) }}
+  hostPath:
+    path: {{ (index .Values.coreRabbitmqPv0 .Values.k8StorageType).path }}
+    type: DirectoryOrCreate
+  {{ else }}
+  nfs:
+    server: {{ (index .Values.coreRabbitmqPv0 .Values.k8StorageType).server }}
+    path: {{ (index .Values.coreRabbitmqPv0 .Values.k8StorageType).path }}
+  {{ end }}
+
+{{ end }}
+{{ end }}
+{{ end }}

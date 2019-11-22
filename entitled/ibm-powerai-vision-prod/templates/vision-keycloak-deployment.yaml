@@ -1,0 +1,111 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "shortname" . }}-keycloak
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    run: {{ template "shortname" . }}-keycloak-dep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ template "shortname" . }}-keycloak-dp
+  template:
+    metadata:
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+        run: {{ template "shortname" . }}-keycloak-dp
+      {{ include "vision-release-annotations" . | indent 6 }}
+    spec:
+      containers:
+      - name: {{ template "shortname" . }}-keycloak
+        image: "{{ template "repoprefix" . }}powerai-vision-keycloak:{{ .Values.image.releaseTag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+          - name: CONTEXT_ROOT
+            value: {{ template "shortname" . }}-keycloak
+          - name: REDIRECT_URL
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "shortname" . }}-config
+                key: CONTEXT_ROOT
+          - name: KEYCLOAK_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "shortname" . }}-config
+                key: KEYCLOAK_ADMIN
+          - name: KEYCLOAK_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "shortname" . }}-secrets
+                key: keycloak-password
+          - name: DB_VENDOR
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "shortname" . }}-config
+                key: KEYCLOAK_DB
+          - name: DB_DATABASE
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "shortname" . }}-config
+                key: KEYCLOAK_DBNAME
+          - name: DB_USER
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "shortname" . }}-config
+                key: KEYCLOAK_DBUSER
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "shortname" . }}-secrets
+                key: postgres-password
+          - name: DB_ADDR
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "shortname" . }}-config
+                key: PGHOST
+          - name: DB_PORT
+            valueFrom:
+              configMapKeyRef:
+                name: {{ template "shortname" . }}-config
+                key: PGPORT
+        ports:
+          - name: http
+            containerPort: 8080
+            protocol: TCP
+          - name: https
+            containerPort: 8443
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /{{ template "shortname" . }}-keycloak/auth/
+            port: 8080
+          initialDelaySeconds: 240
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /{{ template "shortname" . }}-keycloak/auth/
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+        beta.kubernetes.io/arch: ppc64le
+      affinity:
+      {{- include "nodeaffinity-ppc64le" . | indent 6 }}
+      {{ include "imagesecrets" . | indent 6 }}

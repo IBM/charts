@@ -1,0 +1,147 @@
+{{- include "sch.config.init" (list . "mma.sch.chart.config.values") -}}
+{{- $icpPullSecrets := include "icp-pull-secrets" . -}}
+{{- $icpMmaCompName  :=  .sch.chart.components.mma.name -}}
+
+{{/* DRY variables */}}
+{{- $tlsVolumeMountName := "mma-tls-secrets" -}}
+{{- $tlsVolumeMountPath := "/mnt/ssl/mma" -}}
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpMmaCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $icpMmaCompName) | indent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  progressDeadlineSeconds: 600
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $icpMmaCompName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $icpMmaCompName) | indent 8 }}
+      annotations:
+        productName: {{ .Values.product.name | quote }}
+        productID: {{ .Values.product.id | quote }}
+        productVersion: {{ .Values.product.version | quote }}
+    spec:
+      terminationGracePeriodSeconds: 90
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+
+      # Sleep while Postgres boots up
+      initContainers:
+      - name: init
+        image: "{{ .Values.global.icpDockerRepo }}{{ .Values.modelManagementApi.image.repository }}:{{ .Values.modelManagementApi.image.tag }}"
+        resources:
+          limits:
+            cpu: 100m
+            memory: 50Mi
+        command: ["sleep", "120"]
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        resources:
+          requests:
+            memory: {{ .Values.modelManagementApi.resources.requests.memory }}
+            cpu: {{ .Values.modelManagementApi.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.modelManagementApi.resources.limits.memory }}
+            cpu: {{ .Values.modelManagementApi.resources.limits.cpu }}
+      containers:
+        ### MMA Service ###
+      - name: {{ include "sch.names.fullCompName" (list . $icpMmaCompName) }}
+        image: "{{ .Values.global.icpDockerRepo }}{{ .Values.modelManagementApi.image.repository }}:{{ .Values.modelManagementApi.image.tag }}"
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sleep", "89"]
+        env:
+        - name: SSL_KEY_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerKey }}
+        - name: SSL_CERT_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerCertificate }}
+        - name: DB_USERNAME
+          value: {{ .Values.global.postgres.authSecret.pgSuperuserName }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.postgres.authSecret.nameTpl . }}
+              key: {{ .Values.global.postgres.authSecret.suPasswordField }}
+        - name: DB_NAME
+          value: "model_management_api"
+        - name: DB_NAME_V2
+          value: "model_management_api_v2"
+        - name: DB_HOSTNAME
+          value: {{ .Release.Name }}-{{ .Values.global.postgres.nameOverride }}-proxy-svc
+        - name: DB_PORT
+          value: "{{ .Values.global.postgres.endpointPort }}"
+        - name: DB_APPLICATION_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: DB_SSL_ENABLE
+          value: "true"
+        - name: ENABLE_V1
+          value: "{{ .Values.global.mma.database.enableV1 }}"
+        - name: ENABLE_V2
+          value: "{{ .Values.global.mma.database.enableV2 }}"
+        - name: MMA_TENANT
+          value: "public"
+        - name: SIRE_TRAIN_HOST
+          # SIRE Train is a gRPC host, so no https://
+          value: "{{ .Release.Name }}-sire-training-facade:50001"
+        - name: SIRE_HOSTNAME_TEMPLATE
+          value: "{{ .Release.Name }}-sire-runtime-model-mesh:8033"
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        ports:
+          - containerPort: {{ .Values.global.mma.v1Port }}
+            protocol: TCP
+          - containerPort: {{ .Values.global.mma.v2Port }}
+            protocol: TCP
+        volumeMounts:
+        - name: {{ $tlsVolumeMountName }}
+          mountPath: {{ $tlsVolumeMountPath }}
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            {{- if .Values.global.mma.database.enableV1 }}
+            path: /natural-language-understanding/api/v1/wks/health
+            port: {{ .Values.global.mma.v1Port }}
+            {{- end }}
+            {{- if and .Values.global.mma.database.enableV2 (not .Values.global.mma.database.enableV1) }}
+            path: /natural-language-understanding/api/v2/health
+            port: {{ .Values.global.mma.v2Port }}
+            {{- end }}
+          initialDelaySeconds: 600
+          periodSeconds: 10
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            {{- if .Values.global.mma.database.enableV1 }}
+            path: /natural-language-understanding/api/v1/wks/health
+            port: {{ .Values.global.mma.v1Port }}
+            {{- end -}}
+            {{- if and .Values.global.mma.database.enableV2 (not .Values.global.mma.database.enableV1) }}
+            path: /natural-language-understanding/api/v2/health
+            port: {{ .Values.global.mma.v2Port }}
+            {{- end }}
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 30
+        resources:
+          requests:
+            memory: {{ .Values.modelManagementApi.resources.requests.memory }}
+            cpu: {{ .Values.modelManagementApi.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.modelManagementApi.resources.limits.memory }}
+            cpu: {{ .Values.modelManagementApi.resources.limits.cpu }}
+      volumes:
+      - name: {{ $tlsVolumeMountName }}
+        secret:
+          secretName: {{ default (include .Values.global.tls.secret.nameTpl .) .Values.global.tls.secret.fixedName }}
+      imagePullSecrets:
+      - name: {{ $icpPullSecrets | quote }}

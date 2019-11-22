@@ -1,0 +1,197 @@
+{{- include "sch.config.init" (list . "sentiment.sch.chart.config.values") -}}
+{{- $icpSentimentCompName :=  .sch.chart.components.sentiment.name -}}
+{{- $icpFrontendCompName :=  .sch.chart.components.frontend.name -}}
+{{- $icpModelserverCompName :=  .sch.chart.components.modelserver.name -}}
+{{- $icpContainerNameFrontend := printf "sentiment-%s" $icpFrontendCompName -}}
+{{- $icpContainerNameModelserver := printf "sentiment-%s" $icpModelserverCompName -}}
+{{- $icpPullSecrets := include "sentiment-icp.icp-pull-secrets" . -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpSentimentCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $icpSentimentCompName) | indent 4 }}
+spec:
+  replicas: {{ .Values.en.replicasCount }}
+  revisionHistoryLimit: 25
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $icpSentimentCompName) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $icpSentimentCompName) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ $icpContainerNameFrontend }}
+          image: "{{ .Values.global.icpDockerRepo }}{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 10000
+            {{- end }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              memory: {{ .Values.frontend.resources.requests.memory }}
+              cpu: {{ .Values.frontend.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.frontend.resources.limits.memory }}
+              cpu: {{ .Values.frontend.resources.limits.cpu }}
+          readinessProbe:
+            exec:
+              command: ["curl", "-k", "https://localhost:5443/sentiment/service/api/v2/document", "-H", "Content-Type: application/json", "-d", "{\"text\": \"I love example text\"}", "--fail"]
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /service/api/v2/healthcheck
+              port: 5443
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          env:
+          - name: CLOUD_APP
+            value: "watson_sentiment_frontend_en"
+          - name: CLOUD_APP_GROUP
+            value: "watson_sentiment"
+          - name: CLOUD_AUTO_SCALE_GROUP
+            value: "watson_sentiment"
+          - name: CLOUD_CLUSTER
+            value: "watson_sentiment"
+          - name: CLOUD_ENVIRONMENT
+            value: "{{ .Values.en.cloudEnvironment }}"
+          - name: PLATFORM_ENVIRONMENT
+            value: "armada"
+          - name: PAYLOAD_ENABLED
+            value: "false"
+          - name: SENTIMENT_SERVER_LANGUAGE
+            value: "en"
+          - name: INPUT_DIMENSION
+            value: "60"
+          - name: TF_BATCH_SIZE
+            value: "64"
+          - name: THREAD_COUNT
+            value: "2"
+          - name: CORETHREADS
+            value: "100"
+          - name: MAXTHREADS
+            value: "125"
+          - name: STARTING_HEAP
+            value: "2048m"
+          - name: MAX_HEAP
+            value: "2048m"
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          ports:
+          - containerPort: 5443
+          lifecycle:
+            preStop:
+              exec:
+                # SIGTERM triggers a quick exit; gracefully terminate instead
+                command: ["/opt/ibm/docker/stop-server"]
+
+        - name: {{ $icpContainerNameModelserver }}
+          image: "{{ .Values.global.icpDockerRepo }}{{ .Values.tensorflowModelServer.image.repository }}:{{ .Values.tensorflowModelServer.image.tag }}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 2000
+            {{- end }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              memory: {{ .Values.tensorflowModelServer.resources.requests.memory }}
+              cpu: {{ .Values.tensorflowModelServer.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.tensorflowModelServer.resources.limits.memory }}
+              cpu: {{ .Values.tensorflowModelServer.resources.limits.cpu }}
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - /opt/sentiment/liveness.sh
+            initialDelaySeconds: 200
+            periodSeconds: 60
+            timeoutSeconds: 25
+            failureThreshold: 4
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - /opt/sentiment/liveness.sh
+            initialDelaySeconds: 200
+            periodSeconds: 60
+            timeoutSeconds: 25
+            failureThreshold: 4
+          env:
+          - name: LD_LIBRARY_PATH
+            value: "/usr/local/lib"
+          - name: CLOUD_APP
+            value: "watson_sentiment_en"
+          - name: CLOUD_APP_GROUP
+            value: "watson_sentiment"
+          - name: CLOUD_AUTO_SCALE_GROUP
+            value: "watson_sentiment"
+          - name: CLOUD_CLUSTER
+            value: "watson_sentiment"
+          - name: CLOUD_ENVIRONMENT
+            value: "{{ .Values.en.cloudEnvironment }}"
+          - name: PLATFORM_ENVIRONMENT
+            value: "armada"
+          - name: SENTIMENT_SERVER_LANGUAGE
+            value: "en"
+          - name: SENTIMENT_SERVER_PEM
+            value: "/usr/local/sentiment_server/creds.pem"
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          ports:
+          - containerPort: 9000
+          lifecycle:
+            preStop:
+              exec:
+                # SIGTERM triggers a quick exit; gracefully terminate instead
+                command: ["/opt/ibm/docker/stop-server"]
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+      imagePullSecrets:
+      - name: {{ $icpPullSecrets | quote }}

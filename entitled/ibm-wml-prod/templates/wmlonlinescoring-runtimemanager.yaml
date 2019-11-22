@@ -1,0 +1,194 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wml-os-manager
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app: wml-os-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wml-os-manager
+  serviceName: scoring-headless-service
+  template:
+    metadata:
+      annotations:
+        productName: IBM Watson Machine Learning
+        productID: ICP4D-WML_210_00000
+        productVersion: 2.1.0.0
+        checksum.helm.kubernetes.io/configmap: {{ include (print $.Template.BasePath "/wmlruntimemanager-configmap.yaml") . | sha256sum }}
+      labels:
+        app: wml-os-manager
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      initContainers:
+      - name: init-container
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlEtcd.image.repository }}:{{ .Values.wmlEtcd.image.tag }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+        imagePullPolicy: IfNotPresent
+        command: ['sh', '-c', 'while true; do status_code=`curl -s --connect-timeout 30 -o /dev/null -w "%{http_code}"  http://wml-etcd:2379/v2/keys/etcd-init -X PUT -d "value=etcd is up"`; if [ $status_code -eq 200 ]; then TIMESTAMP=`date "+%Y-%m-%d %H:%M:%S"`;echo "$TIMESTAMP ETCD service is reachable"; exit 0; fi; done; exit 1']
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        resources:
+          limits:
+            cpu: 250m
+            memory: 512M
+          requests:
+            cpu: 200m
+            memory: 256M
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+       - name: runtimemanagercontainer
+         image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlRuntimeManager.image.repository }}:{{ .Values.wmlRuntimeManager.image.tag }}"
+         securityContext:
+           allowPrivilegeEscalation: false
+           capabilities:
+             drop:
+               - ALL
+           runAsUser: {{ .Values.global.user.id }}
+         envFrom:
+         - secretRef:
+             name: wdp-service-id
+         - secretRef:
+             name: wml-scoring-svc-secret
+         livenessProbe:
+           httpGet:
+             path: /v3/scoring/online/heartbeat
+             port: 16500
+             scheme: HTTPS
+           failureThreshold: 3
+           initialDelaySeconds: 60
+           periodSeconds: 60
+           successThreshold: 1
+           timeoutSeconds: 5
+         readinessProbe:
+           httpGet:
+             path: /v3/scoring/online/heartbeat
+             port: 16500
+             scheme: HTTPS
+           failureThreshold: 3
+           initialDelaySeconds: 30
+           periodSeconds: 60
+           successThreshold: 1
+           timeoutSeconds: 5
+         resources:
+           limits:
+             cpu: 1
+             memory: 2Gi
+           requests:
+             cpu: "250m"
+             memory: 2Gi
+         env:
+         - name: WMLENV
+           value: fvt
+         - name: DEPLOYMENT_PRIVATE
+           value: "local"
+         - name: DATACENTRE
+           value: $datacentre
+         - name: AGT_ETCD_TLS
+           value: "0"
+         - name: MEMORY
+           value: "3072"
+         - name: CPU
+           value: "2"
+         - name: KUBECONFIG
+           value: "/opt/ibm/wml-online-scoring/runtime-manager/bin/kubeconfig.yml"
+         - name: INSTANCES_DISCOVERY_PREFIX
+           value: "services/wml-online-scoring/instances/"
+         - name: AGT_ETCD_CLUSTER
+           valueFrom:
+             secretKeyRef:
+               name: etcd-secret
+               key: etcd_cluster
+         - name: AGT_ETCD_USERNAME
+           valueFrom:
+             secretKeyRef:
+               name: etcd-secret
+               key: etcd_username
+         - name: AGT_ETCD_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: etcd-secret
+               key: etcd_password
+         - name: INSTANCE_CHECK_ATTEMPTS
+           value: "120"
+         - name: INSTANCE_CHECK_DELAY
+           value: "5000"
+         - name: ENABLE_MODEL_SHUFFLE
+           value: "DISABLE"
+         - name: MODEL_SHUFFLE_INTERVAL
+           value: "300"
+         - name: MEMORY_THRESHHOLD_PERCENTAGE
+           value: "5.0"
+         - name: WMLNEWRELIC
+           value: "DISABLED"
+         - name: DEPLOYMENT_PLATFORM
+           value: "private"
+         - name: DEFAULT_DEPLOY_REPLICA
+           value: "1"
+         - name: SSL_KEYSTORE_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: ssl-secret
+               key: keystore_password
+         - name: SSL_TRUSTSTORE_PASSWORD
+           valueFrom:
+             secretKeyRef:
+               name: ssl-secret
+               key: truststore_password
+         - name: GRPC_SERVER_KEY
+           valueFrom:
+             secretKeyRef:
+               name: ssl-secret
+               key: server_key
+         - name: WML_RMQ_URL_ICD
+           valueFrom:
+             secretKeyRef:
+               key: rabbitmq-url.txt
+               name: rabbitmq-url
+         - name: ETCD_SSL_ENABLE # Once SSL is enabled in ETCD, this can be removed
+           value: "0"
+         - name: ENABLE_SPAWN_MORE_INITIAL_POD
+           value: "false"
+         volumeMounts:
+          - name: config-volume
+            mountPath: /opt/ibm/wml-online-scoring/runtime-manager/conf
+          - name: user-home-mount
+            mountPath: /user-home
+          - name: manager-pvc-mount
+            mountPath: /manager-pvc
+          - mountPath: /etc/pki/ca-trust/source/anchors/
+            name: internalpubkey
+      volumes:
+       - name: config-volume
+         configMap:
+           name: wmlruntimemanager
+       - name: user-home-mount
+         persistentVolumeClaim:
+           claimName: user-home-pvc
+       - name: manager-pvc-mount
+         persistentVolumeClaim:
+           claimName: manager-pvc
+       - name: internalpubkey
+         secret:
+           secretName: internal-nginx-svc-tls

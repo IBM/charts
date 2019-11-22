@@ -1,0 +1,44 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: deploy-a2r
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: deploy-a2r-job
+spec:
+  template:
+    metadata:
+      labels:
+        run: deploy-a2r-job-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+        - name: deploy-a2r-job-container
+          image: {{ .Values.jupyterD8a2rls2xShell.image.repository }}:{{ .Values.jupyterD8a2rls2xShell.image.tag }}
+          imagePullPolicy: IfNotPresent
+          command: ["/scripts/deployPkgs.sh"]
+          volumeMounts:
+            - mountPath: /user-home
+              name: user-home-mount
+      restartPolicy: OnFailure
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

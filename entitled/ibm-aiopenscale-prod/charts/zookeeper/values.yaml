@@ -1,0 +1,79 @@
+## As weighted quorums are not supported, it is imperative that an odd number of replicas
+## be chosen. Moreover, the number of replicas should be either 1, 3, 5, or 7.
+##
+## ref: https://github.com/kubernetes/contrib/tree/master/statefulsets/zookeeper#stateful-set
+replicaCount: 3  # Desired quantity of ZooKeeper pods. This should always be (1,3,5, or 7)
+
+podDisruptionBudget:
+  maxUnavailable: 1  # Limits how many Zokeeper pods may be unavailable due to voluntary disruptions.
+
+terminationGracePeriodSeconds: 30  # Duration in seconds a Zokeeper pod needs to terminate gracefully.
+
+nameOverride: ibm-aios
+clusterDomain: "cluster.local"
+## OnDelete requires you to manually delete each pod when making updates.
+## This approach is at the moment safer than RollingUpdate because replication
+## may be incomplete when replication source pod is killed.
+##
+## ref: http://blog.kubernetes.io/2017/09/kubernetes-statefulsets-daemonsets.html
+updateStrategy:
+  type: OnDelete  # Pods will only be created when you manually delete old pods.
+
+## refs:
+## - https://github.com/kubernetes/contrib/tree/master/statefulsets/zookeeper
+## - https://github.com/kubernetes/contrib/blob/master/statefulsets/zookeeper/Makefile#L1
+image:
+  repository: "aios-zoo-keeper" # Container image repository for zookeeper container.
+  tag: "0.0.7" # Container image tag for zookeeper container.
+  pullPolicy: IfNotPresent  # Image pull criteria for zookeeper container.
+
+service:
+  type: ClusterIP  # Exposes zookeeper on a cluster-internal IP.
+  annotations: {}  # Arbitrary non-identifying metadata for zookeeper service.
+    ## AWS example for use with LoadBalancer service type.
+    # external-dns.alpha.kubernetes.io/hostname: zookeeper.cluster.local
+    # service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+  ports:
+    client:
+      port: 2181  # Service port number for client port.
+      targetPort: client  # Service target port for client port.
+      protocol: TCP  # Service port protocol for client port.
+
+ports:
+  client:
+    containerPort: 2181  # Port number for zookeeper container client port.
+    protocol: TCP  # Protocol for zookeeper container client port.
+  election:
+    containerPort: 3888  # Port number for zookeeper container election port.
+    protocol: TCP  # Protocol for zookeeper container election port.
+  server:
+    containerPort: 2888  # Port number for zookeeper container server port.
+    protocol: TCP  # Protocol for zookeeper container server port.
+
+## Resource limits
+resources:
+ limits:
+   cpu: 250m
+   memory: 1Gi
+ requests:
+   cpu: 150m
+   memory: 100Mi
+
+persistence:
+  enabled: false
+  ## zookeeper data Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  ##
+  # storageClass: "-"
+  accessMode: ReadWriteOnce
+  size: 5Gi
+
+kubectl:
+  image:
+    name: aios-kubectl
+    tag: 1.0.10

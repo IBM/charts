@@ -1,0 +1,97 @@
+{{- $releaseName := .Release.Name }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "security-auth.fullname" . }}-nodejs
+  labels:
+    app: {{ template "security-auth.name" . }}-nodejs
+    chart: {{ template "security-auth.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "security-auth.name" . }}-nodejs
+      release: {{ .Release.Name }}
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "security-auth.name" . }}-nodejs
+        release: {{ .Release.Name }}
+        chart: {{ template "security-auth.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-common
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+      containers:
+      - name: 'nodejs'
+        envFrom:
+        - configMapRef:
+            name: {{ template "security-auth.fullname" . }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        env:
+        - name: JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: JWT_KEY
+{{- if ne .Values.global.IDENTITY_SERVER_TYPE "none" }}
+        - name: LDAP_SERVER_BINDCREDENTIALS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: LDAP_SERVER_BINDCREDENTIALS
+{{- end }}
+        - name: APPID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: APPID_API_KEY
+        - name: APPID_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: APPID_SECRET
+
+        {{- range $key, $value := .Values.securityAuthConfig }}
+        {{- if hasPrefix "USER_ID_" $key }}
+        - name: {{ $key | replace "_ID_" "_PASSWORD_" }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ $releaseName }}-platform-secrets-env
+              key: {{ $key | replace "_ID_" "_PASSWORD_" }}
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        - name: file-secrets
+          mountPath: /opt/ibm/fci/security-auth/certs/fci_universal_ks.pvtk.pem
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /opt/ibm/fci/security-auth/certs/fci_universal_ks.crt.pem
+          subPath: fci_universal_ks.crt.pem
+        - name: file-secrets
+          mountPath: /opt/ibm/fci/security-auth/certs/ldap.crt
+          subPath: fci_universal_ks.crt.pem
+        imagePullPolicy: {{ .Values.nodejs.image.pullPolicy }}
+{{ include "common.readinessProbe" . | indent 8 }}
+{{ include "common.livenessProbe" . | indent 8 }}
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.nodejs.image.repository }}:{{ .Values.nodejs.image.tag }}
+        resources:
+{{ toYaml .Values.nodejs.resources | indent 10 }}
+        ports:
+        - containerPort: 3000
+        - containerPort: 9229
+      restartPolicy: Always

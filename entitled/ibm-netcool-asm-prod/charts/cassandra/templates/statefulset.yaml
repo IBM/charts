@@ -1,0 +1,307 @@
+## create map for my data
+{{- $rootData := fromYaml (include "root.data" .) }}
+## get root metering data
+{{- $rootMetering := $rootData.metering -}}
+{{- include "sch.config.init" (list . "cassandra.sch.chart.config.values") -}}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
+{{- $dataTemplateName := include "sch.names.volumeClaimTemplateName" (list . "data" $statefulSetName) -}}
+{{- $backTemplateName := include "sch.names.volumeClaimTemplateName" (list . "back" $statefulSetName) -}}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+apiVersion: apps/v1beta2
+{{- else }}
+apiVersion: apps/v1beta1
+{{- end }}
+kind: StatefulSet
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/change-cause: Initial application creation.
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  name: {{ $statefulSetName }}
+spec:
+  serviceName:  {{ include "sch.names.fullCompName" (list .) | quote }}
+  podManagementPolicy: "Parallel"
+  replicas: {{ include "cassandra.replicationFactor" . }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      app: {{ include "sch.names.appName" (list .) | quote }}
+  {{- if semverCompare ">=1.7.0" .Capabilities.KubeVersion.GitVersion }}
+  updateStrategy:
+    type: RollingUpdate
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      name: {{ include "sch.names.fullCompName" (list .) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        supplementalGroups:
+        {{- range $group := .Values.global.persistence.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types,
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms,
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
+{{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{ end}}
+{{- if eq .Values.global.privileged true }}
+      initContainers:
+      - name: set-volume-permissions
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+{{ include "cassandra.comp.size.data" (list . "resources") | indent 10 }}
+        command: ["sh", "-c", "mkdir -p /opt/ibm/cassandra/data /opt/ibm/cassandra/logs ; chown -R cassandra:cassandra /opt/ibm/cassandra/data /opt/ibm/cassandra/logs"]
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+        volumeMounts:
+        - name: {{ $dataTemplateName }}
+          mountPath: /opt/ibm/cassandra/data
+        {{ if ne .Values.global.persistence.storageClassOption.cassandrabak "none" }}
+        - name: {{ $backTemplateName }}
+          mountPath: /opt/ibm/cassandra/data/backup_tar
+        {{ end }}
+        - name: {{ .Release.Name }}-cassandralogs
+          mountPath: /opt/ibm/cassandra/logs
+{{- end }}
+      containers:
+        - name: {{ include "sch.names.fullCompName" (list .) | quote }}
+          image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 7000
+              name: intra-node
+              protocol: TCP
+            - containerPort: 7001
+              name: tls-intra-node
+              protocol: TCP
+            - containerPort: 7199
+              name: jmx
+              protocol: TCP
+            - containerPort: 9042
+              name: cql
+              protocol: TCP
+            - containerPort: 9160
+              name: thrift
+              protocol: TCP
+            # Remove the comment from the next three
+            # lines to enable the jolokia jvm agent.
+            #- containerPort: 8778
+            #  name: jolokia
+            #  protocol: TCP
+            # Use intra-cluster port for liveness as it opens soon after the
+            # commit log has bene replayed. To handle any delay to the port
+            # opening due to the commit log taking a long time, return healthy
+            # if the last line in the log indicates that the log is still being
+            # replayed. The failureThreshold of three copes with the probe
+            # being run between the end of the commit log and the port opening.
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - 'socat -T 5 /dev/null TCP4:$HOSTNAME:{{ if ne .Values.internodeEncryption "none" }}7001{{ else }}7000{{ end }} || tail -1 /opt/ibm/cassandra/logs/system.log | grep "CommitLog.*Replaying" > /dev/null'
+            initialDelaySeconds: 120
+            periodSeconds: 120
+            timeoutSeconds: 60
+            failureThreshold: 3
+          # Use CQL port for service, this is what clients are interested in
+          readinessProbe:
+            tcpSocket:
+              port: 9042
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 60
+          env:
+            {{- if .Values.global.cassandra.superuserRole }}
+            - name: CASSANDRA_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-cassandra-auth-secret
+                  key: username
+            - name: CASSANDRA_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-cassandra-auth-secret
+                  key: password
+            {{- end }}
+            {{- if .Values.global.cassandra.clientEncryption }}
+            - name: CASSANDRA_CLIENT_ENCRYPTION_ENABLED
+              value: "true"
+            - name: REQUIRE_CLIENT_AUTH
+              value: {{ .Values.global.cassandra.requireClientAuth | quote }}
+            {{- end }}
+            {{- if ne .Values.internodeEncryption "none"}}
+            - name: CASSANDRA_INTERNODE_ENCRYPTION
+              value: {{ .Values.internodeEncryption | quote }}
+            {{- end }}
+            {{- if or ( ne .Values.internodeEncryption "none" ) .Values.global.cassandra.clientEncryption }}
+            - name: RELEASE
+              value: {{ .Release.Name }}-cassandra
+            - name: CA_CERTIFICATE
+              value: /opt/cacerts/{{ .Values.global.internalCaCertificate.certificateName }}
+            - name: CA_KEY
+              value: /opt/cacerts/{{ .Values.global.internalCaCertificate.certificateKeyName }}
+            - name: STORE_DIR
+              value: /opt/tls
+            {{- end }}
+            - name: RUN_CHANGE_SUPERUSER
+              value: {{ .Values.global.cassandra.superuserRole | quote }}
+            - name: CASSANDRA_AUTH_REPLICATION_FACTOR
+              value: {{ template "cassandra.authSchemaReplicationFactor" . }}
+            - name: CASSANDRA_HEAP_SIZE
+              value: {{ include "cassandra.comp.size.data" (list . "cassandraHeapSize") | quote }}
+            - name: CASSANDRA_HEAP_NEWSIZE
+              value: {{ include "cassandra.comp.size.data" (list . "cassandraHeapNewSize") | quote }}
+            - name: CASSANDRA_CONCURRENT_COMPACTORS
+              value: {{ include "cassandra.comp.size.data" (list . "cassandraConcurrentCompactors") | quote }}
+            - name: CASSANDRA_MEMTABLE_FLUSH_WRITERS
+              value: {{ include "cassandra.comp.size.data" (list . "cassandraMemtableFlushWriters") | quote }}
+            - name: BACKUP_DIR
+              value: /opt/ibm/cassandra/data/backup_tar
+            - name: CASSANDRA_CLUSTER_NAME
+              value: apm_cassandra
+            - name: CASSANDRA_DATA
+              value: /opt/ibm/cassandra/data/data
+            - name: CASSANDRA_SCRIPTS
+              value: /opt/ibm/backup_scripts
+            - name: CASSANDRA_SEEDS
+              value: {{ .Values.seeds | quote }}
+            - name: CASSANDRA_COMMITLOG_COMPRESSION
+              value: LZ4Compressor
+            - name: CASSANDRA_COMMITLOG_TOTAL_SPACE_MB
+              value: "1024"
+            - name: CASSANDRA_INTERNODE_COMPRESSION
+              value: dc
+            - name: DEFAULT_KEYSPACE
+              value: metricdb
+            - name: CASSANDRA_READ_REQUEST_TIMEOUT
+              value: "10000"
+            - name: CASSANDRA_WRITE_REQUEST_TIMEOUT
+              value: "2000"
+            - name: CASSANDRA_CAS_CONTENTION_TIMEOUT
+              value: "2000"
+            - name: CASSANDRA_BACKUP_SPEED
+              value: "17M"
+            - name: CASSANDRA_BATCH_SIZE_WARN
+              value: "200"
+            - name: CASSANDRA_BATCH_SIZE_FAIL
+              value: "600"
+            - name: CASSANDRA_AUTHENTICATION_ENABLED
+              value: "enabled"
+            - name: CASSANDRA_BOOTSTRAP_CONFIG
+              value: {{ .Release.Name }}-cassandra-bootstrap-config
+            #
+            # Remove the comment from the next two
+            # lines to enable the jolokia jvm agent.
+            #- name: ENABLE_JOLOKIA_JVM_AGENT
+            #  value: "yes"
+          resources:
+{{ include "cassandra.comp.size.data" (list . "resources") | indent 12 }}
+          volumeMounts:
+            - name: {{ $dataTemplateName }}
+              mountPath: /opt/ibm/cassandra/data
+          {{ if ne .Values.global.persistence.storageClassOption.cassandrabak "none" }}
+            - name: {{ $backTemplateName }}
+              mountPath: /opt/ibm/cassandra/data/backup_tar
+          {{ end }}
+            - name: {{ .Release.Name }}-cassandralogs
+              mountPath: /opt/ibm/cassandra/logs
+          {{- if or ( ne .Values.internodeEncryption "none" ) .Values.global.cassandra.clientEncryption }}
+            - name: cacerts-secret
+              mountPath: /opt/cacerts
+            - name: tls-store
+              mountPath: /opt/tls
+          {{- end }}
+      volumes:
+        - name: {{ .Release.Name }}-cassandralogs
+          emptyDir: {}
+        {{- if or ( ne .Values.internodeEncryption "none" ) .Values.global.cassandra.clientEncryption }}
+        - name: cacerts-secret
+          secret:
+            secretName: {{ .Values.global.internalCaCertificate.secretName }}
+        - name: tls-store
+          emptyDir: {}
+        {{- end }}
+{{ if .Values.global.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ $dataTemplateName }}
+        labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 10 }}
+
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.global.persistence.storageSize.cassandradata }}
+        {{ if eq .Values.global.persistence.storageClassOption.cassandradata "default" }}
+        storageClassName: {{ .Values.global.persistence.storageClassName }}
+        {{ else }}
+        storageClassName: {{ .Values.global.persistence.storageClassOption.cassandradata }}
+        {{ end }}
+  {{ if ne .Values.global.persistence.storageClassOption.cassandrabak "none" }}
+    - metadata:
+        name: {{ $backTemplateName }}
+        labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 10 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.global.persistence.storageSize.cassandrabak }}
+        {{ if eq .Values.global.persistence.storageClassOption.cassandrabak "default" }}
+        storageClassName: {{ .Values.global.persistence.storageClassName }}
+        {{ else }}
+        storageClassName: {{ .Values.global.persistence.storageClassOption.cassandrabak }}
+        {{ end }}
+  {{ end }}
+{{ else }}
+        - name: {{ $dataTemplateName }}
+          emptyDir: {}
+  {{ if ne .Values.global.persistence.storageClassOption.cassandrabak "none" }}
+        - name: {{ $backTemplateName }}
+          emptyDir: {}
+  {{ end }}
+{{ end }}

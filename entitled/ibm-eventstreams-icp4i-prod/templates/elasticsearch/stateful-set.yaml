@@ -1,0 +1,241 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Kubernetes pods that will make up the cluster of Elasticsearch nodes
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{- if .Values.messageIndexing.messageIndexingEnabled }}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
+# Define a tlsEnabled var from Values.
+{{- include "sch.config.init" (list . "tls.sch.chart.config.values") -}}
+{{ $namePrefix := .sch.chart.components.elasticSearch.statefulSet.name -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $namePrefix) -}}
+{{ $compName := .sch.chart.components.elasticSearch.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# Service Account
+{{ $serviceAccount := .sch.chart.components.elasticSearch.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+{{ $serviceNamePrefix := .sch.chart.components.elasticSearch.service.name -}}
+{{ $serviceName := include "sch.names.fullCompName" (list . $serviceNamePrefix) -}}
+{{ $indexmgrService := .sch.chart.components.indexmgr.service.name -}}
+{{ $indexmgrServiceName := include "sch.names.fullCompName" (list . $indexmgrService) -}}
+# import port definitions
+{{ $ports := .sch.config.ports }}
+# TLS Proxy config map name
+{{ $tlsConfigMap := .sch.chart.components.elasticSearch.configMap.name -}}
+{{ $tlsConfigMapName := include "sch.names.fullCompName" (list . $tlsConfigMap ) }}
+# Secrets with the certificates to use
+{{ $proxySecret := .sch.chart.components.proxy.secret.name -}}
+{{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecret ) -}}
+{{ $httpProtocol := .sch.config.tlsInternal.httpProtocol }}
+# k8s configuration
+{{ $clusterName := .Values.global.k8s.clusterName -}}
+# Internal configmap name for cluster env vars
+{{ $releaseConfigMap := .sch.chart.components.essential.releaseConfigMap.name -}}
+{{ $releaseConfigMapName := include "sch.names.fullCompName" (list . $releaseConfigMap) -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName | quote }}
+  labels:
+{{ $labels | indent 4 }}
+    internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
+spec:
+  # identify the headless service that will enable access to Elasticsearch nodes
+  serviceName: {{ $serviceName | quote }}
+  # Deployed in parallel to enable faster deployments
+  podManagementPolicy: "Parallel"
+  # number of nodes in the Elasticsearch cluster
+  #  changing this after install may lead to problems with Elasticsearch
+  replicas: 2
+  # Elasticsearch node pods are uniquely identified based on release name
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+        "tuned.openshift.io/elasticsearch": "true"
+        internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
+      annotations:
+{{ include "ibm-eventstreams.metering" (list . ) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.pod) | indent 8 }}
+      volumes:
+        - name: tlsproxy-config-map
+          configMap:
+            name: {{ $tlsConfigMapName }}
+        - name: proxy-certs-volume
+          secret:
+            secretName: {{ $proxySecretName }}
+            items:
+            - key: podtls.cacert
+              path: ca-certificates.crt
+      {{- include "license.accept.ref" . | indent 6 }}
+      affinity:
+{{ include "ibm-eventstreams.customNodeaffinity"  (list .) | indent 8 }}
+        # we don't want multiple co-located Elasticsearch nodes
+        #  so this anti-affinity rule should prevent
+        #  nodes with the elastic name being scheduled on
+        #  the same host
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        - {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+      containers:
+        # tls proxy sidecar - encrypts traffic to index manager and between elastic peers
+        - name: tls-proxy
+          image: {{ include "eventstreams.image" (list . "eventstreams-proxy" .Values.global.image.imageTags.proxyTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
+          resources:
+            requests:
+{{ toYaml .Values.global.resources.tlsProxy.requests | indent 14 }}
+            limits:
+{{ toYaml .Values.global.resources.tlsProxy.limits | indent 14 }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ES_CONFIG_PATH
+              value: {{ .sch.chart.components.elasticSearch.tlsConfigPath | quote }}
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.cert"
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.key"
+          volumeMounts:
+            - name: proxy-certs-volume
+              mountPath: /etc/ssl/certs
+              readOnly: true
+            - name: tlsproxy-config-map
+              mountPath: {{ .sch.chart.components.elasticSearch.tlsConfigPath | quote }}
+              readOnly: true
+          ports:
+            - containerPort: {{ $ports.proxy.health }}
+              name: proxy-health
+            - containerPort: {{ $ports.elasticsearch.publishing }}
+              name: publishing
+            - containerPort: {{ $ports.elasticsearch.api }}
+              name: api
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: "/live"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 15
+        - name: elastic
+          image: {{ include "eventstreams.image" (list . "eventstreams-elastic-search" .Values.global.image.imageTags.elasticSearchTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerWritableFilesystem) | indent 12 }}
+          resources:
+            #  The regex used to validate these resource limits are more restrictive
+            #  than the syntax that K8S normally allows, because these values are
+            #  also used to define the max heap for the Elastic JVM processes.
+            #  We enforce that the request and limit are equal to the limit, as this
+            #  is optimal for Elastic.
+            {{- if regexMatch "^[0-9]*(Gi|Mi|G|M)$" .Values.messageIndexing.resources.limits.memory }}
+            requests:
+{{ toYaml .Values.messageIndexing.resources.requests | indent 14 }}
+            limits:
+{{ toYaml .Values.messageIndexing.resources.limits | indent 14 }}
+            {{- else }}
+            {{ fail "Configuration error: You have entered an invalid Memory limit for message indexing nodes. Please enter the value in '^[0-9]*(Gi|Mi|G|M)$' format." }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /_cat/health?v
+              port: {{ $ports.elasticsearch.api }}
+              scheme: HTTP
+              httpHeaders:
+                - name: Accept
+                  value: '*/*'
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10
+          # We need the Elastic nodes to be able to communicate with each other through the service immidiately,
+          # therefore we only run a simple bash command to see if the container is up before declaring it 'ready'
+          # and allowed Kubernetes to wire it up to the service.
+          # All traffic to the Elastic service will be through the Index Manager, which will carry out
+          # it's own checks before sending any requests. So we don't need to worry about traffic flooding
+          # in once the readiness probe is passed.
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - cd
+            failureThreshold: 2
+            initialDelaySeconds: 180
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: CLUSTER_NAME
+              value: "{{ .Release.Name }}-cluster"
+            - name: SERVICE_NAME
+              value: "{{ $serviceName }}"
+            - name: PORT
+              value: "{{ $ports.elasticsearch.api }}"
+            - name: PUBLISHING_PORT
+              value: "{{ $ports.elasticsearch.publishing }}"
+            - name: HOSTS
+              value: "[\"{{ $statefulSetName }}-0.{{ $serviceName }}\", \"{{ $statefulSetName }}-1.{{ $serviceName }}\"]"
+            - name: ELASTIC_HOSTS
+              value: "[\"{{ $statefulSetName }}-0.{{ $serviceName }}\", \"{{ $statefulSetName }}-1.{{ $serviceName }}\"]"
+            - name: INDEXMGR_HOSTNAME
+              value: '{{ $httpProtocol }}://{{ $indexmgrServiceName }}.{{ .Release.Namespace }}.svc.{{ $clusterName }}:{{ $ports.indexmgr.api }}'
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: CONFIGMAP
+              value: {{ $releaseConfigMapName | quote }}
+{{- end -}}
+{{- end -}}

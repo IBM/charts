@@ -1,0 +1,147 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+{{ include "sch.config.init" (list . "sch.bastudio.config.values") }}
+{{- $serviceName := include "sch.names.fullCompName" (list . "jms-service") -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "jms") }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "jms") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "jms") | indent 6 }}
+  serviceName: {{ include "sch.names.fullName" (list . ) }}-jms-service
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "jms") | indent 8 }} 
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering ) | indent 8 }}
+    spec:
+{{ include "bastudio.constants.pod.securityContext" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . "bastudio-sa") }}
+      initContainers:
+      - name: ssl-init-container
+        image: {{ .Values.images.tlsInitContainer | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.resources.initProcess | indent 10 }}
+        securityContext:
+{{ include "bastudio.constants.container.securityContext" . | indent 10 }}
+        volumeMounts:
+        - name: key-trust-store
+          mountPath: /shared/tls
+        - name: global-ca
+          mountPath: /etc/predefined-ca
+        env:
+        - name: KEYTOOL_ACTION
+          value: GENERATE-KEYSTORE
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: sslKeystorePassword
+        - name: CREATE_KEYPAIR
+          value: "true"
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: SUBJECT_ALT_NAMES
+          value: {{ $serviceName }},$(MY_POD_IP)
+      containers:
+      - name: jms-server
+        image: {{ .Values.images.jmsContainer | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.resources.jms | indent 10 }}
+        securityContext:
+{{ include "bastudio.constants.container.securityContext" . | indent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 240
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+        env:
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: sslKeystorePassword
+        - name: ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: adminUser
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: adminPassword
+        # mounting storage persistent volume completely on the data dir
+        volumeMounts:
+        - name: key-trust-store
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/resources/security/keystore/jks/server.jks
+          subPath: keystore/jks/server.jks
+          readOnly: true
+        {{- if .Values.global.baStudio.jmsPersistencePVC }}
+        - name: configurations
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides/messaging.xml
+          subPath: messaging.xml
+        - name: message-store
+          mountPath: /opt/ibm/wlp/usr/shared/resources/persistent/message-store
+        {{- end }}
+      volumes:
+      - name: key-trust-store
+        emptyDir: {}
+      - name: global-ca
+        secret:
+          secretName: {{ .Values.global.caSecretName}}
+      {{- if .Values.global.baStudio.jmsPersistencePVC }}
+      - name: configurations
+        defaultMode: 0755
+        configMap:
+          name: {{ include "sch.names.fullName" (list . ) }}-config
+          items:
+          - key: messaging.xml
+            path: messaging.xml
+      - name: message-store
+        defaultMode: 0755
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.baStudio.jmsPersistencePVC }}
+      {{- end }}
+
+

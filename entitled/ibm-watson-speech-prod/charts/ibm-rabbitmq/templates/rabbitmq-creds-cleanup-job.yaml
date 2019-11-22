@@ -1,0 +1,65 @@
+{{- include "sch.config.init" (list . "ibmRabbitmq.sch.chart.config.values") -}}
+{{- if or (not .Values.auth.authSecretName) (and (.Values.tls.enabled) (not .Values.tls.tlsSecretName)) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      serviceAccountName:  {{ include "sch.names.fullName" (list .) | quote }}
+{{- if tpl .Values.global.image.pullSecret . }}
+      imagePullSecrets:
+      - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+{{- end }}
+      containers:
+      - name: cleanup
+        image:  "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}"
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+{{- if (not .Values.auth.authSecretName) }}
+          echo "=>>>Deleting {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) }} ..." && kubectl delete secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) }} -n {{ .Release.Namespace }}
+{{- end }}
+{{- if (not .Values.tls.tlsSecretName) }}
+          echo "=>>>Deleting {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlssecret) }} ..." && kubectl delete secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlssecret) }} -n {{ .Release.Namespace }}
+{{- end }}
+      restartPolicy: Never
+{{ end }}

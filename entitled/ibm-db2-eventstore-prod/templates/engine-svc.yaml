@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ .Values.servicename }}-tenant-engine-svc"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+spec:
+  type: {{ .Values.engine.type }}
+  ports:
+  - port: {{ .Values.engine.servicePort }}
+    targetPort: {{ .Values.engine.publicPort }}
+    name: legacy-server
+  - port: {{ .Values.engine.db2ServicePort }}
+    targetPort: {{ .Values.engine.db2ClientPort }}
+    name: server
+  selector:
+    app.kubernetes.io/name: {{ .Values.servicename }}-tenant-engine
+    component: eventstore
+    enabled: "true"
+  {{ if ne .Values.runtime "ICP4Data" -}}
+  # note the external IP address will be replaced by the create.sh script
+  externalIPs:
+    - {{ .Values.address.virtualIp }}
+  {{- end }}

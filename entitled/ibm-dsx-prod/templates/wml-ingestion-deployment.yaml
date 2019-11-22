@@ -1,0 +1,69 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: wml-ingestion
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: wml-ingestion
+    run: wml-ingestion-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: wml-ingestion-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: wml-ml
+        component: wml-ingestion
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        run: wml-ingestion-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+      - name: wml-ingestion
+        image: {{ .Values.wmlIngestion.image.repository }}:{{ .Values.wmlIngestion.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.wmlIngestion.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 13102
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /v2/ingest/heartbeat
+            port: 13102
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /v2/ingest/heartbeat
+            port: 13102
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30

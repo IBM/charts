@@ -1,0 +1,57 @@
+####################################################################
+# Licensed Materials Property of HCL*
+# (c) Copyright HCL Technologies Ltd. 2019. All rights reserved.
+#
+# * Trademark of HCL Technologies Limited
+####################################################################
+
+{{- if .Values.console.ingress.enabled }} 
+
+{{- include "sch.config.init" (list . "waconsole.sch.chart.config.values") }}
+{{ $fullName := include "sch.names.fullName" (list .) }}
+{{ $dwcServiceName := include "sch.names.fullName" (list .) }}
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $dwcServiceName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  annotations:
+    ingress.kubernetes.io/backend-protocol: HTTPS
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-name: wa-console-affinity-cookie
+    nginx.ingress.kubernetes.io/session-cookie-hash: sha1
+    ingress.kubernetes.io/affinity: cookie
+    ingress.kubernetes.io/session-cookie-name: wa-console-affinity-cookie
+    ingress.kubernetes.io/session-cookie-hash: sha1  
+spec:
+  tls:
+    - hosts:
+      {{- if .Values.console.ingress.hostname }}
+       - {{ .Values.console.ingress.hostname }}
+      {{- else }}  
+       - {{ $fullName }}.mycluster.proxy
+      {{- end }}
+      {{- if .Values.console.ingress.secretName }}       
+      secretName: {{ .Values.console.ingress.secretName }}    
+      {{- end }}       
+  rules:
+  {{- if .Values.console.ingress.hostname }}
+  - host: {{ .Values.console.ingress.hostname }}
+  {{- else }}  
+  - host: {{ $fullName }}.mycluster.proxy
+  {{- end }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ $dwcServiceName }}
+          servicePort: 9443
+          
+{{- end }}             

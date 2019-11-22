@@ -1,0 +1,100 @@
+{{- if ne (.Values.enableExternalMongoDB|quote|lower) "\"true\"" -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: mongodb
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets change
+        checksums/mongodb.password: "{{ .Values.secrets.mongodb.password | b64enc | sha256sum }}"
+        {{ end }}
+      labels:
+        name: mongodb # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+      containers:
+        - env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_mongodb") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_mongodb" .Values.imageCredentials.registry) }}
+          {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              add:
+              - SETGID
+              - SETFCAP
+              - CHOWN
+              - SETUID
+              drop:
+              - ALL
+          name: mongodb
+          ports:
+            - containerPort: 27017
+          readinessProbe:
+            tcpSocket:
+              port: 27017
+          livenessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 60
+            periodSeconds: 120
+            failureThreshold: 4
+          # DEVOPS-12451: wiredTigerCacheSizeGB:
+          #   Defines the maximum size of the internal cache that WiredTiger will use for all data.
+          #   See the docs: https://docs.mongodb.com/manual/reference/program/mongod/#cmdoption-mongod-wiredtigercachesizegb
+          args: ["--wiredTigerCacheSizeGB", "2.5"] # 50% of (RAM_limit - 1 GB)
+          resources:
+{{ include "deployClassConfig" (list . "cb_mongodb") | indent 12 }}
+          volumeMounts:
+            - mountPath: /data/db
+              name: core-couchdb-claim0
+              subPath: opt/mongodb/data
+      restartPolicy: Always
+      volumes:
+        - name: core-couchdb-claim0
+          persistentVolumeClaim:
+            claimName: core-couchdb-claim0
+{{ end }}

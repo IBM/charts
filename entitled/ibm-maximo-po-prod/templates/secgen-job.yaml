@@ -1,0 +1,57 @@
+{{- if or (.Values.global.secretGen.autoSecret) (.Values.global.secretGen.autoCert) }}
+{{- include "sch.config.init" (list . "poRef.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.autogen.generatorName -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $compName) }}-autogen-c
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+      {{- include "po.securitycontext.pod" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: cert-gen
+        image: "{{ .Values.global.supportT.image.repository }}:{{.Values.global.supportT.image.tag  }}"
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        {{- include "po.securitycontext.container" . | indent 8 }}
+        resources:
+          requests:
+            cpu: 50m
+            memory: 200Mi
+          limits:
+            cpu: 500m
+            memory: 500Mi
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          date
+{{ if .Values.global.secretGen.autoCert }}
+{{ tpl (.Files.Get "data/generate_cert.sh") . | indent 10 }}
+{{ else }}
+          echo "Use provided SSL certificate file"
+{{ end }}
+{{ if .Values.global.secretGen.autoSecret }}
+{{ tpl (.Files.Get "data/generate_sec.sh") . | indent 10 }}
+{{ else }}
+          echo "Use provided secret data"
+{{ end }}
+      restartPolicy: Never
+{{- end }}

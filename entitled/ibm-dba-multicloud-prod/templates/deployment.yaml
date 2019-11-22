@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-dba-multicloud-prod.fullname" . }}
+  labels:
+    app: {{ template "ibm-dba-multicloud-prod.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "ibm-dba-multicloud-prod.name" . }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-dba-multicloud-prod.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productID: ""
+        productName: ""
+        productVersion: ""
+        productMetric: ""
+        productChargedContainers: ""
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 50001
+        fsGroup: 50000
+        supplementalGroups:
+        - 50000
+      affinity:
+      {{- include "ibm-dba-multicloud-prod.nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "ibm-dba-multicloud-prod.name" . }}
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 50001
+          allowPrivilegeEscalation: false 
+          # jesse
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "{{ .Values.resources.requests.memory }}"
+            cpu: "{{ .Values.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.limits.memory }}"
+            cpu: "{{ .Values.resources.limits.cpu }}"
+        command: ['/bin/bash']
+        args: ['/entrypoint.sh', '/bin/bash']
+        stdin: true
+        tty: true
+        ports:
+          - containerPort: 8000
+            name: http
+          - containerPort: 8443
+            name: https
+        env:
+          - name: SC_ECC_DEPLOY_ID
+            value: {{ .Values.environmentVal.ibaccDeployID }}
+          - name: SC_DEPLOYMENT_CONTEXT
+            value: {{ .Values.environmentVal.ibaccDeploymentContext }}
+        readinessProbe:
+          httpGet:
+            path: /docs/swagger-ui.html
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 5
+        livenessProbe:
+          httpGet:
+            path: /docs/swagger-ui.html
+            port: 8000
+          initialDelaySeconds: 240
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+        volumeMounts:
+          - name: ecm-ibacc-pvc
+            mountPath: "/opt/ibm/ibacc"
+      volumes:
+        - name: ecm-ibacc-pvc
+          persistentVolumeClaim:
+            claimName: {{ .Values.volume.persistentVolumeClaim }}

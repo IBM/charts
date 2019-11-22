@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: core-authorization-test
+  labels:
+    name: core-authorization-test
+{{ include "core.test-labels" .  | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+{{ include "core.nodeaffinity" . | indent 4 }}
+{{ include "core.securityContext" .  | indent 2 }}
+{{ include "core.imagePullSecrets" .  | indent 2 }}
+  containers:
+  - name: core-authorization-test
+    {{- template "isIcp" . -}}
+    {{- if not (.Values.isIcp) }}
+    image: {{ template "core.readConfig" (list . "cb_core_authorization_service") }}
+    {{ else }}
+    image: {{ template "coreicp.readConfig" (list . "cb_core_authorization_service" .Values.imageCredentials.registry) }}
+    {{ end }}
+{{ include "core.container.securityContext" . | indent 4  }}
+    command: ["sh", "-c", "wget -O - http://cb-core-authorization-service:4004"]
+  restartPolicy: Never

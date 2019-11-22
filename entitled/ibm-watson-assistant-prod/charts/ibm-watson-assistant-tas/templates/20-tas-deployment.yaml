@@ -1,0 +1,273 @@
+{{- include "sch.config.init" (list . .Values.global.schConfigTemplate) -}}apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-tas"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:   "conversation"
+      component: "tas"
+      slot:      "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant: PUBLIC
+
+    app:         "ibm-watson-assistant-prod-1.3.0"
+    chart:       "ibm-watson-assistant"
+    heritage:    "{{ .Release.Service }}"
+    release:     "{{ .Release.Name }}"
+spec:
+  replicas: {{ include "assistant.tas.replicas" . }}
+  selector:
+    matchLabels: *primary_labels # Don't touch or extend!
+  strategy:
+    rollingUpdate:
+      # Ensure that a Deployment with a single instance is never
+      # unavailable during an upgrade.  This forces each new pod to
+      # become ready before an old one is stopped.
+      maxUnavailable: 0
+  
+  revisionHistoryLimit: 4
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+    spec:
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+        - name: etcd-running
+          image: "{{ if tpl ( .Values.init.etcd.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.init.etcd.image.repository | toString ) . ) }}{{ end }}/{{ .Values.init.etcd.image.name }}:{{ .Values.init.etcd.image.tag }}"
+          imagePullPolicy: {{ .Values.init.etcd.image.pullPolicy | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 2000
+
+          command: [ "/scripts/etcd_running.sh" ]
+          env:
+            - name:  "LL_FULL_SERVICE_NAME"
+              value: "tas-runtime/tas-runtime-slot-{{ .Release.Name }}"
+          volumeMounts:
+            - name: "init-scripts"
+              mountPath: /scripts
+            - name: global-etcd
+              mountPath: "/etc/secrets/etcd"
+              readOnly: true
+        - name: cos-running-check
+          image: "{{ if tpl ( .Values.init.cosRunning.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.init.cosRunning.image.repository | toString ) . ) }}{{ end }}/{{ .Values.init.cosRunning.image.name }}:{{ .Values.init.cosRunning.image.tag }}"
+          imagePullPolicy: {{ .Values.init.cosRunning.image.pullPolicy | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 2000
+
+          command: [ "/scripts/cos_ready.sh" ]
+          env:
+            - name:  "TAS_SERVICE_NAME"
+              value: "tas-runtime-slot-{{ .Release.Name }}"
+          volumeMounts:
+            - name: "init-scripts"
+              mountPath: /scripts
+            - name: global-etcd
+              mountPath: "/etc/secrets/etcd"
+              readOnly: true
+            - name: "cos-certificate"
+              mountPath: "/etc/secrets/cos/"
+              readOnly: true
+{{- if .Values.init.waitForCluMongoData }}
+        - name: mongo-clu-data-check
+          image: "{{ if tpl ( .Values.init.mongoloader.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.init.mongoloader.image.repository | toString ) . ) }}{{ end }}/{{ .Values.init.mongoloader.image.name }}:{{ .Values.init.mongoloader.image.tag }}"
+          imagePullPolicy: {{ .Values.init.mongoloader.image.pullPolicy | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 2000
+
+          command: [ "/scripts/mongodb_loaded.sh" ]
+          volumeMounts:
+            - name: "init-scripts"
+              mountPath: /scripts
+            - name: config
+              mountPath: /opt/watson/dynconfig
+              # /opt/bluegoat/dynconfig/mongodb_connection_string
+              readOnly: true
+{{- end }}
+      containers:
+        - name: "tas"
+          image: "{{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 2000
+
+          
+          ports:
+            - name: "thrift"
+              containerPort: 8080
+          
+          env:
+            # KUBERNETES SPECIFIC ENVIRONMENT VARIABLES
+            - name:  "WKUBE_POD_NAME"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.name"
+            - name:  "WKUBE_POD_IPADDR"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+  
+            # As the Tas is not set to be visible outside k8s. The WKUBE_NODE_NAME, WKUBE_SERVICE_NAME and WKUBE_SERVICE_PORT_NAME are not defined.
+            - name: PRIMARY_OBJECTSTORE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-clu-config-secret
+                  key: primary_objectstore_string
+
+            - name: "KV_STORE"
+              value: "etcd:/etc/secrets/etcd/etcd_connection"
+           
+            - name:  "TAS_SERVICE_NAME"
+              value: "tas-runtime-slot-{{ .Release.Name }}"
+            
+            - name: "SERVICE_VERSION"
+              value: "20190809-125407-4-50f2fa-wa_icp_1.3-icp-e79df21"
+
+            - name: "NEXTGEN_SYS_ENTITIES_SERVICE_NAME"  ##Deprecate after openbeta
+              value: "conversation-system-entities:50051"
+            - name: "SYSTEM_ENTITIES_SERVICE_ADDRESS"
+              value: "conversation-system-entities:50051"
+              
+            - name: LL_PRIVATE_DOMAIN_ID
+              valueFrom:
+                configMapKeyRef:
+                   name: "{{ .Release.Name }}-config-litelinks"
+                   key: kubernetes_cluster_name
+            
+  
+            - name: "CUSTOM_JVM_ARGS"
+              value: "-Dtas.static_heap_overhead_mbytes=1024"
+  
+            - name:  "HEAP_SIZE"
+              value: "4000m"
+  
+            - name: ICP_ENVIRONMENT
+              value: "true"
+            # Specifies how to reach the sireg containers (the namespace: sireg service port)
+            - name: KUBEDNS_SUFFIX
+              value: ".{{ .Release.Namespace }}:50443"
+            - name: KUBEDNS_PREFIX
+              value: "{{ .Release.Name }}-"
+            - name:  "CERTIFICATES_IMPORT_LIST"
+              value: "/etc/secrets/cos/ca.crt:cos-minio"
+          
+          volumeMounts:
+            - name: config
+              mountPath: /opt/watson/tas/dynconfig
+              readOnly: true
+            - mountPath: "/etc/secrets/etcd"
+              readOnly: true
+              name: global-etcd
+            - name: "cos-certificate"
+              mountPath: "/etc/secrets/cos/"
+              readOnly: true
+          resources:
+            requests:
+              cpu: 300m
+              memory: 5Gi
+            limits:
+              # cpu limits removed for ICP deployments
+              memory: 5Gi
+          
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8089
+              scheme: HTTP
+            initialDelaySeconds: 20
+            periodSeconds: 120
+            timeoutSeconds: 60
+          
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8089
+              scheme: HTTP
+            # Offset this probe by 1 minute from the readiness probe
+            initialDelaySeconds: 30
+            periodSeconds: 120
+            timeoutSeconds: 60
+            failureThreshold: 2
+          
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /opt/watson/tas/stop.sh
+                  - wait
+
+  
+        # Not adding statsd container since logmet is not defined (in env file)
+      volumes:
+  
+        # Not adding logmet-config volumeMount for statsd container since logmet is not defined (in env file)
+        - name: config
+          secret:
+           secretName: "{{ .Release.Name }}-clu-config-secret"
+        
+        - name: global-etcd
+          secret:
+            secretName: "{{ .Release.Name }}-global-etcd"
+        - name: "init-scripts"
+          configMap:
+            name: "{{ .Release.Name }}-tas-init-scripts"
+            defaultMode: 0755
+        - name: "cos-certificate"
+          secret:
+            secretName:  "{{ include "assistant.cos.tls.secretName" . }}"
+            defaultMode: 420
+            items:
+            - key:  ca.crt
+              path: ca.crt
+  
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+
+{{- $_ := set . "compName" "tas" }}
+{{ include "assistant.podAntiAffinity" . | indent 8 }}

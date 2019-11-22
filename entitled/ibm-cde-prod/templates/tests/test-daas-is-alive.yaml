@@ -1,0 +1,62 @@
+{{/*
+#+------------no-check-certificate--------------------------------------------------------------+
+#| Licensed Materials - Property of IBM
+#| IBM Cognos Products: Cognos Dashboard Embedded
+#| (C) Copyright IBM Corp. 2019
+#|
+#| US Government Users Restricted Rights - Use, duplication or disclosure
+#| restricted by GSA ADP Schedule Contract with IBM Corp.
+#+------------------------------------------------------------------------+
+*/}}
+{{- $proxyName := include "ibmCde.proxy.fullname" . }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-daas-is-alive"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    {{- include "ibmCde.release_labels" . | indent 4 }}
+    app: {{ template "ibmCde.name" . }}-daas-is-alive
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- if .Values.arch }}
+              - {{ .Values.arch }}
+            {{- else }}
+              - {{ template "ibmCde.arch" . }}
+            {{- end }}
+  restartPolicy: Never
+  serviceAccountName: {{ .Values.serviceAccount.name }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+  - name: {{ .Release.Name }}-healthcheck
+    image: "{{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.image.redisInit.image }}:{{ .Values.image.redisInit.tag | default "latest" }}"
+    command: [ "sh", "-c", "curl -k -i https://{{ $proxyName }}:3001/healthcheck"]
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    securityContext:
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+      runAsUser: {{ .Values.runAsUser }}
+{{- end }}
+      runAsNonRoot: true
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      limits:
+        cpu: "1"
+        memory: 256Mi
+      requests:
+        cpu: "125m"
+        memory: 128Mi

@@ -1,0 +1,68 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.globalconfig.name -}}
+### ROLE
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: Role
+metadata:
+  name: {{ template "wks.role.name" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-100"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+rules:
+- apiGroups:
+    - ""
+    - batch
+  resources:
+    - pods
+    - pods/log
+    - jobs
+    - secrets
+  verbs:
+    - "*"
+
+---
+### SERVICE ACCOUNT
+apiVersion: v1
+kind: ServiceAccount
+imagePullSecrets:
+  - name: sa-{{ .Release.Namespace }}
+{{- if .Values.global.dockerRegistrySecret }}
+  - name: {{ .Values.global.dockerRegistrySecret }}
+{{- end }}
+{{- if .Values.global.image.pullSecret }}
+  - name: {{ .Values.global.image.pullSecret }}
+{{- end }}
+{{- if .Values.global.image.pullSecretCsfdev }}
+  - name: {{ .Values.global.image.pullSecretCsfdev }}
+{{- end }}
+metadata:
+  name: {{ template "wks.serviceaccount.name" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-100"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+
+---
+### ROLE BINDING
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: {{ template "wks.rolebinding.name" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-100"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ template "wks.role.name" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ template "wks.serviceaccount.name" . }}

@@ -1,0 +1,85 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: filemgmt
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: filemgmt-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: filemgmt
+        component: filemgmt
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        run: filemgmt-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+      - name: filemgmt-container
+        image: {{ .Values.filemgmt.image.repository }}:{{ .Values.filemgmt.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["pm2-docker"]
+        args: ["server.js"]
+        env:
+        - name: KUBERNETES_URL
+          value: externalIP
+        - name: KUBERNETES_PORT
+          value: "443"
+        - name: AUTH_URL
+          value: "http://usermgmt-svc:8080/v1"
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.filemgmt.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - name: filemgmt-nodejs
+          containerPort: 3000
+        readinessProbe:
+          exec:
+            command:
+            - ls
+            - /
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        livenessProbe:
+          exec:
+            command:
+            - ls
+            - /
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        volumeMounts:
+        - name: user-home-mount
+          mountPath: /user-home
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

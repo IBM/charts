@@ -1,0 +1,116 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Runs a container that registers the IBM Event Streams UI as an OAuth endpoint
+#  to allow log-ins to the Event Streams Admin UI
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") | trim -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
+{{- $namePrefix := .sch.chart.components.ui.oauth2ClientRegistration.name -}}
+{{- $name := include "sch.names.fullCompName" (list . $namePrefix ) }}
+# Component is 'ui' as this makes up part of implementing the web UI
+{{- $compName := .sch.chart.components.ui.compName -}}
+{{- $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) }}
+# Service Account
+{{- $serviceAccount := .sch.chart.components.ui.oauth.serviceAccount.name -}}
+{{- $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) }}
+#  Secret name and UI service name which are used while creating oauth secret.
+{{- $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
+{{- $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) }}
+#  OAuth registration name which is used for registration and deletion.
+{{- $oauthRegistrationClient := .sch.chart.components.ui.oauth.client.name -}}
+{{- $oauthRegistrationClientName := include "sch.names.fullCompName" (list . $oauthRegistrationClient) | quote -}}
+{{- $uiServiceName :=  .sch.chart.components.ui.service.name -}}
+{{- $uiSvcName := include "sch.names.fullCompName" (list . $uiServiceName) }}
+# this is the route that is providing networking to the UI service
+{{- $uiRouteNamePrefix := .sch.chart.components.ui.route.name -}}
+{{- $uiRouteName := include "sch.names.fullCompName" (list . $uiRouteNamePrefix) }}
+# Secret and config map used by the proxy container
+{{- $proxySecret := .sch.chart.components.proxy.secret.name -}}
+{{- $proxySecretName := include "sch.names.fullCompName" (list . $proxySecret) | quote }}
+# Name of release configmap
+{{- $releaseConfigMap := .sch.chart.components.essential.releaseConfigMap.name -}}
+{{- $releaseConfigMapName := include "sch.names.fullCompName" (list . $releaseConfigMap) | quote }}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+        job: "oauth2-client-registration"
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.pod) | indent 8 }}
+      affinity:
+{{ include "ibm-eventstreams.customNodeaffinity"  (list .) | indent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: "oauth2-client-reg"
+          image: {{ include "eventstreams.image" (list . "eventstreams-oauth-registration" .Values.global.image.imageTags.oauthTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerWritableFilesystem) | indent 12 }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: "ES_NAMESPACE"
+              value: {{ .Release.Namespace | quote }}
+            - name: "RELEASE_NAME"
+              value: {{ .Release.Name | quote }}
+            - name: "ES_SECRET_NAME"
+              value: {{ $oauthSecretName }}
+            - name: "ES_OAUTH_CLIENT_NAME"
+              value: {{ $oauthRegistrationClientName }}
+            - name: "PROXY_SECRET_NAME"
+              value: {{ $proxySecretName }}
+            - name: "UI_SVC_NAME"
+              value: {{ $uiSvcName }}
+            - name: "ES_EXTERNAL_ADDRESS"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "externalHostOrIP"
+            - name: "CLUSTER_ADDRESS"
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $releaseConfigMapName }}
+                  key: "CLUSTER_ADDRESS"
+            - name: "PROXY_ADDRESS"
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $releaseConfigMapName }}
+                  key: "PROXY_ADDRESS"
+            - name: "CLUSTER_CA_DOMAIN"
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $releaseConfigMapName }}
+                  key: "CLUSTER_CA_DOMAIN"
+            - name: "OPENSHIFT_DOMAIN"
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $releaseConfigMapName }}
+                  key: "OPENSHIFT_DOMAIN"
+                  optional: true
+            - name: "UI_ROUTE_NAME"
+              value: "{{ $uiRouteName }}-{{ .Release.Namespace }}"

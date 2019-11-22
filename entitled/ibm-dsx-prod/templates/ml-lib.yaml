@@ -1,0 +1,43 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: ml-lib
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    metadata:
+      labels:
+        component: ml-lib
+        run: ml-lib-job-pod
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+        - name: ml-lib-container
+          image: {{ .Values.mllib.image.repository }}:{{ .Values.mllib.image.tag }}
+          imagePullPolicy: IfNotPresent
+          command: ["/k8s/create.sh"]
+          env:
+          - name: NAMESPACE
+            value: "{{ .Release.Namespace }}"
+          volumeMounts:
+            - mountPath: /user-home
+              name: user-home-mount
+      restartPolicy: OnFailure
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

@@ -1,0 +1,146 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- include "sch.config.init" (list . .Values.global.schConfigTemplate) }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-bdd-test"
+  labels:
+    test: "bdd"
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  restartPolicy: Never
+  hostIPC: false
+  hostNetwork: false
+  hostPID: false
+ 
+  containers:
+  - name: test-bdd
+    image: "{{ if tpl ( .Values.bdd.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.bdd.image.repository | toString ) . ) }}{{ end }}/{{ .Values.bdd.image.name }}:{{ .Values.bdd.image.tag }}"
+    imagePullPolicy: {{ .Values.bdd.image.pullPolicy | quote }}
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      readOnlyRootFilesystem: false
+      runAsNonRoot: true
+      runAsUser: 2000
+ 
+    metadata:
+    command:
+      - '/bin/sh'
+      - '-c'
+      - |
+         #!/bin/bash
+          
+         set -xe
+         
+         if [ -z ${API_HOST:-} ] ; then
+            echo "Error. API_HOST not set. Please setup API_HOST for example:"
+            echo "  export API_HOST=https://localhost:443"
+            echo ""
+            exit 1
+         fi
+          
+         export SERVICE_INSTANCE_GUID=$(cat /proc/sys/kernel/random/uuid)
+         export ORGANIZATION_GUID=$(cat /proc/sys/kernel/random/uuid)
+         export REGION_ID="bdd-test"
+         
+         # Generate new tenant 
+         curl -X PUT \
+           ${API_HOST}/csb/standard/v2/service_instances/${SERVICE_INSTANCE_GUID} \
+             -H 'cache-control: no-cache' \
+             -H 'content-type: application/json' \
+             -H "x-bluemix-region: ${REGION_ID}" \
+             -d "{\"organization_guid\" : \"${ORGANIZATION_GUID}\"}" -k
+         
+         # example systemProp.BM_USER_INFO="bluemix-instance-id=3efd74d3-3190-44ce-9b7d-14b1760bcb79;bluemix-region-id=us-south;bluemix-organization-guid=2ed23515-a749-4b7e-9a2e-e1c687d14e87"
+         export BM_USER_INFO="bluemix-instance-id=${SERVICE_INSTANCE_GUID};bluemix-region-id=${REGION_ID};bluemix-organization-guid=${ORGANIZATION_GUID}"
+         
+         set +e
+         ./gradlew -q --no-daemon -g gradle.home runJar
+         export RESULT=$?
+         set -e
+         
+         # Cleanup = (Soft) delete the tenant
+         curl -X DELETE \
+           ${API_HOST}/csb/standard/v2/service_instances/${SERVICE_INSTANCE_GUID} \
+           -H 'cache-control: no-cache' \
+           -H 'content-type: application/json' \
+           -H "x-bluemix-region: ${REGION_ID}" \
+           -d "{\"organization_guid\" : \"${ORGANIZATION_GUID}\"}" -k
+         
+         # Print out the result and exit accordingly
+         if [ -s "test_output/bdd/cucumber/regression_failures.txt" ]
+         then
+           echo "Error detected: test_output/bdd/cucumber/regression_failures.txt is not empty."
+           echo "cat test_output/bdd/logs/VoyagerBDD.log"
+           echo ""
+           cat test_output/bdd/logs/VoyagerBDD.log
+           echo "==================================================="
+           echo ""
+           echo "cat test_output/bdd/logs/VoyagerBDDResp.log"
+           echo ""
+           cat test_output/bdd/logs/VoyagerBDDResp.log
+           echo "==================================================="
+           echo ""
+           echo "Overview: "
+           cat test_output/bdd/cucumber/regression_failures.txt
+           echo ""
+           echo "====================================================="
+           echo "*                                                   *"
+           echo "*              BDD TESTS FAILED !!!                 *"
+           echo "*                                                   *"
+           echo "====================================================="
+           echo ""           
+           exit 1
+         else
+           echo ""         
+           echo "OK. test_output/bdd/cucumber/regression_failures.txt is empty. BDD tests passed."         
+           echo ""
+           echo "====================================================="
+           echo "*                                                   *"
+           echo "*              BDD TESTS PASSED !!!                 *"
+           echo "*                                                   *"
+           echo "====================================================="
+           echo ""           
+           exit 0
+         fi
+    resources:
+       limits:
+          cpu: "1"
+          memory: "1.5Gi"
+       requests:
+          cpu: "1"
+          memory: "1Gi"
+    env:
+    - name: API_HOST
+      value: "https://wcs-{{ .Release.Name }}:443"
+    - name: CUCUMBER_TAGS
+      value: "@healthcheck,@checkLangs"
+    - name: ICP_ENV
+      value: "true"
+    - name: "API_VERSION"
+      value: "2019-02-28"
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+
+

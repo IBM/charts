@@ -1,0 +1,159 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "addon") | quote }}
+  labels:
+    icpdsupport/collection_type: DEFAULT
+    icpdsupport/addOnKey: {{ include "wcn-addon.id" . }}
+{{ include "sch.metadata.labels.standard" (list . "addon") | indent 4 }}
+spec:
+  {{- if not (include "wcn-addon.booleanConvertor" (list .Values.autoscaling.enabled . )) }}
+  replicas: {{ tpl (.Values.addonService.replicas | toString) . }}
+  {{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "addon") | indent 6 }}
+  revisionHistoryLimit: 2
+  minReadySeconds: 20
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "addon") | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- if ne .Values.serviceAccount.name "" }}
+      serviceAccountName: {{ include "wcn-addon.account.name" . }}
+      {{- end }}
+      securityContext:
+        runAsUser: 1000
+        runAsNonRoot: true
+      terminationGracePeriodSeconds: 60
+{{- if tpl (.Values.global.imagePullSecretName | toString ) . }}
+      imagePullSecrets:
+      - name:  {{ tpl (.Values.global.imagePullSecretName | toString ) . }}
+{{- end }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: "addon"
+        image: "{{ include "wcn-addon.icpDockerRepo" . }}{{ .Values.addonService.image.repository }}:{{ .Values.addonService.image.tag }}"
+        imagePullPolicy: {{ .Values.addonService.image.imagePullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: "{{ .Values.resources.requests.cpu }}"
+            memory: "{{ .Values.resources.requests.memory }}"
+          limits:
+            cpu: "{{ .Values.resources.limits.cpu }}"
+            memory: "{{ .Values.resources.limits.memory }}"
+        ports:
+        - containerPort: {{ .Values.addonService.image.containerPort }}
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: {{ .Values.addonService.image.containerPort }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds}}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds}}
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: "/healthz"
+            port: {{ .Values.addonService.image.containerPort }}
+            scheme: HTTPS
+          timeoutSeconds: 5
+        env:
+        - name: PORT
+          value: {{ .Values.addonService.image.containerPort | quote }}
+        - name: CONTEXT_PATH
+          value: {{ include "wcn-addon.addonService.path" . | quote }}
+        - name: HAS_TOOLING
+          value: {{ if or (not .Values.backendService.exposeAPI) .Values.tooling.enabled -}} "true" {{- else -}} "false" {{- end }}
+        - name: ADDON_DISPLAY_NAME
+          value: {{ include "wcn-addon.displayName" . | quote }}
+        - name: NODE_ENV
+          value: "production"
+        - name: SERVICE_BROKER_URL
+          value: {{ include "wcn-addon.routing.endpoint" (list . .Values.backendService) }}{{ .Values.backendService.brokerPath }}
+        - name: NGINX_URL
+{{- if .Values.addonService.zenNginxUrl }}
+          value: {{ .Values.addonService.zenNginxUrl | quote -}}
+{{- else }}
+          value: {{ printf "https://ibm-nginx-svc.%s:443" .Values.addonService.zenNamespace | quote -}}
+{{- end }}
+        - name: ZEN_CORE_API_URL
+{{- if .Values.addonService.zenCoreApiUrl }}
+          value: {{ .Values.addonService.zenCoreApiUrl | quote -}}
+{{- else }}
+          value: {{ printf "http://zen-core-api-svc.%s:3333" .Values.addonService.zenNamespace | quote -}}
+{{- end }}
+        - name: ZEN_CORE_URL
+{{- if .Values.addonService.zenCoreUrl }}
+          value: {{ .Values.addonService.zenCoreUrl | quote -}}
+{{ else }}
+          value: {{ printf "http://zen-core-svc.%s:3003" .Values.addonService.zenNamespace | quote -}}
+{{- end }}
+        - name: PROVISIONING
+          value: {{ if .Values.backendService.brokerPath }}"true"{{- else }}"false"{{- end }}
+        - name: REGION
+          value: "us-south"
+        - name: RELEASE_NAME
+          value: {{ .Release.Name | quote }}
+        - name: CHART_VERSION
+          value: {{ include "wcn-addon.version" . | quote }}
+        - name: ADDON_NAME
+          value: {{ include "wcn-addon.id" . | quote }}
+        - name: SERVICE_ID
+          value: {{ .Values.addon.serviceId | quote }}
+        - name: NAMESPACE
+          value: {{ .Release.Namespace | quote }}
+        - name: MAX_INSTANCES
+          value: {{ .Values.addon.maxInstances | quote }}
+        - name: INSTANCE_ID
+          value: {{ .Values.addon.instanceId | quote }}
+        - name: ACCOUNT_ID
+          value: {{ .Values.addon.accountId | quote }}
+        - name: PLAN_ID
+          value: {{ .Values.addon.planId | quote }}
+        - name: RESOURCE_GROUP_ID
+          value: {{ .Values.addon.organizationId | quote }}
+        - name: DOCS_GETTING_STARTED
+          value: {{ include "wcn-addon.gettingStartedDocs" . | quote }}
+        - name: DOCS_API_REFERENCE
+          value: {{ include "wcn-addon.apiReferenceDocs" . | quote }}
+        - name: SHOW_USER_MANAGEMENT
+          value: {{ .Values.addon.showUserManagement | quote }}
+        - name: SHOW_CREDENTIALS
+          value: {{ .Values.addon.showCredentials | quote }}
+        - name: USE_HTTPS
+          value: "true"
+        - name: TLS_KEY
+          value: "/certs/tls.key"
+        - name: TLS_CERT
+          value: "/certs/tls.crt"
+        volumeMounts:
+        - name: certs
+          mountPath: /certs
+          readOnly: true
+      volumes:
+      - name: certs
+        secret:
+          secretName: {{ include "sch.names.fullCompName" (list . "addon") | quote }}

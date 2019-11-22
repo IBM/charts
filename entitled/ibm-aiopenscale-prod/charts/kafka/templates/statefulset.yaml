@@ -1,0 +1,277 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{- $namePrefix := "kafka" -}}
+{{- $compName := "aios-kafka" -}}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list . $namePrefix ) -}}
+{{- $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . "kafka-headless" ) -}}
+{{- $zookeeperName := printf "%s-%s-zookeeper" .Release.Name .Values.nameOverride -}}
+{{- $replicaCount := int .Values.replicas -}}
+{{- $zookeeperServiceName := printf "%s-%s-zookeeper-headless" .Release.Name .Values.nameOverride -}}
+{{- $zookeeperPort := int .Values.zookeeper.port -}}
+{{- $kafkaServiceName := printf "%s-%s-kafka-headless.%s.svc.%s" .Release.Name .Values.nameOverride .Release.Namespace .Values.clusterDomain -}}
+{{- $serviceAccount := include "aios.serviceAccountNameAdmin" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid2" (list .) -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  serviceName: {{ $serviceName }}
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  updateStrategy:
+{{ toYaml .Values.updateStrategy | indent 4 }}
+  replicas: {{ default 3 .Values.replicas }}
+  template:
+    metadata:
+      annotations:
+      {{- include "aios.metering" . | indent 8 }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imagePullSecrets }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      {{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      serviceAccountName: {{ $serviceAccount }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        - zookeeper
+                topologyKey: "kubernetes.io/hostname"
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+      initContainers:
+        {{ if .Values.global.dockerRegistryPrefix }}
+        - name: init-volume-container
+          image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+          command: ['sh', '-c',
+                'sudo chown zensys {{ .Values.persistence.mountPath }};
+                 chmod 755 {{ .Values.persistence.mountPath }}']
+          volumeMounts:
+          - name: data
+            mountPath: {{ .Values.persistence.mountPath }}
+        {{ end }}
+        - name: ready-check
+          image: {{ include "aios.image" (list . .Values.image .Values.imageTag) | quote }}
+          imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+          command: ['sh', '-c',
+                'while true; do echo "Waiting for {{ $zookeeperName }}-$(({{ $replicaCount }} - 1)).{{ $zookeeperServiceName }} service to come up...";
+                (echo > /dev/tcp/{{ $zookeeperName }}-$(({{ $replicaCount }} - 1)).{{ $zookeeperServiceName }}/{{ $zookeeperPort }}) > /dev/null 2>&1 && break;
+                sleep 5;done;
+                echo "Zookeeper {{ $zookeeperName }}-$(({{ $replicaCount }} - 1)).{{ $zookeeperServiceName }} started."']
+      containers:
+      - name: kafka-broker
+        image: {{ include "aios.image" (list . .Values.image .Values.imageTag) | quote }}
+        imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: {{ $nonRootUser }}
+          capabilities:
+            drop:
+            - ALL
+        # increased initial delay to wait for zookeeper pods
+        livenessProbe:
+          tcpSocket:
+            port: kafka
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        readinessProbe:
+          tcpSocket:
+            port: kafka
+          initialDelaySeconds: 100
+          periodSeconds: 15
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        ports:
+        - containerPort: 9092
+          name: kafka
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: KAFKA_HEAP_OPTS
+          value: {{ .Values.kafkaHeapOptions }}
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: {{range $i, $e := until $replicaCount }}{{ $zookeeperName }}-{{ $e }}.{{ $zookeeperServiceName }}:{{ $zookeeperPort }},{{ end }}
+        - name: KAFKA_STRUSTSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-ibm-aios-kafka-secrets
+              key: es-truststore-password
+        - name: KAFKA_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-ibm-aios-kafka-secrets
+              key: es-username
+        - name: KAFKA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-ibm-aios-kafka-secrets
+              key: es-api-key
+        - name: HOME
+          value: "/home/aios"
+        - name: LOG_DIR
+          value: "/var/log/kafka"
+        # This is required because the Downward API does not yet support identification of
+        # pod numbering in statefulsets. Thus, we are required to specify a command which
+        # allows us to extract the pod ID for usage as the Kafka Broker ID.
+        # See: https://github.com/kubernetes/kubernetes/issues/31218
+        command:
+        - sh
+        - -ec
+        - |
+          unset KAFKA_PORT
+          export KAFKA_BROKER_ID=${POD_NAME##*-}
+          if [ -z $DISABLE_JSON_LOG ]
+          then
+              cp /opt/ibm/kafka/config/log4j_json.properties /opt/ibm/kafka/config/log4j.properties
+          fi
+          sed -e "s/^zookeeper.connect=.*/zookeeper.connect=${KAFKA_ZOOKEEPER_CONNECT::-1}/" -e "s/^broker.id=.*/broker.id=$KAFKA_BROKER_ID/" /opt/ibm/kafka/config/server.properties > $HOME/server.properties
+          #echo broker.id=${KAFKA_BROKER_ID} >> $HOME/server.properties
+          echo "" >> $HOME/server.properties
+          echo ssl.endpoint.identification.algorithm= >> $HOME/server.properties
+          echo listeners=SASL_SSL://${POD_NAME}.{{ $kafkaServiceName }}:${KAFKA_PORT_NUMBER} >> $HOME/server.properties
+          echo advertised.listeners=SASL_SSL://${POD_NAME}.{{ $kafkaServiceName }}:${KAFKA_PORT_NUMBER} >> $HOME/server.properties
+          echo ssl.keystore.location=$HOME/kafka.server.keystore.jks >> $HOME/server.properties
+          echo ssl.keystore.password=$KAFKA_STRUSTSTORE_PASSWORD >> $HOME/server.properties
+          echo ssl.key.password=$KAFKA_STRUSTSTORE_PASSWORD >> $HOME/server.properties
+          echo ssl.truststore.location=$HOME/kafka.server.truststore.jks >> $HOME/server.properties
+          echo ssl.truststore.password=$KAFKA_STRUSTSTORE_PASSWORD >> $HOME/server.properties
+          echo security.inter.broker.protocol = SASL_SSL >> $HOME/server.properties
+          echo sasl.enabled.mechanisms="PLAIN" >> $HOME/server.properties
+          echo sasl.mechanism.inter.broker.protocol="PLAIN" >> $HOME/server.properties
+          sed "s/username=.*/username=\"${KAFKA_USERNAME}\"/" /opt/ibm/config/kafkaJaas.conf > $HOME/kafkaJaas.conf
+          sed -i "s/password=.*/password=\"${KAFKA_PASSWORD}\"/" $HOME/kafkaJaas.conf
+          exec /opt/ibm/kafka/bin/kafka-server-start.sh $HOME/server.properties
+        volumeMounts:
+        - name: trustore
+          mountPath: /home/aios/kafka.server.truststore.jks
+          subPath: kafka.server.truststore.jks
+        - name: keystore
+          mountPath: /home/aios/kafka.server.keystore.jks
+          subPath: kafka.server.keystore.jks
+        - name: data
+          mountPath: {{ .Values.persistence.mountPath | quote }}
+      volumes:
+      - name: trustore
+        secret:
+          secretName: {{ .Release.Name }}-ibm-aios-kafka-secrets
+          items:
+            - key: kafka.server.truststore.jks
+              path: kafka.server.truststore.jks
+      - name: keystore
+        secret:
+          secretName: {{ .Release.Name }}-ibm-aios-kafka-secrets
+          items:
+          - key: kafka.server.keystore.jks
+            path: kafka.server.keystore.jks
+      {{- if not .Values.global.persistence.enabled }}
+      - name: data
+        emptyDir: {}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+  {{- if .Values.global.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{include "sch.names.volumeClaimTemplateName" (list . "data" $statefulSetName)}}
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+      {{- if or .Values.global.storageClassName .Values.global.persistence.useDynamicProvisioning }}
+      storageClassName: {{ include "aios.storageClassName" (list .) }}
+      {{- else }}
+      storageClassName: ""
+      {{- end }}
+  {{- end }}

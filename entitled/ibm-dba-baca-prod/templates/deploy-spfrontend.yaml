@@ -1,0 +1,165 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.spfrontend.name }}
+  labels:
+    app: {{ .Values.spfrontend.name }}
+    chart: {{ $.Chart.Name }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+    component: {{ .Values.spfrontend.name }}
+spec:
+  replicas: {{ default "2" .Values.spfrontend.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.spfrontend.name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: {{ .Values.spfrontend.maxUnavailableCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.spfrontend.name }}
+        release: {{ .Release.Name }}
+        component: {{ .Values.spfrontend.name }}
+        chart: {{ $.Chart.Name }}
+        heritage: {{ $.Release.Service }}
+      annotations:
+    {{- range $key, $value := .Values.global.annotations }}
+        {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    spec:
+      {{- if .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.global.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end}}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: celery{{ .Values.global.namespace.name }}
+                operator: In
+                values:
+                - "baca"
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ .Values.spfrontend.name }}
+              topologyKey: "kubernetes.io/hostname"
+      volumes:
+      - name: log
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.logs.claimname | quote }}
+      - name: ingress-secrets
+        secret:
+          secretName: baca-ingress-secret
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 51000
+        fsGroup: 51001
+        supplementalGroups:
+          - 51001
+      containers:
+        - name: {{ .Values.spfrontend.name }}
+          image: "{{ .Values.spfrontend.repository }}:{{ .Values.spfrontend.tag }}"
+          securityContext:
+            runAsUser: 51000
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          imagePullPolicy: {{ .Values.spfrontend.pullPolicy }}
+          resources:
+{{ toYaml .Values.spfrontend.resources | indent 12 }}
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+          - name: log
+            mountPath: "/var/log/frontend"
+            subPath: frontend
+          - name: ingress-secrets
+            mountPath: "/etc/certs/frontend"
+          env:
+            - name: SYSTEM_VERSION
+              value: "{{ $.Chart.Version }}-{{ .Values.spfrontend.tag }}"
+            - name: BACKEND_HOST
+              value: {{ .Values.spfrontend.backendHost | quote }}
+            - name: BACKEND_PROTOCOL
+              value: "https"
+            - name: BACKEND_PORT
+              value: {{ .Values.spfrontend.backendPort | quote }}
+            - name: BACKEND_PATH
+              value: {{ .Values.spfrontend.backendPath | quote }}
+            - name: FRONTEND_HOST
+              value: {{ .Values.spfrontend.frontendHost | quote }}
+            - name: FRONTEND_PROTOCOL
+              value: "https"
+            - name: FRONTEND_PATH
+              value: {{ .Values.spfrontend.frontendPath | quote }}
+            - name: LDAP
+              value: {{ default "false" .Values.spfrontend.ldap | quote }}
+            - name: SSO
+              value: {{ default "false" .Values.spfrontend.sso | quote }}
+            - name: NODE_TLS_REJECT_UNAUTHORIZED
+              value: {{ .Values.spfrontend.nodeTLSRejectUnauthorized | quote }}
+            - name: BXDOMAINNAME
+              value: {{ default "ibm.com" .Values.spfrontend.bxDomainName | quote }}
+            - name: LOG_PATH
+              value: "/var/log/frontend"
+            - name: LOG_LEVEL
+              value: {{ .Values.global.logs.logLevel }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: INGRESS_CERTIFICATE_DIR
+              value: "/etc/certs/frontend"
+            - name: TLS_PREFIX
+              value: "tls"
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 300
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            tcpSocket:
+              port: 3000
+          readinessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 300
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command: ["curl", "-X", "GET", "https://0.0.0.0:3000/health","--insecure"]
+#    {{- if .Values.nodeSelector }}
+#      nodeSelector:
+#{{ toYaml .Values.nodeSelector | indent 8 }}
+#    {{- end }}
+
+

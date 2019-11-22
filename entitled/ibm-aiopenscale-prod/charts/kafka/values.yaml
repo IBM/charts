@@ -1,0 +1,102 @@
+# ------------------------------------------------------------------------------
+# Kafka:
+# ------------------------------------------------------------------------------
+
+## The StatefulSet installs 3 pods by default
+replicas: 3
+
+## The kafka image repository
+image: "aios-kafka"
+
+## The kafka image tag
+imageTag: "0.0.9"
+
+## Specify a imagePullPolicy
+## ref: http://kubernetes.io/docs/user-guide/images/#pre-pulling-images
+imagePullPolicy: "IfNotPresent"
+
+nameOverride: ibm-aios
+clusterDomain: "cluster.local"
+## Configure resource requests and limits
+## ref: http://kubernetes.io/docs/user-guide/compute-resources/
+resources:
+  limits:
+    cpu: 200m
+    memory: 1536Mi
+  requests:
+    cpu: 100m
+    memory: 1024Mi
+
+kafkaHeapOptions: "-Xmx1024m -Xms1024m -Djava.security.auth.login.config=/home/aios/kafkaJaas.conf"
+
+persistence:
+  enabled: false
+
+## The StatefulSet Update Strategy which Kafka will use when changes are applied.
+## ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
+updateStrategy:
+  type: "OnDelete"
+
+## Start and stop pods in Parallel or OrderedReady (one-by-one.)  Note - Can not change after first release.
+## ref: https://kubernetes.io/docs/tutorials/stateful-application/basic-stateful-set/#pod-management-policy
+podManagementPolicy: Parallel
+
+## Readiness probe config.
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+##
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+## Period to wait for broker graceful shutdown (sigterm) before pod is killed (sigkill)
+## ref: https://kubernetes-v1-4.github.io/docs/user-guide/production-pods/#lifecycle-hooks-and-termination-notice
+## ref: https://kafka.apache.org/10/documentation.html#brokerconfigs controlled.shutdown.*
+terminationGracePeriodSeconds: 30
+
+## Headless service.
+##
+headless:
+  port: 9092
+
+## Persistence configuration. Specify if and how to persist data to a persistent volume.
+##
+persistence:
+  enabled: false
+
+  ## The size of the PersistentVolume to allocate to each Kafka Pod in the StatefulSet. For
+  ## production servers this number should likely be much larger.
+  ##
+  size: "1Gi"
+
+  ## The location within the Kafka container where the PV will mount its storage and Kafka will
+  ## store its logs.
+  ##
+  mountPath: "/opt/kafka/data"
+
+  ## Kafka data Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  ##
+  # storageClass:
+
+zookeeper:
+  port: 2181
+
+kubectl:
+  image:
+    name: aios-kubectl
+    tag: 1.0.10
+readyCheckContainer:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi

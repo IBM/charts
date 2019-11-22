@@ -1,0 +1,201 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-core-auth
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  {{ if eq (.Values.enableHAGateway|quote|lower) "\"true\"" }}
+  replicas: 2
+  {{ else }}
+  replicas: 1
+  {{ end }}
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cb-core-auth # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets/configmaps change (first 12-chars of sorted b64 encoded)
+        checksums/clientID: "{{ .Values.secrets.blueid.clientId | b64enc | sha256sum }}"
+        checksums/clientSecret: "{{ .Values.secrets.blueid.clientSecret | b64enc | sha256sum }}"
+        checksums/initial-user: "{{ .Values.preAuthInitialUser | sha256sum }}"
+        {{ end }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+{{- include "core.nodeaffinity" . | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      containers:
+        - env:
+          {{ if .Values.gatewayExposeInternalApis }}
+            - name: EXPOSE_ALL_API
+              value: {{ .Values.gatewayExposeInternalApis | quote }}
+          {{ end }}
+            - name: db_host
+              value: mongodb
+            - name: db_port
+              value: "27017"
+            - name: db_protocol
+              value: mongodb
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.url
+            - name: db_user
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: db_password
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+            - name: db_name
+              value: api_gateway
+            - name: NODE_TLS_REJECT_UNAUTHORIZED
+              value: {{ .Values.enforceCertificateValidation | quote }}
+            - name: audit_servicehost
+              value: http://cb-audit-service:80
+            - name: help_servicehost
+              value: http://cb-help-service:80
+            - name: notification_api_host
+              value: http://cb-notification-api:5056
+            - name: cb_cred_svc_host
+              value: http://cb-cred-svc:8000
+            {{ if eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+            # authorizationURL, tokenURL, and issuerID for DEV
+            - name: authorizationURL
+              value: https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/authorize
+            - name: tokenURL
+              value: https://prepiam.toronto.ca.ibm.com/idaas/oidc/endpoint/default/token
+            - name: issuerID
+              value: https://prepiam.toronto.ca.ibm.com
+            {{ else }}
+            # authorizationURL, tokenURL, and issuerID for PROD
+            - name: authorizationURL
+              value: https://idaas.iam.ibm.com/idaas/oidc/endpoint/default/authorize
+            - name: tokenURL
+              value: https://idaas.iam.ibm.com/idaas/oidc/endpoint/default/token
+            - name: issuerID
+              value: https://idaas.iam.ibm.com
+            {{ end }}
+            - name: audit_logs_host
+              value: http://cb-audit-service:80
+            - name: authentication_authorization_host
+              value: http://cb-core-authorization-service:4004
+            # - name: ibus_host
+            #   value: http://cb-core-ibus-admin:4100
+            # - name: mda_host
+            #   value: http://cb-core-ibus-delivery-agent:5001
+            - name: configuration_configuration_host
+              value: http://cb-core-configuration-service:5054
+            - name: NODE_EXTRA_CA_CERTS
+              value: /opt/ibm/cacerts/ca.crt
+            - name: clientID
+              valueFrom:
+                secretKeyRef:
+                  name: apigateway-blueid-creds
+                  key: clientID
+            - name: clientSecret
+              valueFrom:
+                secretKeyRef:
+                  name: apigateway-blueid-creds
+                  key: clientSecret
+            - name: usermanage_version
+              value: v2
+            - name: mutual_auth
+              value: 'false'
+            - name: admin_user
+              valueFrom:
+                configMapKeyRef:
+                  name: gateway-initial-user
+                  key: initial-user
+            - name: redis_host
+              value: redis
+            - name: redis_port
+              value: '6379'
+            # One-Time password -- user must change on first login.  Intentionally
+            # passed in the clear (not using K8 Secrets) so it is visibile in dash
+            - name: admin_password
+              value: "OTP-{{- required "secrets.gateway.apiKey is required!" .Values.secrets.gateway.apiKey -}}"
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_core_auth") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_core_auth" .Values.imageCredentials.registry) }}
+          {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              add:
+              - SETGID
+              - DAC_OVERRIDE
+              - CHOWN
+              - SETUID
+              drop:
+              - ALL
+          name: cb-core-auth
+          ports:
+            - containerPort: 4000
+            - containerPort: 4001
+            - containerPort: 4400
+          readinessProbe:
+            tcpSocket:
+              port: 4001
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4001
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 20
+            failureThreshold: 4
+          resources:
+{{ include "deployClassConfig" (list . "cb_core_auth") | indent 12 }}
+          volumeMounts:
+            - mountPath: /opt/ibm/certs
+              name: grav-certificates
+            {{- template "isIcp" . -}}
+            {{- if (.Values.isIcp) }}
+            - mountPath: /opt/ibm/cacerts
+              name: ca-config
+            {{ end }}
+      restartPolicy: Always
+      volumes:
+        - name: grav-certificates
+          secret:
+            secretName: grav-certificates
+            items:
+              - key: grav.crt
+                path: consume.crt
+              - key: grav.key
+                path: consume.key
+        {{- template "isIcp" . -}}
+        {{- if (.Values.isIcp) }}
+        - name: ca-config
+          configMap:
+            name: ca-config
+        {{ end }}

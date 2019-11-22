@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common-ui.fullname" . }}-iui
+  labels:
+    app: {{ template "common-ui.name" . }}-iui
+    chart: {{ template "common-ui.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.investigativeUI.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "common-ui.name" . }}-iui
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "common-ui.name" . }}-iui
+        release: {{ .Release.Name }}
+        chart: {{ template "common-ui.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+      - name: migration-data
+        persistentVolumeClaim:
+          claimName: {{ template "common-ui.fullname" . }}-bk
+      - name: file-secrets
+        secret:
+          secretName: {{ template "common-ui.core-release-name" . }}-platform-secret-files
+      - name: shared-config
+        emptyDir: {}
+      serviceAccountName: {{ .Release.Name }}-common-scripts
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-mongodb" ]
+        - name: iui-config
+          resources:
+{{ toYaml .Values.iuiStaticConfig.resources | indent 12 }}
+          image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.iuiStaticConfig.image.repository }}:{{ .Values.iuiStaticConfig.image.tag }}
+          imagePullPolicy: {{ .Values.iuiStaticConfig.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          volumeMounts:
+          - name: shared-config
+            mountPath: /opt/ibm/investigative-ui-shared-config
+      containers:
+      - name: iui
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.investigativeUI.image.repository }}:{{ .Values.investigativeUI.image.tag }}
+        imagePullPolicy: {{ .Values.investigativeUI.image.pullPolicy }}
+{{ include "common.readinessProbe" . | indent 8 }}
+{{ include "common.livenessProbe" . | indent 8 }}
+        resources:
+{{ toYaml .Values.investigativeUI.resources | indent 10 }}
+{{- with .Values.investigativeUI.nodeSelector }}
+        nodeSelector:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.investigativeUI.affinity }}
+        affinity:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.investigativeUI.tolerations }}
+        tolerations:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        env:
+        - name: JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common-ui.core-release-name" . }}-platform-secrets-env
+              key: JWT_KEY
+        - name: MONGODB_IUI_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: mongodb-iui-password
+        envFrom:
+        - configMapRef:
+            name: {{ template "common-ui.fullname" . }}-iui-cm
+        - configMapRef:
+            name: {{ template "common-ui.fullname" . }}-nginx
+        volumeMounts:
+        - name: migration-data
+          mountPath: /migration-export
+        - name: file-secrets
+          mountPath: /code/certs/investigative-ui.pem
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /code/certs/investigative-ui.crt
+          subPath: fci_universal_ks.crt.pem
+        - name: shared-config
+          mountPath: /opt/ibm/investigative-ui-shared-config
+        ports:
+        - containerPort: 4400
+      restartPolicy: Always

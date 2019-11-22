@@ -1,0 +1,55 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+{{ if .Values.mfpappcenter.enabled -}}
+{{- $helmTest := default "disabled" .Values.helmTestOverride }}
+{{- if ne $helmTest "disabled" }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ template "mfp.appcenter.fullname" . }}-test"
+  labels:
+    app.kubernetes.io/name: {{ template "mfp.appcenter.fullname" . }}-test
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  imagePullSecrets:
+    - name: {{ .Values.global.image.pullSecret }}
+  affinity:
+    {{- include "nodeAffinity" . | indent 6 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+  containers:
+    - name: "{{ template "mfp.appcenter.fullname" . }}-test"
+      image: alpine:3.8
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1001
+        capabilities:
+          drop:
+          - ALL      
+      command: ['wget']
+      args:  ['{{ template "mfp.appcenter.fullname" . }}:9080/appcenterconsole','-O','-']
+      resources:
+{{ toYaml .Values.mfpappcenter.resources | indent 10 }}
+  restartPolicy: Never
+{{- end }}
+{{- end }}

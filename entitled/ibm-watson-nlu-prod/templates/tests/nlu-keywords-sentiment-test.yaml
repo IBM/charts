@@ -1,0 +1,43 @@
+{{- include "sch.config.init" (list . "nlu.sch.chart.config.values") -}}
+{{- $icpNLUServerCompName :=  .sch.chart.components.nluserver.name -}}
+{{- $icpKeywordsSentimentTest := printf "keywords-sentiment-test" -}}
+{{- $icpPullSecrets := include "icp-pull-secrets" . -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpKeywordsSentimentTest) }}
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: {{ include "sch.names.fullCompName" (list . $icpNLUServerCompName) }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.testSpecSecurityContext) | indent 2 }}
+  containers:
+    - name: {{ include "sch.names.fullCompName" (list . $icpKeywordsSentimentTest) }}
+      image: "{{ .Values.global.icpDockerRepo }}{{ .Values.global.tests.image.repository }}:{{ .Values.global.tests.image.tag }}"
+      command: ['curl']
+      args:  ['-k', '-X POST', '-H Cache-Control: no-cache', '-H Content-Type: application/json', 'https://{{ include "sch.names.fullCompName" (list . $icpNLUServerCompName) }}:443/natural-language-understanding/api/v1/analyze?version=2018-03-16', '-d { "text":"Washington D.C. is the capital of United States of America.", "features":{ "keywords":{"sentiment":true} }}']
+{{- include "sch.security.securityContext" (list . .sch.chart.testContainerSecurityContext) | indent 6 }}
+      resources:
+        requests:
+          memory: {{ .Values.global.tests.resources.requests.memory }}
+          cpu: {{ .Values.global.tests.resources.requests.cpu }}
+        limits:
+          memory: {{ .Values.global.tests.resources.limits.memory }}
+          cpu: {{ .Values.global.tests.resources.limits.cpu }}
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+  imagePullSecrets:
+  - name: {{ $icpPullSecrets | quote }}

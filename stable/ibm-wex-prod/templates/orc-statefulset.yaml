@@ -1,0 +1,132 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compOrchestratorName := .sch.chart.components.wex.orchestrator.name }}
+{{- $compOrchestratorLabelComponent := .sch.chart.components.wex.orchestrator.label.component }}
+{{- $compOrchestratorLabelRunStatefulset := .sch.chart.components.wex.orchestrator.label.runStatefulset }}
+
+{{- $compConfigmapName := .sch.chart.components.wex.configmap.name }}
+{{- $compDataPVCName := .sch.chart.components.wex.data.pvc.name }}
+{{- $compConfigName := .sch.chart.components.wex.config.name }}
+{{- $compDatabaseName := .sch.chart.components.wex.database.name }}
+{{- $compDiscoveryName := .sch.chart.components.wex.discovery.name }}
+{{- $compGatewayName := .sch.chart.components.wex.gateway.name }}
+{{- $compHdpNnName := .sch.chart.components.wex.hdp.nn.name }}
+{{- $compHdpRmName := .sch.chart.components.wex.hdp.rm.name }}
+{{- $compWksmlName := .sch.chart.components.wex.wksml.name }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compOrchestratorName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-orchestrator
+    run: {{ $compOrchestratorLabelRunStatefulset }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "{{ .Chart.Name }}.fullname" . }}
+      component: wex-orchestrator
+      run: {{ $compOrchestratorLabelRunStatefulset }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $compOrchestratorName ) }}
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-orchestrator
+        run: {{ $compOrchestratorLabelRunStatefulset }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: orchestrator
+        image: "{{ .Values.general.image.core }}"
+        imagePullPolicy: {{ .Values.general.image.pullPolicy }}
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+        env:
+        - name: WEX_PORT
+          value: "60443"
+        - name: WEX_ALL_COMPONENTS
+          value: "orchestrator fluentd"
+        - name: ZK_HOST
+          value: "{{ include "sch.names.fullCompName" (list . $compConfigName ) }}:2181"
+        - name: DEPLOYMENT_TYPE
+          value: CLUSTER
+        - name: HADOOP_CONF_DIR
+          value: /wexdata/config/hadoop
+        - name: HADOOP_NAMENODE_ADDRESS
+          value: "{{ include "sch.names.fullCompName" (list . $compHdpNnName ) }}:9000"
+        - name: YARN_RESOURCEMANAGER_HOSTNAME
+          value: "{{ include "sch.names.fullCompName" (list . $compHdpRmName ) }}"
+        - name: DATABASE_SVC
+          value: {{ include "sch.names.fullCompName" (list . $compDatabaseName ) }}:5986
+        - name: COUCHDB_HOST
+          value: {{ include "sch.names.fullCompName" (list . $compDatabaseName ) }}
+        - name: COUCHDB_PORT
+          value: "5986"
+        - name: DISCOVERY_SVC
+          value: {{ include "sch.names.fullCompName" (list . $compDiscoveryName ) }}:8983
+        - name: AMA_SOLR_HOSTNAME
+          value: "{{ include "sch.names.fullCompName" (list . $compDiscoveryName ) }}"
+        - name: AMA_SOLR_PORT
+          value: "8983"
+        - name: MANAGEMENT_API_ENDPOINT
+          value: "http://{{ include "sch.names.fullCompName" (list . $compGatewayName ) }}:9080/wex/api/v1"
+        - name: AMA_ZING_API_ENDPOINT
+          value: "http://{{ include "sch.names.fullCompName" (list . $compGatewayName ) }}:9080/ama-zing/api/v1"
+        - name: ORCHESTRATOR_HOST
+          value: {{ include "sch.names.fullCompName" (list . $compOrchestratorName ) }}
+        - name: ORCHESTRATOR_PORT
+          value: "9521"
+        - name: WKSML_HOST
+          value: {{ include "sch.names.fullCompName" (list . $compWksmlName ) }}
+        - name: WKSML_PORT
+          value: "5193"
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compConfigmapName ) }}
+        ports:
+        - name: api
+          containerPort: 9521
+          protocol: TCP
+        - name: sidecar
+          containerPort: 3000
+          protocol: TCP
+        resources:
+{{ toYaml .Values.orchestrator.resources | indent 10 }}
+        volumeMounts:
+        - name: datadir
+          mountPath: /wexdata
+        readinessProbe:
+          httpGet:
+            path: /orchestrator/api/v1/control/info
+            port: api
+          initialDelaySeconds: {{ .Values.orchestrator.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.orchestrator.readinessProbe.timeoutSeconds }}
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /orchestrator/api/v1/control/info
+            port: api
+          initialDelaySeconds: {{ .Values.orchestrator.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.orchestrator.livenessProbe.timeoutSeconds }}
+      volumes:
+      - name: datadir
+        persistentVolumeClaim:
+          claimName: {{ include "sch.names.fullCompName" (list . $compDataPVCName ) }}

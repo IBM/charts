@@ -1,0 +1,28 @@
+*** ZooKeeper chart is being deployed, this may take serveral minutes. ***
+
+The ZooKeeper connect string is:
+
+    {{ $nodeCount := int .Values.replicaCount }}
+    {{- $releaseNamespace := .Release.Namespace }}
+    {{- $zkFullname := include "zookeeper.fullname" . }}
+    {{- $zkHeadlessServiceName := printf "%s-%s" $zkFullname "hs" | trunc 63  }}
+    {{- $zkClientPort := .Values.service.port }}
+    {{- range $i, $e := until $nodeCount }}
+      {{- $idx := $i | add1 -}}
+      {{ $zkFullname }}-{{ $e }}.{{ $zkHeadlessServiceName }}.{{ $releaseNamespace }}:{{ $zkClientPort }}{{ if ne $idx $nodeCount }},{{ end }}
+    {{- end }}
+
+ZooKeeper can be accessed via port {{ $zkClientPort }} on the following DNS name from within your cluster:
+
+    {{ template "zookeeper.fullname" . }}.{{ .Release.Namespace }}
+    
+Before you can use Zookeeper, run the following command and verify all pods are ready (1/1) 
+and the status of each pod is 'Running'. NOTE: This command uses -w to watch for changes. Use ctrl-c to stop watching. 
+ 
+    kubectl get pod -l "streams-zookeeper={{ .Release.Name }}" -w    
+
+To connect to your ZooKeeper server run the following commands:
+
+    export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ template "zookeeper.name" . }}" -o jsonpath="{.items[0].metadata.name}")
+    kubectl exec -it $POD_NAME -- zkCli.sh
+

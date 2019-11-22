@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-agbot
+  labels:
+    app: {{ .Release.Name }}-agbot
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.agbot.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-agbot
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.common.maxSurge }}
+      maxUnavailable: {{ .Values.agbot.maxUnavailable }}
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-agbot
+        chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productID: 103bfba4a040493b8cb94bd489373ba3
+        productName: "IBM Edge Device Edition"
+        productVersion: 3.2.1
+        timestamp: '{{ date "20060102150405" .Release.Time }}'
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}-agbot
+      containers:
+      - name: {{ .Release.Name }}-agbot
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.agbot.image }}:{{ .Values.agbot.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.agbot.resources | indent 10 }}
+        env:
+        - name: ANAX_LOG_LEVEL
+          value: "{{ .Values.agbot.loglevel }}"
+        ports:
+        - containerPort: {{ .Values.common.httpPort }}
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - http://localhost:{{ .Values.common.httpPort }}/status
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - http://localhost:{{ .Values.common.httpPort }}/status
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: agbot-config
+          mountPath: /etc/horizon/anax.json
+          subPath: anax.json
+        - name: agbot-message-priv
+          mountPath: /var/horizon/msgKey/privateMessagingKey.pem
+          subPath: privateMessagingKey.pem
+        - name: agbot-message-pub
+          mountPath: /var/horizon/msgKey/publicMessagingKey.pem
+          subPath: publicMessagingKey.pem
+        {{ if and .Values.remoteDBs.enableAgbotTLS (not .Values.localDBs.enabled) }}
+        - name: {{ .Release.Name }}-db-cert
+          mountPath: /etc/ssl/certs/{{ .Release.Name }}-trusted-certs.pem
+          subPath: {{ .Release.Name }}-trusted-certs.pem
+        {{ end }}
+      volumes:
+      - name: agbot-config
+        secret:
+          secretName: {{ .Release.Name }}
+          items:
+          - key: agbot-config
+            path: anax.json
+      - name: agbot-message-priv
+        secret:
+          secretName: {{ .Release.Name }}
+          items:
+          - key: agbot-messagekey-private
+            path: privateMessagingKey.pem
+      - name: agbot-message-pub
+        secret:
+          secretName: {{ .Release.Name }}
+          items:
+          - key: agbot-messagekey-public
+            path: publicMessagingKey.pem
+      {{ if and .Values.remoteDBs.enableAgbotTLS (not .Values.localDBs.enabled) }}
+      - name: {{ .Release.Name }}-db-cert
+        secret:
+          secretName: edge-computing-remote-dbs
+          items:
+          - key: trusted-certs
+            path: {{ .Release.Name }}-trusted-certs.pem
+      {{ end }}
+      restartPolicy: Always
+        
+

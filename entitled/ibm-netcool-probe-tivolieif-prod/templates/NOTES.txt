@@ -1,0 +1,18 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+Get the probe host and port by running these commands:
+{{- if contains "NodePort" .Values.service.probe.type }}
+    NOTE: Cluster Administrator role is required to execute the 'kubectl get nodes' command.
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "sch.names.fullName" (list .) }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo $NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.probe.type }}
+    NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+          You can watch the status of by running 'kubectl get svc -w {{ include "sch.names.fullName" (list .) }}'
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "sch.names.fullName" (list .) }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo $SERVICE_IP:{{ .Values.service.probe.externalPort }}
+{{- else if contains "ClusterIP" .Values.service.probe.type }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Test sending EIF events to 127.0.0.1:{{ .Values.service.probe.externalPort }}"
+  kubectl port-forward --namespace {{ .Release.Namespace }} $POD_NAME {{ .Values.service.probe.externalPort }}:9998
+{{- end }}

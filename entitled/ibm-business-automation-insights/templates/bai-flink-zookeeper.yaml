@@ -1,0 +1,235 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-bai-flink-zk-svc
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  ports:
+  - port: 2888
+    name: server
+  - port: 3888
+    name: leader-election
+  clusterIP: None
+  selector:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: bai-flink-zk
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-bai-flink-zk-cs
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  ports:
+  - port: 2181
+    name: client
+  selector:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: bai-flink-zk
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-bai-flink-zk-pdb
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "ibm-bai.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      component: bai-flink-zk
+  minAvailable: 2
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-bai-flink-zk
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "ibm-bai.name" . }}
+      chart: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      component: bai-flink-zk
+  serviceName: {{ .Release.Name }}-bai-flink-zk-svc
+  replicas: {{ .Values.flink.zookeeper.replicas }}
+  podManagementPolicy: Parallel
+  updateStrategy:
+      type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        productName: "IBM Cloud Pak for Automation - Business Automation Insights"
+        productID: "5737-I23-BAI"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "ibm-bai.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: bai-flink-zk
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: {{ template "ibm-bai.name" . }}
+                  chart: {{ .Chart.Name }}
+                  release: {{ .Release.Name }}
+                  heritage: {{ .Release.Service }}
+                  component: bai-flink-zk
+              topologyKey: "kubernetes.io/hostname"
+{{- if and .Values.imageCredentials .Values.imageCredentials.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.imageCredentials .Values.imageCredentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-bai-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ .Release.Name }}-bai-psp-sa
+
+{{- if .Values.flink.initStorageDirectory}}
+      initContainers:
+      - name: bai-flink-zk-init-storage-directory
+        image: {{ .Values.initImage.image.repository }}:{{ .Values.initImage.image.tag }}
+        {{- if .Values.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        {{- end}}
+        command: ["/bin/sh", "-c", "chown 9999:9999 /mnt/pv; chmod 770 /mnt/pv"]
+        volumeMounts:
+        - name: nfs-storage
+          mountPath: /mnt/pv
+        securityContext:
+          privileged: true
+{{- end }}
+      containers:
+      - name: bai-flink-zk
+        image: {{ .Values.flink.zookeeper.image.repository }}:{{ .Values.flink.zookeeper.image.tag }}
+        {{- if .Values.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        {{- end}}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 9999
+        resources:
+          {{ if .Values.flink.zookeeper.resources }}
+          limits:
+            {{ if .Values.flink.zookeeper.resources.limits }}
+            memory: {{ .Values.flink.zookeeper.resources.limits.memory | default "768Mi" | quote }}
+            cpu: {{ .Values.flink.zookeeper.resources.limits.cpu | default "200m" | quote }}
+            {{ else }}
+            memory: "768Mi"
+            cpu: "200m"
+            {{ end }}
+          requests:
+            {{ if .Values.flink.zookeeper.resources.requests }}
+            memory: {{ .Values.flink.zookeeper.resources.requests.memory | default "640Mi" | quote }}
+            cpu: {{ .Values.flink.zookeeper.resources.requests.cpu | default "100m" | quote }}
+            {{ else }}
+            memory: "640Mi"
+            cpu: "100m"
+            {{ end }}
+          {{else}}
+          limits:
+            memory: "768Mi"
+            cpu: "200m"
+          requests:
+            memory: "640Mi"
+            cpu: "100m"
+          {{end}}
+
+        ports:
+        - containerPort: 2181
+          name: client
+        - containerPort: 2888
+          name: server
+        - containerPort: 3888
+          name: leader-election
+        env:
+        - name : ZK_REPLICAS
+          value: {{ .Values.flink.zookeeper.replicas | quote}}
+        - name : ZK_HEAP_SIZE
+          value: {{ .Values.flink.zookeeper.heapSize | default "512M" | quote }}
+        - name : ZK_TICK_TIME
+          value: "2000"
+        - name : ZK_INIT_LIMIT
+          value: "10"
+        - name : ZK_SYNC_LIMIT
+          value: "5"
+        - name : ZK_MAX_CLIENT_CNXNS
+          value: "60"
+        - name: ZK_SNAP_RETAIN_COUNT
+          value: "3"
+        - name: ZK_PURGE_INTERVAL
+          value: "12"
+        - name: ZK_CLIENT_PORT
+          value: "2181"
+        - name: ZK_SERVER_PORT
+          value: "2888"
+        - name: ZK_ELECTION_PORT
+          value: "3888"
+        - name: ZK_DATA_DIR
+          value: /mnt/pv/flink-zookeeper/zookeeper-data
+        - name: ZK_DATA_LOG_DIR
+          value: /mnt/pv/flink-zookeeper/zookeeper-data-log
+        readinessProbe:
+          exec:
+            command:
+            - "zkOk.sh"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - "zkOk.sh"
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: nfs-storage
+          mountPath: /mnt/pv
+      volumes:
+      - name: nfs-storage
+        persistentVolumeClaim:
+          {{- if .Values.flinkPv.existingClaimName }}
+            claimName: {{ .Values.flinkPv.existingClaimName }}
+          {{- else }}
+            claimName: {{ .Release.Name }}-bai-pvc
+          {{- end }}

@@ -1,0 +1,54 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2019, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog    
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-buildservice-test"
+  labels:
+{{- include "build.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-buildservice-test"  
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+  {{- include "build.nodeaffinity" . | indent 4 }}
+  serviceAccountName: {{ template "build.serviceAccountName" . }}
+{{- include "build.podGeneralSecurityPolicies" . | indent 2 }}
+  securityContext:
+{{- include "build.streamsinstallPodSecurityContext" . | indent 4 }}
+  containers:
+  - name: {{ .Release.Name }}-buildservice-test
+    image: {{ .Values.image.prefix }}/{{ .Values.image.build }}:{{ .Values.image.buildTag }} 
+    imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+    securityContext:
+{{- include "build.containerSecurityContext" . | indent 6 }}
+
+    env:
+      - name: LANG
+        value: "en_US.utf-8"
+      - name: STREAMS_INSTANCE_ID
+        value: "{{ .Release.Name }}"
+      - name: STREAMS_ZKCONNECT
+        value: "{{ .Values.zkconnect }}"
+    command: ["bash", "-c", "set -x ; BUILD_HOST_ENV=$(env | grep 'BUILD_SERVICE_HOST=') ;  BUILD_HOST=$(echo $BUILD_HOST_ENV | cut -d'=' -f2) ; BUILD_PORT_ENV=$(env | grep 'BUILD_SERVICE_PORT=') ; BUILD_PORT=$(echo $BUILD_PORT_ENV | cut -d'=' -f2) ; MAX_TRIES=120 ; HEALTHY=0 ; for (( TRIES=0; TRIES<=$MAX_TRIES; TRIES++ )) ; do result=$(curl -u streamsadmin:streams1 -X GET https://$BUILD_HOST:$BUILD_PORT/streams/rest/buildpool?fields=name%2Cstatus -H  'accept: application/json' --insecure) ; echo $result ; echo $result | grep 'ready' ; if [ $? -eq 0 ]; then exit 0 ; break ; else sleep 15 ; fi ; done ; if [ $HEALTHY -eq 0 ]; then echo 'Build service did not become ready in timeout' ; exit 1 ; fi ; exit 0 ;"]
+    
+    resources:
+      requests:
+        cpu: "1"
+        memory: "1Gi"
+      limits:
+        cpu: "2" 
+        memory: "1Gi"
+    
+  restartPolicy: Never

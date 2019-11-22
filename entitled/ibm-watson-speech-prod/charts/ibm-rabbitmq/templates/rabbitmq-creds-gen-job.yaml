@@ -1,0 +1,109 @@
+{{- include "sch.config.init" (list . "ibmRabbitmq.sch.chart.config.values") -}}
+{{- if .Release.IsInstall }}
+{{- if or (not .Values.auth.authSecretName) (and (.Values.tls.enabled) (not .Values.tls.tlsSecretName)) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsGen) | quote }}
+  labels: 
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 4 }}
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsGen) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      serviceAccountName: {{ include "sch.names.fullName" (list .) | quote }}
+{{- if tpl .Values.global.image.pullSecret . }}
+      imagePullSecrets:
+      - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+{{- end }}
+      containers:
+      - name: cred-gen
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          rabbitmq_password_raw=$(openssl rand -hex 10)
+          management_password_raw=$(openssl rand -hex 10)
+          definition=$(echo '{{ include "ibmRabbitmq.definitions" . | indent 14 }} ')
+{{- if and (.Values.tls.enabled) (not .Values.tls.tlsSecretName) }}
+          openssl genrsa -out ca.key 2048
+          openssl req -x509 -new -nodes -key ca.key -subj "/CN={{ include "sch.names.fullName" (list .) }}" -days 3650 -reqexts v3_req -extensions v3_ca -out ca.crt
+          cat >openssl.cnf <<EOL
+          [req]
+          req_extensions = v3_req
+          distinguished_name = req_distinguished_name
+          [req_distinguished_name]
+          [ v3_req ]
+          basicConstraints = CA:FALSE
+          keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+          subjectAltName = @alt_names
+          [alt_names]
+          DNS.1 = {{ include "sch.names.fullName" (list .) }}
+          DNS.2 = localhost
+          DNS.3 = 127.0.0.1
+          EOL
+          openssl genrsa -out rabbitmq.key 2048
+          openssl req -new -key rabbitmq.key -out rabbitmq.csr -subj "/CN={{ include "sch.names.fullName" (list .) }}" -config openssl.cnf
+          openssl x509 -req -in rabbitmq.csr \
+            -CA ca.crt -CAkey ca.key -CAcreateserial \
+            -out rabbitmq.crt -days 3650 -extensions v3_req -extfile openssl.cnf
+
+{{- end }}
+          cat <<EOF | kubectl apply -n {{ .Release.Namespace }} -f -
+{{- if and (.Values.tls.enabled) (not .Values.tls.tlsSecretName) }}
+          apiVersion: v1
+          kind: Secret
+          type: kubernetes.io/tls
+          metadata:
+            labels: 
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlssecret) | quote }}
+          data:
+            tls.cacrt: $(cat ca.crt | base64 | tr -d '\n')
+            tls.crt: $(cat rabbitmq.crt | base64 | tr -d '\n')
+            tls.key: $(cat rabbitmq.key | base64 | tr -d '\n')
+{{- end }}
+{{- if (not .Values.auth.authSecretName) }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            labels: 
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret) | quote }}
+          data:
+            rabbitmq-erlang-cookie: $(openssl rand -base64 32 | tr -d '\n' | base64 | tr -d '\n')
+            rabbitmq-management-password: $( echo -n $management_password_raw | tr -d '\n' | base64 | tr -d '\n')
+            rabbitmq-password: $( echo -n $rabbitmq_password_raw | tr -d '\n' | base64 | tr -d '\n')
+            definitions.json: $(echo $definition | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+
+          EOF
+          
+      restartPolicy: Never
+{{- end }}
+{{- end }}

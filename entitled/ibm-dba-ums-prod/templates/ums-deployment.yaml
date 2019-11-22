@@ -1,0 +1,265 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "ums") | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }} # ignored if the autoscaler is active
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "ums") | indent 6 }}
+      affinity: "{{ include "sch.names.fullName" (list .) }}-pod"
+  template:
+    metadata:
+      labels:
+        affinity: "{{ include "sch.names.fullName" (list .) }}-pod"
+{{ include "sch.metadata.labels.standard" (list . "ums") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{ include "ums.constants.pod.securityContext" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: affinity
+                  operator: In
+                  values:
+                  - {{ include "sch.names.fullName" (list .) }}-pod
+              topologyKey: "kubernetes.io/hostname"
+      serviceAccountName: {{ include "sch.names.fullName" (list .) }}
+      # initContainers are used for translating certificates into a readable format
+      # one for the container's TLS certificate, one for the JWT signing certificate
+      initContainers:
+      - name: tls-init
+        image: {{ .Values.images.initTLS | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        securityContext:
+{{ include "ums.constants.container.securityContext" . | indent 10 }}
+        volumeMounts:
+        - name: key-trust-store
+          mountPath: /shared/tls
+        - name: keypair-secret
+          mountPath: /shared/resources/keypair
+        env:
+        - name: KEYTOOL_ACTION
+          value: GENERATE-KEYSTORE
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName | quote }}
+              key: sslKeystorePassword
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+      - name: jwt-init
+        image: {{ .Values.images.initTLS | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        securityContext:
+{{ include "ums.constants.container.securityContext" . | indent 10 }}
+        volumeMounts:
+        - name: jwt-key-trust-store
+          mountPath: /shared/tls
+        - name: jwt-keypair-secret
+          mountPath: /shared/resources/keypair
+        env:
+        - name: KEYTOOL_ACTION
+          value: GENERATE-KEYSTORE
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName | quote }}
+              key: jwtKeystorePassword
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: {{ .Values.images.ums }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        securityContext:
+{{ include "ums.constants.container.securityContext" . | indent 10 }}
+        ports:
+          - name: {{ include "ums.constants.container.portname" . }}
+            containerPort: {{ include "ums.constants.container.port" . }}
+            protocol: TCP
+        # probes only check the TCP port to see if the workload is ready to accept requests
+        livenessProbe:
+          httpGet:
+            path: /oidc/endpoint/ums/.well-known/openid-configuration
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 300
+          periodSeconds: 10
+        readinessProbe:
+          initialDelaySeconds: 180
+          periodSeconds: 10
+          httpGet:
+            path: /oidc/endpoint/ums/.well-known/openid-configuration
+            port: 9443
+            scheme: HTTPS
+        env:
+        - name: UMS_ADMINUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName }}
+              key: adminUser
+        - name: UMS_ADMINPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName }}
+              key: adminPassword
+        - name: UMS_SSLKEYSTOREPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName }}
+              key: sslKeystorePassword
+        - name: UMS_JWTKEYSTOREPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName }}
+              key: jwtKeystorePassword
+        - name: UMS_LTPAPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName }}
+              key: ltpaPassword
+
+{{- if and .Values.oauth.database.type .Values.teamserver.database.type }}
+{{- if and (ne .Values.oauth.database.type "derby") (ne .Values.teamserver.database.type "derby") }}
+        # database variables are only included when database type is not "derby"
+        - name: UMS_OAUTHDBUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.dbSecretName }}
+              key: oauthDBUser
+        - name: UMS_OAUTHDBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.dbSecretName }}
+              key: oauthDBPassword
+        - name: UMS_TSDBUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.dbSecretName }}
+              key: tsDBUser
+        - name: UMS_TSDBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.dbSecretName }}
+              key: tsDBPassword
+{{- end }}
+{{- end }}
+        - name: UMS_TSCLIENTID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName }}
+              key: teamserverClientID
+        - name: UMS_TSCLIENTSECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName }}
+              key: teamserverClientSecret
+        volumeMounts:
+        - name: {{ include "sch.names.fullName" (list .) }}-config
+          mountPath: /opt/ibm/wlp/usr/shared/resources/config
+          readOnly: true
+        - name: {{ include "sch.names.fullName" (list .) }}-custom-config
+          mountPath: /opt/ibm/wlp/usr/shared/resources/custom
+          readOnly: true
+{{ if .Values.customSecretName }}
+        - name: {{ include "sch.names.fullName" (list .) }}-sensitive-custom
+          mountPath: /opt/ibm/wlp/usr/shared/resources/sensitive-custom
+          readOnly: true
+{{- end }}
+{{- if and .Values.useCustomJDBCDrivers (eq .Values.useCustomJDBCDrivers true) }}
+        # JDBC volume is only mounted when useCustomJDBCDrivers is true
+        - name: {{ include "sch.names.fullName" (list .) }}-binaries
+          mountPath: /opt/ibm/wlp/usr/shared/resources/jdbc
+          subPath: jdbc
+{{- end }}
+{{- if and .Values.useCustomBinaries (eq .Values.useCustomBinaries true) }}
+        # binaries volume is only mounted when useCustomBinaries is true
+        - name: {{ include "sch.names.fullName" (list .) }}-binaries
+          mountPath: /opt/ibm/wlp/usr/shared/resources/custom-binaries
+          subPath: custom-binaries
+{{- end }}
+        #use subpath to prevent overwriting or deleting of existing files in the directory
+        - name: key-trust-store
+          mountPath: /opt/ibm/wlp/usr/shared/resources/security/keystore/jks/server.jks
+          subPath: keystore/jks/server.jks
+          readOnly: true
+        - name: jwt-key-trust-store
+          mountPath: /opt/ibm/wlp/usr/shared/resources/security/jwt-keystore/jks/server.jks
+          subPath: keystore/jks/server.jks
+          readOnly: true
+        - name: ltpa-keys
+          mountPath: /opt/ibm/wlp/usr/shared/resources/security/ltpa
+{{- if eq .Values.oauth.database.ssl true }}
+        - name: oauth-db-cert
+          mountPath: /opt/ibm/wlp/usr/shared/resources/oauthdb-cacert
+          readOnly: true
+{{- end }}
+{{- if eq .Values.teamserver.database.ssl true }}
+        - name: teamserver-db-cert
+          mountPath: /opt/ibm/wlp/usr/shared/resources/teamserverdb-cacert
+          readOnly: true
+{{- end }}
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+{{- include "ums.imagePullSecrets" . | indent 6 }}
+      volumes:
+      - name: {{ include "sch.names.fullName" (list .) }}-config
+        configMap:
+          name: {{ include "sch.names.fullName" (list .) }}
+      - name: {{ include "sch.names.fullName" (list .) }}-custom-config
+        configMap:
+          name: {{ include "sch.names.fullName" (list .) }}-custom
+{{- if or (and .Values.useCustomJDBCDrivers (eq .Values.useCustomJDBCDrivers true)) (and .Values.useCustomBinaries (eq .Values.useCustomBinaries true)) }}
+      # PV is only used when required
+      - name: {{ include "sch.names.fullName" (list .) }}-binaries
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.existingClaimName }}
+{{- end }}
+      # certificates created by the installer
+      - name: keypair-secret
+        secret:
+          secretName: {{ .Values.tls.tlsSecretName }}
+      - name: jwt-keypair-secret
+        secret:
+          secretName: {{ .Values.oauth.jwtSecretName }}
+      #ltpa key created by the initjob
+      - name: ltpa-keys
+        secret:
+          defaultMode: 0551
+          secretName: {{ .Values.global.ums.ltpaSecretName }}
+          items:
+          - key: ltpa.keys
+            path: ltpa.keys
+{{- if eq .Values.oauth.database.ssl true }}
+      - name: oauth-db-cert
+        secret:
+          secretName: {{ .Values.oauth.database.sslSecretName }}
+{{- end }}
+{{- if eq .Values.teamserver.database.ssl true }}
+      - name: teamserver-db-cert
+        secret:
+          secretName: {{ .Values.teamserver.database.sslSecretName }}
+{{- end }}
+      # temporary storage for the keystores (to transfer them from initContainers to real container)
+      - name: key-trust-store
+        emptyDir: {}
+      - name: jwt-key-trust-store
+        emptyDir: {}
+{{- if .Values.customSecretName }}
+      - name: {{ include "sch.names.fullName" (list .) }}-sensitive-custom
+        secret:
+          secretName: {{ .Values.customSecretName }}
+          items:
+          - key: sensitiveCustomConfig
+            path: sensitiveCustom.xml
+{{- end }}

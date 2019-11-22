@@ -1,0 +1,69 @@
+{{- if .Values.global.baseInstaller }}
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: imagemgmt
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: imagemgmt-deployment
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        component: imagemgmt
+        run: imagemgmt-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      nodeSelector:
+        is_compute: "true"
+      containers:
+      - name: imagemgmt-container
+        image: {{ .Values.imagemgmt.image.repository }}:{{ .Values.imagemgmt.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["sh"]
+        args: ["-c", "umask 0 ; /scripts/startup.sh"]
+        env:
+        - name: AUTH_URL
+          value: "http://usermgmt-svc:8080/v1"
+        - name: SPAWNER_URL
+          value: "http://spawner-api-svc:80/spawner/"
+        - name: REGISTRY_URL
+          value: "idp-registry.sysibm-adm.svc.cluster.local:31006/"
+        - name: DELETE_DOCKER_IMAGE
+          value: "http://ibmdp-assistant-service.sysibm-adm.svc.cluster.local:30333/delete_docker_image"
+        ports:
+        - name: imagemgmt
+          containerPort: 3000
+        volumeMounts:
+        - name: user-home-mount
+          mountPath: /user-home
+        - name: rt-def-mount
+          mountPath: "/user-home/_global_/config/.runtime-definitions/ibm"
+        - name: local-docker
+          mountPath: /var/run/docker.sock
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}
+      - name: rt-def-mount
+        configMap:
+          name: runtimes-def-configmap
+      - name: local-docker
+        hostPath:
+          path: /var/run/docker.sock
+{{- end }}

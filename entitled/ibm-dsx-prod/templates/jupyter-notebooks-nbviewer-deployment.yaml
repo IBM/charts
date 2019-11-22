@@ -1,0 +1,81 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: jupyter-notebooks-nbviewer
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: jupyter-notebooks-nbviewer
+    tier: backend
+spec:
+  replicas: {{ .Values.jupyterNbviewer.replicas }}
+  selector:
+    matchLabels:
+      component: jupyter-notebooks-nbviewer
+  template:
+    metadata:
+      labels:
+        app: jupyter-notebooks-nbviewer
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: jupyter-notebooks-nbviewer
+        enabled: "true"
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+      - name: jupyter-notebooks-nbviewer
+        image: {{ .Values.jupyterD8a3rls2xShell.image.repository }}:{{ .Values.jupyterD8a3rls2xShell.image.tag }}
+        command: ["/user-home/.scripts/system/nbviewer-svc/startup.sh"]
+        env:
+        - name: PATH
+          value: "/opt/conda/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:$PATH"
+        - name: CONDA_DIR
+          value: "/opt/conda"
+        - name: CLOUDANT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_username
+        - name: CLOUDANT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_password
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 7330
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /nbviewer-server-healthcheck/
+            port: 7330
+            scheme: HTTP
+          initialDelaySeconds: 45
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /nbviewer-server-healthcheck/
+            port: 7330
+            scheme: HTTP
+          initialDelaySeconds: 45
+          periodSeconds: 30
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

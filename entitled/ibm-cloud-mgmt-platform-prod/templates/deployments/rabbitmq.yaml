@@ -1,0 +1,114 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: rabbit1
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: rabbit1 # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+    spec:
+      hostname: rabbit1 # must set static hostname (will lose state on restarts if not)
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+      initContainers:
+        - name: core-rabbitmq-claim0
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_rabbitmq") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_rabbitmq" .Values.imageCredentials.registry) }}
+          {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              add: ["CHOWN"]
+              drop:
+              - ALL
+          command: ['sh', '-c', 'chmod -R 766 /var/lib/rabbitmq/mnesia /var/log/rabbitmq && chown -R 100:101 /var/lib/rabbitmq/mnesia /var/log/rabbitmq']
+          volumeMounts:
+            - mountPath: /var/lib/rabbitmq/mnesia
+              name: core-rabbitmq-claim0
+              subPath: var/lib/rabbitmq/mnesia
+            - mountPath: /var/log/rabbitmq
+              name: core-rabbitmq-claim0
+              subPath: var/log/rabbitmq
+      containers:
+        - env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-creds
+                  key: rabbitmq.username
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-creds
+                  key: rabbitmq.password
+            - name: RABBITMQ_ERLANG_COOKIE
+              value: secret_cookie
+          {{ if .Values.httpProxy }}
+            # httpProxy support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_rabbitmq") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_rabbitmq" .Values.imageCredentials.registry) }}
+          {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop:
+              - ALL
+          name: rabbit1
+          ports:
+            - containerPort: 5672
+            - containerPort: 15672
+            - containerPort: 25672
+          readinessProbe:
+            tcpSocket:
+              port: 5672
+          livenessProbe:
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            failureThreshold: 4
+          resources:
+{{ include "deployClassConfig" (list . "cb_rabbitmq") | indent 13 }}
+          volumeMounts:
+            - mountPath: /var/lib/rabbitmq/mnesia
+              name: core-rabbitmq-claim0
+              subPath: var/lib/rabbitmq/mnesia
+            - mountPath: /var/log/rabbitmq
+              name: core-rabbitmq-claim0
+              subPath: var/log/rabbitmq
+      restartPolicy: Always
+      volumes:
+        - name: core-rabbitmq-claim0
+          persistentVolumeClaim:
+            claimName: core-rabbitmq-claim0

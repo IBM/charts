@@ -1,0 +1,197 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "ibm-apiconnect-ent.fullname" . }}-operator
+  labels:
+    app: {{ template "ibm-apiconnect-ent.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: {{ template "ibm-apiconnect-ent.name" . }}-operator
+spec:
+  replicas: 1
+  serviceName: {{ template "ibm-apiconnect-ent.fullname" . }}-operator
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-apiconnect-ent.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: {{ template "ibm-apiconnect-ent.name" . }}-operator
+      annotations:
+        productName: {{ template "ibm-apiconnect-ent.productName" . }}
+        productID: {{ template "ibm-apiconnect-ent.productID" . }}
+        productVersion: {{ template "ibm-apiconnect-ent.productVersion" . }}
+        productMetric: {{ template "ibm-apiconnect-ent.productMetric" . }}
+        productChargedContainers: ""
+    spec:
+      serviceAccountName: {{ template "ibm-apiconnect-ent.fullname" . }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.operator.arch }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "ibm-apiconnect-ent.podSecurityContext" . | indent 8 }}
+      initContainers:
+        - name: clean-project
+{{- if .Values.operator.registry }}
+          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- else }}
+          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.operator.pullPolicy }}
+          command: [ "bash", "-c", "find . -maxdepth 1 -name '*-apic-cluster-*' -type d -exec rm -rf {} +" ]
+          workingDir: /home/apic
+          resources:
+{{ include "ibm-apiconnect-ent.resources" . | indent 12 }}
+          volumeMounts:
+          - name: project
+            mountPath: "/home/apic"
+          securityContext:
+{{ include "ibm-apiconnect-ent.securityContext" . | indent 12 }}
+      containers:
+        - name: {{ .Chart.Name }}
+{{- if .Values.operator.registry }}
+          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- else }}
+          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.operator.pullPolicy }}
+          command: [ "/home/apic/init-files/init.sh" ]
+          env:
+            - name: HOME
+              value: "/home/apic"
+            - name: HELM_HOME
+              value: "/home/apic/.helm"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: KUBECONFIG
+              value: "/home/apic/init-files/config"
+          ports:
+            - containerPort: 1776
+          livenessProbe:
+            initialDelaySeconds: 30
+            httpGet:
+              path: /
+              port: 1777
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 1777
+          workingDir: /home/apic
+          resources:
+{{ include "ibm-apiconnect-ent.resources" . | indent 12 }}
+          volumeMounts:
+          - name: apic-extra-values
+            mountPath: "/home/apic/extra-values"
+          {{- if .Values.operator.helmTlsSecret }}
+          - name: helm-tls
+            mountPath: "/home/apic/.helm"
+          {{- end }}
+          - name: init-files
+            mountPath: "/home/apic/init-files"
+          - name: project
+            mountPath: "/home/apic"
+          securityContext:
+{{ include "ibm-apiconnect-ent.securityContext" . | indent 12 }}
+      volumes:
+      - name: apic-extra-values
+        configMap:
+          {{- if .Values.global.extraValuesConfig }}
+          name: {{ .Values.global.extraValuesConfig }}
+          {{- else }}
+          name: {{ template "ibm-apiconnect-ent.fullname" . }}-extra-values
+          {{- end }}
+          items:
+            - key: management
+              path: management-extra-values.yaml
+            - key: analytics
+              path: analytics-extra-values.yaml
+            - key: portal
+              path: portal-extra-values.yaml
+            - key: gateway
+              path: gateway-extra-values.yaml
+      {{- if .Values.operator.helmTlsSecret }}
+      - name: helm-tls
+        secret:
+          secretName: {{ .Values.operator.helmTlsSecret }}
+          defaultMode: 0644
+          items:
+            - key: cert.pem
+              path: cert.pem
+            - key: ca.pem
+              path: ca.pem
+            - key: key.pem
+              path: key.pem
+      {{- end }}
+      - name: project
+        persistentVolumeClaim:
+          claimName: {{ template "ibm-apiconnect-ent.fullname" . }}-project
+      - name: init-files
+        projected:
+          sources:
+          - configMap:
+              name: {{ template "ibm-apiconnect-ent.fullname" . }}-cr-files
+              items:
+                - key: apiconnect-up
+                  path: apiconnect-up.yml
+                  mode: 0640
+                - key: kubeconfig
+                  path: config
+                - key: init
+                  path: init.sh
+                  mode: 0755
+      {{- if .Values.global.certSecret }}
+          - secret:
+              name: {{ .Values.global.certSecret }}
+              items:
+                - key: "{{ .Release.Name }}-apic-cluster-common-secrets.yml"
+                  path: "{{ .Release.Name }}-apic-cluster-common-secrets.yml"
+                  mode: 0640
+      {{- end }}
+      {{- if .Values.management.certSecret }}
+          - secret:
+              name: {{ .Values.management.certSecret }}
+              items:
+                - key: "{{ .Release.Name }}-apic-cluster-management-{{ .Values.management.namespace | default .Release.Namespace }}-secrets.yml"
+                  path: "{{ .Release.Name }}-apic-cluster-management-{{ .Values.management.namespace | default .Release.Namespace }}-secrets.yml"
+                  mode: 0640
+      {{- end }}
+      {{- if .Values.analytics.certSecret }}
+          - secret:
+              name: {{ .Values.analytics.certSecret }}
+              items:
+                - key: "{{ .Release.Name }}-apic-cluster-analytics-{{ .Values.analytics.namespace | default .Release.Namespace }}-secrets.yml"
+                  path: "{{ .Release.Name }}-apic-cluster-analytics-{{ .Values.analytics.namespace | default .Release.Namespace }}-secrets.yml"
+                  mode: 0640
+      {{- end }}
+      {{- if .Values.portal.certSecret }}
+          - secret:
+              name: {{ .Values.portal.certSecret }}
+              items:
+                - key: "{{ .Release.Name }}-apic-cluster-portal-{{ .Values.portal.namespace | default .Release.Namespace }}-secrets.yml"
+                  path: "{{ .Release.Name }}-apic-cluster-portal-{{ .Values.portal.namespace | default .Release.Namespace }}-secrets.yml"
+                  mode: 0640
+      {{- end }}
+      {{- if .Values.gateway.certSecret }}
+          - secret:
+              name: {{ .Values.gateway.certSecret }}
+              items:
+                - key: {{ .Release.Name }}-apic-cluster-gateway-{{ .Values.gateway.namespace | default .Release.Namespace }}-secrets.yml
+                  path: {{ .Release.Name }}-apic-cluster-gateway-{{ .Values.gateway.namespace | default .Release.Namespace }}-secrets.yml
+                  mode: 0640
+      {{- end }}

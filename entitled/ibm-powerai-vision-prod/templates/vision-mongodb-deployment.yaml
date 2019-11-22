@@ -1,0 +1,83 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "shortname" . }}-mongodb
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    run: {{ template "shortname" . }}-mongodb-dep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ template "shortname" . }}-mongodb-dp
+  template:
+    metadata:
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+        run: {{ template "shortname" . }}-mongodb-dp
+      {{ include "vision-release-annotations" . | indent 6 }}
+    spec:
+      containers:
+        - name: {{ template "shortname" . }}-mongodb
+          image: "{{ template "repoprefix" . }}powerai-vision-mongodb:{{ .Values.image.releaseTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 27017
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /data/db
+              name: run-mount
+              subPath: run/mongodb
+          env:
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shortname" . }}-secrets
+                  key: mongodb-admin-password
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: {{ default "" .Values.poweraiVisionMongodb.mongodbAdminUsername | quote }}
+            - name: MONGO_INITDB_DATABASE
+              value: "DLAAS video video-test"
+          livenessProbe:
+            exec:
+              command:
+              - mongo
+              - --eval
+              - "db.adminCommand('ping')"
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - mongo
+              - --eval
+              - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+        beta.kubernetes.io/arch: ppc64le
+      affinity:
+      {{- include "nodeaffinity-ppc64le" . | indent 6 }}
+      volumes:
+        - name: "run-mount"
+          persistentVolumeClaim:
+          {{- if .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+            claimName: {{ .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ tpl .Values.poweraiVisionDataPvc.name . }}
+          {{- end }}
+      {{ include "imagesecrets" . | indent 6 }}

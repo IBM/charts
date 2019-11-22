@@ -1,0 +1,215 @@
+# Licensed Materials - Property of IBM
+# IBM Order Management Software (5725-D10)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if eq (.Values.global.license | lower) "accept" }}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+{{- $httpPort := .Values.appserver.service.http.port | default 9080 }}
+{{- $httpsPort := .Values.appserver.service.https.port | default 9443 }}
+{{- $readyProbePeriod := 30 }}
+{{- $libertyStartupWrapper := .Values.appserver.config.libertyStartupWrapper }}
+{{- $liveProbeBeginDelay := .Values.appserver.livenessCheckBeginAfterSeconds | default 900 }}
+{{- $liveProbePeriod := 60 }}
+{{- $liveFailRestartSeconds := (mul .Values.appserver.livenessFailRestartAfterMinutes 60) | default 600 }}
+{{- $liveFailThreshold := div $liveFailRestartSeconds $liveProbePeriod }}
+{{- $jvmOptionsPath := "/config/jvm.options" }}
+{{- $sysOverridesPath := "/config/dropins/smcfs.ear/properties.jar/system_overrides.properties" }}
+{{- $sysOverridesInitPath := "/opt/ssfs/system_overrides.properties.init" }}
+{{- $stdPodLabel := "role" }}
+{{- $stdPodLabelVal := "appserver" }}
+{{- $custLabels := .Values.appserver.podLabels | default (dict) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "om-chart.fullname" . }}-appserver
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  replicas: {{ .Values.appserver.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "" (set $custLabels $stdPodLabel $stdPodLabelVal)) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "" (set $custLabels $stdPodLabel $stdPodLabelVal)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{- with .Values.appserver.tolerations }}
+      tolerations:
+{{ toYaml . | indent 6 }}
+{{- end }}
+      affinity:
+{{- include "om-chart.nodeAffinity" (list . .Values.appserver.nodeAffinity) | indent 8 }}
+{{- include "om-chart.podAffinity" (list . .Values.appserver.podAffinity) | indent 8 }}
+{{- include "om-chart.podAntiAffinity" (list . .Values.appserver.podAntiAffinity $stdPodLabel $stdPodLabelVal) | indent 8 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName | default "default" }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: {{ .Values.global.persistence.securityContext.fsGroup | default 0 }}
+        supplementalGroups: [{{ .Values.global.persistence.securityContext.supplementalGroup | default 0 }}]
+      {{- if and (.Values.datasetup.loadFactoryData) (eq .Values.datasetup.loadFactoryData "install") }}
+      initContainers:
+      - name: {{ template "om-chart.fullname" . }}-appserver-init
+        image: "{{ .Values.global.image.repository }}/{{ .Values.appserver.image.name }}:{{ .Values.appserver.image.tag }}"
+        securityContext:
+          privileged: false
+          runAsUser: 1001
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command: ['/bin/bash', '-c']
+        args:
+        - 'touch /opt/ssfs/runtime/initfile && while [ -z $(find /shared -maxdepth 1 -newer /opt/ssfs/runtime/initfile -name datasetup.complete) ]; do echo "datasetup not complete $(date +%Y-%m-%d.%H.%M.%S)"; sleep 30; done; echo "datasetup found complete $(date +%Y-%m-%d.%H.%M.%S)"'
+        volumeMounts:
+        - name: {{ .Values.global.persistence.claims.name }}
+          mountPath: "/shared"
+      {{- end }}
+      containers:
+      - name: {{ template "om-chart.fullname" . }}-appserver
+        image: "{{ .Values.global.image.repository }}/{{ .Values.appserver.image.name }}:{{ .Values.appserver.image.tag }}"
+        imagePullPolicy: {{ .Values.appserver.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          runAsUser: 1001
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/bash", "-c"]
+        args:
+        - "/opt/ssfs/evaluateEnvs.sh {{ $jvmOptionsPath }}.init {{ $jvmOptionsPath }} && 
+        /opt/ssfs/evaluateEnvs.sh {{ $sysOverridesInitPath }} {{ $sysOverridesPath }} && 
+        {{ $libertyStartupWrapper }} /opt/ibm/wlp/bin/server run defaultServer"
+        env:
+        - name: OM_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OM_RELEASE
+          value: {{ .Release.Name }}
+        - name: consoleadminpassword
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.appSecret }}
+              key: consoleadminpassword
+        - name: consolenonadminpassword
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.appSecret }}
+              key: consolenonadminpassword
+        - name: dbpassword
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.appSecret }}
+              key: dbpassword
+        - name: LOG_FORMAT
+          value: {{ .Values.global.log.format | default "json" }}
+{{- with .Values.global.envs }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+        ports:
+        - name: https
+          containerPort: {{ $httpsPort }}
+          protocol: TCP
+        - name: http
+          containerPort: {{ $httpPort }}
+          protocol: TCP
+        volumeMounts:
+        - name: {{ .Values.global.persistence.claims.name }}
+          mountPath: "/shared"
+        {{- if .Values.global.mq.bindingConfigName }}
+        - name: binding-config
+          mountPath: {{ .Values.global.mq.bindingMountPath | quote }}
+          subPath: .bindings
+        {{- end }}
+        - name: server-xml
+          mountPath: "/config/server.xml"
+          subPath: server.xml
+        - name: config
+          mountPath: "/opt/ssfs/evaluateEnvs.sh"
+          subPath: evaluateEnvs.sh
+        - name: config
+          mountPath: "{{ $jvmOptionsPath }}.init"
+          subPath: jvm.options
+        {{- if .Values.global.customerOverrides }}
+        - name: config
+          mountPath: "/config/dropins/smcfs.ear/properties.jar/customer_overrides.properties"
+          subPath: customer_overrides.properties
+        {{- end }}
+        - name: config
+          mountPath: "{{ $sysOverridesInitPath }}"
+          subPath: system_overrides.properties
+        # - name: host-timezone
+        #   mountPath: /etc/localtime
+        livenessProbe:
+          httpGet:
+            path: /smcfs/heartbeat/heartbeat.jsp
+            port: {{ $httpPort }}
+            scheme: HTTP
+          {{- /* give some buffer time to the appserver startup */}}
+          initialDelaySeconds: {{ $liveProbeBeginDelay }}
+          {{- /* check for liveness every minute */}}
+          periodSeconds: {{ $liveProbePeriod }}
+          {{- /* A successful http probe must return in less than 1 seconds */}}
+          timeoutSeconds: 1
+          {{- /* once probing begins keep trying. e.g with 1 min period and 10 tries, restart pod after 10 minutes */}}
+          failureThreshold: {{ $liveFailThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /smcfs/heartbeat/heartbeat.jsp
+            port: {{ $httpPort }}
+            scheme: HTTP
+          {{- /* wait for some time (1 mins) before beginning to probe readiness */}}
+          initialDelaySeconds: 60
+          {{- /* check for readiness every n seconds */}}
+          periodSeconds: {{ $readyProbePeriod }}
+          {{- /* A successful http probe must return in less than 1 seconds */}}
+          timeoutSeconds: 1
+          {{- /* keeping max attempts in sync with liveness probe. E.g. if liveness probe starts after 10 minutes
+               and takes another 10 minutes to restart pod. keep trying till approx 20 minutes */}}
+          failureThreshold: {{ div (add $liveProbeBeginDelay $liveFailRestartSeconds ) ($readyProbePeriod) }}
+        resources:
+{{ toYaml .Values.appserver.resources | indent 10 }}
+      volumes:
+      - name: {{ .Values.global.persistence.claims.name }}
+        persistentVolumeClaim:
+          claimName: {{ template "om-chart.fullname" . }}-{{ .Values.global.persistence.claims.name | lower }}
+      - name: config
+        configMap:
+          name: {{ template "om-chart.fullname" . }}-config
+          items:
+          - key: evaluateEnvs.sh
+            path: evaluateEnvs.sh
+            mode: 0754
+          - key: jvm.options
+            path: jvm.options
+        {{- if .Values.global.customerOverrides }}
+          - key: customer_overrides.properties
+            path: customer_overrides.properties
+        {{- end }}
+          - key: system_overrides.properties
+            path: system_overrides.properties
+      - name: server-xml
+        configMap:
+          name: {{ .Values.appserver.config.libertyServerXml | default (printf "%s-%s" (include "om-chart.fullname" .) "def-server-xml-conf" ) }}
+      - name: secret
+        secret:
+          secretName: {{ .Values.global.appSecret }}
+        {{- if .Values.global.mq.bindingConfigName }}
+      - name: binding-config
+        configMap:
+          name: {{ .Values.global.mq.bindingConfigName }}
+      {{- end }}
+      # - name: host-timezone
+      #   hostPath:
+      #     path: /etc/localtime
+{{- end }}

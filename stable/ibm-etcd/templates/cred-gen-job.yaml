@@ -1,0 +1,110 @@
+{{- include "sch.config.init" (list . "etcd.sch.chart.config.values") -}}
+{{- if or (and (include "etcd3.tls.enabled" (list .Values.tls.enabled . )) (not (tpl .Values.tls.existingTlsSecret . ))) (and (.Values.auth.enabled) (not .Values.auth.existingRootSecret)) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "creds-gen-job" ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "creds-gen-job" ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "creds-gen-job") | indent 8 }}
+      name: cred-gen
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ template "etcd3.serviceaccountname" . }}
+      securityContext:
+        runAsNonRoot: true
+      {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 523
+      {{- end }}
+      containers:
+      - name: cred-gen
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}/{{ end }}{{ .Values.certgen.image.name }}:{{ .Values.certgen.image.tag }}"
+        imagePullPolicy: {{ .Values.certgen.image.pullPolicy }}
+        securityContext:
+          runAsNonRoot: true
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 523
+        {{- end }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          openssl genrsa -out ca.key 2048
+          openssl req -x509 -new -nodes -key ca.key -subj "/CN={{ include "sch.names.fullName" (list .) }}" -days 3650 -reqexts v3_req -extensions v3_ca -out ca.crt
+
+          cat >openssl.cnf <<EOL
+          [req]
+          req_extensions = v3_req
+          distinguished_name = req_distinguished_name
+          [req_distinguished_name]
+          [ v3_req ]
+          basicConstraints = CA:FALSE
+          keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+          subjectAltName = @alt_names
+          [alt_names]
+          DNS.1 = {{ include "sch.names.fullName" (list .) }}
+          DNS.2 = {{ template "etcd3.fullservicename" .}}
+          DNS.3 = *.{{ template "etcd3.fullservicename" . }}
+          DNS.4 = localhost
+          DNS.5 = 127.0.0.1
+          EOL
+
+          openssl genrsa -out etcd.key 2048
+          openssl req -new -key etcd.key -out etcd.csr -subj "/CN={{ include "sch.names.fullName" (list .) }}" -config openssl.cnf
+          openssl x509 -req -in etcd.csr \
+            -CA ca.crt -CAkey ca.key -CAcreateserial \
+            -out etcd.crt -days 3650 -extensions v3_req -extfile openssl.cnf
+
+          cat <<EOF | kubectl create -n {{ .Release.Namespace }} -f -
+{{- if and (.Values.auth.enabled) (not .Values.auth.existingRootSecret) }}
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+            name: {{ template "etcd3.rootSecret" . }}
+          data:
+            username: $(echo -n "root" | base64 | tr -d '\n')
+            password: $(openssl rand -hex 20 | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+{{- if and (include "etcd3.tls.enabled" (list .Values.tls.enabled . )) (not (tpl .Values.tls.existingTlsSecret . )) }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: kubernetes.io/tls
+          metadata:
+            labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+            name: {{ template "etcd3.tlsSecret" . }}
+          data:
+            tls.cacrt: $(cat ca.crt | base64 | tr -d '\n')
+            tls.crt: $(cat etcd.crt | base64 | tr -d '\n')
+            tls.key: $(cat etcd.key | base64 | tr -d '\n')
+            tls.cacrt.str: $(sed '1d;$d' ca.crt | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+          EOF
+      restartPolicy: Never
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{- end }}

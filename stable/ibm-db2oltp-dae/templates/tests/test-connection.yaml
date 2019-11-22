@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-credentials-test"
+  labels:
+    app: {{ template "fullname" . }}-credentials-test
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+  - name: {{ template "fullname" . }}
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ template "platform" . }}"
+    env:
+      - name: DB
+        value: "{{ .Values.options.databaseName }}"
+      - name: HOST
+        value: {{ template "fullname" . }}
+      - name: USER
+        value: {{ default "db2inst1" .Values.db2inst.instname | quote }}
+      - name: PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ template "fullname" . }}
+            key: password
+      - name: PORT
+        value: {{ default "50000" .Values.service.port | quote }}
+    {{- if .Values.options.databaseName }}
+    command: ["sh", "-c", "useradd -m $USER  && /opt/ibm/db2/V11.1/instance/db2icrt -s client -u $USER $USER && su - $USER -c \". sqllib/db2profile ; db2cli validate -connect -database $DB:$HOST:$PORT -user $USER -passwd $PASSWORD\""]
+    {{- else }}
+    command: ["sh", "-c", "yum install nc -y; echo $HOST; nc --sh-exec ls -v -w10 $HOST $PORT"]
+    {{- end }}
+  restartPolicy: Never
+

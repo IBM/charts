@@ -1,0 +1,36 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.test.name -}}
+{{- $dvt := .Values.dvt }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ (include "sch.names.fullName" (list .)) }}-dvt-job"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+{{ include "sch.affinity.nodeAffinity" (list . ) | indent 4 }}
+  containers:
+    - name: dvt
+{{ include "wks.docker.image.name" (list . $dvt.image) | indent 6 }}
+      command:
+        - wkstoolbox
+      args:
+        - dvt
+        - --host
+        - https://{{ template "sch.names.fullName" (list .) }}:19443
+        - --broker-host
+        - https://{{ template "wks.broker.svc.name" . }}:10230
+        - --dispatcher-host
+        - https://{{ template "wks.dispatcher.svc.name" .}}:9443
+      resources:
+        limits:
+          cpu: 250m
+          memory: 512Mi
+        requests:
+          cpu: 250m
+          memory: 512Mi
+  restartPolicy: Never
+{{ include "wks.docker.registry.secret" . | indent 2 }}

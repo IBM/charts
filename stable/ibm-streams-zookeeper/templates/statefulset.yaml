@@ -1,0 +1,197 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2019, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "zookeeper.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ template "zookeeper.name" . }}
+{{- include "zookeeper.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  serviceName: {{ template "zookeeper.fullname" . }}-hs
+  replicas: {{ .Values.replicaCount }}
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ template "zookeeper.name" . }}
+      release: {{ .Release.Name }}
+      app.kubernetes.io/component: server
+  updateStrategy:
+{{ toYaml .Values.updateStrategy | indent 4 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ template "zookeeper.name" . }}
+{{- include "zookeeper.defaultLabels" . | indent 8 }}
+{{- include "zookeeper.serviceability" . | indent 8 }}
+        app.kubernetes.io/component: server
+        streams-zookeeper: {{ .Release.Name }}
+      {{- if .Values.podLabels }}
+        ## Custom pod labels
+        {{- range $key, $value := .Values.podLabels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      {{- end }}
+      annotations:
+      {{- if .Values.podAnnotations }}
+        ## Custom pod annotations
+        {{- range $key, $value := .Values.podAnnotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      {{- end }}
+{{- include "zookeeper.metering" . | indent 8 }}
+
+    spec:    
+{{- if .Values.schedulerName }}
+      schedulerName: "{{ .Values.schedulerName }}"
+{{- end }}
+           
+      serviceAccountName: {{ include "zookeeper.serviceAccountName" . }} 
+
+{{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+{{- end }}
+{{- include "zookeeper.podGeneralSecurityPolicies" . | indent 6 }}      
+      securityContext:
+        runAsUser: {{ template "zookeeper.streamsinstall" . }}
+        fsGroup: {{ template "zookeeper.streamsinstall" . }}
+{{- include "zookeeper.podSecurityContext" . | indent 8 }} 
+
+      containers:
+        - name: zookeeper
+          {{- if .Values.image.prefix }}
+          image: "{{ .Values.image.prefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          {{- else }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+{{- include "zookeeper.containerSecurityContext" . | indent 12 }}        
+          command:
+            - /tini
+            - -- 
+            - /bin/bash
+            - -ec
+            - /usr/bin/k8szk-run.sh
+          ports:
+            - name: client
+              containerPort: {{ .Values.service.port | default 2181 }}
+              protocol: {{ .Values.service.protocol | default "TCP" }}
+            - name: server
+              containerPort: {{ .Values.service.serverPort | default 2888 }}
+              protocol: {{ .Values.service.protocol | default "TCP" }}
+            - name: election
+              containerPort: {{ .Values.service.electionPort | default 3888 }}
+              protocol: {{ .Values.service.protocol | default "TCP" }}
+              
+          livenessProbe:
+            exec:
+              command:
+                - k8szk-ready.sh
+            initialDelaySeconds: {{.Values.initialDelaySeconds | default 30 }}
+            periodSeconds: {{.Values.periodSeconds | default 15 }}
+            timeoutSeconds: {{.Values.timeoutSeconds | default 10 }}
+            failureThreshold: {{.Values.failureThreshold | default 6 }}  
+            successThreshold: {{.Values.successThreshold | default 1 }}
+
+          readinessProbe:
+            exec:
+              command:
+                - k8szk-ready.sh
+            initialDelaySeconds: {{.Values.initialDelaySeconds | default 10 }}
+            periodSeconds: {{.Values.periodSeconds | default 15 }}  
+            timeoutSeconds: {{.Values.timeoutSeconds | default 10 }}   
+            failureThreshold: {{.Values.failureThreshold | default 6 }}  
+            successThreshold: {{.Values.successThreshold | default 1 }}   
+             
+          env:
+            - name: ZK_REPLICAS
+              value: {{ .Values.replicaCount | quote }}
+            - name: ZK_CLIENT_PORT
+              value: {{ .Values.service.port | quote }}
+            - name: ZK_ELECTION_PORT
+              value: {{ .Values.service.electionPort | quote }}
+            - name: ZK_MEM_SIZE
+              value: {{ .Values.resources.memoryLimit | default "2Gi" }}
+            - name: ZK_JVM_FLAGS
+              value: {{ .Values.jvmFlags | default "" }}
+            - name: ZK_INIT_LIMIT
+              value: {{ .Values.initLimit | quote }}
+            - name: ZK_LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+            - name: ZK_MAX_CLIENT_CNXNS
+              value: {{ .Values.maxClientCnxns | quote }}
+            - name: ZK_MAX_SESSION_TIMEOUT
+              value: {{ .Values.maxSessionTimeout | quote }}
+            - name: ZK_MIN_SESSION_TIMEOUT
+              value: {{ .Values.minSessionTimeout | quote }}
+            - name: ZK_PURGE_INTERVAL
+              value: {{ .Values.purgeInterval | quote }}
+            - name: ZK_SERVER_PORT
+              value: {{ .Values.service.serverPort | quote }}
+            - name: ZK_SNAP_RETAIN_COUNT
+              value: {{ .Values.snapRetainCount | quote }}
+            - name: ZK_SYNC_LIMIT
+              value: {{ .Values.syncLimit | quote }}
+            - name: ZK_TICK_TIME
+              value: {{ .Values.tickTime | quote }}
+          resources:
+            requests:
+              cpu: {{ .Values.resources.cpu | default "1" }}
+              memory: {{ .Values.resources.memory | default "2Gi" }}
+            limits:
+              cpu: {{ .Values.resources.cpuLimit | default "1" }}
+              memory: {{ .Values.resources.memoryLimit | default "2Gi" }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/zookeeper
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      affinity:
+    {{- with .Values.affinityRules }}
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- include "zookeeper.nodeaffinity" . | indent 8 }}    
+
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      volumes:
+        {{- if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+      {{- if .Values.persistence.storageClass }}
+        {{- if (eq "-" .Values.persistence.storageClass) }}
+        storageClassName: ""
+        {{- else }}
+        storageClassName: "{{ .Values.persistence.storageClass }}"
+        {{- end }}
+      {{- end }}
+  {{- end }}

@@ -1,0 +1,291 @@
+# Paragon CEM event elements for NOI integration:
+# Notification payload structures:
+# $(rel_resources): [
+#   {
+#     $(resource)
+#     ...
+#   } 
+# ]
+#   $(resource)
+#   $(type)
+#   $(sender)
+#   $(summary)
+#   $(urls)
+#   $(details)
+#   $(relatedResource)
+#   $(timestamp)
+#   $(resolution)
+#   $(deduplicationKey)
+#   $(timestamp)
+#   $(severity)
+#   $(eventsource)
+# 
+if( match( @Manager, "ProbeWatch" ) )
+{
+  #
+  # This section deals with internal probe events
+  #
+  switch(@Summary)
+  {
+    case "Running ...":
+      @Severity = 1  # Clear (1 is actually indeterminate, but needed for auto deletion of active)
+      @AlertGroup = "probestat"
+      @Type = 2      # Clear (Resolution)
+    case "Going Down ...":
+      @Severity = 5  # Critical
+      @AlertGroup = "probestat"
+      @Type = 1
+    default:
+      @Severity = 2  # Warning
+      @Type = 1      # Problem
+    @AlertGroup = "probestat"
+  }
+  @AlertKey = @Agent
+  @Summary = @Agent + " probe on " + @Node + ": " + @Summary
+}
+else if (exists($liveness))
+{
+  # livenessProbe Probe Watch
+  @Manager = "ProbeWatch"
+  @AlertGroup = "livenessProbe"
+  @Agent = "message_bus"
+  @AlertKey = @Agent
+  @Node = hostname()
+  @Summary = @Agent + " probe on " + @Node + ": " + "liveness " + $liveness
+  @Identifier = @Agent + "@" + @Node + ":" + @AlertGroup
+  @Type = 13  # Information
+  @ExpireTime = 60
+}
+else if (exists($readiness))
+{
+  # readinessProbe Probe Watch
+  @Manager = "ProbeWatch"
+  @AlertGroup = "readinessProbe"
+  @Agent = "message_bus"
+  @AlertKey = @Agent
+  @Node = hostname()
+  @Summary = @Agent + " probe on " + @Node + ": " + "readiness " + $readiness
+  @Identifier = @Agent + "@" + @Node + ":" + @AlertGroup
+  @Type = 13  # Information
+  @ExpireTime = 60
+}
+else
+{
+  #
+  # This section deals with CEM events
+  #
+  log(DEBUG, "<<<<< Entering... CEM rules >>>>>")
+  if (exists($(sender.name)))
+  { # sender.name
+    @Manager = "CEM sender from: " + $(sender.name)
+  } 
+  else
+  {
+    @Manager = "CEM-NOI message bus probe running on  " + hostname()
+  }
+  @Class = 90000 
+  if (exists($(sender.type)))
+  {
+    @Agent = $(sender.type)
+  }
+  else
+  {
+    @Agent = "CEM"
+  }
+  # @AlertGroup
+  if (exists($(type.eventType)))
+  {
+    @AlertGroup = $(type.eventType)
+  }
+  # @AlertKey
+  if (exists($(resource.type)))
+  {
+    @AlertKey = $(resource.type) + ": " + $(deduplicationKey)
+    @NodeType = $(resource.type)
+  }
+  if (match($(resource.type),"Server") && exists($(resource.hostname)))
+  {
+    @Node = $(resource.hostname)
+  }
+  else if (match($(resource.type),"Cluster") && exists($(resource.cluster)))
+  {
+    @Node = $(resource.cluster)
+  }
+  else if (match($(resource.type),"Application") && exists($(resource.application)))
+  {
+    @Node = $(resource.application)
+  }
+  else if (match($(resource.type),"Service") && exists($(resource.service)))
+  {
+    @Node = $(resource.service)
+  }
+  else if(exists($(resource.ipaddress)))
+  {
+    @Node = $(resource.ipaddress)
+  }
+  else
+  {
+    @Node = $(resource.name)
+  }
+  if (match(@NodeAlias,"") && exists($(resource.ipaddress)))
+  {
+    @NodeAlias = $(resource.ipaddress)
+  }
+  if (match(@NodeAlias,"") && nmatch(@Node,""))
+  {
+    @NodeAlias = @Node
+  }
+  # Define severity
+  if (match($(severity), "70") || match($(severity), "60"))
+  {
+    @Severity=5
+    @Type=1
+  }
+  else if (match($(severity), "50"))
+  {
+    @Severity=4
+    @Type=1
+  }
+  else if (match($(severity), "40"))
+  {
+    @Severity=3
+    @Type=1
+  }
+  else if (match($(severity), "30"))
+  {
+    @Severity=2
+    @Type=1
+  }
+  else if (match($(severity), "20"))
+  {
+    @Severity=1
+    @Type=1
+  }
+  else
+  {
+    #Default
+    @Type=0
+    @Severity=1
+    @ExpireTime = 180
+  }
+  ## check resolution
+  if (match($(resolution), "true"))
+  {
+    @Type=2
+    ## Set severity to 1 instead of 0
+    ## This is to ensure generic clear works
+    @Severity=1
+  }
+  #Define ScopeID based on Event preproc correlation logic
+  if (exists($(resource.correlationKey)))
+  {
+    @ScopeID = $(resource.correlationKey)
+  } 
+  else if (exists($(resource.cluster)))
+  {
+    @ScopeID = $(resource.cluster)
+  }
+  else if (exists($(resource.application)))
+  {
+    @ScopeID = $(resource.application)
+  }
+  else if (exists($(resource.hostname)))
+  {
+    @ScopeID = $(resource.hostname)
+  }
+  else if (exists($(resource.ipaddress)))
+  {
+    @ScopeID = $(resource.ipaddress)
+  }
+  else if (exists($(resource.sourceId)))
+  {
+    @ScopeID = $(resource.sourceId)
+  }
+  else if (exists($(resource.service)))
+  {
+    @ScopeID = $(resource.service)
+  }
+  else if (exists($(resource.name)))
+  {
+    @ScopeID = $(resource.name)
+  }
+  if (exists($(urls)) && length($(urls)) > 0 )
+  {   
+    if (regmatch($(urls), "^http.*"))
+    {
+        @URL = $(urls.0.url)   
+    }
+  }
+  # check Acknowledge
+  if (exists($(resource.location)))
+  {
+    @Location = $(resource.location)
+  }
+  if (exists($(summary)))
+  {
+    @Summary = $(summary)
+  }
+  if (exists($(rel_resources.0.summary)))
+  {
+    @Summary = @Summary + " " + $(rel_resources.0.summary)
+  }
+  if (exists($(type.statusOrThreshold)))
+  {
+    @Summary = @Summary + " " + $(type.statusOrThreshold)
+  }
+  if (length(@Summary) > 254)
+  {
+    @Summary = substr(@Summary,1,250) + "..."
+  }
+  if (exists($(resource.sourceId)))
+  {
+    @BSM_Identity = $(resource.sourceId)
+  }
+  if (exists($(resource.service)))
+  {
+    @Service = $(resource.service)
+  }
+  if (exists($(resource.port)))
+  {
+    @PhysicalPort = $(resource.port)
+  }
+  if (exists($(resource.PhysicalSlot)))
+  {
+    @PhysicalSlot = $(resource.PhysicalSlot)
+  }
+  if (exists($(resource.PhysicalCard)))
+  {
+    @PhysicalCard = $(resource.PhysicalCard)
+  }
+  if (exists($(resource.LocalPriObj)))
+  {
+    @LocalPriObj = $(resource.LocalPriObj)
+  }
+  if (exists($(resource.LocalRootObj)))
+  {
+    @LocalRootObj = $(resource.LocalRootObj)
+  }
+  if (exists($(deduplicationKey)))
+  {
+    @Identifier = $(deduplicationKey) + " " + @Type
+  }
+  else
+  {
+    @Identifier = @Node + " " + @AlertKey + " " + @AlertGroup + " " + @Type + " " + @Agent + " " + @Manager
+  }
+
+  ## CEM Specific fields
+  if (exists($(MESSAGE.META.X-Subscription-ID)))
+  {
+    @CEMSubscriptionID = extract( $(MESSAGE.META.X-Subscription-ID), "\[(.*)\]" )
+  }
+  if (exists($(incidentUuid)))
+  {
+    @CEMIncidentUUID = $incidentUuid
+  }
+  log(DEBUG, "<<<<< Exiting... CEM rules >>>>>")
+}
+  
+# Uncomment the following line for extra information
+# @ExtendedAttr = nvp_add($*)
+# Add custom rules below

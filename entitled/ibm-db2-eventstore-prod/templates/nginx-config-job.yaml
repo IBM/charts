@@ -1,0 +1,44 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.servicename }}-nginx-config-job"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        name: "{{ .Values.servicename }}-nginx-config-job"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+      annotations:
+         {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      securityContext:
+         runAsUser: {{ .Values.dsx.userHomePVC.userId }}
+         runAsGroup: 10
+         fsGroup: 10
+      containers:
+      - name: eventstore-tools
+        {{- if .Values.eventstoreTools.image.tag }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.eventstoreTools.image.tag }}
+        {{- else }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh']
+        args: ["-cx", "timeout 60 /eventstore/tools/hooks/pre-install/reloadNginxConfig.sh --namespace {{ .Values.baseNamespace }} --runtime {{ .Values.runtime }}"]
+        {{- include "eventstore.securityContext" . | indent 8 }}
+      restartPolicy: Never

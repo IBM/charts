@@ -1,0 +1,170 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2018, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "{{ .Release.Name }}-build"
+  labels:
+{{- include "build.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-build"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "{{ .Release.Name }}-build"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+{{- include "build.defaultLabels" . | indent 8 }}
+{{- include "build.serviceability" . | indent 8 }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-build"
+      annotations:
+{{- include "build.metering" . | indent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/build-config.yaml") . | sha256sum }}
+    spec:
+      affinity:
+{{- include "build.nodeaffinity" . | indent 8 }}
+      
+      restartPolicy: Always
+
+      serviceAccountName: {{ template "build.serviceAccountName" . }}
+
+{{- include "build.podGeneralSecurityPolicies" . | indent 6 }}
+      securityContext:
+{{- include "build.streamsinstallPodSecurityContext" . | indent 8 }}
+
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriod | default 30 }}
+    
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      {{- end }}
+
+      volumes:
+        - name: streams-build-config
+          configMap:
+            name: "{{ .Release.Name }}-build"
+        - name: streams-state-volume
+          persistentVolumeClaim:
+            claimName: {{ template "build.persistentVolumeClaimName" . }}
+        - name: security-secret
+          secret:
+            secretName: {{ template "build.securitySecret" . }}
+            items:
+              - key: streams.jks
+                path: streams.jks
+              - key: streams.jts
+                path: streams.jts
+        {{- if or ( .Values.builder.persistentVolumeClaim ) ( .Values.builder.persistentStorageClassName ) }}
+        - name: streams-user-ext-volume
+          persistentVolumeClaim:
+            claimName: {{ template "builder.persistentVolumeClaimName" . }}
+        {{- end }}
+        {{- if or ( .Values.builder.streamsExtPvc ) ( .Values.builder.streamsExtPvcStorageClass ) }}
+        - name: streams-ext-volume
+          persistentVolumeClaim:
+            claimName: {{ template "builder.streamsExtPvcClaimName" . }}
+        {{- end }}
+        
+      containers:
+        - name: service
+          {{- if .Values.image.prefix }}
+          image: "{{ .Values.image.prefix }}/{{ .Values.image.build }}:{{ .Values.image.buildTag }}"
+          {{- else }}
+          image: "{{ .Values.image.build }}:{{ .Values.image.buildTag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPreset" }}
+          
+          workingDir: {{ include "build.installdir" . }}
+          
+          env:
+{{- include "build.basicEnv" . | indent 12 }}
+{{- include "build.securityEnv" . | indent 12 }}
+{{- include "build.ssoSecurityEnv" . | indent 12 }}
+            - name: STREAMS_BUILD_CONFIG
+              value: {{ template "build.configMountPath" . }}/build.properties
+            - name: STREAMS_BUILD_TEMPLATE
+              value: {{ template "build.configMountPath" . }}
+                          
+           {{- if or ( .Values.builder.persistentVolumeClaim ) ( .Values.builder.persistentStorageClassName ) }}
+            - name: STREAMS_BUILDSERVICE
+              value: {{ template "build.userExternalMountPath" . }}
+            {{- end }}
+            
+            {{- if or ( .Values.builder.streamsExtPvc ) ( .Values.builder.streamsExtPvcStorageClass ) }}
+            - name: STREAMS_EXT
+              value: {{ template "build.externalMountPath" . }}
+            {{- end }}
+            
+          securityContext:
+{{- include "build.containerSecurityContext" . | indent 12 }}
+
+          command:
+            - "$(STREAMS_INSTALL)/system/impl/bin/startbuildpool.sh"
+            - "--security"
+            - {{ .Values.environmentType | default "streams" }}
+            - "--httpPort"
+            - "{{.Values.httpPort | default 8443}}"
+            - "--memory"
+            - {{ .Values.build.memoryLimit | default "2Gi" }}
+            
+          livenessProbe:
+            httpGet:
+              path: liveness
+              port: {{.Values.lifeCyclePort | default 8888 }}
+            initialDelaySeconds: {{.Values.livenessDelay | default 60 }}
+            periodSeconds: {{ .Values.livenessPeriod | default 60 }}
+            timeoutSeconds: {{ .Values.livenessTimeout | default 15 }}
+            successThreshold: {{ .Values.livenessSuccess | default 1 }}
+            failureThreshold: {{ .Values.livenessFailure | default 2 }}
+            
+          readinessProbe:
+            httpGet:
+              path: readiness
+              port: {{.Values.lifeCyclePort | default 8888}}
+            initialDelaySeconds: {{.Values.readinessDelay | default 0 }}
+            periodSeconds: {{ .Values.readinessPeriod | default 15 }}
+            timeoutSeconds: {{ .Values.readinessTimeout | default 10 }}
+            successThreshold: {{ .Values.readinessSuccess | default 1 }}
+            failureThreshold: {{ .Values.readinessFailure | default 8 }}
+            
+          lifecycle:
+            preStop:
+              httpGet:
+                path: prestop
+                port: {{ .Values.lifeCyclePort | default 8888 }}
+                
+          volumeMounts:
+            - name: streams-build-config
+              mountPath: {{ template "build.configMountPath" . }}
+            - name: streams-state-volume
+              mountPath: {{ template "build.stateMountPath" . }}
+            - name: security-secret
+              mountPath: {{ template "build.securityMountPath" . }}
+            {{- if or ( .Values.builder.persistentVolumeClaim ) ( .Values.builder.persistentStorageClassName ) }}
+            - name: streams-user-ext-volume
+              mountPath: {{ template "build.userExternalMountPath" . }}
+            {{- end }}
+            {{- if or ( .Values.builder.streamsExtPvc ) ( .Values.builder.streamsExtPvcStorageClass ) }}
+            - name: streams-ext-volume
+              mountPath: {{ template "build.externalMountPath" . }}
+            {{- end }}
+            
+          resources:
+            requests:
+              cpu: {{ .Values.build.cpu | default "1" }}
+              memory: {{ .Values.build.memory | default "1Gi" }}
+            limits:
+              cpu: {{ .Values.build.cpuLimit | default "2" }}
+              memory: {{ .Values.build.memoryLimit | default "2Gi" }}

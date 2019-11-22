@@ -1,0 +1,45 @@
+Please wait while the application is getting deployed.
+1. Run the below command to check the status of application server replica sets. At least 1 replica must be in 'READY' state. 
+  kubectl get replicasets -l release={{ .Release.Name }},role=appserver -n {{ .Release.Namespace }}
+
+
+
+2. Run the below command to check the status of the application server pods for the release.
+  kubectl get po -l release={{ .Release.Name }},role=appserver -n {{ .Release.Namespace }} -o wide
+
+    If the status of an application server pod is 'Init:0/1', it means that the pod is still initializing. Run the below command to view the log of the init container.
+  kubectl logs <pod name> {{ template "om-chart.fullname" . }}-appserver-init -n {{ .Release.Namespace }}
+
+    To view the logs for a pod, run the below command.
+  kubectl logs <pod name> -n {{ .Release.Namespace }}
+
+
+
+3. Access the apps by running the following url
+
+{{- if .Values.appserver.ingress.enabled }}
+{{- $contextList := .Values.appserver.ingress.contextRoots | default (list "smcfs" "sbc" "sma" "sfs" "isccs" "wsc") -}}
+{{- if .Values.appserver.ingress.host }}
+{{- if .Values.appserver.ingress.ssl.enabled }}
+{{ include "om-chart.ingress.paths.notes" (list . (printf "https://%s" .Values.appserver.ingress.host) $contextList) | indent 2 }}
+{{- else }}
+{{ include "om-chart.ingress.paths.notes" (list . (printf "http://%s" .Values.appserver.ingress.host) $contextList) | indent 2 }}
+  echo "Warning: It is recommended to enable SSL"
+{{- end }}  
+{{- else }}
+{{- if .Values.appserver.ingress.ssl.enabled }}
+{{ include "om-chart.ingress.paths.notes" (list . (printf "https://%s" "<proxy node domain>") $contextList) | indent 2 }}
+{{- else }}
+{{ include "om-chart.ingress.paths.notes" (list . (printf "http://%s" "<proxy node domain>") $contextList) | indent 2 }}
+  echo "Warning: It is recommended to enable SSL"
+{{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.appserver.service.type }}
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[1].nodePort}" services {{ template "om-chart.fullname" . }})
+  echo "smcfs : https://$NODE_IP:$NODE_PORT/smcfs"
+  echo "sbc : https://$NODE_IP:$NODE_PORT/sbc"
+  echo "sma : https://$NODE_IP:$NODE_PORT/sma"
+  echo "isccs : https://$NODE_IP:$NODE_PORT/isccs"
+  echo "Warning: It is recommended to avoid NodePort service, instead Ingress should be enabled with ClusterIP service."
+{{- end }}

@@ -1,0 +1,85 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: utils-api
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: utils-api-deployment
+spec:
+  selector:
+    matchLabels:
+      run: utils-api-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: utils-api
+        component: utils-api
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        run: utils-api-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      initContainers:
+      - name: cloudant-secret-job
+        image: {{ .Values.utilsApi.image.repository }}:{{ .Values.utilsApi.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/utils-api/scripts/create-cloudant-secret.sh"]
+        env:
+        - name: BASE_INSTALLER
+          value: {{ .Values.global.baseInstaller | quote }}
+        - name: ADMIN_NAMESPACE
+          value: {{ .Values.dashboard.backendNamespace | quote }}
+      - name: utils-bin-container
+        image: {{ .Values.utilsBin.image.repository }}:{{ .Values.utilsBin.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/nginx-reload", "--cp"]
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+      containers:
+      - name: utils-api-container
+        image: {{ .Values.utilsApi.image.repository }}:{{ .Values.utilsApi.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["sh", "-c", "utils-server --port 8080 --host 0.0.0.0"]
+        env:
+        - name: NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

@@ -1,0 +1,30 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $svcAccName := include "ibmWatsonDiscovery.serviceAccountName" . -}}
+{{- $compName := "app-test" -}}
+{{- $toolingCompName := .sch.chart.components.tooling.name -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "" (dict "component" "discovery")) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+{{ include "ibm-watson-discovery-prod.securityKeys" . | indent 2 }}
+  serviceAccountName: {{ $svcAccName }}
+  containers:
+    - name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+      image: "{{ .Values.global.icpDockerRepo }}{{ .Values.global.helmTest.image.repository }}:{{ .Values.global.helmTest.image.tag}}"
+      resources:
+        requests:
+          memory: '{{ .Values.global.helmTest.resources.requests.memory }}'
+          cpu: '{{ .Values.global.helmTest.resources.requests.cpu }}'
+        limits:
+          memory: '{{ .Values.global.helmTest.resources.limits.memory }}'
+          cpu: '{{ .Values.global.helmTest.resources.limits.cpu }}'
+{{ include "ibm-watson-discovery-prod.securityContext" . | indent 6 }}
+      command: ["sh", "-c", "curl -k --fail https://{{ include "sch.names.fullCompName" (list . $toolingCompName) }}:4000/health"]
+  restartPolicy: Never

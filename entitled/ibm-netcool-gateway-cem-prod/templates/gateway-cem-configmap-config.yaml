@@ -1,0 +1,60 @@
+{{- include "sch.config.init" (list . "gw.cem.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.gatecem.name -}}
+{{/* Gateway config ConfigMap Name */}}
+{{- $configName :=  .sch.chart.components.gatecem.configmap.config.name -}}
+{{- $configMapName := include "sch.names.fullCompName" (list . $configName) -}}
+{{- $netcoolauthenabled := include "ibm-netcool-gateway-cem-prod.netcoolConnectionAuthEnabled" ( . ) -}}
+{{- $gatewayName :=  .sch.chart.components.gatecem.gatewayName -}}
+{{- $gatewayHttpPort :=  .sch.chart.components.gatecem.gatewayHttpPort -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $configMapName }} 
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  G_CEM.props: |-
+    Name                                : '{{ $gatewayName }}'
+    MessageLevel                        : '{{ .Values.cemgateway.messageLevel}}'
+    MessageLog                          : 'stdout'
+    {{- if .Values.netcool.backupServer }}
+    Gate.RdrWtr.Server                  : 'AGG_V'
+    {{- else }}
+    Gate.RdrWtr.Server                  : '{{ .Values.netcool.primaryServer }}'
+    {{- end }}
+    Gate.CEM.KeyStoreFile               : '/opt/IBM/tivoli/netcool/platform/linux2x86/jre64_1.8.0/jre/lib/security/cacerts'
+    Gate.CEM.Connections                : {{ .Values.cemgateway.connections }}
+    Gate.CEM.ConnectionTimeout          : {{ .Values.cemgateway.connectionTimeout }}
+    Gate.CEM.RetryLimit                 : {{ .Values.cemgateway.retryLimit }}
+    Gate.CEM.RetryWait                  : {{ .Values.cemgateway.retryWait }}
+    Gate.RdrWtr.ReconnectTimeout        : {{ .Values.cemgateway.reconnectTimeout }}
+    HttpServer.Port                     : {{ $gatewayHttpPort }}
+    
+
+
+{{ include "ibm-netcool-gateway-cem-prod.commonConfigObjserv" ( . ) | indent 2 }}
+
+  {{/* Gateway table replication definition below will replace the definition in the container (cem.rdrwtr.tblrep.def)
+
+       E.g.
+
+       cem.rdrwtr.tblrep.def.replace: |
+         REPLACE ALL FROM TABLE 'mydb.mytable'
+              USING MAP 'MyTableMap'
+              INTO 'mydb.mytable';
+  */}}
+  cem.rdrwtr.tblrep.def.replace: |
+
+
+  {{/* Gateway map definition below will replace the definition in the container (cem.map)
+
+       E.g.
+
+       cem.map.replace: |
+         CREATE MAPPING MyTableMap
+         (
+             'col1'       =    '@col1'           ON INSERT ONLY,
+             'col2'       =    '@col2'           ON INSERT ONLY
+         );
+  */}}
+  cem.map.replace: |

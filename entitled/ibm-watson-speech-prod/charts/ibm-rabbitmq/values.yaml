@@ -1,0 +1,215 @@
+# Specify architecture (amd64, ppc64le, s390x) and weight to be  used for scheduling as follows :
+#   0 - Do not use
+#   1 - Least preferred
+#   2 - No preference
+#   3 - Most preferred
+arch:
+  amd64: "3 - Most preferred"
+
+config:
+  image:
+    name: "opencontent-rabbitmq-config-copy"
+    tag: "1.1.2"
+
+rabbitmq:
+  image:
+    name: "opencontent-rabbitmq-3"
+    tag: "1.1.2"
+
+creds:
+  image:
+    name: "opencontent-icp-cert-gen-1"
+    tag: "1.1.1"
+
+global:
+  image:
+    repository: "hyc-cp-opencontent-docker-local.artifactory.swg-devops.com"
+    pullSecret: ""
+    pullPolicy: IfNotPresent
+  sch:
+    # global.sch.enabled - Specifies if the ibm-sch chart should be used as sub-chart. If set to false, a compatible version of sch chart should be provided by umbrella chart.
+    enabled: true
+
+replicas: 3
+
+securityContext:
+  rabbitmq:
+    runAsUser: 999
+  creds:
+    runAsUser: 523
+##  env: rabbitmq
+## RabbitMQ application username
+
+## RabbitMQ application password
+
+auth:
+## RabbitMQ application username
+  rabbitmqUsername: "admin"
+  managementUsername: "management"
+  authSecretName: ""
+
+tls:
+  enabled: true
+  tlsSecretName: ""
+## Erlang cookie to determine whether different nodes are allowed to communicate with each other
+#rabbitmqErlangCookie: ""
+
+## If additional configuration is required, per rabbitmq doc.
+## It is recommended to use the RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS environment variable
+# rabbitmqServerAdditionalErlArgs: ""
+
+## Not a Node port, just a cluster ip type service
+rabbitmqNodePort: 5671
+
+## RabbitMQ Manager port
+rabbitmqManagerPort: 15671
+## Not a Node port, just a cluster ip type service
+amqpsNodePort: 5671
+
+## Node Type
+#rabbitmqNodeType: disc
+
+## Node Name
+#rabbitmqNodeName: rabbitmq
+
+## Node name to cluster with. e.g.: `clusternode@hostname`
+#rabbitmqClusterNodeName: ""
+
+## RabbitMQ application vhost
+rabbitmqVhost: /
+
+rabbitmqHipeCompile: false
+
+extraConfig: |
+#  queue_master_locator = min-masters
+
+definitions:
+  users: |-
+#   {
+#     "name": "myUsername",
+#     "password": "myPassword",
+#     "tags": "administrator"
+#   }
+  vhosts: |-
+#   {
+#     "name": "/rabbit"
+#   }
+  parameters: |-
+#   {
+#     "value": {
+#       "src-uri": "amqp://localhost",
+#       "src-queue": "source",
+#       "dest-uri": "amqp://localhost",
+#       "dest-queue": "destination",
+#       "add-forward-headers": false,
+#       "ack-mode": "on-confirm",
+#       "delete-after": "never"
+#     },
+#     "vhost": "/",
+#     "component": "shovel",
+#     "name": "test"
+#   }
+  permissions: |-
+#   {
+#     "user": "myUsername",
+#     "vhost": "/rabbit",
+#     "configure": ".*",
+#     "write": ".*",
+#     "read": ".*"
+#   }
+  queues: |-
+#    {
+#       "name":"myName",
+#       "vhost":"/rabbit",
+#       "durable":true,
+#       "auto_delete":false,
+#       "arguments":{}
+#    }
+  exchanges: |-
+#    {
+#       "name":"myName",
+#       "vhost":"/rabbit",
+#       "type":"direct",
+#       "durable":true,
+#       "auto_delete":false,
+#       "internal":false,
+#       "arguments":{}
+#    }
+  bindings: |-
+#    {
+#       "source":"myName",
+#       "vhost":"/rabbit",
+#       "destination":"myName",
+#       "destination_type":"queue",
+#       "routing_key":"myKey",
+#       "arguments":{}
+#    }
+## Sets the policies in definitions.json. This can be used to control the high
+## availability of queues by mirroring them to multiple nodes.
+## Ref: https://www.rabbitmq.com/ha.html
+  policies: |-
+    {
+      "name": "ha-all",
+      "pattern": ".*",
+      "vhost": "/",
+      "definition": {
+        "ha-mode": "all",
+        "ha-sync-mode": "automatic",
+        "ha-sync-batch-size": 1
+      }
+    }
+
+initContainer:
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 200m
+  limits:
+    memory: 256Mi
+    cpu: 200m
+
+
+## Data Persistency
+persistentVolume:
+  enabled: false
+  useDynamicProvisioning: true
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  ##
+  accessModes: ReadWriteOnce
+  storageClassName: "localvolume-storage"
+  size: 5Gi
+
+dataPVC:
+  # selector - if you not using dynamic provisioning, you can use selectors to refine the binding process. You cannot specify a selector if your using dynamic provisioning.
+  selector:
+    # label - label that the PV should have to be boundable to created PVCs
+    label: ""
+    # value - value of the label that the PV should have to be boundable to created PVCs
+    value: ""
+
+livenessProbe:
+  initialDelaySeconds: 120
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+readinessProbe:
+  failureThreshold: 6
+  initialDelaySeconds: 60
+  timeoutSeconds: 3
+  periodSeconds: 5
+
+# clusterDomain - the suffix of all the cluster DNS names like service_name.service_namespace.svc.cluster.local. Supports templated values like "{{ .Values.global.clusterDomain }}"
+clusterDomain: "cluster.local"

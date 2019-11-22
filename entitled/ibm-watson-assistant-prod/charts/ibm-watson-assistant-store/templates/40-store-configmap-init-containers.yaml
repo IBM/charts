@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-store-init"
+  labels:
+    service:   "conversation"
+    component: "store"
+    slot:      "global"
+    app: "ibm-watson-assistant-prod-1.3.0"
+    chart: "ibm-watson-assistant"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+
+data:
+  clu_started.sh: |
+     #!/bin/sh
+     
+     function kubectl_get() {
+       # Param URL Path
+       # Gets resulting json
+       curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.{{ tpl .Values.clusterDomain . }}$1"
+      }
+      
+      function kubectl_get_deploy() {
+        # Params: 1 Namespace, 2 deloyment name
+        kubectl_get /apis/extensions/v1beta1/namespaces/$1/deployments/$2
+      }
+      
+      function kubectl_rollout_status() {
+        # Params: 1 Namespace, 2 deloyment name
+        deploy_json="$(kubectl_get_deploy "$1" "$2")"
+        status="$(echo "${deploy_json}" | jq -r '.status.conditions[] | select( .type == "Available") | .status ')"
+        if [ $? != 0 ] ; then 
+          >&2 echo "Failed to obtain deloyoment details.  ${deploy_json}"
+        fi
+        echo "${status}"
+      }
+      
+      function wait_until_ready() {
+        echo "Waiting until $1 service is ready"
+        # Params: 1 nickname, 2 Namespace, 3 deloyment name 
+        while true ; do
+          status="$( kubectl_rollout_status "$2" "$3")"
+          echo "  $1 ($3) - is ready: ${status}"
+          if [ "_${status}" = "_True" ] ; then
+            break
+          fi
+          sleep 5
+        done
+        echo "$1 is ready."
+      }
+      echo "This init container will wait until CLU microservices( NLU MASTER TAS and ED) are started and ready."
+      wait_until_ready "NLU"    "{{ .Release.Namespace }}" "{{ .Release.Name }}-nlu"
+      wait_until_ready "ED"     "{{ .Release.Namespace }}" "{{ .Release.Name }}-ed-mm"
+      wait_until_ready "MASTER" "{{ .Release.Namespace }}" "{{ .Release.Name }}-master"
+      wait_until_ready "TAS"    "{{ .Release.Namespace }}" "{{ .Release.Name }}-tas"
+      echo "We are done. CLU started. Let start store."
+  
+  etcd_running.sh: |
+    #!/bin/sh
+    # Checks if etcd is running and password authorization is enabled
+    # Assumes etcd secret is mounted to /etc/secrets/etcd
+    #
+    # Required container with etcdctl and jq commands (e.g., conan-tools)
+     if [ ${DEBUG} ] ; then
+      set -x
+    fi
+    
+    set -e
+    
+    echo "Checking if ETCD is up and running and authorization is enabled"
+    
+    # configure etcdctl - use some defaults from the secrets mount unless already specified (as env vars)
+    export ETCDCTL_API ETCDCTL_ENDPOINTS ETCDCTL_USER ETCDCTL_CACERT ETCDCTL_DIAL_TIMEOUT ETCDCTL_COMMAND_TIMEOUT
+    ETCDCTL_API=${ETCDCTL_API:-3}
+    ETCDCTL_ENDPOINTS=${ETCDCTL_ENDPOINTS:-$(</etc/secrets/etcd/etcd_connection jq -r '.endpoints')}
+    ETCDCTL_USER=${ETCDCTL_USER:-$(</etc/secrets/etcd/etcd_connection jq -r '.userid + ":" + .password')}
+    ETCDCTL_CACERT=${ETCDCTL_CACERT:-'/etc/secrets/etcd/etcd_certificate'}
+    ETCDCTL_DIAL_TIMEOUT=${ETCDCTL_DIAL_TIMEOUT:-10s}
+    ETCDCTL_COMMAND_TIMEOUT=${ETCDCTL_COMMAND_TIMEOUT:-10s}
+    
+    while true ; do
+      echo "etcdctl endpoint health"
+      etcdctl endpoint health && break
+      echo "  command failed. Waiting 5 sec before next retry"
+      sleep 5
+    done
+    echo ""
+    echo "ETCD seems to be running. Checking if authorization is enabled"
+    while true ; do
+      echo ""
+      echo "Running (with correct credentials): etcdctl put /test \"test\""
+      if etcdctl put /test "test"; then
+        echo "Running (with wrong credentials): etcdctl put /test \"test_wrong_creds\""
+        if ETCDCTL_USER=${ETCDCTL_USER/:/:xxx} etcdctl put /test "test_wrong_creds"; then
+          echo "  It seems that AUTHORIZATION is not enabled. The write command succeeded with invalid password. Retry in 5 sec"
+          sleep 5
+        else
+          # Above command failed as expected. --> we are happy
+          echo "  write command failed as expected"
+          break
+        fi
+      else 
+        echo "  It seems test put failed (etcd is not working correctly). Retry in 5 sec"
+        sleep 5
+      fi
+    done
+    echo "It seems ETCD is ready. Going to start the microservice"

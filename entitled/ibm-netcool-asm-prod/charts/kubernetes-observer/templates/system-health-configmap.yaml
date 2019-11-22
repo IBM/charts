@@ -1,0 +1,81 @@
+{{- if .Values.systemHealthJob.enabled -}}
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-system-health-config
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+data:
+  run-system-health-job.sh: |-
+    #!/bin/bash
+
+    #
+    # GLOBAL VARS
+    #
+    CONFIG=/opt/ibm/netcool/asm/etc
+
+    #
+    # PARSE INPUT FROM GLOBAL CONFIG
+    #
+    if [ ! -e $CONFIG/tenant_id ]||[ -z $(cat $CONFIG/tenant_id) ]; then
+      tenant_id='cfd95b7e-3bc7-4006-a4a8-a73a79c71255'
+    else
+      tenant_id=$(cat $CONFIG/tenant_id)
+    fi
+
+    if [ ! -e $CONFIG/release_name ]||[ -z $(cat $CONFIG/release_name) ]; then
+      echo "$(date) ERROR: Could not find $CONFIG/release_name"
+      exit 2
+    else
+      release_name=$(cat $CONFIG/release_name)
+    fi
+
+    # What is this Observer?
+    observer_name="kubernetes-observer"
+
+    # What is the API for this job?
+    job_api="/1.0/${observer_name}/jobs"
+
+    # What is the Observer host?
+    host_var=$(echo ${release_name}-${observer_name}-service-host  | awk '{print toupper($0)}' | awk '{ gsub("-", "_", $0) } 1')
+    if [ -z  ${!host_var} ]; then
+      echo "$(date) ERROR: There is no variable defined called ${host_var}"
+      exit 3
+    fi
+
+    # What is the Observer port?
+    port_var=$(echo ${release_name}-${observer_name}-service-port  | awk '{print toupper($0)}' | awk '{ gsub("-", "_", $0) } 1')
+    if [ -z  ${!port_var} ]; then
+      echo "$(date) ERROR: There is no variable defined called ${port_var}"
+      exit 4
+    fi
+
+    #
+    # CREATE THE JOB JSON
+    #
+    echo "$(date) INFO: POSTing this job specification:"
+    cat <<EOF | tee /tmp/${observer_name}.json;
+    {
+      "unique_id": "system-health-job",
+      "type": "query",
+      "parameters": {
+        "data_center": "icp"
+      }
+    }
+    EOF
+
+    #
+    # POST JOB TO THE OBSERVER
+    #
+    STATUS=`curl -k -X POST -s -u${ASM_USER}:${ASM_PASS} -w "%{http_code}\n\n" -o /tmp/${observer_name}.response --header 'Content-Type: application/json' --header "X-TenantID: ${tenant_id}" --data-binary "@/tmp/${observer_name}.json" "http{{ if not .Values.global.asm.disableHTTPS }}s{{ end }}://${!host_var}:${!port_var}${job_api}"`
+    echo "$(date) INFO: Response code is : ${STATUS}"
+
+    #
+    # VERIFY RETURN CODE
+    #
+    if [ "${STATUS}" != "201" ]; then
+      cat /tmp/${observer_name}.response
+      exit 1
+    fi
+{{ end }}

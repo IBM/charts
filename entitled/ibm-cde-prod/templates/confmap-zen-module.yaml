@@ -1,0 +1,52 @@
+{{/*
+#+------------------------------------------------------------------------+
+#| Licensed Materials - Property of IBM
+#| IBM Cognos Products: Cognos Dashboard Embedded
+#| (C) Copyright IBM Corp. 2019
+#|
+#| US Government Users Restricted Rights - Use, duplication or disclosure
+#| restricted by GSA ADP Schedule Contract with IBM Corp.
+#+------------------------------------------------------------------------+
+*/}}
+{{ if eq .Values.global.ibmProduct "zen" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "ibmCde.fullname" . }}-zen-module-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ibmCde.release_labels" . | indent 4 }}
+    icpdata_addon: "true"
+
+data:
+  add-ons.json: |
+    {
+      "cde": {
+        "details": {
+          "premium": false,
+          "priority": 75
+        },
+        "versions": {
+          "1.13.28": {
+            "state": "enabled"
+          }
+        }
+      }
+    }
+  nginx.conf: |
+    location /daas/v1/session {
+    proxy_set_header Host $host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_pass https://cognosdaasproxy:3001/daas/v1/session;
+    }
+    location /daas/ {
+    access_by_lua_file /nginx_data/checkjwt.lua;
+    proxy_set_header Host $host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_pass https://cognosdaasproxy:3001/daas/;
+    proxy_read_timeout 30m;
+    proxy_cookie_path / /daas/;
+    }
+{{- end }}

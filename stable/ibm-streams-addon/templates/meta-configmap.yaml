@@ -1,0 +1,339 @@
+# begin_generated_IBM_copyright_prolog
+#
+# This is an automatically generated copyright prolog.
+# After initializing,  DO NOT MODIFY OR MOVE
+# ****************************************************************
+# Licensed Materials - Property of IBM
+# 5724-Y95
+# (C) Copyright IBM Corp.  2019, 2019    All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with
+# IBM Corp.
+#
+# end_generated_IBM_copyright_prolog
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "streams-addon.meta-configmap" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "streams-addon.name" . }}
+{{- include "streams-addon.defaultLabels" . | indent 4 }}
+{{- include "streams-addon.serviceability" . | indent 4 }}
+
+data:
+  add-ons.json: |
+   {
+     "streams": {
+       "details": {
+         {{- if .Values.serviceProvider.enableHttps }}
+         "service_provider_url": "{{ include "streams-service-provider.httpsurl" . }}",
+         {{- else }}
+         "service_provider_url": "{{ include "streams-service-provider.httpurl" . }}",
+         {{- end }}
+         "provisionURL": "/streams/webpage/#/streamsProvisioning",
+         "editURL": "/streams/webpage/#/streamsEdit",
+         "accessManagementURL": "/streams/webpage/#/streamsUserManagement",
+         "serviceDetailsURL": "/streams/webpage/#/streamsDetails",
+         "jobDetailsURL": "/streams/webpage/#/streamsJobDetails",
+         "jobGraphURL": "/streams/webpage/#/streamsJobGraph",
+         "has_jobs": true,
+         "generate_username": false,
+         "createJobURL": "/streams/webpage/#/createStreamsNotebook",
+         "icpdsupport" : [ {
+             "collection_type" : "SVC_PROVIDER"
+         } ]
+       },
+       "extensions": {},
+       "max_instances": "",
+       "versions": {
+         "5.2.0.0": {
+           "helm_location": {},
+           "state": "installed",
+           "details": {}
+         }
+       }
+     }
+   }
+
+  nginx.conf: |
+    set_by_lua $clusterdomain '
+        local nsdomain = os.getenv("NS_DOMAIN")
+        local period = string.find(nsdomain, "%.")
+        return string.sub(nsdomain, period + 1)
+    ';
+
+    # Addon  UI
+    location /streams/ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header Upgrade $http_upgrade;
+                        proxy_set_header Connection "upgrade";
+                        proxy_set_header Host $host;
+                        proxy_pass {{ include "streams-addon.nginx-proxy" . }};
+                        proxy_read_timeout 10m;
+    }
+    # Streams REST for this Instance / Namespace
+    location ~ ^/streams-rest/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        # issue 535: nginx decodes url automatically with no convenient way to turn off
+                        # Have to encode our suburi to work for urls with special characters
+                        set_by_lua $encodedsuburi '
+                            local str = ngx.var.suburi
+                            if (str) then
+                            			str = string.gsub (str, "([^%w _ %- . ~ /])",
+                            				function (c) return string.format ("%%%02X", string.byte(c)) end)
+                            			str = string.gsub (str, " ", "%%20")
+                            	   end
+                            return str
+                    		';
+
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         /streams/rest/instances/${instance}
+                                           /streams-rest/instances/${instance}/${namespace};
+                        sub_filter         \/streams\/rest\/instances\/${instance}
+                                           \/streams-rest\/instances\/${instance}\/${namespace};
+                        proxy_redirect     ~(https://[^/]+)/streams/rest/instances/([^/]+)/(.*)$ $1/streams-rest/instances/$2/${namespace}/$3;
+                        proxy_pass         https://${instance}-sws.${namespace}.${clusterdomain}:8443/streams/rest/instances/${instance}${encodedsuburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   application/json;
+                        proxy_read_timeout 10m;
+    }
+    location ~ ^/streams-rest/reserved/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         /streams/rest/reserved/instances/${instance}
+                                           /streams-rest/reserved/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://${instance}-sws.${namespace}.${clusterdomain}:8443/streams/rest/reserved/instances/${instance}${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   application/json;
+                        proxy_read_timeout 10m;
+    }
+    location ~ ^/streams-resource/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         /streams/rest/instances
+                                           /streams-instances/instances/${instance}/${namespace};
+                        sub_filter         /streams/rest/resources
+                                           /streams-resource/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://${instance}-sws.${namespace}.${clusterdomain}:8443/streams/rest/resources${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   application/json;
+                        proxy_read_timeout 10m;
+    }
+    # Special case for accessing /streams/rest/instances
+    location ~ ^/streams-instances/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         /streams/rest/instances/${instance}
+                                           /streams-rest/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://${instance}-sws.${namespace}.${clusterdomain}:8443/streams/rest/instances${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   application/json;
+                        proxy_read_timeout 10m;
+    }
+    # Streams Build REST for this Instance / Namespace
+    location ~ ^/streams-build/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         \/streams\/rest\/builds
+                                           /streams-build/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://build-${instance}-build.${namespace}.${clusterdomain}:8445/streams/rest/builds${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   application/json;
+                        proxy_read_timeout 10m;
+    }
+    location ~ ^/streams-buildpool/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         \/streams\/rest\/buildpool
+                                           /streams-buildpool/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://build-${instance}-build.${namespace}.${clusterdomain}:8445/streams/rest/buildpool${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   application/json;
+                        proxy_read_timeout 10m;
+    }
+    location ~ ^/streams-install/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         \/streams\/rest\/productinstalls
+                                           /streams-install/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://build-${instance}-build.${namespace}.${clusterdomain}:8445/streams/rest/productinstalls${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   application/json;
+                        proxy_read_timeout 10m;
+    }
+    location ~ ^/streams-toolkit/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         \/streams\/rest\/toolkits
+                                           /streams-toolkit/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://build-${instance}-build.${namespace}.${clusterdomain}:8445/streams/rest/toolkits${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   application/json;
+                        proxy_read_timeout 10m;
+    }
+    location ~ ^/streams-build-resource/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         \/streams\/rest\/builds
+                                           /streams-build/instances/${instance}/${namespace};
+                        sub_filter         \/streams\/rest\/buildpool
+                                           /streams-buildpool/instances/${instance}/${namespace};
+                        sub_filter         \/streams\/rest\/productinstalls
+                                           /streams-install/instances/${instance}/${namespace};
+                        sub_filter         \/streams\/rest\/toolkits
+                                           /streams-toolkit/instances/${instance}/${namespace};
+                        sub_filter         \/streams\/rest\/resources
+                                           /streams-build-resource/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://build-${instance}-build.${namespace}.${clusterdomain}:8445/streams/rest/resources${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   application/json;
+                        proxy_read_timeout 10m;
+    }
+
+    ### HTML Pages
+    # Streams Console redirect for this Instance / Namespace
+    location ~ ^/streams-console/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(/*)$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        return 307         $scheme://$http_host/streams-console/instances/${instance}/${namespace}/streams/console;
+                        proxy_read_timeout 10m;
+    }
+    # Streams SWS root for this Instance / Namespace
+    location ~ ^/streams-console/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_set_header   Accept-Encoding "";
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        proxy_redirect     off;
+                        sub_filter         /streams/
+                                           /streams-console/instances/${instance}/${namespace}/streams/;
+                        sub_filter         /service/
+                                           /streams-console/instances/${instance}/${namespace}/service/;
+                        sub_filter_once    off;
+                        sub_filter_types   *;
+                        proxy_pass         https://${instance}-sws.${namespace}.${clusterdomain}:8443${suburi}$is_args$args;
+                        proxy_read_timeout 10m;
+    }
+    ## Streams REST API doc
+    # redirect
+    location ~ ^/streams-doc/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(/*)$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        return 307         $scheme://$http_host/streams-doc/instances/${instance}/${namespace}/html/rest/doc/index.html;
+                        proxy_read_timeout 10m;
+    }
+    location ~ ^/streams-doc/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_set_header   Accept-Encoding "";
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         /streams/html
+                                           /streams-doc/instances/${instance}/${namespace}/html;
+                        sub_filter         /streams/apiJson
+                                           /streams-doc/instances/${instance}/${namespace}/apiJson;
+                        sub_filter         /streams/rest/instances
+                                           /streams-rest/instances/${instance}/${namespace};
+                        sub_filter         /streams/rest/resources
+                                           /streams-resource/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://${instance}-sws.${namespace}.${clusterdomain}:8443/streams${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   *;
+                        proxy_read_timeout 10m;
+    }
+    ## Build REST API url
+    # redirect
+    location ~ ^/streams-build-doc/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(/*)$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        return 307         $scheme://$http_host/streams-build-doc/instances/${instance}/${namespace}/html/rest/doc/index.html;
+                        proxy_read_timeout 10m;
+    }
+    location ~ ^/streams-build-doc/instances/(?<instance>[^/]+)/(?<namespace>[^/]+)(?<suburi>/.*)?$ {
+                        access_by_lua_file /nginx_data/checkjwt.lua;
+                        proxy_http_version 1.1;
+                        proxy_set_header   Upgrade $http_upgrade;
+                        proxy_set_header   Connection "upgrade";
+                        proxy_set_header   Host $http_host;
+                        proxy_set_header   Accept-Encoding "";
+                        proxy_pass_header  Access-Control-Allow-Origin;
+                        sub_filter         /streams/rest/doc/html/images
+                                           /streams-build-doc/instances/${instance}/${namespace}/html/rest/doc/html/images;
+                        sub_filter         /streams/html
+                                           /streams-build-doc/instances/${instance}/${namespace}/html;
+                        sub_filter         /streams/rest/buildpool
+                                           /streams-buildpool/instances/${instance}/${namespace};
+                        sub_filter         /streams/rest/builds
+                                           /streams-build/instances/${instance}/${namespace};
+                        sub_filter         /streams/rest/productinstalls
+                                           /streams-install/instances/${instance}/${namespace};
+                        sub_filter         /streams/rest/resources
+                                           /streams-build-resource/instances/${instance}/${namespace};
+                        sub_filter         /streams/rest/toolkits
+                                           /streams-toolkit/instances/${instance}/${namespace};
+                        proxy_redirect     off;
+                        proxy_pass         https://build-${instance}-build.${namespace}.${clusterdomain}:8445/streams${suburi}$is_args$args;
+                        sub_filter_once    off;
+                        sub_filter_types   *;
+                        proxy_read_timeout 10m;
+    }

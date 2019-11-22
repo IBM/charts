@@ -1,0 +1,23 @@
+{{- include "sch.config.init" (list . "ibmRabbitmq.sch.chart.config.values") -}}
+** RabbitMQ may take a few minutes to become available. Please be patient. **
+
+The RabbitMQ AMQP port {{ .Values.rabbitmqNodePort }} can be accessed on the following DNS name from within your cluster: {{ include "sch.names.fullCompName" (list . .sch.chart.components.service) | quote }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+
+  echo Username      : {{ .Values.auth.rabbitmqUsername }}
+  echo Password      : $(kubectl get secret --namespace {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret)}} -o jsonpath="{.data.rabbitmq-password}" | base64 --decode)
+  echo Username      : {{ .Values.auth.managementUsername }}
+  echo Password      : $(kubectl get secret --namespace {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret)}} -o jsonpath="{.data.rabbitmq-management-password}" | base64 --decode)
+  
+  echo ErLang Cookie : $(kubectl get secret --namespace {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.authsecret)}} -o jsonpath="{.data.rabbitmq-erlang-cookie}" | base64 --decode)
+
+To Access the RabbitMQ Management interface:
+
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  {{ if .Values.tls.enabled }}
+  echo URL : https://127.0.0.1:15671
+  kubectl port-forward $POD_NAME 15671:15671 --namespace {{ .Release.Namespace }}
+  {{ else }}
+  echo URL : http://127.0.0.1:15672  
+  kubectl port-forward $POD_NAME 15672:15672 --namespace {{ .Release.Namespace }}
+  {{ end }}
+login 

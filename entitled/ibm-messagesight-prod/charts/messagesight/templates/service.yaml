@@ -1,0 +1,31 @@
+{{- include "sch.config.init" (list . "server.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-svc
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  ports:
+    - name: adminport
+      port: {{ .Values.adminPort }}
+      targetPort: {{ .Values.adminPort }}
+      protocol: TCP
+{{ if .Values.messagingPorts }}
+  {{- range  (.Values.messagingPorts) }}
+    - port: {{ . }}
+      targetPort: {{ . }}
+      protocol: TCP
+      name: messaging-{{ . }}
+  {{- end }}
+{{ end }}
+  selector:
+    app: {{ include "sch.names.appName" (list .) }}
+    release: {{ .Release.Name }}
+
+  externalIPs:
+{{ if required "At least one IP address must be provided for global.virtualIP!" .Values.global.virtualIP }}
+  {{- range  ( .Values.global.virtualIP ) }}
+    - {{ . | trim }}
+  {{- end }}
+{{ end }}

@@ -1,0 +1,74 @@
+# Licensed Materials - Property of IBM
+# IBM Order Management Software (5725-D10)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if eq (.Values.global.license | lower) "accept" }}
+{{ if and (.Values.appserver.ingress.enabled) (gt .Values.appserver.replicaCount 0.0) -}}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+{{- $autoIngressSecret := include "om-chart.auto-ingress-secret" . -}}
+{{- $contextList := .Values.appserver.ingress.contextRoots | default (list "smcfs" "sbc" "sma" "isccs" "wsc") -}}
+{{- $varSslEnabled := .Values.appserver.ingress.ssl.enabled }}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ template "om-chart.fullname" . }}-ingress
+  annotations:
+    {{- if .Values.appserver.ingress.controller }}
+    kubernetes.io/ingress.class: {{ .Values.appserver.ingress.controller | quote }}
+    {{- end }}
+    {{- if eq .Values.appserver.ingress.controller "nginx" }}
+    {{- if $varSslEnabled }}
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    {{- else }}
+    nginx.ingress.kubernetes.io/secure-backends: "false"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    {{- end }}
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    nginx.ingress.kubernetes.io/session-cookie-hash: "sha1"
+    {{- end }}
+    {{- if $varSslEnabled }}
+    ingress.kubernetes.io/secure-backends: "true"
+    ingress.kubernetes.io/backend-protocol: "HTTPS"
+    {{- else }}
+    ingress.kubernetes.io/secure-backends: "false"
+    ingress.kubernetes.io/backend-protocol: "HTTP"
+    {{- end }}
+    ingress.kubernetes.io/affinity: "cookie"
+    ingress.kubernetes.io/session-cookie-name: "route"
+    ingress.kubernetes.io/session-cookie-hash: "sha1"
+    {{- if .Values.appserver.ingress.annotations }}
+    {{- range $key, $value := .Values.appserver.ingress.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  {{- if and $varSslEnabled .Values.appserver.ingress.host }}
+  tls:
+  - hosts:
+    - {{ .Values.appserver.ingress.host }}
+    secretName: {{ .Values.appserver.ingress.ssl.secretname | default $autoIngressSecret }}
+  {{- end }}
+  rules:
+  - host: {{ .Values.appserver.ingress.host }}
+    http:
+      paths:
+{{- $varRoot := .}}
+{{- range $contextList }}
+{{- $ctxRoot := .}}
+{{- if $ctxRoot }}
+      - path: {{printf "/%s/" $ctxRoot | quote }}
+        backend:
+          serviceName: {{ template "om-chart.fullname" $varRoot }}
+          {{- if $varSslEnabled }}
+          servicePort: {{ $varRoot.Values.appserver.service.https.port | default 9443 }}
+          {{- else }}
+          servicePort: {{ $varRoot.Values.appserver.service.http.port | default 9080 }}
+          {{- end }}
+{{- end }}
+{{- end }}
+{{ end -}}
+{{ end -}}

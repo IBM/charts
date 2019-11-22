@@ -1,0 +1,137 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2019, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "streams-addon.service-provider-name" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "streams-addon.service-provider-name" . }}
+{{- include "streams-addon.defaultLabels" . | indent 4 }}
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "streams-addon.service-provider-name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "streams-addon.service-provider-name" . }}
+{{- include "streams-addon.defaultLabels" . | indent 8 }}
+{{- include "streams-addon.serviceability" . | indent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/service-provider-configmap.yaml") . | sha256sum }}
+{{- include "streams-addon.metering" . | indent 8 }}
+    spec:
+      volumes:
+        - name: sp-config            
+          configMap:
+            name: "{{ include "streams-addon.service-provider-configmap" . }}"
+        {{- if not .Values.zenCoreApi.noTls }}      
+        - name: helm-secret-mount
+          secret:
+            secretName: {{ .Values.zenCoreApi.helmSecrets | default "helm-secret" }}
+            items: 
+              - key: ca.cert.pem
+                path: ca.pem
+              - key: helm.cert.pem
+                path: cert.pem
+              - key: helm.key.pem
+                path: key.pem
+        {{- end }}
+        {{- if .Values.serviceProvider.enableHttps }} 
+        - name: internal-tls
+          secret:
+            secretName: internal-tls
+        {{- end }}
+        - name: {{ include "streams-addon.service-provider-pvc" . }}
+          persistentVolumeClaim:
+          {{- if .Values.serviceProvider.persistence.existingClaimName }}
+            claimName: {{ .Values.serviceProvider.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ include "streams-addon.service-provider-pvc" . }}
+          {{- end }}
+
+{{- include "streams-addon.podGeneralSecurityPolicies" . | indent 6 }}                      
+      securityContext:
+{{- include "streams-addon.podSecurityContext" . | indent 8 }}
+        
+      {{- if .Values.global.dockerPullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.global.dockerPullSecrets }}
+      {{- end }}
+      
+      {{- if .Values.global.serviceAccount }}
+      serviceAccountName: {{ .Values.global.serviceAccount }}
+      {{- end }}
+      
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- if .Values.global.dockerRegistryPrefix }}
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.serviceProvider.image.repository }}:{{ .Values.serviceProvider.image.tag }}"
+          {{- else }}
+          image: "{{ .Values.serviceProvider.image.repository }}:{{ .Values.serviceProvider.image.tag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.global.dockerPullPolicy }}
+          
+          securityContext:
+{{- include "streams-addon.containerSecurityContext" . | indent 12 }}
+      
+          env:
+            - name: LANG
+              value: en_US.UTF-8            
+            - name: TILLER_NAMESPACE
+              value: {{ .Values.zenCoreApi.tillerNamespace  | default .Release.Namespace }}           
+          
+          volumeMounts:
+            - name: sp-config
+              mountPath: "/var/streams/service-provider-config"
+           {{- if not .Values.zenCoreApi.noTls }} 
+            - name: "helm-secret-mount"
+              mountPath: "/etc/helm"
+           {{- end }}
+           {{- if .Values.serviceProvider.enableHttps }} 
+            - name: internal-tls
+              mountPath: "/etc/internal-tls"
+           {{- end }}           
+            - name: {{ include "streams-addon.service-provider-pvc" . }}
+              mountPath: /var/streams/serviceProvider
+              
+          livenessProbe:
+            exec:
+              command:
+              - ls
+              - /opt/ibm
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - ls
+              - /opt/ibm
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: {{ .Values.serviceProvider.resources.requests.cpu }}
+              memory: {{ .Values.serviceProvider.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.serviceProvider.resources.limits.cpu }}
+              memory: {{ .Values.serviceProvider.resources.limits.memory }}
+      affinity:
+      {{- include "streams-addon.nodeaffinity" . | indent 8 }}
+
+
+

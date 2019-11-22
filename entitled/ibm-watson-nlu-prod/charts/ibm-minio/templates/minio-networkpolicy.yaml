@@ -1,0 +1,34 @@
+---
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+{{- if .Values.networkPolicy.enabled }}
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ include "sch.names.fullName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.minioServer) | indent 6 }}
+  ingress:
+    - ports:
+        - port: {{ .Values.service.port }}
+      {{- if not .Values.networkPolicy.allowExternal }}
+      from:
+        - podSelector:
+            matchLabels:
+              {{ include "sch.names.fullName" (list .) }}-client: "true"
+      {{- end }}
+{{- end }}

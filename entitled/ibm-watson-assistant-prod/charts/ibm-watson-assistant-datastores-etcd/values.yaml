@@ -1,0 +1,67 @@
+# Default values for etcd.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  etcd:
+    # global.etcd.create - If set to true, the etcd cluster for watson assistant service is created during installation. Otherwise you have to provide your own etcd instance and the credentials.
+    create: true
+  image:
+    repository: ""
+
+creds:
+  image:
+    repository: "{{ tpl .Values.global.image.repository . }}"
+    name:       "conan-tools"
+    tag:        "20190809-0011"
+    pullPolicy: "IfNotPresent"
+
+
+config:
+  # Do not even think about changing this value.
+  nameOverride: "etcd3"
+
+  replicaCount: 3
+
+  resources:
+    limits:
+      # cpu limits removed for WA ICP deployments
+      memory: 256Mi
+    requests:
+      cpu: 15m
+      memory: 256Mi
+
+  # change this value to limit the number of threads ETCD will use, otherwise it will be set to node's
+  # number of cores. which will cause container killed by high CPU usage
+  maxEtcdThreads: 1
+
+  auth:
+    enabled: true
+    existingRootSecret: '{{ include "assistant.etcd.secretName" . }}'
+
+
+  persistence:
+    enabled: true
+    #useDynamicProvisioning: true
+
+  dataPVC:
+    accessMode: ReadWriteOnce
+
+    # specify the storageClassName you want to use
+    # if you don't specify a storageClassName it will use the default
+    storageClassName:
+
+    size: 10Gi
+
+  tls:
+    # Do not even think about changing this value.
+    enabled: "{{ .Values.global.etcd.tls.enabled }}"
+    existingTlsSecret: '{{ include "assistant.etcd.secretName" . }}'
+
+  # if true, don't delete the datastore objects during a helm delete
+  keep: "{{ .Values.global.keepDatastores }}"
+  clusterDomain: "{{ tpl .Values.global.clusterDomain . }}"
+
+  # Enabling pod disruption budget
+  podDisruptionBudget:
+    maxUnavailable: 1

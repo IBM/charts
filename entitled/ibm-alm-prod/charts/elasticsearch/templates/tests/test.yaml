@@ -1,0 +1,31 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullName" (list .) }}-test"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ include "sch.names.appName" (list .) }}-test
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{ include "alm.podSecurityContext" (list . "") | indent 2 }}
+  containers:
+    - name: "{{ include "sch.names.fullName" (list .) }}-test"
+      image: "{{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.baseImage.name}}:{{.Values.baseImage.tag}}"
+      command: ['/bin/sh']
+      args:  ['-c', 'curl -X GET "{{ include "sch.names.fullName" (list .) }}:{{ .Values.httpPort }}/_cat/health?v" | egrep "(green|yellow)"']
+      securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 8 }}
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: "beta.kubernetes.io/arch"
+            operator: In
+            values:
+            - {{ .Values.arch }}

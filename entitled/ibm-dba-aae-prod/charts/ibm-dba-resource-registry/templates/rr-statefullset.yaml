@@ -1,0 +1,239 @@
+{{- include "sch.config.init" (list . "sch.rr.config.values") -}}
+{{- $compName := "server" -}}
+{{- $pvcName := "rr-data-pvc" -}}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list . $compName) -}}
+{{- $volumeClaimTemplateName := include "sch.names.volumeClaimTemplateName" (list . $pvcName $statefulSetName) -}}
+{{- $label := (include "sch.metadata.labels.standard" (list . $compName)) -}}
+{{- $headlessService := include "sch.names.fullCompName" (list . "headless") -}}
+{{- $dnsBase := .Values.global.dnsBaseName -}}
+{{- $replicaCount := int .Values.replicaCount -}}
+{{- $namespace := .Release.Namespace -}}
+{{- $scriptName := include "sch.names.fullCompName" (list . "script") -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ $label | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ $label | indent 6 }}
+  serviceName: {{ $headlessService }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+{{ $label | indent 8 }}
+      annotations: {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering ) | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+{{- include "sch.affinity.podAntiAffinity" (list .) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . "sa") }}
+      securityContext:
+{{ include "ibm-dba-rr.pod.securitycontext" . | indent 8 }}
+      initContainers:
+      - name: peer-tls-init
+        image: {{ .Values.images.keytoolInitcontainer | quote }} 
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        securityContext:
+{{ include "ibm-dba-rr.container.securitycontext" . | indent 10 }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        env:
+        - name: CREATE_KEYPAIR
+          value: "true"
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: SUBJECT_ALT_NAMES
+          value: $(MY_POD_NAME).{{ $headlessService }}.{{ .Release.Namespace }}.{{ $dnsBase }},$(MY_POD_IP)
+        volumeMounts:
+        - name: global-ca
+          mountPath: /etc/predefined-ca
+        - name: tls-stores
+          mountPath: /shared/tls
+      containers:
+      - name: etcd
+        image: {{ .Values.images.resourceRegistry | quote }} 
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        securityContext:
+{{ include "ibm-dba-rr.container.securitycontext" . | indent 10 }}
+        ports:
+        - containerPort: 2380
+          name: peer
+        - containerPort: 2379
+          name: client
+        volumeMounts:
+        - name: {{ $volumeClaimTemplateName }}
+          mountPath: /etcd-data
+        - name: client-key-store
+          mountPath: /shared/resources/tls
+        - name: tls-stores
+          mountPath: /shared/tls
+        - name: scripts
+          mountPath: /shared/scripts
+        env:
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: ETCD_NAME
+          value: "$(MY_POD_NAME)"
+        - name: ETCD_CERT_FILE
+          value: /shared/resources/tls/client-cert.pem
+        - name: ETCD_KEY_FILE
+          value: /shared/resources/tls/client-key.pem
+        - name: ETCD_DATA_DIR
+          value: /etcd-data/data
+        - name: ETCD_ADVERTISE_CLIENT_URLS
+          value: "https://$(MY_POD_NAME).{{ $headlessService }}.{{ .Release.Namespace }}.{{ $dnsBase }}:2379"
+        - name: ETCD_LISTEN_CLIENT_URLS
+          value: "https://0.0.0.0:2379"
+        - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+          value: "https://$(MY_POD_NAME).{{ $headlessService }}.{{ .Release.Namespace }}.{{ $dnsBase }}:2380"
+        - name: ETCD_LISTEN_PEER_URLS
+          value: "https://0.0.0.0:2380"
+        {{- if gt $replicaCount 1 }}
+        - name: ETCD_INITIAL_CLUSTER_TOKEN
+          value: "etcd-cluster-k8s"
+        - name: ETCD_INITIAL_CLUSTER_STATE
+          value: "new"
+        - name: ETCD_INITIAL_CLUSTER
+          value: {{range $i, $e := until $replicaCount }}{{ $statefulSetName }}-{{ $e }}=https://{{ $statefulSetName }}-{{ $e }}.{{ $headlessService }}.{{ $namespace }}.{{ $dnsBase }}:2380,{{ end }}
+        {{- end }}
+        - name: ETCDCTL_API
+          value: "3"
+        - name: ETCD_PEER_CERT_FILE
+          value: "/shared/tls/keystore/keypair/tls.crt"
+        - name: ETCD_PEER_KEY_FILE
+          value: "/shared/tls/keystore/keypair/tls.key"
+        - name: ETCD_PEER_TRUSTED_CA_FILE
+          value: "/shared/resources/tls/ca-cert.pem"
+        - name: ETCD_AUTO_COMPACTION_RETENTION
+          value: 10h
+        - name: ETCD_AUTO_COMPACTION_MODE
+          value: "periodic"
+        - name: ETCD_ENABLE_V2
+          value: "false"
+{{- if .Values.logLevel }}
+        - name: ETCD_LOG_LEVEL
+          value: {{ .Values.logLevel | quote }}
+{{- end }}
+        - name: ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.resourceRegistry.adminSecretName }}
+              key: rootPassword
+        - name: READ_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.resourceRegistry.adminSecretName }}
+              key: readUser
+        - name: READ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.resourceRegistry.adminSecretName }}
+              key: readPassword
+        - name: WRITE_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.resourceRegistry.adminSecretName }}
+              key: writeUser
+        - name: WRITE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.resourceRegistry.adminSecretName }}
+              key: writePassword
+        args:
+        - /shared/scripts/setup.sh
+        {{- if .Values.livenessProbe.enabled }}
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -ec
+            - |
+              etcdctl --cacert=${ETCD_PEER_TRUSTED_CA_FILE} --user=root:${ROOT_PASSWORD} --endpoints="https://localhost:2379" --insecure-skip-tls-verify endpoint health
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        {{- end }}
+        {{- if .Values.readinessProbe.enabled }}
+        readinessProbe:
+          exec:
+            command:
+            - /shared/scripts/readiness-probe.sh
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        {{- end }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /shared/scripts/pre-stop.sh
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ $scriptName }}
+          defaultMode: 0755
+      - name: client-key-store
+        projected:
+          defaultMode: 0454
+          sources:
+          - secret:
+              name: {{ .Values.tls.tlsSecretName }}
+              items:
+              - key: tls.key
+                path: client-key.pem
+              - key: tls.crt
+                path: client-cert.pem
+          - secret:
+              name: {{ .Values.global.caSecretName }}
+              items:
+              - key: tls.crt
+                path: ca-cert.pem
+      - name: global-ca
+        secret:
+          secretName: {{ .Values.global.caSecretName}}
+      - name: tls-stores
+        emptyDir: {}
+{{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ $volumeClaimTemplateName }}
+    spec:
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      storageClassName: {{ .Values.persistence.storageClassName }}
+      {{- else }}
+      storageClassName: {{ .Values.persistence.storageClassName }}
+      {{- end }}
+      accessModes: 
+      - {{ .Values.persistence.accessMode | quote }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }} 
+{{- else }}
+      - name: {{ $volumeClaimTemplateName }}
+        emptyDir: {}
+{{- end -}}

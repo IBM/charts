@@ -1,0 +1,162 @@
+{{- include "sch.config.init" (list . "sch.rr.config.values") -}}
+{{- $compName := "server" -}}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list . $compName) -}}
+{{- $scriptName := include "sch.names.fullCompName" (list . "script") -}}
+{{- $label := (include "sch.metadata.labels.standard" (list . "script")) -}}
+{{- $headlessService := include "sch.names.fullCompName" (list . "headless") -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . "service") }}
+{{- $dnsBase := .Values.global.dnsBaseName -}}
+{{- $replicaCount := int .Values.replicaCount -}}
+{{- $namespace := .Release.Namespace -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $scriptName }}
+  labels:
+{{ $label | indent 4 }}
+data:
+  setup.sh: |-
+    #!/bin/bash
+
+    set -o errexit
+    set -o pipefail
+    set -o nounset
+
+    HOSTNAME="$(hostname -s)"
+    AUTH_OPTIONS="--cacert=${ETCD_PEER_TRUSTED_CA_FILE}"
+    ROOT_USER_OPTIONS="--user=root:${ROOT_PASSWORD}"
+    ETCDCTL_ENDPOINTS="{{range $i, $e := until $replicaCount }}https://{{ $statefulSetName }}-{{ $e }}.{{ $headlessService }}.{{ $namespace }}.{{ $dnsBase }}:2379,{{ end }}"
+    # Remove the last comma "," introduced in the string
+    export ETCDCTL_ENDPOINTS="$(sed 's/,/ /g' <<< $ETCDCTL_ENDPOINTS | awk '{$1=$1};1' | sed 's/ /,/g')"
+    echo "==> Start server ${HOSTNAME}"
+    echo "==> start endpoint is ${ETCDCTL_ENDPOINTS}"
+    # Functions
+    ## Store member id for later member replacement
+    store_member_id() {
+        while ! etcdctl $AUTH_OPTIONS $ROOT_USER_OPTIONS member list --insecure-skip-tls-verify >/dev/null 2>&1; do sleep 1; done
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} member list --insecure-skip-tls-verify | grep "$HOSTNAME" | awk '{ print $1}' | awk -F "," '{ print $1}' > "$ETCD_DATA_DIR/member_id"
+        exit 0
+    }
+    ## Check wether the member was succesfully removed from the cluster
+    should_add_new_member() {
+        return_value=0
+        local memberid=$(etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} member list --insecure-skip-tls-verify | grep "$HOSTNAME" | awk '{ print $1}' | awk -F "," '{ print $1}')
+        if (grep -E "^Member[[:space:]]+[a-z0-9]+ removed from cluster [a-z0-9]+$" "$(dirname "$ETCD_DATA_DIR")/member_removal.log" > /dev/null) || \
+    ! ([[ -d "$ETCD_DATA_DIR/member/snap" ]] && [[ -f "$ETCD_DATA_DIR/member_id" ]]); then
+          if [[ -n $memberid ]]; then
+            etcdctl --cacert=${ETCD_PEER_TRUSTED_CA_FILE} --user=root:${ROOT_PASSWORD} member remove --insecure-skip-tls-verify $memberid || true
+          fi
+          rm -rf $ETCD_DATA_DIR/*
+        else
+          if [[ -n $memberid ]]; then
+            return_value=1
+          else
+            rm -rf $ETCD_DATA_DIR/*
+          fi
+        fi
+        rm "$(dirname "$ETCD_DATA_DIR")/member_removal.log"
+        return $return_value
+    }
+    ## Checks whether there was a disaster or not
+    is_disastrous_failure() {
+        local endpoints_array=(${ETCDCTL_ENDPOINTS//,/ })
+        local active_endpoints=0
+
+        for e in "${endpoints_array[@]}"; do
+          if [[ "$e" != "$ETCD_ADVERTISE_CLIENT_URLS" ]] && etcdctl $AUTH_OPTIONS $ROOT_USER_OPTIONS endpoint health --endpoints="$e" --insecure-skip-tls-verify; then
+            active_endpoints=$((active_endpoints + 1))
+          fi
+        done
+
+        if [[ $active_endpoints -lt 1 ]]; then
+          true
+        else
+          false
+        fi
+    }
+    ## Configure RBAC
+    config_rbac() {
+      if [[ "$HOSTNAME" == "{{ $statefulSetName }}-0" ]]; then
+        echo "==> Begin to configure roles"
+        etcd > /dev/null 2>&1 &
+        ETCD_PID=$!
+        sleep 5
+        export ETCDCTL_ENDPOINTS="https://{{ $statefulSetName }}-0.{{ $headlessService }}.{{ $namespace }}.{{ $dnsBase }}:2379"
+        while ! etcdctl $AUTH_OPTIONS $ROOT_USER_OPTIONS member list --insecure-skip-tls-verify >/dev/null 2>&1; do sleep 5; echo "==>Member list"; done
+        echo "==> Cluster started. Begin to add users..."
+        CONTRIBUTORS_KEY=/dba/appstudio/contributors
+        APPRESOURCES_KEY=/dba/appresources
+        LEASECOMPARE_KEY=/dba/IBM_WORKFLOW
+        CONTRIBUTORS_READ=contributors-read
+        CONTRIBUTORS_WRITE=contributors-write
+        RESOURCES_READ=resources-read
+        RESOURCES_WRITE=resources-write
+        LEASECOMPARE_WRITE=leasecompare-write
+        etcdctl ${AUTH_OPTIONS} user add root:${ROOT_PASSWORD} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} auth enable --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} user add ${WRITE_USER}:${WRITE_PASSWORD} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} user add ${READ_USER}:${READ_PASSWORD} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role add ${RESOURCES_READ} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role add ${RESOURCES_WRITE} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role add ${CONTRIBUTORS_READ} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role add ${CONTRIBUTORS_WRITE} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role add ${LEASECOMPARE_WRITE} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role grant-permission ${RESOURCES_READ} --prefix=true read ${APPRESOURCES_KEY} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role grant-permission ${RESOURCES_WRITE} --prefix=true readwrite ${APPRESOURCES_KEY} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role grant-permission ${CONTRIBUTORS_READ} --prefix=true read ${CONTRIBUTORS_KEY} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role grant-permission ${CONTRIBUTORS_WRITE} --prefix=true readwrite ${CONTRIBUTORS_KEY} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} role grant-permission ${LEASECOMPARE_WRITE} --prefix=true readwrite ${LEASECOMPARE_KEY} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} user grant-role ${WRITE_USER} ${RESOURCES_WRITE} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} user grant-role ${WRITE_USER} ${CONTRIBUTORS_WRITE} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} user grant-role ${WRITE_USER} ${LEASECOMPARE_WRITE} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} user grant-role ${READ_USER} ${RESOURCES_READ} --insecure-skip-tls-verify
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} user grant-role ${READ_USER} ${CONTRIBUTORS_READ} --insecure-skip-tls-verify
+        kill "$ETCD_PID"
+        sleep 5
+      fi
+    }
+    if [ ! -d "${ETCD_DATA_DIR}" ]; then
+      echo "==> Creating data dir ..."
+      mkdir -p "${ETCD_DATA_DIR}"
+      store_member_id &
+      config_rbac
+    else
+      echo "==> Restart node..."
+      if is_disastrous_failure; then
+        echo "==> Cluster died! Reinitializing!"
+        rm -rf $ETCD_DATA_DIR
+        mkdir -p "${ETCD_DATA_DIR}"
+        store_member_id &
+        config_rbac
+      elif should_add_new_member; then
+        echo "New member to the existing cluster..."
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} member add "$HOSTNAME" --insecure-skip-tls-verify --peer-urls="https://${HOSTNAME}.{{ $headlessService }}.{{ $namespace }}.{{ $dnsBase }}:2380" | grep "^ETCD_" > "$ETCD_DATA_DIR/new_member_envs"
+        sed -ie 's/^/export /' "$ETCD_DATA_DIR/new_member_envs"
+        source "$ETCD_DATA_DIR/new_member_envs"
+        store_member_id &
+      else
+        echo "Update member..."
+        etcdctl ${AUTH_OPTIONS} ${ROOT_USER_OPTIONS} member update "$(cat "$ETCD_DATA_DIR/member_id")" --insecure-skip-tls-verify --peer-urls="https://${HOSTNAME}.{{ $headlessService }}.{{ $namespace }}.{{ $dnsBase }}:2380"
+      fi
+    fi
+    exec /usr/local/bin/etcd
+  pre-stop.sh: |-
+    #!/bin/bash
+
+    set -o errexit
+    set -o pipefail
+    set -o nounset
+    HOSTNAME="$(hostname -s)"
+    ETCDCTL_ENDPOINTS="{{range $i, $e := until $replicaCount }}https://{{ $statefulSetName }}-{{ $e }}.{{ $headlessService }}.{{ $namespace }}.{{ $dnsBase }}:2379,{{ end }}"
+    export ETCDCTL_ENDPOINTS="$(sed 's/,/ /g' <<< $ETCDCTL_ENDPOINTS | awk '{$1=$1};1' | sed 's/ /,/g')"
+    etcdctl --cacert=${ETCD_PEER_TRUSTED_CA_FILE} --user=root:${ROOT_PASSWORD} member remove --insecure-skip-tls-verify "$(cat "$ETCD_DATA_DIR/member_id")" > "$(dirname "$ETCD_DATA_DIR")/member_removal.log" 2>&1
+  readiness-probe.sh: |-
+    #!/bin/bash
+    set -o errexit
+    set -o pipefail
+    set -o nounset
+    if etcdctl --cacert=${ETCD_PEER_TRUSTED_CA_FILE} --user=root:${ROOT_PASSWORD} --insecure-skip-tls-verify --endpoints="https://{{ $serviceName }}:2379" endpoint health > /dev/null; then
+      etcdctl --cacert=${ETCD_PEER_TRUSTED_CA_FILE} --user=root:${ROOT_PASSWORD} --insecure-skip-tls-verify --endpoints="https://localhost:2379" endpoint health
+    else
+      timeout 2 bash -c "</dev/tcp/localhost/2379"
+    fi

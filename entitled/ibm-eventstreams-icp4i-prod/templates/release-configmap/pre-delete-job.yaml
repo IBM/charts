@@ -1,0 +1,68 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Runs a job to delete release configmap when deleting install
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
+{{ $namePrefix := .sch.chart.components.essential.releaseDeleteJob.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is essential
+{{ $compName := .sch.chart.components.essential.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# Name of the new temporary service account
+{{ $serviceAccount := .sch.chart.components.essential.releaseServiceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount) -}}
+# Name of configmap to delete
+{{ $releaseConfigMap := .sch.chart.components.essential.releaseConfigMap.name -}}
+{{ $releaseConfigMapName := include "sch.names.fullCompName" (list . $releaseConfigMap) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed
+    "helm.sh/hook-weight": "5"
+spec:
+  template:
+    metadata:
+      name: {{ $name | quote }}
+      labels:
+{{ $labels | indent 8 }}
+        job: {{ $name | quote }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.pod) | indent 8 }}
+      affinity:
+{{ include "ibm-eventstreams.customNodeaffinity" (list .) | indent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: {{ $name | quote }}
+          image: {{ include "eventstreams.image" (list . "eventstreams-kubectl" .Values.global.image.imageTags.kubectlTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 12 }}
+          securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
+          command:
+            - sh
+            - -c
+            - "kubectl delete configmap {{ $releaseConfigMapName }} -n {{ .Release.Namespace }} --ignore-not-found"
+{{ end -}}

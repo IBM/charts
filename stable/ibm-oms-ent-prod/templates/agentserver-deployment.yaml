@@ -1,0 +1,220 @@
+# Licensed Materials - Property of IBM
+# IBM Order Management Software (5725-D10)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if eq (.Values.global.license | lower) "accept" }}
+{{ $global := . }}
+{{- $sysOverridesInitPath := "/opt/ssfs/system_overrides.properties.init" }}
+{{ $sysOverridesPath := "/opt/ssfs/runtime/properties/system_overrides.properties" }}
+{{ if .Values.omserver -}}
+{{ range .Values.omserver.servers -}}
+{{ $inter := . }}
+{{ range $inter.name -}}
+{{ if . -}}
+{{- include "sch.config.init" (list $global "om-chart.sch.chart.config.values") -}}
+{{- $serverNameUnQuote := . -}}
+{{- $serverName := . | quote -}}
+{{- $serverNameLow := . | lower -}}
+{{- $varServerStateDir := "/opt/ssfs/runtime/serverstate" }}
+{{- $varServerStateJvmArg := (printf "%s=%s" "-Dserver.state.dir" $varServerStateDir) }}
+{{- $readyProbePeriod := 15 }}
+{{- $readinessFailRestartAfterMinutes := $global.Values.omserver.common.readinessFailRestartAfterMinutes | default 10 }}
+{{- $varReadinessFailRestartAfterMinutes := $inter.readinessFailRestartAfterMinutes | default $readinessFailRestartAfterMinutes }}
+{{- $readyFailRestartSeconds := (mul $varReadinessFailRestartAfterMinutes 60) | default 600 }}
+{{- /* for agent liveness check is not appplicable hence hardcoding livenessProbeDelay */}}
+{{- $liveProbeBeginDelaySecs := 60 }}
+{{- $liveFailThreshold := add (div (sub $readyFailRestartSeconds $liveProbeBeginDelaySecs) $readyProbePeriod) 1 }}
+{{- $readyFailThreshold := div $readyFailRestartSeconds $readyProbePeriod }}
+{{- $varJvmArgs := $inter.jvmArgs | default $global.Values.omserver.common.jvmArgs -}}
+{{- $varReplicaCount := $inter.replicaCount | default $global.Values.omserver.common.replicaCount -}}
+{{- $varResources := $inter.resources | default $global.Values.omserver.common.resources -}}
+{{- $varNodeAffinity := $inter.nodeAffinity | default $global.Values.omserver.common.nodeAffinity -}}
+{{- $varPodAffinity := $inter.podAffinity | default $global.Values.omserver.common.podAffinity -}}
+{{- $varPodAntiAffinity := $inter.podAntiAffinity | default $global.Values.omserver.common.podAntiAffinity -}}
+{{- $varTolerations := $inter.tolerations | default $global.Values.omserver.common.tolerations }}
+{{- $varCustLabels := $inter.podLabels | default $global.Values.omserver.common.podLabels }}
+{{- $custLabels := $varCustLabels | default (dict) }}
+{{- $stdPodLabel := "serverName" }}
+{{- $stdPodLabelVal := $serverNameLow }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "om-chart.fullname" $global }}-{{ $serverNameLow }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $global "" (dict $stdPodLabel $stdPodLabelVal)) | indent 4 }}
+spec:
+  replicas: {{ $varReplicaCount | default 1 }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list $global "" (set $custLabels $stdPodLabel $stdPodLabelVal)) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list $global "" (set $custLabels $stdPodLabel $stdPodLabelVal)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list $global $global.sch.chart.metering) | indent 8 }}
+    spec:
+{{- with $varTolerations }}
+      tolerations:
+{{ toYaml . | indent 6 }}
+{{- end }}
+      affinity:
+{{- include "om-chart.nodeAffinity" (list $global $varNodeAffinity) | indent 8 }}
+{{- include "om-chart.podAffinity" (list $global $varPodAffinity) | indent 8 }}
+{{- include "om-chart.podAntiAffinity" (list $global $varPodAntiAffinity $stdPodLabel $stdPodLabelVal) | indent 8 }}
+      serviceAccountName: {{ $global.Values.global.serviceAccountName | default "default" }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: {{ $global.Values.global.persistence.securityContext.fsGroup | default 0 }}
+        supplementalGroups: [{{ $global.Values.global.persistence.securityContext.supplementalGroup | default 0 }}]
+      {{- if and ($global.Values.datasetup.loadFactoryData) (eq $global.Values.datasetup.loadFactoryData "install") }}
+      initContainers:
+      - name: {{ template "om-chart.fullname" $global }}-{{ $serverNameLow }}-init
+        image: "{{ $global.Values.global.image.repository }}/{{ $global.Values.omserver.image.name }}:{{ $global.Values.omserver.image.tag }}"
+        securityContext:
+          privileged: false
+          runAsUser: 1000
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command: ['/bin/bash', '-c']
+        args:
+        - 'touch /opt/ssfs/runtime/initfile && while [ -z $(find /shared -maxdepth 1 -newer /opt/ssfs/runtime/initfile -name datasetup.complete) ]; do echo "datasetup not complete $(date +%Y-%m-%d.%H.%M.%S)"; sleep 30; done; echo "datasetup found complete $(date +%Y-%m-%d.%H.%M.%S)"'
+        volumeMounts:
+        - name: {{ $global.Values.global.persistence.claims.name }}
+          mountPath: "/shared"
+      {{- end }}
+      containers:
+      - name: {{ template "om-chart.fullname" $global }}-{{ $serverNameLow }}
+        image: "{{ $global.Values.global.image.repository }}/{{ $global.Values.omserver.image.name }}:{{ $global.Values.omserver.image.tag }}"
+        imagePullPolicy: {{ $global.Values.omserver.image.pullPolicy }}
+        env:
+        - name: OM_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OM_RELEASE
+          value: {{ $global.Release.Name }}
+        - name: dbpassword
+          valueFrom:
+            secretKeyRef:
+              name: {{ $global.Values.global.appSecret }}
+              key: dbpassword
+        - name: LOG_FORMAT
+          value: {{ $global.Values.global.log.format | default "json" }}
+{{- with $global.Values.global.envs }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+        resources:
+{{ toYaml $varResources | indent 10 }}
+        securityContext:
+          privileged: false
+          runAsUser: 1000
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/bash", "-c"]
+        {{- $commonArg := printf "%s %s %s %s" "/opt/ssfs/evaluateEnvs.sh" $sysOverridesInitPath $sysOverridesPath "&& "}}
+        {{- if $varJvmArgs }}
+        args:
+        - '{{ $commonArg }} 
+        /opt/ssfs/runtime/bin/agentserver.sh -jvmargs {{ printf "%s %s" $varJvmArgs $varServerStateJvmArg | quote }} {{ $serverName }}'
+	      {{- else }}
+        args:
+        - '{{ $commonArg }} 
+        /opt/ssfs/runtime/bin/agentserver.sh -jvmargs {{ printf "%s" $varServerStateJvmArg | quote }} {{ $serverName }}'
+        {{- end }}
+        workingDir: "/opt/ssfs/runtime/"
+        volumeMounts:
+        - name: {{ $global.Values.global.persistence.claims.name }}
+          mountPath: "/shared/"
+        {{- if $global.Values.global.mq.bindingConfigName }}
+        - name: binding-config
+          mountPath: {{ $global.Values.global.mq.bindingMountPath | quote }}
+          subPath: .bindings
+        {{- end }}
+        - name: config
+          mountPath: "/opt/ssfs/evaluateEnvs.sh"
+          subPath: evaluateEnvs.sh
+        - name: config
+          mountPath: "/opt/ssfs/agentStartupTest.sh"
+          subPath: agentStartupTest.sh
+        - name: config
+          mountPath: "{{ $sysOverridesInitPath }}"
+          subPath: system_overrides.properties
+        {{- if $global.Values.global.customerOverrides }}
+        - name: config
+          mountPath: "/opt/ssfs/runtime/properties/customer_overrides.properties"
+          subPath: customer_overrides.properties
+        {{- end }}
+        # - name: host-timezone
+        #   mountPath: /etc/localtime
+        livenessProbe:
+          exec:
+            command:
+            - '/bin/bash'
+            - '-c'
+            - '/opt/ssfs/agentStartupTest.sh {{ $varServerStateDir }} {{ printf "%s--%s_*" $serverNameUnQuote $serverNameUnQuote | quote }} {{ div $readyFailRestartSeconds 60 }}'
+          initialDelaySeconds: {{ $liveProbeBeginDelaySecs }}
+          {{- /* check for liveness every n seconds */}}
+          periodSeconds: {{ $readyProbePeriod }}
+          {{- /* A successful probe must return in less than 1 seconds */}}
+          timeoutSeconds: 1
+          failureThreshold: {{ $liveFailThreshold }}
+        readinessProbe:
+          exec:
+            command:
+            - '/bin/bash'
+            - '-c'
+            - '/opt/ssfs/agentStartupTest.sh {{ $varServerStateDir }} {{ printf "%s--%s_*" $serverNameUnQuote $serverNameUnQuote | quote }} {{ div $readyFailRestartSeconds 60 }}'
+          initialDelaySeconds: 1
+          {{- /* check for readiness every n seconds */}}
+          periodSeconds: {{ $readyProbePeriod }}
+          {{- /* A successful probe must return in less than 1 seconds */}}
+          timeoutSeconds: 1
+          failureThreshold: {{ $readyFailThreshold }}
+      volumes:
+      - name: {{ $global.Values.global.persistence.claims.name }}
+        persistentVolumeClaim:
+          claimName: {{ template "om-chart.fullname" $global }}-{{ $global.Values.global.persistence.claims.name | lower }}
+      - name: config
+        configMap:
+          name: {{ template "om-chart.fullname" $global }}-config
+          items:
+          - key: evaluateEnvs.sh
+            path: evaluateEnvs.sh
+            mode: 0754
+          - key: agentStartupTest.sh
+            path: agentStartupTest.sh
+            mode: 0754
+        {{- if $global.Values.global.customerOverrides }}
+          - key: customer_overrides.properties
+            path: customer_overrides.properties
+        {{- end }}
+          - key: system_overrides.properties
+            path: system_overrides.properties
+      - name: secret
+        secret:
+          secretName: {{ $global.Values.global.appSecret }}
+      {{- if $global.Values.global.mq.bindingConfigName }}
+      - name: binding-config
+        configMap:
+          name: {{ $global.Values.global.mq.bindingConfigName }}
+      {{- end }}
+      # - name: host-timezone
+      #   hostPath:
+      #     path: /etc/localtime
+---
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}

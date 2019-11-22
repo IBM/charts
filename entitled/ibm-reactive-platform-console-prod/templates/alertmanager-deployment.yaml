@@ -1,0 +1,144 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.alertmanager.compName -}}
+{{- $name := .sch.chart.components.alertmanager.deployment.name -}}
+
+{{- if .Values.createAlertManager -}}
+apiVersion: {{ .Values.deploymentApiVersion }}
+kind: Deployment
+metadata:
+  labels:
+    appName: {{ $name }}-{{ .Release.Name }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  name: prometheus-alertmanager
+spec:
+  replicas: 1
+
+  strategy:
+    # Always Recreate to ensure the PVs get released. It's not possible to have two replicas sharing a PV during deployment.
+    type: Recreate
+    # Needed for helm upgrade to succeed.
+    rollingUpdate: null
+
+  selector:
+    matchLabels:
+      run: prometheus
+      component: alertmanager
+
+  template:
+    metadata:
+      annotations:
+        checksum/alertmanager-config: {{ (.Files.Glob "alertmanager/*").AsConfig | sha256sum }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: {{ template "name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: alertmanager
+        # Deprecated - these should be removed eventually. Kept to support upgrades with the old labels.
+        run: prometheus
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "ibm-reactive-platform-console-prod.nodeaffinity" . | indent 6 }}
+      {{ if .Values.podUID }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.podUID }}
+      {{ end }}
+      {{ if .Values.imageCredentials.credentials }}
+      imagePullSecrets:
+      - name: {{ .Values.imageCredentials.credentials }}
+      {{ end }}
+      serviceAccountName: default
+      containers:
+        - name: prometheus-alertmanager
+          image: {{ tpl .Values.alertManagerImage . }}:{{ .Values.alertManagerVersion }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podUID }} 
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: {{ default .Values.defaultCPURequest .Values.alertManagerCPURequest }}
+              memory: {{ default .Values.defaultMemoryRequest .Values.alertManagerMemoryRequest }}
+            limits:
+              memory: {{ default .Values.defaultMemoryLimit .Values.alertManagerMemoryLimit }}
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          args:
+            - --config.file=/etc/config/alertmanager.yml
+            - --storage.path=/data
+            - --cluster.listen-address=$(POD_IP):6783
+            {{ if .Values.esConsoleURL -}}
+            - --web.external-url={{ .Values.esConsoleURL }}/service/alertmanager
+            - --web.route-prefix=/
+            {{ end }}
+          ports:
+            - containerPort: 9093
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+            timeoutSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9093
+            timeoutSeconds: 30
+            initialDelaySeconds: 30
+
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+            - name: data-volume
+              mountPath: /data
+
+        - name: prometheus-alertmanager-configmap-reload
+          image: {{ tpl .Values.configMapReloadImage . }}:{{ .Values.configMapReloadVersion }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podUID }} 
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: {{ default .Values.defaultCPURequest .Values.configmapReloadCPURequest }}
+              memory: {{ default .Values.defaultMemoryRequest .Values.configmapReloadMemoryRequest }}
+            limits:
+              memory: {{ default .Values.defaultMemoryLimit .Values.configmapReloadMemoryLimit }}
+          args:
+            - --volume-dir=/etc/config
+            - --webhook-url=http://127.0.0.1:9093/-/reload
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+              readOnly: true
+
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ .Values.alertManagerConfigMap }}
+        - name: data-volume
+          {{ if .Values.usePersistentVolumes }}
+          persistentVolumeClaim:
+            claimName: alertmanager-storage
+          {{ else }}
+          emptyDir: {}
+          {{ end }}
+{{ end }}

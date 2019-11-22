@@ -1,0 +1,175 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+{{ $repository := trimSuffix "/" .Values.image.repository -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+      app.kubernetes.io/component: {{ $compName }}
+  {{ if .Values.autoscaling.enabled -}}
+  replicas: {{ .Values.autoscaling.minReplicas | default 1 }}
+  {{- else -}}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  minReadySeconds: 45
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        checksum/config.configmap: {{ include (print $.Template.BasePath "/probe-tivolieif-config-configmap.yaml") . | sha256sum }}
+        checksum/rules.configmap: {{ include (print $.Template.BasePath "/probe-tivolieif-rules-configmap.yaml") . | sha256sum }}
+    spec:
+      #https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: interfaces-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: omni.dat
+              path: omni.dat
+        - name: rules-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: tivoli_eif.rules
+              path: tivoli_eif.rules
+        {{ if .Values.probe.rulesFile.taddm }}
+        - name: taddm-rules-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: tivoli_eif_taddm.rules
+              path: tivoli_eif_taddm.rules
+        {{- end }}
+        {{ if .Values.probe.rulesFile.tpc }}
+        - name: tpc-rules-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: tivoli_eif_tpc.rules
+              path: tivoli_eif_tpc.rules
+        {{- end }}
+        {{ if .Values.probe.rulesFile.tsm }}
+        - name: tsm-rules-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: tivoli_eif_tsm.rules
+              path: tivoli_eif_tsm.rules
+        {{- end }}
+        - name: props-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: tivoli_eif.props
+              path: tivoli_eif.props
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 2001
+      containers:
+        - name: tivolieif
+          image: "{{ .Values.image.repository}}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            privileged: false
+            allowPrivilegeEscalation: false
+            {{/* readOnlyRootFilesystem must be false to allow probe to create interfaces file */}}
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          env:
+          - name: LICENSE
+            value: {{ .Values.license | default "not accepted" }}
+          - name: PROBE_NAME
+            value: "nco_p_tivoli_eif"
+          ports:
+            - name: eif-port
+              containerPort: 9998
+              protocol: TCP
+          volumeMounts:
+          - name: interfaces-file
+            mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+            subPath: omni.dat
+          - name: props-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/tivoli_eif.props
+            subPath: tivoli_eif.props
+          - name: rules-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/tivoli_eif.rules
+            subPath: tivoli_eif.rules
+          {{ if .Values.probe.rulesFile.taddm }}
+          - name: taddm-rules-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/extensions/taddm/tivoli_eif_taddm.rules
+            subPath: tivoli_eif_taddm.rules
+          {{- end }}
+          {{ if .Values.probe.rulesFile.tpc }}
+          - name: tpc-rules-file
+            mountPath: /opt/IBM/tivoli/ProbeExtensions/eif/IBM_TPC/tivoli_eif_tpc.rules
+            subPath: tivoli_eif_tpc.rules
+          {{- end }}
+          {{ if .Values.probe.rulesFile.tsm }}
+          - name: tsm-rules-file
+            mountPath: /opt/IBM/tivoli/ProbeExtensions/eif/IBM_TSM/tivoli_eif_tsm.rules
+            subPath: tivoli_eif_tsm.rules
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:8080/probe/common
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: eif-port
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{ if .Values.global.image.secretName -}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}

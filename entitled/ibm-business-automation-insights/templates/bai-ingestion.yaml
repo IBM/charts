@@ -1,0 +1,65 @@
+
+{{ if .Values.ingestion.install -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-bai-ingestion
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      annotations:
+        productName: "IBM Cloud Pak for Automation - Business Automation Insights"
+        productID: "5737-I23-BAI"
+        productVersion: "19.0.2"
+      labels:
+        app: {{ template "ibm-bai.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: bai-ingestion
+    spec:
+{{ include "bai.nodeaffinity" . | indent 6 }}
+{{- if and .Values.imageCredentials .Values.imageCredentials.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.imageCredentials .Values.imageCredentials.registry }}
+      imagePullSecrets:
+        - name: {{ .Release.Name }}-bai-docker-secret
+  {{- end }}
+{{- end }}
+      serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+      initContainers:
+        - name: wait-bai-flink
+          image: {{ .Values.initImage.image.repository }}:{{ .Values.initImage.image.tag }}
+          {{- if .Values.imagePullPolicy }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          {{- end}}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 9999
+          command: ['sh', '-c',
+                'until wget "https://{{ .Release.Name }}-bai-flink-jobmanager:8081/overview" -qO- -T 5 --no-check-certificate ;
+                do echo Waiting for Flink cluster to start...; sleep 2; done;']
+      containers:
+      - name: bai-ingestion
+        image: {{ .Values.ingestion.image.repository }}:{{ .Values.ingestion.image.tag }}
+        {{- if .Values.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        {{- end}}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 9999
+{{ include "jobs.probes" . | indent 8 }}
+{{ include "jobs.envVars" (dict "Values" .Values "Release" .Release "Parallelism" .Values.ingestion.parallelism "RecoveryPath" .Values.ingestion.recoveryPath "IgnoreES" "true") | indent 8 }}
+{{ include "jobs.volumeMounts" . | indent 8 }}
+{{ include "jobs.volumes" . | indent 6 }}
+      restartPolicy: Never
+{{- end }}
+

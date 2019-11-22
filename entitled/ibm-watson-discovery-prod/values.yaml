@@ -1,0 +1,945 @@
+#keeping global name temporarily, modify global to a different name
+global:
+  license: "not accepted"
+  icpDockerRepo: ""
+  licenseFileName: "LICENSES/LICENSE-discovery"
+  icp:
+    # These values are needed to get the wire-ranker components to work
+    # global.icp.masterHostname - Hostname of the ICP cluster Master node - i.e., the name where you login to the cluster https://{{ masterHostname }}:8443, and where docker repository is running.
+    # If the master node is not an DNS resolvable name (e.g., it is "mycluster.icp"), then global.icp.masterIP has to be also specified.
+    masterHostname: ""
+    # global.icp.masterIP - IP (v4) address of the master node. Has to be specified if the global.icp.masterHostname cannot be resolved inside the pods (i.e., if the global.icp.masterHostname is not a valid DNS entry). This IP address has to be accessible from inside of the cluster.
+    masterIP: ""
+  image:
+    # ibm-minio chart uses this key to prefix its images
+    repository: ""
+  sdu:
+    enabled: true
+  sch:
+    enabled: false
+  wire:
+    # Enable wire subchart
+    enabled: true
+    # Disable Minio dependency in wire subchart
+    enableMinio: false
+  appName: "watson-discovery"
+  serviceAccount:
+    create: true
+    name: ""
+  privilegedRbac:
+    create: true
+  privilegedServiceAccount:
+    create: true
+    name: ""
+  imagePullSecretName: ""
+  tls:
+    clusterDomain: "cluster.local"
+  metering:
+    productName: "IBM Watson Discovery for IBM Cloud Pak for Data"
+    productID: "ICP4D-addon-5802bdd0bc424e2488698c0a8f82cfb8-discovery"
+    productVersion: "2.0.0"
+  helmTest:
+    image:
+      repository: icp-util
+      tag: "1.0.6"
+    resources:
+      requests:
+        memory: "100Mi"
+        cpu: "100m"
+      limits:
+        memory: "200Mi"
+        cpu: "200m"
+  tlsJob:
+    image:
+      repository: icp-util
+      tag: "1.0.6"
+    resources:
+      requests:
+        memory: 100Mi
+        cpu: '200m'
+      limits:
+        memory: 200Mi
+        cpu: '500m'
+  #global.deploymentType Valid values are Development or Production. A Production deployment is scaled up i.e. a higher number of replicas.
+  deploymentType: "Development"
+
+arch: "amd64"
+runAsUser: 60001
+
+tooling:
+  replicas:
+  resources:
+    requests:
+      cpu: "0.1"
+      memory: 2Gi
+    limits:
+      cpu: "0.2"
+      memory: 4Gi
+  image:
+    repository: tooling
+    tag: "5.0.25"
+  toolingPathTemplate: '{{ printf "/discovery/%s" .Release.Name }}'
+  backend:
+    port: 60443
+
+wcn:
+  schConfigName: "discovery.sch.chart.config.values"
+  autoscaling:
+    enabled: true
+    minReplicas: '{{ include "ibmWcnAddon.replicas" . }}'
+    maxReplicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 100Mi
+    limits:
+      cpu: 500m
+      memory: 150Mi
+  serviceAccount:
+    name: '{{ include "ibmWatsonDiscovery.serviceAccountName" . }}'
+  privilegedServiceAccount:
+    name: '{{ include "ibmWatsonDiscovery.privilegedServiceAccountName" . }}'
+  addon:
+    disableUpgrade: true
+    networkPolicy:
+      additionalLabels: {"trainingJob": "RANKER"}
+      enabled: true
+    tls:
+      image:
+        repository: opencontent-common-utils
+        tag: 1.1.2
+    productImages: 4
+    displayName: "Watson Discovery"
+    shortDescription: "Find answers and uncover insights in your complex business content."
+    longDescription: "The IBM Watson Discovery add-on is an AI-powered search and content analytics engine that enables you to find answers and uncover insights that hide in your complex business content. With the Smart Document Understanding training interface, Watson Discovery can learn where answers live in your content based on a visual understanding of your documents.<br><br>Want to do more? These Watson add-ons can help:<br><br><ul><li>Enhance Watson Discovery's ability to understand domain-specific language with Watson Knowledge Studio.</li><li>Surface answers to users through a conversational dialog driven by Watson Assistant.</li></ul>"
+    deployDocs: https://docs-icpdata.mybluemix.net/docs/content/SSQNUZ_current/com.ibm.icpdata.doc/watson/discovery-install.html
+    productDocs: https://docs-icpdata.mybluemix.net/docs/content/SSQNUZ_current/com.ibm.icpdata.doc/watson/discovery.html
+    apiReferenceDocs: https://cloud.ibm.com/apidocs/discovery-data
+    gettingStartedDocs: https://cloud.ibm.com/docs/services/discovery-data
+    serviceId: "discovery"
+    maxDeployments: 1
+    maxInstances: 1
+    instanceId: "default"
+    organizationId: "ba4ab788-68a9-492b-87da-9179cb1e6541"
+    accountId: "02a92df0-657c-43c9-94fc-2280450b1e0b"
+    planId: "cec95e99-75b8-4e2f-a176-8687f31597fd"
+  addonService:
+    replicas: '{{ include "ibmWcnAddon.replicas" . }}'
+    port: 5000
+    image:
+      repository: wcn-addon
+      tag: "1.50.2"
+      containerPort: 5000
+      imagePullPolicy: Always
+  backendService:
+    name: '{{ include "sch.names.fullCompName" (list . "gateway" )}}'
+    nameTemplate: ""
+    namespace: ""
+    port: 60443
+    rewriteTarget: "/wd-api/"
+    secure: true
+    nginxDirectives:
+      - "proxy_read_timeout 3m;"
+  tooling:
+    enabled: true
+    name: '{{ include "sch.names.fullCompName" (list . "tooling" )}}'
+    nameTemplate: ""
+    namespace: ""
+    port: 4000
+    rewriteTarget: ""
+    secure: true
+    nginxDirectives:
+      - "proxy_read_timeout 3m;"
+      - "proxy_http_version 1.1;"
+
+core:
+  image:
+    core:
+      repository: ibm-wex-ee
+      tag: "12.0.3.1055"
+      pullPolicy: Always
+    wksml:
+      repository: ibm-wex-wksml
+      tag: "12.0.3.1055"
+      pullPolicy: Always
+
+  persistence:
+    useDynamicProvisioning: true
+
+  common:
+    persistence:
+      storageClassName: ""
+      size: "100Gi"
+      selector:
+        label: ""
+        value: ""
+
+  gateway:
+    replica:
+    minAvailable: 1
+    antiAffinity: "soft"
+    server:
+      maxMemory: "1024m"
+    initContainer:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "50Mi"
+        limits:
+          cpu: "500m"
+          memory: "250Mi"
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "99"
+        memory: "4Gi"
+    readinessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 15
+      timeoutSeconds: 10
+      failureThreshold: 12
+    livenessProbe:
+      initialDelaySeconds: 420
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+  ingestion:
+    replica:
+    minAvailable: 1
+    numberOfCrawlerInstances: 3
+    mount:
+      enabled: true
+      useDynamicProvisioning: true
+      storageClassName: ""
+      size: "1Gi"
+      selector:
+        label: "assign-to"
+        value: "wex-userdata"
+    antiAffinity: "soft"
+    initContainer:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "50Mi"
+        limits:
+          cpu: "500m"
+          memory: "250Mi"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "2Gi"
+      limits:
+        cpu: "99"
+        memory: "4Gi"
+    readinessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 12
+    livenessProbe:
+      initialDelaySeconds: 210
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+  orchestrator:
+    replica:
+    docproc:
+      maxMemory: "2g"
+      driverMaxMemory: "1g"
+      workerNum: 2
+    initContainer:
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "50Mi"
+        limits:
+          cpu: "500m"
+          memory: "250Mi"
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "99"
+        memory: "4Gi"
+    readinessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 12
+    livenessProbe:
+      initialDelaySeconds: 420
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+  wksml:
+    replica:
+    minAvailable: 1
+    antiAffinity: "soft"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "2Gi"
+      limits:
+        cpu: "99"
+        memory: "4Gi"
+    readinessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 12
+    livenessProbe:
+      initialDelaySeconds: 210
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+  test:
+    activeDeadlineSeconds: 300
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 100Mi
+      limits:
+        cpu: "99"
+        memory: 200Mi
+
+elastic:
+  image:
+    repository: ibm-wex-ee
+    tag: "12.0.3.1055"
+    pullPolicy: Always
+
+  backup:
+    persistence:
+      storageClassName: ""
+      size: "30Gi"
+      selector:
+        label: ""
+        value: ""
+
+  replica:
+  minAvailable: 1
+  antiAffinity: "soft"
+
+  service:
+    port: 9200
+
+  rbac:
+    create: false
+
+  tls:
+    existingTlsSecret: true
+
+  readinessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+  livenessProbe:
+    initialDelaySeconds: 210
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # CPU / Memory
+  resources:
+    requests:
+      cpu: "750m"
+      memory: 2Gi
+    limits:
+      cpu: "99"
+      memory: 4Gi
+
+  # Persistent volume
+  persistence:
+    useDynamicProvisioning: true
+    storageClassName: ""
+    size: "10Gi"
+    selector:
+      label: ""
+      value: ""
+
+  credCleanUpJob:
+    activeDeadlineSeconds: 300
+
+  credGenJob:
+    activeDeadlineSeconds: 300
+
+  initPluginJob:
+    activeDeadlineSeconds: 600
+
+  test:
+    activeDeadlineSeconds: 180
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 100Mi
+      limits:
+        cpu: "99"
+        memory: 200Mi
+
+etcd:
+  image:
+    repository: ibm-wex-ee
+    tag: "12.0.3.1055"
+    pullPolicy: Always
+
+  replica:
+  minAvailable: 1
+  antiAffinity: "soft"
+
+  service:
+    port: 2379
+
+  rbac:
+    create: false
+
+  tls:
+    existingTlsSecret: true
+
+  readinessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+  livenessProbe:
+    initialDelaySeconds: 210
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # CPU / Memory
+  resources:
+    requests:
+      cpu: "750m"
+      memory: 2Gi
+    limits:
+      cpu: "99"
+      memory: 4Gi
+
+  # Persistent volume
+  persistence:
+    useDynamicProvisioning: true
+    storageClassName: ""
+    size: "10Gi"
+    selector:
+      label: ""
+      value: ""
+
+  credCleanUpJob:
+    activeDeadlineSeconds: 300
+
+  credGenJob:
+    activeDeadlineSeconds: 300
+
+  test:
+    activeDeadlineSeconds: 180
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 100Mi
+      limits:
+        cpu: "99"
+        memory: 200Mi
+
+hdp:
+  image:
+    repository: ibm-wex-hdp
+    tag: "12.0.3.1055"
+    pullPolicy: Always
+
+  # Persistent volume
+  persistence:
+    useDynamicProvisioning: true
+    storageClassName: ""
+
+  dfsReplication: 2
+  maxMemoryMB: 1024
+  yMaxMemoryMB: 1024
+
+  nn:
+    replica:
+    resources:
+      requests:
+        cpu: "500m"
+        memory: 2Gi
+      limits:
+        cpu: "99"
+        memory: 4Gi
+    persistence:
+      size: "10Gi"
+      selector:
+        label: ""
+        value: ""
+    readinessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 12
+    livenessProbe:
+      initialDelaySeconds: 200
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+  rm:
+    replica:
+    resources:
+      requests:
+        cpu: "500m"
+        memory: 2Gi
+      limits:
+        cpu: "99"
+        memory: 4Gi
+    readinessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 12
+    livenessProbe:
+      initialDelaySeconds: 200
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+  worker:
+    replica:
+    antiAffinity: "soft"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: 2Gi
+      limits:
+        cpu: "99"
+        memory: 9Gi
+    persistence:
+      size: "100Gi"
+      selector:
+        label: ""
+        value: ""
+    nm:
+      memoryMB: 8192
+      cpu: 8
+    readinessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 6
+    livenessProbe:
+      initialDelaySeconds: 120
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+  test:
+    activeDeadlineSeconds: 180
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 100Mi
+      limits:
+        cpu: "99"
+        memory: 200Mi
+
+postgresql:
+  image:
+    repository: ibm-wex-ee
+    tag: "12.0.3.1055"
+    pullPolicy: Always
+
+  replica:
+  minAvailable: 1
+  antiAffinity: "soft"
+
+  service:
+    port: 5432
+
+  rbac:
+    create: false
+
+  tls:
+    existingTlsSecret: true
+
+  readinessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+  livenessProbe:
+    initialDelaySeconds: 210
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # CPU / Memory
+  resources:
+    requests:
+      cpu: "750m"
+      memory: 2Gi
+    limits:
+      cpu: "99"
+      memory: 4Gi
+
+  # Persistent volume
+  persistence:
+    useDynamicProvisioning: true
+    storageClassName: ""
+    size: "10Gi"
+    selector:
+      label: ""
+      value: ""
+
+  credCleanUpJob:
+    activeDeadlineSeconds: 300
+
+  credGenJob:
+    activeDeadlineSeconds: 300
+
+  test:
+    activeDeadlineSeconds: 180
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 100Mi
+      limits:
+        cpu: "99"
+        memory: 200Mi
+
+sdu:
+  sdu:
+    replicas:
+    image:
+      repository: "sdu-spark"
+      tag: "1.1.10"
+    # CPU / Memory
+    resources:
+      requests:
+        cpu: "2000m"
+        memory: 2Gi
+      limits:
+        cpu: "4000m"
+        memory: 4Gi
+    spark:
+      enabled: true
+    ocr:
+      workers: 4
+
+    scratchDir:
+      enabled: true
+      path: /_scratch
+      volumeName: scratch-volume
+  sduDbInit:
+    image:
+      repository: "sdu-spark-db-init"
+      tag: "1.0.6"
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: ".1"
+    limits:
+      memory: "512Mi"
+      cpu: ".3"
+  sduTest:
+    image:
+      repository: "sdu-spark-dvt-test"
+      tag: "0.0.12"
+    resources:
+      requests:
+        memory: "250Mi"
+        cpu: "100m"
+      limits:
+        memory: "500Mi"
+        cpu: "250m"
+  statsd:
+    enabled: false
+    image:
+      repository: rhubi-statsd-exporter_0_12_1
+      tag: 1.0.2
+
+# override minio subchart values
+minio:
+
+  ### START - These keys are not part of the ibm-minio chart
+  bucketSuffix: "wire-all"
+  ### END
+
+  # set kubernetes cluster domain where minio is running
+  clusterDomain: "cluster.local"
+
+  # Minio Docker images
+  minio:
+    image:
+      name: "opencontent-minio"
+      tag: "1.0.0"
+
+  creds:
+    image:
+      name: "opencontent-icp-cert-gen-1"
+      tag: "1.1.1"
+
+  minioClient:
+    image:
+      name: "opencontent-minio-client"
+      tag: "1.0.0"
+
+  # Create default bucket after deployment
+  defaultBucket:
+    enabled: true
+    name: "ranker-wire-all"
+
+  # Have post-install bucket creation be done last
+  postBucketCreationHookWeight: "100"
+
+  # Existing minio secret
+  existingSecret: '{{ include "ibmDiscoveryWire.minio.secretName" . }}'
+
+  # For enabling Serve Side Encryption (SSE-S3): https://github.com/minio/minio/tree/master/docs/kms#22-specify-a-master-key
+  sse:
+    enabled: true
+    masterKeyName: "sseMasterKey"
+    masterKeySecret: '{{ include "ibmDiscoveryWire.minio.secretName" . }}'
+
+  # Configure Minio persistence
+  persistence:
+    enabled: true
+    size: "5Gi"
+    useDynamicProvisioning: true
+    # must be set if 'useDynamicProvisioning' is true
+    storageClass: ""
+    accessMode: "ReadWriteOnce"
+
+  # The replicas value will be set based on .Values.global.deploymentType
+  replicas: 0
+  # When replicas=0 and global.deploymentType is set, the following values will be used
+  # as the replica value.
+  replicasForDev: 4
+  replicasForProd: 4
+
+  # Configure resource requests and limits
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 2048Mi
+
+  # tls config
+  tls:
+    enabled: true
+    certSecret: '{{ include "ibmDiscoveryWire.tlsSecretName" . }}'
+## END Minio settings
+
+wire:
+  helmTest:
+    image:
+      repository: helm-test
+      tag: "1.0.6"
+  jksJob:
+    image:
+      repository: icp-jks-gen
+      tag: "1.0.6"
+  credsJobImage:
+    image:
+      repository: icp-util
+      tag: "1.0.6"
+  cosSecretJob:
+    image:
+      repository: icp-util
+      tag: "1.0.6"
+  minioGenSecretJob:
+    image:
+      repository: icp-util
+      tag: "1.0.6"
+  wireTest:
+    image:
+      repository: icp-util
+      tag: "1.0.6"
+    resources:
+      requests:
+        memory: "150Mi"
+        cpu: "100m"
+      limits:
+        memory: "250Mi"
+        cpu: "150m"
+  initContainers:
+    minio:
+      image:
+        repository: "opencontent-minio-client"
+        tag: "1.0.0"
+    etcd:
+      image:
+        repository: ibm-wex-ee
+        tag: 12.0.3.1055
+    postgresql:
+      image:
+        repository: configure-postgres
+        tag: 20190808-111339-361-605c538c
+    postgresqlInit:
+      image:
+        repository: ibm-wex-ee
+        tag: 12.0.3.1055
+    jobStatus:
+      image:
+        repository: job-status
+        tag: 1.0.8
+    elastic:
+      image:
+        repository: icp-util
+        tag: "1.0.6"
+  trainingRest:
+    image:
+      repository: "training-rest"
+      tag: "20190808-112942-131-79ddd44-non-root"
+    trainingRestReplicas:
+    resources:
+      requests:
+        memory: "1250Mi"
+        cpu: "240m"
+      limits:
+        memory: "2750Mi"
+        cpu: "480m"
+  trainingCrud:
+    image:
+      repository: "training-data-crud"
+      tag: "20190808-111339-361-605c538c"
+    trainingCrudReplicas:
+    resources:
+      requests:
+        memory: "3500Mi"
+        cpu: "300m"
+      limits:
+        memory: "4700Mi"
+        cpu: "2010m"
+  serveRanker:
+    mmRuntime:
+      image:
+        repository: model-mesh
+        tag: master-20190809-235
+      resources:
+        requests:
+          memory: "1000Mi"
+          cpu: "120m"
+        limits:
+          memory: "1536Mi"
+          cpu: "240m"
+    mmServer:
+      image:
+        repository: disco-ranker-server
+        tag: 20190808-111407-44-71554ac
+      resources:
+        requests:
+          memory: "500Mi"
+          cpu: "120m"
+        limits:
+          memory: "1024Mi"
+          cpu: "240m"
+    serveRankerReplicas:
+  rankerRest:
+    image:
+      repository: "discovery-ranker-rest-service"
+      tag: "20190808-111350-101-486f94f"
+    replicas:
+    resources:
+      requests:
+        memory: "5000Mi"
+        cpu: "120m"
+      limits:
+        memory: "7500Mi"
+        cpu: "240m"
+
+  dataPrepAgent:
+    replicas:
+    resources:
+      requests:
+        memory: "1000Mi"
+        cpu: "33m"
+      limits:
+        memory: "2000Mi"
+        cpu: "66m"
+
+  rankerMonitorAgent:
+    image:
+      repository: "ranker-monitor-agent"
+      tag: "20190809-125502-61-ad1a2d1f"
+    replicas:
+    resources:
+      requests:
+        memory: "50Mi"
+        cpu: "7m"
+      limits:
+        memory: "100Mi"
+        cpu: "34m"
+
+  rankerCleanerAgent:
+    resources:
+      requests:
+        memory: "50Mi"
+        cpu: "7m"
+      limits:
+        memory: "100Mi"
+        cpu: "34m"
+
+  trainingDataDeletionAgent:
+    resources:
+      requests:
+        memory: "50Mi"
+        cpu: "7m"
+      limits:
+        memory: "100Mi"
+        cpu: "34m"
+
+  trainingAgent:
+    replicas:
+    image:
+      repository: "training-agent"
+      tag: "20190809-114915-188-b4c5692d"
+
+  rankerMaster:
+    replicas:
+    image:
+      repository: "master"
+      tag: "20190808-133855-230-9a0a44"
+    etcdConfigJob:
+      image:
+        repository: "configure-etcd"
+        tag: "1.1.6"
+      trainCPURequestMilli: "2000"
+      trainCPULimitMilli: "2000"
+      trainingMemoryMB: "4096"
+    rankerTraining:
+      image:
+        repository: "ranker-training"
+        tag: "20190808-111355-67-cfb565a"
+      dockerRegistryPullSecret: ""
+      dockerRegistry: ""
+      dockerNamespace: ""
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "120m"
+      limits:
+        memory: "4Gi"
+        cpu: "240m"
+
+  haywire:
+    replicas:
+    image:
+      repository: "haywire"
+      tag: "20190808-111345-59-96617c7"
+    resources:
+      requests:
+        memory: "1000Mi"
+        cpu: "84m"
+      limits:
+        memory: "2000Mi"
+        cpu: "419m"

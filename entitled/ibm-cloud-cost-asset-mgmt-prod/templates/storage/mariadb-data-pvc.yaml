@@ -1,0 +1,30 @@
+{{- if eq (.Values.persistence.enabled|quote|lower) "\"true\"" }}
+# DO NOT modify this condition
+{{ if not ( eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" ) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mariadb-data-claim
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+  {{- if (index .Values.mariadbDataPv0 .Values.k8StorageType).storageClass }}
+  annotations:
+    volume.beta.kubernetes.io/storage-class: {{ (index .Values.mariadbDataPv0 .Values.k8StorageType).storageClass }}
+  {{ end }}
+spec:
+  # DO NOT modify this conditional check
+  {{ if and ((eq (.Values.persistence.useDynamicProvisioning|quote|lower) "\"true\"")  (eq (.Values.enableDevSettings|quote|lower) "\"true\"")) }}
+  # storageClassName is required for Minikube v0.21.0 / Kubernets 1.7
+  #   value must be "standard"
+  storageClassName: standard
+  {{ end }}
+  accessModes:
+    - {{ (index .Values.k8StorageAccessMode .Values.k8StorageType) }}
+  resources:
+    requests:
+      storage: {{ (index .Values.mariadbDataPv0 .Values.k8StorageType).capacity }}
+{{ if or ((eq .Values.k8StorageType "hostpath") (eq .Values.k8StorageType "nfs")) }}
+  volumeName: mariadb-data-pv0
+  {{ end }}
+{{ end }}
+{{ end }}

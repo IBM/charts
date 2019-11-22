@@ -1,0 +1,52 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-redis-test"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    name: {{ .Release.Name }}-redis-test
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  {{- if .Values.imagePullSecrets }}
+  {{- if ne .Values.imagePullSecrets "default" }}
+  imagePullSecrets:
+    - name: {{ .Values.imagePullSecrets }}
+  {{- end }}
+  {{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: {{ $nonRootUser }}
+  containers:
+  - name: {{ template "fullname" . }}-redis-test
+    image: {{ include "aios.image" (list . .Values.redis.image.name .Values.redis.image.tag) | quote }}
+    resources:
+{{ toYaml .Values.ephemeralPod.resources | indent 12 }}
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: {{ $nonRootUser }}
+      capabilities:
+        drop:
+        - ALL
+    command: ["sh", "-c","redis-cli -h {{ template "fullname" . }}-redis-master-svc ping" ]
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+              - amd64

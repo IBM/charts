@@ -1,0 +1,30 @@
+{{ if not .Values.global.dockerRegistryPrefix }}
+{{ $namePrefix := "post-delete-rb" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $compName := "post-delete-rb" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $serviceAccount := "post-delete-aios" -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount) -}}
+{{ $clusterRole := "post-delete-cluster-role" -}}
+{{ $clusterRoleName := include "sch.names.fullCompName" (list . $clusterRole) -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $clusterRoleName | quote }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $serviceAccountName | quote }}
+    namespace: {{ .Release.Namespace }}
+{{ end }}

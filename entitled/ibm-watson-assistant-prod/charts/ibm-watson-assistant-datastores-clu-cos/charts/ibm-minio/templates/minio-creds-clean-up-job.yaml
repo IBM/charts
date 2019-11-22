@@ -1,0 +1,77 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+{{- if or (not (tpl .Values.existingSecret . )) (and (include "ibm-minio.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.certSecret . ))) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "sch.names.fullName" (list .) | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+      restartPolicy: Never
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      containers:
+      - name: delete-creds
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 128Mi
+            cpu: 100m
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+{{- if not (tpl .Values.existingSecret .) }}
+          {{- $secretName := include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) }}
+          if kubectl get   secret {{ $secretName | quote }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting {{ $secretName }} ..."
+          kubectl delete secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+          else
+            echo "=>>>Secret   {{ $secretName }} does not exist (already deleted)"
+          fi
+{{- end }}
+{{- if and (include "ibm-minio.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.certSecret . )) }}
+          {{- $secretName := include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) }}
+          if kubectl get   secret {{ $secretName | quote }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting {{ $secretName }} ..."
+          kubectl delete secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+          else
+            echo "=>>>Secret   {{ $secretName }} does not exist (already deleted)"
+          fi
+{{- end }}
+{{- end }}

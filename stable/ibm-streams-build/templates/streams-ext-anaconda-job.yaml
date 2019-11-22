@@ -1,0 +1,79 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2019, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+
+{{- if and ( or .Values.builder.streamsExtPvc .Values.builder.streamsExtPvcStorageClass ) ( eq (toString .Values.build.installAnaconda) "true" ) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-anaconda"
+  labels:
+{{- include "build.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-streams-ext"
+spec:
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-anaconda"
+      labels:
+{{- include "build.defaultLabels" . | indent 8 }}
+{{- include "build.serviceability" . | indent 8 }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-streams-ext"
+      annotations:
+{{- include "build.metering" . | indent 8 }}
+    spec:
+      affinity:
+{{- include "build.nodeaffinity" . | indent 8 }}
+      restartPolicy: OnFailure
+
+      serviceAccountName: {{ template "build.serviceAccountName" . }}
+      
+{{- include "build.podGeneralSecurityPolicies" . | indent 6 }}       
+      securityContext:
+{{- include "build.streamsinstallPodSecurityContext" . | indent 8 }}  
+        
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      {{- end }}
+      
+      volumes:
+        - name: streams-ext-volume
+          persistentVolumeClaim:
+            claimName: {{ template "builder.streamsExtPvcClaimName" . }}
+            
+      containers:
+      - name: bootstrap
+        {{- if .Values.image.prefix }}
+        image: "{{ .Values.image.prefix }}/{{ .Values.image.anaconda }}:{{ .Values.image.anacondaTag }}"
+        {{- else }}
+        image: "{{ .Values.image.anaconda }}:{{ .Values.image.anacondaTag }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+ 
+        securityContext:
+{{- include "build.containerSecurityContext" . | indent 10 }}
+        
+        command: ["/anaconda_installer/copy_anaconda.sh", "/opt/ibm/streams-ext"]
+        
+        volumeMounts:
+          - name: streams-ext-volume
+            mountPath: {{ template "build.externalMountPath" . }}
+          
+        resources:
+          requests:
+            cpu: 1
+            memory: "500M"
+          limits:
+            cpu: 1
+            memory: "500M"
+{{- end }}

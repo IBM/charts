@@ -1,0 +1,199 @@
+################## GLOBALLY SHARED CONFIG #########################################################
+
+global:
+  highAvailabilityMode: true
+  icpDockerRepo: "us.icr.io/"
+  image:
+    # TODO: pull secret field name has been changed so that avoiding confilct of the naming
+    # between SIRE chart and MongoDB chart.
+    # SIRE chart pulls image from CSFDEV docker registry whereas MongoDB pulls from artifactory
+    pullSecretCsfdev: ""
+    pullPolicy: "IfNotPresent"
+
+  clusterDomain: "cluster.local"
+
+  s3:
+    accessSecret:
+      nameTpl: "sireTraining.s3AccessSecretNameTemplate"
+      fixedName: ""
+      fieldAccessKey: "accesskey"
+      fieldSecretKey: "secretkey"
+    tlsSecret:
+      nameTpl: "sireTraining.s3TlsSecretNameTemplate"
+      fixedName: ""
+      fieldRootCertificate: ""
+    sslEnabled: true
+    endpointTpl: "sireTraining.s3EndpointTemplate"
+    bucketTpl: "sireTraining.s3BucketNameTemplate"
+    endpointPort: 9000
+    bucketFixed: ""
+    endpointFixed: ""
+
+  postgresql:
+    authSecret:
+      nameTpl: "sireTraining.postgresqlAuthSecretNameTemplate"
+      fixedName: ""
+      fieldAdminPassword: "adminPassword"
+      fieldJobqPassword: "jobqPassword"
+    tlsSecret:
+      nameTpl: "sireTraining.postgresqlTlsSecretNameTemplate"
+      fixedName: ""
+      fieldRootCertificate: ""
+    sslEnabled: true
+    adminDB: "postgres"
+    adminUser: "postgres"
+    port: 5432
+    hostNameTpl: "sireTraining.postgresqlHostNameTemplate"
+    fixedHostName: ""
+
+################## END OF GLOBAL ##################################################################
+
+### SIRE TRAINING
+highAvailabilityMode: true
+preInstallHookWeightAnchor: 10
+
+################## JOB QUEUE CONFIG ###############################################################
+jobq:
+  enabled: true
+  image:
+    repository: "mnlp/jobq"
+    tag: "master-2f2a4d07-81"
+  existingServiceAccount: ""
+  cpuRequestsMillis: 100
+  cpuLimitMillis: 500
+  memoryLimitMB: 200
+  securePort: 8090
+  unsecurePort: 8091
+  logLevel: info
+  poll_interval: 30s
+  leader_election_interval: 10s
+  expire_routine_interval: 3600s
+  soft_delete_job_after: 168h # 1 week
+  hard_delete_job_after: 480h # 1 month
+  postgres:
+    user: jobq
+    db_prefix: jobq
+  tenants:
+    train:
+      tenant_id: wks-train
+      description: "SIRE training"
+      quota_cpu_millis: "1000"
+      quota_memory_megabytes: 30000
+      quota_gpus: 0
+      max_queued_and_active_per_user: 10
+      max_active_per_user: 2
+    evaluate:
+      tenant_id: wks-batch-apply
+      description: "SIRE batch apply aka evaluation"
+      quota_cpu_millis: 1000
+      quota_memory_megabytes: 30000
+      quota_gpus: 0
+      max_queued_and_active_per_user: 10
+      max_active_per_user: 2
+  pgInit:
+    backoffLimit: 10
+
+################## TRAIN FACADE CONFIG ############################################################
+trainFacade:
+  enabled: true
+  image:
+    repository: "mnlp/sire-train-facade"
+    tag: "master-e579da8f-108"
+  cpuRequestsMillis: 100
+  cpuLimitMillis: 500
+  memoryLimitMB: 200
+  createS3BucketIfNotExists: true
+  s3RootPath: "sire-training"
+  unsecurePort: 50001
+
+trainJob:
+  image:
+    repository: "mnlp/sire-train-runtime"
+    tag: "wdc-20181119-8b58861f-48-ubi7-master-a1d0f2e0-99"
+  backoff_limit: 0 # no retry
+  timeout_seconds: 18000 # 10h
+  cpu_requested: 200m
+  cpu_limit: 1000m
+  memory_limit: 5Gi
+  command: ["/opt/ibm/mnlp/scripts/sire-train.sh"]
+
+batchApplyJob:
+  image:
+    repository: "mnlp/sire-train-runtime"
+    tag: "wdc-20181119-8b58861f-48-ubi7-master-a1d0f2e0-99"
+  backoff_limit: 0 # no retry
+  timeout_seconds: 1200 # 20m
+  cpu_requested: 200m
+  cpu_limit: 1000m
+  memory_limit: 5Gi
+  command: ["/opt/ibm/mnlp/scripts/sire-batch-apply.sh"]
+
+################## LANGUAGE CONFIG ################################################################
+sireg:
+  enabled: true
+  securePort: 443
+  image:
+    repository: "mnlp/sireg"
+    tag: "wdc-20181119-8b58861f-48-ubi7-master-1c566660-78-with-templates"
+  endpointTpl: "sireTraining.siregEndpointTpl"
+  languages:
+    en:
+      enabled: true
+      cpuRequestsMillis: 200
+      cpuLimitMillis: 1000
+      memoryLimitMB: 2500
+    ar:
+      enabled: false
+      cpuRequestsMillis: 200
+      cpuLimitMillis: 1000
+      memoryLimitMB: 2000
+    de:
+      enabled: false
+      cpuRequestsMillis: 50
+      cpuLimitMillis: 250
+      memoryLimitMB: 600
+    es:
+      enabled: false
+      cpuRequestsMillis: 200
+      cpuLimitMillis: 1000
+      memoryLimitMB: 1500
+    fr:
+      enabled: false
+      cpuRequestsMillis: 50
+      cpuLimitMillis: 250
+      memoryLimitMB: 300
+    it:
+      enabled: false
+      cpuRequestsMillis: 50
+      cpuLimitMillis: 250
+      memoryLimitMB: 300
+    ja:
+      enabled: false
+      cpuRequestsMillis: 50
+      cpuLimitMillis: 250
+      memoryLimitMB: 600
+    ko:
+      enabled: false
+      cpuRequestsMillis: 200
+      cpuLimitMillis: 1000
+      memoryLimitMB: 1000
+    nl:
+      enabled: false
+      cpuRequestsMillis: 50
+      cpuLimitMillis: 250
+      memoryLimitMB: 700
+    pt:
+      enabled: false
+      cpuRequestsMillis: 200
+      cpuLimitMillis: 1000
+      memoryLimitMB: 800
+    zh:
+      enabled: false
+      cpuRequestsMillis: 200
+      cpuLimitMillis: 1000
+      memoryLimitMB: 1500
+    zht:
+      enabled: false
+      cpuRequestsMillis: 50
+      cpuLimitMillis: 250
+      memoryLimitMB: 300

@@ -1,0 +1,116 @@
+{{- include "sch.config.init" (list . "nms.sch.chart.config.values") -}}
+{{- $icpPullSecrets := include "icp-pull-secrets" . -}}
+{{- $icpModelsServerCompName  :=  .sch.chart.components.nms.name -}}
+{{- $icpMmaCompName  :=  .sch.chart.components.mma.name -}}
+
+{{/* DRY variables */}}
+{{- $tlsVolumeMountName := "nms-tls-secrets" -}}
+{{- $tlsVolumeMountPath := "/mnt/ssl/nms" -}}
+{{- $modelsServerPort := .Values.global.modelsServer.port }}
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpModelsServerCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $icpModelsServerCompName) | indent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $icpModelsServerCompName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $icpModelsServerCompName) | indent 8 }}
+      annotations:
+        productName: {{ .Values.product.name | quote }}
+        productID: {{ .Values.product.id | quote }}
+        productVersion: {{ .Values.product.version | quote }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ .Values.product.name }}-{{ $icpModelsServerCompName }}
+        image: {{ .Values.global.icpDockerRepo }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /health
+            port: {{ $modelsServerPort }}
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /health
+            port: {{ $modelsServerPort }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        env:
+        - name: LOG_LEVEL
+          value: info
+        - name: MMA_V1_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-mma-prod-{{ $icpMmaCompName }}:4000"
+        - name: MMA_V2_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-mma-prod-{{ $icpMmaCompName }}:4001"
+        - name: ENABLE_V1_MODELS
+          value: "false"
+        - name: TENANT
+          value: public
+        - name: STORAGE_SIRE_TYPE
+          value: cos
+        - name: STORAGE_SIRE_FILESYSTEM_BASE_PATH
+          value: "."
+        - name: STORAGE_SIRE_COS_USE_SSL
+          value: "true"
+        - name: STORAGE_SIRE_COS_ENDPOINT
+          value: {{ include .Values.global.s3.endpointTpl . | quote }}
+        - name: STORAGE_SIRE_COS_BUCKET
+          value: {{ .Values.global.s3.bucketName }}
+        - name: STORAGE_SIRE_COS_REGION
+          value: ""
+        - name: SIGNATURE_VALIDATION_ENABLED
+          value: "false"
+        - name: SSL_KEY_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerKey }}
+        - name: SSL_CERT_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerCertificate }}
+        ####################################################################################################
+        - name: NODE_TLS_REJECT_UNAUTHORIZED
+          value: "0"
+        - name: STORAGE_SIRE_COS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.s3.accessSecret.nameTpl . }}
+              key: {{ .Values.global.s3.accessSecret.fieldAccessKey }}
+        - name: STORAGE_SIRE_COS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.s3.accessSecret.nameTpl . }}
+              key: {{ .Values.global.s3.accessSecret.fieldSecretKey }}
+        ####################################################################################################
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        ports:
+        - containerPort: {{ $modelsServerPort }}
+          protocol: TCP
+        resources:
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+        volumeMounts:
+        - name: {{ $tlsVolumeMountName }}
+          mountPath: {{ $tlsVolumeMountPath }}
+          readOnly: true
+      imagePullSecrets:
+      - name: {{ $icpPullSecrets | quote }}
+      volumes:
+      - name: {{ $tlsVolumeMountName }}
+        secret:
+          secretName: {{ default (include .Values.global.tls.secret.nameTpl .) .Values.global.tls.secret.fixedName }}

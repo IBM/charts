@@ -1,0 +1,458 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmMongodb.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name:  {{ include "sch.names.statefulSetName" (list . .sch.chart.components.server) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.server) | indent 4 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 4 }}
+{{- end }}
+{{- if include "ibm-mongodb.boolConvertor" (list .Values.keep . ) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.server) | indent 6 }}
+  serviceName:  {{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) | quote }}
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.server) | indent 8 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 8 }}
+{{- end }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      {{- if .Values.metrics.prometheusServiceDiscovery }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.metrics.port | quote }}
+        prometheus.io/path: {{ .Values.metrics.path | quote }}
+      {{- end }}
+      {{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+      {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.mongoPodSecurityContext) | indent 8 }}
+      serviceAccountName: {{ include "ibm-mongodb.serviceAccount.name" . | quote }}
+{{- if tpl .Values.global.image.pullSecret . }}
+      imagePullSecrets:
+      - name: {{ tpl .Values.global.image.pullSecret . }}
+{{- end }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      affinity:
+{{ include "ibm-mongodb.affinityMongodb" . | indent 8 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      initContainers:
+      - name: copy-config
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.config.image.name }}:{{ .Values.config.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources: 
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.mongoContainerSecurityContext) | indent 10 }}
+        command:
+          - "sh"
+        args:
+          - "-c"
+          - |
+            set -e
+            set -x
+
+            cp /home/mongodb/configdb-readonly/mongod.conf /data/configdb/mongod.conf
+
+          {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+            cp /home/mongodb/ca-readonly/tls.key /data/configdb/tls.key
+            cp /home/mongodb/ca-readonly/tls.crt /data/configdb/tls.crt
+          {{- end }}
+
+          {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+            cp /home/mongodb/keydir-readonly/key.txt /data/configdb/key.txt
+            chmod 600 /data/configdb/key.txt
+          {{- end }}
+        volumeMounts:
+          - name: workdir
+            mountPath: /home/mongodb/work-dir
+          - name: config
+            mountPath: /home/mongodb/configdb-readonly
+          - name: configdir
+            mountPath: /data/configdb
+        {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+          - name: ca
+            mountPath: /home/mongodb/ca-readonly
+        {{- end }}
+        {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+          - name: keydir
+            mountPath: /home/mongodb/keydir-readonly
+        {{- end }}
+      - name: install
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.mongodbInstall.image.name }}:{{ .Values.mongodbInstall.image.tag }}
+        imagePullPolicy:  {{ .Values.global.image.pullPolicy }}
+        resources: 
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.mongoContainerSecurityContext) | indent 10 }}
+        args:
+          - --work-dir=/home/mongodb/work-dir
+        volumeMounts:
+          - name: workdir
+            mountPath: /home/mongodb/work-dir
+      - name: bootstrap
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.mongodb.image.name }}:{{ .Values.mongodb.image.tag }}
+        imagePullPolicy:  {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.mongoContainerSecurityContext) | indent 10 }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        command:
+          - /home/mongodb/work-dir/peer-finder
+        args:
+          - -on-start=/home/mongodb/init/on-start.sh
+          - "-service={{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) }}"
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: REPLICA_SET
+            value: {{ .Values.replicaSetName }}
+        {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+          - name: AUTH
+            value: "true"
+          - name: ADMIN_USER
+            valueFrom:
+              secretKeyRef:
+    {{- if not (tpl .Values.auth.authSecretName . ) }}
+                name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+    {{- else }}
+                name: {{ tpl .Values.auth.authSecretName . }}
+    {{- end }}
+                key: user
+          - name: ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+    {{- if not (tpl .Values.auth.authSecretName . ) }}
+                name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+    {{- else }}
+                name: {{ tpl .Values.auth.authSecretName . }}
+    {{- end }}
+                key: password
+        {{- if .Values.metrics.enabled }}
+          - name: METRICS
+            value: "true"
+          - name: METRICS_USER
+            valueFrom:
+              secretKeyRef:
+    {{- if not (tpl .Values.auth.metricsSecretName . ) }}
+                name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.metricsSecret) | quote }}
+    {{- else }}
+                name: {{ tpl .Values.auth.metricsSecretName . }}
+    {{- end }}
+                key: user
+          - name: METRICS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+    {{- if not (tpl .Values.auth.metricsSecretName . ) }}
+                name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.metricsSecret) | quote }}
+    {{- else }}
+                name: {{ tpl .Values.auth.metricsSecretName . }}
+    {{- end }}
+                key: password
+        {{- end }}
+        {{- end }}
+        {{- if .Values.wiredTigerCacheSizeGb }}
+          - name: WIREDTIGER_CACHE_SIZE_GB
+            value: "{{ .Values.wiredTigerCacheSizeGb }}"
+        {{- end }}
+        {{- if .Values.oplogSizeMB }}
+          - name: OPLOG_SIZE_MB
+            value: "{{ .Values.oplogSizeMB }}"
+        {{- end }}
+        volumeMounts:
+        - name: workdir
+          mountPath: /home/mongodb/work-dir
+        - name: init
+          mountPath: /home/mongodb/init
+        - name: configdir
+          mountPath: /data/configdb
+        - name: datadir
+          mountPath: /data/db
+      containers:
+      - name: mongod
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.mongodb.image.name }}:{{ .Values.mongodb.image.tag }}
+        imagePullPolicy:  {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.mongoContainerSecurityContext) | indent 10 }}
+      {{- if .Values.extraVars }}
+        env:
+{{ toYaml .Values.extraVars | indent 10 }}
+      {{- end }}
+        ports:
+        - name: peer
+          containerPort: 27017
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        command:
+        - mongod
+        args:
+          - --config=/data/configdb/mongod.conf
+          - --dbpath=/data/db
+          - --replSet={{ .Values.replicaSetName }}
+          - --port=27017
+          - --bind_ip=0.0.0.0
+        {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+          - --auth
+          - --keyFile=/data/configdb/key.txt
+        {{- end }}
+        {{- if .Values.wiredTigerCacheSizeGb }}
+          - --wiredTigerCacheSizeGB={{ .Values.wiredTigerCacheSizeGb }}
+        {{- end }}
+        {{- if .Values.oplogSizeMB }}
+          - --oplogSize={{ .Values.oplogSizeMB }}
+        {{- end }}
+        {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+          - --sslMode=requireSSL
+          - --sslCAFile=/data/configdb/tls.crt
+          - --sslPEMKeyFile=/home/mongodb/work-dir/mongo.pem
+        {{- end }}
+        livenessProbe:
+          exec:
+            command:
+              - mongo
+            {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+              - --ssl
+              - --sslCAFile=/data/configdb/tls.crt
+              - --sslPEMKeyFile=/home/mongodb/work-dir/mongo.pem
+            {{- end }}
+              - --eval
+              - "db.adminCommand('ping')"
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+        readinessProbe:
+          exec:
+            command:
+              - mongo
+            {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+              - --ssl
+              - --sslCAFile=/data/configdb/tls.crt
+              - --sslPEMKeyFile=/home/mongodb/work-dir/mongo.pem
+            {{- end }}
+              - --eval
+              - "db.adminCommand('ping')"
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+        volumeMounts:
+        - name: datadir
+          mountPath: /data/db
+        - name: configdir
+          mountPath: /data/configdb
+        - name: workdir
+          mountPath: /home/mongodb/work-dir
+{{ if .Values.metrics.enabled }}
+      - name: metrics
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.metrics.image.name }}:{{ .Values.metrics.image.tag }}"
+        imagePullPolicy:  {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.mongoContainerSecurityContext) | indent 10 }}
+        command:
+          - sh
+          - -ec
+          - >-
+          {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+            export MONGODB_URL=mongodb://$METRICS_USER:$METRICS_PASSWORD@localhost:{{ .Values.port }};
+          {{- else }}
+            export MONGODB_URL=mongodb://localhost:{{ .Values.port }};
+          {{- end }}
+            /bin/mongodb_exporter
+          {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+            --mongodb.tls
+            --mongodb.tls-ca=/home/mongodb/ca/tls.crt
+            --mongodb.tls-cert=/home/mongodb/work-dir/mongo.pem
+          {{- end }}
+            --mongodb.socket-timeout={{ .Values.metrics.socketTimeout }}
+            --mongodb.sync-timeout={{ .Values.metrics.syncTimeout }}
+            --web.telemetry-path={{ .Values.metrics.path }}
+            --web.listen-address=:{{ .Values.metrics.port }}
+        volumeMounts:
+        {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+          - name: ca
+            mountPath: /home/mongodb/ca
+            readOnly: true
+        {{- end }}
+          - name: workdir
+            mountPath: /home/mongodb/work-dir
+            readOnly: true
+        env:
+        {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+          - name: METRICS_USER
+            valueFrom:
+              secretKeyRef:
+              {{- if not (tpl .Values.auth.metricsSecretName . ) }}
+                name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.metricsSecret) | quote }}
+              {{- else }}
+                name: {{ tpl .Values.auth.metricsSecretName . }}
+              {{- end }}
+                key: user
+          - name: METRICS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+              {{- if not (tpl .Values.auth.metricsSecretName . ) }}
+                name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.metricsSecret) | quote }}
+              {{- else }}
+                name: {{ tpl .Values.auth.metricsSecretName . }}
+              {{- end }}
+                key: password
+        {{- end }}
+        ports:
+          - name: metrics
+            containerPort: {{ .Values.metrics.port  }}
+        resources: 
+{{ toYaml .Values.metrics.resources | indent 10 }}
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -ec
+              - >-
+              {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+                export MONGODB_URL=mongodb://$METRICS_USER:$METRICS_PASSWORD@localhost:{{ .Values.port }};
+              {{- else }}
+                export MONGODB_URL=mongodb://localhost:{{ .Values.port }};
+              {{- end }}
+                /bin/mongodb_exporter
+              {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+                --mongodb.tls
+                --mongodb.tls-ca=/home/mongodb/ca/tls.crt
+              {{- end }}
+                --test
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -ec
+              - >-
+              {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+                export MONGODB_URL=mongodb://$METRICS_USER:$METRICS_PASSWORD@localhost:{{ .Values.port }};
+              {{- else }}
+                export MONGODB_URL=mongodb://localhost:{{ .Values.port }};
+              {{- end }}
+                /bin/mongodb_exporter
+              {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+                --mongodb.tls
+                --mongodb.tls-ca=/home/mongodb/ca/tls.crt
+              {{- end }}
+                --test
+          initialDelaySeconds: 30
+          periodSeconds: 10
+{{ end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.mongodConfigmap) | quote }}
+        - name: init
+          configMap:
+            defaultMode: 0755
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.initConfigmap) | quote }}
+        {{- if include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . ) }}
+        - name: ca
+          secret:
+  #            defaultMode: 0400
+          {{- if not (tpl .Values.tls.tlsSecretName . ) }}
+            secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+          {{- else }}
+            secretName: {{ tpl .Values.tls.tlsSecretName . }}
+          {{- end }}
+        {{- end }}
+        {{- if include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . ) }}
+        - name: keydir
+          secret:
+  #            defaultMode: 0400
+          {{- if not (tpl .Values.auth.keySecretName . ) }}
+            secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.keySecret) | quote }}
+          {{- else }}
+            secretName: {{ tpl .Values.auth.keySecretName . }}
+          {{- end }}
+        {{- end }}
+        - name: workdir
+          emptyDir: {}
+        - name: configdir
+          emptyDir: {}
+{{- if .Values.persistentVolume.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: datadir
+        annotations:
+        {{- range $key, $value := .Values.persistentVolume.annotations }}
+          {{ $key }}: {{ $value }}
+        {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.persistentVolume.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistentVolume.size | quote }}
+      {{- if .Values.persistentVolume.useDynamicProvisioning }}
+      {{- if .Values.persistentVolume.storageClass }}
+      {{- if (eq "-" .Values.persistentVolume.storageClass) }}
+        storageClassName: ""
+      {{- else }}
+        storageClassName: {{ .Values.persistentVolume.storageClass | quote }}
+      {{- end }}
+      {{- end }}
+      {{- else }}
+        storageClassName: {{ default "" .Values.persistentVolume.storageClass | quote }}
+        {{- if .Values.persistentVolume.selector.label }}
+        selector:
+          matchExpressions:
+            - {key: {{ .Values.persistentVolume.selector.label }}, operator: In, values: [{{ .Values.persistentVolume.selector.value }}]}
+        {{- end }}
+      {{- end }}
+{{- else }}
+        - name: datadir
+          emptyDir: {}
+{{- end }}

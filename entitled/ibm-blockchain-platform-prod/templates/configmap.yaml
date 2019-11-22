@@ -1,0 +1,39 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.optools.compName }}
+{{- $labels := include "sch.metadata.labels.standard" (list . $compName) }}
+{{- $annotations := include "sch.metadata.annotations.metering" (list . .sch.chart.metering) }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-env
+  labels:
+{{ $labels | indent 4 }}
+data:
+  REGION: prod
+  DB_CONNECTION_STRING: {{ .Values.app.db.connectionString }}
+  APP_PORT: "3000"
+  HOST_URL:  "https://{{ .Values.ingress.optools.hostname }}:{{ .Values.ingress.optools.port }}"
+  CONFIGTXLATOR_URL_ORIGINAL:  "http://localhost:8083"
+  DB_SYSTEM: {{ .Values.app.db.system }}
+  CONFIGURE_FILE: "/template/settings.yaml"
+  {{- if ne .Values.ingress.tls.secret "" }}
+  KEY_FILE_PATH: /certs/tls/tls.key
+  PEM_FILE_PATH: /certs/tls/tls.crt
+  {{- else }}
+  KEY_FILE_PATH: /certs/tls.key
+  PEM_FILE_PATH: /certs/tls.crt
+  {{- end }}

@@ -1,0 +1,29 @@
+{{- if .Values.global.persistence.enabled }}
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-{{ .Release.Name }}-{{ include "sch.names.appName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  {{- if .Values.global.persistence.useDynamicProvisioning }}
+      # If present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by Kubernetes Administrator
+      #
+      # Setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+  {{- else }}
+  # Disable dynamic provisioning and use selector match labels.
+  storageClassName: ""
+  selector:
+    matchLabels:
+      app: {{ include "sch.names.appName" (list .) }}
+      release: {{ .Release.Name }}
+  {{- end }}
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.storageSize }}
+{{- end }}

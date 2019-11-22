@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  # Unique key of the Deployment instance
+  name: {{ .Values.servicename }}-tenant-zk
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+spec:
+  # 1 Pods should exist at all times.
+  replicas: {{ .Values.eventstoreZookeeper.replicas }}
+  serviceName: {{ .Values.servicename }}-tenant-zk-svc
+  podManagementPolicy: "Parallel"
+  selector:
+     matchLabels:
+       app.kubernetes.io/name: {{ .Values.servicename }}-tenant-zk
+  template:
+    metadata:
+      labels:
+        # Apply this label to pods and default
+        # the Deployment label selector to this value
+        app.kubernetes.io/name: {{ .Values.servicename }}-tenant-zk
+        helm.sh/chart: "{{ .Chart.Name }}"
+        name: {{ template "eventstore.name" . }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        component: eventstore
+        enabled: "true"
+      annotations:
+        {{- include "eventstore.annotations" . | indent 8 }}
+
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app.kubernetes.io/name"
+                    operator: In
+                    values: 
+                    - {{ .Values.servicename }}-tenant-zk
+              topologyKey: "kubernetes.io/hostname"
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      securityContext:
+        runAsUser: {{ regexFind "([1-9]{1}[0-9]{0,8}$)|(eventstore$)" .Values.servicename | replace "eventstore" "1000" }}
+        runAsGroup: 0
+        fsGroup: 0
+      # ZK needs to wait for the sqllib-shared job because it sets the zk connection string
+      initContainers:
+      {{- include "eventstore.wait-sqllib-shared" . | indent 6 }}
+      containers:
+      - name: eventstore-tenant-zookeeper
+        {{- if .Values.eventstoreZookeeper.image.tag }}
+        image: {{ .Values.eventstoreZookeeper.image.repository }}:{{ .Values.eventstoreZookeeper.image.tag }}
+        {{- else }}
+        image: {{ .Values.eventstoreZookeeper.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        ports:
+        - containerPort: 2181
+          name: client
+        - containerPort: 2888
+          name: server
+        - containerPort: 3888
+          name: leader-election
+        readinessProbe:
+          tcpSocket:
+            port: 2181
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 2181
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        env:
+        - name: INSTANCE_ID
+          value: '{{ regexFind "([1-9]{1}[0-9]{0,8}$)|(eventstore$)" .Values.servicename | replace "eventstore" "1000" }}'
+        volumeMounts:
+        - mountPath: /var/zookeeper/logs:z
+          name: zookeeper-logs
+        - mountPath: /var/zookeeper/data:z
+          name: zookeeper-data
+        - mountPath: /var/zookeeper/datalog:z
+          name: zookeeper-datalog
+        - mountPath: /opt/zookeeper/conf/external_conf
+          name: zookeeper-config-volume
+        command: ['bash']
+        args: ['-c','/home/db2inst1/base_entrypoint.sh /opt/zookeeper/bin/zkEntryPoint.sh']
+      # Restart policy for all containers within the pod
+      # One of Always, OnFailure, Never. Default to Always.
+      # From env var ${ZOOKEEPER_RESTART_POLICY}
+      restartPolicy: Always
+      volumes:
+      - name: zookeeper-logs
+        # HostPath represents a pre-existing file or directory on the host machine that is directly exposed to the container.
+        # This is generally used for system agents or other privileged things that are allowed to see the host machine.
+        # Most containers will NOT need this.
+        hostPath:
+          path: {{ tpl .Values.disk.zookeeperPath . }}/{{ .Values.servicename }}/zookeeper/server.0/log
+      - name: zookeeper-data
+        hostPath:
+          path: {{ tpl .Values.disk.zookeeperPath . }}/{{ .Values.servicename }}/zookeeper/server.0/data
+      - name: zookeeper-datalog
+        hostPath:
+          path: {{ tpl .Values.disk.zookeeperPath . }}/{{ .Values.servicename }}/zookeeper/server.0/datalog
+      - name: zookeeper-config-volume
+        configMap:
+          name: "{{ .Values.servicename }}-config-files"
+          items:
+          - key: zoo-cfg
+            path: zoo.cfg

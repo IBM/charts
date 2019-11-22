@@ -1,0 +1,88 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "shortname" . }}-video-test-nginx
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    run: {{ template "shortname" . }}-video-test-nginx-dep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ template "shortname" . }}-video-test-nginx-dp
+  template:
+    metadata:
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+        run: {{ template "shortname" . }}-video-test-nginx-dp
+      {{ include "vision-release-annotations" . | indent 6 }}
+    spec:
+      containers:
+        - name: {{ template "shortname" . }}-video-test-nginx
+          image: "{{ template "repoprefix" . }}powerai-vision-video-test-nginx:{{ .Values.image.releaseTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+            - containerPort: 443
+              name: https
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /var/www/media
+              name: run-mount
+              subPath: run/video-detection-test-data/media
+          env:
+            - name: URL_PREFIX
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: WEBROOT_VIDEO_TEST
+            - name: UWSGI_SERVER_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: UWSGI_SERVER_HOST_VIDEO_TEST
+          livenessProbe:
+            httpGet:
+              #TODO - would like this to be /demo_video so it's
+              #validating thw uwsgi-server, but that ends
+              #up failing with a 502 as it follows redirects
+              #We also need to make this from a variable..not sure how yet.
+              path: {{ template "shortname" . }}/demo-video/static/img/favicon.ico
+              port: http
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: {{ template "shortname" . }}/demo-video/static/img/favicon.ico
+              port: http
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+        beta.kubernetes.io/arch: ppc64le
+      affinity:
+      {{- include "nodeaffinity-ppc64le" . | indent 6 }}
+      volumes:
+        - name: run-mount
+          persistentVolumeClaim:
+          {{- if .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+            claimName: {{ .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ tpl .Values.poweraiVisionDataPvc.name . }}
+          {{- end }}
+      {{ include "imagesecrets" . | indent 6 }}

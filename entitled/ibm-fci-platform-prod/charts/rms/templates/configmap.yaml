@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "rms.fullname" . }}
+  labels:
+    app: {{ template "rms.name" . }}-designstudio
+    chart: {{ template "rms.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{- with .Values.rmsConfig }}
+data:
+{{ toYaml . | indent 2 }}
+{{- end }}
+  GET_PARTY_ID_SERVICE_URL: https://{{ .Release.Name }}-cedm-integration:9443/RMSModelServices/rmsui/v1/party/
+  com_fci_db2_server: {{ .Release.Name }}-{{ .Values.rmsConfig.db2_service }}
+  rms_db2_server: {{ .Release.Name }}-{{ .Values.rmsConfig.db2_service }}
+  ODM_SCORING_SERVICE: https://{{ template "rms.fullname" . }}-odm:9443/DecisionService/rest/v1/
+  ODM_RULEAPPS_SERVICE: https://{{ template "rms.fullname" . }}-odm:9443/res/api/v1/ruleapps
+  BOOTSTRAP_SERVERS_CONFIG: {{ .Release.Name }}-kafka:9092
+  UPDATE_STATUS_URL: https://fci-rms-designstudio:9443/RMSModelServices/voicemodel
+  STREAMS_JMXURL: "service:jmx:jmxmp://fci-rms-streams:9975"
+  ZOOKEEPER_URL: {{ .Values.global.managerFQDN }}:2181
+  kube_master: {{ .Values.global.managerFQDN }}
+{{- if .Values.global.deployOnIBMCloud }}
+  WATSON_CUSTOMIZATION_URL: "https://{{ .Values.WATSON_CUSTOMIZATION_URL }}/speech-to-text/api/"
+{{- else  }}
+  WATSON_CUSTOMIZATION_URL: "https://{{ .Values.global.webProxyServer }}/speech-to-text/api/"
+{{- end }}

@@ -1,0 +1,56 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- if .Values.global.ums.serviceType }}
+{{- if ne .Values.global.ums.serviceType "NodePort" }}
+{{- if eq .Values.global.isOpenShift false }}
+{{- $endpoints := include "ums.constants.ingress.endpoints" . | fromYaml -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "ums") | indent 4 }}
+  # annotations depend on the Ingress controller - these ones refer to the nginx Ingress controller
+  annotations:
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/session-cookie-hash: "sha1"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/secure-verify-ca-secret: "{{ .Values.tls.tlsSecretName }}"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/ssl-ciphers: EECDH+AESGCM:EDH+AESGCM
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_clear_headers 'Server';
+    ingress.kubernetes.io/affinity: "cookie"
+    ingress.kubernetes.io/proxy-body-size: "50m"
+    ingress.kubernetes.io/secure-backends: "true"
+    ingress.kubernetes.io/session-cookie-hash: "sha1"
+    ingress.kubernetes.io/ssl-redirect: "true"
+    ingress.kubernetes.io/secure-verify-ca-secret: "{{ .Values.tls.tlsSecretName }}"
+    ingress.kubernetes.io/backend-protocol: "HTTPS"
+    ingress.kubernetes.io/ssl-ciphers: EECDH+AESGCM:EDH+AESGCM
+    ingress.kubernetes.io/configuration-snippet: |
+      more_clear_headers 'Server';
+spec:
+  tls:
+    - hosts:
+        - {{ default "ums-host" .Values.global.ums.hostname }}
+{{- if .Values.ingressSecretName }}
+      secretName: {{ .Values.ingressSecretName }}
+{{- end }}
+  rules:
+    - host: {{ .Values.global.ums.hostname }}
+      http:
+        paths:
+        {{- with $endpoints }}
+          {{- range .paths }}
+          - path: {{ .prefix }}
+            backend:
+              serviceName: {{ $fullName }}
+              servicePort: {{ include "ums.constants.service.portname" . }}
+          {{- end }}
+        {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

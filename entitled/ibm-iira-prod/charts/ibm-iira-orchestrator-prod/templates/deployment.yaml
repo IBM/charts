@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-iira-orchestrator-prod.fullname" . }}
+  {{ if .Values.global.nameSpaceEnabled }}
+  namespace: {{ toYaml .Values.global.namespace }}
+  {{ end }}
+  labels:
+    app: {{ template "ibm-iira-orchestrator-prod.name" . }}
+    chart: {{ template "ibm-iira-orchestrator-prod.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-iira-orchestrator-prod.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-iira-orchestrator-prod.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "ibm-iira-orchestrator-prod.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+      {{- include "ibm-iira-orchestrator-prod.product-metering" . | indent 8 }}
+    spec:
+      volumes:
+        - name: iira-internal-tls-orch
+          secret:
+            secretName: iira-internal-tls
+            items:
+              - key: iira-orch.crt
+                path: iira-orch.crt
+              - key: iira-orch.key
+                path: iira-orch.key
+              - key: iira-ca.crt
+                path: iira-ca.crt
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true 
+      affinity: 
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+          image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          serviceAccount: cpd-viewer-sa
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false 
+            capabilities:
+              drop:
+              - ALL
+          env:
+            - name: PLATFORM
+              value: {{ .Values.platform }}
+            - name: MONGO_USER
+              value: {{ .Values.mongo.username }}
+            - name: MONGO_HOST
+              value: "{{ .Values.mongo.host }}"
+            - name: MONGO_PORT
+              value: !!integer {{ .Values.mongo.port }}
+            - name: MONGO_DATABASE
+              value: {{ .Values.mongo.database }}
+            - name: ML_SERVICE_HOST
+              value: "{{ .Values.mongo.mlServiceHost }}"
+            - name: ML_SERVICE_PORT
+              value: !!integer {{ .Values.mongo.mlServicePort }}
+            - name: CATALOG_SERVICE_AUTH_USER
+              value: {{ .Values.mongo.catalog_service_auth_user }}
+            - name: CATALOG_SERVICE_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: iis-usr-secrets
+                  key: isadmin_password
+                  optional: true
+          ports:
+            - name: https
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - curl -X GET -k https://localhost:8080/iira-api/v1/metrics
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - curl -X GET -k https://localhost:8080/iira-api/v1/metrics
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            periodSeconds: 30
+            failureThreshold: 5
+          volumeMounts:
+            - mountPath: "/etc/pki/tls/certs"
+              name: iira-internal-tls-orch
+              readOnly: true
+          resources:
+{{ toYaml .Values.resources | indent 12 }}

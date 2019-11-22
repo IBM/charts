@@ -1,0 +1,97 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "shortname" . }}-ui
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    run: {{ template "shortname" . }}-ui-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ template "shortname" . }}-ui-deployment-pod
+  template:
+    metadata:
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+        run: {{ template "shortname" . }}-ui-deployment-pod
+        component: {{ template "shortname" . }}-ui
+      {{ include "vision-release-annotations" . | indent 6 }}
+    spec:
+      containers:
+        - name: {{ template "shortname" . }}-ui
+          image: "{{ template "repoprefix" . }}powerai-vision-ui:{{ .Values.image.releaseTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /opt/powerai-vision/data
+              name: data-mount
+              subPath: data
+          env:
+            - name: CONTEXT_ROOT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: CONTEXT_ROOT
+            - name: DLAAS_API_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: DLAAS_API_SERVER
+            - name: SERVER_HOST_VIDEO_TEST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: SERVER_HOST_VIDEO_TEST
+            - name: SERVICE_PORT_VIDEO_TEST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: SERVICE_PORT_VIDEO_TEST
+            - name: WEBROOT_VIDEO_TEST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: WEBROOT_VIDEO_TEST
+          livenessProbe:
+            httpGet:
+              path: /{{ template "shortname" . }}/index.html
+              port: http
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /{{ template "shortname" . }}/index.html
+              port: http
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+        beta.kubernetes.io/arch: ppc64le
+      affinity:
+      {{- include "nodeaffinity-ppc64le" . | indent 6 }}
+      {{ include "imagesecrets" . | indent 6 }}
+      volumes:
+        - name: "data-mount"
+          persistentVolumeClaim:
+          {{- if .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+            claimName: {{ .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ tpl .Values.poweraiVisionDataPvc.name . }}
+          {{- end }}

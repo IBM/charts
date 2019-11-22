@@ -1,0 +1,242 @@
+{{ $namePrefix := "payload-logging" -}}
+{{ $compName := "aios-payload-logging" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceAccount := include "aios.serviceAccountName" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  progressDeadlineSeconds: {{ .Values.progressDeadline.seconds }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+    type: RollingUpdate
+  replicas: {{ .Values.payloadLogging.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+      {{- include "aios.metering" . | indent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 0
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      {{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      serviceAccountName: {{ $serviceAccount }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 6 }}
+      # to prevent multiple replicas from deploying on the same node
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      volumes:
+        - name: es-truststore
+          secret:
+            secretName: {{ template "fullname" . }}-kafka-secrets
+            items:
+              - key: es-cert.jks
+                path: es-cert.jks
+        - name: nginx-tls
+          secret:
+            secretName: {{ template "fullname" . }}-nginx-secrets
+      initContainers:
+        - name: ready-check
+          image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          resources:
+{{ toYaml .Values.readyCheckContainer.resources | indent 12 }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          command: ['sh', '-c',
+                'while true; do echo "Checking availability of ICP4D JWT public key...";
+                 curl -k $AIOS_GATEWAY_URL/auth/jwtpublic && break;
+                 sleep 5; done;
+                 echo "ICP4D JWT public key available.";
+                 while true; do echo "Waiting for kafka service to come up...";
+                 (echo > /dev/tcp/{{ template "fullname" . }}-kafka-0.{{ template "fullname" . }}-kafka-headless/9092) > /dev/null 2>&1 && break;
+                 sleep 5; done;
+                 echo "Kafka service available.";
+                 echo "Starting main container."']
+          env:
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+      containers:
+        - name: aios-payload-logging
+          image: {{ include "aios.image" (list . .Values.payloadLogging.image.name .Values.payloadLogging.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.payloadLogging.resources | indent 12 }}
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          livenessProbe:
+            {{ include "aios.common.liveness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/aios_payload_logging_service/heartbeat
+              port: 9443
+              scheme: HTTPS
+          readinessProbe:
+            {{ include "aios.common.readiness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/aios_payload_logging_service/heartbeat
+              port: 9443
+              scheme: HTTPS
+          volumeMounts:
+          - name: es-truststore
+            mountPath: /home/aios/es-cert.jks
+            subPath: es-cert.jks
+          - name: nginx-tls
+            mountPath: "/opt/ibm/java/jre/lib/security/cacerts"
+            subPath: "java-cacerts"
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+            subPath: "ca-pem"
+          env:
+            - name: BM_APP_VERSION_ENDPOINT
+              value: "/v1/aios_payload_logging_service/heartbeat"
+            - name: PAYLOAD_LOGGING_PORT
+              value: "9443"
+            - name: PAYLOAD_LOGGING_KAFKA_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-username
+            - name: PAYLOAD_LOGGING_KAFKA_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-api-key
+            - name: PAYLOAD_LOGGING_KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-bootstrap-server
+            - name: DATAMART_KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-bootstrap-server
+            - name: DATAMART_KAFKA_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-username
+            - name: DATAMART_KAFKA_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-api-key
+            - name: KAFKA_TRUSTORE_LOCATION
+              value: /home/aios/es-cert.jks
+            - name: KAFKA_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-kafka-secrets
+                  key: es-truststore-password
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+            - name: "PAYLOAD_LOGGING_AIOS_HOST"
+              value: "$(AIOS_GATEWAY_URL)"
+            - name: PAYLOAD_LOGGING_AIOS_PORT
+              value: "443"
+            - name: "ENABLE_ICP"
+              value: "true"
+            - name: ICP4D_JWT_PUBLIC_KEY_URL
+              value: "$(AIOS_GATEWAY_URL)/auth/jwtpublic"
+            - name: AIOS_SERVICE_CREDENTIALS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-service-secrets
+                  key: aios-service-credential
+            - name: DEPLOYMENTMODE
+              value: "icp4d"
+            - name: ENTITLEMENTS_URL
+              value: "$(AIOS_GATEWAY_URL)/v1/entitlements"
+            - name: PAYLOAD_LOGGING_KAFKA_CONSUMERGROUPID_CHUNKED
+              value: "Icp4d-payload-consumer"
+            - name: PAYLOAD_LOGGING_KAFKA_CONSUMERGROUPID_COMPLETE
+              value: "Icp4d-payload-consumer-complete"
+            - name: PAYLOAD_LOGGING_SERVICE_APIKEY
+              value: "$(AIOS_SERVICE_CREDENTIALS)"
+            - name: SERVICEID_0
+              value: "$(AIOS_SERVICE_CREDENTIALS)"
+            - name: ICP_WML_URL
+              value: "$(AIOS_GATEWAY_URL)/wml"
+            - name: REDIS_URL
+              value: "redis://{{ template "fullname" . }}-redis-master-svc:6379"
+            - name: CONFIGURATION_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-redis-secrets
+                  key: auth
+            - name: ICP_WML_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.icp4DToken.secretName }}
+                  key: {{ .Values.icp4DToken.secretKey }}
+             # only set the env for cpd installation
+            {{ if .Values.global.dockerRegistryPrefix }}
+            - name: FEATURE_FLAG_WML_V4
+              value: "true"
+            {{ end }}
+            - name: AT_SERVICE_PROVIDER_ID
+              value: ""
+            - name: AT_INITIATOR_ENV
+              value: ""
+            - name: AT_NAME_PREFIX
+              value: ""
+            - name: AT_SERVICE_PROVIDER_NAME
+              value: ""
+            - name: AT_TOKEN
+              value: ""
+            - name: AT_SERVICE_NAME
+              value: ""

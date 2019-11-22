@@ -1,0 +1,63 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.ibmPrivateCloud) -}}
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: dsx-core
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: dsx-core-deployment
+spec:
+  replicas: {{ .Values.dsxCoreContainer.replicas }}
+  selector:
+    matchLabels:
+      run: dsx-core-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        component: dsx-core
+        run: dsx-core-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: dsx-core-container
+        image: {{ .Values.dsxCoreContainer.image.repository }}:{{ .Values.dsxCoreContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/scripts/startup.sh"]
+        env:
+        - name: NODE_ENV
+          value: "production"
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        resources:
+{{ toYaml .Values.dsxCoreContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /#/monitor
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /#/monitor
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - name: user-home-mount
+        persistentVolumeClaim:
+          {{- if .Values.userHomePvc.persistence.existingClaimName }}
+            claimName: {{ .Values.userHomePvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}-{{ .Values.userHomePvc.name }}
+          {{- end }}
+{{- end }}

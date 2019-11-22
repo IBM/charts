@@ -1,0 +1,35 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmMongodb.sch.chart.config.values") -}}
+1. After the statefulset is created completely, one can check which instance is primary by running:
+
+    $ for ((i = 0; i < {{ .Values.replicas }}; ++i)); do kubectl exec --namespace {{ .Release.Namespace }}  {{ include "sch.names.statefulSetName" (list . .sch.chart.components.server) }}-$i -- sh -c 'mongo admin --ssl --sslCAFile /data/configdb/tls.crt -u "$(kubectl get secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) }} -o json | jq .data.user -r | base64 -D)" -p "$(kubectl get secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) }} -o json | jq .data.password -r | base64 -D)" --eval="printjson(rs.isMaster())"'; done
+
+2. Create appropriate user credentials using the admin user (root user of 'admin' db) on the master by running the following:
+    MASTER_POD_NAME must be replaced with the name of the master found from the previous step.
+    Also, replace appropriate db name, username, password.
+
+    $ kubectl exec --namespace {{ .Release.Namespace }} MASTER_POD_NAME -- mongo admin --ssl --sslCAFile /data/configdb/tls.crt -u "$(kubectl get secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) }} -o json | jq .data.user -r | base64 -D)" -p "$(kubectl get secret {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }} -o json | jq .data.password -r | base64 -D)" --eval="db.getSiblingDB('replace_this_test_db').createUser({user: 'replace_this_test_user', pwd: 'replace_this_test_password', roles: ['dbAdmin', 'readWrite']})"
+
+3. One can insert a key into the primary instance of the mongodb replica set by running the following:
+    MASTER_POD_NAME must be replaced with the name of the master found from the previous step.
+    Replace appropriate db name, username, password.
+
+    $ kubectl exec --namespace {{ .Release.Namespace }} MASTER_POD_NAME -- mongo replace_this_test_db --ssl --sslCAFile /data/configdb/tls.crt -u replace_this_test_user -p replace_this_test_password --eval="printjson(db.test.insert({key1: 'value1'}))"
+
+4. One can fetch the keys stored in the primary or any of the slave nodes in the following manner:
+    POD_NAME must be replaced by the name of the pod being queried.
+    Replace appropriate db name, username, password.
+
+    $ kubectl exec --namespace {{ .Release.Namespace }} POD_NAME -- mongo replace_this_test_db --ssl --sslCAFile /data/configdb/tls.crt -u replace_this_test_user -p replace_this_test_password --eval="rs.slaveOk(); db.test.find().forEach(printjson)"
+
+*** Note that ***, please replace mongo Auth/TLS options in above commands accordingly.

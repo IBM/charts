@@ -1,0 +1,47 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the PVC used by the Schema Registry server
+###############################################################################
+{{- if .Values.persistence.enabled }}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "schemaregistry.sch.chart.config.values" ) -}}
+# schemaregistry sts name
+{{ $namePrefix := .sch.chart.components.schemaregistry.statefulSet.name -}}
+{{ $pvcNamePrefix := .sch.chart.components.schemaregistry.persistentVolumeClaim.name -}}
+# Component is 'schemaregistry' as this makes up part of implementing the Schema Registry
+{{ $compName := .sch.chart.components.schemaregistry.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# pvc name
+{{ $pvcName := printf "%s-%s-%s-%s" .Release.Name .sch.chart.appName $pvcNamePrefix .Values.dataPVC.name -}} # datadir-release-ibm-es-schemaregistry-sts
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ $pvcName }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  {{- if .Values.persistence.useDynamicProvisioning }}
+  # If present, use the storageClassName from the values.yaml, else use the
+  # default storageClass setup by Kubernetes Administrator
+  #
+  # Setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+  {{- else }}
+  # Disable dynamic provisioning
+  storageClassName: {{ default "" .Values.dataPVC.storageClassName | quote }}
+  {{- end }}
+  accessModes: [ {{ .Values.persistence.mode | quote }} ]
+  resources:
+    requests:
+      storage: {{ .Values.dataPVC.size | quote }}
+{{ end -}}

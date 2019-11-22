@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cam-lookup
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: hook-failed,hook-succeeded
+    helm.sh/hook-weight: "2"
+spec:
+  template:
+    metadata:
+      name: cam-lookup
+      labels:
+{{ include "cam.labels" .  | indent 8 }}
+        task: update-lookups
+    spec:
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      containers:
+        - name: cam-lookup
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+          image: {{ template "cam.readConfig" (list . "k8_jumpbox") }}
+        {{ else }}
+          image: {{ template "camicp.readConfig" (list . "k8_jumpbox" .Values.imageCredentials.registry) }}
+        {{ end }}
+{{ include "cam.container.securityContext" . | indent 10  }}
+          env:
+            - name: cam_services_url
+              value: http://camservice:8000/api
+            - name: ORCHESTRATOR2
+              value: http://cam-orch-v2:4081
+            - name: TASKMANAGER
+              value: http://cam-task-mgr:4041
+          command: ["/bin/bash"]
+          args:
+            - "-c"
+            - >
+              curl --write-out "%{http_code}" --retry 3 --retry-delay 10 --show-error --fail -X POST http://cam-orch-v2:4081/api/reset_rabbitmq/ &&
+              echo " resetting rabbitmq ";
+              curl --write-out "%{http_code}" --retry 3 --retry-delay 10 --show-error --fail -X GET http://cam-orch-v2:4081/api/reset_status/ &&
+              echo " resetting job status ";
+              curl --write-out "%{http_code}" --retry 3 --retry-delay 10 --show-error --fail -X GET http://cam-orch-v2:4081/api/encrypt/datalake_encrypt &&
+              echo " encrypted files in the legacy and gpd data lakes";
+              curl --write-out "%{http_code}" --retry 3 --retry-delay 10 --show-error --fail -X
+              POST http://cam-task-mgr:4041/api/reset_rabbitmq/ &&
+              echo " resetting rabbitmq ";
+      restartPolicy: Never
+      # DO NOT modify this conditional check
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

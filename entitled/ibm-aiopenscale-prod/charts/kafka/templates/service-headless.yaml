@@ -1,0 +1,26 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $namePrefix := "kafka-headless" -}}
+{{ $compName := "aios-kafka" -}}
+{{ $serviceSelector := "kafka" }}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $serviceSelector)) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+{{ $labels | indent 4 }}
+{{- if .Values.headless.annotations }}
+{{ .Values.headless.annotations | toYaml | trimSuffix "\n" | indent 4 }}
+{{- end }}
+spec:
+  ports:
+  - name: headless-broker
+    port: {{ .Values.headless.port }}
+{{- if .Values.headless.targetPort }}
+    targetPort: {{ .Values.headless.targetPort }}
+{{- end }}
+  clusterIP: None
+  selector:
+    release: {{ .Release.Name | quote }}
+    serviceSelector: {{ $serviceSelector | quote }}

@@ -1,0 +1,79 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-core-sample-auth-agent
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        io.kompose.service: cb-core-sample-auth-agent
+        name: cb-core-sample-auth-agent
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }} # referenced by dash.gravitant.net for Pod Name
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      containers:
+        - env:
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+            - name: DB_HOST
+              value: "mongodb"
+            - name: DB_PORT
+              value: "27017"
+            - name: CONNECT_DB_PROTOCOL
+              value: mongodb
+            - name: CONNECTION_PROTOCOL
+              value: http
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_core_sample_auth_agent") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_core_sample_auth_agent" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "core.container.securityContext" .  | indent 10 }}
+          name: cb-core-sample-auth-agent
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+          livenessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 20
+            failureThreshold: 4
+          resources:
+{{ include "deployClassConfig" (list . "cb_core_sample_auth_agent") | indent 12 }}
+      restartPolicy: Always

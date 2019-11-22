@@ -1,0 +1,85 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+{{ include "sch.config.init" (list . "sch.bastudio.config.values") }}
+{{ $appEngineUrl := (include "bastudio.serviceURL" (list .Values.global.appEngine "appengine")) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "config") }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "config") | indent 4 }}
+data:
+  oidc-rp.xml: |-
+    <?xml version="1.0" encoding="UTF-8"?>
+    <server description="IBM BPM Process Server">
+      <featureManager>
+        <feature>openidConnectClient-1.0</feature>
+      </featureManager>
+      <openidConnectClient id="umsClient"
+        accessTokenInLtpaCookie="true"
+        disableLtpaCookie="true"
+        authorizationEndpointUrl="${ums_urlprefix}/oidc/endpoint/ums/authorize"
+        clientId="${client_id}" clientSecret="${client_secret}"
+        tokenEndpointUrl="${ums_urlprefix}/oidc/endpoint/ums/token"
+        signatureAlgorithm="RS256"
+        jwkEndpointUrl="${ums_urlprefix}/oidc/endpoint/ums/jwk"
+        validationEndpointUrl="${ums_urlprefix}/oidc/endpoint/ums/introspect"
+{{- if eq (toString .Values.global.ums.port) "443" }}
+        issuerIdentifier="https://${ums_hostname}/oidc/endpoint/ums"
+{{- else }}
+        issuerIdentifier="https://${ums_urlprefix}/oidc/endpoint/ums"
+{{- end }}
+        inboundPropagation="supported">
+        <authFilter id="basicAuthFilter" >
+          <requestHeader id="basicAuth" name="Authorization" value="Basic" matchType="notcontain"/>
+        </authFilter>
+      </openidConnectClient>
+    </server>
+  processServer_variables_system.xml: |-
+    {{- range .Files.Lines "config/processServer_variables_system.xml" }}
+    {{ . -}}
+    {{ end }}
+  101Custom.xml: |-
+    <?xml version="1.0" encoding="UTF-8"?>
+    <properties>
+      <server>
+        <solution-server-origin>{{- $appEngineUrl -}}</solution-server-origin>
+        <exposed-project-types merge="replace">
+          <project-type>app</project-type>
+          <project-type>general</project-type>
+        </exposed-project-types>
+      </server>
+    </properties>
+  ltpa-config.xml: |-
+    {{- range .Files.Lines "config/ltpa-config.xml" }}
+    {{ . -}}
+    {{ end }}
+  ssl.xml: |-
+    {{- range .Files.Lines "config/ssl.xml" }}
+    {{ . -}}
+    {{ end }}
+  security.xml: |-
+    {{- range .Files.Lines "config/security.xml" }}
+    {{ . -}}
+    {{ end }}
+  messaging.xml: |-
+    {{- range .Files.Lines "config/messaging.xml" }}
+    {{ . -}}
+    {{ end }}
+  trace-specification.xml: |-
+    <?xml version="1.0" encoding="UTF-8"?>
+    <server>
+      <logging consoleFormat="{{ .Values.logs.consoleFormat }}"
+              consoleLogLevel="{{ .Values.logs.consoleLogLevel }}"
+              consoleSource="{{ .Values.logs.consoleSource }}"
+              traceFormat="{{ .Values.logs.traceFormat }}"
+              traceSpecification="{{ .Values.logs.traceSpecification }}" />
+    </server>

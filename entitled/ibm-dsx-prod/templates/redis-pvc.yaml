@@ -1,0 +1,28 @@
+{{ if not .Values.redisPVC.persistence.existingClaimName -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "fullname" . }}-{{ .Values.redisPVC.name }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: redis-pvc
+spec:
+  {{- if .Values.persistence.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.persistence.storageClassName | quote }}
+  {{ else }}
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ default "10Gi" .Values.redisPVC.persistence.size | quote }}
+  {{- if (not .Values.persistence.useDynamicProvisioning ) }}
+  selector:
+    matchLabels:
+      assign-to: "{{ .Release.Namespace }}-redis"
+  {{- end }}
+{{- end }}

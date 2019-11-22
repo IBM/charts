@@ -1,0 +1,222 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering }}
+{{- $component := "gateway" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-gateway
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $component) | indent 4 }}
+spec:
+  replicas: {{ .Values.gateway.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $component) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/gateway-configmap.yaml") . | sha256sum }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $component) | indent 8 }}
+    spec:
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 2001
+      supplementalGroups:
+      {{- range $group := .Values.global.persistence.supplementalGroups }}
+        - {{ $group -}}
+      {{ end }}
+      initContainers:
+        - name: wait-for-objectserver
+          image:  {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.gateway.image.name }}:{{ .Values.gateway.image.tag }}
+          imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
+          command:
+          - /bin/sh
+          - -c
+          - /opt/IBM/tivoli/netcool/bin/nco_igen && while [ true ];do echo -n "`date` ";if /opt/IBM/tivoli/netcool/omnibus/bin/nco_ping AGG_V;then break;else sleep 2;fi;done
+          volumeMounts:
+          - name: interfaces-file
+            mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+            subPath: omni.dat
+          resources:
+{{ include "asm.minimalPodResources" . | indent 12 }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+        - name: wait-for-observer
+          image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+          env:
+          - name: SERVICE
+            value: {{ .Release.Name }}-event-observer
+          - name: EXPECTED_COUNT
+            value: "1"
+          command:
+          - /bin/sh
+          - -c
+          - /opt/ibm/netcool/asm/bin/check-service-endpoint-count.sh
+          terminationMessagePolicy: FallbackToLogsOnError
+          resources:
+{{ include "asm.minimalPodResources" . | indent 12 }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+      containers:
+        - name: gateway
+          image:  {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.gateway.image.name }}:{{ .Values.gateway.image.tag }}
+          imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
+          command:
+          - /bin/sh
+          - -c
+          - /opt/IBM/tivoli/netcool/bin/nco_igen && /opt/IBM/tivoli/netcool/omnibus/bin/nco_g_xml -name {{ .Values.gateway.name }} -messagelog stdout -messagelevel $MESSAGELEVEL
+          env:
+            - name: MESSAGELEVEL
+              value: "{{ .Values.gateway.log.level }}"
+          ports:
+             - containerPort: {{ .Values.gateway.httpPort }}
+          volumeMounts:
+          - mountPath: /opt/ibm/netcool/asm/security
+            name: ca-secret
+            readOnly: true
+          - name: interfaces-file
+            mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+            subPath: omni.dat
+          - name: props-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/etc/ASM_GATE.props
+            subPath: ASM_GATE.props
+          - name: tblrep-def-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/gates/xml/asm_xml.reader.tblrep.def
+            subPath: asm_xml.reader.tblrep.def
+          - name: map-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/gates/xml/asm_xml.map
+            subPath: asm_xml.map
+          - name: transformers-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/asm_transformers.xml
+            subPath: asm_transformers.xml
+          - name: transport-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/asm_httpTransport.properties
+            subPath: asm_httpTransport.properties
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          readinessProbe:
+            exec:
+              command:
+              - {{ .Values.gateway.liveness.gateway.command }}
+              - {{ .Values.gateway.name }}
+            initialDelaySeconds: {{ .Values.gateway.liveness.gateway.initialDelaySeconds }}
+            periodSeconds: {{ .Values.gateway.liveness.gateway.periodSeconds }}
+            timeoutSeconds: {{ .Values.gateway.liveness.gateway.timeoutSeconds }}
+            failureThreshold: {{ .Values.gateway.liveness.gateway.failureThreshold }}
+          livenessProbe:
+            exec:
+              command:
+              - {{ .Values.gateway.liveness.gateway.command }}
+              - {{ .Values.gateway.name }}
+            initialDelaySeconds: {{ .Values.gateway.liveness.gateway.initialDelaySeconds }}
+            periodSeconds: {{ .Values.gateway.liveness.gateway.periodSeconds }}
+            timeoutSeconds: {{ .Values.gateway.liveness.gateway.timeoutSeconds }}
+            failureThreshold: {{ .Values.gateway.liveness.gateway.failureThreshold }}
+      terminationGracePeriodSeconds: {{ .Values.gateway.terminationGracePeriodSeconds }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.gateway.arch }}
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: NotIn
+                  values:
+                  - {{ include "sch.names.appName" (list .) }}
+                - key: component
+                  operator: NotIn
+                  values:
+                  - {{ $component }}
+                - key: release
+                  operator: NotIn
+                  values:
+                  - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+            weight: 50
+      volumes:
+        - name: ca-secret
+          secret:
+            secretName: "{{ .Release.Name }}-ca-secret"
+        - name: interfaces-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-gateway-config
+            items:
+            - key: omni.dat
+              path: omni.dat
+        - name: props-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-gateway-config
+            items:
+            - key: ASM_GATE.props
+              path: ASM_GATE.props
+        - name: map-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-gateway-config
+            items:
+            - key: asm_xml.map
+              path: asm_xml.map
+        - name: tblrep-def-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-gateway-config
+            items:
+            - key: asm_xml.reader.tblrep.def
+              path: asm_xml.reader.tblrep.def
+        - name: transformers-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-gateway-config
+            items:
+            - key: asm_transformers.xml
+              path: asm_transformers.xml
+        - name: transport-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-gateway-config
+            items:
+            - key: asm_httpTransport.properties
+              path: asm_httpTransport.properties

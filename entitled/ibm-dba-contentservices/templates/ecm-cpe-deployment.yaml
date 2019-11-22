@@ -1,0 +1,264 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-dba-contentservices.fullname" . }}
+  labels:
+    app: {{ template "ibm-dba-contentservices.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-dba-contentservices.name" . }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      name: {{ template "ibm-dba-contentservices.fullname" . }}
+      labels:
+        app: {{ template "ibm-dba-contentservices.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productID: "5737-I23"
+        productName: "IBM Cloud Pak for Automation"
+        productVersion: "19.0.1"
+        productMetric: "PROCESSOR_VALUE_UNIT"
+        productChargedContainers: "All"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 50001
+        fsGroup: 50000
+        supplementalGroups:
+        - 50000
+      affinity:
+      {{- include "ibm-dba-contentservices.nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "ibm-dba-contentservices.name" . }}
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: {{ template "ibm-dba-contentservices.name" . }}
+        securityContext:
+          runAsUser: 50001
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        ## cpe resources.
+        resources:
+          requests:
+            memory: "{{ .Values.resources.requests.memory }}"
+            cpu: "{{ .Values.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.limits.memory }}"
+            cpu: "{{ .Values.resources.limits.cpu }}"
+        ports:
+        - containerPort: 9080
+          name: http
+        - containerPort: 9443
+          name: https
+        env:
+          - name: LICENSE
+            value: {{ .Values.cpeProductionSetting.license | quote }}
+          - name: PRODUCT
+            value: "DBAMC"
+          - name: CPESTATICPORT
+            value: "false"
+          - name: CONTAINERTYPE
+            value: "1"
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "json" }}
+          - name: TZ
+            value: {{ .Values.cpeProductionSetting.timeZone | quote }}
+          - name: JVM_HEAP_XMS
+            value: "{{ .Values.cpeProductionSetting.jvmHeapXms }}m"
+          - name: JVM_HEAP_XMX
+            value: "{{ .Values.cpeProductionSetting.jvmHeapXmx }}m"
+          - name: GCDJNDINAME
+            value: {{ .Values.cpeProductionSetting.gcdJNDIName | quote }}
+          - name: GCDJNDIXANAME
+            value: {{ .Values.cpeProductionSetting.gcdJNDIXAName | quote }}
+          - name: LICENSEMODEL
+            value: {{ .Values.cpeProductionSetting.licenseModel | quote }}
+{{- if .Values.monitoring.enabled }}
+          - name: MON_METRICS_WRITER_OPTION
+            value: {{ .Values.monitoringConfiguration.monMetricsWriterOpt | quote }}
+          - name: MON_METRICS_SERVICE_ENDPOINT
+            value: {{ .Values.monitoringConfiguration.monMetricsSvcEndpoint | quote }}
+          - name: MON_BMX_GROUP
+            value: {{ .Values.monitoringConfiguration.monBMXGroup | quote }}
+          - name: MON_BMX_METRICS_SCOPE_ID
+            value: {{ .Values.monitoringConfiguration.monBMXMetricsScopeID | quote }}
+          - name: MON_BMX_API_KEY
+            value: {{ .Values.monitoringConfiguration.monBMXAPIKey | quote }}
+          - name: MON_ECM_METRICS_COLLECT_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monCollectInterval | quote }}
+          - name: MON_ECM_METRICS_FLUSH_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monFlushInterval | quote }}
+{{- end }}
+{{- if .Values.logging.enabled }}
+          - name: MON_LOG_SHIPPER_OPTION
+            value: {{ .Values.loggingConfiguration.monLogShipperOpt | quote }}
+          - name: MON_LOG_SERVICE_ENDPOINT
+            value: {{ .Values.loggingConfiguration.monLogSvcEndpoint | quote }}
+          - name: MON_BMX_LOGS_LOGGING_TOKEN
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXLogsLoggingToken | quote }}
+          - name: MON_BMX_SPACE_ID
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXSpaceID | quote }}
+{{- end }}
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+        readinessProbe:
+          httpGet:
+            path: /P8CE/Health
+            port: 9080
+            httpHeaders:
+              - name: Content-Encoding
+                value: gzip
+          initialDelaySeconds: 180
+          periodSeconds: 5
+          timeoutSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /P8CE/Health
+            port: 9080
+            httpHeaders:
+              - name: Content-Encoding
+                value: gzip
+          initialDelaySeconds: 600
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 6
+        volumeMounts:
+{{- if and (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforCPELogstore) (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforICMrulestore) (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforTextextstore) (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforBootstrapstore) (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforFNLogstore) }}
+          - name: "{{ .Values.dataVolume.nameforCPECfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides"
+            subPath: cpe/configDropins/overrides
+          - name: "{{ .Values.dataVolume.nameforCPECfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/logs"
+            subPath: cpe/logs
+          - name: "{{ .Values.dataVolume.nameforCPECfgstore }}"
+            mountPath: "/opt/ibm/icmrules"
+            subPath: cpe/icmrules
+          - name: "{{ .Values.dataVolume.nameforCPECfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/FileNet"
+            subPath: cpe/FileNet
+          - name: "{{ .Values.dataVolume.nameforCPECfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/lib/bootstrap"
+            subPath: cpe/bootstrap
+          - name: "{{ .Values.dataVolume.nameforCPECfgstore }}"
+            mountPath: "/opt/ibm/textext"
+            subPath: cpe/textext
+{{- else }}
+          - name: "{{ .Values.dataVolume.nameforCPECfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides"
+          - name: "{{ .Values.dataVolume.nameforCPELogstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/logs"
+          - name: "{{ .Values.dataVolume.nameforICMrulestore }}"
+            mountPath: "/opt/ibm/icmrules"
+          - name: "{{ .Values.dataVolume.nameforFNLogstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/FileNet"
+          - name: "{{ .Values.dataVolume.nameforBootstrapstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/lib/bootstrap"
+          - name: "{{ .Values.dataVolume.nameforTextextstore }}"
+            mountPath: "/opt/ibm/textext"
+{{- end }}
+          - name: "{{ .Values.dataVolume.nameforFilestore }}"
+            mountPath: "/opt/ibm/asa"
+      imagePullSecrets:
+      - name: "{{ .Values.imagePullSecrets.name }}"
+      volumes:
+{{- if and (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforCPELogstore) (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforICMrulestore) (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforTextextstore) (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforBootstrapstore) (eq .Values.dataVolume.existingPVCforCPECfgstore .Values.dataVolume.existingPVCforFNLogstore) }}
+        - name: "{{ .Values.dataVolume.nameforCPECfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCPECfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- else }}
+        - name: "{{ .Values.dataVolume.nameforCPECfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCPECfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforCPELogstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCPELogstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforICMrulestore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforICMrulestore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforTextextstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforTextextstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforBootstrapstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforBootstrapstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforFNLogstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforFNLogstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- end }}
+        - name: "{{ .Values.dataVolume.nameforFilestore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforFilestore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+

@@ -1,0 +1,118 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if .Values.policyregistryservice.enabled -}}
+{{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- $deploymentName := include "ibm-hdm-analytics-dev.policyregistryservice.deployment.name" . -}}
+{{- $compName := include "ibm-hdm-analytics-dev.policyregistryservice.component.name" . -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+spec:
+{{- if  eq .Values.global.environmentSize  "size0" }}
+  replicas: 1
+{{- else if eq .Values.global.environmentSize "size1" }}
+  replicas: 3
+{{- else }}
+  replicas: {{ .Values.policyregistryservice.repFactor }}
+{{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template: 
+    metadata:
+      name: {{ $deploymentName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        origin: helm-ibm-hdm-analytics-dev
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+{{ include "ibmeaprod.spec.security.context" (list .)| indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      initContainers:
+      - name: waitforcassandra
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.archivingservice.image.name }}:{{ .Values.archivingservice.image.tag }}
+        command:
+          - /bin/sh
+          - -c
+          - '/app/entrypoint.sh npm run checkdbconn'
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "policyregistryservice" "resources") | indent 10 }}
+        env:
+{{ include "eventanalytics.common.license" . | indent 8 }}
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.eaarchivingservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra" . | indent 8 }}
+{{ include "eventanalytics.common.kafka" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+      - name: policyregistry-checkdb
+        image: "{{ include "image.docker.repository" . }}/{{ .Values.policyregistryservice.image.name }}:{{ .Values.policyregistryservice.image.tag }}"
+        command:
+          - /bin/sh
+          - -c
+          - '/app/entrypoint.sh npm run checkdb'
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "policyregistryservice" "resources") | indent 10 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.eapolicyregistryservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.authentication" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra.policies" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - image:  {{ include "image.docker.repository" . }}/{{ .Values.policyregistryservice.image.name }}:{{ .Values.policyregistryservice.image.tag }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "policyregistryservice" "resources") | indent 10 }}
+        name: {{ $deploymentName }}
+        imagePullPolicy: {{ .Values.policyregistryservice.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.common.restApi.port }}
+          name: unsecure-port
+          protocol: TCP
+        - containerPort: {{ .Values.common.restApi.portSsl }}
+          name: ssl-port
+          protocol: TCP
+{{ include "eventanalytics.probe.smonitor.all" . | indent 8 }}
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.eapolicyregistryservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.authentication" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra.policies" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+{{ end }}

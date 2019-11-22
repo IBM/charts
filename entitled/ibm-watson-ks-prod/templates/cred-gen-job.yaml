@@ -1,0 +1,105 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.credsGen.name -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 8 }}
+      name: cred-gen
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ template "wks.serviceaccount.name" . }}
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+{{- if .Values.creds.imagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.creds.imagePullSecret }}
+{{- end }}
+      containers:
+      - name: cred-gen
+        image: {{ if .Values.creds.image.repository }}{{ trimSuffix "/" .Values.creds.image.repository }}{{ end }}/{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}
+        imagePullPolicy: IfNotPresent
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 10 }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          openssl genrsa -out ca.key 2048
+          openssl req -x509 -new -nodes -key ca.key -subj "/CN={{ include "sch.names.fullName" (list .) }}" -days 3650 -reqexts v3_req -extensions v3_ca -out ca.crt
+          cat >openssl.cnf <<EOL
+          [req]
+          req_extensions = v3_req
+          distinguished_name = req_distinguished_name
+          [req_distinguished_name]
+          [ v3_req ]
+          basicConstraints = CA:FALSE
+          keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+          subjectAltName = @alt_names
+          [alt_names]
+          DNS.1 = {{ include "sch.names.fullName" (list .) }}
+          DNS.2 = *.{{ include "wks.k8s.svc.domain" . }}
+          DNS.3 = *.{{ include "wks.minio.service.fullName" .}}
+          DNS.4 = localhost
+          DNS.5 = 127.0.0.1
+          EOL
+          openssl genrsa -out wks.key 2048
+          openssl req -new -key wks.key -out wks.csr -subj "/CN={{ include "sch.names.fullName" (list .) }}" -config openssl.cnf
+          openssl x509 -req -in wks.csr \
+            -CA ca.crt -CAkey ca.key -CAcreateserial \
+            -out wks.crt -days 3650 -extensions v3_req -extfile openssl.cnf
+          cat <<EOF | kubectl create -n {{ .Release.Namespace }} -f -
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 14 }}
+            name: {{ include "wks.minio.access.secret.name" . }}
+          data:
+            accesskey: $(openssl rand -hex 20 | tr -d '\n' | base64 | tr -d '\n')
+            secretkey: $(openssl rand -hex 20 | tr -d '\n' | base64 | tr -d '\n')
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: kubernetes.io/tls
+          metadata:
+            labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 14 }}
+            name: {{ include "wks.cert.internal.secret.name" . }}
+          data:
+            tls.cacrt: $(cat ca.crt | base64 | tr -d '\n')
+            tls.crt: $(cat wks.crt | base64 | tr -d '\n')
+            tls.key: $(cat wks.key | base64 | tr -d '\n')
+            tls.cacrt.str: $(sed '1d;$d' ca.crt | tr -d '\n' | base64 | tr -d '\n')
+          EOF
+      restartPolicy: Never
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}

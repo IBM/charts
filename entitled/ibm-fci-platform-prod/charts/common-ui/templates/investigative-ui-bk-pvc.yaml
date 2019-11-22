@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "common-ui.fullname" . }}-bk
+  labels:
+    app: {{ template "common-ui.name" . }}-bk
+    chart: {{ template "common-ui.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{- if .Values.bkPvcSpec.accessModes }}
+{{-   with .Values.bkPvcSpec.accessModes }}
+  accessModes:
+{{      toYaml . | indent 4 -}}
+{{-   end -}}
+{{- end }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.bkPvcSpec.storageClassName }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ .Values.bkPvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+  storageClassName: {{ default "" .Values.bkPvcSpec.storageClassName | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.bkPvcSpec.size }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+  selector:
+    matchLabels:
+      app: {{ template "common-ui.name" . }}-bk
+      release: {{ .Release.Name -}}
+{{- end -}}

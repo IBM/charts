@@ -1,0 +1,94 @@
+{{- include "sch.config.init" (list . "ibm-spectrum-computing.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+{{- $role := "master" -}}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" -}}
+apiVersion: apps/v1beta2
+{{- else -}}
+apiVersion: apps/v1beta1
+{{- end }}
+kind: Deployment
+metadata:
+  name: {{ $fullName }}-{{ $role }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+    # Do not change below as it is tied to the PodPreset
+    role: {{ $role }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+      role: {{ $role }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+        role: {{ $role }}
+      annotations:
+{{ toYaml .sch.chart.metering | indent 8 }}
+    spec:
+{{ toYaml .sch.chart.podsecurity | indent 6}}
+      tolerations:
+        - key: "dedicated"
+          operator: "Exists"
+          effect: NoSchedule
+      nodeSelector:
+        master: "true"
+      affinity:
+{{ toYaml .sch.chart.affinity | indent 8 }}
+      subdomain: default-subdomain
+      dnsPolicy: ClusterFirst
+      hostname: lsfmaster
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.manager.image }}:{{ .Values.manager.tag }}"
+          imagePullPolicy: {{ .Values.manager.imagePullPolicy }}
+{{ toYaml .sch.chart.containerSecurity | indent 10 }}
+          args: [ "master", "no" ]
+          env:
+{{ toYaml .sch.chart.env | indent 12 }}
+          volumeMounts:
+            - name: conf-volume
+              mountPath: "/opt/ibm/lsfsuite/lsfadmin"
+            - name: configmap-users
+              mountPath: "/opt/ibm/lsfsuite/configmap/lsb.users"
+            - name: configmap-queues
+              mountPath: "/opt/ibm/lsfsuite/configmap/lsb.queues"
+          resources:
+            requests:
+              cpu: {{ .Values.manager.cpu }}
+              memory: {{ .Values.manager.memory }}
+            limits:
+              cpu: 16
+              memory: 128Gi
+          readinessProbe:
+            exec:
+              command:
+                - ls
+                - /tmp/lsf-ready
+            initialDelaySeconds: 45
+            periodSeconds: 60
+          livenessProbe:
+            exec:
+              command:
+                - ls
+                - /tmp/lsf-alive
+            initialDelaySeconds: 60
+            periodSeconds: 60
+      restartPolicy: Always
+      volumes:
+        - name: conf-volume
+          persistentVolumeClaim:
+          {{- if .Values.pvc.existingClaimName }}
+            claimName: {{ .Values.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ $fullName }}
+          {{- end }}
+        - name: configmap-users
+          configMap:
+            name: "{{ $fullName }}-users"
+        - name: configmap-queues
+          configMap:
+            name: "{{ $fullName }}-queues"

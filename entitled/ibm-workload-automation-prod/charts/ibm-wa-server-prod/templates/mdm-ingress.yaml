@@ -1,0 +1,47 @@
+####################################################################
+# Licensed Materials Property of HCL*
+# (c) Copyright HCL Technologies Ltd. 2019. All rights reserved.
+#
+# * Trademark of HCL Technologies Limited
+####################################################################
+
+{{- if .Values.server.ingress.enabled }} 
+ 
+{{- include "sch.config.init" (list . "waserver.sch.chart.config.values") }}
+{{ $fullName := include "sch.names.fullName" (list .) }}
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ template "waMdm.ServiceName" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  annotations:
+    ingress.kubernetes.io/ssl-passthrough: "true"
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+
+spec:
+  tls:
+    - hosts:
+      {{- if .Values.server.ingress.hostname }}
+       - {{ .Values.server.ingress.hostname }}
+      {{- else }}  
+       - {{ $fullName }}.mycluster.proxy
+      {{- end }}    
+      {{- if .Values.server.ingress.secretName }}       
+      secretName: {{ .Values.server.ingress.secretName }}    
+      {{- end }}         
+  rules:
+  {{- if .Values.server.ingress.hostname }}
+  - host: {{ .Values.server.ingress.hostname }}
+  {{- else }}  
+  - host: {{ $fullName }}.mycluster.proxy
+  {{- end }} 
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ template "waMdm.ServiceName" . }}
+          servicePort: 31116
+          
+{{- end }}            

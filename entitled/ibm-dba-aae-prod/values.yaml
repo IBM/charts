@@ -1,0 +1,176 @@
+#Shared values across components
+global:
+  # The persistence volumn claim name used for store JDBC and ODBC library
+  existingClaimName: 
+  # Keep this value to false
+  nonProductionMode: false
+  # Secret with Docker credentials
+  imagePullSecrets: 
+  - image-pull-secret
+  # global CA secret name
+  caSecretName: "ca-tls-secret"
+  # Kubernetes dns base name
+  dnsBaseName: "svc.cluster.local" 
+
+  # Global configuration created by user management service
+  ums:
+    serviceType: Ingress
+    hostname: "ums.x.x.x.x.nip.io"
+    port: 443
+    # Secret with admin credentials
+    adminSecretName: ums-admin-secret
+
+  # Global configuration created by Resource Registry
+  resourceRegistry:
+    hostname: "rr.x.x.x.x.nip.io"
+    port: 31099
+    adminSecretName: resource-registry-admin-secret
+
+  # Global configuration created by App Engine
+  appEngine:
+    serviceType: "Ingress"
+    hostname: "appengine.x.x.x.x.nip.io"
+    port: 443
+
+appengine:
+  install: true
+
+  replicaCount: 2
+
+  probes:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 5
+    failureThreshold: 3
+
+  images:
+    appEngine: solution-server:19.0.2
+    tlsInitContainer: dba-keytool-initcontainer:19.0.2
+    dbJob: solution-server-helmjob-db:19.0.2
+    oidcJob: dba-umsregistration-initjob:19.0.2
+    dbcompatibilityInitContainer: dba-dbcompatibility-initcontainer:19.0.2
+    pullPolicy: IfNotPresent
+
+  tls:
+    tlsSecretName: ae-ingress-tls-secret
+    tlsTrustList: []
+
+  database:
+    name: 
+    host: 
+    port: 
+    type: db2
+    currentSchema: DBASB
+    initialPoolSize: 1
+    maxPoolSize: 10
+    uvThreadPoolSize: 4
+    maxLRUCacheSize: 1000
+    maxLRUCacheAge: 600000
+
+  # Toggle for custom JDBC drivers
+  useCustomJDBCDrivers: false
+
+  adminSecretName: ae-secret-credential
+
+  logLevel:
+    node: trace
+    browser: 2
+
+  contentSecurityPolicy:
+    enable: false
+    whitelist: ""
+
+  session:
+    duration: "1800000"
+    resave: "false"
+    rolling: "true"
+    saveUninitialized: "false"
+    useExternalStore: "false"
+
+  redis:
+    host: localhost
+    port: 6379
+    ttl: 1800
+
+  maxAge:
+    staticAsset: "2592000"
+    csrfCookie: "3600000"
+    authCookie: "900000"
+
+  env:
+    serverEnvType: production
+    maxSizeLRUCacheRR: 1000
+
+  resources:
+    ae:
+      limits:
+        cpu: 1500m
+        memory: 1024Mi
+      requests:
+        cpu: 1
+        memory: 512Mi
+    initContainer:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 200m
+        memory: 128Mi
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetAverageUtilization: 80
+
+resourceRegistry:
+  install: true
+
+  # Private images for resource registry
+  images:
+    resourceRegistry: dba-etcd:19.0.2
+    keytoolInitcontainer: dba-keytool-initcontainer:19.0.2
+    pullPolicy: IfNotPresent
+
+  # TLS configurations
+  tls:
+    tlsSecretName: rr-client-tls-secret
+
+  # Resource registry cluster size
+  replicaCount: 3
+
+  # RR Resource config
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+  # data persistence config
+  persistence:
+    enabled: false
+    useDynamicProvisioning: true
+    storageClassName: "manual"
+    accessMode: "ReadWriteOnce"
+    size: 3Gi
+
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 120
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  
+  logLevel: info

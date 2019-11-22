@@ -1,0 +1,97 @@
+{{- $iiraOrchestratorService := printf "%s" "ibm-iira-orchestrator-prod" -}}
+{{- $iiraMLService := printf "%s" "ibm-iira-ml-prod" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-iira-prod.fullname" . }}
+  {{ if .Values.global.nameSpaceEnabled }}
+  namespace: {{ .Values.global.namespace }}
+  {{ end }}
+  labels:
+    app: {{ template "ibm-iira-prod.name" . }}
+    chart: {{ template "ibm-iira-prod.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-iira-prod.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-iira-prod.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "ibm-iira-prod.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+      {{- include "ibm-iira-prod.product-metering" . | indent 8 }}
+    spec:
+      volumes:
+        - name: iira-internal-tls-webapp
+          secret:
+            secretName: iira-internal-tls
+            items:
+              - key: iira-webapp-ca.crt
+                path: iira-webapp-ca.crt
+              - key: iira-webapp.key
+                path: iira-webapp.key
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true 
+      affinity: 
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          serviceAccount: cpd-viewer-sa
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false 
+            capabilities:
+              drop:
+              - ALL
+          env:
+            - name: REACT_APP_DEPLOY_TARGET
+              value: {{ .Values.image.tag}}
+            - name: AMELIA_ORCHESTRATOR
+              value: {{ $iiraOrchestratorService }}
+            - name: AMELIA_ORCHESTRATOR_PORT
+              value: !!integer {{ index .Values "ibm-iira-orchestrator-prod" "service" "port" }}
+            - name: AMELIA_ML_SERVICE
+              value: {{ $iiraMLService }}
+            - name: AMELIA_ML_PORT
+              value: !!integer {{ index .Values "ibm-iira-ml-prod" "service" "port" }}
+          ports:
+            - name: https
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - mountPath: "/etc/pki/tls/certs"
+              name: iira-internal-tls-webapp
+              readOnly: true
+          resources:
+{{ toYaml .Values.resources | indent 12 }}

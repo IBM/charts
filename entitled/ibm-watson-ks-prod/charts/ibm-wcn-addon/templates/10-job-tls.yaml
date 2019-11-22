@@ -1,0 +1,78 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "addon-tls") | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "addon-tls") | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . "addon-tls") | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "addon-tls") | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 8000
+{{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ include "wcn-addon.privileged-account.name" . }}
+      volumes:
+      - name: tls-out
+        emptyDir: {}
+      containers:
+      - name: secret-config
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 8000
+{{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ include "wcn-addon.icpDockerRepo" . }}{{ .Values.addon.tls.image.repository }}:{{ .Values.addon.tls.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: tls-out
+          mountPath: /tmp/secretGen/tls
+        command:
+        - /bin/bash
+        - -c
+        - |
+            set -e
+            openssl genrsa -out /tmp/secretGen/tls/{{ include "ibm-wcn-addon.name" . }}.key 2048
+            openssl req -x509 -new -nodes -key /tmp/secretGen/tls/{{ include "ibm-wcn-addon.name" . }}.key -subj "/CN=mycluster.icp" -days 3650 -reqexts v3_req -extensions v3_ca -out /tmp/secretGen/tls/{{ include "ibm-wcn-addon.name" . }}.crt
+            cat <<EOF | kubectl create -f -
+            apiVersion: v1
+            kind: Secret
+            type: kubernetes.io/tls
+            metadata:
+              name: {{ include "sch.names.fullCompName" (list . "addon") | quote }}
+              labels:
+{{ include "sch.metadata.labels.standard" (list . "addon") | indent 16 }}
+            data:
+              tls.crt: $(cat /tmp/secretGen/tls/{{ include "ibm-wcn-addon.name" . }}.crt | base64 | tr -d '\n')
+              tls.key: $(cat /tmp/secretGen/tls/{{ include "ibm-wcn-addon.name" . }}.key | base64 | tr -d '\n')
+            EOF

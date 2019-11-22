@@ -1,0 +1,28 @@
+{{- if and .Values.persistence.enabled (not (tpl .Values.dataPVC.existingClaimName . )) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ .Release.Name}}-{{ .Values.dataPVC.name }}"
+{{ include "embeddings.labels" . | indent 2 }}
+spec:
+  {{- if .Values.persistence.useDynamicProvisioning }}
+  # if present, use the storageClassName from the values.yaml, else use the default storageClass setup by kubernetes Administrator
+  # setting storageClassName to nil means use the default storage class 
+  storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+  {{- else }}
+  # bind to an existing pv.
+  # setting storageClassName to "" disables dynamic provisioning 
+  storageClassName: {{ default "" .Values.dataPVC.storageClassName | quote }}
+    {{- if .Values.dataPVC.selector.label }}
+  # use selectors in the binding process
+  selector:
+    matchExpressions:
+      - {key: {{ .Values.dataPVC.selector.label }}, operator: In, values: [{{ .Values.dataPVC.selector.value }}]}
+    {{- end }}
+  {{- end }}
+  accessModes:
+    - {{ .Values.dataPVC.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.dataPVC.size | quote }}
+{{- end }}

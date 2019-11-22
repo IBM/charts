@@ -1,0 +1,157 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- if or .Values.archivingservice.enabled .Values.policyregistryservice.enabled -}}
+{{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
+{{- $trainerDepName := include "sch.names.fullCompName" (list . "trainer") -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $compName := "setup" -}}
+{{- $rootMetering := $rootData.metering -}}
+{{- $jobName := include "sch.names.fullCompName" (list . $compName) -}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name:  {{ $jobName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    origin: helm-ibm-hdm-analytics-dev
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  template:
+    metadata:
+      name: {{ $jobName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        origin: helm-ibm-hdm-analytics-dev
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{ include "ibmeaprod.spec.security.context" (list .)| indent 6 }}
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secret }}
+      initContainers:
+      - name: waitforcassandra
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.archivingservice.image.name }}:{{ .Values.archivingservice.image.tag }}
+        command:
+          - /bin/sh
+          - -c
+          - '/app/entrypoint.sh npm run checkdbconn'
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "archivingservice" "resources") | indent 10 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.eaarchivingservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra" . | indent 8 }}
+{{ include "eventanalytics.common.kafka" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+      - name: waitfortrainer
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.trainer.image.name }}:{{ .Values.trainer.image.tag }}
+        command: ["sh", "-c", "i=1; until getent hosts {{ $trainerDepName }}; do echo waiting for training service $i; i=$((i+1)); sleep 2; done;"]
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "trainer" "resources") | indent 10 }}
+        env:
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      containers:
+      - name: setupdb-events
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.archivingservice.image.name }}:{{ .Values.archivingservice.image.tag }}
+        imagePullPolicy: {{ .Values.archivingservice.pullPolicy }}
+        command:
+          - /bin/sh
+          - -c
+          - '/app/entrypoint.sh npm run setup'
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "archivingservice" "resources") | indent 10 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.eaarchivingservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra.events" . | indent 8 }}
+{{ include "eventanalytics.common.kafka" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+      - name: setupdb-policies
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.policyregistryservice.image.name }}:{{ .Values.policyregistryservice.image.tag }}
+        imagePullPolicy: {{ .Values.policyregistryservice.pullPolicy }}
+        command:
+          - /bin/sh
+          - -c
+          - '/app/entrypoint.sh npm run setup'
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "policyregistryservice" "resources") | indent 10 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.eapolicyregistryservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.authentication" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra.policies" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+{{ if ne .Values.common.authentication.scheme "cemusers" }}
+      - name: setup-scopeid-policy
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.policyregistryservice.image.name }}:{{ .Values.policyregistryservice.image.tag }}
+        imagePullPolicy: {{ .Values.policyregistryservice.pullPolicy }}
+        command:
+          - /bin/sh
+          - -c
+          - '/app/entrypoint.sh npm run checkdb && /app/entrypoint.sh npm run updscopepol -- -t ${API_AUTHSCHEME_NOIUSERS_TENANTID} -e true'
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "policyregistryservice" "resources") | indent 10 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.eapolicyregistryservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.authentication" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra" . | indent 8 }}
+{{ include "eventanalytics.common.cassandra.policies" . | indent 8 }}
+{{ include "eventanalytics.common.defaults" . | indent 8 }}
+{{ end }}
+      - name: setup-init-training-config
+        image:  {{ include "image.docker.repository" . }}/{{ .Values.trainer.image.name }}:{{ .Values.trainer.image.tag }}
+        imagePullPolicy: {{ .Values.trainer.pullPolicy }}
+        command:
+          - /bin/sh
+          - -c
+          - '/opt/app/generateDefaults.sh -a $API_AUTHSCHEME_TYPE -t $API_AUTHSCHEME_NOIUSERS_TENANTID -u {{ $trainerDepName }}:{{ .Values.trainer.port }} -p $RE_POLICY_DEPLOYED_STATUS -h $SE_POLICY_DEPLOYED_STATUS -o false'
+{{ include "ibmeaprod.container.security.context" (list .)| indent 8 }}
+        resources:
+{{ include "ibmeaprod.comp.size.data" (list . "trainer" "resources") | indent 10 }}
+        env:
+        - name: VCAP_APPLICATION
+          value: '{}'
+{{ include "eventanalytics.common.license" . | indent 8 }}
+{{ include "eventanalytics.common.authentication" . | indent 8}}
+{{ include "eventanalytics.trainerservice.application" . | indent 8 }}
+{{ include "eventanalytics.common.couchdb" . | indent 8 }}
+{{ include "ibmeaprod.spec.security.context" (list .)| indent 6 }}
+{{ end }}

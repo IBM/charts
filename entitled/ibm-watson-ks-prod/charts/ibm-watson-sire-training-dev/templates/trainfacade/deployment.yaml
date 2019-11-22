@@ -1,0 +1,132 @@
+{{- include "sch.config.init" (list . "sireTraining.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.facade.deploymentName -}}
+{{- $jobqCompName :=  .sch.chart.components.jobq.deploymentName -}}
+{{- $tf := .Values.trainFacade -}}
+{{- $jobq := .Values.jobq -}}
+{{- if $tf.enabled -}}
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ include "sireTraining.replicaCountTemplate" . }}
+  selector:
+    matchLabels:
+      release: "{{ .Release.Name }}"
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- /* nodeaffinity for github.com charts, remove the following for PPA charts */}}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+
+### IMAGE PULL SECRET
+{{ include "sireTraining.pullSecretTemplate" . | indent 6 }}
+
+#######################################################################################################################
+########## VOLUMES ####################################################################################################
+#######################################################################################################################
+      volumes:
+      {{ if .Values.global.s3.tlsSecret.fieldRootCertificate -}}
+      # secret reference that contains the etcd connection string for the model mesh sidecar container
+      - name: s3-root-certificate-secret
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.s3.tlsSecret.nameTpl .) .Values.global.s3.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.s3.tlsSecret.fieldRootCertificate }}
+            path: root.pem
+       {{- end }}
+
+      - name: train-facade-config
+        configMap:
+          name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+          defaultMode: 420
+          items:
+          - key: train-job-template
+            path: train.yaml
+          - key: batchapply-job-template
+            path: batchapply.yaml
+
+#######################################################################################################################
+########## CONTAINERS #################################################################################################
+#######################################################################################################################
+      containers:
+      - name: server
+        {{ include "sireTraining.imageTpl" (list $ $tf) }}
+        {{ include "sireTraining.pullPolicyTemplate" . }}
+        resources:
+          requests:
+            cpu: {{ $tf.cpuRequestsMillis }}m
+          limits:
+            cpu: {{ $tf.cpuLimitMillis }}m
+            memory: {{ $tf.memoryLimitMB }}Mi
+        workingDir: "/opt/ibm/mnlp"
+        command:
+        - "train-facade"
+        volumeMounts:
+        - name: train-facade-config
+          mountPath: "/etc/sire-train-facade/job-templates"
+          readOnly: true
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: s3-root-certificate-secret
+          mountPath: /etc/ssl/s3/
+        {{- end }}
+        ports:
+          - name: tf-port-grpc
+            containerPort: 50001
+
+        env:
+        - name: SIRE_TF_S3_ENDPOINT_URI
+          value: {{ default (include .Values.global.s3.endpointTpl .) .Values.global.s3.endpointFixed }}
+        - name: SIRE_TF_S3_BUCKET_NAME
+          value: {{ default (include .Values.global.s3.bucketTpl .) .Values.global.s3.bucketFixed }}
+        - name: SIRE_TF_S3_ROOT_PATH
+          value: {{ $tf.s3RootPath }}
+        - name: JOBQ_HOST
+          value: {{ include "sch.names.fullCompName" (list . $jobqCompName) | quote }}
+        - name: JOBQ_PORT
+          value: "{{ $jobq.securePort }}"
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: AWS_CA_BUNDLE
+          value: /etc/ssl/s3/root.pem
+        {{- end }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+              key: {{ .Values.global.s3.accessSecret.fieldAccessKey }}
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+              key: {{ .Values.global.s3.accessSecret.fieldSecretKey }}
+
+        readinessProbe:
+          exec:
+            command:
+            - grpc-health-probe
+            - -addr=localhost:50001
+            - -connect-timeout=250ms
+            - -rpc-timeout=100ms
+          initialDelaySeconds: 2
+          periodSeconds: 10
+          timeoutSeconds: 1
+        livenessProbe:
+          exec:
+            command:
+            - grpc-health-probe
+            - -addr=localhost:50001
+            - -connect-timeout=250ms
+            - -rpc-timeout=100ms
+          initialDelaySeconds: 20
+          periodSeconds: 30
+          timeoutSeconds: 1
+{{- end -}}

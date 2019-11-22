@@ -1,0 +1,150 @@
+apiVersion: v1
+data:
+  log4j.properties: |
+    log4j.rootLogger=ALL, fileOut, stdout
+    log4j.logger.security=INFO,securityAppender, stdout
+
+    log4j.logger.com.ibm.analytics.wml.eventclient=INFO
+    log4j.logger.org.apache=ERROR
+    log4j.logger.com.ibm.analytics.wml=TRACE
+    log4j.logger.akka=WARN
+    log4j.logger.io.grpc=INFO
+    log4j.logger.io.netty=INFO
+    log4j.logger.com.spss=WARN
+    log4j.logger.com.ibm.spss=WARN
+    log4j.logger.sun.reflect=ERROR
+
+
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+    log4j.appender.stdout.Target=System.out
+    log4j.appender.stdout.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%-5p|%l|%X{Request-ID}|%m%n
+
+    log4j.appender.fileOut=org.apache.log4j.RollingFileAppender
+    log4j.appender.fileOut.File=/opt/ibm/mlonlinespss/logs/mlonlinespss-all.log
+    log4j.appender.fileOut.DatePattern=.yyyy-MM-dd
+    log4j.appender.fileOut.layout=org.apache.log4j.PatternLayout
+    log4j.appender.fileOut.MaxFileSize=10MB
+    log4j.appender.fileOut.MaxBackupIndex=15
+    log4j.appender.fileOut.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%-5p|%l|%X{Request-ID}|%m%n
+
+    # Direct security log messages to a security.log file
+    log4j.appender.securityAppender=org.apache.log4j.DailyRollingFileAppender
+    log4j.appender.securityAppender.File=/opt/ibm/mlonlinespss/logs/security-mlonlinespss.log
+    log4j.appender.securityAppender.DatePattern=.yyyy-MM-dd
+    log4j.appender.securityAppender.layout=org.apache.log4j.PatternLayout
+    log4j.appender.securityAppender.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss,SSS}|%-5p|%l|%X{Request-ID}|%m%n
+  mlscoringspssService.conf: |
+    service {
+      validateTokenService.ml.pubkey.path = "/opt/ibm/mlonlinespss/keys/mltoken.pub"
+      validateTokenService.icp.pubkey.path = "/user-home/_global_/config/jwt/public.pem"
+      wml.host = "https://internal-nginx-svc:12443"
+      wml.port = 443
+      icp4d-host-url = "https://internal-nginx-svc:12443"
+      wml_instances {
+        url = "https://internal-nginx-svc:12443/v3/wml_instances"
+      }
+      features {
+        list = []
+      }
+      space_access {
+       post = ["Admin", "Editor"]
+      }
+      space_cache_refresh {
+        interval = 10
+      }
+      http.port = 18088
+      ssl {
+        port = 16500
+        keystore {
+          path = "/opt/ibm/mlonlinespss/keys/private/keystore.jks"
+          type = "JKS"
+        }
+      }
+      iam {
+        url = "dummy"
+        pdp {
+          url = "dummy"
+          serviceName = "pm-20-devops"
+          apiKey = ""
+        }
+      }
+      spss.home = "/usr/IBM/SPSS/ModelerSolutionPublisher/"
+      spss.ms.home = "/opt/IBM/SPSS/ModelerServer/Cloud/"
+      grpc {
+        port = 16501
+        clients {
+          agent{
+            interface = "wml-scoring-rt-utils"
+            port = 16502
+          }
+        }
+        ssl {
+          key = "/opt/ibm/mlonlinespss/keys/server.key"
+          cert = "/opt/ibm/mlonlinespss/keys/server.crt"
+        }
+      }
+      resiliency {
+        delay = 500   // In milliseconds
+        retries = 3
+      }
+      online-scoring-runtime-spss {
+        type = "Dispatcher"
+        executor = "thread-pool-executor"
+        thread-pool-executor {
+          core-pool-size-min = 12
+          core-pool-size-max = 12
+          max-pool-size-min = 24
+          max-pool-size-max = 128
+          task-queue-size = 24
+        }
+        throughput = 1
+      }
+    }
+
+    akka {
+      # Log the complete configuration at INFO level when the actor system is started.
+      # This is useful when you are uncertain of what configuration is used.
+      log-config-on-start = on
+      loggers = ["akka.event.slf4j.Slf4jLogger"]
+      loglevel = "INFO"
+      stdout-loglevel = "INFO"
+      http.server.max-connections = 6144
+      http.server.request-timeout = 120 s
+      http.server.idle-timeout = 121 s
+      http.host-connection-pool {
+        # The maximum number of open requests accepted into the pool across all
+        # materializations of any of its client flows.
+        # Protects against (accidentally) overloading a single pool with too many client flow materializations.
+        # Note that with N concurrent materializations the max number of open request in the pool
+        # will never exceed N * max-connections * pipelining-limit.
+        # Must be a power of 2 and > 0!
+        max-open-requests = 256
+        max-connections = 64
+      }
+    }
+
+    common {
+      memory.threshold = 80.0
+    }
+
+    usage {
+      wmlService.timeout = 60
+
+      modelType = "spss-modeler"
+      runtimeEnvironment = "18.1"
+
+      ml-event-client {
+        topicSpace = "misc"
+        messageProcessParallelism = 20
+      }
+    }
+kind: ConfigMap
+metadata:
+  name: wmlscoringspss
+  labels:
+    app: wml-scoring
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+

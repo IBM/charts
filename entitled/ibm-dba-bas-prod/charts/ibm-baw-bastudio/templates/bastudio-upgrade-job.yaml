@@ -1,0 +1,79 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+{{- if .Release.IsUpgrade -}}
+{{ include "sch.config.init" (list . "sch.bastudio.config.values") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "upgrade") }}-{{ randNumeric 3 }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "upgrade") | indent 4 }}
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      name: bastudio-db-upgrade-job
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "upgrade") | indent 8 }}
+    spec:
+{{ include "bastudio.constants.pod.securityContext" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      restartPolicy: OnFailure
+{{- include "bastudio.imagePullSecrets" . | indent 6 }}
+      containers:
+      - name: bastudio-container-upgrade
+        image: {{ .Values.images.bastudio | quote }}
+        securityContext:
+{{ include "bastudio.constants.container.securityContext" . | indent 10 }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.resources.bastudio | indent 10 }}
+        command: ["sh","-c"]
+        args: ["/opt/ibm/wlp/ibmProcessServer/bin/dbConfig upgrade defaultServer && /opt/ibm/wlp/ibmProcessServer/bin/updateSystemApp defaultServer"]
+        env:
+        - name: HOSTNAME
+          value: "*"
+        - name: HTTPS_PORT
+          value: "9443"
+        - name: EXTERNAL_HOSTNAME
+          value: {{ .Values.global.baStudio.hostname | quote }}
+        - name: EXTERNAL_HTTPS_PORT
+          value: {{ toString .Values.global.baStudio.port | quote }}
+        - name: ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: adminUser
+        - name: ADMIN_PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: adminPassword
+        - name: DB_TYPE
+          value: {{ .Values.bastudioDB.database.type | quote }}
+        - name: DB_NAME
+          value: {{ .Values.bastudioDB.database.name | quote }}
+        - name: DB_HOST
+          value: {{ .Values.bastudioDB.database.host | quote }}
+        - name: DB_PORT
+          value: {{ toString .Values.bastudioDB.database.port | quote }}
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: dbUsername
+        - name: DB_PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: dbPassword
+{{- end -}}

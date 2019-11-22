@@ -1,0 +1,18 @@
+{{- $hpaEnabled := (include "asm.sizeData" (list . "enableHPA" )) -}}
+{{ if eq $hpaEnabled "true" }}
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "sch.names.fullName" (list .) }}
+  minReplicas: {{ default .Values.global.minReplicasHPAs .Values.minReplicasHPAs }}
+  maxReplicas: {{ default .Values.global.maxReplicasHPAs .Values.maxReplicasHPAs }}
+  targetCPUUtilizationPercentage: {{ .Values.targetCPU }}
+{{- end -}}

@@ -1,0 +1,98 @@
+{{- include "sch.config.init" (list . "sch.chart.gdpr_data_deletion.config.values") -}}
+{{- $compName :=  .sch.chart.components.gdpr_data_deletion.name -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    appName: gdpr-data-deletion
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      appName: gdpr-data-deletion
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        appName: gdpr-data-deletion
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1001
+        {{- end }}
+      terminationGracePeriodSeconds: 300
+      containers:
+        - name: gdpr-data-deletion
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: "{{ .Values.global.image.repository }}/{{ .Values.images.gdprDataDeletion.image }}:{{ .Values.images.gdprDataDeletion.tag }}"
+{{ include "containerSecurityContext" . | indent 10 }}
+          resources:
+            requests:
+              memory: "500Mi"
+              cpu: "200m"
+            limits:
+              memory: "500Mi"
+              cpu: "500m"
+          env:
+          - name: MAX_HEAP
+            value: "400m"
+          - name: STARTING_HEAP
+            value: "400m"
+          - name: CLOUD_ENVIRONMENT
+            value: icp
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: EUREKA_FETCH_REGISTRY
+            value: "false"
+          - name: EUREKA_DISABLE
+            value: "true"
+          ports:
+          - containerPort: 9080
+          - containerPort: 9443
+          volumeMounts:
+          - mountPath: /etc/gdpr-data-deletion/config
+            name: gdpr-data-deletion-config
+            readOnly: true
+          lifecycle:
+            preStop:
+              exec:
+                # SIGTERM triggers a quick exit; gracefully terminate instead
+                command: ["/opt/ibm/docker/stop-server"]
+          livenessProbe:
+            httpGet:
+              path: "/text-to-speech/api/health/check"
+              port: 9080
+            initialDelaySeconds: 300
+            timeoutSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: "/text-to-speech/api/health/check/readiness"
+              port: 9080
+            initialDelaySeconds: 60
+            timeoutSeconds: 20
+      affinity:
+{{- include "ibm-watson-speech-prod.watson-speech-nodeaffinity" .Values.arch | indent 8 }}
+      volumes:
+        - name: gdpr-data-deletion-config
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName) }}-configmap

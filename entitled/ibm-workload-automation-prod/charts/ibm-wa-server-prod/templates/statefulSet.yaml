@@ -1,0 +1,269 @@
+####################################################################
+# Licensed Materials Property of HCL*
+# (c) Copyright HCL Technologies Ltd. 2019. All rights reserved.
+#
+# * Trademark of HCL Technologies Limited
+####################################################################
+
+{{- include "sch.config.init" (list . "waserver.sch.chart.config.values") }}
+{{ $dataPvcName := .Values.persistence.dataPVC.name }}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list .) }}
+{{ $persistentVolumeClaimName := include "sch.names.volumeClaimTemplateName" (list . $dataPvcName $statefulSetName) }}
+{{ $fullName := include "sch.names.fullName" (list .) }}
+{{ $serviceName := include "sch.names.fullName" (list .) }}
+{{ $configName := include "waserver.ConfigName" .}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  updateStrategy: 
+    type: RollingUpdate
+  serviceName: {{ $serviceName }}-h
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "{{ include "sch.names.appName" (list .) }}"
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+        affinity: wa-server
+        waservertype: master
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}      
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false    
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999        
+        fsGroup: {{ default 999 .Values.fsGroupId }}   
+        supplementalGroups: [{{ .Values.supplementalGroupId | default 999 }}]           
+      serviceAccountName: {{ .Values.global.serviceAccountName | default "default" }}              
+      affinity:
+        #schedule pod on different nodes when possible
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: affinity
+                  operator: In
+                  values:
+                  - wa-server
+              topologyKey: kubernetes.io/hostname
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}    
+{{- if .Values.persistence.enabled }}                
+      initContainers:
+      - name: init-config
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: {{ $persistentVolumeClaimName }}
+          mountPath: /tmp/data
+        command: [/opt/wautils/wa_populate_volume.sh]
+        args: ["-s /home/wauser -d /tmp/data"]   
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false     
+          capabilities:
+            drop:
+            - ALL        
+{{- end }}        
+      containers:
+      - name: {{ .Chart.Name }}
+        readinessProbe:
+          exec:
+            command:
+            - /opt/wautils/wa_probe.sh
+            - server
+            - readiness
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        livenessProbe:
+          exec:
+            command:
+            - /opt/wautils/wa_probe.sh
+            - server
+            - liveness
+          initialDelaySeconds: {{ default 600 .Values.server.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 60
+        env:                
+        - name: LICENSE
+          value: {{ .Values.global.license | quote }}   
+        - name: WA_IS_KUBE
+          value: "true"
+        - name: LANG
+          value: {{ default "en" .Values.global.language }}
+        - name: WA_DEBUG_SCRIPTS
+          value: "false"      
+        - name: PUBLIC_HOSTNAME
+          value: {{ template "waMdm.ServiceName" . }}                  
+        - name: WA_SERVICE_DOMAIN
+          value: {{ $serviceName }}-h
+        - name: PUBLIC_PORT
+          value: "31116" 
+        {{- if .Values.server.ingress.enabled }}          
+        - name: ADDITIONAL_HOSTNAME        
+        {{- if .Values.server.ingress.hostname }}
+          value: {{ .Values.server.ingress.hostname | quote }}
+        {{- else }}  
+        {{ $hostname := printf "%s.%s" $fullName "proxy" }}
+          value: {{ $hostname | quote }}
+        {{- end }}     
+        - name: ADDITIONAL_PORT
+          value: "443"
+        {{- end }}         
+        - name: COMPANY_NAME
+          value: {{ .Values.server.company | quote }}
+        {{- if .Values.server.agentName }}
+        - name: AGT_NAME
+          value: {{ .Values.server.agentName | quote }}
+        {{- end }}
+        {{- if .Values.server.startOfDay }}
+        - name: START_OF_DAY
+          value: {{ .Values.server.startOfDay | quote }}
+        {{- end }}   
+        {{- if .Values.server.timezone }}
+        - name: TIMEZONE
+          value: {{ .Values.server.timezone | quote }}
+        {{- end }}   
+        {{- if .Values.server.tz }}
+        - name: TZ
+          value: {{ .Values.server.tz | quote }}
+        {{- end }}              
+        {{- if .Values.server.dateFormat }}
+        - name: DATE_FORMAT
+          value: {{ .Values.server.dateFormat | quote }}
+        {{- end }}
+        - name: CREATE_PLAN
+          value: {{ .Values.server.createPlan | quote }}
+        - name: WA_DEBUG
+          value: {{ .Values.server.containerDebug | quote }}
+        - name: DB_TYPE
+          value: {{ .Values.server.db.type | quote }}
+        - name: DB_HOSTNAME
+          value: {{ .Values.server.db.hostname | quote }}         
+        - name: DB_PORT
+          value: {{ .Values.server.db.port | quote }}   
+        - name: DB_SSL_CONNECTION
+          value:  {{ .Values.server.db.sslConnection | quote }}                           
+        - name: DB_NAME
+          value: {{ .Values.server.db.name | quote }}    
+        - name: DB_USER
+          value: {{ .Values.server.db.user | quote }} 
+        - name: DB_ADMIN_USER
+          value: {{ .Values.server.db.adminUser | quote }}                          
+        {{- if .Values.server.db.tsName }}
+        - name: DB_TS_NAME
+          value: {{ .Values.server.db.tsName | quote }}
+        {{- end }}          
+        {{- if .Values.server.db.tsPath }}
+        - name: DB_TS_PATH
+          value: {{ .Values.server.db.tsPath | quote }}
+        {{- end }}        
+        {{- if .Values.server.db.tsLogName }}
+        - name: DB_LOG_TS_NAME
+          value: {{ .Values.server.db.tsLogName | quote }}
+        {{- end }}          
+        {{- if .Values.server.db.tsLogPath }}
+        - name: DB_LOG_TS_PATH
+          value: {{ .Values.server.db.tsLogPath | quote }}
+        {{- end }}
+        {{- if .Values.server.db.tsPlanName }}
+        - name: DB_PLAN_TS_NAME
+          value: {{ .Values.server.db.tsPlanName | quote }}
+        {{- end }}          
+        {{- if .Values.server.db.tsPlanPath }}
+        - name: DB_PLAN_TS_PATH
+          value: {{ .Values.server.db.tsPlanPath | quote }}
+        {{- end }}
+        {{- if .Values.server.db.tsTempName }}
+        - name: DB_TEMP_TS_NAME
+          value: {{ .Values.server.db.tsTempName | quote }}
+        {{- end }}      
+        {{- if .Values.server.db.tssbspace }}
+        - name: DB_SBSPACE
+          value: {{ .Values.server.db.tssbspace | quote }}
+        {{- end }}     
+        - name: DB_ENABLE_PARTITIONING
+          value: {{ .Values.server.db.usepartitioning | quote }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false     
+          capabilities:
+            drop:
+            - ALL          
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+        volumeMounts:
+{{- if .Values.persistence.enabled }}        
+        - name: {{ $persistentVolumeClaimName }}
+          mountPath: /home/wauser
+          subPath: wauser
+{{- end }}           
+{{- if .Values.server.useCustomizedCert }}
+        - name: cert-bind-volume
+          mountPath: /opt/wautils/certs
+{{- end }}   
+        - name: password-bind-volume
+          mountPath: /opt/service-bind    
+{{- if .Values.server.libConfigName }}
+        - name: config-liberty-volume
+          mountPath: /opt/wautils/dropins
+{{- end }}
+      volumes:
+{{- if .Values.server.useCustomizedCert }}        
+      - name: cert-bind-volume
+        secret:
+          defaultMode: 0664
+          secretName: {{ .Values.server.certSecretName }} 
+{{- end }}       
+      - name: password-bind-volume
+        secret:
+          defaultMode: 0664
+          secretName: {{ .Values.server.pwdSecretName }}        
+{{- if .Values.server.libConfigName }}          
+      - name: config-liberty-volume
+        configMap:
+          name: {{ default $configName .Values.server.libConfigName }}     
+{{- end }}                   
+{{- if .Values.persistence.enabled }}                 
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ $persistentVolumeClaimName }}
+      labels: 
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}      
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.persistence.dataPVC.size | quote }}
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kube Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.persistence.dataPVC.storageClassName | quote }}
+      {{- else }}
+      # bind to an existing pv.
+      # setting storageClassName to "" disables dynamic provisioning 
+      storageClassName: ""
+        {{- if .Values.persistence.dataPVC.selector.label }}
+      # use selectors in the binding process
+      selector:
+        matchLabels:
+          {{ .Values.persistence.dataPVC.selector.label }}: {{ .Values.persistence.dataPVC.selector.value }}
+        {{- end }}      
+      {{- end }}
+{{- end }}

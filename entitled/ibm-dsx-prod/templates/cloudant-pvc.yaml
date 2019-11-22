@@ -1,0 +1,28 @@
+{{ if not .Values.cloudantSrvPVC.persistence.existingClaimName -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "fullname" . }}-{{ .Values.cloudantSrvPVC.name }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: cloudant-pvc
+spec:
+  {{- if .Values.persistence.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.persistence.storageClassName | quote }}
+  {{ else }}
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ default "10Gi" .Values.cloudantSrvPVC.persistence.size | quote }}
+  {{- if (not .Values.persistence.useDynamicProvisioning ) }}
+  selector:
+    matchLabels:
+      assign-to: "{{ .Release.Namespace }}-cloudant"
+  {{- end }}
+{{- end }}

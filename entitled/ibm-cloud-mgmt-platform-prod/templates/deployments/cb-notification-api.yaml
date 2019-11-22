@@ -1,0 +1,84 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-notification-api
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  {{ if eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+  replicas: 2 # dev
+  {{ else }}
+  replicas: 3 # qa/prod
+  {{ end }}
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        io.kompose.service: cb-notification-api
+        name: cb-notification-api # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      containers:
+        - env:
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+            - name: DB_HOST
+              value: "mongodb"
+            - name: DB_PORT
+              value: "27017"
+            - name: CONNECT_DB_PROTOCOL
+              value: mongodb
+            - name: audit_service_url
+              value: cb-audit-service:80
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_notification_api") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_notification_api" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "core.container.securityContext" .  | indent 10 }}
+          name: cb-notification-api
+          ports:
+            - containerPort: 5056
+          resources:
+{{ include "deployClassConfig" (list . "cb_notification_api") | indent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: 5056
+          livenessProbe:
+            httpGet:
+              path: /email/health
+              port: 5056
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 20
+            failureThreshold: 4
+      restartPolicy: Always

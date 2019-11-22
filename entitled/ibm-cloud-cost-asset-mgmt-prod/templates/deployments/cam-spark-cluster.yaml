@@ -1,0 +1,112 @@
+# DO NOT modify this conditional check
+{{- if eq (.Values.enableSparkCluster|quote|lower) "\"true\"" }}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: spark-master
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: spark-master
+  template:
+    metadata:
+      labels:
+        name: spark-master
+{{ include "cam.labels" .  | indent 8 }}
+{{ include "cam.icpMetering" .  | indent 6 }}
+    spec:
+      hostname: spark-master
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      initContainers:
+        - name: user-change
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "cam.readConfig" (list . "k8_jumpbox") }}
+          {{ else }}
+          image: {{ template "camicp.readConfig" (list . "k8_jumpbox" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "cam.container.securityContext.InitContainer" . | indent 10  }}
+          command: ['sh', '-c', 'chown -R 1100:1101 /var/gpd/  &&  chown -R 1100:1101 /zip/']
+          volumeMounts:
+            - name: cam-data
+              mountPath: /var/gpd/analyze_temp
+              subPath: gpd/analyze_temp
+            - name: cam-data
+              mountPath: /var/gpd/temp_uploads
+              subPath: gpd/temp_uploads
+            - name: cam-data
+              mountPath: /var/gpd/staged_uploads
+              subPath: gpd/staged_uploads
+            - name: cam-data
+              mountPath: /var/gpd/zip
+              subPath: gpd/zip
+            - name: cam-data
+              mountPath: /var/gpd/extracts
+              subPath: gpd/extracts
+            - name: cam-data
+              mountPath: /zip
+      containers:
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+      - image: {{ template "cam.readConfig" (list . "cam_spark") }}
+      {{ else }}
+      - image: {{ template "camicp.readConfig" (list . "cam_spark" .Values.imageCredentials.registry) }}
+      {{ end }}
+{{ include "cam.container.securityContext.NonRoot" . | indent 8  }}
+        command: ["/bin/bash","-x","/opt/spark/conf/master.sh"]
+        name: spark-master
+        resources:
+          # Maximum limits
+          limits:
+          # DO NOT modify this conditional check
+            memory: "15G"
+            cpu: "4"
+          # Requests (for K8 pod placement)
+          requests:
+          # DO NOT modify this conditional check
+          {{ if eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+            memory: "0" # DEV override
+            cpu: "0" # force cpu-request to zero (otherwise defaults to limits def)
+          {{ else }}
+            # DO NOT modify this conditional check
+            memory: "4G"
+            cpu: "4"
+          {{ end }}
+        env:
+        {{ if not eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+        - name: SPARK_EXECUTOR_MEMORY
+          value: "15g"
+        - name: SPARK_DRIVER_MEMORY
+          value: "15g"
+        {{ end }}
+        ports:
+        - containerPort: 7077
+          name: spark-master
+        volumeMounts:
+        - name: cam-data
+          mountPath: /var/gpd/analyze_temp
+          subPath: gpd/analyze_temp
+        - name: cam-data
+          mountPath: /var/gpd/temp_uploads
+          subPath: gpd/temp_uploads
+        - name: cam-data
+          mountPath: /var/gpd/staged_uploads
+          subPath: gpd/staged_uploads
+        - name: cam-data
+          mountPath: /var/gpd/zip
+          subPath: gpd/zip
+        - name: cam-data
+          mountPath: /var/gpd/extracts
+          subPath: gpd/extracts
+        - name: cam-data
+          mountPath: /zip
+      volumes:
+        - name: cam-data
+          persistentVolumeClaim:
+            claimName: cam-data-claim
+{{ end }}

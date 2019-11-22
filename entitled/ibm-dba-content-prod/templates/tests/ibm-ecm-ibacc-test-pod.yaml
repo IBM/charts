@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app: {{ template "ibm-dba-content-prod.name" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+# spec\.template\.spec\.affinity\.nodeAffinity\.requiredDuringSchedulingIgnoredDuringExecution\.nodeSelectorTerms\[[0-9]+\]\.matchExpressions\[[0-9]+\]\.key
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 50001
+  containers:
+  - name: {{ template "ibm-dba-content-prod.fullname" . }}-test
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+    command: ["sh", "-c", "wget -O- https://{{ template "ibm-dba-content-prod.fullname" . }}:8443/index.html --no-check-certificate"]
+    securityContext:
+          runAsUser: 50001
+          allowPrivilegeEscalation: false
+          # jesse
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+  restartPolicy: Never

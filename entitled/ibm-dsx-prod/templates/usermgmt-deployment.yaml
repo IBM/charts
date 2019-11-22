@@ -1,0 +1,93 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: usermgmt
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: usermgmt-deployment
+spec:
+  replicas: {{ .Values.usermgmt.replicas }}
+  selector:
+    matchLabels:
+      run: usermgmt-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: usermgmt
+        component: usermgmt
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        run: usermgmt-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      containers:
+      - name: usermgmt-container
+        image: {{ .Values.usermgmt.image.repository }}:{{ .Values.usermgmt.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/startup.sh"]
+        env:
+        - name: CLOUDANT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_username
+        - name: CLOUDANT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_password
+        {{ if eq .Values.global.ibmProduct "zen" }}
+        - name: IBM_PRODUCT
+          value: zen
+        - name: ISF_SERVICE_URL
+          value: https://is-servicesdocker:9446
+        {{- end }}
+        - name: SHOW_K8S_MGMT
+          value: {{ or .Values.usermgmt.showK8sMgmt .Values.global.baseInstaller | quote }}
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.usermgmt.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

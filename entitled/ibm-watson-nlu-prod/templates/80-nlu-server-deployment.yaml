@@ -1,0 +1,108 @@
+{{- include "sch.config.init" (list . "nlu.sch.chart.config.values") -}}
+{{- $icpPullSecrets := include "icp-pull-secrets" . -}}
+{{- $icpNLUServerCompName :=  .sch.chart.components.nluserver.name -}}
+{{- $icpOrchestratorCompName :=  .sch.chart.components.orchestrator.name -}}
+{{- $icpfeatureServerOverridesConfigMapName :=  .sch.configmap.featureServerOverrideConfigmap.name -}}
+
+{{/* DRY variables */}}
+{{- $nluServerPort := 4443 -}}
+{{- $tlsVolumeMountName := "shared-tls-secrets" -}}
+{{- $tlsVolumeMountPath := "/mnt/ssl/shared" -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  {{ include "sch.names.fullCompName" (list . $icpNLUServerCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $icpNLUServerCompName) | indent 4 }}
+spec:
+  replicas: {{ .Values.nluserver.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $icpNLUServerCompName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $icpNLUServerCompName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering .) | indent 8 }}
+
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      containers:
+      - name: {{ include "sch.names.fullCompName" (list . $icpNLUServerCompName) }}
+        image: "{{ .Values.global.icpDockerRepo }}{{ .Values.nluserver.image.repository }}:{{ .Values.nluserver.image.tag }}"
+        ports:
+          - name: https-nluserver
+            containerPort: {{ $nluServerPort }}
+            protocol: TCP
+        resources:
+          limits:
+            memory: {{ .Values.nluserver.resources.limits.memory }}
+            cpu: {{ .Values.nluserver.resources.limits.cpu }}
+          requests:
+            memory: {{ .Values.nluserver.resources.requests.memory }}
+            cpu: {{ .Values.nluserver.resources.requests.cpu }}
+        livenessProbe:
+          httpGet:
+            path: "/info/health"
+            port: {{ $nluServerPort }}
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: "/info/health"
+            port: {{ $nluServerPort }}
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          failureThreshold:  3
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        env:
+        - name: ORCHESTRATOR_HOST
+          value: "{{ include "sch.names.fullCompName" (list . $icpOrchestratorCompName) }}:8000"
+        - name: RUNNING_IN_ARMADA
+          value: "true"
+        - name: AS1_MONITOR_ENABLED
+          value: "false"
+        - name: FEATURE_SERVER_OVERRIDES_ONLY
+          value: "true"
+        - name: FEATURE_SERVER_HOT_RELOAD
+          value: "false"
+        - name: FEATURE_SERVER_OVERRIDES_FILE
+          value: "/opt/nlu/overrides/feature_server_overrides.yml"
+        - name: SSL_KEY_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerKey }}
+        - name: SSL_CERT_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerCertificate }}
+        volumeMounts:
+        - name: {{ include "sch.names.fullCompName" (list . $icpfeatureServerOverridesConfigMapName) }}
+          mountPath: /opt/nlu/overrides
+        - name: {{ $tlsVolumeMountName }}
+          mountPath: {{ $tlsVolumeMountPath }}
+          readOnly: true
+        - mountPath: "/opt/nlu/var"
+          name: "var-mount"
+      volumes:
+      - name: {{ include "sch.names.fullCompName" (list . $icpfeatureServerOverridesConfigMapName) }}
+        configMap:
+          name: {{ include "sch.names.fullCompName" (list . $icpfeatureServerOverridesConfigMapName) }}
+      - name: {{ $tlsVolumeMountName }}
+        secret:
+          secretName: {{ default (include .Values.global.tls.secret.nameTpl .) .Values.global.tls.secret.fixedName }}
+      - name: "var-mount"
+        emptyDir: {}
+      imagePullSecrets:
+      - name: {{ $icpPullSecrets | quote }}
+
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64

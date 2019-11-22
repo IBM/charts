@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-service-verification
+  labels:
+    app: {{ .Release.Name }}-service-verification
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": test-success
+    productID: 103bfba4a040493b8cb94bd489373ba3
+    productName: "IBM Edge Device Edition"
+    productVersion: 3.2.1
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  {{- if .Values.global.image.pullSecret }}
+  imagePullSecrets:
+    - name: {{ .Values.global.image.pullSecret }}
+  {{- end }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: "beta.kubernetes.io/arch"
+            operator: In
+            values:
+            - {{ .Values.arch }}
+  containers:
+  - name: {{ .Release.Name }}-service-verification
+    image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.agbot.image }}:{{ .Values.agbot.tag }}
+    imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+    resources:
+      requests:
+        memory: 100Mi
+        cpu: 100m
+      limits:
+        memory: 200Mi
+        cpu: 200m
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+    env:
+      - name: EXCHANGE_ROOT_PASS
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Release.Name }}
+            key: exchange-root-pass
+      - name: AGBOT_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Release.Name }}
+            key: agbot-token
+      - name: AGBOT_CONFIG
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Release.Name }}
+            key: agbot-config
+    command:
+    - "/bin/bash"
+    - -c
+    - |
+      echo "Running verification helm tests against IBM Edge Computing for release '{{ .Release.Name }}'"
+       
+      # Define some variables based off supplied ones
+      export HZN_ORG_ID=IBM \
+      HZN_CSS_URL=http://{{ .Release.Name }}-css \
+      HZN_EXCHANGE_URL=http://{{ .Release.Name }}-exchange/v1 \
+      HZN_EXCHANGE_USER_AUTH="root/root:$EXCHANGE_ROOT_PASS"
+      AGBOT_ID=$(echo $AGBOT_CONFIG | awk -F "$HZN_ORG_ID/" '{print $2}' | awk -F '"' '{print $1}')
+      HZN_AGBOT_AUTH="$HZN_ORG_ID/$AGBOT_ID:$AGBOT_TOKEN"
+
+      # Some final automated/manual checks
+      FAIL_FLAG=0
+      echo -e "\n==Running final verification of service availability=="
+      if [[ $(curl -sSf -u "$HZN_EXCHANGE_USER_AUTH" $HZN_EXCHANGE_URL/admin/status | jq -r .msg) == "Exchange server operating normally" ]]; then
+        echo "SUCCESS: Edge Computing Exchange API is operational"
+      else
+        echo "FAILURE: Edge Computing Exchange API is not operational"
+        FAIL_FLAG=1
+      fi
+      if [[ $(curl -sSf -u "$HZN_EXCHANGE_USER_AUTH" $HZN_CSS_URL/api/v1/health | jq -r .general.healthStatus) == "green" ]]; then
+        echo "SUCCESS: Edge Computing Cloud Sync Service is operational"
+      else
+        echo "FAILURE: Edge Computing Cloud Sync Service is not operational"
+        FAIL_FLAG=1
+      fi
+      if curl -sSf -u "$HZN_AGBOT_AUTH" $HZN_EXCHANGE_URL/orgs/$HZN_ORG_ID/agbots/$AGBOT_ID > /dev/null; then
+        echo "SUCCESS: Edge Computing Agbot authentication is configured correctly"
+      else
+        echo "FAILURE: Edge Computing Agbot authentication is configured incorrectly, using '$HZN_ORG_ID/$AGBOT_ID'"
+        FAIL_FLAG=1
+      fi
+      AGBOT_HEARTBEAT=$(curl -sSf -u "$HZN_EXCHANGE_USER_AUTH" $HZN_EXCHANGE_URL/orgs/$HZN_ORG_ID/agbots/$AGBOT_ID | jq -r '.agbots["'$HZN_ORG_ID'/'$AGBOT_ID'"].lastHeartbeat')
+      echo "VERIFY: Most recent '$AGBOT_ID' heartbeat is '$AGBOT_HEARTBEAT'"
+      echo "VERIFY: Please visit $(curl -k -s https://icp-management-ingress.kube-system:8443/api/v1/config | jq -r .cluster_url)/edge for the Edge Computing UI"
+
+      # Did we fail
+      if [ $FAIL_FLAG == 1 ]; then
+        exit 1
+      fi
+  restartPolicy: Never

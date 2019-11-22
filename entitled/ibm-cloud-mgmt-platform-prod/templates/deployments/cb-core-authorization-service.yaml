@@ -1,0 +1,119 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-core-authorization-service
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cb-core-authorization-service # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      containers:
+        - env:
+            - name: audit_service_url
+              value: cb-audit-service:80
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-creds
+                  key: couchdb.username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-creds
+                  key: couchdb.password
+            - name: DB_URL
+              value: http://couchdb:5984
+            - name: ROLE_DB
+              value: roles
+            - name: USER_ROLE_DB
+              value: user_roles
+            - name: TEAM_DB
+              value: teams
+            - name: iam_agent_url
+              value: http://cb-core-sample-auth-agent:5000
+            - name: iam_agent_name
+              value: iam_agent
+            - name: iam_agent_version
+              value: v2
+            - name: iam_agent_user_endpoint
+              value: authorization/user
+            - name: iam_agent_users_endpoint
+              value: authorization/users
+            - name: iam_agent_roles_endpoint
+              value: authorization/roles
+            - name: iam_agent_teams_endpoint
+              value: authorization/teams
+            - name: connection_protocol
+              value: http
+            - name: cb_core_configuration_service_url
+              value: cb-core-configuration-service:5054
+            - name: cb_cred_svc_url
+              value: http://cb-cred-svc:8000
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.url
+            - name: MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+            - name: MONGODB_HOSTNAME
+              value: "mongodb"
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: CONNECT_DB_PROTOCOL
+              value: mongodb
+            - name: API_GATEWAY
+              value: {{ .Values.apiGatewayUrl }}
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_core_authorization_service") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_core_authorization_service" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "core.container.securityContext" .  | indent 10}}
+          name: cb-core-authorization-service
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 20
+            failureThreshold: 4
+          resources:
+{{ include "deployClassConfig" (list . "cb_core_authorization_service") | indent 12 }}
+      restartPolicy: Always

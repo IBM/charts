@@ -1,0 +1,270 @@
+{{- include "sch.config.init" (list . "etcd.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "server") | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "server") | indent 6 }}
+  replicas: {{ .Values.replicaCount }}
+  serviceName: {{ include "sch.names.fullName" (list .) | quote }}
+  podManagementPolicy: "Parallel"
+  template:
+    metadata:
+      name: {{ include "sch.names.fullName" (list .) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "server") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ template "etcd3.serviceaccountname" . }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+{{ include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 6 }}
+      containers:
+      {{- $replicaCount := int .Values.replicaCount }}
+      {{- $clientPort := int "2379" }}
+      {{- $peerPort := int "2380" }}
+      {{- $etcdFullname := include "sch.names.statefulSetName" (list .) }}
+      {{- $releaseNamespace := .Release.Namespace }}
+      {{- $etcdServiceName := include "etcd3.fullservicename" . }}
+      {{- $etcdPeerProtocol := "http" }}
+      {{- $etcdClientProtocol := include "etcd3.clientProtocol" . }}
+      {{- $dataDir := printf "/home/etcd/data/%s" $etcdFullname }}
+      - command:
+        - "/bin/sh"
+        - "-ec"
+        - |
+          HOSTNAME=$(hostname -s)
+          ID=${HOSTNAME: -1}
+          echo "==> The ID of the host is $ID"
+          DATA_DIR={{ $dataDir }}
+
+          ## Store member id for later member replacement
+          store_member_id() {
+            memberIdToStore=""
+            while [ -z "${memberIdToStore}" ]; do
+              sleep 30;
+              ETCDCTL_ENDPOINTS=${ETCDCTL_ENDPOINTS%","}
+              echo "==> Storing member ID, connecting to: ${ETCDCTL_ENDPOINTS}"
+              memberIdToStore=$(etcdctl member list | grep `hostname -s` | awk '{print $1}' | tr -d ",")
+              echo $memberIdToStore > ${DATA_DIR}/member_id
+            done
+            exit 0
+          }
+
+          ## Create data dir if not exists
+          if [ ! -d '${DATA_DIR}' ]; then
+            echo "==> Creating data dir..."
+            mkdir -p ${DATA_DIR}
+          fi
+
+          export ETCDCTL_ENDPOINTS="{{range $i, $e := until $replicaCount }}{{ $etcdClientProtocol }}://{{ $etcdFullname }}-{{ $e }}.{{ $etcdServiceName }}:{{ $clientPort }},{{ end }}"
+          export ETCD_PEER_ENDPOINTS="{{range $i, $e := until $replicaCount }}{{ $etcdPeerProtocol }}://{{ $etcdFullname }}-{{ $e }}.{{ $etcdServiceName }}:{{ $peerPort }},{{ end }}"
+          ETCDCTL_ENDPOINTS=${ETCDCTL_ENDPOINTS%","}
+          ETCD_PEER_ENDPOINTS=${ETCD_PEER_ENDPOINTS%","}
+
+          ## Re-joining failed node
+          export ETCD_INITIAL_CLUSTER_STATE="existing"
+          if [ -d '${DATA_DIR}/member/' ]; then
+            echo "==> Data exists. Re-joining etcd member"
+            member_id=$(cat ${DATA_DIR}/member_id)
+
+            echo "==> Updating member in existing cluster."
+            echo "==>Connecting to: ${ETCDCTL_ENDPOINTS}" && etcdctl member update ${member_id} --peer-urls="{{ $etcdPeerProtocol }}://`hostname -s`.{{ $etcdServiceName }}:{{ $peerPort }}"
+
+          ## Adding new member to the cluster
+          elif [ "${ID}" -ge {{ $replicaCount }} ]; then
+            echo "==> Adding member to existing cluster."
+
+            echo "==> Adding new member"
+            export ETCD_INITIAL_CLUSTER_STATE="existing"
+            echo "==>Connecting to: ${ETCDCTL_ENDPOINTS}" && etcdctl member add `hostname -s` --peer-urls="${ETCD_PEER_ENDPOINTS}"
+            #sed -ie 's/^/export /' ${DATA_DIR}/new_member_envs
+
+            #echo "==> Loading env vars of existing cluster"
+            #source ${DATA_DIR}/new_member_envs
+
+            store_member_id &
+
+          ## Setting up new cluster
+          else
+
+            myId=""
+            otherNodes=""
+
+            IFS=','
+            for node in $ETCDCTL_ENDPOINTS ; do
+              ## connect to node other than myself and try to get my id
+              if [ `echo -n "${node}" | grep "${HOSTNAME}" | wc -l` == 0 ]; then
+                myId=$(etcdctl member list --endpoints=${node} | grep `hostname -s` | awk '{ print $1}' | tr -d ",")
+                otherNodes="${otherNodes}${node},"
+              fi
+            done
+            unset IFS;
+
+            if [ -n "${myId}" ]; then
+              echo "==> Existed member and LOST DATA, Re-joining... "
+              echo "==> Re-joining, connecting to: ${otherNodes}"
+              otherNodes=${otherNodes%","}
+
+              echo "==> Re-joining self: \n==>"
+              etcdctl member update ${myId} --peer-urls="{{ $etcdPeerProtocol }}://`hostname -s`.{{ $etcdServiceName }}:{{ $peerPort }}"
+
+              echo "==> Re-joining, loading env vars of existing cluster"
+
+            else
+              export ETCD_INITIAL_CLUSTER_STATE="new"
+              echo "==> There is no data at all. Starting as new cluster..."
+
+
+            fi
+
+            store_member_id &
+
+          fi
+
+          exec etcd
+
+        image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}/{{ end }}{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: etcd
+        ports:
+        - containerPort: 2379
+          name: client
+          protocol: TCP
+        - containerPort: 2380
+          name: server
+          protocol: TCP
+        env:
+        - name: SET_NAME
+          value: {{ template "etcd3.fullservicename" . }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        ## Basic configuration
+        - name: GOMAXPROCS
+          value: {{ .Values.maxEtcdThreads | quote }}
+
+        - name: ETCD_NAME
+          value: "$(POD_NAME)"
+        - name: ETCD_DATA_DIR
+          value: {{ $dataDir }}
+        - name: ETCD_ADVERTISE_CLIENT_URLS
+          value: '{{ $etcdClientProtocol }}://$(POD_NAME).{{ $etcdServiceName }}:{{ $clientPort }}'
+        - name: ETCD_LISTEN_CLIENT_URLS
+          value: "{{ $etcdClientProtocol }}://0.0.0.0:{{ $clientPort }}"
+        - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+          value: "{{ $etcdPeerProtocol }}://$(POD_NAME).{{ $etcdServiceName }}:{{ $peerPort }}"
+        - name: ETCD_LISTEN_PEER_URLS
+          value: "{{ $etcdPeerProtocol }}://0.0.0.0:{{ $peerPort }}"
+        - name: ETCD_ELECTION_TIMEOUT
+          value: "5000"
+        - name: ETCD_HEARTBEAT_INTERVAL
+          value: "500"
+
+        ## Clustering configuration
+{{- if gt $replicaCount 1 }}
+        - name: ETCD_INITIAL_CLUSTER_TOKEN
+          value: "ibm-wcd-etcd-cluster-{{ .Release.Name }}"
+        - name: ETCD_INITIAL_CLUSTER
+          value: {{range $i, $e := until $replicaCount }}{{ $etcdFullname }}-{{ $e }}={{ $etcdPeerProtocol }}://{{ $etcdFullname }}-{{ $e }}.{{ $etcdServiceName }}:{{ $peerPort }},{{ end }}
+{{- end }}
+
+{{- if .Values.auth.enabled }}
+        - name: USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "etcd3.rootSecret" . }}
+              key: username
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "etcd3.rootSecret" . }}
+              key: password
+        - name: ETCDCTL_USER
+          value: "$(USERNAME):$(PASSWORD)"
+{{- end }}
+
+{{- if include "etcd3.tls.enabled" (list .Values.tls.enabled . ) }}
+        - name: ETCD_CERT_FILE
+          value: "/var/etcd/certs/tls.crt"
+        - name: ETCD_KEY_FILE
+          value: "/var/etcd/certs/tls.key"
+        - name: ETCDCTL_CACERT
+          value: "/var/etcd/certs/tls.cacrt"
+{{- end }}
+
+        ## ETCD Client configuration
+        - name: ETCDCTL_API
+          value: "3"
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        livenessProbe:
+          tcpSocket:
+            port: 2379
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+        readinessProbe:
+          exec:
+            command: ["etcdctl", "--endpoints={{ template "etcd3.fullservicename" . }}:2379", "endpoint", "health"]
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+        volumeMounts:
+        {{- if include "etcd3.tls.enabled" (list .Values.tls.enabled . ) }}
+        - name: tls
+          mountPath: /var/etcd/certs/
+        {{- end }}
+        - name: {{ .Values.dataPVC.name | quote }}
+          mountPath: /home/etcd/data/
+{{ include "sch.security.securityContext" (list . .sch.chart.securityContext2) | indent 8 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      volumes:
+      {{- if include "etcd3.tls.enabled" (list .Values.tls.enabled . ) }}
+      - name: tls
+        secret:
+          secretName: {{ include "etcd3.tlsSecret" . | quote }}
+          defaultMode: 0644
+      {{ end }}
+      {{- if not .Values.persistence.enabled }}
+      - name: {{ .Values.dataPVC.name | quote }}
+        emptyDir: {}
+      {{- else }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Values.dataPVC.name | quote }}
+      spec:
+      {{- if .Values.persistence.useDynamicProvisioning }}
+        # if present, use the storageClassName from the values.yaml, else use the default storageClass setup by kube Administrator
+        # setting storageClassName to nil means use the default storage class
+        storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+      {{- else }}
+        # bind to an existing pv.
+        # setting storageClassName to "" disables dynamic provisioning
+        storageClassName: {{ default "" .Values.dataPVC.storageClassName | quote }}
+        {{- if .Values.dataPVC.selector.label }}
+        # use selectors in the binding process
+        selector:
+          matchExpressions:
+            - {key: {{ .Values.dataPVC.selector.label }}, operator: In, values: [{{ .Values.dataPVC.selector.value }}]}
+        {{- end }}
+      {{- end }}
+        accessModes:
+          - {{ .Values.dataPVC.accessMode | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.dataPVC.size | quote }}
+      {{- end }}

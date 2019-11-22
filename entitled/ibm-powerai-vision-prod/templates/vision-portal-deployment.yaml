@@ -1,0 +1,117 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "shortname" . }}-portal
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    run: {{ template "shortname" . }}-portal-dep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ template "shortname" . }}-portal-dp
+  template:
+    metadata:
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+        run: {{ template "shortname" . }}-portal-dp
+      {{ include "vision-release-annotations" . | indent 6 }}
+    spec:
+      initContainers:
+        - name: init
+          image: "{{ template "repoprefix" . }}powerai-vision-models:{{ .Values.image.releaseTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c", "time cp -auv /vision_content/* /volume_mount/"]
+          volumeMounts:
+            - mountPath: /volume_mount
+              name: data-mount
+      containers:
+        - name: {{ template "shortname" . }}-portal
+          image: "{{ template "repoprefix" . }}powerai-vision-portal:{{ .Values.image.releaseTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 9080
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /opt/powerai-vision/data
+              name: data-mount
+              subPath: data
+            - mountPath: /etc/vision
+              name: config-mount
+              readOnly: true
+            - name: podinfo
+              mountPath: /etc/podinfo
+              readOnly: true
+          env:
+            - name: CONTEXT_ROOT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: WEBROOT_API
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shortname" . }}-secrets
+                  key: mongodb-admin-password
+            - name: VMS_SERVER_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: VMS_SERVER_HOST
+          livenessProbe:
+            httpGet:
+              path: /{{ template "shortname" . }}-api/index.html
+              port: http
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /{{ template "shortname" . }}-api/index.html
+              port: http
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+        beta.kubernetes.io/arch: ppc64le
+      affinity:
+      {{- include "nodeaffinity-ppc64le" . | indent 6 }}
+      volumes:
+        - name: "data-mount"
+          persistentVolumeClaim:
+          {{- if .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+            claimName: {{ .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ tpl .Values.poweraiVisionDataPvc.name . }}
+          {{- end }}
+        - name: "config-mount"
+          #hostPath:
+          #  path: /opt/powerai-vision/run/portal/config-powerai-k8s.json
+          #  type: File
+          # Ideally we'd use a configMap - but this will need a refactoring of the
+          # location of the config json.
+          configMap:
+            name: {{ template "shortname" . }}-config
+        - name: podinfo
+          downwardAPI:
+            items:
+              - path: "labels"
+                fieldRef:
+                  fieldPath: metadata.labels
+              - path: "annotations"
+                fieldRef:
+                  fieldPath: metadata.annotations
+      {{ include "imagesecrets" . | indent 6 }}

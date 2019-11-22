@@ -1,0 +1,203 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-create-slot-store-db"
+  labels: &job_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:   "conversation"
+      component:   "store_db_creator"
+      slot:      "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    app:         "ibm-watson-assistant-prod-1.3.0"
+    chart:       "ibm-watson-assistant"
+    heritage:    "{{ .Release.Service }}"
+    release:     "{{ .Release.Name }}"
+spec:
+  activeDeadlineSeconds: 1200
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        <<: *job_labels
+        # Any pod-specific labels go below
+    spec:
+      restartPolicy: Never 
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+      - name: postgres-is-running
+        image: "{{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+        command:
+        - "sh"
+        - "-c"
+        - |
+          echo "Waiting until postgres is running and responding"
+          while true ; do
+            psql --command "select 1" -w | grep -q 1 && break
+            echo "    - The basic command to postgres failed (retry in 5 sec)"
+            sleep 5
+          done
+          echo "Done. Postgres is running now. Let go to create the DB user and database."
+        env:
+        - name: "PGHOST"
+          value: "{{ include "assistant.postgres.hostname"       . }}"
+        - name: "PGPORT"
+          value: "{{ include "assistant.postgres.port"           . }}"
+        - name: "PGDATABASE"
+          value: "{{ .Values.global.postgres.adminDatabase         }}"
+        - name: "PGUSER"
+          value: "{{ .Values.global.postgres.auth.user             }}"
+        - name: "PGPASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "assistant.postgres.secret_name" . }}"
+              key:  "pg_su_password"
+        - name: "PGSSLMODE"
+          value: "{{ .Values.global.postgres.sslMode               }}"
+        - name: "PGSSLROOTCERT"
+          value: "/etc/secrets/postgres/tls.crt"
+        volumeMounts:
+          - name: postgres
+            mountPath: "/etc/secrets/postgres/"
+
+      containers:
+      - name: db-creator
+        image: "{{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+        env:
+        - name: "POSTGRES_HOSTNAME"
+          value: "{{ include "assistant.postgres.hostname"       . }}"
+        - name: "POSTGRES_PORT"
+          value: "{{ include "assistant.postgres.port"           . }}"
+        - name: "POSTGRES_SSL_MODE"
+          value: "{{ .Values.global.postgres.sslMode               }}"
+        - name: "POSTGRES_ADMIN_USER"
+          value: "{{ .Values.global.postgres.auth.user             }}"
+        - name: "POSTGRES_ADMIN_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "assistant.postgres.secret_name" . }}"
+              key:  "pg_su_password"
+        - name: "POSTGRES_ADMIN_DATABASE"
+          value: "{{ .Values.global.postgres.adminDatabase         }}"
+        # Information about the user and database to create
+        - name: "DATABASE_NAME"
+          value: "{{ include "assistant.postgres.store.database" . }}"
+        - name: "POSTGRES_USER"
+          value: "{{ include "assistant.postgres.store.user"     . }}"
+        - name: "POSTGRES_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "assistant.postgres_store.secretName" . }}"
+              key:  "password"
+        command:
+         - "/bin/sh"
+         - "-c"
+         - |
+            set -e ;
+            export PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}"
+            CONNECTION_PARAMS="host=${POSTGRES_HOSTNAME} port=${POSTGRES_PORT} user=${POSTGRES_ADMIN_USER} dbname=${POSTGRES_ADMIN_DATABASE} sslmode=${POSTGRES_SSL_MODE}"
+            if [ -s /etc/secrets/postgres/tls.crt ] ; then
+                CONNECTION_PARAMS="${CONNECTION_PARAMS} sslrootcert=/etc/secrets/postgres/tls.crt"
+            fi
+            
+            echo "Step 0 - Prerequisites - trying to connect into postgres"
+            echo "    psql \"${CONNECTION_PARAMS}\" --command \"SELECT 1 ;\" -w"
+            psql "${CONNECTION_PARAMS}" --command "SELECT 1 ;" -w
+            
+            echo "Step 1 - creating DB user (if not exists) that will use store microservice to connect to postgres"
+            echo "   Listing existing users"
+            psql "${CONNECTION_PARAMS}" --command "\du+" -w
+            echo "   Creating user ${POSTGRES_USER}"
+            psql "${CONNECTION_PARAMS}" --command "\
+                DO
+                \$do\$
+                BEGIN
+                    IF NOT EXISTS ( SELECT FROM   pg_catalog.pg_roles WHERE  rolname = '${POSTGRES_USER}') THEN
+                        CREATE USER \"${POSTGRES_USER}\" WITH ENCRYPTED PASSWORD '${POSTGRES_PASSWORD}';
+                   END IF;
+                END
+                \$do\$;
+                " ; echo $?
+            echo "   Listing existing users"
+            psql "${CONNECTION_PARAMS}" --command "\du+" -w
+            
+            echo "Step 2 - creating database (if not exists) where store microservice will save the workspaces."
+            echo "   Listing existing databases"
+            psql "${CONNECTION_PARAMS}" --command "\list" -w
+            echo "   Creating database ${DATABASE_NAME} if not exists"
+            psql "${CONNECTION_PARAMS}" --command "SELECT 1 FROM pg_database WHERE datname = '${DATABASE_NAME}'" | grep -q 1 \
+              || psql "${CONNECTION_PARAMS}" --command "CREATE DATABASE \"${DATABASE_NAME}\" with template template0 encoding='utf8' lc_ctype='en_US.utf8' lc_collate='en_US.utf8' ; " -w
+            echo "   Listing existing databases"
+            psql "${CONNECTION_PARAMS}" --command "\list" -w
+            
+            echo "Step 3 - Revoking access for other users to database ${DATABASE_NAME}"
+            psql "${CONNECTION_PARAMS}" --command "REVOKE CONNECT ON DATABASE \"${DATABASE_NAME}\" from public ; " -w
+            
+            echo "Step 4 - Permitting user ${POSTGRES_USER} to access database ${DATABASE_NAME}"
+            psql "${CONNECTION_PARAMS}" --command "GRANT  CONNECT ON DATABASE \"${DATABASE_NAME}\" to \"${POSTGRES_USER}\" ; " -w
+            
+            echo "Step 5 - Installing pgcrypto extension"
+            CONNECTION_PARAMS_STORE="host=${POSTGRES_HOSTNAME} port=${POSTGRES_PORT} user=${POSTGRES_ADMIN_USER} dbname=${DATABASE_NAME} sslmode=${POSTGRES_SSL_MODE}"
+            if [ -s /etc/secrets/postgres/tls.crt ] ; then
+                CONNECTION_PARAMS_STORE="${CONNECTION_PARAMS_STORE} sslrootcert=/etc/secrets/postgres/tls.crt"
+            fi
+            psql "${CONNECTION_PARAMS_STORE}" --command "CREATE EXTENSION IF NOT EXISTS \"pgcrypto\" ;" -w
+            
+            echo "Completed." 
+        volumeMounts:
+          - name: postgres
+            mountPath: "/etc/secrets/postgres/"
+      volumes:
+        - name: postgres
+          secret:
+            secretName: "{{ include "assistant.postgres.secret_name" . }}"
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 30            # To get some time before retry. Remove once backoff limit is uncommented
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"

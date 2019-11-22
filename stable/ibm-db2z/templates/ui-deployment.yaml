@@ -1,0 +1,57 @@
+{{- include "sch.config.init" (list . "db2z.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.ui.name -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ include "sch.names.appName" (list .) }}-{{ $compName }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.podSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+{{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secretName }}
+{{- end }}
+      containers:
+        - name: "{{ include "sch.names.appName" (list .) }}-{{ $compName }}"
+          image: "{{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.db2z.ui.image.repository }}:{{ .Values.db2z.ui.image.tag }}"
+          imagePullPolicy: {{ .Values.db2z.image.pullPolicy }}
+          ports:
+            - name: https
+              containerPort: 3004
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthCheck
+              port: 3004
+              scheme: HTTPS
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 25
+          readinessProbe:
+            httpGet:
+              path: /healthCheck
+              port: 3004
+              scheme: HTTPS
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 25
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.containerSecurityContext) | indent 10 }}

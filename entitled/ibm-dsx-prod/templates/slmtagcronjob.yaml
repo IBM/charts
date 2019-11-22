@@ -1,0 +1,29 @@
+kind: CronJob
+apiVersion: batch/v1beta1
+metadata:
+  name: slmtagcronjob
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  schedule: "{{ .Values.slmtagscheduling.image.schedule }}"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: slmtagcronjob
+            image: {{ .Values.slmtagscheduling.image.repository }}:{{ .Values.slmtagscheduling.image.tag }}
+            imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+            args:
+            - /bin/sh
+            - -c
+            - /slm_tag_create.sh
+            volumeMounts:
+            - mountPath: /user-home
+              name: user-home-mount
+          restartPolicy: OnFailure
+          volumes:
+          {{- include "user-home-pvc" .  | indent 10 }}

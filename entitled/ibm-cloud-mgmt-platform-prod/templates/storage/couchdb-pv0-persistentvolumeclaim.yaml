@@ -1,0 +1,24 @@
+{{- if eq (.Values.persistence.enabled|quote|lower) "\"true\"" -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: core-couchdb-claim0
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+  {{- if (index .Values.coreCouchdbPv0 .Values.k8StorageType).storageClass }}
+  annotations:
+    volume.beta.kubernetes.io/storage-class: {{ (index .Values.coreCouchdbPv0 .Values.k8StorageType).storageClass }}
+  {{ end }}
+spec:
+  {{ if and ((eq (.Values.persistence.useDynamicProvisioning|quote|lower) "\"true\"") ((index .Values.coreCouchdbPv0 .Values.k8StorageType).storageClass)) }}
+  storageClassName: {{ (index .Values.coreCouchdbPv0 .Values.k8StorageType).storageClass }}
+  {{ end }}
+  accessModes:
+    - {{ (index .Values.k8StorageAccessMode .Values.k8StorageType) }}
+  resources:
+    requests:
+      storage: {{ (index .Values.coreCouchdbPv0 .Values.k8StorageType).capacity }}
+  {{- if or (eq .Values.k8StorageType "hostpath" ) ( eq .Values.k8StorageType "nfs" ) }}
+  volumeName: core-couchdb-pv0
+  {{ end }}
+{{ end }}

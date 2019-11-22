@@ -1,0 +1,765 @@
+global:
+  # global.schConfigTemplate - template used to configure common helper. Do not modify
+  schConfigTemplate: "assistant.sch.chart.config.values"
+
+  # global.deploymentType Valid values are Development or Production. A Production deployment is scaled up i.e. a higher number of replicas.
+  deploymentType: "Development"
+
+  # global.podAntiAffinity Valid values are Default, Enable or Disable
+  podAntiAffinity: "Default" 
+
+  # global.keepDatastores
+  keepDatastores: true
+  
+  image:
+    # global.image.pullSecret - Name of the (manually created) imagePullSecret used to pull docker images. If empty the default image pull secret for internal ICP Docker repository ( sa-{{ .Release.Name }} ) will be used.
+    pullSecret: ""
+    
+    # global.image.repository - repository where to pull images from
+    repository: "us.icr.io/"
+
+  icp:
+    # global.icp.masterHostname - Hostname of the ICP cluster Master node - i.e., the name where you login to the cluster https://{{ masterHostname }}:8443, and where docker repository is running.
+    # If the master node is not an DNS resolvable name (e.g., it is "mycluster.icp"), then global.icp.masterIP has to be also specified.
+    masterHostname: ""
+    # global.icp.masterIP - IP (v4) address of the master node. Has to be specified if the global.icp.masterHostname cannot be resolved inside the pods (i.e., if the global.icp.masterHostname is not a valid DNS entry). This IP address has to be accessible from inside of the cluster.
+    #  Typicaly has to be specified if masterHostname is mycluster.icp
+    masterIP: ""
+
+    # global.icp.proxyHostname - the hostname of the proxy node (i.e., where the ingress/services are exposed). Used only for documentation purposes. IP address is permitted. Defaults to masterHostname if not provided.
+    proxyHostname:
+
+  autoscaling:
+    # global.autoscaling.enabled - Specifies whether Horizontal Pod Autoscalers should be created for the Watson Assistant deployments.
+    enabled: true
+  
+  # Specifies the suffix used by the cluster for KubeDNS (default value used by k8s is cluster.local)
+  clusterDomain: "cluster.local"
+  
+  # global.languages - specifes the languages to be installed. Beware, more languages consumes more resources.
+  # I would like this to be an array, but since ICP / metadata does not have support for this kind of entries (it is bunch of booleans :-(
+  languages:
+    english: true # Specifies whether English (en) should be installed or not. If disabled the helm tests will fail.
+
+    # global.languages.german - Specifies whether Deutch (de) should be installed or not
+    german:  false
+
+    # global.languages.arabic - Specifies whether Arabic (ar) should be installed or not
+    arabic: false
+
+    # global.languages.spanish - Specifies whether Spanish (es) should be installed or not
+    spanish: false
+
+    # global.languages.french - Specifies whether French (fr) should be installed or not
+    french: false
+
+    # global.languages.italian - Specifies whether Italian (it) should be installed or not
+    italian: false
+
+    # global.languages.japanese - Specifies whether Japanese (ja)should be installed or not
+    japanese: false
+
+    # global.languages.korean - Specifies whether Korean (ko) should be installed or not
+    korean: false
+
+    # global.languages.portuguese - Specifies whether Portuguese (Brazilian) (pt-br) should be installed or not
+    portuguese: false
+
+    # global.languages.czech - Specifies whether Czech (cs) should be installed or not. (Enabled by default since it does not introduce any addiitional costs.)
+    czech: true
+
+    # global.languages.dutch - Specifies whether Dutch (nl) should be installed or not
+    dutch: false
+
+    # global.languages.chineseTraditional - Specifies whether Chinese traditional (zh-tw) should be installed or not.
+    chineseTraditional: false
+
+    # global.languages.chineseSimplified - Specifies whether Chinese simplified (zh-cn) should be installed or not
+    chineseSimplified: false
+
+  cos:
+    # created - If set to false COS will not be created but you have to provide your own cos instance and credentials to it (see schema, hostname, port) otherwise own cos based on minio is created
+    create: true
+
+    # bucket - prefix of the bucket names to be used
+    bucket:    icp
+
+    # schema, hostname, port are used only if tag cos.enables = false (i.e., bring your own COS)
+    # schema specifies the protocol used to connest to the cos. Values https,http
+    # schema: http
+    schema: ""
+    # hostname where to connect to cos. Typical suffix is namespace.svc.cluster.local if COS is running inside the cluster
+    # hostname: cos.namespace.svc.cluster.local
+    hostname: ""
+    # port where cos is listening.
+    # port: 443
+    port: 443
+
+    auth:
+      # global.cos.auth.secretName - Name of the (manually created secret) that holds the keys for minio (keys: `accesskey` and `secretkey`). If empty the secret is autogenerated with randomly generated keys.
+      secretName: ""
+    tls:
+      # global.cos.tls.secretName - Name of the (manually created secret) that holds private key (key: `tls.key`) and a corresponding certificate (key: `tls.crt`) and CA certificate used to sign the certificate (or the cert itself for self-signed certificate; key `tls.cacrt) to be used by minio and components connecting to minio.
+      #  If empty the secret is autogenerated with randomly generated cert and keys; thus for provided COS with secured connections it should be provided.
+      secretName: ""
+    sse:
+      # global.cos.sse.secretName - Name of the (manually created secret) that holds the key for minio (key: `sseMasterKey`). If empty the secret is autogenerated with randomly generated keys.
+      secretName: ""
+
+  redis:
+    # global.redis.create - If set to false the redis will not be created but you have to provide your own redis instance and credentials to it (see hostname, port, password)/. If true the redis instance will be created automatically
+    create: true
+
+    # global.redis.hostname - hostname of the running redis. Used only if global.redis.create is false.
+    # hostname: redis-master-svc.default.svc.cluster.local
+    hostname: ""
+
+    # global.redis.port - port where redis instance is running. Used only if global.redis.create is false.
+    port: 6379
+
+    auth:
+      # global.redis.auth.authSecretName - Name of the (manually created secret) that holds the password for redis. If empty the secrets is autogenerated with randomly generated password.
+      authSecretName: ""
+
+  postgres:
+    # global.postgres.create - If set to true the postgres instance is created. Otherwise you have to provide your own postgres instance and the credentials.
+    create: true
+
+    # global.postgres.hostname - hostname of the postgress. Used only if global.postgres.create is false.
+    hostname: ""
+    # global.postgres.port - port where postgress instance is running. Used only if global.postgres.create is false.
+    port: 5432
+
+    auth:
+      # global.postgres.auth.user - Username of superuser in postgres database (needs to be able to create new databases and users).
+      # Needs to be changed if you provide our own postgres instance to match admin username and password.
+      user: "admin"
+
+      # global.postgres.auth.authSecretName - Name of the (manually created) secret that holds the password (key: `password`) for postgres superuser specified in `global.postgres.auth.user`. If empty the secrets is autogenerated with randomly generated password.
+      authSecretName: ""
+
+    # global.postgres.adminDatabase - Database to which connect if logging as adminName. Not changed or used in any other way.
+    adminDatabase: postgres
+
+    # global.postgres.sslMode - The SSL mode used to connect into postgres.
+    #  For possible values see https://www.postgresql.org/docs/9.3/static/libpq-ssl.html
+    sslMode: verify-full
+
+    # global.postgres.sslSecretName - Name of the manually (created) secret that holds the certificate (key `tls.crt`) and if not `global.postgres.create` is true then also private key for the certificate (key `tls.key`)
+    # If the global.postgres.create is `false` (i.e., provide your own postgres, you describe provided postgres instance, if the valu is true, you provides cert/key pair to be used by postgres installed by the this chart.
+    sslSecretName: ""
+
+    database:
+      # global.postgres.database.create - If set to true the specified database and database user will be automatically created. If set to false you have to create them manually.
+      # Note that valid admin creds are needed to create DB and db user.
+      create: true
+
+      # global.postgres.database.createSchema - If set to true the specified in the database the required tables, functions, ... ) will be created.
+      createSchema: true
+
+    store:
+      # global.postgres.store.database - The database name that the store microservice is using.
+      # Note: if empty the default value  "conversation_icp_{{ .Release.Name }}" is used.
+      database: ""
+
+      auth:
+        # global.postgres.store.auth.user - The user name that the store miroservice is using to connect to postgres.
+        # Note: if empty the default value "store_icp_{{ .Release.Name }}" is used.
+        user: ""
+
+        # global.postgres.store.auth.authSecretName - Name of the (manually created) secret that holds the password of the postgres user for store microservice. If empty the secrets is autogenerated with randomly generated password.
+        authSecretName: ""
+
+
+  etcd:
+    # global.etcd.create - If set to true, the etcd cluster for watson assistant service is created during installation. Otherwise you have to provide your own etcd instance and the credentials.
+    create: true
+
+    auth:
+      # global.etcd.authentication.user - User used to access to etcd.
+      user: root
+
+      # global.etcd.auth.authSecretName - Name of the (manually created) secret that holds the password (key: `password`) for redis (super)user specified in `global.etcd.auth.user`. If empty the secrets is autogenerated with randomly generated password.
+      authSecretName: ""
+
+    tls:
+      # global.etcd.tls.enabled - Specifies if etcd is using encrypted communication (https) or plain-text (http) communication.
+      # If the global.etcd.create is `false` (i.e., provide your own etcd, you describe provided etcd instance, if the value is true, you provides cert/key pair to be used by etcd  installed by the this chart.
+      enabled: true
+
+      # global.etcd.tls.tlsSecretName - Name of the manually (created) secret that holds the certificate (key `tls.crt`) and if not `global.etcd.create` is true then also private key for the certificate (key `tls.key`)
+      #       Value used only if global.etcd.tls.enabled set to true.
+      # If the global.etcd.create is `false` (i.e., provide your own etcd, you describe provided etcd instance, if the value is true, you provides cert/key pair to be used by etcd  installed by the this chart.
+      tlsSecretName: ""
+
+    # global.etcd - connection details to etcd. Used only if global.etcd.create is false (i.e., bring your own etcd instance)
+    #   Should be in the following format http://etcd-ibm-etcd.default.svc.cluster.local:2379
+    connection: ""
+    # - shema: http
+    #   host:  etcd-ibm-etcd.default.svc.cluster.local
+    #   port:  2379
+
+  mongodb:
+    create: true
+
+    # global.mongodb.hostname - hostname of the mongodb. Used only if global.mongodb.create is false.
+    hostname: ""
+    # global.mongodb.port - port where postgress instance is running. Used only if global.mongodb.create is false.
+    port: 27017
+
+    auth:
+      enabled: true
+      existingAdminSecret: ""
+
+    tls:
+      # Enable or disable MongoDB TLS support
+      enabled: true
+      # If an existing secret exists that contains the CA cert and key for MongoDB chart, specify the secret name here.
+      existingCaSecret: ""
+
+  recommends:
+    # global.recommends.enabled - speficies whether or not to install the recommendation component. The recommendation helps in the UI/tooling during the authouring of the workspace. Permited values are true and false
+    enabled: true
+
+  apiV2:
+    # global.apiV2.enabled - Enables V2 API in the Watson Assistant. It adds new microservices if enabled.
+    enabled: true
+
+  skillSearch:
+    encryptionKey:
+      # global.skillSearch.encryptionKey - The name of the secret that hold 128bit AES encryption key (under `authorization_encryption_key`) used to encrypt/decrypt credentials for Discovery service. If empty secret with random password is generated.
+      existingSecretName: ""
+
+########### END OF GLOBAL
+
+#environment:
+#  creds:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "conan-tools"
+#      tag:        "20190809-0011"
+
+# Images for ibm-watson-assistant-ui chart
+#ui:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "icp-wa-tooling-pathed"
+#    tag:        "20190830-143615"
+#  creds:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "conan-tools"
+#      tag:        "20190809-0011"
+#  init:
+#    redis:
+#      image:
+#        repository: "{{ tpl .Values.global.image.repository . }}"
+#        name:       "conan-tools"
+#        tag:        "20190809-0011"
+
+cos:
+  minio:
+    # Only some interesting values are pointed here. For more details see ibm-watson-assistant-datastores-clu-cos and minio subcharts.
+
+    # cos.minio.mode - minio server mode, i.e. standalone or distributed. The mode in which minio runs.
+    mode: distributed
+
+    # cos.minio.replicas - (applied only of cos.minio.mode is distributed). Number of nodes (applicable only to Minio distributed mode). Must be 4 <= x <= 32
+    replicas: 4
+
+    persistence:
+      # Entries for dynamic provisioning in standalone mode or in distributed mode.
+      # cos.minio.persistence.size - Size of the PVC to be used/created.
+      size: 5Gi
+      # cos.minio.persistence.storageClass - Storage class for the created persistent volume claim. Leave null value for default storage class. Otherwise local-storage, glusterfs or nfs based storageClass is suggested.
+      storageClass: "local-storage"
+      
+      useDynamicProvisioning: true
+      # selector as used only if persistence.useDynamicProvisioning is set to false.
+      selector:
+        # label - label that the PV should have to be boundable to created PVCs
+        label: ""
+        # value - value of the label that the PV should have to be boundable to created PVCs
+        value: ""
+      
+# Images for ibm-minio-objectstore chart
+#    image:
+#      repository:   "{{ tpl .Values.global.image.repository . }}"
+#      name:         "minio-amd64"
+#      tag:          "RELEASE.2019-04-09T01-22-30Z.1"
+#    mc:
+#      image:
+#        repository: "{{ tpl .Values.global.image.repository . }}"
+#        name:       "minio-mc-amd64
+#        tag:        "RELEASE.2019-04-03T17-59-57Z.1"
+#
+#  creds:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "conan-tools"
+#      tag:        "20190809-0011"
+
+etcd:
+  config:
+    persistence:
+      useDynamicProvisioning: true
+    dataPVC:
+      size: 10Gi
+      # specify the storageClassName you want to use
+      # if you don't specify a storageClassName it will use the default
+      storageClassName: "local-storage"
+
+      # selector - if you not using dynamic provisioning (i.e., etcd.config.persistence.useDynamicProvisioning is set to false), you can use selectors to refine the binding process. You cannot specify a selector if your using dynamic provisioning.
+      selector:
+        # label - label that the PV should have to be boundable to created PVCs
+        label: ""
+        # value - value of the label that the PV should have to be boundable to created PVCs
+        value: ""
+
+#    image:
+#      repository: opencontent-etcd-3
+#      tag: 1.1.0
+#    certgen:
+#      image:
+#        repository: opencontent-icp-cert-gen-1
+#        tag: 1.1.0
+#  creds:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "conan-tools"
+#      tag:        "20190809-0011"
+
+
+postgres:
+  config:            
+    persistence:
+      # postgres.config.persistence.storageClassName - specify kind of PVC to be used be postgres. It is suggested/recommended not to use glusterfs.
+      storageClassName: "local-storage" # I.e., use default storageClass (i.e., glusterfs)
+
+      # postgres.config.persistence.useDynamicProvisioning - if enabled the  postgres.config.persistence.storageClassName volumes will be dynamicaly created (if the storage class can be created automatically).
+      #  If disabled either dataPVC.selectot.label should be specify and then the PVC will bound to precreated PV based on labels or dataPVC.storageClassName should be empty and then cluster admin has to bound the PVC to existing PV manually
+      useDynamicProvisioning: true
+
+      # The sazi of PVC to use
+      size: 10Gi
+
+
+    dataPVC:
+      # selector - if you not using dynamic provisioning, you can use selectors to refine the binding process. You cannot specify a selector if your using dynamic provisioning.
+      selector:
+        # label - label that the PV should have to be boundable to created PVCs
+        label: ""
+        # value - value of the label that the PV should have to be boundable to created PVCs
+        value: ""
+  #   postgres:
+  #     image:
+  #       name: "opencontent-postgres-stolon"
+  #       tag: "1.1.0-amd64"
+  #   creds:
+  #     image: 
+  #       name: "opencontent-icp-cert-gen-1"
+  #       tag: "1.1.0" 
+  # creds:
+  #   image:
+  #     repository: "{{ tpl .Values.global.image.repository . }}"
+  #     name:       "store"
+  #     tag:        "20190812-092922-bf3c75"
+
+# Images for ibm-watson-assistant-store_db_schema chart
+#storeDbSchema:
+#  store:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "store"
+#      tag:        "20190812-092922-bf3c75"
+#  pgClient:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "conan-tools"
+#      tag:        "20190809-0011"
+
+# Images for ibm-watson-assistant-create_slot_store_db chart
+#createSlotStoreDatabaseCreate:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "conan-tools"
+#    tag:        "20190809-0011"
+
+#ingress:
+#  wcnAddon:
+#    addonService:
+#      image:
+#        repository: "wcn-addon"
+#        tag: "1.50.3"
+#    addon:
+#      tls:
+#        image:
+#          repository: "icp-common-components/opencontent-common-utils"
+#          tag:        "1.1.2-amd64"
+#  
+#  storeReadyCheck:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "conan-tools"
+#      tag:        "20190809-0011"
+
+bdd:
+  image:
+    repository: "{{ tpl .Values.global.image.repository . }}"
+    name:       "dvt-bdd-ubi"
+    tag:        "20190814-181554-6f1992"
+    pullPolicy: "IfNotPresent"
+
+#redis:
+#  config:
+#    # Images for ibm-redis chart
+#    image:
+#      name: opencontent-redis-3
+#      tag:  1.1.0
+#  creds:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "conan-tools"
+#      tag:        "20190809-0011"
+
+# Images for ibm-watson-assistant-create_slot charts
+#slot:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "conan-tools"
+#    tag:        "20190809-0011"
+
+mongodb:
+  config:
+    # Images for ibm-mongodb chart
+    #config: 
+    #  image:
+    #    name: "opencontent-mongodb-config-copy"
+    #    tag: "1.1.0"
+    #mongodbInstall:
+    #  image:
+    #    name: "opencontent-mongodb-install"
+    #    tag: "1.1.0"
+    #mongodb:
+    #  image:
+    #    name: "opencontent-mongodb-3"
+    #    tag: "1.1.1"
+    #creds:
+    #  image: 
+    #    name: "opencontent-icp-cert-gen-1"
+    #    tag: "1.1.0"
+    #test:
+    #  image:
+    #    name: "opencontent-bats"
+    #    tag: "1.1.0"
+    #metrics:
+    #  image:
+    #    name: "opencontent-mongodb-exporter"
+    #    tag: "1.1.0"
+
+    persistentVolume:
+      useDynamicProvisioning: true
+      storageClass: local-storage
+      selector:
+        label: ""
+        value: ""
+    auth:
+      keySecretName: ""
+
+recommendsMongodbLoadEmbeddings:
+#  # Images for ibm-watson-assistant-datastores-mongodb-load-embeddings chart
+#  loader:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "improve-recommendations-mongo-ubi"
+#      tag:           "3.6"
+#  dataEmbeddings:
+#    en:
+#      counts:
+#        image:
+#          repository: "{{ tpl .Values.global.image.repository . }}"
+#          name:       "improve-recommendations-data-embeddings-ubi.en.counts"
+#          tag:        "20181004-221011"
+#      precomputed:
+#        image:
+#          repository: "{{ tpl .Values.global.image.repository . }}"
+#          name:       "improve-recommendations-data-embeddings-ubi.en.precomputed"
+#          tag:        "20181004-221011"
+#      wordEmbeddings:
+#        image:
+#          repository: "{{ tpl .Values.global.image.repository . }}"
+#          name:       "improve-recommendations-data-embeddings-ubi.en.word_embeddings"
+#          tag:        "20181004-221011"
+#    es:
+#      image:
+#        repository:   "{{ tpl .Values.global.image.repository . }}"
+#        name:         "improve-recommendations-data-embeddings-ubi.es"
+#        tag:          "20181017-131837"
+#    fr:
+#      image:
+#        repository:   "{{ tpl .Values.global.image.repository . }}"
+#        name:         "improve-recommendations-data-embeddings-ubi.fr"
+#        tag:          "20181017-132950"
+#    ja:
+#      image:
+#        repository:   "{{ tpl .Values.global.image.repository . }}"
+#        name:         "improve-recommendations-data-embeddings-ubi.ja"
+#        tag:          "20181017-133647"
+
+  persistence:
+    # persistence.enabled - Enable persistence using Persistent Volume Claims, otherwise the empty-dir is used.
+    enabled: false
+
+    # useDynamicProvisioning - if enabled the dataPVC.storageClassName volumes will be dynamicaly created (if the storage class can be created automatically).
+    #  If disabled either dataPVC.selector.label should be specify and then the PVC will bound to precreated PV based on labels or dataPVC.storageClassName should be empty and then cluster admin has to bound the PVC to existing PV manually
+    useDynamicProvisioning: true
+
+  dataPVC:
+    # specify the storageClassName you want to use if you don't specify a storageClassName it will use the default
+    storageClassName: "local-storage"
+
+    size: 50Gi
+
+    # Specify the name of the Existing Claim to be used by your application empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+
+# Images for ibm-watson-assistant-datastores-mongodb-load-clu
+#mongodbloadclu:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name: "icp-load-wa-word-vectors"
+#    tag: "20190809-130108-2-332ed8"
+
+
+# Images for ibm-watson-assistant-tas chart
+#tas:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "slad-tas-runtime"
+#    tag:        "20190809-125407-4-50f2fa-wa_icp_1.3-icp-e79df21"
+#  init:
+#    etcd:
+#      image:
+#        repository: "{{ tpl .Values.global.image.repository . }}"
+#        name:       "conan-tools"
+#        tag:        "20190809-0011"
+#    cosRunning:
+#      image:
+#        repository: "{{ tpl .Values.global.image.repository . }}"
+#        name:       "conan-tools"
+#        tag:        "20190809-0011"
+#    mongoloader:
+#      image:
+#        repository: "{{ tpl .Values.global.image.repository . }}"
+#        name:       "improve-recommendations-mongo-ubi"
+#        tag:        "3.6"
+
+master:
+# Images for ibm-watson-assistant-master chart
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "master"
+#    tag:        "20190809-125647-2-9a0a44"
+#  init:
+#    etcd:
+#      image:
+#        repository: "{{ tpl .Values.global.image.repository . }}"
+#        name:       "conan-tools"
+#        tag:        "20190809-0011"
+#    cosRunning:
+#      image:
+#        repository: "{{ tpl .Values.global.image.repository . }}"
+#        name:       "conan-tools"
+#        tag:        "20190809-0011"
+#    mongoloader:
+#      image:
+#        repository: "{{ tpl .Values.global.image.repository . }}"
+#        name:       "improve-recommendations-mongo-ubi"
+#        tag:        "3.6"
+
+  slad:
+    # slad.dockerRegistry - The docker registry where the training images are located.
+    #            Master observes content of the registry for available training (slad) images. And use it as a registry for training pods when they created them (the temporary vn-* pods)
+    #     should default to the {icp-url}:8500 if left empty. The default is extracted from image.repository values
+    dockerRegistry: ""
+
+    # slad.dockerRegistryPullSecret - The pull secret that is used by master to connect into docker images. It is NOT used for created training pods.
+    #     Defaults to the sa-{ Release.Namespace } if left empty. This secret should be automatically created
+    #       once the PPA achvive is uploaded to your ICP cluster using
+    #  bx pr load-ppa-archive --archive ...  --clustername {{ global.icp.masterHostname }} --namespace {{ .Release.Namespace }}
+    dockerRegistryPullSecret: ""
+
+    # slad.dockerRegistry - The docker registry namespace under which the slad/training images are uploaded.
+    #     Should default to the {{ .Release.Namespace }}. The default is extracted from image.repository values.
+    dockerRegistryNamespace: ""
+
+# Images for ibm-watson-assistant-nlu chart
+#nlu:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "nlu"
+#    tag:        "20190809-150349-4-7198a0"
+#  init:
+#    etcd:
+#      image:
+#        repository:    "{{ tpl .Values.global.image.repository . }}"
+#        name:          "conan-tools"
+#        tag:           "20190809-0011"
+#    cosRunning:
+#      image:
+#        repository:    "{{ tpl .Values.global.image.repository . }}"
+#        name:          "conan-tools"
+#        tag:           "20190809-0011"
+
+# Images for ibm-watson-assistant-ed chart
+#ed:
+#  init:
+#    etcd:
+#      image:
+#        repository:    "{{ tpl .Values.global.image.repository . }}"
+#        name:          "conan-tools"
+#        tag:           "20190809-0011"
+#    cosRunning:
+#      image:
+#        repository:    "{{ tpl .Values.global.image.repository . }}"
+#        name:          "conan-tools"
+#        tag:           "20190809-0011"
+#  runtime:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "model-mesh"
+#      tag:        "master-20190809-235"
+#  mm:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "entities"
+#      tag:        "1.2.69-gee04ba5.19-08-09-172036.master"
+#  py4j:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "objectstore-py4j-bridge"
+#      tag:        "20190809-125825-2-98fd03"
+
+# Images for ibm-watson-assistant-sireg chart
+#sireg:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:   "sireg"
+#  tag:           "20190809-153346-wdc-20181119-8b58861f-48-ubi7-master-262243ff-66"
+#  model:
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name: "sireg-model-ubi"
+
+# Images for ibm-watson-assistant-dialog chart -extracted image configuration (and default values) for dialog miscroservice subchart
+#dialog:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "dialog"
+#    tag:        "20190809-0406-ad179368-wa-icp-1.3-11-ubi"
+#  init:
+#    etcd:
+#      image:
+#        repository:    "{{ tpl .Values.global.image.repository . }}"
+#        name:          "conan-tools"
+#        tag:           "20190809-0011"
+#    redis:
+#      image:
+#        repository:    "{{ tpl .Values.global.image.repository . }}"
+#        name:          "conan-tools"
+#        tag:           "20190809-0011"
+#  creds:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "conan-tools"
+#      tag:           "20190809-0011"
+
+# Images for ibm-watson-assistant-recommends chart
+#recommends:
+#  loader:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "improve-recommendations-mongo-ubi"
+#      tag:           "3.6"
+#  engine:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "improve-recommendations-engine-x86_64"
+#      tag:            "1.1.6-20190812140908"
+#  rest:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:           "recommends-rest-x86_64"
+#      tag:            "1.1.6-20190812154857"
+#  creds:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "conan-tools"
+#      tag:           "20190809-0011"
+
+# Images for ibm-watson-assistant-store chart
+#store:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "store"
+#    tag:        "20190812-092922-bf3c75"
+#  # Store init images
+#  schemaCheck:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "conan-tools"
+#      tag:           "20190809-0011"
+#  etcd:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "conan-tools"
+#      tag:           "20190809-0011"
+#  cluStarted:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "conan-tools"
+#      tag:           "20190809-0011"
+#  ssl:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "conan-tools"
+#      tag:           "20190809-0011"
+#  creds:
+#    image:
+#      repository:    "{{ tpl .Values.global.image.repository . }}"
+#      name:          "conan-tools"
+#      tag:           "20190809-0011"
+
+creds:
+  image:
+    repository: "{{ tpl .Values.global.image.repository . }}"
+    name:       "conan-tools"
+    tag:        "20190809-0011"
+    pullPolicy: "IfNotPresent"
+
+#skillConversation:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "skill-dialog"
+#    tag:        "20190724-112101-9cc93a-wa-icp-1.3-1-rhubi"
+
+#skillSearch:
+#  image:
+#    repository: "{{ tpl .Values.global.image.repository . }}"
+#    name:       "skill-search"
+#    tag:        "20190809-034058-9cc93a-wa-icp-1.3-3-rhubi"
+#  authKey:
+#    # image used to generate/delete the authorization encryption key
+#    image:
+#      repository: "{{ tpl .Values.global.image.repository . }}"
+#      name:       "conan-tools"
+#      tag:        "20190809-0011"
+
+# license must be set to "accept" in order to accept the terms of the IBM license for Helm CLI install
+license: "not accepted"

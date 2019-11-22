@@ -1,0 +1,67 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: dash-front-deploy
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: dash-front-rc
+spec:
+  replicas: {{ .Values.dashboard.replicas }}
+  template:
+    metadata:
+      labels:
+        app: dash-front
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        run: dash-front-rc
+        enabled: "true"
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      containers:
+      - name: dash-front
+        image: {{.Values.dashboard.image.repository}}:{{.Values.dashboard.image.tag}}
+        ports:
+        - name: dash-nodejs
+          containerPort: 3000
+        env:
+        - name: NAMESPACE
+          value: {{.Release.Namespace}}
+        - name: BACKEND_NAMESPACE
+          value: {{.Values.dashboard.backendNamespace}}
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        livenessProbe:
+          httpGet:
+            path: /dsx-admin
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /dsx-admin
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

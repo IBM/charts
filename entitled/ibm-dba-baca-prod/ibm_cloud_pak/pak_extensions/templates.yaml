@@ -1,0 +1,331 @@
+# Default values for smartpages.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+## Images
+
+callerapi:
+  name: callerapi
+  repository: $REGISTRY_NAME/processing
+  tag: $VERSION_TAG
+  pullPolicy: Always
+  queue: caller_api
+  serviceName: callerapi
+  replicaCount: $CELERY_REPLICAS
+  maxUnavailableCount: 1
+  resources:
+    # requests:
+    #   memory: 256Mi
+    #   cpu: "0.2"
+    limits:
+      # memory: 491.52Mi
+      memory: $CALLERAPI_LIMITED_MEMORY
+#    pullSecrets: #docker secret if needed
+
+
+spbackend:
+  name: spbackend
+  repository: $REGISTRY_NAME/backend
+  tag: $VERSION_TAG
+  pullPolicy: Always
+  replicaCount: $NON_CELERY_REPLICAS
+  maxUnavailableCount: 1
+#    pullSecrets:
+  #   - myRegistrKeySecretName
+  dbSSL: false # true or false.  Indicate whether backend will connect to DB2 via SSL
+  baseDB:      #base db2 database name
+  baseDBServer:      #base db2 database server
+  baseDBPort: 50000  #base db2 database server port
+  baseDBUser:   #base db2 database logon user
+  resources:
+    limits:
+      # memory: 491.52Mi
+      memory: $BACKEND_LIMITED_MEMORY
+  backendPath:
+  backendPort: 8080
+  callerAPIProtocol: https
+  fullCallerAPIPath: /api/v1/actions
+  nodeTLSRejectUnauthorized: 0
+  ldap: false #string - value would either be true of false,
+  ldapFilter:
+  ldapDN:
+  ldapURL:
+  ldapPort:
+  ldapBase:
+  userName: hluhuang@cn.ibm.com
+  ldapCrtName:
+  ldapSelfSignedCrt:
+
+spfrontend:
+  name: spfrontend
+  repository: $REGISTRY_NAME/spfrontend
+  tag: $VERSION_TAG
+  pullPolicy: Always
+  replicaCount: $NON_CELERY_REPLICAS
+  maxUnavailableCount: 1
+#    pullSecrets:
+  backendHost:  <hostname> #host name/domain to access backend (typically proxy or master node
+  backendPort:   #if not using ingress, specify nodePort of spbackend service
+  backendPath:   #if using path based ingress, specify url path. It should be the backend service name
+  frontendHost:  <hostname> #host nmae/domain to access frontend
+  frontendPath:  #if using path based ingress, specify url path. It should be the frontend service name
+  # limitsCPU: "0.4"
+  resources:
+    limits:
+      # memory: 491.52Mi
+      memory: $FRONTEND_LIMITED_MEMORY
+  # requestsCPU: "0.2"
+  # requestsMemory: "500Mi"
+  nodeTLSRejectUnauthorized: 0
+  sso:
+  bxDomainName: #domain name to access frontend and backend
+  ldap: n #string - value would either be true of false
+
+consumers:
+  - name: postprocessing
+    arch: amd64
+    repository: $REGISTRY_NAME/processing
+    tag: $VERSION_TAG
+    pullPolicy: Always
+    queue: postprocessing
+    serviceName: postprocessing
+    processTimeout: 1500
+    # pullSecrets:
+    #   - myRegistrKeySecretName
+    replicaCount: $CELERY_REPLICAS
+    maxUnavailableCount: 1
+    numWorkers: 2
+    resources:
+      limits:
+        # memory: 491.52Mi
+        memory: $POST_PROCESS_LIMITED_MEMORY
+  - name: pdfprocess
+    arch: amd64
+    repository: $REGISTRY_NAME/extraction
+    tag: $VERSION_TAG
+    pullPolicy: Always
+    queue: pdfprocess
+    serviceName: pdfprocess
+    processTimeout: 1500
+    # pullSecrets:
+    #   - myRegistrKeySecretName
+    replicaCount: $CELERY_REPLICAS
+    maxUnavailableCount: 1
+    numWorkers: 2
+    resources:
+      limits:
+        # memory: 491.52Mi
+        memory: $PDF_PROCESS_LIMITED_MEMORY
+  - name: utf8process
+    arch: amd64
+    repository: $REGISTRY_NAME/extraction
+    tag: $VERSION_TAG
+    pullPolicy: Always
+    queue: utf8process
+    serviceName: utf8process
+    processTimeout: 1500
+    # pullSecrets:
+    #   - myRegistrKeySecretName
+    replicaCount: $CELERY_REPLICAS
+    maxUnavailableCount: 1
+    numWorkers: 2
+    resources:
+      limits:
+        memory: $UTF8_PROCESS_LIMITED_MEMORY
+  - name: setup
+    arch: amd64
+    repository: $REGISTRY_NAME/processing
+    tag: $VERSION_TAG
+    pullPolicy: Always
+    queue: setup
+    serviceName: setup
+    processTimeout: 120
+    # pullSecrets:
+    #   - myRegistrKeySecretName
+    replicaCount: $CELERY_REPLICAS
+    maxUnavailableCount: 1
+    numWorkers: 2
+    resources:
+      limits:
+        memory: $SETUP_LIMITED_MEMORY
+  - name: ocr-extraction
+    arch: amd64
+    repository: $REGISTRY_NAME/extraction
+    tag: $VERSION_TAG
+    pullPolicy: Always
+    queue: ocr_extraction
+    serviceName: ocr-extraction
+    # pullSecrets:
+    #   - myRegistrKeySecretName
+    replicaCount: $CELERY_REPLICAS
+    maxUnavailableCount: 1
+    numWorkers: 2
+    resources:
+      limits:
+        memory: $OCR_EXTRACTION_LIMITED_MEMORY
+  - name: classifyprocess-classify
+    arch: amd64
+    repository: $REGISTRY_NAME/processing
+    tag: $VERSION_TAG
+    pullPolicy: Always
+    queue: classifyprocess_classify
+    serviceName: classifyprocess-classify
+    # pullSecrets:
+    #   - myRegistrKeySecretName
+    replicaCount: $CELERY_REPLICAS
+    maxUnavailableCount: 1
+    numWorkers: 2
+    resources:
+      limits:
+        memory: $CLASSIFY_LIMITED_MEMORY
+  - name: processing-extraction
+    arch: amd64
+    repository: $REGISTRY_NAME/processing
+    tag: $VERSION_TAG
+    pullPolicy: Always
+    queue: processing_extraction
+    serviceName: processing-extraction
+    # pullSecrets:
+    #   - myRegistrKeySecretName
+    replicaCount: $CELERY_REPLICAS
+    maxUnavailableCount: 1
+    numWorkers: 2
+    resources:
+      limits:
+        memory: $PROCESSING_EXTRACTION_LIMITED_MEMORY
+  - name: reanalyze
+    arch: amd64
+    repository: $REGISTRY_NAME/processing
+    tag: $VERSION_TAG
+    pullPolicy: Always
+    queue: reanalyze
+    serviceName: reanalyze
+    # pullSecrets:
+    #   - myRegistrKeySecretName
+    replicaCount: $CELERY_REPLICAS
+    maxUnavailableCount: 1
+    numWorkers: 2
+    resources:
+      limits:
+        memory: $REANALYZE_LIMITED_MEMORY
+  - name: updatefiledetail
+    arch: amd64
+    repository: $REGISTRY_NAME/processing
+    tag: $VERSION_TAG
+    pullPolicy: Always
+    queue: updatefiledetail
+    serviceName: updatefiledetail
+    # pullSecrets:
+    #   - myRegistrKeySecretName
+    replicaCount: $CELERY_REPLICAS
+    maxUnavailableCount: 1
+    numWorkers: 2
+    resources:
+      limits:
+        memory: $UPDATEFILE_LIMITED_MEMORY
+
+## Services
+
+callerapisvc:
+  name: callerapi
+  type: NodePort
+#  externalPort:  #blank unless type=LoadBalancer
+  internalPort: 8080
+spbackendsvc:
+  name: spbackend
+  type: NodePort
+  internalPort: 8080
+#  externalPort: 30102
+
+spfrontendsvc:
+  name: spfrontend
+  type: NodePort
+  internalPort: 8080
+  #externalPort: 30102
+
+
+######################
+ingress:
+  enabled: true
+  # Used to create an Ingress record.
+  #hosts:
+  #  - chart-example.local
+  tls:
+    # Secrets must be manually created in the namespace.
+      hosts:
+        - $HOST_NAME
+
+
+
+
+
+global:
+  annotations:
+    productID: "5737-I23-BACA"
+    productName: "IBM Cloud Pak for Automation - Business Automation Content Analyzer"
+    productVersion: "19.0.2"
+  # This setting is for Mongo HA. Set storageClass to "-" to disable dynamic provisioning for MongoHA.  Set to a valid storage class name if you already have storage class to use
+  storageClass: "-"
+  arch: amd64
+  image:
+    pullSecrets:
+#      - <INSERT YOUR DOCKER REGISTRY SECRET NAME HERE !!!!>
+  redis:
+    image:
+      repository: $REGISTRY_NAME/redis
+      tag: $VERSION_TAG
+      pullPolicy: Always
+    replicas: 3
+    quorum: 2 # This values is the number to sentinels must agree on to promote a slave to the new master when a master goes down.
+    HA: true # don't change this.
+    masterGroupName: mymaster
+    resources:
+      limits:
+        memory: $REDIS_LIMITED_MEMORY
+        cpu: "250m"
+  sslValidate: false #false = self-sign, true= not self-sign
+  namespace:
+    name: $KUBE_NAME_SPACE
+  mongo:
+    image:
+      repository: $REGISTRY_NAME/mongoha
+      tag: $VERSION_TAG
+      pullPolicy: Always
+#      replicaCount: 1
+#    type: LoadBalancer
+    mongoPort: 27017
+#    mongoLimitedMemory: $MONGO_LIMITED_MEMORY
+    wiredTigerCache: $MONGO_WIREDTIGER_LIMIT
+#    HA: true # don't change this.
+  mongoadmin:
+    image:
+      repository: $REGISTRY_NAME/mongoha
+      tag: $VERSION_TAG
+      pullPolicy: Always
+#      replicaCount: 1
+#    type: LoadBalancer
+    mongoAdminPort: 27017
+#    mongoAdminLimitedMemory: $MONGO_ADMIN_LIMITED_MEMORY
+    wiredTigerCache: $MONGO_WIREDTIGER_LIMIT
+    HA: true # don't change this.
+  rabbitmq:
+    image:
+      repository: $REGISTRY_NAME/rabbitmq
+      tag: $VERSION_TAG
+      pullPolicy: Always
+    resources:
+      limits:
+        memory: $RABBITMQ_LIMITED_MEMORY
+        cpu: "500m"
+    replicas: 3
+    ulimitNofiles: '65536'
+  celery:
+    processTimeout: 300
+  configs:
+    claimname: sp-config-pvc
+  logs:
+    claimname: sp-log-pvc
+    logLevel: debug
+  data:
+    claimname: sp-data-pvc
+

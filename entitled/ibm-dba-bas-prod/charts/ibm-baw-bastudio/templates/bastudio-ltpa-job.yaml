@@ -1,0 +1,55 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+{{ include "sch.config.init" (list . "sch.bastudio.config.values") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "ltpa") }}-{{ randNumeric 3 }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "ltpa") | indent 4 }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: bastudio-ltpa-init-job
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "ltpa") | indent 8 }}
+    spec:
+{{ include "bastudio.constants.pod.securityContext" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }} 
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . "init") }}
+      restartPolicy: OnFailure
+      containers:
+      - name: bastudio-container-oidc
+        image: {{ .Values.images.ltpaInitContainer | quote }}
+        securityContext:
+{{ include "bastudio.constants.container.securityContext" . | indent 10 }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.resources.initProcess | indent 10 }}
+        env:
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: sslKeystorePassword
+        - name: LTPA_SECRET_NAME
+          value: "{{ include "sch.names.fullCompName" (list . "ltpa") }}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . "ltpa") }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "ltpa") | indent 4 }}
+type: Opaque
+stringData:

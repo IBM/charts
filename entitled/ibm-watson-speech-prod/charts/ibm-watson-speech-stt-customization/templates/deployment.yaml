@@ -1,0 +1,164 @@
+{{- include "sch.config.init" (list . "sch.chart.stt_customization.config.values") -}}
+{{- $compName :=  .sch.chart.components.stt_customization.name -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    appName: stt-customization
+    wdc.ibm.com/network-access: public-egress
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      appName: stt-customization
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        appName: stt-customization
+        wdc.ibm.com/network-access: public-egress
+    spec:
+      terminationGracePeriodSeconds: 300
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1001
+        {{- end }}
+      initContainers:
+        - name: wait4db
+          image: "{{ .Values.global.image.repository }}/{{ .Values.global.images.utils.image }}:{{ .Values.global.images.utils.tag }}"
+{{ include "containerSecurityContext" . | indent 10 }}
+{{ include "initContainerResources" . | indent 10}}
+          env:
+          - name: PGPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.global.datastores.postgressql.auth.authSecretName }}"
+                key: pg_su_password
+          - name: PGCONNECT_TIMEOUT
+            value: "3"
+          command: ['sh', '-c']
+          args:
+           #- until pg_isready -h {{ .Release.Name }}-ibm-postgresql-proxy-svc.{{- .Release.Namespace }} -p 5432 -d postgres;
+            - until psql -h {{ .Release.Name }}-ibm-postgresql-proxy-svc.{{- .Release.Namespace }} -p 5432 -d postgres -U stolon;
+              do echo waiting for database;
+              sleep 2;
+              done;
+              psql -h {{ .Release.Name }}-ibm-postgresql-proxy-svc.{{- .Release.Namespace }} -d postgres -U stolon -f /tmp/stt-customization.sql;
+          volumeMounts:
+          - name: sql-volume
+            mountPath: /tmp/
+        # at some point we can add an init container to check the health of the patchers before coming up
+        # for that we can use: curl https://RELEASE-NAME-speech-to-text-stt-am-patcher:1443//v1/miniHealthCheck -k
+      containers:
+        - name: stt-customization
+          image: "{{ .Values.global.image.repository }}/{{ .Values.images.sttCustomization.image }}:{{ .Values.images.sttCustomization.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+{{ include "containerSecurityContext" . | indent 10 }}
+          resources:
+            requests:
+              memory: "2048Mi"
+              cpu: "500m"
+            limits:
+              memory: "2048Mi"
+              cpu: "1000m"
+          env:
+          - name: MEM_JAVA_HEAP_PERCENT
+            value: "80"
+          - name: MEM_TOTAL_BYTES
+            valueFrom:
+              resourceFieldRef:
+                resource: requests.memory
+          - name: CLOUD_ENVIRONMENT
+            value: icp
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: EUREKA_FETCH_REGISTRY
+            value: "false"
+          - name: EUREKA_DISABLE
+            value: "true"
+          - name: MINIO_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio
+                key: accesskey
+          - name: MINIO_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio
+                key: secretkey
+          - name: POSTGRESSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.datastores.postgressql.auth.authSecretName }}
+                key: pg_su_password
+          ports:
+          - containerPort: 9080
+          - containerPort: 9443
+          volumeMounts:
+          - mountPath: /etc/stt-customization/secrets/minio
+            name: minio-information
+            readOnly: true
+          - name: datastores-information
+            mountPath: /etc/stt-customization/secrets/compose
+            readOnly: true
+          - name: stt-customization-config
+            mountPath: /etc/stt-customization/config
+            readOnly: true
+          - name: at-config
+            mountPath: /etc/stt-customization/config-shared
+            readOnly: true
+          lifecycle:
+            preStop:
+              exec:
+                # SIGTERM triggers a quick exit; gracefully terminate instead
+                command: ["/opt/ibm/docker/stop-server"]
+          livenessProbe:
+            httpGet:
+              path: "/speech-to-text/api/health/check"
+              port: 9080
+            initialDelaySeconds: 300
+            timeoutSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: "/speech-to-text/api/health/check/readiness"
+              port: 9080
+            initialDelaySeconds: 20
+            timeoutSeconds: 10
+      affinity:
+{{- include "ibm-watson-speech-prod.watson-speech-nodeaffinity" .Values.arch | indent 8 }}
+      volumes:
+        - name: stt-customization-config
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName) }}-configmap
+        - name: at-config
+          configMap:
+             name: {{ .Release.Name }}-activity-tracker-configmap
+        - name: minio-information
+          configMap:
+            name: {{ .Release.Name }}-minio-info
+        - name: datastores-information
+          configMap:
+            name: {{ .Release.Name }}-datastores-info
+        - name: sql-volume
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName) }}-sql

@@ -1,0 +1,242 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+{{- $parent := (include "asm.getParentChart" .) | trim -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  progressDeadlineSeconds: 900
+  {{- if not ( default .Values.global.minReplicasHPAs .Values.minReplicasHPAs ) }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: NotIn
+                  values:
+                  - {{ include "sch.names.appName" (list .) }}
+                - key: release
+                  operator: NotIn
+                  values:
+                  - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+            weight: 50
+      dnsPolicy: ClusterFirst
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      supplementalGroups:
+      {{- range $group := .Values.global.persistence.supplementalGroups }}
+        - {{ $group -}}
+      {{ end }}
+      initContainers:
+      - name: wait-for-topology
+        image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+        imagePullPolicy: {{.Values.global.image.pullPolicy}}
+        resources:
+{{ include "asm.minimalPodResources" . | indent 10 }}
+        securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 10 }}
+        env:
+        - name: SERVICE
+          value: {{ .Release.Name }}-topology
+        - name: EXPECTED_COUNT
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - /opt/ibm/netcool/asm/bin/check-service-endpoint-count.sh
+      - name: wait-for-layout
+        image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+        imagePullPolicy: {{.Values.global.image.pullPolicy}}
+        resources:
+{{ include "asm.minimalPodResources" . | indent 10 }}
+        securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 10 }}
+        env:
+        - name: SERVICE
+          value: {{ .Release.Name }}-layout
+        - name: EXPECTED_COUNT
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - /opt/ibm/netcool/asm/bin/check-service-endpoint-count.sh
+      {{- if not ( eq $parent "ibm-cloud-appmgmt-prod" ) }}
+      - name: wait-for-merge
+        image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+        imagePullPolicy: {{.Values.global.image.pullPolicy}}
+        resources:
+{{ include "asm.minimalPodResources" . | indent 10 }}
+        securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 10 }}
+        env:
+        - name: SERVICE
+          value: {{ .Release.Name }}-merge
+        - name: EXPECTED_COUNT
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - /opt/ibm/netcool/asm/bin/check-service-endpoint-count.sh
+      {{- end }}
+      - name: wait-for-search
+        image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+        imagePullPolicy: {{.Values.global.image.pullPolicy}}
+        resources:
+{{ include "asm.minimalPodResources" . | indent 10 }}
+        securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 10 }}
+        env:
+        - name: SERVICE
+          value: {{ .Release.Name }}-search
+        - name: EXPECTED_COUNT
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - /opt/ibm/netcool/asm/bin/check-service-endpoint-count.sh
+      containers:
+      - name: {{ include "sch.names.appName" (list .) }}
+        image: "{{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}"
+        imagePullPolicy: {{.Values.global.image.pullPolicy}}
+        env:
+        - name: DISTINGUISHED_NAME
+          value: {{ include "sch.names.fullName" (list .) }}.{{ .Release.Namespace }}.svc
+        - name: CONSOLE_OUTPUT
+          value: "true"
+        - name: ASM_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: username
+        - name: ASM_PASS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: password
+        - name: LAYOUT_SERVICE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: username
+        - name: LAYOUT_SERVICE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: password
+        - name: TOPOLOGY_SERVICE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: username
+        - name: TOPOLOGY_SERVICE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: password
+        - name: MERGE_SERVICE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: username
+        - name: MERGE_SERVICE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: password
+        - name: SEARCH_SERVICE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: username
+        - name: SEARCH_SERVICE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: password
+        securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 10 }}
+        ports:
+        - containerPort: {{ .Values.httpPort }}
+        resources:
+{{ include "asm.sizeData" (list . "resources") | indent 10 }}
+        volumeMounts:
+          - name: application-yaml
+            mountPath: /app/etc
+          - name: asm-security
+            mountPath: /opt/ibm/netcool/asm/security
+          - name: logs
+            mountPath: /app/logs
+        readinessProbe:
+          httpGet:
+            path: /1.0/ui-api/service/healthcheck?checkReadiness=true
+            port: {{ .Values.httpPort }}
+            scheme: HTTP{{ if not .Values.global.asm.disableHTTPS }}S{{ end }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+        livenessProbe:
+          httpGet:
+            path: /1.0/ui-api/service/healthcheck
+            port: {{ .Values.httpPort }}
+            scheme: HTTP{{ if not .Values.global.asm.disableHTTPS }}S{{ end }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: FallbackToLogsOnError
+      volumes:
+      - name: application-yaml
+        configMap:
+          name: {{ include "sch.names.fullName" (list .) }}
+      - name: asm-security
+        projected:
+          sources:
+            - secret:
+                name: "{{ .Release.Name }}-ca-secret"
+                optional: false
+            - secret:
+                name: "{{ .Release.Name }}-custom-secrets"
+                optional: true
+      - name: logs
+        emptyDir: {}

@@ -1,0 +1,335 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $externalScalaHostname := printf "%s.%s.%s" "scala" .Release.Name .Values.global.cluster.fqdn -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullName" (list . 63) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+
+spec:
+  replicas: {{ include "noi.loganalysis.replicas" (list . .Values.replicaCount )}}
+  updateStrategy:
+    type: RollingUpdate
+  serviceName: {{ .Release.Name }}-{{ .Values.service.name }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      hostname: {{ .Release.Name }}-{{ .Values.service.name }}
+      volumes:
+        # shared volume between the containers of this pod.
+        - name: shared-data
+          emptyDir: {}
+        - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+        {{- if .Values.global.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.pvc.existingClaimName }}
+            claimName: {{ .Values.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: {{ .Release.Name }}-share-mount
+          emptyDir: {}
+        - name: {{ .Release.Name }}-xml-gate-props-append
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-config
+            items:
+            - key: xml-gate-props-append
+              path: {{ .Values.gateway.name }}.props-append
+        - name: {{ .Release.Name }}-xml-gate-map-replace
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-config
+            items:
+            - key: xml-gate-map-replace
+              path: {{ .Values.gateway.name }}.map-replace
+        - name: {{ .Release.Name }}-xml-gate-tblrep-def-replace
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-config
+            items:
+            - key: xml-gate-tblrep-def-replace
+              path: {{ .Values.gateway.name }}.reader.tblrep.def-replace
+        - name: {{ .Release.Name }}-xml-gate-startup-cmd-replace
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-config
+            items:
+            - key: xml-gate-startup-cmd-replace
+              path: {{ .Values.gateway.name }}.startup.cmd-replace
+      containers:
+        - name: unity
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.unity.name }}-{{- include "image.edition" . -}}:{{ .Values.image.unity.tag }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE"]
+          volumeMounts:
+            - name: shared-data
+              mountPath: /share-la
+            {{- if .Values.global.persistence.enabled }}
+            - name: {{ include "sch.names.persistentVolumeClaimName" (list . "pvc") }}
+              mountPath: /space
+            {{- end }}
+            - name: {{ .Release.Name }}-share-mount
+              mountPath: /share
+          ports:
+            - containerPort: {{ .Values.service.internal.port.http }}
+            - containerPort: {{ .Values.service.internal.port.https }}
+            - containerPort: {{ .Values.service.internal.port.db }}
+            - containerPort: {{ .Values.service.internal.port.eif }}
+            - containerPort: {{ .Values.service.internal.port.zookeeper }}
+            - containerPort: {{ .Values.service.internal.port.solrSearch }}
+            - containerPort: {{ .Values.service.internal.port.solrStop }}
+          env:
+            - name: LICENSE
+              value: "{{ .Values.global.license }}"
+            - name: LA_SERVICE_NAME
+              value: "{{ .Release.Name }}-{{ .Values.service.name }}"
+            - name: LA_EXTERNAL_HOST_NAME
+            {{- if eq .Values.global.ingress.port 443.0 }}
+              value: "{{ $externalScalaHostname }}"
+            {{- else }}
+              value: "{{ $externalScalaHostname }}:{{ .Values.global.ingress.port }}"
+            {{- end }}
+            - name: NCO_AGGP_SERVICE_NAME
+              value: "{{ .Release.Name }}-{{ .Values.service.objserv.primary.name }}"
+            - name: LDAP_SERVICE_NAME
+              value: {{ .Release.Name }}-{{ .Values.global.ldapservice.name }}
+            - name: LDAP_SERVICE_PORT
+              value: "{{ .Values.global.ldapservice.internal.ldapPort }}"
+            - name: LDAP_BIND_DN
+              value: "{{ .Values.global.ldapservice.internal.bindDN }}"
+            - name: LDAP_BASE_DN
+              value: "{{ .Values.global.ldapservice.internal.baseDN }}"
+            - name: LDAP_BIND_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-ldap-secret
+                  key: LDAP_BIND_PASSWORD
+                  optional: false
+            - name: SSO_DOMAIN
+              value: {{- if eq .Values.global.ingress.prefixWithReleaseName  true }} {{ .Release.Name }}.{{ .Values.global.cluster.fqdn }}  {{- else }} {{ .Values.global.cluster.fqdn }} {{- end }}
+            - name: LTPA_KEY_FILE
+              value: "{{ .Values.sso.internal.ltpaKeyFile }}"
+            - name: UNITY_ADMIN_USER
+              value: "{{ .Values.unity.adminUser }}"
+            - name: UNITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-la-secret
+                  key: UNITY_ADMIN_PASSWORD
+                  optional: false
+            - name:  LDAP_VERIFY_PASSWORDS
+              value: "{{ .Values.global.ldapservice.verifypasswords }}"
+            - name: HELM_RELEASE
+              value: {{ .Release.Name }}
+            - name: LC_ALL
+              value: "{{ .Values.unity.env.locale }}"
+          livenessProbe:
+            httpGet:
+              path: /Unity
+              port: {{ .Values.service.internal.port.https }}
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.liveness.unity.initialDelaySeconds }}
+            periodSeconds: {{ .Values.liveness.unity.periodSeconds }}
+            timeoutSeconds: {{ .Values.liveness.unity.timeoutSeconds }}
+            failureThreshold: {{ .Values.liveness.unity.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /Unity
+              port: {{ .Values.service.internal.port.https }}
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.readiness.unity.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readiness.unity.periodSeconds }}
+            timeoutSeconds: {{ .Values.readiness.unity.timeoutSeconds }}
+            failureThreshold: {{ .Values.readiness.unity.failureThreshold }}
+          {{- if eq .Values.global.resource.requests.enable true }}
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "scala" "resources") | indent 12 }}
+          {{- end }}
+        - name: gateway
+          image:  {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-{{ .Values.image.gateway.name }}-{{- include "image.edition" . -}}:{{ .Values.image.gateway.tag }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE"]
+          env:
+            - name: LICENSE
+              value: "{{ .Values.global.license }}"
+            - name: MESSAGELEVEL
+              value: "{{ .Values.log.level }}"
+            - name: NCO_AGGP_SERVICE_NAME
+              value: "{{ .Release.Name }}-{{ .Values.service.objserv.primary.name }}"
+            - name: NCO_AGGB_SERVICE_NAME
+              value: "{{ .Release.Name }}-{{ .Values.service.objserv.backup.name }}"
+            - name: UNITY_ADMIN_USER
+              value: "{{ .Values.unity.adminUser }}"
+            - name: UNITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-la-secret
+                  key: UNITY_ADMIN_PASSWORD
+                  optional: false
+            - name: LC_ALL
+              value: "{{ .Values.unity.env.locale }}"
+          volumeMounts:
+            - name: shared-data
+              mountPath: /share-la
+            - name: {{.Release.Name}}-xml-gate-props-append
+              mountPath: {{.Values.gateway.env.propsPath}}/{{.Values.gateway.name}}.props-append
+              subPath: {{.Values.gateway.name}}.props-append
+            - name: {{.Release.Name}}-xml-gate-map-replace
+              mountPath: {{.Values.gateway.env.propsPath}}/{{.Values.gateway.name}}.map-replace
+              subPath: {{.Values.gateway.name}}.map-replace
+            - name: {{.Release.Name}}-xml-gate-tblrep-def-replace
+              mountPath: {{.Values.gateway.env.propsPath}}/{{.Values.gateway.name}}.reader.tblrep.def-replace
+              subPath: {{.Values.gateway.name}}.reader.tblrep.def-replace
+            - name: {{.Release.Name}}-xml-gate-startup-cmd-replace
+              mountPath: {{.Values.gateway.env.propsPath}}/{{.Values.gateway.name}}.startup.cmd-replace
+              subPath: {{.Values.gateway.name}}.startup.cmd-replace
+          ports:
+             - containerPort: {{ .Values.service.internal.port.xmlGateway }}
+          {{- if eq .Values.global.resource.requests.enable true }}
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "scalagw" "resources") | indent 12 }}
+          {{- end }}
+          livenessProbe:
+            exec:
+              command:
+              - {{ .Values.liveness.gateway.command }}
+              - {{ .Values.gateway.name }}
+            initialDelaySeconds: {{ .Values.liveness.gateway.initialDelaySeconds }}
+            periodSeconds: {{ .Values.liveness.gateway.periodSeconds }}
+            timeoutSeconds: {{ .Values.liveness.gateway.timeoutSeconds }}
+            failureThreshold: {{ .Values.liveness.gateway.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+              - {{ .Values.readiness.gateway.command }}
+              - {{ .Values.gateway.name }}
+            initialDelaySeconds: {{ .Values.readiness.gateway.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readiness.gateway.periodSeconds }}
+            timeoutSeconds: {{ .Values.readiness.gateway.timeoutSeconds }}
+            failureThreshold: {{ .Values.readiness.gateway.failureThreshold }}
+        - name: configuration-share
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-configuration-share-{{- include "image.edition" . -}}:{{ .Values.global.image.sharedTag }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE"]
+          volumeMounts:
+            - name: {{ .Release.Name }}-share-mount
+              mountPath: /share
+          ports:
+            - containerPort: 8000
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "configurationShare" "resources") | indent 12 }} 
+          env:
+          - name: ICP_NOI_SHARED_SYNCFROM_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-configuration-share
+                key: scala            
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.readiness.gateway.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readiness.gateway.periodSeconds }}
+            failureThreshold: {{ .Values.readiness.gateway.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.liveness.gateway.initialDelaySeconds }}
+            periodSeconds: {{ .Values.liveness.gateway.periodSeconds }}
+            failureThreshold: {{ .Values.liveness.gateway.failureThreshold }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      affinity:
+        nodeAffinity:
+{{ include "noi.nodeAffinity.arch" . | indent 10 }}
+      securityContext:
+        fsGroup: 2001  
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+      {{- if .Values.global.image.secret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secret }}
+      {{- end }}
+      initContainers:
+        - name: wait4db2ese
+          image: {{ include "image.docker.repository" . -}}/{{- include "image.family" . -}}-configuration-share-{{- include "image.edition" . -}}:{{ .Values.global.image.sharedTag }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+              add: ["NET_BIND_SERVICE"]
+          volumeMounts:
+            - name: {{ .Release.Name }}-share-mount
+              mountPath: /share
+          resources:
+{{ include "ibmnoiprod.comp.size.data" (list . "preinstall" "resources") | indent 12 }} 
+          env:
+          - name: ICP_NOI_SHARED_SYNCFROM_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Release.Name }}-configuration-share
+                key: scala            
+          - name:  ICP_NOI_SHARED_EXIT_WHEN_FOUND
+            value: "True"   

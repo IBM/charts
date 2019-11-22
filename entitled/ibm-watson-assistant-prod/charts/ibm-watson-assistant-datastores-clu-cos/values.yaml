@@ -1,0 +1,89 @@
+
+
+global:
+  image:
+    repository: ""
+
+creds:
+  image:
+    repository: "{{ tpl .Values.global.image.repository . }}"
+    name:       "conan-tools"
+    tag:        "20190809-0011"
+    pullPolicy: "IfNotPresent"
+
+minio: 
+  arch:
+    amd64: "2 - No preference"
+    ppc64le: "0 - Do not use" # Because of the different image name it cannot work in mixed pod architecture environment. Thus disabling ppc64le.
+    s390x:   "0 - Do not use" # Because of the different image name it cannot work in mixed pod architecture environment. Thus disabling ppc64le.
+  minio:  
+    image:
+      repository:   "{{ tpl .Values.global.image.repository . }}"
+      name:         "opencontent-minio"
+      tag:          "1.0.0"
+  minioClient:
+    image:
+      repository: "{{ tpl .Values.global.image.repository . }}"
+      name:       "opencontent-minio-client"
+      tag:        "1.0.0"
+  creds:
+    image:
+      repository: "{{ tpl .Values.global.image.repository . }}"
+      name:       "opencontent-icp-cert-gen-1"
+      tag:        "1.1.1"
+  
+  # Do not even think about changing to override nameOverride or fullnameOverride
+  nameOverride: "clu-minio"
+  
+  minioAccessSecret: ""
+  minioAccessSecretTemplateName: "assistant.cos.creds.secretName"
+  
+  mode: distributed
+  replicas: 4 # used only in distributed mode, 4 <= replicas <= 32
+  
+  service:
+    clusterIP: None # We need headless service for minio to start
+  persistence:
+    enabled: true # By default the minio should use PVC and store data persistently
+    
+    #size: 50Gi
+    size: 5Gi
+
+    # Storage class for the created persistent volume claim. Leave null for default storage class. Otherwise glusterfs based storageClass is suggested.
+    storageClass: local-storage
+    
+    useDynamicProvisioning: true
+    
+    existingClaim: ""  # This value equals to false, undefined and makes linter happy :-( This means the PVC needs to be created.
+
+  existingSecret: "{{ .Values.global.cos.auth.secretName }}"
+  
+  tls:
+    enabled: true
+    type: provided
+    certSecret: "{{ .Values.global.cos.tls.secretName }}"
+    clusterDomain: "{{ tpl .Values.global.clusterDomain . }}"
+
+  # Reducing CPU requests to reduce costs
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 75m
+    limits:
+      # cpu limits removed for WA ICP deployments
+      memory: 1Gi
+
+  buckets: []
+
+  # if true, don't delete the datastore objects during a helm delete
+  keep: "{{ .Values.global.keepDatastores }}"
+
+  # Enabling pod disruption budget
+  podDisruptionBudget:
+    maxUnavailable: 1
+
+  ## SSE-S3 Config
+  sse:
+    enabled: true
+    # Specify either a template (to evaluate) or the name of a secret where the master key is stored
+    masterKeySecret: "{{ .Values.global.cos.sse.secretName }}"

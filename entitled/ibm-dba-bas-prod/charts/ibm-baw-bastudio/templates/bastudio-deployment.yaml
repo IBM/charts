@@ -1,0 +1,296 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+{{ include "sch.config.init" (list . "sch.bastudio.config.values") }}
+{{- $serviceName := include "sch.names.fullCompName" (list . "jms-service") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "deployment") }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "deployment") | indent 4 }}
+  annotations:
+    checksum/config: {{ include (print $.Template.BasePath "/bastudio-configmap.yaml") . | sha256sum }}
+spec:
+  progressDeadlineSeconds: 1200
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "deployment") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "deployment") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering ) | indent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/bastudio-configmap.yaml") . | sha256sum }}
+    spec:
+{{ include "bastudio.constants.pod.securityContext" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{- include "sch.affinity.podAntiAffinity" (list . .sch.chart.podAntiAffinity) | indent 8 }}
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . "bastudio-sa") }}
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 50001
+{{- end }}
+      # use init container to do the ssl thing
+      initContainers:
+      - name: ssl-init-container
+        image: {{ .Values.images.tlsInitContainer | quote }}
+        securityContext:
+{{ include "bastudio.constants.container.securityContext" . | indent 10 }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.resources.initProcess | indent 10 }}
+        volumeMounts:
+        - name: key-trust-store
+          mountPath: /shared/tls
+        - name: trust-tls-volume
+          mountPath: /shared/resources/cert-trusted
+        - name: keypair-secret
+          mountPath: /shared/resources/keypair
+        env:
+        - name: KEYTOOL_ACTION
+          value: GENERATE-BOTH
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: sslKeystorePassword
+      - name: db-compatibility-checking
+        image: {{ .Values.images.dbcompatibilityInitContainer | quote }}
+        securityContext:
+{{ include "bastudio.constants.container.securityContext" . | indent 10 }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.resources.initProcess | indent 10 }}
+        env:
+        - name: DATABASE_TYPE
+          value: {{ .Values.bastudioDB.database.type | quote }}
+        - name: DATABASE_NAME
+          value: {{ .Values.bastudioDB.database.name | quote }}
+        - name: DATABASE_HOST_NAME
+          value: {{ .Values.bastudioDB.database.host | quote }}
+        - name: DATABASE_PORT
+          value: {{ toString .Values.bastudioDB.database.port | quote }}
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: dbUsername
+        - name: DATABASE_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: dbPassword
+        - name: EXPECTED_SCHEMA_VERSION
+          value: {{ .Values.bastudioDB.database.expectedSchemaVersion | quote }}
+        - name: MAX_RETRIES
+          value: "90"
+      containers:
+      - name: bastudio-container
+        image: {{ .Values.images.bastudio | quote }}
+        securityContext:
+{{ include "bastudio.constants.container.securityContext" . | indent 10 }}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        ports:
+        - name: https
+          containerPort: 9443
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /health
+            port: 9443
+{{ toYaml .Values.livenessProbe | indent 10 }}
+        readinessProbe:
+          exec:
+            command:
+              - /bin/bash
+              - -c
+              - if [ "$(curl -sfk https://localhost:9443/ps/rest/v1/config/getProcessServerDatabaseSchemaVersion | grep -Po '(?<="status":")(.*?)(?=")')" != "200" ]; then exit 1; fi
+{{ toYaml .Values.readinessProbe | indent 10 }}
+        resources:
+{{ toYaml .Values.resources.bastudio | indent 10 }}
+        env:
+        - name: HOSTNAME
+          value: "*"
+        - name: HTTPS_PORT
+          value: "9443"
+        - name: EXTERNAL_HOSTNAME
+          value: {{ .Values.global.baStudio.hostname | quote }}
+        - name: EXTERNAL_HTTPS_PORT
+          value: {{ toString .Values.global.baStudio.port | quote }}
+        - name: ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: adminUser
+        - name: ADMIN_PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: adminPassword
+        - name: JMS_SERVER_HOST
+          value: {{ $serviceName }}
+        - name: DB_TYPE
+          value: {{ .Values.bastudioDB.database.type | quote }}
+        - name: DB_NAME
+          value: {{ .Values.bastudioDB.database.name | quote }}
+        - name: DB_HOST
+          value: {{ .Values.bastudioDB.database.host | quote }}
+        - name: DB_PORT
+          value: {{ toString .Values.bastudioDB.database.port | quote }}
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: dbUsername
+        - name: DB_PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: dbPassword
+        - name: OIDC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: oidcClientId
+        - name: OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: oidcClientSecret
+        - name: UMS_HOST
+          value: {{ .Values.global.ums.hostname | quote }}
+        - name: UMS_PORT
+          value: {{ .Values.global.ums.port | quote }}
+        - name: UMS_ADMIN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName | quote }}
+              key: adminUser
+        - name: UMS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.ums.adminSecretName | quote }}
+              key: adminPassword
+        - name: KEYSTORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.baStudio.adminSecretName | quote }}
+              key: sslKeystorePassword
+        - name: RESOURCE_REGISTRY_URL
+          value: {{ printf "https://%s:%s"  .Values.global.resourceRegistry.hostname (toString .Values.global.resourceRegistry.port) | quote }}
+        - name: RESOURCE_REGISTRY_UNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.resourceRegistry.adminSecretName | quote }}
+              key: readUser
+        - name: RESOURCE_REGISTRY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.global.resourceRegistry.adminSecretName | quote }}
+              key: readPassword
+        - name: CONTENT_SECURITY_POLICY
+          value: {{ .Values.contentSecurityPolicy | quote }}
+        - name: WLP_LOGGING_CONSOLE_FORMAT
+          value: {{ .Values.logs.consoleFormat | quote }}
+        - name: CSRF_REFERER_WHITELIST
+          value: {{ printf "%s,%s" .Values.global.baStudio.hostname .Values.global.ums.hostname | quote }}
+        {{- if .Values.global.contributorToolkitsPVC }}
+        - name: RESOURCE_REGISTRY_PERSISTENT_VOLUME
+          value: /shared/resources/twx
+        {{- end }}
+        volumeMounts:
+        {{- if .Values.global.contributorToolkitsPVC }}
+        - mountPath: /shared/resources/twx
+          name: shared-twx-pv
+        {{- end }}
+        - name: key-trust-store
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/resources/security/keystore/jks/server.jks
+          subPath: keystore/jks/server.jks
+        - name: key-trust-store
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/resources/security/truststore/jks/trusts.jks
+          subPath: truststore/jks/trusts.jks
+        - name: ltpa-store
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/resources/security/ltpa.keys
+          subPath: ltpa.keys
+        - name: configurations
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides/oidc-rp.xml
+          subPath: oidc-rp.xml
+        - name: configurations
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides/processServer_variables_system.xml
+          subPath: processServer_variables_system.xml
+        - name: configurations
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides/ltpa-config.xml
+          subPath: ltpa-config.xml
+        - name: configurations
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides/ssl.xml
+          subPath: ssl.xml
+        - name: configurations
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides/security.xml
+          subPath: security.xml
+        - name: configurations
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/config/101Custom.xml
+          subPath: 101Custom.xml
+        - name: configurations
+          mountPath: /opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides/trace-specification.xml
+          subPath: trace-specification.xml
+{{- if .Values.global.existingClaimName }}
+        - name: custom-binaries
+          mountPath: /opt/ibm/wlp/usr/shared/resources/jdbc
+          subPath: jdbc
+{{- end }}
+      volumes:
+{{- if .Values.global.existingClaimName }}
+      - name: custom-binaries
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.existingClaimName }}
+{{- end }}
+      - name: ltpa-store
+        secret:
+          defaultMode: 0551
+          secretName: "{{ include "sch.names.fullCompName" (list . "ltpa") }}"
+          items:
+          - key: ltpa.keys
+            path: ltpa.keys
+      - name: keypair-secret
+        secret:
+          secretName: {{ .Values.tls.tlsSecretName }}
+{{ include "bastudio.trustVolumes" (list .Values.global.caSecretName .Values.tls.tlsTrustList ) | indent 6 }}
+      - name: key-trust-store
+        emptyDir: {}
+      {{- if .Values.global.contributorToolkitsPVC }}
+      - name: shared-twx-pv
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.contributorToolkitsPVC }}
+      {{- end }}
+      - name: configurations
+        configMap:
+          defaultMode: 0551
+          name: {{ include "sch.names.fullCompName" (list . "config") }}
+          items:
+          - key: oidc-rp.xml
+            path: oidc-rp.xml
+          - key: 101Custom.xml
+            path: 101Custom.xml
+          - key: processServer_variables_system.xml
+            path: processServer_variables_system.xml
+          - key: ltpa-config.xml
+            path: ltpa-config.xml
+          - key: ssl.xml
+            path: ssl.xml
+          - key: security.xml
+            path: security.xml
+          - key: trace-specification.xml
+            path: trace-specification.xml

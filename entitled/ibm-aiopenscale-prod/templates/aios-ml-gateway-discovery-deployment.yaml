@@ -1,0 +1,162 @@
+{{ $namePrefix := "ml-gateway-discovery" -}}
+{{ $compName := "aios-ml-gateway-discovery" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceAccount := include "aios.serviceAccountName" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  progressDeadlineSeconds: {{ .Values.progressDeadline.seconds }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+    type: RollingUpdate
+  replicas: {{ .Values.mlGatewayDiscovery.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+      {{- include "aios.metering" . | indent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 0
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      {{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      serviceAccountName: {{ $serviceAccount }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 6 }}
+      # to prevent multiple replicas from deploying on the same node
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      volumes:
+      - name: nginx-tls
+        secret:
+          secretName: {{ template "fullname" . }}-nginx-secrets
+      initContainers:
+        - name: ready-check
+          image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.readyCheckContainer.resources | indent 12 }}
+          command: ['sh', '-c',
+                'while true; do echo "Checking availability of ICP4D JWT public key...";
+                 curl -k $AIOS_GATEWAY_URL/auth/jwtpublic && break;
+                 sleep 5; done;
+                 echo "ICP4D JWT public key available.";
+                 echo "Starting main container."']
+          env:
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+      containers:
+        - name: aios-ml-gateway-discovery
+          image: {{ include "aios.image" (list . .Values.mlGatewayDiscovery.image.name .Values.mlGatewayDiscovery.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.mlGatewayDiscovery.resources | indent 12 }}
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          livenessProbe:
+            # to allow more time to startup on slower systems
+            failureThreshold: 10
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            httpGet:
+              path: /v1/ml_instances/version
+              port: 9443
+              scheme: HTTPS
+          readinessProbe:
+            initialDelaySeconds: 130
+            periodSeconds: 30
+            httpGet:
+              path: /v1/ml_instances/version
+              port: 9443
+              scheme: HTTPS
+          volumeMounts:
+          - name: nginx-tls
+            mountPath: "/opt/ibm/java/jre/lib/security/cacerts"
+            subPath: "java-cacerts"
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+            subPath: "ca-pem"
+          env:
+            - name: ENABLE_ICP
+              value: "True"
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+            - name: ICP4D_JWT_PUBLIC_KEY_URL
+              value: "$(AIOS_GATEWAY_URL)/auth/jwtpublic"
+            - name: ICP_AUTH_URL
+              value: "$(AIOS_GATEWAY_URL)/v1/preauth/validateAuth"
+            - name: ICP_WML_URL
+              value: "https://ibm-nginx-svc.{{ include "aios.cp4d.namespace" (list .) }}.svc.{{ .Values.clusterDomain }}"
+            - name: ICP_WML_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.icp4DToken.secretName }}
+                  key: {{ .Values.icp4DToken.secretKey }}
+            - name: AIOS_SERVICE_CREDENTIALS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-service-secrets
+                  key: aios-service-credential
+            - name: BM_APP_VERSION_ENDPOINT
+              value: "/v1/deployments/version"
+            - name: ML_GATEWAY_NORMALIZE_PROBABILITIES_ENABLED
+              value: "true"
+            {{ if .Values.global.dockerRegistryPrefix }}
+            - name: ML_GATEWAY_V4_WML_API_ENABLED
+              value: "true"
+            {{ end }}

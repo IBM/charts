@@ -1,0 +1,177 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-configdb-service
+  # namespace: {{ .Values.global.nameSpace }}
+  labels:
+    name: {{ .Values.mongoDBConfig.labelName }}
+    app: mongodb-configdb-service
+    heritage: {{ .Release.Service | quote }}
+    release: {{ .Release.Name | quote }}
+    chart: mongodb-configdb-service
+spec:
+  ports:
+  - port: {{ .Values.mongoDBConfig.configPort }}
+    targetPort: {{ .Values.mongoDBConfig.configPort }}
+  clusterIP: None
+  selector:
+    role: {{ .Values.mongoDBConfig.labelName }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb-configdb
+  labels:
+    app: mongodb-configdb
+    heritage: {{ .Release.Service | quote }}
+    release: {{ .Release.Name | quote }}
+    chart: mongodb-configdb
+spec:
+  serviceName: mongodb-configdb-service
+  replicas: {{ .Values.mongoDBConfig.replicas }}
+  selector:
+    matchLabels:
+      role: {{ .Values.mongoDBConfig.labelName }}
+  template:
+    metadata:
+      annotations:
+    {{- range $key, $value := .Values.global.annotations }}
+        {{ $key }}: {{ $value | quote }}
+    {{- end }}
+      labels:
+        role: {{ .Values.mongoDBConfig.labelName }}
+        tier: configdb
+        replicaset:  {{ .Values.mongoDBConfig.replicaSetName }}
+        app: mongodb-configdb
+        heritage: {{ .Release.Service | quote }}
+        release: {{ .Release.Name | quote }}
+        chart: mongodb-configdb
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: replicaset
+                  operator: In
+                  values:
+                  - {{ .Values.mongoDBConfig.replicaSetName }}
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: mongo{{ .Values.global.namespace.name }}
+                operator: In
+                values:
+                - "baca"
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.arch }}
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: secrets-volume
+        secret:
+          secretName: {{ .Values.secretVolume }} 
+      - name: sp-log-pvc
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.logs.claimname }}
+      containers:
+        - name: mongodb-configdb-container
+          image: "{{ .Values.global.mongo.image.repository }}:{{ .Values.global.mongo.image.tag }}"
+          securityContext:
+            runAsUser: 51000
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          resources: 
+{{ toYaml .Values.mongoDBConfig.resources | indent 12 }}
+          env:
+          # - name: ENTRYPASSWORD
+          #   value: "bacauser"
+          # - name: MONGO_USER
+          #   value: "bacauser"
+          # - name: MONGO_PASSWORD
+          #   value: "bacauser"
+          # - name: MONGO_INITDB
+          #   value: "bacauser"
+          - name: LOG_LEVEL
+            value: {{ .Values.global.logs.logLevel }}
+          - name: WIREDTIGERCACHE
+            value: {{ .Values.global.mongo.wiredTigerCache | default 0.5 | quote }}
+          - name: CERTIFICATE_DIR
+            value: "/etc/certs"
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: MONGO_TYPE
+            value: "configsvr"
+          - name: MONGO_TYPE_VALUE
+            value: "configReplSet"
+          - name: CONTAINER_PORT
+            value: {{ .Values.mongoDBConfig.configPort | quote }}  
+          - name: KUBE_NAME_SPACE
+            value: {{ .Values.global.nameSpace | quote }}
+          ports:
+            - containerPort: {{ .Values.mongoDBConfig.configPort }}  
+          livenessProbe:
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command: 
+                - bash
+                - -c
+                - source setup_env.sh && echo 'db.runCommand("ping").ok' | mongo 127.0.0.1:27019 --sslAllowInvalidCertificates  --ssl --sslPEMKeyFile $PEMFILE --sslCAFile $CERTIFICATE_PATH
+          readinessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - bash
+                - -c
+                - source setup_env.sh && echo 'db.runCommand("ping").ok' | mongo 127.0.0.1:27019 --sslAllowInvalidCertificates  --ssl --sslPEMKeyFile $PEMFILE --sslCAFile $CERTIFICATE_PATH
+          imagePullPolicy: {{ .Values.global.mongo.image.pullPolicy }}
+          volumeMounts:
+            - name: secrets-volume
+              readOnly: true
+              mountPath: "/etc/certs"
+            - name: mongodb-configdb-storage
+              mountPath: /data/db
+            - name: sp-log-pvc
+#             mountPath: "/var/log/mongodb"
+              mountPath: {{ .Values.global.logs.path }}{{ .Values.mongo.name }}db
+#             subPath: mongo
+              subPath: {{ .Values.mongo.name }}
+  volumeClaimTemplates:
+  - metadata:
+      name: mongodb-configdb-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+    {{- if $.Values.global.storageClass }}
+    {{- if (eq "-" $.Values.global.storageClass) }}
+      storageClassName: {{ .Values.storageClassName | quote }}
+    {{- else }}
+      storageClassName: {{ $.Values.global.storageClass | quote }}
+    {{- end }}
+    {{- end }}
+      resources:
+        requests:
+          storage: {{.Values.mongoDBConfig.storageCapacity}}

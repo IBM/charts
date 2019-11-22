@@ -1,0 +1,125 @@
+{{ if .Values.ldap.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-db2u-ldap
+  labels:
+    app: {{ template "fullname" . }}
+    release: "{{ .Release.Name }}"
+    component: "ldap"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}
+      chart: "{{ .Chart.Name }}"
+      release: "{{ .Release.Name }}"
+      component: "ldap"
+      heritage: "{{ .Release.Service }}"
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        component: "ldap"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        {{- include "db2wh.annotations" .  | indent 8 }}
+    spec:
+      volumes:
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-meta-storage
+          {{- end }}
+        {{- end }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      - name: ldap-secret
+        secret:
+          secretName: {{ template "fullname" . }}-db2u-ldap
+          defaultMode: 256
+      - name: bluadmin-secret
+        secret:
+          secretName: {{ template "fullname" . }}-db2u-ldap-bluadmin
+          defaultMode: 256
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAffinityDedicated" . | indent 8 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "root.securityContext" . | indent 6}}
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      containers:
+      - name: ldap
+        image: "{{ .Values.images.auth.image.repository }}:{{ .Values.images.auth.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "root.containers.ldap.securityContext" . | indent 8 }}
+        readinessProbe:
+          timeoutSeconds: 3
+          initialDelaySeconds: 10
+          exec:
+            command:
+            - "/bin/bash"
+            - "-c"
+            - "supervisorctl status slapd"
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+        livenessProbe:
+          timeoutSeconds: 10
+          initialDelaySeconds: 20
+          exec:
+            command:
+            - "/bin/bash"
+            - "-c"
+            - "supervisorctl status slapd"
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+        env:
+        - name: INSTANCE_NAME
+          value: {{ default "db2inst1" .Values.database.db2InstanceUser | quote }}
+        - name: SERVICE_NAME
+          value: {{ template "fullname" . }}-db2u-ldap
+        - name: LDAP_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}-db2u-ldap
+              key: password
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - name: ldap-secret
+          mountPath: "/secrets/bluldap.pwd"
+          readOnly: true
+        - name: bluadmin-secret
+          mountPath: "/secrets/bluadmin.pwd"
+          readOnly: true
+{{ end }}

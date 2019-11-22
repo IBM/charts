@@ -1,0 +1,149 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compDiscoveryName := .sch.chart.components.wex.discovery.name }}
+{{- $compDiscoveryLabelComponent := .sch.chart.components.wex.discovery.label.component }}
+{{- $compDiscoveryLabelRunStatefulset := .sch.chart.components.wex.discovery.label.runStatefulset }}
+
+{{- $compConfigmapName := .sch.chart.components.wex.configmap.name }}
+{{- $compConfigName := .sch.chart.components.wex.config.name }}
+{{- $compGatewayName := .sch.chart.components.wex.gateway.name }}
+{{- $compHdpNnName := .sch.chart.components.wex.hdp.nn.name }}
+{{- $compNlpName := .sch.chart.components.wex.nlp.name }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compDiscoveryName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-discovery
+    run: {{ $compDiscoveryLabelRunStatefulset }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "{{ .Chart.Name }}.fullname" . }}
+      component: wex-discovery
+      run: {{ $compDiscoveryLabelRunStatefulset }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $compDiscoveryName ) }}
+  replicas: {{ .Values.discovery.replica }}
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-discovery
+        run: {{ $compDiscoveryLabelRunStatefulset }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.discovery.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+                app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                component: wex-discovery
+                run: {{ $compDiscoveryLabelRunStatefulset }}
+        {{- else if eq .Values.discovery.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                  component: wex-discovery
+                  run: {{ $compDiscoveryLabelRunStatefulset }}
+        {{- end }}
+      containers:
+      - name: discovery
+        image: "{{ .Values.general.image.core }}"
+        imagePullPolicy: {{ .Values.general.image.pullPolicy }}
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+        ports:
+        - containerPort: 8983
+          name: client
+        env:
+        - name: WEX_ALL_COMPONENTS
+          value: "solr dclustering nlp"
+        - name: ZK_HOST
+          value: "{{ include "sch.names.fullCompName" (list . $compConfigName ) }}:2181"
+        - name: DEPLOYMENT_TYPE
+          value: CLUSTER
+        - name: HADOOP_NAMENODE_ADDRESS
+          value: "{{ include "sch.names.fullCompName" (list . $compHdpNnName ) }}:9000"
+        - name: NLP_SVC
+          value: {{ include "sch.names.fullCompName" (list . $compNlpName ) }}:8393
+        - name: AMA_ZING_API_ENDPOINT
+          value: "http://{{ include "sch.names.fullCompName" (list . $compGatewayName ) }}:9080/ama-zing/api/v1"
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compConfigmapName ) }}
+        resources:
+{{ toYaml .Values.discovery.resources | indent 10 }}
+        volumeMounts:
+        - name: datadir
+          mountPath: /wexdata
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - curl -s --head http://localhost:8983/solr/admin/collections?action=CLUSTERSTATUS | grep -q "HTTP/1.1 200 OK"
+          initialDelaySeconds: {{ .Values.discovery.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.discovery.readinessProbe.timeoutSeconds }}
+          failureThreshold: 12
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - curl -s --head http://localhost:8983/solr/admin/collections?action=CLUSTERSTATUS | grep -q "HTTP/1.1 200 OK"
+          initialDelaySeconds: {{ .Values.discovery.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.discovery.livenessProbe.timeoutSeconds }}
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-discovery
+        run: {{ $compDiscoveryLabelRunStatefulset }}
+    spec:
+      {{- if .Values.general.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kubernetes Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.general.persistence.storageClassName | quote }}
+      {{- else }}
+      # bind to an existing pv.
+      # setting storageClassName to "" disables dynamic provisioning
+      storageClassName: {{ default "" .Values.general.persistence.storageClassName | quote }}
+      selector:
+        matchLabels:
+          assign-to: "wex-index"
+        {{- if .Values.general.persistence.selector.label }}
+        matchExpressions:
+          - {key: "{{ .Values.general.persistence.selector.label }}", operator: In, values: ["{{ .Values.general.persistence.selector.value }}"]}
+        {{- end }}
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.discovery.persistence.size }}

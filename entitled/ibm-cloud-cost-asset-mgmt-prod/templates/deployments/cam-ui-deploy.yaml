@@ -1,0 +1,122 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: camui-deploy
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  {{ if eq (.Values.enableHA|quote|lower) "\"true\"" }}
+  replicas: 2
+  {{ else }}
+  replicas: 1
+  {{ end }}
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      name: camui-deploy
+  template:
+    metadata:
+      labels:
+        name: camui-deploy
+{{ include "cam.labels" .  | indent 8 }}
+      annotations:
+{{ include "cam.icpMetering" .  | indent 8 }}
+        pod.beta.kubernetes.io/init-containers: '[]'
+    spec:
+      affinity:
+      {{ if and (eq (.Values.enableHA|quote|lower) "\"true\"") (not (eq (.Values.enableDevSettings|quote|lower) "\"true\"")) }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: name
+                operator: In
+                values:
+                - camui-deploy
+            topologyKey: "kubernetes.io/hostname"
+      {{ end }}
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      containers:
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+      - image: {{ template "cam.readConfig" (list . "cam_ui") }}
+      {{ else }}
+      - image: {{ template "camicp.readConfig" (list . "cam_ui" .Values.imageCredentials.registry) }}
+      {{ end }}
+{{ include "cam.container.securityContext.NonRoot" . | indent 8 }}
+        name: cam-ui
+        resources:
+          # Maximum limits
+          limits:
+            {{ if eq (.Values.enableHA|quote|lower) "\"true\"" }}
+            memory: "512M"
+            {{ else }}
+            memory: {{ include "deployClassSingleConfig" (list . "cam_ui_limits_mem" (.Values.deploymentClass|lower)) }}
+            {{ end }}
+            cpu: {{ include "deployClassSingleConfig" (list . "cam_ui_limits_cpu" (.Values.deploymentClass|lower)) }}
+          # Requests (for K8 pod placement)
+          requests:
+            cpu: {{ include "deployClassSingleConfig" (list . "cam_ui_requests_cpu" (.Values.deploymentClass|lower)) }} # force cpu-request to zero (otherwise defaults to limits def)
+          {{ if eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+            memory: "0" # DEV override
+          {{ else }}
+            {{ if eq (.Values.enableHA|quote|lower) "\"true\"" }}
+            memory: "512M"
+            {{ else }}
+            memory: {{ include "deployClassSingleConfig" (list . "cam_ui_requests_mem" (.Values.deploymentClass|lower)) }}
+            {{ end }}
+          {{ end }}
+        env:
+          - name: GATEWAY_SYSTEM
+            value: {{ .Values.apiGatewayUrl }}
+          - name: HTTPS_PORT
+            value: "8443"
+          - name: UI_URL
+            value: {{ .Values.uiUrl }}
+          - name: SUITE_MODE
+            value: {{ .Values.suiteMode|quote|lower }}
+          - name: MCMP_UI_HOST
+            value: {{ .Values.mcmpUIHost }}
+          - name: IBM_CLOUD_ON_PREM
+            value: {{ .Values.isIcp|quote|lower }}
+          - name: ICCAM_VERSION
+            value: {{ .Values.iccamVersion|quote|lower }}
+        ports:
+          - containerPort: 8443
+            name: cam-ui
+        readinessProbe:
+            tcpSocket:
+              port: cam-ui
+            initialDelaySeconds: 5
+            periodSeconds: 10
+        livenessProbe:
+            tcpSocket:
+              port: cam-ui
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            failureThreshold: 4
+            timeoutSeconds: 20
+        volumeMounts:
+        - name: grav-cert-file
+          mountPath: /tmp/
+        - name: tmp-nginx
+          mountPath: /tmp/nginx/
+      volumes:
+      - name: grav-cert-file
+        secret:
+          secretName: grav-certificates
+          items:
+          - key: grav.crt
+            path: _gravitant_net_2017.crt
+          - key: grav.key
+            path: _gravitant_net_2017.key
+      - name: tmp-nginx
+        emptyDir: {}
+      restartPolicy: Always
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

@@ -1,0 +1,50 @@
+{{- include "sch.config.init" (list . "gw.cem.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.gatecem.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "test" -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) -}}
+{{- $saName := include "ibm-netcool-gateway-cem-prod.commonServiceAccountName" ( . ) -}}
+{{- $gatewayName :=  .sch.chart.components.gatecem.gatewayName -}}
+{{- $gatewayService := include "sch.names.fullName" (list .) }}
+{{- $gatewayHttpPort := .sch.chart.components.gatecem.gatewayHttpPort -}}
+{{- $testImageRepo := include "ibm-netcool-gateway-cem-prod.constructTestImageReponame" ( . ) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullTestCompName }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+spec:
+{{- if .Values.global.serviceAccountName }}
+  serviceAccountName: {{ .Values.global.serviceAccountName }}
+{{- end }}
+  automountServiceAccountToken: false
+{{- if .Values.global.image.secretName }}
+  imagePullSecrets:
+    - name: {{ .Values.global.image.secretName }}
+{{- end }}
+{{ include "ibm-netcool-gateway-cem-prod.securitySettingsStatefulset" . | indent 2 }}
+  containers:
+  - name: {{ .Release.Name }}-test
+    image: "{{ $testImageRepo }}"
+    command:
+      - "/bin/sh"
+    args: 
+    - -c
+    - |
+      RES=$(curl -X GET -u netcool:$HTTP_AUTH_PASSWORD -H 'cache-control: no-cache' http://{{ $gatewayService }}.{{ .Release.Namespace }}:{{ $gatewayHttpPort }}/cachegateway -k -silent --write-out '%{http_code}' --output /dev/null);
+      test "$RES" -ne "200" && echo "Failed to send HTTP request. Expecting a 200 OK , but got $RES." && exit 1 || echo "OK - Got $RES"
+    env:
+    - name: HTTP_AUTH_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.cemgateway.cemSecretName }}
+          key: HttpAuthenticationPassword
+          optional: true
+{{ include "ibm-netcool-gateway-cem-prod.securitySettingsContainer" . | indent 4 }}
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}

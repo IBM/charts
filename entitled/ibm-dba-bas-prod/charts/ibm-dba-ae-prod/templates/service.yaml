@@ -1,0 +1,29 @@
+################################################################################
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+################################################################################
+{{ include "sch.config.init" (list . "sch.appengine.config.values") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "service") }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "service") | indent 4 }}
+spec:
+  type: {{if or (eq .Values.global.appEngine.serviceType "Ingress") (eq .Values.global.appEngine.serviceType "ClusterIP") }}ClusterIP{{ else }}NodePort{{ end }}
+  ports:
+    - port: 443
+      targetPort: https
+      {{if eq .Values.global.appEngine.serviceType "NodePort" }}nodePort: {{ .Values.global.appEngine.port }}{{ end }}
+      protocol: TCP
+      name: https
+  selector:
+{{ include "sch.metadata.labels.standard" (list . "deployment") | indent 4 }}
+  {{-  if eq .Values.global.appEngine.serviceType "NodePort" }}
+  sessionAffinity: ClientIP
+  {{- end }}

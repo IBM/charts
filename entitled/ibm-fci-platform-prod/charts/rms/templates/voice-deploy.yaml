@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "rms.fullname" . }}-streams
+  labels:
+    app: {{ template "rms.name" . }}-streams
+    chart: {{ template "rms.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  selector:
+    matchLabels:
+      app: {{ template "rms.name" . }}-streams
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "rms.name" . }}-streams
+        release: {{ .Release.Name }}
+        chart: {{ template "rms.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccount: {{ template "rms.fullname" . }}-streams
+      serviceAccountName: {{ template "rms.fullname" . }}-streams
+      volumes:
+        - name: rms-streams-volume
+          persistentVolumeClaim:
+            claimName: {{ template "rms.fullname" . }}-streams
+        - name: rms-streams-volume-1
+          persistentVolumeClaim:
+            claimName: {{ template "rms.fullname" . }}-streams-training
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+      containers:
+        - name: voice-streams
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.rmsStreamsVoice.image.repository }}:{{ .Values.rmsStreamsVoice.image.tag }}"
+          imagePullPolicy: {{ .Values.rmsStreamsVoice.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.rmsStreamsVoice.resources | indent 12 }}
+          securityContext:
+{{ include "common.PrivilegedContainerSecurityContext" . | indent 12 }}
+            capabilities:
+              drop:
+              - ALL
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          envFrom:
+          - configMapRef:
+              name: {{ template "rms.fullname" . }}-streams-cm
+          env:
+          - name: HDP_MASTER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: HDP_MASTER_PASSWORD
+          ports:
+          - containerPort: 21810
+          - containerPort: 9975
+          - containerPort: 8443
+          volumeMounts:
+          - name: rms-streams-volume
+            mountPath: /home/streams-anchor
+          - name: rms-streams-volume-1
+            mountPath: /training/
+          - name: file-secrets
+            mountPath: /home/streamsadmin/security/fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /home/streamsadmin/security/kafka.client.truststore.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /home/streamsadmin/security/kafka.client.keystore.jks
+            subPath: fci_universal_ks.jks
+          - name: file-secrets
+            mountPath: /home/streamsadmin/security/fci_kafka_msg.p12
+            subPath: fci_kafka_msg.p12 
+          - name: file-secrets
+            mountPath: /home/streamsadmin/security/fci_universal_ks.sth
+            subPath: fci_universal_ks.sth
+          - name: file-secrets
+            mountPath: /home/streamsadmin/security/fci_universal_ks.kdb
+            subPath: fci_universal_ks.kdb 

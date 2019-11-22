@@ -1,0 +1,30 @@
+# Licensed Materials - Property of IBM
+# IBM Order Management Software (5725-D10)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if eq (.Values.global.license | lower) "accept" }}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "om-chart.fullname" . }}-config
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+  annotations:
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook": pre-install,pre-upgrade
+
+data:
+  jvm.options: |-
+{{ (tpl (.Files.Get "config/jvm.options") . ) | indent 4 }}
+  {{ if .Values.global.customerOverrides -}}
+  customer_overrides.properties: |-
+{{ (tpl (.Files.Get "config/customer_overrides.properties") . ) | indent 4 }}
+  {{ end -}}
+  system_overrides.properties: |-
+{{ (tpl (.Files.Get "config/system_overrides.properties") . ) | indent 4 }}
+  evaluateEnvs.sh: |-
+{{ (tpl (.Files.Get "scripts/evaluateEnvs.sh") . ) | indent 4 }}
+  agentStartupTest.sh: |-
+{{ (tpl (.Files.Get "scripts/agentStartupTest.sh") . ) | indent 4 }}
+{{- end }}

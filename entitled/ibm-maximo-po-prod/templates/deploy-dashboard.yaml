@@ -1,0 +1,71 @@
+{{- include "sch.config.init" (list . "poRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.dashboard.name -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.global.replicaCount }}
+  minReadySeconds: 60
+  strategy:
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      {{- include "po.securitycontext.dashboard.pod" . | indent 6 }}
+      {{- include "po.image.pull.secret" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      terminationGracePeriodSeconds: 60
+      volumes:
+{{ include "po.config.volume" . | indent 6 }}
+      initContainers:
+{{ include "po.config.initContainer" . | indent 6 }}
+{{ include "po.readiness.waitForCouchdb" . | indent 6 }}
+      containers:
+      - name: dashboard
+        image: {{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}
+        volumeMounts:
+{{ include "po.config.volumeMount" . | indent 8 }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        livenessProbe:
+          httpGet:
+            path: /healthcheck
+            port: 30000
+            scheme: HTTP
+          initialDelaySeconds: 60 ## equals to the maximum startup time of the application + couple of seconds
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: {{ .Values.global.containers.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /healthcheck
+            port: 30000
+            scheme: HTTP
+          initialDelaySeconds: 60 ## equals to minimum startup time of the application
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: {{ .Values.global.containers.failureThreshold }}
+        resources: # keep request = limit to keep this container in guaranteed class
+        {{- if .Values.dashboard.resources }}
+{{ toYaml .Values.dashboard.resources | indent 10 }}
+        {{- else }}
+          requests:
+            cpu: 50m
+            memory: 200Mi
+          limits:
+            cpu: 500m
+            memory: 500Mi
+        {{- end }}
+        {{- include "po.securitycontext.container" . | indent 8 }}
+        ports:
+          - containerPort: 30000
+{{ include "po.containers.env" . | indent 8 }}

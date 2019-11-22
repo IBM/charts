@@ -1,0 +1,42 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+{{ $test :=  printf "%s" "test" -}}
+{{ $testCompName := printf "%s-%s" $compName "test" -}}
+{{ $fullTestCompName := include "sch.names.fullCompName" (list . $test) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullTestCompName }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+spec:
+{{- if .Values.global.image.secretName }}
+  imagePullSecrets:
+    - name: {{ .Values.global.image.secretName }}
+{{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+  containers:
+  - name: {{ $fullTestCompName }}
+    exec: 
+    image: "{{ .Values.image.testRepository }}:{{ .Values.image.testImageTag }}"
+    command:
+      - "/bin/sh"
+    args:
+      ["-c","wget -S -T 60 --header \'cache-control: no-cache\' --header \'content-type: application/json\' -O- http://{{ include "sch.names.fullName" (list .) }}-admin:8080/probe/common"]
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}

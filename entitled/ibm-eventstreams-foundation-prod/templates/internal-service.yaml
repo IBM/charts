@@ -1,0 +1,60 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines a headless service to allow the Kafka cluster to be accessible
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{ $namePrefix := .sch.chart.components.kafka.internalHeadless.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'kafka' as this makes up part of implementing the Kafka cluster
+{{ $compName := .sch.chart.components.kafka.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $kafkaStatefulset := .sch.chart.components.kafka.statefulSet.name -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  publishNotReadyAddresses: true
+  ports:
+    # Ports that are opened by the Kafka broker container
+    - port: {{ $ports.kafka.internalKafka }}
+      name: "kafka"
+    - port: {{ $ports.kafka.externalProxySecure }}
+      name: "ext-secure"
+    - port: {{ $ports.kafka.internalEventStreamsSecureIntercept }}
+      name: "es-tlsonly"
+    - port: {{ $ports.kafka.internalLoopbackIntercept }}
+      name: "es-loopback"
+    # Port opened by the kafka-metrics-reporter container
+    - port: {{ $ports.kafka.metrics }}
+      name: metrics-port
+    {{- if $.Values.kafka.openJMX }}
+    - port: {{ $ports.kafka.jmx }}
+      name: "jmx"
+    {{- end }}
+    # Port opened by the kafka-healthcheck container
+    - port: {{ $ports.kafka.healthcheck }}
+      name: healthcheck
+  clusterIP: None
+  selector:
+    release: {{ .Release.Name | quote }}
+    serviceSelector: {{ $kafkaStatefulset | quote }}
+{{ end -}}

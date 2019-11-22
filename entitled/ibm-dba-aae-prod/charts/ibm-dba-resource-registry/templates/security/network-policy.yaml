@@ -1,0 +1,49 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "sch.rr.config.values") -}}
+{{ $label := (include "sch.metadata.labels.standard" (list . "security")) }}
+{{ $labelWorkload := (include "sch.metadata.labels.standard" (list . "server")) }}
+{{- $policyName := include "sch.names.fullCompName" (list . "networkpolicy") -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $policyName }}
+  labels: 
+{{ $label | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+{{ $labelWorkload | indent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - ports:
+    - port: 2379
+  - from:
+    - podSelector:
+        matchLabels:
+{{ $labelWorkload | indent 10 }}
+    ports:
+    - port: 2380
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+{{ $labelWorkload | indent 10 }}
+    ports:
+    - port: 2380
+    - port: 2379
+  - to:
+    ports:
+    - protocol: UDP
+      port: 53

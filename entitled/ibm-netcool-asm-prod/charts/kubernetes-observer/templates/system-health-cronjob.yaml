@@ -1,0 +1,98 @@
+{{- if .Values.systemHealthJob.enabled -}}
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-system-health-cronjob
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  concurrencyPolicy: Forbid
+  schedule: {{ .Values.systemHealthJob.schedule | quote }}
+  suspend: false
+  jobTemplate:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      template:
+        spec:
+          hostNetwork: false
+          hostPID: false
+          hostIPC: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          supplementalGroups:
+          {{- range $group := .Values.global.persistence.supplementalGroups }}
+            - {{ $group -}}
+          {{ end }}
+          {{- if .Values.global.image.pullSecret }}
+          imagePullSecrets:
+          - name: {{ .Values.global.image.pullSecret }}
+          {{- end }}
+          initContainers:
+          - name: wait-for-kubernetes-observer
+            image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+            imagePullPolicy: {{.Values.global.image.pullPolicy}}
+            resources:
+{{ include "asm.minimalPodResources" . | indent 14 }}
+            securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 14 }}
+            env:
+            - name: SERVICE
+              value: {{ .Release.Name }}-kubernetes-observer
+            - name: EXPECTED_COUNT
+              value: "1"
+            command:
+            - /bin/sh
+            - -c
+            - /opt/ibm/netcool/asm/bin/check-service-endpoint-count.sh
+          containers:
+          - image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.image.name }}:{{ .Values.image.tag }}
+            name: {{ .Release.Name }}-system-health-cronjob
+            resources:
+{{ include "asm.minimalPodResources" . | indent 14 }}
+            securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 14 }}
+            command:
+            - /bin/sh
+            - -c
+            - /opt/ibm/netcool/asm/bin/run-system-health-job.sh
+            env:
+            - name: ASM_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-asm-credentials
+                  key: username
+            - name: ASM_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-asm-credentials
+                  key: password
+            volumeMounts:
+            - mountPath: /opt/ibm/netcool/asm/etc
+              name: asm-config
+            - mountPath: /opt/ibm/netcool/asm/bin
+              name: job-script
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                    - {{ .Values.arch }}
+          volumes:
+          - name: asm-config
+            configMap:
+              name: {{ .Release.Name }}-global-config
+              optional: true
+          - name: job-script
+            configMap:
+              name: {{ .Release.Name }}-system-health-config
+              defaultMode: 0755
+          restartPolicy: OnFailure
+{{ end }}

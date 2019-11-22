@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wml-scoring-rt-utils
+  labels:
+    app: wml-scoring-rt-utils
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  serviceName: wml-scoring-rt-utils
+  selector:
+    matchLabels:
+      app: wml-scoring-rt-utils
+  template:
+    metadata:
+      labels:
+        app: wml-scoring-rt-utils
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: IBM Watson Machine Learning
+        productID: ICP4D-WML_210_00000
+        productVersion: 2.1.0.0
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+      - name: agent-container
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlScoringUtils.image.repository }}:{{ .Values.wmlScoringUtils.image.tag }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+        livenessProbe:
+          exec:
+            command:  ["/etc/agent/bin/grpc-healthcheck", "localhost", "16502"]
+          failureThreshold: 3
+          initialDelaySeconds: 25
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["/etc/agent/bin/grpc-healthcheck", "localhost", "16502"]
+          failureThreshold: 3
+          initialDelaySeconds: 20
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        envFrom:
+        - secretRef:
+            name: wdp-service-id
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+        env:
+        - name: AGT_SERVICE_NAME
+          value: wml-online-scoring
+        - name: WMLENV
+          value: fvt
+        - name: DATACENTRE
+          value: $datacentre
+        - name: AGT_ETCD_CLUSTER
+          valueFrom:
+           secretKeyRef:
+            name: etcd-secret
+            key: etcd_cluster
+        - name: AGT_ETCD_USERNAME
+          valueFrom:
+           secretKeyRef:
+            name: etcd-secret
+            key: etcd_username
+        - name: AGT_ETCD_PASSWORD
+          valueFrom:
+           secretKeyRef:
+            name: etcd-secret
+            key: etcd_password
+        - name: AGT_POLL_INTERVAL_IN_SEC
+          value: "1800"
+        - name: AGT_ETCD_TLS
+          value: "0"
+        - name: AGT_SERVICE_TLS
+          value: "true"
+        - name: AGT_STATSD_ENABLE
+          value: "1"
+

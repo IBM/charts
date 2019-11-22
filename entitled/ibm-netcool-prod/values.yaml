@@ -1,0 +1,314 @@
+######################################################################## #
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+
+#
+# This is where we can overwrite the values set in each individual charts.
+#
+global:
+  # This is the global license value that must be manually set to accept.
+  license: "not accepted"
+  omnisecretname: "%s-omni-secret"
+  cluster:
+    # Public name or IP the deployment cluster will be accessible from.
+    fqdn: mycluster.icp
+  ingress:
+    port : 443
+    tlsSecret: "{{ .Release.Name }}-netcool-tls-secret"
+    # This value must be left to true. Other values are only valid in specific test environment.
+    prefixWithReleaseName: true
+  common:
+    eventanalytics:
+      tenantId: cfd95b7e-3bc7-4006-a4a8-a73a79c71255
+
+  # Define where/who the images will be pulled from
+  image:
+    # This is the artifactory server to pull the docker images from.
+    repository: ""
+    # Secret used to access the docker repository above
+    secret: "noi-registry-secret"
+    # pullPolicy: IfNotPresent change to Always to make the latest is always picked up
+    pullPolicy: Always
+
+  #environmentSize defines the size of deployment you want.
+  #size0 is current default and is intended for demo purposes only.
+  #size1 is recommended for development use.
+  #Future work for production settings coming soon.
+  environmentSize: "size0"
+
+  # Control initial deployment of NOI applications
+  enableLogAnalysis: true
+  enableImpact: true
+
+  rbac:
+    serviceAccountName: noi-service-account
+    create: false
+
+  tls:
+    certificate:
+      # Will not use ICP certmanager to automatically generate TLS certificate secrets
+      useExistingSecret: false
+  users:
+    secretsCreatedPreInstall: false
+    randompasswords: true
+
+  # Enable sub-chart resource requests
+  resource:
+    requests:
+      enable: true
+
+  antiAffinity:
+    # Enable chart anti-affinity e.g. schedule primary and backup objserv on different nodes
+    enabled: true
+
+  # global persistence settings
+  persistence:
+    enabled: true
+    useDynamicProvisioning: false
+    storageClassOption:
+      cassandradata: "local-storage-cassandra"
+      cassandrabak:  "local-storage-cassandra-bak"
+      zookeeperdata: "local-storage-zookeeper"
+      kafkadata:     "local-storage-kafka"
+      couchdbdata:   "local-storage-couchdb"
+    storageSize:
+      cassandradata: 50Gi
+      cassandrabak:  50Gi
+      zookeeperdata: 512Mi
+      kafkadata:     5Gi
+      couchdbdata:   512Mi
+
+  nciservers:
+    # Expose the number of nciservers we need.
+    replicaCount: 2
+
+  ldapservice:
+    # name of the service should not be changed.
+    name: ldapservice
+    verifypasswords : true
+    # Define how LDAP is working: ['proxy','standalone']
+    mode: standalone
+    internal:
+      ldapPort: 389
+      ldapSSLPort: 636
+      url: "ldap://localhost:389"
+      suffix: "dc=mycluster,dc=icp"
+      baseDN: dc=mycluster,dc=icp
+      bindDN: "cn=admin,dc=mycluster,dc=icp"
+  dashboardEnabled: false
+  integrations:
+    asm:
+      # The release name of Agile Service Manager.
+      releaseName: "asm"
+
+      # This should be set to the hostname of the ASM kafka service. If
+      # not set, this defaults to:
+      # {releaseName}-kafka
+      kafkaHostname: ""
+
+      # This should be set to the port of the ASM kafka service
+      kafkaPort: "9092"
+
+      # The topic in the ASM kafka cluster where ASM is publishing external
+      # status updates
+      kafkaExternalStatusTopic: "itsm.status.external.json"
+
+      # If true, signifies that ASM integration is to be enabled and activates the ASM integration
+      enabled: false
+
+      # On premise properties
+      onPremSecureRemote:
+
+        # If true, indicates to use a secured connection to on prem services
+        # And do not attempt to connect to a cluster internal asm kafka and UI API services
+        # This will also result in the usage of external-asm secrets created by ASM on prem
+        # In order to use these secrets, the upgrade or install using the on prem remote configuration must
+        # be done after the scripts have been executed from the ASM on prem host.
+        enabled: false
+
+        # Hostname or IP address of secured kafka and UI API
+        remoteHost: ""
+
+        # The port to be used for the secured remote kafka service.
+        remotePort: "19093"
+
+        # The ui API port, which is set to 443 as a default.
+        uiApiPort: "443"
+
+  
+  
+db2ese:
+  pvc:
+    # specify the storageClassName you want to use
+    # if you don't specify a storageClassName it will use the default
+    storageClassName: "local-storage-db2"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if you are using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+  # Configure the memory and CPU Allocation for DB2
+########################################################################
+# Commenting this out as CPU requests  and limits mover to _resources.tpl.
+#  Leaving it here just in case we somehow still need it for now.
+########################################################################
+#  resources:
+#    # This is the minimum required
+#    requests:
+#      cpu: 500m
+#      # This is the minimum required
+#      memory: 6Gi
+#    limits:
+#      cpu: 1000m
+#      # This must be adjusted to 25% of the total amount of memory available on the biggest node. It could be more, but not less.
+#      # If you have a mixture of 32GB and 64GB nodes, make sure you set it to 16Gi, as this is 25% of the biggest node.
+#      memory: 8Gi
+
+ncoprimary:
+  pvc:
+    # specify the storageClassName you want to use
+    # if you don't specify a storageClassName it will use the default
+    storageClassName: "local-storage-ncoprimary"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+
+ncobackup:
+  pvc:
+    # specify the storageClassName you want to use
+    # if you don't specify a storageClassName it will use the default
+    storageClassName: "local-storage-ncobackup"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+
+nciserver:
+  pvc:
+    # specify the storageClassName you want to use
+    # if you don't specify a storageClassName it will use the default
+    storageClassName: "local-storage-nciserver"
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+
+impactgui:
+  pvc:
+    # specify the storageClassName you want to use
+    # if you don't specify a storageClassName it will use the default
+    storageClassName: "local-storage-impactgui"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 5Gi
+scala:
+  pvc:
+    # specify the storageClassName you want to use
+    # if you don't specify a storageClassName it will use the default
+    storageClassName: "local-storage-scala"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 20Gi
+
+openldap:
+  pvc:
+    # specify the storageClassName you want to use
+    # if you don't specify a storageClassName it will use the default
+    storageClassName: "local-storage-openldap"
+
+    # Specify the name of the Existing Claim to be used by your application
+    # empty string means don't use an existClaim
+    existingClaimName: ""
+
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+
+    size: 1Gi
+
+ibm-hdm-common-ui:
+  dash:
+    consoleIntegration:
+      passwordOptional: true
+
+ea-noi-layer:
+  noieagateway:
+    ingestionEndpoint:
+      subscriptionKeyName: "smadmin"
+
+ibm-hdm-analytics-dev:
+  archivingservice:
+    eventTTL: 7862400
+  common:
+    topics:
+      # This topic must be enabled in order to utilise the ASM integration enrichment capabilities
+      asmMessages:
+        name: ea-asm-enriched-events
+        enabled: true
+    temporalGroupingDeployFirst: true
+    authentication:
+      scheme: noiusers
+
+ibm-ea-asm-normalizer:
+  joinWindowSize: 15
+  kafkaImage:
+    name: ea/kafka
+    tag: 1.1.0-201909261738-amd64L_PPAN_BFXQE

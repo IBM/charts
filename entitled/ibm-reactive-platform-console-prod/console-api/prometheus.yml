@@ -1,0 +1,421 @@
+{{/*
+   * Note to Helm devs: this is NOT a Helm template, but rather a plain go template used
+   * in console-api to generate the final prometheus.yml.
+   * sanitizeForPrometheusLabel is a function in console-api that replaces [.-] with "_"
+   */}}
+global:
+  # dev mode
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+rule_files:
+  - /etc/config/rules/*.yaml
+
+{{ if .AlertmanagerAddresses }}
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      {{ range $index, $address := .AlertmanagerAddresses }}
+      - {{ $address }}
+      {{ end }}
+{{ end }}
+
+scrape_configs:
+
+  # Container metrics from kubelet cadvisor endpoint
+
+  - job_name: 'kubernetes-cadvisor'
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+    kubernetes_sd_configs:
+      - role: node
+
+    honor_labels: true
+
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node_name
+      - source_labels: [__meta_kubernetes_node_address_InternalIP]
+        target_label: node_ip
+
+    # These are metric_relabel_configs since the source labels come from the scraped `/metrics`.
+    metric_relabel_configs:
+      - source_labels: [pod_name]
+        target_label: kubernetes_pod_name
+      - regex: pod_name
+        action: labeldrop
+      # pause containers have all the network stats for a pod
+      - source_labels: [container_name, __name__]
+        regex: POD;container_(network).*
+        target_label: container_name
+      # drop all other pause container stats
+      - source_labels: [container_name]
+        regex: POD
+        action: drop
+      # drop system containers with no name
+      - source_labels: [container_name]
+        regex: ^$
+        action: drop
+      # drop high cardinality debug metrics
+      - source_labels: [__name__]
+        regex: container_(network_tcp_usage_total|tasks_state|cpu_usage_seconds_total|memory_failures_total|network_udp_usage_total)
+        action: drop
+      # extract workload from workload-hash-rand
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*)-[456789bcdf]{4,10}-[bcdfghjklmnpqrstvwxz2456789]{5};
+        target_label: es_workload
+      # extract workload from workload-rand
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*)-[bcdfghjklmnpqrstvwxz2456789]{5};
+        target_label: es_workload
+      # spark workload
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*)-[0-9]{13}-exec-[0-9]+;
+        replacement: ${1}-exec
+        target_label: es_workload
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*)-[0-9]{13}-driver;
+        replacement: ${1}-driver
+        target_label: es_workload
+      # extract workload from workload-num
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*)-[0-9]{1,4};
+        target_label: es_workload
+      # copy pod name to workload
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.+);
+        target_label: es_workload
+
+{{ .MonitorTypeRules | indent 6 }}
+
+  # kubelet metrics (not for monitoring, just grafana data)
+  - job_name: 'kubelet'
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+    kubernetes_sd_configs:
+      - role: node
+
+    honor_labels: true
+
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node_name
+      - source_labels: [__meta_kubernetes_node_address_InternalIP]
+        target_label: node_ip
+
+
+  # kube-state-metrics
+
+  - job_name: 'kube-state-metrics'
+
+    kubernetes_sd_configs:
+      - role: endpoints
+
+    honor_labels: true
+
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_endpoints_name]
+        regex: prometheus-kube-state-metrics
+        action: keep
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        action: replace
+        target_label: kubernetes_name
+
+    # es_workload labels:
+    # These are metric_relabel_configs since the source labels come from the scraped `/metrics`.
+    metric_relabel_configs:
+      - source_labels: [created_by_kind, pod, es_workload]
+        regex: 'ReplicaSet;(.+)-[^-]+-[^-]+;'
+        target_label: es_workload
+      - source_labels: [created_by_kind, pod, es_workload]
+        regex: 'StatefulSet;(.+)-[^-]+;'
+        target_label: es_workload
+      - source_labels: [created_by_kind, pod, es_workload]
+        regex: 'DaemonSet;(.+)-[^-]+;'
+        target_label: es_workload
+      - source_labels: [created_by_kind, pod, es_workload]
+        regex: 'Job;(.+)-[^-]+;'
+        target_label: es_workload
+      - source_labels: [created_by_kind, pod, es_workload]
+        regex: 'ReplicationController;(.+)-[^-]+;'
+        target_label: es_workload
+      - source_labels: [created_by_kind, pod, es_workload]
+        regex: '.none.;(.+);'
+        target_label: es_workload
+      - source_labels: [deployment, es_workload]
+        regex: '(.+);'
+        target_label: es_workload
+      - source_labels: [daemonset, es_workload]
+        regex: '(.+);'
+        target_label: es_workload
+      # extract workload from workload-hash-rand
+      - source_labels: [pod, es_workload]
+        regex: (.*)-[456789bcdf]{4,10}-[bcdfghjklmnpqrstvwxz2456789]{5};
+        target_label: es_workload
+      # extract workload from workload-rand
+      - source_labels: [pod, es_workload]
+        regex: (.*)-[bcdfghjklmnpqrstvwxz2456789]{5};
+        target_label: es_workload
+      # spark workload
+      - source_labels: [pod, es_workload]
+        regex: (.*)-[0-9]{13}-exec-[0-9]+;
+        replacement: ${1}-exec
+        target_label: es_workload
+      - source_labels: [pod, es_workload]
+        regex: (.*)-[0-9]{13}-driver;
+        replacement: ${1}-driver
+        target_label: es_workload
+      # extract workload from workload-num
+      - source_labels: [pod, es_workload]
+        regex: (.*)-[0-9]{1,4};
+        target_label: es_workload
+      # copy pod name to workload
+      - source_labels: [pod, es_workload]
+        regex: (.+);
+        target_label: es_workload
+      - source_labels: [node]
+        target_label: node_name
+
+      # Copy pod name to kubernetes_pod_name, to match all the other service discovery sections.
+      # The UI uses kubernetes_pod_name for displaying pod health.
+      - source_labels: [pod]
+        target_label: kubernetes_pod_name
+
+
+{{ .MonitorTypeRules | indent 6 }}
+
+  # Scrape config for service endpoints.
+  #
+  # The relabeling allows the actual service scrape endpoint to be configured
+  # via the following annotations:
+  #
+  # * `{{ .PrometheusDomain }}/scrape`: Only scrape services that have a value of `true`
+  # * `{{ .PrometheusDomain }}/scheme`: If the metrics endpoint is secured then you will need
+  # to set this to `https` & most likely set the `tls_config` of the scrape config.
+  # * `{{ .PrometheusDomain }}/path`: If the metrics path is not `/metrics` override this.
+  # * `{{ .PrometheusDomain }}/port`: If the metrics are exposed on a different port to the
+  # service then set this appropriately.
+
+  - job_name: 'kubernetes-services'
+    kubernetes_sd_configs:
+      - role: endpoints
+
+    honor_labels: true
+
+    relabel_configs:
+      # these have dedicated scrape sections:
+      - source_labels: [__meta_kubernetes_endpoints_name]
+        regex: prometheus-node-exporter
+        action: drop
+      - source_labels: [__meta_kubernetes_endpoints_name]
+        regex:  prometheus-kube-state-metrics
+        action: drop
+
+      # _scrape _scheme _path _port annotation triggers:
+      - source_labels: [__meta_kubernetes_service_annotation_{{ sanitizeForPrometheusLabel .PrometheusDomain }}_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_service_annotation_{{ sanitizeForPrometheusLabel .PrometheusDomain }}_scheme]
+        action: replace
+        target_label: __scheme__
+        regex: (https?)
+      - source_labels: [__meta_kubernetes_service_annotation_{{ sanitizeForPrometheusLabel .PrometheusDomain }}_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+
+      # Keep only the ports ending in the suffix `metrics` if prometheus.io/port is unspecified.
+      - source_labels: [__meta_kubernetes_service_annotation_{{ sanitizeForPrometheusLabel .PrometheusDomain }}_port, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: ^(.+;.*)|(;.*metrics)$
+
+      # Set port from prometheus.io/port if it's set.
+      - source_labels: [__address__, __meta_kubernetes_service_annotation_{{ sanitizeForPrometheusLabel .PrometheusDomain }}_port]
+        action: replace
+        # Extract IP from address. Address might not contain a port in some cases.
+        regex: ([^:]+):?(?:\d*);(\d+)
+        replacement: ${1}:${2}
+        target_label: __address__
+
+      # Copy all labels from the service to the scraped metrics.
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+
+      # Set the namespace label from metadata.
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+
+      # Set the name label from the service name.
+      - source_labels: [__meta_kubernetes_service_name]
+        action: replace
+        target_label: kubernetes_name
+
+      # Set the node_name label from metadata.
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        action: replace
+        target_label: node_name
+
+      # Set the node_ip label from metadata.
+      - source_labels: [__meta_kubernetes_pod_host_ip]
+        action: replace
+        target_label: node_ip
+
+      # Copy all labels from the pod to the scraped metrics.
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+
+      # Set the kubernetes_pod_name label from metadata.
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+
+      # Set the es_workload label.
+      - source_labels: [__meta_kubernetes_pod_label_pod_template_hash, __meta_kubernetes_pod_name, es_workload]
+        action: replace
+        regex: '[^;]+;(.*)-[^-]+-[^-]+;'
+        target_label: es_workload
+
+      - source_labels: [__meta_kubernetes_pod_label_statefulset_kubernetes_io_pod_name, es_workload]
+        action: replace
+        regex: '(.*)-[0-9]+;'
+        target_label: es_workload
+
+      # spark workload
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*)-[0-9]{13}-exec-[0-9]+;
+        replacement: ${1}-exec
+        target_label: es_workload
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*)-[0-9]{13}-driver;
+        replacement: ${1}-driver
+        target_label: es_workload
+
+      # fall through plain pod name
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*);
+        target_label: es_workload
+
+{{ .MonitorTypeRules | indent 6 }}
+
+
+  # Scrape config for pods
+  #
+  # The relabeling allows the actual pod scrape endpoint to be configured via the
+  # following annotations:
+  #
+  # * `{{ .PrometheusDomain }}/scrape`: Only scrape pods that have a value of `true`
+  # * `{{ .PrometheusDomain }}/path`: If the metrics path is not `/metrics` override this.
+  # * `{{ .PrometheusDomain }}/port`: Scrape the pod on the indicated port instead of all `metrics` ports.
+  - job_name: 'kubernetes-pods'
+
+    kubernetes_sd_configs:
+      - role: pod
+
+    honor_labels: true
+
+    relabel_configs:
+
+      # Only scrape pods with prometheus.io/scrape=true.
+      - source_labels: [__meta_kubernetes_pod_annotation_{{ sanitizeForPrometheusLabel .PrometheusDomain }}_scrape]
+        action: keep
+        regex: true
+
+      # Set scrape path from prometheus.io/path.
+      - source_labels: [__meta_kubernetes_pod_annotation_{{ sanitizeForPrometheusLabel .PrometheusDomain }}_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+
+      # Keep only the ports ending in the suffix `metrics` if prometheus.io/port is unspecified.
+      - source_labels: [__meta_kubernetes_pod_annotation_{{ sanitizeForPrometheusLabel .PrometheusDomain }}_port, __meta_kubernetes_pod_container_port_name]
+        action: keep
+        regex: ^(.+;.*)|(;.*metrics)$
+
+      # Set port from prometheus.io/port if it's set.
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_{{ sanitizeForPrometheusLabel .PrometheusDomain }}_port]
+        action: replace
+        # Extract IP from address. Address might not contain a port in some cases.
+        regex: ([^:]+):?(?:\d*);(\d+)
+        replacement: ${1}:${2}
+        target_label: __address__
+
+      # Copy all labels from the pod to the scraped metrics.
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+
+      # Set the namespace label from metadata.
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+
+      # Set the kubernetes_pod_name label from metadata.
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+
+      # Set the node_name label from metadata.
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        action: replace
+        target_label: node_name
+
+      # Set the node_ip label from metadata.
+      - source_labels: [__meta_kubernetes_pod_host_ip]
+        action: replace
+        target_label: node_ip
+
+      # Set the workload label from pod name.
+      - source_labels: [__meta_kubernetes_pod_label_pod_template_hash, __meta_kubernetes_pod_name, es_workload]
+        action: replace
+        regex: '[^;]+;(.*)-[^-]+-[^-]+;'
+        target_label: es_workload
+
+      # Set the workload label from statefulset if pod name was unable to set it.
+      - source_labels: [__meta_kubernetes_pod_label_statefulset_kubernetes_io_pod_name, es_workload]
+        action: replace
+        regex: '(.*)-[0-9]+;'
+        target_label: es_workload
+
+      # spark workload
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*)-[0-9]{13}-exec-[0-9]+;
+        replacement: ${1}-exec
+        target_label: es_workload
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*)-[0-9]{13}-driver;
+        replacement: ${1}-driver
+        target_label: es_workload
+
+      # fall through plain pod name
+      - source_labels: [kubernetes_pod_name, es_workload]
+        regex: (.*);
+        target_label: es_workload
+
+{{ .MonitorTypeRules | indent 6 }}

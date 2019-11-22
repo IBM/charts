@@ -1,0 +1,75 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: sparkaas-api-deploy
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: sparkaas-api-deploy
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: SparkaaS
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: sparkaas-api-rc
+        enabled: "true"
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      containers:
+      - name: sparkaas-api
+        image: {{ .Values.sparkaasApi.image.repository }}:{{ .Values.sparkaasApi.image.tag }}
+        env:
+        - name: USER_MGMT_URL
+          value: "http://usermgmt-svc:8080"
+        - name: SPARK_CLIENT_IMAGE
+          value: {{ .Values.sparkClient.image.repository }}:{{ .Values.sparkClient.image.tag }}
+        - name: SPARK_METRICS_PV
+          value: {{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}
+        - name: USER_HOME_PV
+          {{- if .Values.global.userHomePVC.persistence.existingClaimName }}
+          value: {{ .Values.global.userHomePVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          value: "user-home-pvc"
+          {{- end }}
+        ports:
+        - name: sparkaas-api
+          containerPort: 3999
+        readinessProbe:
+          exec:
+            command:
+            - ls
+            - /
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health/healthz
+            port: 3999
+          initialDelaySeconds: 30
+          periodSeconds: 30

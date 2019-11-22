@@ -1,0 +1,172 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $namePrefix := "drift" -}}
+{{ $compName := "aios-drift" -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+{{- $serviceAccount := include "aios.serviceAccountName" (list . "serviceAccount" ) }}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  progressDeadlineSeconds: {{ .Values.progressDeadline.seconds }}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+    type: RollingUpdate
+  replicas: {{ .Values.drift.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+      {{- include "aios.metering" . | indent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 0
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      {{ include "aios.fsGroupGid" (list . ) | indent 8 }}
+      serviceAccountName: {{ $serviceAccount }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 6 }}
+      # to prevent multiple replicas from deploying on the same node
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      volumes:
+      - name: nginx-tls
+        secret:
+          secretName: {{ template "fullname" . }}-nginx-secrets
+      initContainers:
+        - name: ready-check
+          image: {{ include "aios.image" (list . .Values.etcd.image.name .Values.etcd.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.readyCheckContainer.resources | indent 12 }}
+          command: ['sh', '-c',
+                'while true; do echo "Checking availability of ICP4D JWT public key...";
+                 curl -ko /dev/null $AIOS_GATEWAY_URL/auth/jwtpublic && break;
+                 sleep 5; done;
+                 echo "ICP4D JWT public key available.";
+                 while true; do echo "Waiting for ML-Gateway service to come up...";
+                 curl -ko /dev/null $AIOS_GATEWAY_URL/v2/ml_deployments/version && break;
+                 sleep 5; done;
+                 echo "ML-Gateway service available.";
+                 echo "Starting main container."']
+          env:
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+      containers:
+        - name: aios-drift
+          image: {{ include "aios.image" (list . .Values.drift.image.name .Values.drift.image.tag) | quote }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.drift.resources | indent 12 }}
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          livenessProbe:
+            {{ include "aios.common.liveness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/model_drifts/heartbeat
+              port: 9443
+              scheme: HTTPS
+          readinessProbe:
+            {{ include "aios.common.readiness.options" . | indent 10 }}
+            httpGet:
+              path: /v1/model_drifts/heartbeat
+              port: 9443
+              scheme: HTTPS
+          volumeMounts:
+          - name: nginx-tls
+            mountPath: "/opt/ibm/java/jre/lib/security/cacerts"
+            subPath: "java-cacerts"
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/java/cacerts"
+            subPath: "java-cacerts"
+          - name: nginx-tls
+            mountPath: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+            subPath: "ca-pem"
+          env:
+            - name: GATEWAY_URL
+              value: "$(AIOS_GATEWAY_URL)"
+            - name: "AIOS_GATEWAY_URL"
+              value: "https://{{ include "aios.fqdn2" (list . "nginx-internal") }}"
+            - name: "ENABLE_ICP"
+              value: "true"
+            - name: ENABLE_GLOBALIZATION
+              value: "false"
+            - name: ICP4D_JWT_PUBLIC_KEY_URL
+              value: "$(AIOS_GATEWAY_URL)/auth/jwtpublic"
+            - name: ENTITLEMENTS_SERVICE_URL
+              value: "$(AIOS_GATEWAY_URL)/v1/entitlements"
+            - name: ENTITLEMENT_CHECK_ENABLED
+              value: "false"
+            - name: JSON_LOGGING_ENABLED
+              value: "true"
+            - name: AIOS_SERVICE_CREDENTIALS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "fullname" . }}-service-secrets
+                  key: aios-service-credential
+            - name: FEATURE_DISTRIBUTION_GENERATION_SHAP_ENABLED
+              value: "true"
+            - name: AT_LOGGING_ENABLED
+              value: "False"
+            - name: SERVICE_ID_WHITELIST
+              value: "internal-service"
+            - name: ENABLE_REST_MLG
+              value: "true"
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+            - name: ENABLE_V2_TIME_WINDOW_COMPUTE
+              value: "true"
+            - name: ENABLE_COPY_METRICS
+              value: "true"

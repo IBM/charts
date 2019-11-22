@@ -1,0 +1,132 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2018, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-build"
+  labels:
+{{- include "build.defaultLabels" . | indent 4 }}  
+    app.kubernetes.io/name: "{{ .Release.Name }}-build"  
+data:
+  build.properties: |
+    clientCertificateRequired={{ .Values.build.clientAuthenticationCertificateRequired | default "false" }}
+    certificateUserRegularExpression={{ .Values.build.certificateUserRegularExpression | default "${cn}" }}
+    traceLevel={{ .Values.build.traceLevel | default "trace" }}
+    traceFileSize={{ .Values.build.traceFileSize | default "5000" }}
+    traceFileCount={{ .Values.build.traceFileCount | default "3" }}
+    sizeMinimum={{ .Values.build.poolSizeMinimum | default "1" }}
+    sizeMaximum={{ .Values.build.poolSizeMaximum | default "5" }}
+    resourceWaitTimeout={{ .Values.build.poolResourceWaitTimeout | default "180" }}
+    buildProcessingTimeout={{ .Values.builder.buildProcessingTimeout | default "15" }}
+    buildProductVersion={{ .Values.builder.buildProductVersion }}
+    {{- if (eq (toString .Values.build.buildInactivityTimeout) "0") }}
+    buildInactivityTimeout=0
+    {{- else }}
+    buildInactivityTimeout={{ .Values.build.buildInactivityTimeout | default "15"}}
+    {{- end }}
+    {{- if (eq (toString .Values.build.installAnaconda) "true") }}
+    installAnaconda=true
+    {{- else }}
+    installAnaconda=false
+    {{- end }}
+    {{- if (eq (toString .Values.build.installSpss) "true") }}
+    installSpss=true
+    {{- else }}
+    installSpss=false
+    {{- end }}
+    
+  build.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      labels:
+{{- include "build.defaultLabels" . | indent 8 }}
+{{- include "build.serviceability" . | indent 8 }}
+      annotations:
+{{- include "build.metering" . | indent 8 }}
+    spec:
+      affinity:
+{{- include "build.nodeaffinity" . | indent 8 }}
+{{- include "build.podGeneralSecurityPolicies" . | indent 6 }}
+      securityContext:
+{{- include "build.streamsappPodSecurityContext" . | indent 8 }}
+
+      volumes:
+      {{- if or ( .Values.builder.persistentVolumeClaim ) ( .Values.builder.persistentStorageClassName ) }}              
+        - name: streams-user-ext-volume
+          persistentVolumeClaim:
+            claimName: {{ template "builder.persistentVolumeClaimName" . }}
+      {{- end }}
+      {{- if or ( .Values.builder.streamsExtPvc ) ( .Values.builder.streamsExtPvcStorageClass ) }}
+        - name: streams-ext-volume
+          persistentVolumeClaim:
+            claimName: {{ template "builder.streamsExtPvcClaimName" . }}
+      {{- end }}
+        - name: shm-volume
+          emptyDir:
+            medium: Memory
+      
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      {{- end }}
+
+      {{- if .Values.builder.serviceAccount }}
+      serviceAccountName: {{ .Values.builder.serviceAccount }}
+      {{- end }}
+
+      containers:
+        - name: controller
+          {{- if .Values.image.prefix }}
+          image: "{{ .Values.image.prefix }}/{{ .Values.image.builder }}:{{ .Values.image.builderTag }}"
+          {{- else }}
+          image: "{{ .Values.image.builder }}:{{ .Values.image.builderTag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          
+          env:
+          {{- if or ( .Values.builder.persistentVolumeClaim ) ( .Values.builder.persistentStorageClassName ) }}
+            - name: STREAMS_BUILDSERVICE
+              value: {{ template "build.userExternalMountPath" . }}
+            - name: STREAMS_USER_EXT
+              value: {{ template "build.userExternalMountPath" . }}
+          {{- end }}
+          {{- if or ( .Values.builder.streamsExtPvc ) ( .Values.builder.streamsExtPvcStorageClass ) }}
+            - name: STREAMS_EXT
+              value: {{ template "build.externalMountPath" . }}
+          {{- end }}          
+          
+          volumeMounts:
+          {{- if or ( .Values.builder.persistentVolumeClaim ) ( .Values.builder.persistentStorageClassName ) }}
+            - name: streams-user-ext-volume
+              mountPath: {{ template "build.userExternalMountPath" . }}
+          {{- end }}
+          {{- if or ( .Values.builder.streamsExtPvc ) ( .Values.builder.streamsExtPvcStorageClass ) }}
+            - name: streams-ext-volume
+              mountPath: {{ template "build.externalMountPath" . }}
+          {{- end }}
+            - mountPath: /dev/shm
+              name: shm-volume
+
+          
+          securityContext:
+{{- include "build.containerSecurityContext" . | indent 12 }}
+
+          resources:
+            requests:
+              cpu: {{ .Values.builder.cpu | default "1" }}
+              memory: {{ .Values.builder.memory | default "6Gi" }}
+            limits:
+              cpu: {{ .Values.builder.cpuLimit | default "2" }}
+              memory: {{ .Values.builder.memoryLimit | default "8Gi" }}

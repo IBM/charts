@@ -1,0 +1,432 @@
+{{- include "sch.config.init" (list . .Values.global.schConfigTemplate) -}}apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-store"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:   "conversation"
+      component: "store"
+      slot:      "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant: PUBLIC
+
+    app: "ibm-watson-assistant-prod-1.3.0"
+    chart: "ibm-watson-assistant"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+spec:
+  replicas: {{ include "assistant.store.replicas" . }}
+  selector:
+    matchLabels: *primary_labels # Don't touch or extend!
+  strategy:
+    type: "RollingUpdate"
+    rollingUpdate:
+#      maxUnavailable: 20%
+#      maxSurge:       35%
+      maxUnavailable: 0
+      maxSurge: 1
+  revisionHistoryLimit: 4
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+
+    spec:
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+
+      initContainers:
+{{- if .Values.init.schemaCreated }}
+      - name: schema-created-check
+        image: "{{ if tpl ( .Values.schemaCheck.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.schemaCheck.image.repository | toString ) . ) }}{{ end }}/{{ .Values.schemaCheck.image.name }}:{{ .Values.schemaCheck.image.tag }}"
+        imagePullPolicy: {{ .Values.schemaCheck.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+        command:
+        - "sh"
+        - "-c"
+        - |
+          echo "Waiting until schema 4.0.7.1 is created in db"
+          while true ; do
+            psql --command "select 1 from schema_info where version = '4.0.7.1'" -w | grep -q 1 && break
+            echo "    - did not found expected schema version. (retry in 5 sec)"
+            psql --command "select * from schema_info"
+            sleep 5
+          done
+          echo "Done. Schema created at required version --> starting store"
+        env:
+        - name: "PGHOST"
+          value: "{{ include "assistant.postgres.hostname"       . }}"
+        - name: "PGPORT"
+          value: "{{ include "assistant.postgres.port"           . }}"
+        - name: "PGSSLMODE"
+          value: "{{ .Values.global.postgres.sslMode               }}"
+        - name: "PGSSLROOTCERT"
+          value: "/etc/secrets/postgres/tls.crt"
+        - name: "PGDATABASE"
+          value: "{{ include "assistant.postgres.store.database" . }}"
+        - name: "PGUSER"
+          value: "{{ include "assistant.postgres.store.user"     . }}"
+        - name: "PGPASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "{{ .Release.Name }}-store-vcap"
+              key: "password"
+        volumeMounts:
+        - name: postgres-vcap
+          mountPath: "/etc/secrets/postgres"
+          readOnly: true
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+
+{{- end }}
+      - name: etcd-running
+        image: "{{ if tpl ( .Values.etcd.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.etcd.image.repository | toString ) . ) }}{{ end }}/{{ .Values.etcd.image.name }}:{{ .Values.etcd.image.tag }}"
+        imagePullPolicy: {{ .Values.etcd.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+        command: [ "/scripts/etcd_running.sh" ]
+        volumeMounts:
+        - name: "init-scripts"
+          mountPath: /scripts
+        - name: global-etcd
+          mountPath: "/etc/secrets/etcd"
+          readOnly: true
+{{- if .Values.init.cluStarted }}
+      - name: clu-started
+        image: "{{ if tpl ( .Values.cluStarted.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.cluStarted.image.repository | toString ) . ) }}{{ end }}/{{ .Values.cluStarted.image.name }}:{{ .Values.cluStarted.image.tag }}"
+        imagePullPolicy: {{ .Values.cluStarted.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+        command: [ "/scripts/clu_started.sh" ]
+        volumeMounts:
+        - name: "init-scripts"
+          mountPath: /scripts
+{{- end }}
+      containers:
+        - name: "store"
+          image: "{{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 2000
+
+
+          ports:
+            - name: "api"
+              containerPort: 8443
+          env:
+            - name:  "CLOUD_APP_GROUP"
+              value: "voyager"
+            - name:  "CLOUD_APP"
+              value: "conversation-store-{{ .Release.Name }}"
+            - name:  "CLOUD_AUTO_SCALE_GROUP"
+              value: "20190812-092922-bf3c75"
+            - name:  "CLOUD_ENVIRONMENT"
+              value: "dev"
+            - name:  "SLOT_NAME"
+              value: "{{ .Release.Name }}"
+            # KUBERNETES SPECIFIC ENVIRONMENT VARIABLES
+            - name:  "WKUBE_NODE_IP"
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name:  "WKUBE_NODE_NAME"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "spec.nodeName"
+            - name:  "WKUBE_SERVICE_NAME"
+              value: "wcs-{{ .Release.Name }}"
+            - name: "ENABLE_ATHENA"
+              value: "true"
+            - name: "ENABLE_CACHE"
+              value: "true"
+            - name: "ENABLE_STABLE_EXPORT"
+              value: "false"
+
+            - name: "LL_DISCOVERY"
+              value: "etcd:/etc/secrets/etcd/etcd_connection"
+#           - name:  "SERVICE_VERSION"
+#             value: "20190812-092922-bf3c75"
+
+            - name: LL_PRIVATE_DOMAIN_ID
+              valueFrom:
+                configMapKeyRef:
+                   name: "{{ .Release.Name }}-config-litelinks"
+                   key: kubernetes_cluster_name
+
+
+            - name:  "EUREKA_SERVERS"
+              value: "'[\"http://eureka-01.myicp.com:8080\"]'"
+            - name:  "EUREKA_REGION"
+              value: "us"
+            - name:  "EUREKA_DOMAIN"
+              value: "myicp.com"
+            - name:  "EC2_REGION"
+              value: "sl-us"
+            - name: "EUREKA_APP"
+              value: "CONVERSATION-SLOT-{{ .Release.Name }}-API"
+            - name: "EUREKA_VIP"
+              value: "CONVERSATION-SLOT-{{ .Release.Name }}-API"
+            - name:  "ANALYTICS_SERVICE_NAME"
+              value: "voyager-analytics-slot-{{ .Release.Name }}"
+            - name:  "NLU_SERVICE_NAME"
+              value: "voyager-nlu-slot-{{ .Release.Name }}"
+            - name:  "DIALOG_SERVICE_NAME"
+              value: "voyager-dialog-slot-{{ .Release.Name }}"
+            - name:  "RECOMMENDS_SERVICE_NAME"
+              value: "{{ .Release.Name }}-recommends"
+            - name:  "RECOMMENDS_SERVICE_PORT"
+              value: "8080"
+            - name: "RECOMMENDS_CERT"
+              value: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUQzVENDQXNXZ0F3SUJBZ0lKQUs0SG95UU5mdEhzTUEwR0NTcUdTSWIzRFFFQkN3VUFNSUdFTVFzd0NRWUQKVlFRR0V3SlZVekVMTUFrR0ExVUVDQXdDVGtNeEREQUtCZ05WQkFjTUExSlVVREVNTUFvR0ExVUVDZ3dEU1VKTgpNUTh3RFFZRFZRUUxEQVpYWVhSemIyNHhFakFRQmdOVkJBTU1DV3h2WTJGc2FHOXpkREVuTUNVR0NTcUdTSWIzCkRRRUpBUllZYzNSbGRtVnVYM0J5YVhScmIwQjFjeTVwWW0wdVkyOXRNQjRYRFRFM01EWXpNREl5TkRZMU1Wb1gKRFRJeU1USXlNVEl5TkRZMU1Wb3dnWVF4Q3pBSkJnTlZCQVlUQWxWVE1Rc3dDUVlEVlFRSURBSk9RekVNTUFvRwpBMVVFQnd3RFVsUlFNUXd3Q2dZRFZRUUtEQU5KUWsweER6QU5CZ05WQkFzTUJsZGhkSE52YmpFU01CQUdBMVVFCkF3d0piRzlqWVd4b2IzTjBNU2N3SlFZSktvWklodmNOQVFrQkZoaHpkR1YyWlc1ZmNISnBkR3R2UUhWekxtbGkKYlM1amIyMHdnZ0VpTUEwR0NTcUdTSWIzRFFFQkFRVUFBNElCRHdBd2dnRUtBb0lCQVFDK0lleEpuOVZiUmxzNgpvTVRiUktRODV5QW9tSmtqWCtVYnVMWlc0RzAza1RobGlkUnZDQWZMZ2RHT25YSU0rclVucmtid1RINk1aMmF6CmtzaytwSmNGRzl4U2FDSGE0eFlIVi9rTVN1aXlFbXpyanRrZ2RYdkQ3a3ordFVrTUoyTHpwekpzZDdyTU51Y0IKVnZlWG9HM1VDekoyeGdHOWNvMXNadWpuN25QRjNnV2JkRER4T3Axb0pBbFlhSk41M1gvZ0IrUSsxMURVS1BTMApHV29iR3NJQTFIRy9DZkoxRG5iTTdGR2M5Q1FoVVFnbWwrb0lzVlh2OTQyRVBBRldvc1Fvc3JhWjBYb3hrTlgvCnVKd0JIM296MkVTYVgzajNISWxJdm1ZZDJpeDZaa29ZeThqT2g4aVdpYmU5S0Nlb0tFeDhWVkNKTjVHbkFmU3YKNVhja0xsNUxBZ01CQUFHalVEQk9NQjBHQTFVZERnUVdCQlFGTGFCMHFzU3hQZnRpSURQRVU0clpKM1FsRFRBZgpCZ05WSFNNRUdEQVdnQlFGTGFCMHFzU3hQZnRpSURQRVU0clpKM1FsRFRBTUJnTlZIUk1FQlRBREFRSC9NQTBHCkNTcUdTSWIzRFFFQkN3VUFBNElCQVFCQUVvMkJsVUFTT1NVQk91d0wrdXowakcvN25aQ3c5d2hJUytRazJmTWEKQk9od1Jmc2Y4TGNjRzNjTFVSazNaYmI2S3dXL1ZzS0g1ZjM5ZFB3dmJKVXdUejZNSkExQiszeUFDeVRxSjM3MApKREtueU1PeW5teUQ1R09aWkx2UDZmU2xhMzIvUVRHbmRob0NqdnFQQTRlZDZWclNPcDZTdkV0ay9nWjB2OGRBCnZwTXJwWGllT1lyNVlLb2t5Z1EwcHZ2S2ZpR1BQSDdkbVZBWVl3TjFFNHZGS1VmSzZKUitKTy9zNGdOcE9tcEkKWnZlOGdHb3RHZmE5NE4zMWl0TkxMWlZuTWJDRjFya1VBWVE4ZWY4TWViK2d6L3VDdDdPNS9CNGdSeVBWbnNRcwowMkQ3cnh5QkdlRFp1TUNHWjdIZFlKZWRINzNsZG03R3JJcGgrYUFUVDBiOQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0t"
+            - name:  "RECOMMENDS_CERT_HOST"
+              value: "localhost"
+            - name: "DIALOG_SKILL_HOST"
+              value: "https://{{ .Release.Name }}-skill-conversation.{{ .Release.Namespace }}"
+            - name: "DIALOG_SKILL_PORT"
+              value: "443"
+            - name: "SEARCH_SKILL_HOST"
+              value: "https://{{ .Release.Name }}-skill-search.{{ .Release.Namespace }}"
+            - name: "SEARCH_SKILL_PORT"
+              value: "443"
+              
+            - name:  "SESSION_SECRET"
+              value: "wea-conversation-session-secret"
+            - name:  "COOKIE_SECRET"
+              value: "wea-conversation-cookie-secret"
+            - name:  "CRYPTO_KEY"
+              value: "wea-conversation-cryptokey"
+            - name:  "config"
+              value: "[{ \"trustStorePath\" : \"/opt/logstash/truststore.jks\", \"trustStorePass\" : \"w@ts0n16qa\" }]"
+            - name:  "VCAP_SERVICES"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-store-vcap"
+                  key: "vcap_services"
+            - name:  "PGSSLMODE"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-store-vcap"
+                  key: "ssl_mode"
+            - name:  "DB_POOL_SIZE"
+              value: "10"
+            - name:  "ENABLE_PREMIUM"
+              value: "false" # Slot does not have a premium plan
+            - name:  "ENABLE_RATE_LIMIT"
+              value: "false"
+            - name:  "ENABLE_TRAINING_QUEUE"
+              value: "true"
+            - name:  "ENABLE_ANALYTICS_EVENTS"
+              value: "false"
+            - name:  "UV_THREADPOOL_SIZE"
+              value: "64"
+            
+            - name:  "LANGUAGES"
+              value: "{{ include "store.languages"             . }}"
+            - name: "FUZZY_MATCH_LANGUAGES"
+              value: "{{ include "store.fuzzy_match_languages" . }}"
+            - name: "NEW_SYSTEM_ENTITIES_LANGUAGES"
+              value: '[]'
+            
+            - name:  "TOOLING_IDENTIFIER_KEYS"
+              value: '''["a064c34f-73f7-4ddf-8e24-d963879af26c"]'''
+            - name:  "UNMETERED_IDENTIFIER_KEYS"
+              value: '''[""]'''
+            - name:  "INTERNAL_IDENTIFIER_KEYS"
+              value: '''["4b1894c0-5380-4fca-b81d-394aee22b180", "icp-helm-health-testing"]'''
+            - name:  "UNLIMITED_IDENTIFIER_KEYS"
+              value: '''["388096f4-6d85-4949-b1b2-263b67d17f8f", "bf0cdfa4-ed1d-443f-b1d2-a789530c006d"]'''
+            - name: "ENTER_PURGATORY_ON_EXIT"  # If true and in dev, delay container being reaped after store crash
+              value: "false"
+            - name: "MASSAGE_ENV_VARS"  # If true, enables stripping surrounding single quotes from select envvar values
+              value: "true"
+            # IAM is disabled in this slot. Secrets does not specify non-empty store.iam.api_key value
+            # CHIA is disabled in this slot. Secrets does not specify non-empty store.chia.cloud_function_password value
+            # Options from store.extra_var entry (defined in slot / plan / env files)
+            # Seen values:
+            #  - ENABLE_PREMIUM_LEGACY: "true" # For older premium slots which are registered in ZK differently ; PPRD: pmp004, pmp005, pmp018, pmp019, DEV: premium1, ps-aa; PSTG: pms001, psac
+            #  - PREMIUM_LEGACY_WHITELIST: (make sense only for GA slots - serving CSB?) - ga on PPRD, PSTG, DEV,
+            #  - STATSD_SAMPLE_RATE: on ga PPRD and PSTG
+            #  - UNLIMITED_IDENTIFIER_KEYS --> ga on PSTG
+            #  - CLOUD_TENANT - on test2 and test slot on PSTG
+
+    
+            - name:  "ENABLE_ICP"
+              value: "true"
+            - name:  "ENABLE_SNAPSHOT_MODEL_COPY"
+              value: "true"
+            - name:  "IBM_WATSON_LITELINKS_BLOCKING_CALLS_ANALYTICS_ENABLED"
+              value: "true"
+            - name:  "IBM_WATSON_LITELINKS_BLOCKING_CALLS_VOYAGER_ENABLED"
+              value: "true"
+            - name:  "PLUS_PLAN_DATE"
+              value: "2019-03-01"
+            - name:  "PLUS_PLAN_GRACE_END_DATE"
+              value: "2020-03-01"
+            - name:  "SEGMENT_EVENT_NAME"
+              value: "API Call"
+            - name:  "STOP_AGENT_DEFINITION_API_PROXY"
+              value: "true"
+            - name:  "STOP_AGENT_INSTANCE_API_PROXY"
+              value: "true"
+            - name:  "STOP_SNAPSHOT_API_PROXY"
+              value: "true"
+            - name:  "STOP_TEMPLATE_API_PROXY"
+              value: "true"
+            - name:  "STOP_V2_MESSAGE_PROXY"
+              value: "true"
+            - name:  "STOP_WORKER_DEFINITION_API_PROXY"
+              value: "true"
+            # This slot does not use elastics-search / store-sync
+
+            # Activity Tracker related settings
+            - name:  "ENABLE_ACTIVITY_TRACKER"
+              value: "false"
+            - name:  "ENABLE_DEDICATED"
+              value: "false" # Slot is not dedicated
+            - name: "ENABLE_BILLING"
+              value: "false"
+  # insert AUTHORIZATION_ENCRYPTION_KEY only if it is available
+            - name: "AUTHORIZATION_ENCRYPTION_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ include "skillSearch.authorization-encryption.secretName"        . }}"
+                  key: "authorization_encryption_key"
+            - name: "SESSION_STORE_HOST"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-store-session-store"
+                  key: "host"
+            - name: "SESSION_STORE_PORT"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-store-session-store"
+                  key: "port"
+            - name: "SESSION_STORE_DB"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-store-session-store"
+                  key: "slot"
+            - name: "SESSION_STORE_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-store-session-store"
+                  key: "password"
+            - name: "SESSION_STORE_SKIP_CERT_CHECK"
+              value: "true"
+            - name: "SESSION_STORE_CA_FILE"
+              value: "/etc/secrets/session_store/certificate"
+          volumeMounts:
+            - name: global-etcd
+              mountPath: "/etc/secrets/etcd"
+              readOnly: true
+            # Mount /etc/secrets/etcd_ll_migration is not defined since store.mounts.etcd_ll_migration and ll_mounts.etcd_ll_migration are empty (no name of secret to mount is provided)
+            - mountPath: "/app/certs"
+              name: secret-store-ssl
+            - mountPath: "/etc/secrets/session_store"
+              readOnly: true
+              name: "secret-store-session-store"
+          resources:
+            requests:
+              cpu:    400m
+              memory: 1.5Gi
+            limits:
+              # cpu limits removed if variable is set to false, "" or 0 (eg in ICP environments where we want cpu limit disabled)
+              memory: 1.5Gi
+          livenessProbe:
+            httpGet:
+              scheme: "HTTPS"
+              path: "/v1/status/info"
+              port: "api"
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 15
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              scheme: "HTTPS"
+              path: "/v1/status/info"
+              port: "api"
+            initialDelaySeconds: 30 # We want to be longer than the time need for the livenessProbe to fail during startup
+            periodSeconds: 20
+            timeoutSeconds: 15
+            successThreshold: 1
+            failureThreshold: 2 # We want to be smaller than livenessProbe (to be unready) before the pod is restarted by failing livenessProbe
+      volumes:
+        - name: global-etcd
+          secret:
+            secretName: "{{ .Release.Name }}-global-etcd"
+        # Mount etcd-ll-migrations (/etc/secrets/etcd_ll_migration) is not defined since store.mounts.etcd_ll_migration and ll_mounts.etcd_ll_migration are empty (no name of secret to mount is provided)
+        - name: "init-scripts"
+          configMap:
+            name: "{{ .Release.Name }}-store-init"
+            defaultMode: 0755
+        - name: secret-store-ssl
+          secret:
+            secretName: "{{ include "store.ssl.secretName"        . }}"
+        - name: postgres-vcap
+          secret:
+            secretName: "{{ .Release.Name }}-store-vcap"
+        - name: secret-store-session-store
+          secret:
+            secretName: "{{ .Release.Name }}-store-session-store"
+  
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+
+{{- $_ := set . "compName" "store" }}
+{{ include "assistant.podAntiAffinity" . | indent 8 }}

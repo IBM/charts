@@ -1,0 +1,104 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cam-sl-extractor
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cam-sl-extractor # referenced by dash.gravitant.net for Pod Name
+{{ include "cam.labels" .  | indent 8 }}
+      annotations:
+{{ include "cam.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets/configmaps change
+        checksums/rabbitmq.username: "{{ .Values.secrets.rabbitmqDefaultUser | b64enc | sha256sum }}"
+        checksums/rabbitmq.password: "{{ .Values.secrets.rabbitmqDefaultPassword | b64enc | sha256sum }}"
+        {{ end }}
+        # Wait for rabbitmq to be available, then start the IB
+        pod.beta.kubernetes.io/init-containers: '[
+        {
+            "name": "init-rabbitmq",
+            "image": {{ template "cam.readConfig" (list . "k8_jumpbox") }},
+            "imagePullPolicy": "IfNotPresent",
+            "command": ["sh", "-c", "until wget http://rabbitmq:15672 -T 5; do echo waiting for rabbitmq...; sleep 2; done;"]
+        }]'
+    spec:
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      initContainers:
+        - name: user-change
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "cam.readConfig" (list . "k8_jumpbox") }}
+          {{ else }}
+          image: {{ template "camicp.readConfig" (list . "k8_jumpbox" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "cam.container.securityContext.InitContainer" . | indent 10  }}
+          command: ['sh', '-c', 'chown -R 1100:1101 /var/gpd/extracts/']
+          volumeMounts:
+            - mountPath: /var/gpd/extracts
+              name: cam-data
+              subPath: gpd/extracts
+      containers:
+        - env:
+          - name: BROKER_HOST
+            value: rabbitmq
+          - name: BROKER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-creds
+                key: rabbitmq.password
+          - name: BROKER_PORT
+            value: "5672"
+          - name: BROKER_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-creds
+                key: rabbitmq.username
+          - name: EXTRACTDIR
+            value: /var/gpd/extracts
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "cam.readConfig" (list . "cam_softlayer_extractor") }}
+          {{ else }}
+          image: {{ template "camicp.readConfig" (list . "cam_softlayer_extractor" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "cam.container.securityContext.NonRoot" . | indent 10  }}
+          name: cam-sl-extractor
+          ports:
+            - containerPort: 4400
+          volumeMounts:
+          - name: cam-data
+            mountPath: /var/gpd/extracts
+            subPath:  gpd/extracts
+          resources:
+{{ include "deployClassConfig" (list . "cam_softlayer_extractor") | indent 12 }}
+          livenessProbe:
+            exec:
+              command:
+              - /bin/bash
+              - /tmp/health.sh
+            initialDelaySeconds: 120
+            periodSeconds: 120
+            timeoutSeconds: 10
+            failureThreshold: 4
+      volumes:
+      - name: cam-data
+        persistentVolumeClaim:
+          claimName: cam-data-claim
+      restartPolicy: Always
+      # DO NOT modify this conditional check
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

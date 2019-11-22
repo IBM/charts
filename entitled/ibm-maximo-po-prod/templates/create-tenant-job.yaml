@@ -1,0 +1,53 @@
+{{ if .Release.IsInstall -}}
+{{- include "sch.config.init" (list . "poRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.createtenant.name -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      {{- include "po.securitycontext.pod" . | indent 6 }}
+      {{- include "po.image.pull.secret" . | indent 6}}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      terminationGracePeriodSeconds: 60
+      volumes:
+{{ include "po.config.volume" . | indent 6 }}
+      - name: script
+        configMap:
+          name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+          items:
+          - key: createTenant.sh
+            path: createTenant.sh
+            mode: 0777
+      restartPolicy: Never
+      initContainers:
+{{ include "po.readiness.waitForTenantManagement" . | indent 6 }}
+{{ include "po.readiness.waitForGraphManagement" . | indent 6 }}    
+      containers:
+      - name: create-tenant-job
+        image: {{ .Values.graphmgmt.image.repository }}:{{ .Values.graphmgmt.image.tag }}
+        command: ["sh", "/usr/local/bin/createTenant.sh", "{{ .Values.adminUser }}"]
+        resources:
+          requests:
+            cpu: 50m
+            memory: 200Mi
+          limits:
+            cpu: 500m
+            memory: 500Mi
+        volumeMounts:
+        - name: script
+          mountPath: /usr/local/bin/createTenant.sh
+          subPath: createTenant.sh
+{{ include "po.config.volumeMount" . | indent 8 }}
+{{ include "po.securitycontext.container" . | indent 8 }}
+{{- end }}

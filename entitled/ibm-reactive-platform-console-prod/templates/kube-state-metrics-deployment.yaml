@@ -1,0 +1,82 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.kubeStateMetrics.compName -}}
+{{- $name := .sch.chart.components.kubeStateMetrics.deployment.name -}}
+
+apiVersion: {{ .Values.deploymentApiVersion }}
+kind: Deployment
+metadata:
+  labels:
+    appName: {{ $name }}-{{ .Release.Name }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  name: prometheus-kube-state-metrics
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      run: prometheus
+      component: kube-state-metrics
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+        app.kubernetes.io/name: {{ template "name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: kube-state-metrics
+        # Deprecated - these should be removed eventually. Kept to support upgrades with the old labels.
+        run: prometheus
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "ibm-reactive-platform-console-prod.nodeaffinity" . | indent 6 }}
+      {{ if .Values.podUID }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.podUID }}
+      {{ end }}
+      {{ if .Values.imageCredentials.credentials }}
+      imagePullSecrets:
+      - name: {{ .Values.imageCredentials.credentials }}
+      {{ end }}
+      serviceAccountName: prometheus-kube-state-metrics
+      containers:
+        - name: prometheus-kube-state-metrics
+          image: {{ tpl .Values.kubeStateMetricsImage . }}:{{ .Values.kubeStateMetricsVersion }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podUID }} 
+            capabilities:
+              drop:
+                - ALL
+          args:
+            - --port=8080
+            - --telemetry-port=8081
+          resources:
+            requests:
+              cpu: {{ default .Values.defaultCPURequest .Values.kubeStateMetricsCPURequest }}
+              memory: {{ default .Values.defaultMemoryRequest .Values.kubeStateMetricsMemoryRequest }}
+            limits:
+              memory: {{ default .Values.defaultMemoryLimit .Values.kubeStateMetricsMemoryLimit }}
+          ports:
+            - name: metrics
+              containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 10
+            initialDelaySeconds: 30
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 20
+            initialDelaySeconds: 120
+

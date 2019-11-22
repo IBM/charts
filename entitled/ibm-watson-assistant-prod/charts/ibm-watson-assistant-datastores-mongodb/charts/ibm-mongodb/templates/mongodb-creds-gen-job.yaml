@@ -1,0 +1,140 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmMongodb.sch.chart.config.values") -}}
+{{- if or (and (include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . )) (or (not (tpl .Values.auth.authSecretName . )) (and (.Values.metrics.enabled) (not (tpl .Values.auth.metricsSecretName . ))) (not (tpl .Values.auth.keySecretName . )))) (and (include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . ))) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsGen) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 4 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 4 }}
+{{- end }}
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 8 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 8 }}
+{{- end }}
+      name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsGen) | quote }}
+    spec:
+      affinity:
+        {{- if .Values.affinity }}
+{{ .Values.affinity | toYaml | indent 8 }}
+        {{- else }}
+          {{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+      serviceAccountName: {{ include "ibm-mongodb.serviceAccount.name" . | quote }}
+{{- if tpl .Values.global.image.pullSecret . }}
+      imagePullSecrets:
+      - name: {{ tpl .Values.global.image.pullSecret . }}
+{{- end }}
+      containers:
+      - name: cred-gen
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+{{- if and (include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . )) }}
+          openssl genrsa -out ca.key 2048
+          openssl req -x509 -new -nodes -key ca.key -subj "/CN={{ include "sch.names.fullName" (list .) }}" -days 3650 -reqexts v3_req -extensions v3_ca -out ca.crt
+          echo "Dumping CA certificate"
+          openssl x509 -in ca.crt -text -noout
+{{- end }}
+          cat <<EOF | kubectl apply -f -
+{{- if and (include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . )) }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: kubernetes.io/tls
+          metadata:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+            labels: 
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 14 }}
+{{- end }}
+          data:
+            tls.crt: $(cat ca.crt | base64 | tr -d '\n')
+            tls.key: $(cat ca.key | base64 | tr -d '\n')
+{{- end }}
+{{- if and (include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . )) (not (tpl .Values.auth.authSecretName . )) }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+            labels: 
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 14 }}
+{{- end }}
+          data:
+            user: $(echo -n "admin" | base64 | tr -d '\n')
+            password: $(openssl rand -hex 64 | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+{{- if and (include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . )) (.Values.metrics.enabled) (not (tpl .Values.auth.metricsSecretName . )) }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.metricsSecret) | quote }}
+            labels: 
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 14 }}
+{{- end }}
+          data:
+            user: $(echo -n "metrics" | base64 | tr -d '\n')
+            password: $(openssl rand -base64 20 | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+{{- if and (include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . )) (not (tpl .Values.auth.keySecretName . )) }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.keySecret) | quote }}
+            labels: 
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 14 }}
+{{- end }}
+          data:
+            key.txt: $(openssl rand -hex 100 | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+          EOF
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+      restartPolicy: Never
+{{- end }}

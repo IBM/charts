@@ -1,0 +1,24 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-test
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "ums-test") | indent 4 }}
+spec:
+{{ include "ums.constants.pod.securityContext" . | indent 2 }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+  serviceAccountName: {{ include "sch.names.fullName" (list .) }}
+  containers:
+  - name: {{ include "sch.names.fullName" (list .) }}
+    image: {{ .Values.images.ums }}
+    imagePullPolicy: IfNotPresent
+    securityContext:
+{{ include "ums.constants.container.securityContext" . | indent 6 }}
+    command: ["sh", "-c", " response=$(curl -k --silent --output /dev/null --write-out %{http_code} https://{{ .Values.global.ums.hostname }}:{{ .Values.global.ums.port }}/ums/login ) ; if [ $response -ne 200 ]; then echo 'UMS not available.' ; exit 1; else echo 'login page retrieved'; fi" ]
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+  restartPolicy: Never

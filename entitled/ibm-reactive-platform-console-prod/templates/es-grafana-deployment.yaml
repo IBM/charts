@@ -1,0 +1,132 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.esGrafana.compName -}}
+{{- $name := .sch.chart.components.esGrafana.deployment.name -}}
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: grafana-server
+  labels:
+    appName: {{ $name }}-{{ .Release.Name }}
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: 1
+
+  strategy:
+    # Always Recreate to ensure the PVs get released. It's not possible to have two replicas sharing a PV during deployment.
+    type: Recreate
+    # Needed for helm upgrade to succeed.
+    rollingUpdate: null
+
+  selector:
+    matchLabels:
+      run: grafana
+      component: es-grafana
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ template "name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: grafana
+        # Deprecated - these should be removed eventually. Kept to support upgrades with the old labels.
+        run: grafana
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        {{ .Values.prometheusDomain }}/scrape: "true"
+        {{ .Values.prometheusDomain }}/port: "3000"
+        checksum/datasource-config: {{ include (print $.Template.BasePath "/es-grafana-configmap-datasource.yaml") . | sha256sum }}
+        checksum/plugin-config: {{ (.Files.Glob "es-grafana/*").AsConfig | sha256sum }}
+
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+      {{- include "ibm-reactive-platform-console-prod.nodeaffinity" . | indent 6 }}
+      {{ if .Values.podUID }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.podUID }}
+      {{ end }}
+      {{ if .Values.imageCredentials.credentials }}
+      imagePullSecrets:
+      - name: {{ .Values.imageCredentials.credentials }}
+      {{ end }}
+      containers:
+      - image: {{ tpl .Values.esGrafanaImage . }}:{{ .Values.esGrafanaVersion }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        name: grafana-server
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: {{ .Values.podUID }} 
+          capabilities:
+            drop:
+              - ALL
+        resources:
+          requests:
+            cpu: {{ default .Values.defaultCPURequest .Values.esGrafanaCPURequest }}
+            memory: {{ default .Values.defaultMemoryRequest .Values.esGrafanaMemoryRequest }}
+          limits:
+            memory: {{ default .Values.defaultMemoryLimit .Values.esGrafanaMemoryLimit }}
+        env:
+          # The next two env variables set up anonymous access to grafana with editor access.
+          - name: GF_AUTH_ANONYMOUS_ENABLED
+            value: "true"
+          - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+            value: "Editor"
+          - name: GF_SERVER_ROOT_URL
+            value: "/service/grafana/"
+          - name: GF_SERVER_ROUTER_LOGGING
+            value: "true"
+          - name: GF_ANALYTICS_REPORTING_ENABLED
+            value: "false"
+          - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+            value: "false"
+          {{- range $key, $val := .Values.esGrafanaEnvVars }}
+          - name: {{ $key }}
+            value: {{ $val | quote }}
+          {{- end }}
+        ports:
+          - containerPort: 3000
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c", "echo \"Waiting for grafana to enable cinnamon plugin...\"; until curl --output /dev/null --silent --head --fail curl http://127.0.0.1:3000; do echo -n '.' ;  sleep 2; done ; curl -XPOST 'admin:admin@127.0.0.1:3000/api/plugins/cinnamon-prometheus-app/settings?enabled=true' -d '' || true" ]
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+        livenessProbe:
+          tcpSocket:
+            port: 3000
+          periodSeconds: 20
+          initialDelaySeconds: 120
+        volumeMounts:
+        - name: grafana-dashboards
+          mountPath: /usr/share/grafana/public/conf
+        - name: grafana-datasources
+          mountPath: /etc/grafana/provisioning/datasources/
+        - name: grafana-data
+          mountPath: /var/lib/grafana
+
+      volumes:
+      - name: grafana-dashboards
+        configMap:
+          name: exporter-graphs-cm
+      - name: grafana-datasources
+        configMap:
+          name: grafana-datasource-cm
+      - name: grafana-data
+        {{ if .Values.usePersistentVolumes }}
+        persistentVolumeClaim:
+          claimName: es-grafana-storage
+        {{ else }}
+        emptyDir: {}
+        {{ end }}

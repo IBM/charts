@@ -1,0 +1,99 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: dd-cognitive
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: dd-cognitive
+    run: dd-cognitive-deployment
+spec:
+  replicas: {{ .Values.ddCognitive.replicas }}
+  selector:
+    matchLabels:
+      run: dd-cognitive-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: dd-cognitive
+        run: dd-cognitive-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+      - name: dd-cognitive-container
+        image: {{ .Values.ddCognitive.image.repository }}:{{ .Values.ddCognitive.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        env:
+          - name: NEW_RELIC_LICENSE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: dd-secrets
+                key: NEW_RELIC_LICENSE_KEY
+          - name: NEW_RELIC_APP_NAME
+            value: dd-cognitive-wdp
+          # for liberty log sender
+          - name: CONTAINER_NAME
+            value: dd-cognitive-wdp
+          - name: OAAS_log_server_ip
+            value: dd-monitor
+          - name: OAAS_saxo_cloudant_url
+            value: 'http://cloudant-svc'
+          - name: OAAS_saxo_cloudant_key
+            valueFrom:
+              secretKeyRef:
+                name: dd-secrets
+                key: OAAS_service_cloudant_username
+          - name: OAAS_saxo_cloudant_password
+            valueFrom:
+              secretKeyRef:
+                name: dd-secrets
+                key: OAAS_service_cloudant_password
+          - name: OAAS_saxo_cloudant_forceCreate
+            value: "true"
+          - name: OAAS_oaas_docloud_token
+            valueFrom:
+              secretKeyRef:
+                name: dd-secrets
+                key: OAAS_oaas_docloud_token
+          - name: OAAS_oaas_docloud_url
+            value: 'http://job-manager-svc-not-available'
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.ddCognitive.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /v1/cognitive/buildInfo
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 180
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /v1/cognitive/buildInfo
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 180
+          periodSeconds: 30

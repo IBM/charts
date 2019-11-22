@@ -1,0 +1,296 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "rabbitmq-ha.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "rabbitmq-ha.name" . }}
+    chart: {{ template "rabbitmq-ha.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 4 }}
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      app: {{ template "rabbitmq-ha.name" . }}
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  serviceName: {{ template "rabbitmq-ha.fullname" . }}-discovery
+  replicas: {{ .Values.global.rabbitmq.replicas  }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "rabbitmq-ha.name" . }}
+        release: {{ .Release.Name }}
+        component: {{ template "rabbitmq-ha.name" .  }}
+        chart: {{ $.Chart.Name }}
+        heritage: {{ $.Release.Service }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 8 }}
+{{- end }}
+      annotations:
+    {{- range $key, $value := .Values.global.annotations }}
+        {{ $key }}: {{ $value | quote }}
+    {{- end }}
+        {{- if not .Values.existingConfigMap }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
+{{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+{{- end }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: celery{{ .Values.global.namespace.name }}
+                operator: In
+                values:
+                - "baca"
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "rabbitmq-ha.name" . }}
+              topologyKey: "kubernetes.io/hostname"
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+{{ toYaml .Values.securityContext | indent 10 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.global.rabbitmq.image.repository }}:{{ .Values.global.rabbitmq.image.tag }}
+          imagePullPolicy: {{ .Values.global.rabbitmq.image.pullPolicy | quote }}
+          securityContext:
+            runAsUser: 51000
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - name: epmd
+              protocol: TCP
+              containerPort: 4369
+            - name: amqp
+              protocol: TCP
+              containerPort: 5672
+            - name: http
+              protocol: TCP
+              containerPort: 15672
+            {{- if .Values.rabbitmqSTOMPPlugin.enabled }}
+            - name: stomp-tcp
+              protocol: TCP
+              containerPort: 61613
+            - name: stomp-ssl
+              protocol: TCP
+              containerPort: 61614
+            {{- end }}
+            {{- if .Values.rabbitmqWebSTOMPPlugin.enabled }}
+            - name: stomp-ws
+              protocol: TCP
+              containerPort: 15674
+            {{- end }}
+            {{- if .Values.rabbitmqMQTTPlugin.enabled }}
+            - name: mqtt-tcp
+              protocol: TCP
+              containerPort: 1883
+            - name: mqtt-ssl
+              protocol: TCP
+              containerPort: 8883
+            {{- end }}
+            {{- if .Values.rabbitmqWebMQTTPlugin.enabled }}
+            - name: mqtt-ws
+              protocol: TCP
+              containerPort: 15675
+            {{- end }}
+            {{- if .Values.rabbitmqAmqpsSupport.enabled }}
+            - name: amqps
+              protocol: TCP
+              containerPort: 5671
+            {{- end }}
+          livenessProbe:
+            initialDelaySeconds: 120
+            periodSeconds: 300
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            tcpSocket:
+              port: 5671
+          readinessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 300
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - bash
+                - -c
+                - rabbitmqctl list_users | grep $RABBITMQ_USER            
+          env:
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP          
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace                  
+            - name: RABBITMQ_USE_LONGNAME
+              value: "true"
+            - name: RABBITMQ_NODENAME
+              value: rabbit@$(MY_POD_NAME).{{ template "rabbitmq-ha.fullname" . }}-discovery.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+            - name: RABBITMQ_ULIMIT_NOFILES
+              value: {{ .Values.global.rabbitmq.ulimitNofiles | quote }}              
+            - name: K8S_HOSTNAME_SUFFIX
+              value: .{{ template "rabbitmq-ha.fullname" . }}-discovery.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+            - name: K8S_SERVICE_NAME
+              value: {{ template "rabbitmq-ha.fullname" . }}-discovery
+            - name: RABBITMQ_ERL_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-erlang-cookie
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-password
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-user
+            - name: RABBIT_MANAGEMENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-management-password
+            - name: RABBIT_MANAGEMENT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-management-user                  
+            - name: RABBITMQ_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-admin-password
+            - name: CERTIFICATE_DIR
+              value: "/etc/certs"               
+            {{- if .Values.rabbitmqHipeCompile }}
+            - name: RABBITMQ_HIPE_COMPILE
+              value: {{ .Values.rabbitmqHipeCompile | quote }}
+            {{- end }}
+          resources:
+{{ toYaml .Values.global.rabbitmq.resources | indent 12 }}
+          volumeMounts:
+            - name: definitions
+              mountPath: /etc/definitions
+            - name: config-volume
+              mountPath: /etc/rabbitmq
+            - name: {{ .Values.persistentVolume.name }}
+              mountPath: /var/lib/rabbitmq/
+              subPath: rabbitmq
+            - name: storage # must match the volume name, above
+              mountPath: "/etc/certs"
+            {{- if .Values.extraVolumeMounts }}
+{{ toYaml .Values.extraVolumeMounts | indent 12 }}
+            {{- end }}
+        {{ if .Values.prometheus.exporter.enabled }}
+        - name: {{ .Chart.Name }}-exporter
+          image: {{ .Values.prometheus.exporter.image.repository }}:{{ .Values.prometheus.exporter.image.tag }}
+          imagePullPolicy: {{ .Values.prometheus.exporter.image.pullPolicy }}
+          ports:
+          - name: exporter
+            protocol: TCP
+            containerPort: {{ .Values.prometheus.exporter.port }}
+          env:
+            - name: PUBLISH_PORT
+              value: "{{ .Values.prometheus.exporter.port }}"
+            {{ if .Values.prometheus.exporter.capabilities }}
+            - name: RABBIT_CAPABILITIES
+              value: "{{ .Values.prometheus.exporter.capabilities }}"
+            {{- end }}
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-user
+            - name: RABBITMQ_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-admin-password
+            {{- range $key, $value := .Values.prometheus.exporter.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          resources:
+{{ toYaml .Values.prometheus.exporter.resources | indent 12 }}
+        {{ end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: "{{ .Values.schedulerName }}"
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      volumes:
+        - name: definitions
+          configMap:
+            name: {{ template "rabbitmq-ha.fullname" . }}-config-def
+            items:
+            - key: {{ .Values.definitionsSource }}
+              path: definitions.json
+        - name: config-volume
+          configMap:
+            name: {{ template "rabbitmq-ha.fullname" . }}-config
+            items:
+            - key: rabbitmq.conf
+              path: rabbitmq.conf
+            - key: enabled_plugins
+              path: enabled_plugins        
+        {{- if .Values.rabbitmqCrt.enabled }}
+        - name: storage
+          secret:
+            secretName: baca-secrets{{ .Values.global.namespace.name }}
+        {{- end }}
+        {{- if .Values.extraVolumes }}
+{{ toYaml .Values.extraVolumes | indent 8 }}
+        {{- end }}
+{{- if .Values.persistentVolume.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: sp-data-pvc
+{{- else }}
+        - name: {{ .Values.persistentVolume.name }}
+          emptyDir: {}
+{{- end }}

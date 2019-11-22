@@ -1,0 +1,133 @@
+{{- include "sch.config.init" (list . "nlu.sch.chart.config.values") -}}
+{{- $icpPullSecrets := include "icp-pull-secrets" . -}}
+{{- $icpOrchestratorCompName :=  .sch.chart.components.orchestrator.name -}}
+{{- $icpKeywordsCompName :=  .sch.chart.components.keywords.name -}}
+{{- $icpMmaCompName :=  .sch.chart.components.mma.name -}}
+
+{{/* DRY variables */}}
+{{- $httpsPort := 443 -}}
+{{- $mmaPortV1 := 4000 -}}
+{{- $mmaPortV2 := 4001 -}}
+{{- $orchestratorPort := 8000 -}}
+{{- $sireRuntimePort := 8033 -}}
+{{- $textProcessingPort := 19443 -}}
+{{- $tlsVolumeMountName := "shared-tls-secrets" -}}
+{{- $tlsVolumeMountPath := "/mnt/ssl/shared" -}}
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpOrchestratorCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $icpOrchestratorCompName) | indent 4 }}
+spec:
+  replicas: {{ .Values.orchestrator.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $icpOrchestratorCompName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $icpOrchestratorCompName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering .) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      containers:
+        ### Orchestrator Service ###
+      - name: {{ include "sch.names.fullCompName" (list . $icpOrchestratorCompName) }}
+        image: {{ .Values.global.icpDockerRepo }}{{ .Values.orchestrator.image.repository }}:{{ .Values.orchestrator.image.tag }}
+        env:
+
+        # Single-Variable Downstreams #
+        - name: KEYWORDS_HOST
+          value: "https://{{ include "sch.names.fullCompName" (list . $icpKeywordsCompName) }}.{{ .Release.Namespace }}"
+        - name: MMA_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-mma-prod-{{ $icpMmaCompName }}.{{ .Release.Namespace }}:{{ $mmaPortV1 }}"
+        - name: MMA_V2_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-mma-prod-{{ $icpMmaCompName }}.{{ .Release.Namespace }}:{{ $mmaPortV2 }}"
+        - name: ENABLE_MMA_V2
+          value: "true"
+
+        # Sentiment Downstreams #
+        - name: EN_SENTIMENT_HOST
+          value: "https://{{ .Release.Name }}-ibm-sentiment-sentiment-analysis-en.{{ .Release.Namespace }}:{{ $httpsPort }}"
+
+        # TP Downstreams #
+        - name: DE_TEXT_PRIMITIVE_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-nlp.{{ .Release.Namespace }}:{{ $textProcessingPort }}"
+        - name: EN_TEXT_PRIMITIVE_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-nlp.{{ .Release.Namespace }}:{{ $textProcessingPort }}"
+        - name: ES_TEXT_PRIMITIVE_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-nlp.{{ .Release.Namespace }}:{{ $textProcessingPort }}"
+        - name: FR_TEXT_PRIMITIVE_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-nlp.{{ .Release.Namespace }}:{{ $textProcessingPort }}"
+        - name: IT_TEXT_PRIMITIVE_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-nlp.{{ .Release.Namespace }}:{{ $textProcessingPort }}"
+        - name: JA_TEXT_PRIMITIVE_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-nlp.{{ .Release.Namespace }}:{{ $textProcessingPort }}"
+        - name: PT_TEXT_PRIMITIVE_HOST
+          value: "https://{{ .Release.Name }}-ibm-watson-nlp.{{ .Release.Namespace }}:{{ $textProcessingPort }}"
+
+        # SIRE Downstream #
+        - name: SIRE_DEFAULT_HOST
+          value: {{ .Release.Name }}-sire-runtime-model-mesh.{{ .Release.Namespace }}:{{ $sireRuntimePort }}
+        - name: SIRE_SSL_HOSTNAME_OVERRIDE
+          value: mnlp
+        - name: SIRE_SSL_CERT
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerCertificate }}
+
+        # Server Config #
+        - name: NODE_PORT
+          value: "{{ $orchestratorPort }}"
+        - name: SSL_KEY_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerKey }}
+        - name: SSL_CERT_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerCertificate }}
+{{ include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        ports:
+          - containerPort: {{ $orchestratorPort }}
+        volumeMounts:
+          - name: {{ $tlsVolumeMountName }}
+            mountPath: {{ $tlsVolumeMountPath }}
+            readOnly: true
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /orchestrator/health?ready=false
+            port: {{ $orchestratorPort }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: orchestrator/health?ready=true
+            port: {{ $orchestratorPort }}
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          requests:
+            memory: {{ .Values.orchestrator.resources.requests.memory }}
+            cpu: {{ .Values.orchestrator.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.orchestrator.resources.limits.memory }}
+            cpu: {{ .Values.orchestrator.resources.limits.cpu }}
+      volumes:
+      - name: {{ $tlsVolumeMountName }}
+        secret:
+          secretName: {{ default (include .Values.global.tls.secret.nameTpl .) .Values.global.tls.secret.fixedName }}
+
+      imagePullSecrets:
+      - name: {{ $icpPullSecrets | quote }}
+
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64

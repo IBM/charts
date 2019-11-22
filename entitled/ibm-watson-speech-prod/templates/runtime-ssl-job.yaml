@@ -1,0 +1,80 @@
+{{- include "sch.config.init" (list . "sch.chart.stt.config.values") -}}
+{{- $compName := "runtime-ssl-cert" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-runtime-ssl-cert
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: {{ .Release.Name }}-runtime-ssl-cert
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 8000
+        {{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-speech-runtime-privileged
+      volumes:
+      - name: ssl-out
+        emptyDir: {}
+      containers:
+      - name: secret-config
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 8000
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ .Values.global.icpDockerRepo | trimSuffix "/"  }}/{{ .Values.global.ssl.image.repository }}:{{ .Values.global.ssl.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: ssl-out
+          mountPath: /tmp/secretGen/ssl
+        command:
+        - /bin/bash
+        - -c
+        - |
+            set -e
+            openssl genrsa -out /tmp/secretGen/ssl/tls.key 2048
+            openssl req -x509 -new -nodes -key /tmp/secretGen/ssl/tls.key -subj "/CN=mycluster.icp" -days 3650 -reqexts v3_req -extensions v3_ca -out /tmp/secretGen/ssl/tls.crt
+
+            cat <<EOF | kubectl create -f -
+            apiVersion: v1
+            kind: Secret
+            type: kubernetes.io/ssl
+            metadata:
+              name: {{ .Release.Name }}-speech-runtime-ssl-cert
+            data:
+              tls.crt: $(cat /tmp/secretGen/ssl/tls.crt | base64 | tr -d '\n')
+              tls.key: $(cat /tmp/secretGen/ssl/tls.key | base64 | tr -d '\n')
+            EOF
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}

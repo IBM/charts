@@ -1,0 +1,35 @@
+{{- if eq (.Values.serviceType|lower) "ingress" -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: cb-core-ingress
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+  annotations:
+{{ include "nginx.ingress" . | indent 6 }}
+spec:
+  tls:
+  - hosts:
+    - {{ .Values.gatewayHost }}
+  {{ if .Values.mutualAuthGatewayHost }}
+    - {{ .Values.mutualAuthGatewayHost }}
+  {{ end }}
+    secretName: grav-tls
+  rules:
+  - host: {{ .Values.gatewayHost }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: cb-core-auth
+          servicePort: 443
+  {{ if .Values.mutualAuthGatewayHost }}
+  - host: {{ .Values.mutualAuthGatewayHost }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: cb-core-auth
+          servicePort: 8443
+  {{ end }}
+{{ end }}

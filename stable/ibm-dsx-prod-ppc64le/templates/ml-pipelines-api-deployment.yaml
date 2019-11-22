@@ -1,0 +1,49 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.dsxlMl) -}}
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: ml-pipelines-api
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: ml-pipelines-api
+    run: ml-pipelines-api-deployment
+spec:
+  replicas: {{ .Values.mlPipelinesContainer.replicas }}
+  selector:
+    matchLabels:
+      run: ml-pipelines-api-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        component: ml-pipelines-api
+        run: ml-pipelines-api-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: ml-pipelines-api-container
+        image: {{ .Values.mlPipelinesContainer.image.repository }}:{{ .Values.mlPipelinesContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.mlPipelinesContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 4700
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /monitor
+            port: 4700
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /monitor
+            port: 4700
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+{{- end }}

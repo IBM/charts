@@ -1,0 +1,143 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+{{- $replicas := int ( include "es.replicas" . ) -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  serviceName: {{ include "sch.names.fullName" (list .) }}
+  replicas: {{ $replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      supplementalGroups:
+      {{- range $group := .Values.global.persistence.supplementalGroups }}
+        - {{ $group -}}
+      {{ end }}
+      containers:
+      - command:
+        - /opt/elasticsearch/bin/elasticsearch
+        args:
+        - -Enetwork.host=0.0.0.0
+        - -Ecluster.name={{ .Values.clusterName }}
+        {{- if gt $replicas 1 }}
+        - -Ediscovery.zen.ping.unicast.hosts={{ include "sch.names.fullName" (list .) }}
+        - -Ediscovery.zen.minimum_master_nodes={{ add1 ( div $replicas 2 ) }}
+        - -Egateway.expected_nodes={{ $replicas }}
+        {{- end }}
+        name: {{ include "sch.names.fullName" (list .) }}
+        image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}
+        imagePullPolicy: {{.Values.global.image.pullPolicy}}
+        ports:
+        - containerPort: {{ .Values.httpPort }}
+        - containerPort: {{ .Values.apiPort }}
+        env:
+        - name: ES_JAVA_OPTS
+          value: {{ include "asm.sizeData" (list . "jvmArgs") | quote }}
+        volumeMounts:
+        - mountPath: /opt/elasticsearch/data
+          name: data
+        - mountPath: /opt/elasticsearch/logs
+          name: logs
+        - mountPath: /tmp
+          name: tmp
+        resources:
+{{ include "asm.sizeData" (list . "resources") | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.apiPort }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: {{ .Values.httpPort }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: NotIn
+                  values:
+                  - {{ include "sch.names.appName" (list .) }}
+                - key: release
+                  operator: NotIn
+                  values:
+                  - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+            weight: 50
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+{{- if .Values.global.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      {{- if eq .Values.global.persistence.storageClassOption.elasticdata "default" }}
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+      {{- else }}
+      storageClassName: {{ .Values.global.persistence.storageClassOption.elasticdata }}
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.global.persistence.storageSize.elasticdata }}
+{{- else }}
+        - name: data
+          emptyDir: {}
+{{- end }}

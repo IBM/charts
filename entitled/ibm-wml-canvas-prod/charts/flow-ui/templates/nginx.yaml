@@ -1,0 +1,37 @@
+{{- if .Values.global.nginx.enabled }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "flow-ui.fullname" . }}
+  labels:
+    app: {{ template "flow-ui.name" . }}
+    chart: {{ template "flow-ui.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    # Apparently, we need this for every configMap associated with our addon,
+    # not just the top level one which declares our addon metadata.
+    icpdata_addon: "true"
+  annotations:
+    build: {{ .Values.global.buildVersion | quote }}
+data:
+  nginx.conf: |
+    location /{{ .Values.global.flowUi.nginxPath }} {
+      proxy_set_header Host $host:31843;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $url "https://{{ template "flow-ui.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.https_port }}";
+      proxy_pass $url;
+    }
+    location /{{ .Values.global.flowUi.nginxPath }}/monitor {
+      proxy_set_header Host $host:31843;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $url "https://{{ template "flow-ui.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.https_port }}";
+      proxy_pass $url;
+      rewrite ^/{{ .Values.global.flowUi.nginxPath }}(.*) $1 break;
+    }
+
+{{- end }}

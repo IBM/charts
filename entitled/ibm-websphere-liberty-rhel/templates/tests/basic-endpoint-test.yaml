@@ -1,0 +1,42 @@
+###############################################################################
+# Copyright (c) 2017 IBM Corp.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+###############################################################################
+{{- include "slt.config.init" (list . "slt.chart.config.values") }}
+{{- if .Values.service.enabled }}
+{{- $fullname := include "slt.utils.fullname" (list .) -}}
+{{- $name := include "slt.utils.name" (list .) -}}
+{{- $serviceName := .Values.service.name | trunc 63 | lower | trimSuffix "-" | default $fullname }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $fullname }}-basic-test"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ $name }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+{{- include "slt.affinity.nodeaffinity" (list .) | indent 2 }}
+{{- include "slt.security.context.pod" (list .) | indent 2 }}
+  containers:
+  - name: "{{ $fullname }}-basic-test"
+    image: alpine:3.8
+{{- include "slt.security.context.container" (list .) | indent 4 }}
+    command: ["sh", "-c", "wget -T 3 --no-check-certificate -O - {{ if .Values.ssl.enabled }}https{{ else }}http{{ end }}://{{ $serviceName }}:{{ .Values.service.port }}"]
+  restartPolicy: Never
+{{- end }}

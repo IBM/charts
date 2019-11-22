@@ -1,0 +1,87 @@
+{{- include "sch.config.init" (list . "discovery.sch.chart.config.values") -}}
+{{- $suffix := "tls-secret-gen-job" -}}
+{{- $icpPullSecrets := include "ibmWatsonDiscovery.icpPullSecrets" . -}}
+{{- $discoPrivilegedSvcAccName := include "ibmWatsonDiscovery.privilegedServiceAccountName" . -}}
+{{- $tlsSecretName := include "ibmWatsonDiscovery.tlsSecretName" . -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $suffix) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $suffix) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      name: {{ include "sch.names.fullCompName" (list . $suffix) | quote }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . $suffix)  | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+{{ include "ibm-watson-discovery-prod.securityKeys" . | indent 6 }}
+      restartPolicy: Never
+      serviceAccountName: {{ $discoPrivilegedSvcAccName }}
+      imagePullSecrets:
+      - name: {{ $icpPullSecrets | quote }}
+      volumes:
+      - name: tls-out
+        emptyDir: {}
+      containers:
+      - name: secret-config
+        resources:
+          requests:
+            memory: {{ .Values.global.tlsJob.resources.requests.memory | quote }}
+            cpu: {{ .Values.global.tlsJob.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.global.tlsJob.resources.limits.memory | quote }}
+            cpu: {{ .Values.global.tlsJob.resources.limits.cpu | quote }}
+        image: "{{ .Values.global.icpDockerRepo }}{{ .Values.global.tlsJob.image.repository }}:{{ .Values.global.tlsJob.image.tag }}"
+{{ include "ibm-watson-discovery-prod.securityContext" . | indent 8 }}
+        volumeMounts:
+        - name: tls-out
+          mountPath: /tmp/secretGen/tls
+        command:
+        - /bin/bash
+        - -c
+        - |
+           set -e
+
+           openssl genrsa -out /tmp/secretGen/tls/cert-secret.key 2048
+           openssl req -x509 -new -nodes -key /tmp/secretGen/tls/cert-secret.key -days 3650 -extensions san -out /tmp/secretGen/tls/cert-secret.crt \
+             -config <(echo "[req]"; echo distinguished_name=req; echo "[san]"; \
+              echo subjectAltName=DNS:*.{{ .Release.Name }}-ibm-minio-headless-svc.{{ .Release.Namespace }}.svc.{{ .Values.global.tls.clusterDomain }}, \
+              DNS:{{ .Release.Name }}-ibm-minio-headless-svc, \
+              DNS:*{{ .Release.Name }}-ibm-minio-headless-svc.{{ .Release.Namespace }}.svc.{{ .Values.global.tls.clusterDomain }}, \
+              DNS:etcd, DNS:ibm-etcd, DNS:{{ .Release.Name }}-{{ .Values.global.appName }}-etcd, \
+              DNS:postgresql, DNS:ibm-postgresql, DNS:{{ .Release.Name }}-{{ .Values.global.appName }}-postgresql, \
+              DNS:elastic, DNS:ibm-elastic, DNS:{{ .Release.Name }}-{{ .Values.global.appName }}-elastic, \
+              DNS:*.{{ .Release.Namespace }}.svc.{{ .Values.global.tls.clusterDomain }}) \
+             -subj "/CN=*.{{ .Release.Namespace }}.svc.{{ .Values.global.tls.clusterDomain }}"
+           openssl pkcs8 -topk8 -inform pem -in /tmp/secretGen/tls/cert-secret.key -outform pem -out /tmp/secretGen/tls/cert-secret.pem -nocrypt
+
+           cat <<EOF | kubectl create -f -
+           apiVersion: v1
+           kind: Secret
+           type: kubernetes.io/tls
+           metadata:
+            name: {{ $tlsSecretName }}
+            labels:
+{{ include "sch.metadata.labels.standard" (list . $suffix) | indent 14 }}
+           data:
+            tls.cacrt: $(cat /tmp/secretGen/tls/cert-secret.crt | base64 | tr -d '\n')
+            tls.crt: $(cat /tmp/secretGen/tls/cert-secret.crt | base64 | tr -d '\n')
+            tls.key: $(cat /tmp/secretGen/tls/cert-secret.key | base64 | tr -d '\n')
+            public.crt: $(cat /tmp/secretGen/tls/cert-secret.crt | base64 | tr -d '\n')
+            ca.crt: $(cat /tmp/secretGen/tls/cert-secret.crt | base64 | tr -d '\n')
+            private.key: $(cat /tmp/secretGen/tls/cert-secret.key | base64 | tr -d '\n')
+            server.pem: $(cat /tmp/secretGen/tls/cert-secret.pem | base64 | tr -d '\n')
+            server.crt: $(cat /tmp/secretGen/tls/cert-secret.crt | base64 | tr -d '\n')
+
+           EOF

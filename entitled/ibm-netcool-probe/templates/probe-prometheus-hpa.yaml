@@ -1,0 +1,25 @@
+
+{{- if .Values.prometheusProbe.enabled -}}
+{{- if .Values.prometheusProbe.autoscaling.enabled -}}
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.prometheus.name -}}
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "sch.names.fullCompName" (list .  $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  scaleTargetRef:
+    kind: Deployment
+    name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+    apiVersion:  apps/v1
+  minReplicas: {{ .Values.prometheusProbe.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.prometheusProbe.autoscaling.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      targetAverageUtilization: {{ .Values.prometheusProbe.autoscaling.cpuUtil }}
+  {{- end -}}
+{{- end -}}

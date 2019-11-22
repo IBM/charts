@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "ibm-apiconnect-pro.fullname" . }}-cr-files
+  annotations:
+    productName: {{ template "ibm-apiconnect-pro.productName" . }}
+    productID: {{ template "ibm-apiconnect-pro.productID" . }}
+    productVersion: {{ template "ibm-apiconnect-pro.productVersion" . }}
+    productMetric: {{ template "ibm-apiconnect-pro.productMetric" . }}
+    productChargedContainers: ""
+  labels:
+    app: {{ template "ibm-apiconnect-pro.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+data:
+  # apiconnect-up.yaml templated with cluster CR fields
+  apiconnect-up: |-
+    apiVersion: v1
+    kind: apic.ibm.com/APIConnectCluster
+    metadata:
+      name: {{ .Release.Name }}-apic-cluster
+{{ include "ibm-apiconnect-pro.apic-cluster-spec" . | indent 4 }}
+  # empty kubeconfig to allow apicup commands to run
+  kubeconfig: |-
+    apiVersion: v1
+    clusters: []
+    contexts: []
+    current-context: ""
+    kind: Config
+    preferences: {}
+    users: []
+  # init script to copy set-up files to working dir
+  init: |-
+    #!/bin/bash
+
+    cp -Lr /home/apic/init-files/*.yml .
+    /apicop/init.sh apicup server --debug --create-crd={{ .Values.global.createCrds }} --accept-license
+  # top-level delete script for cluster CR and subsystem delete jobs
+  delete-cluster: |-
+    #!/bin/bash
+    set -xe
+    set -o pipefail
+
+    CR_NAMESPACE="{{ .Release.Namespace }}"
+    echo "Getting apiconnectcluster release data"
+    CR_RELEASE_DATA=$(kubectl get apiconnectcluster ${1}-apic-cluster --namespace $CR_NAMESPACE -o json | jq -r '.status.releases | values[]')
+    RELEASES=()
+
+    # delete apiconnectcluster CR
+    echo "Deleting apiconnectcluster custom resource"
+    kubectl delete apiconnectcluster ${1}-apic-cluster --namespace $CR_NAMESPACE
+
+    # delete secrets created by the operator
+    echo "Deleting subsystem secrets"
+    kubectl delete secrets -l heritage=apicup --namespace $CR_NAMESPACE
+    for SUBSYS_RELEASE in ${CR_RELEASE_DATA}; do
+    cat <<EOF | kubectl create -f -
+{{ include "ibm-apiconnect-pro.delete-subsys-job" . | indent 4 }}
+    EOF
+    done
+
+     for i in `seq 1 40`; do
+      RELEASES_DELETED=true
+      for SUBSYS_RELEASE in ${CR_RELEASE_DATA}; do
+          JOB_DATA=$(kubectl get job {{ template "ibm-apiconnect-pro.fullname" . }}-delete-$SUBSYS_RELEASE -o json)
+          SUCCESS=$(echo $JOB_DATA | jq .status.succeeded)
+          if [ "$SUCCESS" != "1" ]; then
+            echo "Waiting for release $SUBSYS_RELEASE to be deleted..."
+            RELEASES_DELETED=false
+          else
+            echo "Release $SUBSYS_RELEASE has been deleted"
+          fi
+      done
+
+      if [ "${RELEASES_DELETED}" == "true" ]; then 
+        echo "All releases have been deleted"
+        for SUBSYS_RELEASE in ${CR_RELEASE_DATA}; do
+          kubectl delete job {{ template "ibm-apiconnect-pro.fullname" . }}-delete-$SUBSYS_RELEASE
+        done
+        exit 0
+      fi
+
+      sleep 15
+    done
+
+    echo "Atempts exceeded waiting for releases to be deleted"
+    exit 1
+  # subsystem delete script
+  delete-subsys: |-
+    #!/bin/bash
+    set -xe
+    set -o pipefail
+
+    SUBSYS_RELEASE=$1
+    SUBSYS_NAMESPACE=$(helm ls | grep -m 1 $1 | awk '{print $10}')
+    echo "Deleting release $SUBSYS_RELEASE from namespace $SUBSYS_NAMESPACE"
+    helm delete --purge $SUBSYS_RELEASE
+    kubectl delete pvc,job -l release=$SUBSYS_RELEASE --namespace $SUBSYS_NAMESPACE
+    kubectl delete pvc,job -l controller=$SUBSYS_RELEASE-apiconnect-cc --namespace $SUBSYS_NAMESPACE
+    kubectl delete secrets -l heritage=apicup --namespace $SUBSYS_NAMESPACE

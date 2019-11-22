@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: core-cred-svc-v2-migrator
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: hook-failed,hook-succeeded
+    helm.sh/hook-weight: "2"
+spec:
+  template:
+    metadata:
+      name: core-cred-svc-v2-migrator
+      labels:
+        task: core-cred-svc-v2-migrator
+{{ include "core.labels" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: core-cred-svc-v2-migrator
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "core_cred_svc_v2_migrator") }}
+        {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "core_cred_svc_v2_migrator" .Values.imageCredentials.registry) }}
+        {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              drop:
+              - ALL
+          env:
+            - name: CRED_SVC_HOST
+              value: "http://cb-cred-svc"
+            - name: CRED_SVC_PORT
+              value: "8000"
+            - name: CRED_SVC_V1_BASE_URL
+              value: "/cb-credential-service/api/v1.0"
+            - name: CRED_SVC_V2_BASE_URL
+              value: "/cb-credential-service/api/v2.0"
+            - name: IS_AUDIT_ENABLED
+              value: "true"
+            - name: AUDIT_SERVICE_HOST
+              value: "http://cb-audit-service"
+            - name: AUDIT_SERVICE_PORT
+              value: "80"
+            - name: IS_MIGRATION_READY
+              value: "true"
+      restartPolicy: Never

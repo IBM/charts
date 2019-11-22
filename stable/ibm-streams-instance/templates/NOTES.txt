@@ -1,0 +1,40 @@
+{{-  $restservice := printf "%s-%s" .Release.Name "sws" -}}
+Your Streams instance is created and started. The name of the Streams instance is: {{ .Release.Name }}. You can use the 
+Streams Console to manage the instance and submit applications.  You can also use the instance REST APIs to manage the 
+instance, submit Streams applications and manage the application jobs.
+
+Before you can use Streams Console or instance REST APIs, run the following command and verify all pods are ready (1/1) 
+and the status of each pod is 'Running'. NOTE: This command uses -w to watch for changes. Use ctrl-c to stop watching. 
+  kubectl get pod -l streams-instance={{ .Release.Name }} -w
+
+{{- if ( eq .Values.sws.serviceType "NodePort" ) }}
+
+To access the Streams console or REST APIs you need to find the node port and external IP. 
+
+Run the following command to get the node port.
+  export NODE_PORT=$(kubectl get svc -n {{ .Release.Namespace }} {{ $restservice | quote }} -o 'jsonpath={.spec.ports[?(@.name=="https-streams-console")].nodePort}')
+
+Use the following command to get an external IP. 
+{{- if ( .Values.sws.serviceExternalIPs ) }}
+  export NODE_IP=$(kubectl get service -n {{ .Release.Namespace }}  {{ $restservice | quote }} -o jsonpath="{range .spec.externalIPs[0]}{@}{'\n'}{end}")
+{{- else }}
+  export NODE_IP=$(kubectl cluster-info | grep "Kubernetes master" | awk 'match($0,/^(.*:)\/\/([A-Za-z0-9\-\.]+)(:[0-9]+)?(.*)$/,m) { print substr( m[2], RSTART, RLENGTH )}')
+{{- end }}
+
+Copy and paste the URL returned by the following command into your browser, to access the Streams console:
+  echo https://$NODE_IP:$NODE_PORT/streams/console
+
+Copy and paste the URL returned by the following command into your browser to access the instance REST APIs:
+  echo https://$NODE_IP:$NODE_PORT/streams/html/rest/doc
+
+{{- else }}
+{{- if ( eq .Values.sws.serviceType "LoadBalancer" ) }}
+To access the Streams console or REST APIs you need to find the IP address of the load balancer and replace load-balancer-address in the following URLs. 
+
+URL for Streams Console:  https://<load-balancer-address>/streams/console 
+URL for REST APIs:  https://<load-balancer-address>/streams/html/rest/doc 
+{{- end }}
+
+{{- end }}
+
+

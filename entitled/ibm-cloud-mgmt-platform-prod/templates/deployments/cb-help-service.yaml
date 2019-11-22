@@ -1,0 +1,58 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-help-service
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cb-help-service # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      containers:
+        - env:
+            - name: SERVICE_NAME
+              value: cb-help-service
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_help_service") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_help_service" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "core.container.securityContext" .  | indent 10 }}
+          name: cb-help-service
+          ports:
+            - containerPort: 5060
+          readinessProbe:
+            tcpSocket:
+              port: 5060
+          livenessProbe:
+            tcpSocket:
+              port: 5060
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 20
+            failureThreshold: 4
+          resources:
+{{ include "deployClassConfig" (list . "cb_help_service") | indent 12 }}
+      restartPolicy: Always
+      volumes:

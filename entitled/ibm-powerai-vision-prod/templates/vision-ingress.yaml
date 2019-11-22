@@ -1,0 +1,63 @@
+{{- if .Values.ingress.enabled -}}
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+  annotations:
+    ## We'll duplicate some to include the nginx
+    ## prefix so this works regardless of the
+    ## --annotations-prefix setting on the ingress ctlr
+    kubernetes.io/ingress.class: "nginx"
+    ingress.kubernetes.io/ssl-redirect: "True"
+    nginx.ingress.kubernetes.io/ssl-redirect: "True"
+    ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    ## If the upstream redirects, make sure we rewrite
+    ## the redirect to https, otherwise the port will be wrong
+    ingress.kubernetes.io/proxy-redirect-from: ~*^https?://[^/]*(.*)$ $scheme://$host:$server_port$1
+    nginx.ingress.kubernetes.io/proxy-redirect-from: ~*^https?://[^/]*(.*)$ $scheme://$host:$server_port$1
+    # Set the $WSSC header for Websphere Liberty to properly handle the proxy
+    ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header "$WSSC" http;
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header "$WSSC" http;
+    ingress.kubernetes.io/proxy-read-timeout: "1200"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1200"
+  name: {{ template "shortname" . }}-ing
+spec:
+  rules:
+  {{- range .Values.ingress.hosts }}
+  - http:
+      paths:
+      - backend:
+          serviceName: {{ template "shortname" $ }}-ui
+          servicePort: 80
+        path: /{{ template "shortname" $ }}
+    {{- if . }}
+    host: {{ . }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.ingress.tls.secretName }}
+  tls:
+    - secretName: {{ .Values.ingress.tls.secretName }}
+      hosts:
+      {{- range .Values.ingress.hosts }}
+        {{- if . }}
+      - {{ . }}
+        {{- end }}
+      {{- end }}
+  {{- end -}}
+{{- end -}}

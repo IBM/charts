@@ -1,0 +1,61 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.servicename }}-db2nodes-cfg-job"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db2nodes-cfg-job
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        name: {{ template "eventstore.name" . }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+      annotations:
+         {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      initContainers:
+      {{- include "eventstore.wait-sqllib-shared" . | indent 6 }}
+      containers:
+      - name: eventstore-init
+        {{- if .Values.eventstoreTools.image.tag }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.eventstoreTools.image.tag }}
+        {{- else }}
+        image: {{ .Values.eventstoreTools.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh']
+        {{ if ne .Values.runtime "ICP4Data" -}}
+        args: ['-cx', '/eventstore/tools/hooks/pre-install/db2nodes-cfg.sh -t explicit -n {{ .Values.eventstoreService.replicas }} -s {{ .Values.address.eventstoreNodesString }} -c {{ .Values.servicename }}-tenant-catalog-svc.{{ .Release.Namespace }}.svc -f /eventstorefs/{{ .Values.servicename }}/db2inst1/sqllib_shared/']
+        {{- else }}
+        args: ['-cx', '/eventstore/tools/hooks/pre-install/db2nodes-cfg.sh -t implicit -q icp4data={{ .Values.servicename }} -n {{ .Values.eventstoreService.replicas }} -c {{ .Values.servicename }}-tenant-catalog-svc.{{ .Release.Namespace }}.svc -f /eventstorefs/{{ .Values.servicename }}/db2inst1/sqllib_shared/']
+        {{- end }}
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        env:
+        - name: DB2INST1_INSTANCE_ID
+          value: '{{ regexFind "([1-9]{1}[0-9]{0,8}$)|(eventstore$)" .Values.servicename | replace "eventstore" "1000" }}'
+        - name: SERVICENAME
+          value: "{{ .Values.servicename }}"
+        volumeMounts:
+        - mountPath: /eventstorefs
+          name: storage-underfs
+      restartPolicy: Never
+      volumes:
+      - name: storage-underfs
+        persistentVolumeClaim:
+        {{- if .Values.pvcSettings.existingClaimName }}
+          claimName: {{ .Values.pvcSettings.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.servicename }}-pvc
+        {{- end }}

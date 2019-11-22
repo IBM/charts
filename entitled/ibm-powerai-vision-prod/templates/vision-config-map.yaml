@@ -1,0 +1,231 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+# A note on formatting:
+# Because we read this and then write this at build time using a jackson yaml parser,
+# and because we want the end result to be human readable, all data value pairs MUST
+# conform to the following:
+#
+# Remember - all configmap values are strings and k8s requires that they are strings
+# * String values that are obvious strings may or may not be quoted
+# * String values that are - or could be interpreted as a Boolean or an Integer/Float etc.
+#   must be written as follows:  '{{ toString "INSERT_VALUE_HERE" }}'
+#   That is, use the helm template toString to ensure quotes aren't stripped as the
+#   end result must have quotes.
+#
+# NOTE:  The config-powerai-k8s.json content is json and does NOT have these same
+#        restrictions.  Strings should be quoted, and ints/booleans shoudl NOT.
+# NOTE:  The config-powerai-k8s.json has GO templates in it which make them none-json
+#        conformant if they include double quotes.  As such, any go template other than
+#        {{ template "shortname" . }} will need to get special handling in the ConfigTools
+#        for encryption.
+# NOTE:  Do NOT put go templates inside any of the items that get encrypted!!!
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: '{{ template "shortname" . }}-config'
+  labels:
+    # NOTE:  We can not do an include on our labels as the encrypter can not
+    # handle it, so make sure to keep these labels in sync with
+    # _release_variables.tpl vision-standard-labels
+    app: '{{ template "shortname" . }}'
+    chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
+    release: '{{ .Release.Name }}'
+    heritage: '{{ .Release.Service }}'
+data:
+  config-powerai-k8s.json: |
+    {
+        "MONGODB": [
+            {
+                "SERVER": "{{ template "shortname" . }}-mongodb",
+                "PORT": 27017,
+                "DBNAME": "DLAAS",
+                "USER": "{{ .Values.poweraiVisionMongodb.mongodbAdminUsername }}"
+            }
+        ],
+        "DOCKER": {
+            "DOCKER_MANAGER": "k8s",
+            "K8S_API_BASE_URL": "/api/v1/",
+            "K8S_API_URL": "/api/v1/namespaces/{{ .Release.Namespace }}/",
+            "K8S_API_EXT_URL": "/apis/extensions/v1beta1/namespaces/{{ .Release.Namespace }}/",
+            "K8S_API_PROXY_URL": "/api/v1/namespaces/{{ .Release.Namespace }}/services/",
+            "K8S_AUTH_ENABLE": true,
+            "K8S_DATA_PERSISTENT_VOLUME_CLAIM": "{{- if .Values.poweraiVisionDataPvc.persistence.existingClaimName }}{{ .Values.poweraiVisionDataPvc.persistence.existingClaimName }}{{- else }}{{ tpl .Values.poweraiVisionDataPvc.name . }}{{- end }}",
+            "APP_SHORTNAME": "{{ template "shortname" . }}"
+        },
+        "OBJECTSTORE": {
+            "ENABLE_OBJECT_STORE": false
+        },
+        "SSO": {
+            "SSO_REDIRECT_URL": "/{{ template "shortname" . }}",
+            "SSO_SERVER_BASE_URL": "http://{{ template "shortname" . }}-keycloak:8080/{{ template "shortname" . }}-keycloak/auth/realms/powerai-vision/protocol/openid-connect/"
+        },
+        "SSO_ENC": {
+            "ENABLE_SSO": true,
+            "SSO_CLIENT_ID": "powerai-vision-backend",
+            "SSO_CLIENT_SECRET": "7e9b2b91-4bb4-40a3-84d4-82c9a5ee0c50"
+        },
+        "DLSRV": {
+            "USER_DATA_MOUNT_SUBPATH": "data",
+            "USER_DATA_BASE_PATH": "/opt/powerai-vision/data/",
+            "DLAAS_API_SERVER": "http://{{ template "shortname" . }}-portal:9080/{{ template "shortname" . }}-api/api/",
+            "DNN_CALLBACK_API_URL": "http://{{ template "shortname" . }}-portal:9080/{{ template "shortname" . }}-api/api/dnn-messages",
+            "PRE_ANALYSIS_API_URL": "http://{{ template "shortname" . }}-taskanaly:5000/",
+            "TRAIN_IMAGE": "{{ template "repoprefix" . }}powerai-vision-dnn:{{ .Values.image.releaseTag }}",
+            "INFERENCE_IMAGE": "{{ template "repoprefix" . }}powerai-vision-dnn:{{ .Values.image.releaseTag }}",
+            "PREPROCESS_IMAGE": "{{ template "repoprefix" . }}powerai-vision-preprocessing:{{ .Values.image.releaseTag }}",
+            "COD_TRAIN_IMAGE": "{{ template "repoprefix" . }}powerai-vision-frcnn:{{ .Values.image.releaseTag }}",
+            "USR_DNN_IMAGE": "{{ template "repoprefix" . }}powerai-vision-dnn-custom:{{ .Values.image.releaseTag }}",
+            "EMB_COD_IMAGE": ["ZC706,ZC706,{{ template "repoprefix" . }}powerai-vision-dnn-edge:{{ .Values.image.releaseTag }}"],
+            "FPGA_CODEGEN_IMAGE": "{{ template "repoprefix" . }}powerai-vision-fpga-codegen:{{ .Values.image.releaseTag }}"
+        },
+        "RESLMT": {
+            "CIC_TRAIN_CPUS": 0,
+            "CIC_TRAIN_GPUS": 1,
+            "CIC_TRAIN_MEM": 0,
+            "CIC_INFERENCE_CPUS": 0,
+            "CIC_INFERENCE_GPUS": 1,
+            "CIC_INFERENCE_FPGAS": 1,
+            "CIC_INFERENCE_MEM": 0,
+            "COD_TRAIN_CPUS": 0,
+            "COD_TRAIN_GPUS": 1,
+            "COD_TRAIN_MEM": 0,
+            "COD_INFERENCE_CPUS": 0,
+            "COD_INFERENCE_GPUS": 1,
+            "COD_INFERENCE_FPGAS": 1,
+            "COD_INFERENCE_MEM": 0,
+            "PREPROCESS_CPUS": 0,
+            "PREPROCESS_GPUS": 0,
+            "PREPROCESS_MEM": 0,
+            "USR_DNN_CPUS": 0,
+            "USR_DNN_GPUS": 1,
+            "USR_DNN_FPGAS": 1,
+            "USR_DNN_MEM": 0
+        },
+        "FUNC": {
+            "SERVICE_MAC_RESTRICT": "bypass",
+            "TRIAL_MODE": false,
+            "TRIAL_DAYS": 30,
+            "ENABLE_OBJECT_DETECTION": true,
+            "ENABLE_DATASET_PREPROCESS": false,
+            "ENABLE_COD_DATASET_ATTRIBUTE": false,
+            "ENABLE_USER_DNN": true,
+            "ENABLE_EMB_OBJECT_DETECTION": true,
+            "SUPPORTED_CIC_SCENARIOS": ["Flower", "Landscape", "Chinesefood", "Action", "Scene", "Face", "Vehicle", "Others"],
+            "REDIRECT_LOG_TO_FILE": false,
+            "INFERENCE_API_LIMIT": -1,
+            "INFERENCE_API_MAX_REPLICAS": 1,
+            "ENABLE_COD_API_AUTO_DELETE": false,
+            "ADMIN_USERS": ["admin"]
+        },
+        "EXTRA": {
+            "VIDEO_PLATFORM_LINK": "/{{ template "shortname" . }}-video",
+            "COD_VIDEO_APP_LINK": "/{{ template "shortname" . }}/demo-video",
+            "COMMON_VIDEO_APP_LINK": ""
+        }
+    }
+  REDIS_HOST_VIDEO: '{{ template "shortname" . }}-video-redis'
+  REDIS_HOST_VIDEO_TEST: '{{ template "shortname" . }}-video-test-redis'
+  SERVICE_PORT: '{{ toString "8081" }}'
+  CONTEXT_ROOT: '/{{ template "shortname" . }}'
+  WEBROOT_API: '/{{ template "shortname" . }}-api'
+  WEBROOT: '/{{ template "shortname" . }}-video'
+  UWSGI_SERVER_HOST: '{{ template "shortname" . }}-video-portal'
+  VMS_SERVER_HOST: 'http://{{ template "shortname" . }}-video-portal:8081'
+  DEBUG: '{{ toString "True" }}'
+  # Set to true  - it will mean every time we start up a django container
+  # it runs makemigrations/migrate - but those do no harm if there are no changes.  And if
+  # there are, it allows us to upgrade.
+  INITIAL_DATABASE: '{{ toString "True" }}'
+  # Set to true  - it will regenerate the settings.py each time the
+  # container starts - no harm (just a bunch of sed commands that get run)
+  INITIAL_SETTINGS: '{{ toString "True" }}'
+  # Set to true - This just creates the mongo collection - which is a noop on existing collections
+  INITIAL_MONGO: '{{ toString "True" }}'
+
+  KEYCLOAK_HOST: '{{ template "shortname" . }}-keycloak'
+  KEYCLOAK_PORT: '{{ toString "8080" }}'
+  KEYCLOAK_ADMIN: "admin"
+  KEYCLOAK_DB: "postgres"
+  KEYCLOAK_DBNAME: "keycloak"
+  KEYCLOAK_DBUSER: "postgres"
+
+  PGHOST: '{{ template "shortname" . }}-postgres'
+  PGPORT: '{{ toString "5432" }}'
+  PG_VIDEO_DB: "video"
+  PG_VIDEO_TEST_DB: "video_test"
+
+  # More documentation on docker init scripts for postgres found in section
+  # "How to extend this image" of https://hub.docker.com/_/postgres/
+  create-postgres-dbs.sh: |
+    #!/bin/bash
+    function create_database() {
+        local database=$1
+        echo "  Creating database '$database'"
+        psql -U postgres <<-EOSQL
+            CREATE DATABASE $database;
+            GRANT ALL PRIVILEGES ON DATABASE $database TO postgres;
+    EOSQL
+    }
+    pg_isready --username=postgres
+    if [[ $? != 0 ]]; then
+        exit 1
+    fi
+    if [[ -f "/dbs_up" ]]; then
+        exit 0
+    fi
+    if [ -n "$POSTGRES_MULTIPLE_DATABASES" ]; then
+        echo "Multiple database creation requested: $POSTGRES_MULTIPLE_DATABASES"
+        for db in $(echo $POSTGRES_MULTIPLE_DATABASES | tr ',' ' '); do
+            create_database $db
+        done
+        echo "Multiple databases created"
+        echo $POSTGRES_MULTIPLE_DATABASES > /dbs_up
+    fi
+    exit 0
+
+  RABBITMQ_DEFAULT_VHOST: "classify"
+  RABBITMQ_DEFAULT_PASS: "mamboserver"
+  RABBITMQ_DEFAULT_USER: "hightall"
+  # TODO:  Consolidate our rabbit instances
+  SERVER_WORKER_THREADS: '{{ toString "30" }}'
+  MONGO_HOST_VIDEO: '{{ template "shortname" . }}-mongodb'
+  MONGO_HOST_VIDEO_TEST: '{{ template "shortname" . }}-mongodb'
+  MONGO_USER:  "{{ .Values.poweraiVisionMongodb.mongodbAdminUsername }}"
+  MONGO_DB_VIDEO: "video"
+  MONGO_DB_VIDEO_TEST: "video-test"
+  DLAAS_API_SERVER: '{{ template "shortname" . }}-portal:9080/{{ template "shortname" . }}-api'
+  MEDIA_DIR: "/opt/powerai-vision/data"
+
+  # For open_id integration
+  REDIRECT_URI: ""
+  SSO_SERVER: ""
+  SINGLE_USER: '{{ toString "True" }}'
+  CLIENT_ID: "TVBsUpoXDf1vfsMixtEHqGwJ9V8a"
+  CLIENT_SECRET: "kzAu3RhHbV7DxIhZawPXfMV3xgYa"
+
+  SMART_AUTO_LABELING: '{{ toString "False" }}'
+  SERVICE_PORT_VIDEO_TEST: '{{ toString "8083" }}'
+  WEBROOT_VIDEO_TEST: '/{{ template "shortname" . }}/demo-video'
+  UWSGI_SERVER_HOST_VIDEO_TEST: '{{ template "shortname" . }}-video-test-portal'
+  SERVER_HOST_VIDEO_TEST: '{{ template "shortname" . }}-video-test-nginx'
+  # The stream_proxy should be empty allowing for relative URLs to be calculated
+  # by the javascript.  Running outside of K8S mode may require a full URL prefix
+  STREAM_PROXY: ""
+  VIDEO_STREAM_IMAGE: '{{ template "repoprefix" . }}powerai-vision-video-test-stream:{{ .Values.image.releaseTag }}'
+  # Used by the vision-addon-video-detect service to manage k8s entities it creates
+  K8S_HOST: ""
+  # We should use the same namespace
+  K8S_NAMESPACE: "{{ .Release.Namespace }}"
+  K8S_USE_INCLUSTER_CONFIG: '{{ toString "True" }}'
+  K8S_DATA_PERSISTENT_VOLUME_CLAIM: "{{ tpl .Values.poweraiVisionDataPvc.name . }}"
+  K8S_DATA_MOUNT_SUBPATH_FOR_STREAMING: "run/video-detection-test-data/media/"

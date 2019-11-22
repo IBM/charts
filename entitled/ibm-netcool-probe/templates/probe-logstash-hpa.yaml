@@ -1,0 +1,24 @@
+{{- if .Values.logstashProbe.enabled -}}
+{{- if .Values.logstashProbe.autoscaling.enabled -}}
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.logstash.name -}}
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "sch.names.fullCompName" (list .  $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  scaleTargetRef:
+    kind: Deployment
+    name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+    apiVersion:  apps/v1
+  minReplicas: {{ .Values.logstashProbe.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.logstashProbe.autoscaling.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      targetAverageUtilization: {{ .Values.logstashProbe.autoscaling.cpuUtil }}
+{{- end -}}
+{{- end -}}

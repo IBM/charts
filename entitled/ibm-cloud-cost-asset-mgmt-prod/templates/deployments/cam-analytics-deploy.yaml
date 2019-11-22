@@ -1,0 +1,169 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: camanalytics
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: camanalytics
+{{ include "cam.labels" .  | indent 8 }}
+      annotations:
+{{ include "cam.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets/configmaps change
+        checksums/mysql-username: "{{ .Values.secrets.mysqlUsername | b64enc | sha256sum }}"
+        checksums/mysql-password: "{{ .Values.secrets.mysqlKey | b64enc | sha256sum }}"
+        checksums/rabbitmq.username: "{{ .Values.secrets.rabbitmqDefaultUser | b64enc | sha256sum }}"
+        checksums/rabbitmq.password: "{{ .Values.secrets.rabbitmqDefaultPassword | b64enc | sha256sum }}"
+        {{ end }}
+    spec:
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      initContainers:
+        - name: user-change
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "cam.readConfig" (list . "k8_jumpbox") }}
+          {{ else }}
+          image: {{ template "camicp.readConfig" (list . "k8_jumpbox" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "cam.container.securityContext.InitContainer" . | indent 10  }}
+          command: ['sh', '-c', 'chown -R 1100:1101 /var/gpd/zip']
+          volumeMounts:
+            - name: cam-data
+              mountPath: /var/gpd/zip
+              subPath: gpd/zip
+      containers:
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+      - image: {{ template "cam.readConfig" (list . "cam_analytics") }}
+      {{ else }}
+      - image: {{ template "camicp.readConfig" (list . "cam_analytics" .Values.imageCredentials.registry) }}
+      {{ end }}
+{{ include "cam.container.securityContext.NonRoot" . | indent 8  }}
+        name: cam-analytics
+        resources:
+{{ include "deployClassConfig" (list . "cam_analytics") | indent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - /tmp/health.sh
+          initialDelaySeconds: 120
+          periodSeconds: 120
+          timeoutSeconds: 10
+          failureThreshold: 4
+        env:
+          - name: APP_SETTINGS
+            value: production
+          - name: SERVER_NAME
+            value: camanalytics
+          - name: CAM_ANALYTICS_DIR
+            value: /var/www/cam_analytics
+          - name: DB_HOST
+            value: "mariadb"
+          - name: DB_PORT
+            # DO NOT modify this condition
+            {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+            value: "{{ .Values.secrets.mariadbServicePort}}"
+            {{ else }}
+            value: "{{ .Values.secrets.mariadbServicePort}}"
+            {{ end }}
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                key: mysql.username
+                name: mysql-username
+          - name: DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: mysql-password
+                key: mysql.key
+          - name: DB_KEY
+            value: /var/www/cam-analytics/certs/maria_dev.key
+          - name: DB_CRT
+            value: /var/www/cam-analytics/certs/maria_dev.crt
+          - name: DATALAKE_DIR
+            value: /var/gpd/zip
+          - name: CAMSERVICE_SERVICE_HOST
+            value: camservice
+          - name: CAMSERVICE_SERVICE_PORT
+            value: "8000"
+          - name: CONFIG_SERVICE
+            value: "http://cb-core-configuration-service.{{ .Values.coreNamespace }}:5054"
+          - name: CB_CRED_HOST
+            value: "http://cb-cred-svc.{{ .Values.coreNamespace }}"
+          - name: CB_CRED_PORT
+            value: "8000"
+          - name: BROKER_QUEUE
+            value: "cam-analytics"
+          - name: PUBLISH_QUEUE
+            value: "ingestion-status"
+          - name: BROKER_HOST
+            value: rabbitmq
+          - name: BROKER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-creds
+                key: rabbitmq.password
+          - name: BROKER_PORT
+            value: "5672"
+          - name: BROKER_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-creds
+                key: rabbitmq.username
+          # DO NOT modify this condition
+          {{ if eq (.Values.enableSparkCluster|quote|lower) "\"true\"" }}
+          - name: SPARK_MASTER_HOST
+            value: "spark-master"
+          {{ end }}
+          - name: SPARK_EXECUTOR_MEMORY
+            # DO NOT modify this condition
+            {{ if eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+            value: "2g"
+            {{ else }}
+            value: "15g"
+            {{ end }}
+          - name: SPARK_DRIVER_MEMORY
+            # DO NOT modify this condition
+            {{ if eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+            value: "1g"
+            {{ else }}
+            value: "15g"
+            {{ end }}
+          - name: ANALYTICS_SKIP_STANDARD
+            value: "{{ .Values.analyticsSkipStandard }}"
+        volumeMounts:
+          - name: cm-keystore-file
+            mountPath: /var/www/cam-analytics/certs/
+          - name: cam-data
+            mountPath: /var/gpd/zip
+            subPath: gpd/zip
+      volumes:
+        - name: cam-data
+          persistentVolumeClaim:
+            claimName: cam-data-claim
+        - name: cm-keystore-file
+          secret:
+            secretName: grav-certificates
+            items:
+              - key: maria_dev.crt
+                path: maria_dev.crt
+              - key: maria_dev.key
+                path: maria_dev.key
+      # DO NOT modify this condition
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

@@ -1,0 +1,70 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: dd-scenario-api
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: dd-scenario-api
+    run: dd-scenario-api-deployment
+spec:
+  replicas: {{ .Values.ddScenarioApi.replicas }}
+  selector:
+    matchLabels:
+      run: dd-scenario-api-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: dd-scenario-api
+        run: dd-scenario-api-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+      - name: dd-scenario-api-container
+        image: {{ .Values.ddScenarioApi.image.repository }}:{{ .Values.ddScenarioApi.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.ddScenarioApi.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 9080
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9080
+            scheme: HTTP
+          initialDelaySeconds: 180
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9080
+            scheme: HTTP
+          initialDelaySeconds: 180
+          periodSeconds: 30
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}

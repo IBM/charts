@@ -1,0 +1,66 @@
+{{/*********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* (C) Copyright IBM Corporation 2019.  All rights reserved.
+*
+* The source code for this program is not published or otherwise
+* divested of its trade secrets, irrespective of what has been
+* deposited with the U.S. Copyright Office.
+********************************************************* {COPYRIGHT-END} ****/}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ template "kafka.fullname" . }}-test"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}
+    app: {{ template "kafka.fullname" . }}-test
+  annotations:
+    "helm.sh/hook": test-success
+    #container.apparmor.security.beta.kubernetes.io/{{ template "kafka.fullname" . }}-test: runtime/default
+    #seccomp.security.alpha.kubernetes.io/pod: docker/default
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- range $arch := .Values.arch }}
+              - {{ $arch -}}
+            {{ end }}
+{{ if .Values.global.image.pullSecret }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
+  containers:
+    - name: "{{ template "kafka.fullname" . }}-test"
+      image: "{{ include "kafka.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command: ["sh"]   # another completely pointless test
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1001
+        capabilities:
+          drop:
+          - ALL
+      resources:
+        requests:
+          memory: "32Mi"
+          cpu: "50m"
+        limits:
+          memory: "32Mi"
+          cpu: "50m"
+  restartPolicy: Never

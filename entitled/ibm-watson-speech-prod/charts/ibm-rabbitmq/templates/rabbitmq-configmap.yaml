@@ -1,0 +1,46 @@
+{{- include "sch.config.init" (list . "ibmRabbitmq.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+data:
+  enabled_plugins: |
+    [
+
+      rabbitmq_consistent_hash_exchange,
+      rabbitmq_federation,
+      rabbitmq_federation_management,
+      rabbitmq_management,
+      rabbitmq_peer_discovery_k8s,
+      rabbitmq_shovel,
+      rabbitmq_shovel_management
+    ].
+
+  rabbitmq.conf: |
+    ## RabbitMQ configuration
+    ## Ref: https://github.com/rabbitmq/rabbitmq-server/blob/master/docs/rabbitmq.conf.example
+    ## Authentification
+    ## Clustering
+    cluster_formation.peer_discovery_backend  = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.{{ .Values.clusterDomain }}
+    cluster_formation.k8s.address_type = hostname
+    cluster_formation.node_cleanup.interval = 10
+    # Set to false if automatic cleanup of absent nodes is desired.
+    # This can be dangerous, see http://www.rabbitmq.com/cluster-formation.html#node-health-checks-and-cleanup.
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_partition_handling = autoheal
+    ## The default "guest" user is only permitted to access the server
+    ## via a loopback interface (e.g. localhost)
+    ## 
+    management.load_definitions = /etc/definitions/definitions.json
+    listeners.ssl.default             = 5671
+    ssl_options.cacertfile            = /etc/cert/cacert.pem
+    ssl_options.certfile              = /etc/cert/cert.pem
+    ssl_options.keyfile               = /etc/cert/key.pem
+    ssl_options.verify                = verify_none
+    ssl_options.fail_if_no_peer_cert  = false
+
+    loopback_users = none
+{{ .Values.extraConfig | indent 4 }}

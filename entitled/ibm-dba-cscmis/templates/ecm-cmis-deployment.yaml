@@ -1,0 +1,223 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-dba-cscmis.fullname" . }}
+  labels:
+    app: {{ template "ibm-dba-cscmis.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-dba-cscmis.name" . }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-dba-cscmis.name" . }}
+        release: {{ .Release.Name }}        
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productID: "5737-I23"
+        productName: "IBM Cloud Pak for Automation"
+        productVersion: "19.0.1"
+        productMetric: "PROCESSOR_VALUE_UNIT"
+        productChargedContainers: "All"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 50001
+        fsGroup: 50000
+        supplementalGroups:
+        - 50000
+      affinity:
+      {{- include "ibm-dba-cscmis.nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "ibm-dba-cscmis.name" . }}
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: {{ template "ibm-dba-cscmis.name" . }}
+        securityContext:
+          runAsUser: 50001
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "{{ .Values.resources.requests.memory }}"
+            cpu: "{{ .Values.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.limits.memory }}"
+            cpu: "{{ .Values.resources.limits.cpu }}"
+        ports:
+        - containerPort: 9080
+          name: http
+        - containerPort: 9443
+          name: https
+        env:
+          - name: LICENSE
+            value: {{ .Values.cmisProductionSetting.license | quote }}
+          - name: PRODUCT
+            value: "DBAMC"
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "json" }}
+          - name: CMIS_VERSION
+            value: {{ .Values.cmisProductionSetting.cmisVersion | quote }}
+          - name: CE_URL
+            value: {{ .Values.cmisProductionSetting.cpeUrl | quote }}
+          - name: TZ
+            value: {{ .Values.cmisProductionSetting.timeZone | quote }}
+          - name: JVM_HEAP_XMS
+            value: "{{ .Values.cmisProductionSetting.jvmHeapXms }}m"
+          - name: JVM_HEAP_XMX
+            value: "{{ .Values.cmisProductionSetting.jvmHeapXmx }}m"
+          - name: CMC_TIME_TO_LIVE
+            value: "3600000"
+          - name: CRC_TIME_TO_LIVE
+            value: "3600000"
+          - name: USER_CACHE_TIME_TO_LIVE
+            value: "28800000"
+          - name: CHECKOUT_COPYCONTENT
+            value: {{ .Values.cmisProductionSetting.checkOutCopyContent | quote }}
+          - name: DEFAULTMAXITEMS
+            value: {{ .Values.cmisProductionSetting.defaultMaxItems | quote }}
+          - name: CVL_CACHE
+            value: {{ .Values.cmisProductionSetting.cvlCache | quote }}
+          - name: SECUREMETADATACACHE
+            value: {{ .Values.cmisProductionSetting.secureMetaDataCache | quote }}
+          - name: FILTERHIDDENPROPERTIES
+            value: {{ .Values.cmisProductionSetting.filterHiddenProperties | quote }}
+          - name: QUERYTIMELIMIT
+            value: {{ .Values.cmisProductionSetting.queryTimeLimit | quote }}
+          - name: RESUMABLEQUERIESFORREST
+            value: {{ .Values.cmisProductionSetting.resumableQueriesforrest | quote }}
+          - name: ESCAPEUNSAFESTRINGCHARACTERS
+            value: {{ .Values.cmisProductionSetting.escapeunsafeStringCharacters | quote }}
+          - name: MAXSOAPSIZE
+            value: {{ .Values.cmisProductionSetting.maxSoapSize | quote }}
+          - name: PRINTFULLSTACKTRACE
+            value: {{ .Values.cmisProductionSetting.printFullStackTrace | quote }}
+          - name: FOLDERFIRSTSEARCH
+            value: {{ .Values.cmisProductionSetting.folderFirstSearch | quote }}
+          - name: IGNOREROOTDOCUMENTS
+            value: {{ .Values.cmisProductionSetting.ignoreRootDocuments | quote }}
+          - name: SUPPORTINGTYPEMUTABILITY
+            value: {{ .Values.cmisProductionSetting.supportingTypeMutability | quote }}
+{{- if .Values.monitoring.enabled }}
+          - name: MON_METRICS_WRITER_OPTION
+            value: {{ .Values.monitoringConfiguration.monMetricsWriterOpt | quote }}
+          - name: MON_METRICS_SERVICE_ENDPOINT
+            value: {{ .Values.monitoringConfiguration.monMetricsSvcEndpoint | quote }}
+          - name: MON_BMX_GROUP
+            value: {{ .Values.monitoringConfiguration.monBMXGroup | quote }}
+          - name: MON_BMX_METRICS_SCOPE_ID
+            value: {{ .Values.monitoringConfiguration.monBMXMetricsScopeID | quote }}
+          - name: MON_BMX_API_KEY
+            value: {{ .Values.monitoringConfiguration.monBMXAPIKey | quote }}
+          - name: MON_ECM_METRICS_COLLECT_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monCollectInterval | quote }}
+          - name: MON_ECM_METRICS_FLUSH_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monFlushInterval | quote }}
+{{- end }}
+{{- if .Values.logging.enabled }}
+          - name: MON_LOG_SHIPPER_OPTION
+            value: {{ .Values.loggingConfiguration.monLogShipperOpt | quote }}
+          - name: MON_LOG_SERVICE_ENDPOINT
+            value: {{ .Values.loggingConfiguration.monLogSvcEndpoint | quote }}
+          - name: MON_BMX_LOGS_LOGGING_TOKEN
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXLogsLoggingToken | quote }}
+          - name: MON_BMX_SPACE_ID
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXSpaceID | quote }}
+{{- end }}
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+        readinessProbe:
+          tcpSocket:
+            port: 9080
+          initialDelaySeconds: 90
+          periodSeconds: 5
+          timeoutSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          tcpSocket:
+            port: 9080
+          initialDelaySeconds: 300
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 6
+        volumeMounts:
+{{- if eq .Values.dataVolume.existingPVCforCMISCfgstore .Values.dataVolume.existingPVCforCMISLogstore }}
+          - name: "{{ .Values.dataVolume.nameforCMISCfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides"
+            subPath: cmis/configDropins/overrides
+          - name: "{{ .Values.dataVolume.nameforCMISCfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/logs"
+            subPath: cmis/logs
+{{- else }}
+          - name: "{{ .Values.dataVolume.nameforCMISCfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides"
+          - name: "{{ .Values.dataVolume.nameforCMISLogstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/logs"
+{{- end }}
+      imagePullSecrets:
+      - name: "{{ .Values.imagePullSecrets.name }}"
+      volumes:
+{{- if eq .Values.dataVolume.existingPVCforCMISCfgstore .Values.dataVolume.existingPVCforCMISLogstore }}
+        - name: "{{ .Values.dataVolume.nameforCMISCfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCMISCfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- else }}
+        - name: "{{ .Values.dataVolume.nameforCMISCfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCMISCfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforCMISLogstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforCMISLogstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- end }}
+

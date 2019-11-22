@@ -1,0 +1,49 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.dsxlMl) -}}
+kind: StatefulSet
+apiVersion: apps/v1beta1
+metadata:
+  name: mlscoring
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: mlscoring-statefulset
+spec:
+  serviceName: "mlscoring"
+  replicas: 1
+  selector:
+    matchLabels:
+      run: mlscoring-statefulset-pod
+  template:
+    metadata:
+      labels:
+        app: dsx-ml
+        component: mlscoring
+        run: mlscoring-statefulset-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: mlscoring-container
+        image: {{ .Values.mlScoringContainer.image.repository }}:{{ .Values.mlScoringContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.mlScoringContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 16500
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /v2/scoring/online/heartbeat
+            port: 16500
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /v2/scoring/online/heartbeat
+            port: 16500
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+{{- end }}

@@ -1,0 +1,24 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $namePrefix := "zookeeper-headless" -}}
+{{ $compName := "aios-kafka" -}}
+{{ $serviceSelector := "zookeeper" }}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $serviceSelector)) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  clusterIP: None
+  ports:
+{{- range $key, $port := .Values.ports }}
+    - name: headless-{{ $key }}
+      port: {{ $port.containerPort }}
+      targetPort: {{ $key }}
+      protocol: {{ $port.protocol }}
+{{- end }}
+  selector:
+    release: {{ .Release.Name | quote }}
+    serviceSelector: {{ $serviceSelector | quote }}

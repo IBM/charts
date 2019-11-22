@@ -1,0 +1,189 @@
+{{- range .Values.consumers }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  labels:
+    app: {{ template "celery-poc.name" $ }}
+    chart: {{ $.Chart.Name }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+    component: consumer
+    worker: {{ .name }}
+spec:
+  replicas: {{ default "4" .replicaCount }}
+  selector:
+    matchLabels:
+      worker: {{ .name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: {{ .maxUnavailableCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "celery-poc.name" $ }}
+        chart: {{ $.Chart.Name }}
+        heritage: {{ $.Release.Service }}
+        release: {{ $.Release.Name }}
+        component: consumer
+        worker: {{ .name }}
+      annotations:
+    {{- range $key, $value := $.Values.global.annotations }}
+        {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    spec:
+      {{- if $.Values.global.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range $.Values.global.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end}}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: celery{{ $.Values.global.namespace.name }}
+                operator: In
+                values:
+                - "baca"
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "celery-poc.name" $ }}
+              topologyKey: "kubernetes.io/hostname"
+      volumes:
+      - name: log
+        persistentVolumeClaim:
+          claimName: {{ $.Values.global.logs.claimname | quote }}
+      - name: secrets
+        secret:
+          secretName: baca-secrets{{ $.Values.global.namespace.name }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 51000
+        fsGroup: 51001
+        supplementalGroups:
+          - 51001
+      containers:
+        - name: {{ .name }}
+          image: "{{ .repository }}:{{ .tag }}"
+          securityContext:
+            runAsUser: 51000
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          imagePullPolicy: {{ .pullPolicy }}
+          resources:
+{{ toYaml .resources | indent 12 }}
+            # limits:
+            #   cpu: {{.limitsCPU}}
+            #   memory: {{.limitsMemory}}
+            # requests:
+            #   cpu: {{.requestsCPU}}
+            #   memory: {{.requestsMemory}}
+          volumeMounts:
+          - name: log
+            mountPath: "/var/log/{{ .name }}"
+            subPath: {{ .name }}
+            readOnly: false
+          - name: secrets
+            mountPath: "/etc/certs" # This is the $HOME for celery container
+          livenessProbe:
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - bash
+                - -c
+                - cd $QUEUE && celery inspect ping -A tasks -d celery@{{ .queue }}-$HOSTNAME
+          readinessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command:
+                - bash
+                - -c
+                - cd $QUEUE && celery inspect ping -A tasks -d celery@{{ .queue }}-$HOSTNAME
+          env:
+            - name: PROCESS_TIMEOUT
+            {{- if or (eq .name "utf8process") (eq .name "pdfprocess") (eq .name "postprocessing") }}
+              value: {{ default "1500" .processTimeout | quote }}
+            {{- else if eq .name "setup" }}
+              value: {{ default "120" .processTimeout | quote }}
+            {{- else }}
+              value: {{ default "300" $.Values.global.celery.processTimeout | quote }}
+            {{- end }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: LOG_PATH
+              value: "/var/log/{{ .name }}"
+            - name: QUEUE
+              value: "{{ .queue }}"
+            - name: SERVICE_NAME
+              value: "{{ .serviceName }}"
+            - name: LOG_LEVEL
+              value: "{{ $.Values.global.logs.logLevel }}"
+            - name: NUM_WORKERS
+              value: "{{ .numWorkers }}"
+            - name: BROKER_URL
+              value: amqps://{{ template "subchart.rabbitmq.fullname" $ }}:5671
+            - name: BROKER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-user
+            - name: BROKER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-rabbitmq"
+                  key: rabbitmq-password
+            {{- if $.Values.global.redis.HA }}
+            - name: RESULTS_URL
+              value: "sentinel://celery{{ $.Values.global.namespace.name }}-redis-ha:26379"
+            - name: RESULT_MASTER_NAME
+              value: {{  $.Values.global.redis.masterGroupName | quote }}
+            - name: REDIS_HA
+              value: "true"
+            {{- else}}
+            - name: RESULTS_URL
+              value: rediss://{{ template "subchart.redis.fullname" $ }}-master:6379
+            {{- end}}
+            - name: RESULTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-redis"
+                  key: redis-password
+            - name: CERTIFICATE_DIR
+              value: "/etc/certs"
+            - name: SSL_VALIDATE
+              value: {{ $.Values.global.sslValidate | quote }}
+{{ end -}}

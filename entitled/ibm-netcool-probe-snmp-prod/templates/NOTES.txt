@@ -1,0 +1,39 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+Get the probe host and port by running these commands:
+{{- if contains "NodePort" .Values.service.probe.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "sch.names.fullName" (list . ) }})
+  
+  # On ICP 3.1.1, you can obtain the External IP from the IBM Cloud Cluster Info Configmap using the command below.
+  export NODE_IP=$(kubectl get configmap --namespace kube-public ibmcloud-cluster-info -o jsonpath="{.data.proxy_address}")
+
+  # Test sending SNMP traps to $NODE_IP:$NODE_PORT.
+  echo $NODE_IP:$NODE_PORT
+
+  # On ICP 3.1.0, get the External IP from the Nodes resource. This command requires Cluster Administrator role.
+  export NODE_IP=$(kubectl get nodes -l proxy=true -o jsonpath="{.items[0].status.addresses[0].address}")
+{{- else if contains "LoadBalancer" .Values.service.probe.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  You can watch the status of by running 'kubectl get svc -w {{ include "sch.names.fullName" (list . ) }}'
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "sch.names.fullName" (list . ) }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo $SERVICE_IP:{{ .Values.service.probe.externalPort }}
+{{- else if contains "ClusterIP" .Values.service.probe.type }}
+  Get the service name, port and namespace to configure your clients.
+  export SERVICE_NAME=$( kubectl get service {{ include "sch.names.fullName" (list .) }} --namespace {{ .Release.Namespace }} -o jsonpath="{.metadata.name}")
+  export SERVICE_NAMESPACE=$( kubectl get service {{ include "sch.names.fullName" (list .) }} --namespace {{ .Release.Namespace }} -o jsonpath="{.metadata.namespace}")
+  export SERVICE_PORT=$( kubectl get service {{ include "sch.names.fullName" (list .) }} --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[*].port}")
+  echo "SERVICE_NAME=$SERVICE_NAME, SERVICE_NAMESPACE=$SERVICE_NAMESPACE, SERVICE_PORT=$SERVICE_PORT"
+
+  Due to a limitation on Kubernetes Ingress resource, additional post-installation step is required in order to receive external TCP/UDP traffic.
+  A Cluster Administrator needs to reconfigure the nginx-ingress-controller with a "static" configuration based on Configmaps
+  and restart the ingress controller for the changes to take effect.
+  CAUTION: Restarting the ingress controller would impact other workloads running. Consider performing the change during a planned downtime
+  in production environments. See https://www.ibm.com/support/knowledgecenter/en/SSSHTQ/omnibus/helms/all_helms/wip/reference/hlm_expose_probe.html for more details.
+
+  After the ingress controller is reconfigured, you should be able to configure external clients to connect to the <Proxy IP/Hostname>:<Probe Service Port>
+
+  You can use kubectl port-forward command to map a local port to the pod port for verification. Example command below.
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "sch.names.appName" (list . ) }},release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Test sending SNMP traps to 127.0.0.1:{{ .Values.service.probe.externalPort }}.
+  kubectl port-forward --namespace {{ .Release.Namespace }} $POD_NAME {{ .Values.service.probe.externalPort }}:4162
+{{- end }}

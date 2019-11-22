@@ -1,0 +1,93 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "shortname" . }}-postgres
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    run: {{ template "shortname" . }}-postgres-dep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ template "shortname" . }}-postgres-dp
+  template:
+    metadata:
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+        run: {{ template "shortname" . }}-postgres-dp
+      {{ include "vision-release-annotations" . | indent 6 }}
+    spec:
+      containers:
+      - name: {{ template "shortname" . }}-postgres
+        image: "{{ template "repoprefixpublic" . }}postgres:9.6.8"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+          - containerPort: 5432
+            protocol: TCP
+        volumeMounts:
+          - mountPath: /var/lib/postgresql/data
+            name: var-lib-postgres-mount
+            subPath: run/pgsql
+          - mountPath: /docker-entrypoint-initdb.d
+            name: postgres-initdb
+            readOnly: true
+        env:
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "shortname" . }}-secrets
+                key: postgres-password
+          - name: POSTGRES_MULTIPLE_DATABASES
+            value: "keycloak,video,video_test"
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - exec pg_isready --username=postgres
+          initialDelaySeconds: 240
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - cp /docker-entrypoint-initdb.d/create-postgres-dbs.sh /create-postgres-dbs.sh; chmod +wx /create-postgres-dbs.sh; /create-postgres-dbs.sh
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+        beta.kubernetes.io/arch: ppc64le
+      affinity:
+      {{- include "nodeaffinity-ppc64le" . | indent 6 }}
+      volumes:
+        - name: "postgres-initdb"
+          configMap:
+            name: {{ template "shortname" . }}-config
+            items:
+            - key: create-postgres-dbs.sh
+              path: create-postgres-dbs.sh
+        - name: "var-lib-postgres-mount"
+          persistentVolumeClaim:
+          {{- if .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+            claimName: {{ .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ tpl .Values.poweraiVisionDataPvc.name . }}
+          {{- end }}
+      {{ include "imagesecrets" . | indent 6 }}

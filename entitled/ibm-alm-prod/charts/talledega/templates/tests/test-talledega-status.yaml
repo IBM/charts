@@ -1,0 +1,30 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-test
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}
+    app: {{ include "sch.names.appName" (list .) }}-test
+spec:
+{{ include "alm.podSecurityContext" (list . "") | indent 2 }}
+  containers:
+  - name: {{ .Release.Name }}-talledega-status-test
+    image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}
+    command: ["sh", "-c", "curl -X GET 'http://{{ include "sch.names.appName" (list .) }}:8287/management/health' "]
+    securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 8 }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: "beta.kubernetes.io/arch"
+            operator: In
+            values:
+            - {{ .Values.arch }}
+  restartPolicy: Never

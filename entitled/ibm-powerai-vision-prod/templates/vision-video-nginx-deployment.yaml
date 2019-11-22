@@ -1,0 +1,87 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "shortname" . }}-video-nginx
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    run: {{ template "shortname" . }}-video-nginx-dep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ template "shortname" . }}-video-nginx-dp
+  template:
+    metadata:
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+        run: {{ template "shortname" . }}-video-nginx-dp
+      {{ include "vision-release-annotations" . | indent 6 }}
+    spec:
+      containers:
+        - name: {{ template "shortname" . }}-video-nginx
+          image: "{{ template "repoprefix" . }}powerai-vision-video-nginx:{{ .Values.image.releaseTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+            - containerPort: 443
+              name: https
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /var/www/media
+              name: data-mount
+              subPath: data
+          env:
+            - name: URL_PREFIX
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: WEBROOT
+            - name: UWSGI_SERVER_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: UWSGI_SERVER_HOST
+          livenessProbe:
+            httpGet:
+              #TODO - would like this to be /video so it's
+              #validating thw uwsgi-server, but that ends
+              #up failing with a 502 as it follows redirects
+              path: {{ template "shortname" . }}-video/static/css/app.css
+              port: http
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: {{ template "shortname" . }}-video/static/css/app.css
+              port: http
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+        beta.kubernetes.io/arch: ppc64le
+      affinity:
+      {{- include "nodeaffinity-ppc64le" . | indent 6 }}
+      volumes:
+        - name: "data-mount"
+          persistentVolumeClaim:
+          {{- if .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+            claimName: {{ .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ tpl .Values.poweraiVisionDataPvc.name . }}
+          {{- end }}
+      {{ include "imagesecrets" . | indent 6 }}

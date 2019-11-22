@@ -1,0 +1,46 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.ibmPrivateCloud) -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: spark-history-server
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: spark-history-server-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: spark-history-server-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: spark
+        component: spark-history-server
+        run: spark-history-server-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: spark-history-server-container
+        image: {{ .Values.sparkContainer.image.repository }}:{{ .Values.sparkContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["bash"]
+        args: ["-c", "chmod 0777 /tmp/spark-events ; /start_history_server"]
+        resources:
+{{ toYaml .Values.sparkContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 18080
+        volumeMounts:
+        - mountPath: /tmp/spark-events
+          name: spark-metrics-mount
+      volumes:
+      - name: spark-metrics-mount
+        persistentVolumeClaim:
+          {{- if .Values.sparkMetricsPvc.persistence.existingClaimName }}
+            claimName: {{ .Values.sparkMetricsPvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}-{{ .Values.sparkMetricsPvc.name }}
+          {{- end }}
+{{- end }}

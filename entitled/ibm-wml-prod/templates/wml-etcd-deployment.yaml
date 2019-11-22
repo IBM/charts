@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: wml-etcd
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  name: wml-etcd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wml-etcd
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: wml-etcd
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: IBM Watson Machine Learning 
+        productID: ICP4D-WML_210_00000
+        productVersion: 2.1.0.0
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+      - command:
+        - /usr/local/bin/etcd
+        - --name
+        - wml-etcd
+        - --data-dir
+        - /data
+        - --auto-tls
+        - --listen-client-urls
+        - http://0.0.0.0:2379
+        - --advertise-client-urls
+        - http://wml-etcd:2379
+        env:
+        - name: AGT_ETCD_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: etcd_username
+              name: etcd-secret
+        - name: AGT_ETCD_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: etcd_password
+              name: etcd-secret        
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlEtcd.image.repository }}:{{ .Values.wmlEtcd.image.tag }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+        name: wml-etcd
+        livenessProbe:
+          httpGet:
+            path: /v2/keys
+            port: 2379
+            scheme: HTTP
+          failureThreshold: 10
+          initialDelaySeconds: 20
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /v2/keys
+            port: 2379
+            scheme: HTTP
+          failureThreshold: 10
+          initialDelaySeconds: 15
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        ports:
+        - containerPort: 2379
+        lifecycle:
+          postStart:
+            exec:
+              command: 
+              - /bin/sh
+              - -c
+              - /usr/local/bin/adduser.sh
+        volumeMounts:
+        - name: etcd-pv
+          mountPath: /data
+        resources: 
+          limits:
+            cpu: "1"
+            memory: "2Gi"
+          requests:
+            cpu: "250m"
+            memory: "2Gi"
+      volumes:
+      - name: etcd-pv
+        persistentVolumeClaim:
+          claimName: etcd-pvc
+status: {}

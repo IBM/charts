@@ -1,0 +1,66 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines a temporary role used for copying and modifying secrets
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{ $namePrefix := .sch.chart.components.essential.preInstallRole.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'essential' as this makes up part of implementing the web UI
+{{ $compName := .sch.chart.components.essential.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade, pre-rollback
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    # This needs to happen before the binding of this role to the new
+    # temporary service account in another pre-install job.
+    "helm.sh/hook-weight": "0"
+rules:
+  - apiGroups:
+      - ""
+    # limit the scope of this role to secrets/configmaps only, as they are the only
+    # resources managed by this job
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - create
+      - patch
+  - apiGroups:
+      - ""
+    # limit the scope of this role to secrets/configmaps only, as they are the only
+    # resources managed by this job
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - patch
+    # Needed to delete the oauth job
+  - apiGroups:
+      - "batch"
+    resources:
+      - jobs
+    verbs:
+      - get
+      - delete
+      
+{{ end -}}
+

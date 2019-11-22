@@ -1,0 +1,85 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: spark-history-server
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: spark-history-server-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: spark-history-server-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: spark
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: spark-history-server
+        run: spark-history-server-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      containers:
+      - name: spark-history-server-container
+        image: {{ .Values.spark.image.repository }}:{{ .Values.spark.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["bash"]
+        args: ["-c", "chmod 0777 /tmp/spark-events ; /scripts/start_history_server.sh"]
+        env:
+        - name: APACHE_SPARK_VERSION
+          value: "2.0.2"
+        ports:
+        - containerPort: 18080
+        readinessProbe:
+          exec:
+            command:
+            - ls
+            - /
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        livenessProbe:
+          exec:
+            command:
+            - ls
+            - /
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        volumeMounts:
+        - mountPath: /tmp/spark-events
+          name: spark-metrics-mount
+      volumes:
+      - name: spark-metrics-mount
+        persistentVolumeClaim:
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+            claimName: {{ .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}
+          {{- end }}

@@ -1,0 +1,33 @@
+{{ if (not .Values.pvcSettings.existingClaimName) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ .Values.servicename }}-pvc"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+spec:
+  {{- if .Values.pvcSettings.useDynamicProvisioning }}
+  storageClassName: {{ .Values.pvcSettings.storageClassName }}
+  {{ else }}
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      {{- if ne .Values.pvcSettings.size "0Gi"}}
+      storage: {{ .Values.pvcSettings.size }}
+      {{- else }}
+      storage: 250Gi
+      {{- end }}
+  {{ if ne .Values.runtime "ICP4Data" -}}
+  selector:
+    matchLabels:
+      assign-to: "{{ .Release.Namespace }}-eventstore-pv-{{ .Values.storage.type }}"
+  {{- end }}
+{{- end }}

@@ -1,0 +1,66 @@
+# © Copyright IBM Corporation 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+{{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
+{{- $name := include "sch.names.fullCompName" (list . "test") }}
+{{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $name }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "test") | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - 'amd64'
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 405
+  serviceAccountName: {{ $saName }}
+  containers:
+  - name: "{{ .Release.Name }}-test"
+    image: alpine:3.8
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 405
+      capabilities:
+        drop:
+        - ALL
+    command:
+      - "sh"
+    args:
+      - "-xc"
+      - "timeout -t {{ .Values.livenessProbe.initialDelaySeconds }} /bin/sh -c \"until nc -v -w1 -z {{ include "sch.names.fullName" (list .) }} 7600; do sleep 1; done\""
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+  restartPolicy: Never

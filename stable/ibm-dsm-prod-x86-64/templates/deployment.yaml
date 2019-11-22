@@ -1,0 +1,116 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: "IBM Data Server Manager"
+        productID: "IBMDSM_2141_dev_00000"
+        productVersion: "{{ .Values.image.tag }}"
+    spec:
+      serviceAccountName: dsm-{{ template "fullname" . }}
+      #https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types, 
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms, 
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+      - name: dsm
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: LICENSE
+          value: accept
+        - name: DSM_ADMIN
+          value: "{{ .Values.login.user }}"
+        - name: DSM_ADMIN_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "fullname" . }}-dsm-passwd
+              key: password
+        ports:
+        - containerPort: 11080
+        - containerPort: 11081
+        livenessProbe:
+          initialDelaySeconds: 180
+          httpGet:
+            path: /
+            port: 11081
+            scheme: HTTPS
+        readinessProbe:
+          initialDelaySeconds: 180
+          httpGet:
+            path: /
+            port: 11080
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+        - name: all
+          mountPath: /opt/ibm-datasrvrmgr-data/
+      - name: dsmsc
+        image: "{{ .Values.imageSidecar.repository }}:{{ .Values.imageSidecar.tag }}"
+        imagePullPolicy: {{ .Values.imageSidecar.pullPolicy }}
+        env:
+        - name: LICENSE
+          value: accept
+        - name: DSM_APP_NAME
+          value: {{ template "fullname" . }}
+        - name: DSM_RELEASE_NAME
+          value: {{ .Release.Name }}
+        - name: DSM_CHART_NAME
+          value: {{ .Chart.Name }}
+        - name: DSM_CHART_VERSION
+          value: {{ .Chart.Version }} 
+        - name: DSM_MY_SVC_NAME
+          value: {{ template "fullname" . }}
+        - name: DSM_REPO_SVC_NAME
+          value: {{ template "repoDB.fullname" . }}
+        livenessProbe:
+          exec:
+            command:
+            - echo
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - echo
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: all
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.dataVolume.existingClaimName }}
+          claimName: {{ .Values.dataVolume.existingClaimName }}
+        {{- else }}
+          claimName: {{ template "fullname" . }}-{{ .Values.dataVolume.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+

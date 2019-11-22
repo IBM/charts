@@ -1,0 +1,19 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: conductor
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+data:
+  spring_profiles_include: {{ .Values.app.config.profiles }},{{ if .Values.global.security.enabled }}security{{ else }}nosecurity{{ end }},{{ if .Values.app.config.configServer.vault.enabled }}vault{{ else }}novault{{ end }}{{ if .Values.app.config.configServer.git.enabled }},git{{ end }}
+{{- if .Values.app.config.configServer.git.enabled }}
+  spring_cloud_config_server_git_uri: {{ .Values.app.config.configServer.git.uri }}
+{{- end }}
+{{- if .Values.app.config.configServer.vault.enabled }}
+  spring_cloud_vault_host: {{ .Values.app.config.configServer.vault.host | default (printf "%s-%s.%s" .Release.Name "vault" .Release.Namespace ) }}
+  spring_cloud_config_server_vault_host: {{ .Values.app.config.configServer.vault.host | default (printf "%s-%s.%s" .Release.Name "vault" .Release.Namespace ) }}
+{{- end }}
+  LOG_FOLDER: "/var/lm/logs"
+  eureka.client.registerWithEureka: "false"
+  eureka.client.fetchRegistry: "false"

@@ -1,0 +1,162 @@
+ # deploy only models specified in model_ids_with_replicas
+{{- include "sch.config.init" (list . .Values.global.schConfigTemplate) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-sireg-de-tok-20160801"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service: conversation
+      model: de-tok
+      version: "20160801"
+      component: sireg
+      slot:  "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant: PUBLIC
+
+    app: "ibm-watson-assistant-prod-1.3.0"
+    chart: "ibm-watson-assistant"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+spec:
+  replicas: {{ include "assistant.sireg.de-tok-20160801.replicas" . }}
+  progressDeadlineSeconds: 3840 # Largest deployment 4 groups (2 pods) of SIREg sys-entities containers -> each group can take 960 seconds = 4*960
+  selector:
+   matchLabels: *primary_labels # Don't touch or extend!
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 2
+  template:
+    metadata:
+      name: sireg-pod
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+# Volumes
+    spec:
+      volumes:
+      - name: model-storage
+        emptyDir: {}
+# Affinity
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+
+{{- $_ := set . "modelName" "de-tok" }}
+{{ include "assistant.podAntiAffinity" . | indent 8 }}
+# Containers
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+
+
+      - name: model-loader
+        image: "{{ if tpl (.Values.model.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.model.image.repository | toString ) . ) }}{{ end }}/{{ .Values.model.image.name }}:de-tok-20160801"
+        imagePullPolicy: {{ .Values.model.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 10000
+
+        command:
+        - sh
+        - -c
+        - 'rm -rf /opt/ibm/sireg-models/* && mv /data/de-tok-20160801.tar.gz /opt/ibm/sireg-models/model.tgz && cd /opt/ibm/sireg-models && tar xf model.tgz && rm -rf model.tgz'
+        
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: 2Gi
+          requests:
+            cpu: "400m"
+            memory: 2Gi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/ibm/sireg-models/
+          name: model-storage
+      containers:
+      - name: sireg-server
+        image: "{{ if tpl (.Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 10000
+
+        resources:
+          requests:
+            memory: "1350Mi"
+            cpu: "500m"
+          limits:  
+            memory: "1350Mi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: model-storage
+          mountPath: /opt/ibm/sireg-models/
+        env:
+        - name: DDINF_FILE
+          value: "/opt/ibm/sireg-models/models/libACE_models/de_tokenizer.ddinf"
+        - name: NUM_WORKERS
+          value: "3"
+        - name: EUREKA_VIP
+          value: VOYAGER-SIRE-TOK-DE
+
+
+       # Adding MAX_WORKER_MEM_GROWTH_FACTOR env var
+       # to properly set per-worker language limits
+        - name:  "MAX_WORKER_MEM_GROWTH_FACTOR"
+          value: "1.25"
+
+
+       # Adding MAX_WORKER_MEM_MB env to properly set per-worker limits
+        - name:  "MAX_WORKER_MEM_MB"
+          value: "400"
+
+        ports:
+        - containerPort: 50443
+          name: api-port
+        readinessProbe:
+          exec:
+            command:
+            - /opt/ibm/sireg/bin/healthcheck_client.sh
+            - "50443"
+          initialDelaySeconds: 60
+          timeoutSeconds: 6 # internal SIREg health-check script limit is 5 seconds
+          periodSeconds: 15
+          failureThreshold: 2
+        livenessProbe:
+          exec:
+            command:
+            - /opt/ibm/sireg/bin/healthcheck_client.sh
+            - "50443"
+          initialDelaySeconds: 960 # SIREg sys-entities containers start 10-15 minutes
+          timeoutSeconds: 6 # internal SIREg health-check script limit is 5 seconds
+          periodSeconds: 60
+          failureThreshold: 3

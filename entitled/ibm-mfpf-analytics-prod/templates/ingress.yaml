@@ -1,0 +1,58 @@
+##############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{ if .Values.ingress.enabled }}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "fullname" . }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}" 
+  annotations:
+    ingress.kubernetes.io/client-max-body-size: "200m"
+    ingress.kubernetes.io/proxy-read-timeout: "300s"
+    ingress.kubernetes.io/proxy-connect-timeout: "300s"
+{{- if and .Values.ingress.tlsEnabled .Values.ingress.sslPassThrough }}
+    ingress.kubernetes.io/ssl-passthrough: "true"
+{{- end }}
+    ingress.bluemix.net/client-max-body-size: "200m"
+    ingress.bluemix.net/proxy-read-timeout: "300s"
+    ingress.bluemix.net/proxy-connect-timeout: "300s"
+spec:
+  rules:
+{{- if .Values.ingress.tlsEnabled }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.hostname }}
+    secretName: {{ .Values.ingress.tlsSecretName }}
+{{- end }}
+  rules:
+  - host: {{ .Values.ingress.hostname }}
+    http:
+      paths:
+      - path: /analytics
+        backend:
+          serviceName: {{ template "fullname" . }}
+{{- if and .Values.ingress.tlsEnabled .Values.ingress.sslPassThrough }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /analytics-service
+        backend:
+          serviceName: {{ template "fullname" . }}
+{{- if and .Values.ingress.tlsEnabled .Values.ingress.sslPassThrough }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+{{- end }}

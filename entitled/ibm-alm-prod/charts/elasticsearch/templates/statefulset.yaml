@@ -1,0 +1,156 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  serviceName: {{ include "sch.names.fullName" (list .) }}
+  replicas: {{ .Values.global.elasticsearch.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+{{ include "alm.podSecurityContext" (list . "") | indent 6 }}
+        supplementalGroups:
+        {{- range $group := .Values.global.persistence.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
+      containers:
+      - command:
+        - /opt/elasticsearch/bin/elasticsearch
+        args:
+        - -Enetwork.host=0.0.0.0
+        - -Ecluster.name={{ .Values.clusterName }}
+        {{- if gt .Values.global.elasticsearch.replicaCount 1.0 }}
+        - -Ediscovery.zen.ping.unicast.hosts={{ include "sch.names.fullName" (list .) }}
+        - -Ediscovery.zen.minimum_master_nodes={{ add1 ( div .Values.global.elasticsearch.replicaCount 2 ) }}
+        - -Egateway.expected_nodes={{ .Values.global.elasticsearch.replicaCount }}
+        {{- end }}
+        name: {{ include "sch.names.fullName" (list .) }}
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: ES_JAVA_OPTS
+          value: {{ .Values.jvmOptions | quote }}
+        ports:
+        - containerPort: {{ .Values.httpPort }}
+        - containerPort: {{ .Values.apiPort }}
+        volumeMounts:
+        - mountPath: /opt/elasticsearch/data
+          name: data
+        - mountPath: /opt/elasticsearch/logs
+          name: logs
+        - mountPath: /tmp
+          name: tmp
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.apiPort }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: {{ .Values.httpPort }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+        resources:
+{{ include "alm.getResources" . | indent 10 }}
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: "{{ include "sch.names.appName" (list .) }}"
+                  release: "{{ .Release.Name }}"
+      {{- if eq .Values.global.persistence.storageClassOption.elasticlogs "none" }}
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.global.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      {{- if .Values.global.persistence.useDynamicProvisioning }}
+      # If present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by Kubernetes Administrator
+      #
+      # Setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+      {{- else }}
+      # Disable dynamic provisioning and use selector match labels.
+      storageClassName: ""
+      selector:
+        matchLabels:
+          app: {{ include "sch.names.appName" (list .) }}
+          release: {{ .Release.Name }}
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.global.persistence.storageSize.elasticdata }}
+    {{-  if ne .Values.global.persistence.storageClassOption.elasticlogs "none" }}
+  - metadata:
+      name: logs
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      {{- if .Values.global.persistence.useDynamicProvisioning }}
+      # If present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by Kubernetes Administrator
+      #
+      # Setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+      {{- else }}
+      # Disable dynamic provisioning and use selector match labels.
+      storageClassName: ""
+      selector:
+        matchLabels:
+          app: {{ include "sch.names.appName" (list .) }}
+          release: {{ .Release.Name }}
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.global.persistence.storageSize.elasticlogs }}
+    {{- end }}
+  {{- else }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  {{- end }}

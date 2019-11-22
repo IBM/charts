@@ -1,0 +1,198 @@
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "shortname" . }}-video-portal
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+    run: {{ template "shortname" . }}-video-portal-dep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ template "shortname" . }}-video-portal-dp
+  template:
+    metadata:
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+        run: {{ template "shortname" . }}-video-portal-dp
+      {{ include "vision-release-annotations" . | indent 6 }}
+    spec:
+      containers:
+        - name: {{ template "shortname" . }}-video-portal
+          image: "{{ template "repoprefix" . }}powerai-vision-video-portal:{{ .Values.image.releaseTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+              name: uwsgi
+              protocol: TCP
+            - containerPort: 8081
+              name: stream
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /var/www/media
+              name: data-mount
+              subPath: data
+          env:
+            - name: WEBROOT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: WEBROOT
+            - name: DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: DEBUG
+            - name: INITIAL_SETTINGS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: INITIAL_SETTINGS
+            - name: INITIAL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: INITIAL_DATABASE
+            - name: INITIAL_MONGO
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: INITIAL_MONGO
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: REDIS_HOST_VIDEO
+            - name: SERVER_WORKER_THREADS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: SERVER_WORKER_THREADS
+            - name: CELERY_RESULT_BACKEND
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shortname" . }}-secrets
+                  key: celery_result_backend_video
+            - name: BROKER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shortname" . }}-secrets
+                  key: celery_result_backend_video
+            - name: MONGO_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: MONGO_HOST_VIDEO
+            - name: MONGO_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: MONGO_USER
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shortname" . }}-secrets
+                  key: mongodb-admin-password
+            - name: MONGO_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: MONGO_DB_VIDEO
+            - name: DLAAS_API_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: DLAAS_API_SERVER
+            - name: CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: CLIENT_ID
+            - name: CLIENT_SECRET
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: CLIENT_SECRET
+            - name: REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: REDIRECT_URI
+            - name: SSO_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: SSO_SERVER
+            - name: SINGLE_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: SINGLE_USER
+            - name: SMART_AUTO_LABELING
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: SMART_AUTO_LABELING
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: PGHOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: PGPORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ template "shortname" . }}-config
+                  key: PG_VIDEO_DB
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "shortname" . }}-secrets
+                  key: postgres-password
+          livenessProbe:
+            exec:
+              command:
+              - uwsgi_curl
+              - 127.0.0.1:8080
+              - /api/data/task
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - uwsgi_curl
+              - 127.0.0.1:8080
+              - /api/data/task
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      nodeSelector:
+        beta.kubernetes.io/arch: ppc64le
+      affinity:
+      {{- include "nodeaffinity-ppc64le" . | indent 6 }}
+      volumes:
+        - name: "data-mount"
+          persistentVolumeClaim:
+          {{- if .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+            claimName: {{ .Values.poweraiVisionDataPvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ tpl .Values.poweraiVisionDataPvc.name . }}
+          {{- end }}
+      {{ include "imagesecrets" . | indent 6 }}

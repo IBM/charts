@@ -1,0 +1,28 @@
+{{ if and (eq .Release.Namespace .Values.dsxNamespaces.sysIbmAdmData) (not .Values.redisPvc.persistence.existingClaimName) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "fullname" . }}-{{ .Values.redisPvc.name }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: redis-pvc
+spec:
+  {{- if .Values.persistence.useDynamicProvisioning }}
+  storageClassName: {{ default nil .Values.redisPvc.persistence.storageClassName | quote }}
+  {{ else }}
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ default "10Gi" .Values.redisPvc.persistence.size | quote }}
+  {{- if (not .Values.persistence.useDynamicProvisioning ) }}
+  selector:
+    matchLabels:
+      assign-to: "redis-repo"
+  {{- end }}
+{{- end }}

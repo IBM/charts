@@ -1,0 +1,80 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ template "ibm-apiconnect-pro.fullname" . }}-create-cluster-{{ .Release.Revision }}"
+  labels:
+    app: {{ template "ibm-apiconnect-pro.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: {{ template "ibm-apiconnect-pro.name" . }}-create-cr
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-apiconnect-pro.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: {{ template "ibm-apiconnect-pro.name" . }}-create-cr
+      annotations:
+        productName: {{ template "ibm-apiconnect-pro.productName" . }}
+        productID: {{ template "ibm-apiconnect-pro.productID" . }}
+        productVersion: {{ template "ibm-apiconnect-pro.productVersion" . }}
+        productMetric: {{ template "ibm-apiconnect-pro.productMetric" . }}
+        productChargedContainers: ""
+    spec:
+      serviceAccountName: {{ template "ibm-apiconnect-pro.fullname" . }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.operator.arch }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "ibm-apiconnect-pro.podSecurityContext" . | indent 8 }}
+      restartPolicy: Never
+{{- if .Values.global.createCrds }}
+      initContainers:
+        - name: "crd-wait"
+{{- if .Values.operator.registry }}
+          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- else }}
+          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- end }}
+          imagePullPolicy: {{ index .Values.operator.pullPolicy }}
+          command: ["bash", "-c", "until kubectl get crd apiconnectclusters.apic.ibm.com; do echo waiting for crd to register; sleep 2; done;"]
+{{- end }}
+          resources:
+{{ include "ibm-apiconnect-pro.resources" . | indent 12 }}
+          securityContext:
+{{ include "ibm-apiconnect-pro.securityContext" . | indent 12 }}
+      containers:
+        - name: "cr-create"
+{{- if .Values.operator.registry }}
+          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- else }}
+          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.operator.pullPolicy }}
+          command:
+            - 'bash'
+            - '-c'
+            - |
+              cat <<EOF | kubectl apply -f -
+              apiVersion: apic.ibm.com/v1
+              kind: APIConnectCluster
+              metadata:
+                name: {{ .Release.Name }}-apic-cluster
+{{ include "ibm-apiconnect-pro.apic-cluster-spec" . | indent 14 }}
+              EOF
+          resources:
+{{ include "ibm-apiconnect-pro.resources" . | indent 12 }}
+          securityContext:
+{{ include "ibm-apiconnect-pro.securityContext" . | indent 12 }}

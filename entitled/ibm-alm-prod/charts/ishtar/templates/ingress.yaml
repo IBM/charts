@@ -1,0 +1,31 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /  # This line is only needed when deploying on IBM Cloud Private.
+    nginx.ingress.kubernetes.io/rewrite-target: /  # This line is only needed when deploying on IBM Cloud Private.
+  {{- if .Values.global.security.enabled}}
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    ingress.kubernetes.io/secure-backends: "true"
+  {{- end }}
+  name: ishtar-ingress  # The ingress name must be unique for each ingress rule created.
+spec:
+  rules:
+  - host: {{ .Values.global.ingress.domain | default nil }}
+    http:
+      paths:
+      - path: /ishtar  # This is the url path used to access the service externally.
+        backend:
+         serviceName: ishtar
+         servicePort: 8280
+  {{- if .Values.global.ingress.tlsSecret }}
+  tls:
+  - hosts:
+    - {{ .Values.global.ingress.domain }}
+    secretName: {{ .Values.global.ingress.tlsSecret }}
+  {{- end }}

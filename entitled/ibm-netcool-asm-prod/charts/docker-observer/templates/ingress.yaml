@@ -1,0 +1,42 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+{{- $parent := (include "asm.getParentChart" .) | trim -}}
+{{- if and ( or .Values.global.ingress.api.enabled .Values.ingress.api.enabled ) ( not ( eq $parent "ibm-cloud-appmgmt-prod" )) -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    {{- if not .Values.global.asm.disableHTTPS }}
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    ingress.kubernetes.io/secure-backends: "true"
+    {{- end }}
+    ingress.kubernetes.io/rewrite-target: /1.0/{{ include "sch.names.appName" (list .) }}
+    # redirect swagger if request comes in for the root path
+    ingress.kubernetes.io/configuration-snippet: |
+      rewrite ^(/1.0/{{ include "sch.names.appName" (list .) }})$ $1/swagger permanent;
+    nginx.ingress.kubernetes.io/rewrite-target: /1.0/{{ include "sch.names.appName" (list .) }}
+    # redirect swagger if request comes in for the root path
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      rewrite ^(/1.0/{{ include "sch.names.appName" (list .) }})$ $1/swagger permanent;
+  name: {{ include "sch.names.fullName" (list .) }}-{{ .Values.httpPort }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  rules:
+  - host: {{ .Values.global.ingress.domain | default nil }}
+    http:
+      paths:
+        - backend:
+            serviceName: {{ include "sch.names.fullName" (list .) }}
+            servicePort: {{ .Values.httpPort }}
+          path: /1.0/{{ include "sch.names.appName" (list .) }}
+  {{- if .Values.global.ingress.tlsSecret }}
+  tls:
+  - hosts:
+    - {{ .Values.global.ingress.domain }}
+    secretName: {{ .Values.global.ingress.tlsSecret }}
+  {{- end }}
+
+{{- end }}

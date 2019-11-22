@@ -1,0 +1,27 @@
+{{- include "sch.config.init" (list . "sireTraining.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.jobq.deploymentName -}}
+{{- $jobq := .Values.jobq -}}
+{{- if $jobq.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName "config") }}-config"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  config.yaml: |-
+    server:
+      secure-address: 0.0.0.0:{{ $jobq.securePort }}
+      unsecure-address: 0.0.0.0:{{ $jobq.unsecurePort }}
+    kube-handler:
+      # use in cluster config
+      kube-config-path: ""
+      namespace: {{ .Release.Namespace }}
+      deployment-id: {{ .Release.Name }}
+    controller:
+      poll-intervall: {{ $jobq.poll_interval }}
+      leader-election-interval: {{ $jobq.leader_election_interval }}
+      expire-routine-interval: {{ $jobq.expire_routine_interval }}
+      soft-delete-job-after: {{ $jobq.soft_delete_job_after }}
+      hard-delete-job-after: {{ $jobq.hard_delete_job_after }}
+{{- end -}}

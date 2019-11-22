@@ -1,0 +1,152 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: galileo
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  serviceName: "galileo"
+  replicas: {{ .Values.app.numReplicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+{{ include "alm.podSecurityContext" (list . "") | indent 6 }}
+      #https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      initContainers:
+      - name: wait-for-schemas
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.baseImage.name}}:{{.Values.baseImage.tag}}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: JOB
+          value: {{ .Release.Name }}-configurator
+        - name: SUCCEEDED
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - python3 /scripts/wait-for-job-completion.py
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+      - name: wait-for-conductor
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.baseImage.name}}:{{.Values.baseImage.tag}}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: SERVICE
+          value: conductor
+        - name: EXPECTED_COUNT
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - python3 /scripts/check-service-endpoint-count.py
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+      - name: wait-for-apollo
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.baseImage.name}}:{{.Values.baseImage.tag}}
+        env:
+        - name: SERVICE
+          value: apollo
+        - name: EXPECTED_COUNT
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - python3 /scripts/check-service-endpoint-count.py
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+      containers:
+      - name: galileo
+        command:
+        - /data/start.sh
+        image: "{{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        ports:
+        - containerPort: 8283
+          protocol: TCP
+        livenessProbe:
+          failureThreshold: {{ .Values.app.livenessProbe.failureThreshold }}
+          httpGet:
+            path: /management/health
+            port: 8283
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.app.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.app.livenessProbe.periodSeconds }}
+        readinessProbe:
+          failureThreshold: {{ .Values.app.readinessProbe.failureThreshold }}
+          httpGet:
+            path: /management/health
+            port: 8283
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.app.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.app.readinessProbe.periodSeconds }}
+        envFrom:
+        - configMapRef:
+            name: galileo
+        env:
+        - name: JVM_OPTIONS
+          value: {{ .Values.jvmOptions }}
+        - name: INSTANCE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: LOG_FOLDER
+          value: {{ .Values.logFolder }}
+        - name: spring_cloud_config_token
+          valueFrom:
+            secretKeyRef:
+              name: {{ printf "%s-%s" .Release.Name "vault-keys" }}
+              key: alm_token
+        resources:
+{{ include "alm.getResources" . | indent 10 }}
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+        volumeMounts:
+        - name: lm-certs
+          mountPath: /var/lm/certs
+        - name: logs
+          mountPath: {{ .Values.logFolder }}
+        - name: tmp
+          mountPath: /tmp
+        - name: truststore
+          mountPath: /var/lm/truststore
+        - name: streams
+          mountPath: /var/streams
+      # note: the LDU volume stores the Kafka Streams state store and is not persistent. We rely on Kafka Streams to
+      # re-constitute LDU Kafka Streams state stores that are lost when a Galileo instance goes down.
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      - name: truststore
+        emptyDir: {}
+      - name: streams
+        emptyDir: {}
+      - name: lm-certs
+        secret:
+          secretName: {{ .Values.global.security.almCerts.secretName | default (printf "%s-%s" .Release.Name "security-default") }}

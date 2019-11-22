@@ -1,0 +1,95 @@
+{{- include "sch.config.init" (list . "ibm-spectrum-symphony.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+{{- $role := "compute" -}}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" -}}
+apiVersion: apps/v1beta2
+{{- else -}}
+apiVersion: apps/v1beta1
+{{- end }}
+kind: Deployment
+metadata:
+  name: {{ $fullName }}-{{ $role }}
+  labels:
+    role: {{ $role }}
+{{ toYaml .sch.chart.labels | indent 4 }}
+spec:
+  replicas: {{ .Values.compute.replicaCount }}
+  selector:
+    matchLabels:
+      role: {{ $role }}
+{{ toYaml .sch.chart.labels | indent 6 }}
+  template:
+    metadata:
+      labels:
+        role: {{ $role }}
+{{ toYaml .sch.chart.labels | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{ toYaml .sch.chart.specSecurity | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+{{ toYaml .sch.chart.image | indent 10 }}
+          resources:
+{{ toYaml .Values.compute.resources | indent 12 }}
+          env:
+{{ toYaml .sch.chart.env | indent 12 }}
+            - name: HOST_ROLE
+              value: "COMPUTE"
+          securityContext:
+{{ toYaml .sch.chart.containerSecurity  | indent 12 }}
+          volumeMounts:
+            - name: persistdir
+              mountPath: /shared
+            {{- if .Values.cluster.enableSSHD }}
+            {{- if .Values.cluster.sshKeysSecretName }}
+            - name: ssh
+              mountPath: /opt/ibm/spectrumcomputing/scripts/ssh
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.cluster.scriptsSecretName }}
+            - name: config
+              mountPath: /opt/ibm/spectrumcomputing/scripts/config
+              readOnly: true
+            {{- end }}
+          livenessProbe:
+            exec:
+              command: [ "/bin/bash", "-c", "</dev/tcp/localhost/17869"]
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command: [ "/bin/bash", "-c", "</dev/tcp/localhost/17869"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 30
+      volumes:
+        - name: persistdir
+          persistentVolumeClaim:
+          {{- if .Values.cluster.pvc.existingClaimName }}
+            claimName: {{ .Values.cluster.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ $fullName }}
+          {{- end }}
+        {{- if .Values.cluster.enableSSHD }}
+        {{- if .Values.cluster.sshKeysSecretName }}
+        - name: ssh
+          secret:
+            secretName: {{ .Values.cluster.sshKeysSecretName }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.cluster.scriptsSecretName }}
+        - name: config
+          secret:
+            secretName: {{ .Values.cluster.scriptsSecretName }}
+        {{- end }}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

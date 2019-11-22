@@ -1,0 +1,41 @@
+# If running on ICP the user needs to create nfs/hostpath manually
+{{- template "isIcp" . -}}
+{{- if not (.Values.isIcp) }}
+{{- if eq (.Values.persistence.enabled|quote|lower) "\"true\"" }}
+{{ if or (eq .Values.k8StorageType "hostpath") (eq .Values.k8StorageType "nfs") }}
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  # DO NOT modify this condition
+  {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+  name: cam-rabbitmq-pv0-{{ .Values.k8Namespace }}
+  {{ else }}
+  name: cam-rabbitmq-pv0
+  {{ end }}
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  # DO NOT modify this conditional check
+  {{ if and ((eq (.Values.persistence.useDynamicProvisioning|quote|lower) "\"true\"") (eq (.Values.enableDevSettings|quote|lower) "\"true\"")) }}
+  # storageClassName is required for Minikube v0.21.0 / Kubernets 1.7
+  #   value must be "standard"
+  storageClassName: standard
+  {{ end }}
+  accessModes:
+    - {{ (index .Values.k8StorageAccessMode .Values.k8StorageType) }}
+  capacity:
+    storage: {{ (index .Values.camRabbitmqPv0 .Values.k8StorageType).capacity }}
+  {{ if eq (.Values.k8StorageType) "hostpath" }}
+  hostPath:
+    path: {{ .Values.camRabbitmqPv0.hostpath.path }}
+    type: DirectoryOrCreate
+  {{ else }}
+  nfs:
+    server: {{ .Values.camRabbitmqPv0.nfs.server }}
+    path: {{ .Values.camRabbitmqPv0.nfs.path }}
+  {{ end }}
+
+{{ end }}
+{{ end }}
+{{ end }}

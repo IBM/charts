@@ -1,0 +1,50 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.ibmPrivateCloud) -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: filemgmt
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: filemgmt-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: filemgmt
+        run: filemgmt-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: filemgmt-container
+        image: {{ .Values.filemgmtContainer.image.repository }}:{{ .Values.filemgmtContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["pm2-docker"]
+        args: ["server.js"]
+        env:
+        - name: KUBERNETES_URL
+          value: externalIP
+        - name: KUBERNETES_PORT
+          value: "443"
+        - name: AUTH_URL
+          value: "http://usermgmt-svc.sysibm-adm.svc.cluster.local:8080/v1"
+        resources:
+{{ toYaml .Values.filemgmtContainer.resources | indent 12 }}
+        ports:
+        - name: filemgmt-nodejs
+          containerPort: 3000
+        volumeMounts:
+        - name: user-home-mount
+          mountPath: /user-home
+      volumes:
+      - name: user-home-mount
+        persistentVolumeClaim:
+          {{- if .Values.userHomePvc.persistence.existingClaimName }}
+            claimName: {{ .Values.userHomePvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}-{{ .Values.userHomePvc.name }}
+          {{- end }}
+{{- end }}

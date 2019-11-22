@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-iira-mongodb-prod.fullname" . }}
+  {{ if .Values.global.nameSpaceEnabled }}
+  namespace: {{ .Values.global.namespace }}
+  {{ end }}
+  labels:
+    app: {{ template "ibm-iira-mongodb-prod.name" . }}
+    chart: {{ template "ibm-iira-mongodb-prod.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-iira-mongodb-prod.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-iira-mongodb-prod.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "ibm-iira-mongodb-prod.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+      {{- include "ibm-iira-mongodb-prod.product-metering" . | indent 8 }}
+    spec:
+      volumes:
+      - name: mongo-iira
+        persistentVolumeClaim:
+          claimName: {{ .Values.mongoPVC.name }}
+      - name: iira-internal-tls-mongo
+        secret:
+          secretName: iira-internal-tls
+          items:
+            - key: iira-mongodb.pem
+              path: iira-mongodb.pem
+            - key: iira-ca.crt
+              path: iira-ca.crt
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      affinity: 
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        serviceAccount: cpd-viewer-sa
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false 
+          capabilities:
+            drop:
+            - ALL
+        ports:
+          - name: http
+            containerPort: 27017 
+            protocol: TCP
+        livenessProbe:
+          exec:
+            command:
+              - mongo
+              - --eval
+              - "db.adminCommand('ping')"
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          periodSeconds: 30
+          failureThreshold: 5
+        readinessProbe:
+          exec:
+            command:
+              - mongo
+              - --eval
+              - "db.adminCommand('ping')"
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          periodSeconds: 30
+          failureThreshold: 5
+        volumeMounts:
+          - mountPath: /data/db/
+            name: mongo-iira
+          - mountPath: "/etc/pki/tls/certs"
+            name: iira-internal-tls-mongo
+            readOnly: true
+        resources:
+{{ toYaml .Values.resources | indent 12 }}

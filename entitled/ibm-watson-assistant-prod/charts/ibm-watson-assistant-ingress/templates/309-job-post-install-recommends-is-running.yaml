@@ -1,0 +1,81 @@
+{{- if .Values.global.recommends.enabled -}}
+{{- /* This jobs waits for some time and terminates fast if recommends is ready */ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ printf "%s-helm-dependency-recommends-check309" .Release.Name }}"
+  labels:
+    service:   "conversation"
+    component: "helm-startup-recommends-check309"
+    slot:      "{{ .Release.Name }}"
+    
+    app:       "ibm-watson-assistant-prod-1.3.0"
+    chart:     "ibm-watson-assistant"
+    heritage:  "{{ .Release.Service }}"
+    release:   "{{ .Release.Name }}"
+  annotations:
+    "helm.sh/hook": "post-install"
+    "helm.sh/hook-weight": "309"
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+spec:
+  activeDeadlineSeconds: 86400 # 1 day, not to give up early.
+  backoffLimit: 1000
+  template:
+    metadata:
+      labels:
+        service:   "conversation"
+        component: "helm-startup-recommends-check309"
+        slot:      "{{ .Release.Name }}"
+        
+        app:       "ibm-watson-assistant-prod-1.3.0"
+        chart:     "ibm-watson-assistant"
+        heritage:  "{{ .Release.Service }}"
+        release:   "{{ .Release.Name }}"
+    spec:
+      restartPolicy: Never
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      containers:
+      - name: recommends-status
+        image: "{{ if tpl ( .Values.storeReadyCheck.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.storeReadyCheck.image.repository | toString ) . ) }}{{ end }}/{{ .Values.storeReadyCheck.image.name }}:{{ .Values.storeReadyCheck.image.tag }}"
+        imagePullPolicy: {{ .Values.storeReadyCheck.image.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 2000
+
+        command: [ "/scripts/recommends_ready.sh" ]
+        env:
+        - name: "RETRIES"
+          value: "9"
+        - name: "EXIT_TIMEOUT"
+          value: "0"
+        - name: "SUCCESS_THRESHOLD"
+          value: "1"
+        - name: "SLEEP_TIME"
+          value: "20"
+        volumeMounts:
+        - name: "init-scripts"
+          mountPath: /scripts
+      volumes:
+        - name: "init-scripts"
+          configMap:
+            name: "{{ printf "%s-helm-dependency-services-ready" .Release.Name }}"
+            defaultMode: 0755
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+{{- end -}}

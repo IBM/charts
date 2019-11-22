@@ -1,0 +1,43 @@
+{{- include "sch.config.init" (list . "nlu.sch.chart.config.values") -}}
+{{- $icpKeywordsCompName :=  .sch.chart.components.keywords.name -}}
+{{- $icpKeywordsTestCompName := printf "%s-health-test" $icpKeywordsCompName -}}
+{{- $icpPullSecrets := include "icp-pull-secrets" . -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpKeywordsTestCompName) }}
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: {{ include "sch.names.fullCompName" (list . $icpKeywordsCompName) }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.testSpecSecurityContext) | indent 2 }}
+  containers:
+    - name: {{ include "sch.names.fullCompName" (list . $icpKeywordsTestCompName) }}
+      image: "{{ .Values.global.icpDockerRepo }}{{ .Values.global.tests.image.repository }}:{{ .Values.global.tests.image.tag }}"
+      command: ['curl']
+      args:  ['-k', '-i', 'https://{{ include "sch.names.fullCompName" (list . $icpKeywordsCompName) }}:443/api/v2/keywords/health']
+{{- include "sch.security.securityContext" (list . .sch.chart.testContainerSecurityContext) | indent 6 }}
+      resources:
+        requests:
+          memory: {{ .Values.global.tests.resources.requests.memory }}
+          cpu: {{ .Values.global.tests.resources.requests.cpu }}
+        limits:
+          memory: {{ .Values.global.tests.resources.limits.memory }}
+          cpu: {{ .Values.global.tests.resources.limits.cpu }}
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+  imagePullSecrets:
+  - name: {{ $icpPullSecrets | quote }}

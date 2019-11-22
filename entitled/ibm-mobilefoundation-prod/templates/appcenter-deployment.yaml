@@ -1,0 +1,201 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+{{ if .Values.mfpappcenter.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "mfp.appcenter.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ template "mfp.appcenter.fullname" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    run: {{ template "mfp.appcenter.fullname" . }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}" 
+spec:
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      run: {{ template "mfp.appcenter.fullname" . }}
+  {{- if not .Values.mfpappcenter.autoscaling.enabled }}
+  replicas: {{ .Values.mfpappcenter.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+     maxUnavailable: 25%
+     maxSurge: 25%
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/appcenter-configmap.yaml") . | sha256sum }}
+        productName: {{ template "ibm-mobilefoundation.productName" . }}
+        productID: {{ template "ibm-mobilefoundation.productID" . }}
+        productVersion: {{ template "ibm-mobilefoundation.productVersion" . }}
+      labels:
+        run: {{ template "mfp.appcenter.fullname" . }}
+        app.kubernetes.io/name: {{ template "mfp.appcenter.fullname" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}" 
+    spec:
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      affinity:
+        {{- include "nodeAffinity" . | indent 6 }}
+      {{/* Prefer horizontal scaling */}}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - {{ template "mfp.appcenter.fullname" . }}
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name | quote }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: appcntrconfig-volume
+          configMap:
+            name: {{ template "mfp.appcenter-configmap.fullname" . }}
+{{- if .Values.mfpappcenter.customConfiguration }}
+        - name: mfpappcenter-customconfig
+          configMap:
+            name: {{ .Values.mfpappcenter.customConfiguration }}
+{{- end }}
+{{- if .Values.mfpappcenter.keystoreSecret }}
+        - name: mfpf-certs
+          secret:
+            secretName: {{ .Values.mfpappcenter.keystoreSecret }}
+{{- end }}
+{{- if not (empty .Values.mfpappcenter.db.driverPvc) }}
+        - name: mfpappcenter-db-driverpvc
+          persistentVolumeClaim:
+            claimName: {{ .Values.mfpappcenter.db.driverPvc }}
+{{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        readinessProbe:
+          httpGet:
+            path: /appcenterconsole
+            port: 9080
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
+        livenessProbe:
+          tcpSocket:
+            port: 9080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
+        image: "{{ .Values.mfpappcenter.repository }}:{{ .Values.mfpappcenter.tag }}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        env:
+          - name: WLP_LOGGING_CONSOLE_FORMAT
+            value: "basic"
+          - name: WLP_LOGGING_CONSOLE_LOGLEVEL
+            value: "info"
+          - name : WLP_LOGGING_CONSOLE_SOURCE
+            value: "message,trace,accessLog,ffdc"
+          - name: MFPF_APPCNTR_SVC_NAME
+            value: {{ template "mfp.appcenter.fullname" . }}
+{{- if .Values.global.https }}
+          - name: MFPF_APPCNTR_PROTOCOL
+            value: "https"
+          - name: MFPF_APPCNTR_PORT
+            value: "9443"
+{{- else }}
+          - name: MFPF_APPCNTR_PROTOCOL
+            value: "http"
+          - name: MFPF_APPCNTR_PORT
+            value: "9080"
+{{- end }}
+{{- if .Values.mfpappcenter.keystoreSecret }}
+          - name: KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.mfpappcenter.keystoreSecret }}
+                key: KEYSTORE_PASSWORD
+          - name: TRUSTSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.mfpappcenter.keystoreSecret }}
+                key: TRUSTSTORE_PASSWORD
+{{- end }}
+        envFrom:
+        - configMapRef:
+            name: {{ template "mfp.appcenter-configmap.fullname" . }}
+{{- if .Values.mfpappcenter.consoleSecret }}
+        - secretRef:
+            name: {{ .Values.mfpappcenter.consoleSecret }}
+{{- else}}
+        - secretRef:
+            name: {{ .Release.Name }}-mfpappcenterconsolesecret
+{{- end }}
+        - secretRef:
+            name: {{ .Values.mfpappcenter.db.secret }}
+{{- if .Values.mfpappcenter.db.adminCredentialsSecret }}
+        - secretRef:
+            name: {{ .Values.mfpappcenter.db.adminCredentialsSecret }}
+{{- end }}
+        ports:
+          - containerPort: 9080
+          - containerPort: 9443
+        volumeMounts:
+{{- if .Values.mfpappcenter.customConfiguration }}
+          - name: mfpappcenter-customconfig
+            readOnly: true
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-appcenter/configDropins/overrides
+{{- end }}
+{{- if .Values.mfpappcenter.keystoreSecret }}
+          - name: mfpf-certs
+            readOnly: true
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-appcenter/resources/security/keystore.jks
+            subPath: keystore.jks
+          - name: mfpf-certs
+            readOnly: true
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-appcenter/resources/security/truststore.jks
+            subPath: truststore.jks
+{{- end }}
+{{- if not (empty .Values.mfpappcenter.db.driverPvc) }}
+          - name: mfpappcenter-db-driverpvc
+            readOnly: true
+            mountPath: /opt/ibm/MobileFirst/dbdrivers
+{{- end }}
+        resources:
+{{ toYaml .Values.mfpappcenter.resources | indent 10 }}
+{{- end }}

@@ -1,0 +1,93 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: spawner-api
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: spawner-api-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      run: spawner-api-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: spawner-api
+        component: spawner-api
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        run: spawner-api-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+      - name: spawner-api-container
+        image: {{ .Values.spawnerApiK8s.image.repository }}:{{ .Values.spawnerApiK8s.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        env:
+        - name: SPAWNER_DEFS_PATH
+          value: "/user-home/_global_/config/.runtime-definitions/ibm"
+        - name: SPAWNER_USER_DEFS_PATH
+          value: "/user-home/_global_/config/.runtime-definitions/custom"
+        - name: SPAWNER_REMOTE_HOSTS_PATH
+          value: "/user-home/_global_/config/.remote-hosts"
+        - name: SPAWNER_GPU_DRIVERS_PATH
+          value: "/var/lib/nvidia-docker"
+        - name: NAMESPACE
+          value: {{.Release.Namespace}}
+        {{- if .Values.global.baseInstaller }}
+        - name: DSXL_INSTALLER
+          value: "baseInstaller"
+        {{- end }}
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.spawnerApiK8s.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /spawner/monitor
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /spawner/monitor
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        - mountPath: "/user-home/_global_/config/.runtime-definitions/ibm"
+          name: rt-def-mount
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}
+      - name: rt-def-mount
+        configMap:
+          name: runtimes-def-configmap

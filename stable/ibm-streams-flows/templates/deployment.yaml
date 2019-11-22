@@ -1,0 +1,186 @@
+{{- range .Values.microservices }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ . }}
+  labels:
+    app.kubernetes.io/name: {{ . }}
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: helm
+spec:
+  replicas: {{ $.Values.replicas }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 100% 
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ . }}
+        helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/managed-by: helm
+      annotations:
+        productID: "ICP4D-998edc72e0f04ec18cc5e2310eabafee-Management"
+        productName: "IBM Streams for IBM Cloud Pak For Data"
+        productVersion: "5.2.0.0"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+      - name: {{ . }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsUser: 1000320999
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          capabilities:
+            drop: [ALL]
+        image: {{ if $.Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" $.Values.global.dockerRegistryPrefix }}/{{ end }}{{ (index $.Values .).image.repository }}:{{ (index $.Values .).image.tag }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 4Gi
+            cpu: 500m
+        ports:
+        - containerPort: 8443
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: {{ (index $.Values .).image.rootPath | quote }}
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 90
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: {{ (index $.Values .).image.rootPath | quote }}
+            port: 8443
+            scheme: HTTPS
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+          timeoutSeconds: 5
+          initialDelaySeconds: 30
+        env:
+          - name: PROPERTY_PREFIX
+            value: "icp4d_dev_"
+          - name: K8S
+            value: "true"
+            
+          - name: APP_PATH_OVERRIDE
+            value: /streams-flows
+          - name: CUSTOM_DOMAIN
+            valueFrom:
+              configMapKeyRef:
+                name: wdp-config
+                key: host
+          - name: ZEN_DOMAIN
+            valueFrom:
+              configMapKeyRef:
+                name: wdp-config
+                key: icp4d-host
+          - name: NODE_EXTRA_CA_CERTS
+            value: /etc/certificate/certificate.pem
+          - name: icp4d_dev_rabbitmq__primaryUrl
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-url
+                key: rabbitmq-url.txt
+          - name: icp4d_dev_rabbitmq__fallbackUrl
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-url
+                key: rabbitmq-url.txt
+                
+          - name: icp4d_dev_config__composeRedis__url
+            valueFrom:
+              configMapKeyRef:
+                name: redis-ha-configmap
+                key: redis-url
+          - name: icp4d_dev_config__composeRedis__encryptionKey
+            valueFrom:
+              secretKeyRef:
+                name: watson-studio-secrets
+                key: redis-encryption-token.txt
+                
+          - name: CLOUDANT_DOMAIN
+            value: couchdb-ha-svc:6984
+          - name: icp4d_dev_cloudant__username
+            valueFrom:
+              secretKeyRef:
+                name: wdp-cloudant-creds
+                key: username
+          - name: icp4d_dev_cloudant__password
+            valueFrom:
+              secretKeyRef:
+                name: wdp-cloudant-creds
+                key: password
+                
+          - name: icp4d_dev_auth__icp4d__serviceIdAuth
+            valueFrom:
+              secretKeyRef:
+                name: wdp-service-id
+                key: service-id-credentials
+          - name: icp4d_dev_cams_admin_api_key
+            valueFrom:
+              secretKeyRef:
+                name: wdp-service-id
+                key: service-id-credentials
+          - name: icp4d_dev_auth__crypto__password
+            valueFrom:
+              secretKeyRef:
+                name: watson-studio-secrets
+                key: crypto-password-iv.txt
+                
+          - name: icp4d_dev_config__session__key
+            valueFrom:
+              secretKeyRef:
+                name: watson-studio-secrets
+                key: session-key.txt
+          - name: icp4d_dev_config__session__secret
+            valueFrom:
+              secretKeyRef:
+                name: watson-studio-secrets
+                key: session-secret.txt
+                
+          - name: icp4d_dev_auth__certs__selfSignedCert
+            valueFrom:
+              secretKeyRef:
+                name: watson-studio-secrets
+                key: self-signed-certificate-base64.txt
+          - name: icp4d_dev_auth__certs__selfSignedKey
+            valueFrom:
+              secretKeyRef:
+                name: watson-studio-secrets
+                key: self-signed-private-key-base64.txt
+        volumeMounts:
+        - mountPath: /etc/certificate
+          name: certificate
+      serviceAccount: cpd-viewer-sa
+      serviceAccountName: cpd-viewer-sa
+      volumes:
+      - name: certificate
+        secret:
+          secretName: ca-certificate-chain-trust
+{{ printf "%s" "---" }}
+{{- end -}}

@@ -1,0 +1,52 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- if .Values.aggregationcollaterservice.enabled -}}
+{{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
+{{- $testCompName := include "ibm-hdm-analytics-dev.aggregationcollaterservice.test.component.name" . -}}
+{{- $testName := include "ibm-hdm-analytics-dev.aggregationcollaterservice.test.name" . -}}
+{{- $serviceName := include "ibm-hdm-analytics-dev.aggregationcollaterservice.service.name" . -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $testName }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": test-success
+
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+    test: {{ $testName }}
+spec:
+{{ include "ibmeaprod.spec.security.context" (list .)| indent 2 }}
+  serviceAccountName: {{ .Values.global.rbac.serviceAccountName }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+  containers:
+  - name: {{ $testName }}
+    image:  {{ include "image.docker.repository" . }}/{{ .Values.policyregistryservice.image.name }}:{{ .Values.policyregistryservice.image.tag }}
+{{ include "ibmeaprod.container.security.context" (list .)| indent 4 }}
+    resources:
+{{ include "ibmeaprod.comp.size.data" (list . "aggregationcollater" "resources") | indent 10 }}
+    command:
+    - /bin/sh
+    - -c
+    - 'curl http://{{ $serviceName }}:5600/servicemonitor'
+    env:
+{{ include "eventanalytics.common.license" . | indent 6 }}
+  restartPolicy: Never
+{{ end }}

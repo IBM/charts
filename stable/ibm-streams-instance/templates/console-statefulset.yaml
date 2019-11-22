@@ -1,0 +1,100 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2018, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "{{ .Release.Name }}-console"
+  labels:
+{{- include "streams.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-console"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "{{ .Release.Name }}-console"
+  podManagementPolicy: Parallel
+  replicas: 1
+  
+  template:
+    metadata:
+      labels:
+{{- include "streams.defaultLabels" . | indent 8 }}
+{{- include "streams.serviceability" . | indent 8 }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-console"
+        streams-management: active
+        streams-sws: active
+        streams-tags: sws
+        
+      annotations:
+{{- include "streams.metering" . | indent 8 }}
+        checksum/kube-config: {{ include (print $.Template.BasePath "/kube-config.yaml") . | sha256sum }}
+        checksum/instance-config: {{ include (print $.Template.BasePath "/instance-config.yaml") . | sha256sum }}
+
+    spec:
+      affinity:
+{{- include "streams.nodeaffinity" . | indent 8 }}
+    
+      restartPolicy: Always
+      
+      serviceAccountName: {{ template "streams.instanceServiceAccountName" . }}
+       
+{{- include "streams.podGeneralSecurityPolicies" . | indent 6 }}     
+      securityContext:
+{{- include "streams.streamsinstallPodSecurityContext" . | indent 8 }}
+
+      terminationGracePeriodSeconds: {{ .Values.controller.stopTimeout | default 60 }}
+      
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      {{- end }}
+      
+      volumes:
+{{- include "streams.basicVolumes" . | indent 8 }}
+{{- include "streams.swsVolumes" . | indent 8 }}       
+        
+      containers:
+        - name: controller
+          {{- if .Values.image.prefix }}
+          image: "{{ .Values.image.prefix }}/{{ .Values.image.console }}:{{ .Values.image.consoleTag }}"
+          {{- else }}
+          image: "{{ .Values.image.console }}:{{ .Values.image.consoleTag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          
+          workingDir: {{ include "streams.installdir" . }}
+          
+          securityContext:
+{{- include "streams.containerSecurityContext" . | indent 12 }}
+          
+          env:
+{{- include "streams.basicEnv" . | indent 12 }}
+{{- include "streams.controllerSecurityEnv" . | indent 12 }}
+{{- include "streams.swsSecurityEnv" . | indent 12 }}
+{{- include "streams.ssoSecurityEnv" . | indent 12 }}
+
+          command: ["$(STREAMS_INSTALL)/system/impl/bin/startcontroller.sh", "--tags", "sws"]
+          
+{{- include "streams.lifecycle" . | indent 10 }}
+                          
+          volumeMounts:
+{{- include "streams.basicVolumeMounts" . | indent 12 }}
+{{- include "streams.swsVolumeMounts" . | indent 12 }}            
+            
+          resources:
+            requests:
+              cpu: {{ .Values.resources.consoleCpu | default "2" }}
+              memory: {{ .Values.resources.consoleMemory | default "6Gi" }}
+            limits:
+              cpu: {{ .Values.resources.consoleCpuLimit | default "2" }}
+              memory: {{ .Values.resources.consoleMemoryLimit | default "6Gi" }}

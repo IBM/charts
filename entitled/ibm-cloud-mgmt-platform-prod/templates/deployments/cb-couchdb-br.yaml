@@ -1,0 +1,116 @@
+{{ if eq (.Values.enableBackups|quote|lower) "\"true\"" }}
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-couchdb-br
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cb-couchdb-br # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+       # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+       # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+       {{- template "isIcp" . -}}
+       {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets change
+        checksums/couchdb.password: "{{ .Values.secrets.couchdb.password | sha256sum }}"
+        checksums/s3.url: "{{ .Values.secretsS3Url | sha256sum }}"
+        checksums/s3.access_key_id: "{{ .Values.secretsS3AccessKeyId | sha256sum }}"
+        checksums/s3.secret_access_key: "{{ .Values.secretsS3SecretAccessKey | sha256sum }}"
+        checksums/encryption_passphrase: "{{ .Values.secretsBackupPassphrase | sha256sum }}"
+        {{ end }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+      {{ include "core.securityContext" .  | indent 6 }}
+      containers:
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        - image: {{ template "core.readConfig" (list . "cb_couchdb_br") }}
+        {{ else }}
+        - image: {{ template "coreicp.readConfig" (list . "cb_couchdb_br" .Values.imageCredentials.registry) }}
+        {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop:
+              - ALL
+          name: cb-couchdb-br
+          ports:
+            - containerPort: 5000
+          env:
+            - name: S3_URL
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: s3.url
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: s3.access_key_id
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: s3.secret_access_key
+            - name: BACKUP_PASSPHRASE
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: encryption_passphrase
+            # COUCHDB_HOSTS -- comma separated list of hostnames
+            - name: COUCHDB_HOSTS
+              value: "couchdb"
+            # For each CouchDB Host, Need: COUCHDB_*_USER, COUCHDB_*_PASSWORD, COUCHDB_*_PORT
+            # Where '*' is the CouchDB hostname (in uppercase)
+            - name: COUCHDB_COUCHDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-creds
+                  key: couchdb.username
+            - name: COUCHDB_COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-creds
+                  key: couchdb.password
+            - name: COUCHDB_COUCHDB_PORT
+              value: "5984"
+            # K8_CLUSTER and K8_NAMESPACE to uniquely identify this system
+            - name: K8_CLUSTER
+              value: "{{ .Values.k8Cluster }}"
+            - name: K8_NAMESPACE
+              value: "{{ .Release.Namespace }}"
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          resources:
+{{ include "deployClassConfig" (list . "cb_couchdb_br") | indent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthcheck/isready
+              port: 5000
+            initialDelaySeconds: 10
+            timeoutSeconds: 20
+            periodSeconds: 60
+      restartPolicy: Always
+{{ end }}

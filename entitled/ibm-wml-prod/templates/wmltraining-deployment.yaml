@@ -1,0 +1,212 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app: wmltraining
+  name: wmltraining
+spec:
+  minReadySeconds: 10
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: wmltraining
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: wmltraining
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        productName: IBM Watson Machine Learning
+        productID: ICP4D-WML_210_00000
+        productVersion: 2.1.0.0
+        checksum.helm.kubernetes.io/configmap: {{ include (print $.Template.BasePath "/wmltraining-configmap.yaml") . | sha256sum }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+      - env:
+          - name: CAMS_APIS
+            value: camstrue
+          - name: INTERNAL_NGINX_CERT
+            valueFrom:
+              secretKeyRef:
+                key: certificate.pem
+                name: internal-nginx-svc-tls
+          - name: WDP_BASE_URL
+            valueFrom:
+              configMapKeyRef:
+                key: host-url
+                name: wdp-config
+          - name: KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: key_store_password
+                name: training-secrets
+          - name: WML_RMQ_URL
+            valueFrom:
+              secretKeyRef:
+                key: rabbitmq-url.txt
+                name: rabbitmq-url
+          - name: WML_REDIS_HOST
+            valueFrom:
+              secretKeyRef:
+                key: redis-host
+                name: redis-ha-secret-host-and-port
+          - name: WML_REDIS_PORT
+            valueFrom:
+              secretKeyRef:
+                key: redis-port
+                name: redis-ha-secret-host-and-port
+          - name: WML_CLOUDANT_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: wdp-cloudant-creds
+                key: username
+          - name: WML_CLOUDANT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: wdp-cloudant-creds
+                key: password
+          - name: WML_CLOUDANT_HOSTNAME
+            valueFrom:
+              configMapKeyRef:
+                name: wmltrainingconfigmap
+                key: cloudant_host
+          - name: WMLA_HOST
+            valueFrom:
+              configMapKeyRef:
+                key: host
+                name: wmltrainingconfigmap
+          - name: WMLA_PORT
+            valueFrom:
+              configMapKeyRef:
+                key: port
+                name: wmltrainingconfigmap
+          - name: WMLA_DEFAULT_INSTANCE_GROUP
+            valueFrom:
+              configMapKeyRef:
+                key: default_instance_group
+                name: wmltrainingconfigmap
+          - name: WMLA_DEFAULT_INSTANCE_GROUP_EDT
+            valueFrom:
+              configMapKeyRef:
+                key: default_instance_group_edt
+                name: wmltrainingconfigmap
+          - name: WML_EXTERNAL_URL
+            valueFrom:
+              configMapKeyRef:
+                key: external_url
+                name: wmltrainingconfigmap
+          - name: DEPLOYMENT_PLATFORM
+            value: private
+          - name: DEPLOYMENT_PRIVATE
+            value: "local"
+          - name: WMLENV
+            value: fvt
+          - name: DATACENTRE
+            value: Dallas
+          - name: AZ
+            value: dal10
+          - name: MEMORY
+            value: "2048"
+          - name: CPU
+            value: "1"
+        image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.wmlTrainingService.image.repository }}:{{ .Values.wmlTrainingService.image.tag }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+        envFrom:
+        - secretRef:
+            name: wdp-service-id
+        livenessProbe:
+          httpGet:
+            path: /wml_services/training/heartbeat
+            port: 13300
+            scheme: HTTPS
+          failureThreshold: 3
+          initialDelaySeconds: 20
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /wml_services/training/heartbeat
+            port: 13300
+            scheme: HTTPS
+          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 5
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sleep
+              - "120"
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sleep
+              - "120"
+        name: wmltrainingservice
+        ports:
+        - containerPort: 32191
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "1"
+            memory: 1Gi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/ibm/training/conf
+          name: config-volume
+        - mountPath: /wml-training-data
+          name: wml-training-data
+        - mountPath: /user-home
+          name: user-home-mount
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 120
+      volumes:
+      - name: config-volume
+        configMap:
+          name: wmltrainingconfigmap
+      - name: wml-training-data
+        persistentVolumeClaim:
+          claimName: file-api-claim
+      - name: user-home-mount
+        persistentVolumeClaim:
+          claimName: user-home-pvc

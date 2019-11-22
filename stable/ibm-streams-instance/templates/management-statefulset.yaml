@@ -1,0 +1,146 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2018, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "{{ .Release.Name }}-management"
+  labels:
+{{- include "streams.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-management"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "{{ .Release.Name }}-management"
+  podManagementPolicy: Parallel
+  replicas: 1
+  
+  template:
+    metadata:
+      labels:
+{{- include "streams.defaultLabels" . | indent 8 }}
+{{- include "streams.serviceability" . | indent 8 }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-management"
+        streams-management: active        
+        streams-jmx: active
+        streams-sam: active
+        streams-srm: active
+        streams-view: active
+        streams-nam: active
+        streams-tags: management
+        
+      annotations:
+{{- include "streams.metering" . | indent 8 }}
+        checksum/kube-config: {{ include (print $.Template.BasePath "/kube-config.yaml") . | sha256sum }}
+        checksum/instance-config: {{ include (print $.Template.BasePath "/instance-config.yaml") . | sha256sum }}
+        
+    spec:
+      affinity:
+{{- include "streams.nodeaffinity" . | indent 8 }}
+
+      restartPolicy: Always
+      
+      serviceAccountName: {{ template "streams.instanceServiceAccountName" . }}
+    
+{{- include "streams.podGeneralSecurityPolicies" . | indent 6 }}      
+      securityContext:
+{{- include "streams.streamsinstallPodSecurityContext" . | indent 8 }}
+      
+      terminationGracePeriodSeconds: {{ .Values.controller.stopTimeout | default 60 }}
+      
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      {{- end }}
+      
+      volumes:
+{{- include "streams.basicVolumes" . | indent 8 }}
+{{- include "streams.jmxVolumes" . | indent 8 }}
+        - name: app-config
+          configMap:
+            name: "{{ .Release.Name }}-app-config"
+            
+        {{- if .Values.instance.applicationTemplateConfigMap }}
+        - name: user-app-config
+          configMap:
+            name: "{{ .Values.instance.applicationTemplateConfigMap }}"
+        {{- end }}
+        
+      containers:
+        - name: controller
+          {{- if .Values.image.prefix }}
+          image: "{{ .Values.image.prefix }}/{{ .Values.image.management }}:{{ .Values.image.managementTag }}"
+          {{- else }}
+          image: "{{ .Values.image.management }}:{{ .Values.image.managementTag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          
+          workingDir: {{ include "streams.installdir" . }}
+          
+          securityContext:
+{{- include "streams.containerSecurityContext" . | indent 12 }}         
+          
+          env:
+{{- include "streams.basicEnv" . | indent 12 }}
+{{- include "streams.controllerSecurityEnv" . | indent 12 }}
+{{- include "streams.jmxSecurityEnv" . | indent 12 }}
+            - name: STREAMS_KUBE_TEMPLATE
+              value: {{ template "streams.appTplMountPath" . }}
+            
+            {{- if .Values.instance.applicationTemplateConfigMap }}
+            - name: STREAMS_KUBE_CUSTOM_TEMPLATE
+              value: {{ template "streams.userAppTplMountPath" . }}
+            {{- end }}
+            
+            {{- if and ( .Values.instance.governanceEnabled ) ( not ( empty .Values.instance.governanceSecret )) }}
+            - name: "STREAMS_GOVERNANCE_USER"
+              valueFrom:
+               secretKeyRef:
+                 name: {{ .Values.instance.governanceSecret }}
+                 key:  username
+            - name: "STREAMS_GOVERNANCE_PW"
+              valueFrom:
+               secretKeyRef:
+                 name: {{ .Values.instance.governanceSecret }}
+                 key:  password
+            {{- end }}
+            
+            {{- if .Values.osgi }}
+            {{- if .Values.osgi.pluginDir }}
+            - name: STREAMS_OSGI_PLUGIN
+              value: "{{ .Values.osgi.pluginDir }}"
+            {{- end }}            
+            {{- end }}
+                        
+          command: ["$(STREAMS_INSTALL)/system/impl/bin/startcontroller.sh", "--tags", "management", "--memory", {{ .Values.resources.managementMemoryLimit | default "8Gi" }}]
+          
+{{- include "streams.lifecycle" . | indent 10 }}
+          
+          volumeMounts:
+{{- include "streams.basicVolumeMounts" . | indent 12 }}
+{{- include "streams.jmxVolumeMounts" . | indent 12 }}
+            - name: app-config
+              mountPath: {{ template "streams.appTplMountPath" . }}
+            
+            {{- if .Values.instance.applicationTemplateConfigMap }}
+            - name: user-app-config
+              mountPath: {{ template "streams.userAppTplMountPath" . }}
+            {{- end }}
+            
+          resources:
+            requests:
+              cpu: {{ .Values.resources.managementCpu | default "2" }}
+              memory: {{ .Values.resources.managementMemory | default "8Gi" }}
+            limits:
+              cpu: {{ .Values.resources.managementCpuLimit | default "2" }}
+              memory: {{ .Values.resources.managementMemoryLimit | default "8Gi" }}

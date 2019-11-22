@@ -1,0 +1,77 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-budget-adapter
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cb-budget-adapter
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+      containers:
+      - env:
+        - name: MONGO_URL
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-creds
+              key: mongodb.url
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-creds
+              key: mongodb.username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-creds
+              key: mongodb.password
+        - name: DB_HOST
+          value: "mongodb"
+        - name: DB_PORT
+          value: "27017"
+        - name: CONNECT_DB_PROTOCOL
+          value: mongodb
+      {{ if .Values.httpProxy }}
+        # HTTP_PROXY support
+        - name: http_proxy
+          value: {{ .Values.httpProxy }}
+        - name: https_proxy
+          value: {{ .Values.httpsProxy }}
+        - name: no_proxy
+          value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+      {{ end }}
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+        image: {{ template "core.readConfig" (list . "cb_budget_adapter") }}
+      {{ else }}
+        image: {{ template "coreicp.readConfig" (list . "cb_budget_adapter" .Values.imageCredentials.registry) }}
+      {{ end }}
+{{ include "core.container.securityContext" .  | indent 8 }}
+        name: cb-budget-adapter
+        ports:
+        - containerPort: 5051
+        readinessProbe:
+          tcpSocket:
+            port: 5051
+        livenessProbe:
+            httpGet:
+              path: /health
+              port: 5051
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 20
+            failureThreshold: 4
+        resources:
+{{ include "deployClassConfig" (list . "cb_budget_adapter") | indent 10 }}
+      restartPolicy: Always

@@ -1,0 +1,139 @@
+####################################################################
+# Licensed Materials Property of HCL*
+# (c) Copyright HCL Technologies Ltd. 2018. All rights reserved.
+#
+# * Trademark of HCL Technologies Limited
+####################################################################
+
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ template "app-fullname" . }}
+  labels:
+    app: {{ template "app-fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  updateStrategy: 
+    type: RollingUpdate
+  serviceName: {{ template "app-fullname" . }}-hservice
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "app-fullname" . }} 
+  template:
+    metadata:
+      labels:
+        app: {{ template "app-fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        affinity: ws-agent
+      annotations:
+        productName: IBM Workload Automation
+        productID: 5725-G80_dyn_prod
+        productVersion: 9.4.0.04
+    spec:
+      securityContext:
+        fsGroup: 999      
+      affinity:
+        #schedule pod on different nodes when possible
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: affinity
+                  operator: In
+                  values:
+                  - ws-agent
+              topologyKey: kubernetes.io/hostname
+        #schedule pod on amd64 nodes     
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+      - name: {{ .Chart.Name }}
+        readinessProbe:
+          exec:
+            command:
+            - pidof
+            - JobManager
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        livenessProbe:
+          exec:
+            command:
+            - pidof
+            - JobManager
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        env:
+        - name: LICENSE
+          value: {{ .Values.license | quote }}
+        - name: AGENTNAME
+          value: {{ .Values.agent.name | quote }}
+        - name: SERVERHOSTNAME
+          value: {{ .Values.agent.dynamic.server.mdmhostname | quote }}
+        - name: SERVERPORT
+          value: {{ .Values.agent.dynamic.server.port | quote }}
+        {{- if .Values.agent.dynamic.server.bkmhostname }}
+        - name: BKMSERVERHOSTNAME
+          value: {{ .Values.agent.dynamic.server.bkmhostname | quote }}
+        {{- end }}
+        {{- if .Values.agent.dynamic.pools }}
+        - name: POOLS
+          value: {{ .Values.agent.dynamic.pools | quote }}
+        {{- end }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+            requests:
+                cpu: 200m
+                memory: 200Mi
+{{ toYaml .Values.resources | indent 12 }}
+{{- if .Values.persistence.enabled }}
+        volumeMounts:
+        - name: {{ .Values.persistence.dataPVC.name | quote }}
+          mountPath: /home/wauser/TWA/TWS/stdlist
+{{- if .Values.agent.dynamic.useCustomizedCert }}
+        - name: cert-bind-volume
+          mountPath: /home/wauser/cert
+      volumes:
+      - name: cert-bind-volume
+        secret:
+          defaultMode: 0644
+          secretName: {{ template "app-fullname" . }}-secret
+{{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ .Values.persistence.dataPVC.name | quote }}
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.persistence.dataPVC.size | quote }}
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kube Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.persistence.dataPVC.storageClassName | quote }}
+      {{- else }}
+      # bind to an existing pv.
+      # setting storageClassName to "" disables dynamic provisioning 
+      storageClassName: {{ default "" .Values.persistence.dataPVC.storageClassName | quote }}
+        {{- if .Values.persistence.dataPVC.selector.label }}
+      # use selectors in the binding process
+      selector:
+        matchLabels:
+          {{ .Values.persistence.dataPVC.selector.label }}: {{ .Values.persistence.dataPVC.selector.value }}
+        {{- end }}      
+      {{- end }}
+{{- end }}

@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "wca.fullname" . }}
+  labels:
+    app: {{ template "wca.name" . }}
+    chart: {{ template "wca.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  selector:
+    matchLabels:
+      app: {{ template "wca.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "wca.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "wca.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: {{ .Release.Name }}-wca
+      serviceAccount: {{ .Release.Name }}-wca
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ template "wca.fullname" . }}
+        - name: logs
+          emptyDir: {}
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+      containers:
+      - name: 'rest-proxy'
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        resources:
+{{ toYaml .Values.proxy.resources | indent 10 }}
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+        imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
+        env:
+        - name: "SERVICE_HOST_ENV_NAME"
+          value: "localhost"
+        - name: "SERVICE_PORT_ENV_NAME"
+          value: "8393"
+        - name: "PORT"
+          value: "7444"
+        volumeMounts:
+        - name: file-secrets
+          mountPath: /etc/secrets/proxykey
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /etc/secrets/proxycert
+          subPath: fci_universal_ks.crt.pem
+      - name: 'admin-proxy'
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+        imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.proxy.resources | indent 10 }}
+        env:
+        - name: "SERVICE_HOST_ENV_NAME"
+          value: "localhost"
+        - name: "SERVICE_PORT_ENV_NAME"
+          value: "8390"
+        - name: "PORT"
+          value: "7443"
+        volumeMounts:
+        - name: file-secrets
+          mountPath: /etc/secrets/proxykey
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /etc/secrets/proxycert
+          subPath: fci_universal_ks.crt.pem
+      - name: 'wca'
+        envFrom:
+        - configMapRef:
+            name: {{ template "wca.fullname" . }}
+        env:
+        - name: "esadmin_password"
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: esadmin_password
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "/opt/IBM/es/scripts/healthcheck.sh"
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "/opt/IBM/es/scripts/healthcheck.sh"
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        volumeMounts:
+        - name: data
+          mountPath: "/home/esadmin/esdata"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}

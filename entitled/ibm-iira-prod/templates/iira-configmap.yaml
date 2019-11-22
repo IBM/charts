@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "iira-addon"
+  labels:
+    app: "iira-addon"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: runtimes-def-configmap
+    icpdata_addon: "true"
+  annotations:
+  {{- include "ibm-iira-prod.product-metering" . | indent 4 }}
+data:
+  add-ons.json: |
+    {
+      "iira":{
+        "versions": {
+          "2.5.0.0" : {
+          "state":"enabled"
+          }
+         }
+       }
+    }
+  nginx.conf: |
+    location ~ ^/iira/(.*)$ {
+                access_by_lua_file /nginx_data/checkjwt.lua;
+                rewrite ^/iira/(.*)$ /iira/$1 break;
+                proxy_pass https://ibm-iira-prod:80;
+                proxy_read_timeout 2400s;
+         }
+
+    location ~ ^/iira-api/(.*)$ {
+                access_by_lua_file /nginx_data/checkjwt.lua;
+                rewrite ^/iira-api/(.*)$ /iira-api/$1 break;
+                proxy_pass https://ibm-iira-orchestrator-prod:8080;
+                proxy_read_timeout 2400s;
+         }

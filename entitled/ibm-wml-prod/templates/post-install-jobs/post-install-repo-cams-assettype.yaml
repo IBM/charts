@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: post-install-repo-cams-asssettype
+  labels:
+    release: "{{ .Release.Name }}"
+    helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      name: post-install-repo-cams-assettype
+      labels:
+        release: "{{ .Release.Name }}"
+        helm.sh/chart: "{{.Chart.Name}}-{{.Chart.Version}}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+      - name: post-install-repo-cams-assettype-job
+        image: "{{ .Values.global.docker_registry_prefix}}/{{ .Values.wmlAssetTypes.image.repository }}:{{ .Values.wmlAssetTypes.image.tag }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: {{ .Values.global.user.id }}
+        command: ["/bin/sh","-c"]
+        args: ["/assetType/run.sh"]
+        envFrom:
+            - secretRef:
+                name: wdp-service-id
+        env:
+          - name: WDP_BASE_URL
+            valueFrom:
+              configMapKeyRef:
+                key: host-url
+                name: wdp-config
+        resources:
+          limits:
+            cpu: 1
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+      restartPolicy: OnFailure

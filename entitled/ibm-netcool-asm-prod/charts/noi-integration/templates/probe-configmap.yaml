@@ -1,0 +1,390 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-probe-config
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+data:
+  omni.dat: |-
+    [AGG_P]
+    {
+      {{- if .Values.omnibus.primary.name }}
+        {{- if .Values.omnibus.primary.port }}
+          Primary: {{ .Values.omnibus.primary.name }} {{ .Values.omnibus.primary.port }}
+        {{- else }}
+          Primary: {{ .Values.omnibus.primary.name }} 4100
+        {{- end }}
+      {{- else }}
+        Primary: {{ .Release.Name }}-objserv-primary 4100
+      {{- end }}
+    }
+    [AGG_B]
+    {
+      {{- if .Values.omnibus.backup.name }}
+        {{- if .Values.omnibus.backup.port }}
+          Primary: {{ .Values.omnibus.backup.name }} {{ .Values.omnibus.backup.port }}
+        {{- else }}
+          Primary: {{ .Values.omnibus.backup.name }} 4100
+        {{- end }}
+      {{- else }}
+        Primary: {{ .Release.Name }}-objserv-backup 4100
+      {{- end }}
+    }
+    [AGG_V]
+    {
+      {{- if .Values.omnibus.primary.name }}
+        {{- if .Values.omnibus.primary.port }}
+          Primary: {{ .Values.omnibus.primary.name }} {{ .Values.omnibus.primary.port }}
+        {{- else }}
+          Primary: {{ .Values.omnibus.primary.name }} 4100
+        {{- end }}
+      {{- else }}
+        Primary: {{ .Release.Name }}-objserv-primary 4100
+      {{- end }}
+      {{- if .Values.omnibus.backup.name }}
+        {{- if .Values.omnibus.backup.port }}
+          Backup: {{ .Values.omnibus.backup.name }} {{ .Values.omnibus.backup.port }}
+        {{- else }}
+          Backup: {{ .Values.omnibus.backup.name }} 4100
+        {{- end }}
+      {{- else }}
+        Backup: {{ .Release.Name }}-objserv-backup 4100
+      {{- end }}
+    }
+
+
+  message_bus.rules: |-
+    if( match( @Manager, "ProbeWatch" ) )
+    {
+        switch(@Summary)
+        {
+        case "Running ...":
+                @Severity = 1
+                @AlertGroup = "probestat"
+                @Type = 2
+        case "Going Down ...":
+                @Severity = 5
+                @AlertGroup = "probestat"
+                @Type = 1
+        case "Start resynchronization" | "Finish resynchronization":
+                @Severity = 2
+                @AlertGroup = "probestat"
+                @Type = 13
+        case "Connection to source lost":
+                @Severity = 5
+                @AlertGroup = "probestat"
+                @Type = 1
+        default:
+                @Severity = 1
+        }
+        @AlertKey = @Agent
+        @Summary = @Agent + " probe on " + @Node + ": " + @Summary
+    }
+    else
+    {
+        ################################################
+        # Input from ASM
+        #
+        # guaranteed json fields:
+        #
+        #     statusId             - the topology service status _id
+        #     resources.0._id      - the topology service resource _id
+        #
+        #     tenantId             - the topology service tenant _id
+        #     providerName         - the name of the resource provider
+        #
+        #     status               - the type of status affecting the resource
+        #     state                - the current resource state wrt this status
+        #
+        #     resources.0.uniqueId - provider's id for the resource
+        #
+        # optional json fields:
+        #
+        #     resources.0.name    - resource name, as shown in the UI (falls back to uniqueId)
+        #     description         - human readable description of the status (falls back to the status type)
+        #     severity            - current severity of the status (defaults to 'indeterminate')
+        #     eventType           - type of event (defaults to 'ASM Status')
+        #     expiryTimeSeconds   - optional expiryTime for the event
+        #
+        ################################################
+    
+        ##########################################################################################
+        # @AlertGroup           # Purpose                                 # @Type                #
+        ##########################################################################################
+        # ASM Status            # Status about observed resources         # Problem / Resolution #
+        # ASM Self Monitoring   # Status about ASM itself                 # Problem / Resolution #
+        # ASM Resource Creation # Identifies newly created ASM resources  # Information          #
+        # ASM Resource Deletion # Identifies deleted ASM resources        # Information          #
+        ##########################################################################################
+
+        # These 4 fields are used to match up the event to the ASM status, and must not be changed
+        @EventId        = $status
+        @Customer       = $tenantId
+        @Agent          = $providerName
+        @NodeAlias      = $(resources.0.uniqueId)
+    
+        @LocalNodeAlias = $(resources.0._id)
+        if ( exists($statusId) )
+        {
+            @AsmStatusId    = $statusId
+        }
+        
+        @Node           = $(resources.0.uniqueId)
+        if ( exists( $(resources.0.name) ) )
+        {
+            # This is a user-friendly string identifying the resource
+            @Node=$(resources.0.name)
+        }
+
+        @AlertGroup = "ASM Status"
+        if ( exists($eventType) )
+        {
+            @AlertGroup=$eventType
+        }
+
+        @ExpireTime = 0
+        if ( exists($expiryTimeSeconds) )
+        {
+            @ExpireTime=$expiryTimeSeconds
+        }
+
+        switch(@AlertGroup)
+        {
+        case "ASM Status" | "ASM Self Monitoring":
+            switch($state)
+            {
+            case "open":
+                @Type = 1
+            case "clear":
+                @Type = 2
+            case "closed":
+                @Type = 2
+            default:
+                @Type = 1
+            }
+        case "ASM Resource Creation":
+            @Type = 13
+        case "ASM Resource Deletion":
+            @Type = 13
+        default:
+            @Type = 13
+        }
+
+        @Severity=1
+        if ( exists($severity) )
+        {
+            switch($severity)
+            {
+            case "clear":
+                @Severity = 1
+            case "indeterminate":
+                @Severity = 1
+            case "warning":
+                @Severity = 2
+            case "minor":
+                @Severity = 3
+            case "major":
+                @Severity = 4
+            case "critical":
+                @Severity = 5
+            default:
+                @Severity = 1
+            }
+        }
+
+        @Summary=$status
+        if ( exists($description) )
+        {
+            @Summary=$description
+        }
+
+        # Use the status timestamp so that the event isn't older than the topology status
+        if ( exists($observedTime) )
+        {
+                # The Object Server uses seconds, whereas ASM uses milliseconds
+                $seconds = regreplace($observedTime, "(.*?)\d\d\d$", "\1")
+                $milliseconds = regreplace($observedTime, ".*?(\d\d\d)$", "\1")
+                @LastOccurrence = $seconds
+                @LastOccurrenceUSec = int($milliseconds) * 1000
+        }
+
+        @AlertKey=$uniqueId + "->" + $status + "->" + @Agent + "->" + @Customer
+        @Identifier=@AlertKey + @Type
+
+        @Class = 45111
+    }
+
+  message_bus.props: |-
+    Server          : 'AGG_V'
+    MessagePayload  : 'json'
+    TransformerFile : ''
+    TransportFile   : '$OMNIHOME/java/conf/kafkaTransport.properties'
+    TransportType   : 'KAFKA'
+    MessageLog      : 'stdout'
+    MessageLevel    : '{{ default "warn" .Values.probe.log.level }}'
+    MessageHeader   : 'json'
+    MessagePayload  : 'json.resources'
+    RulesFile       : '$OMNIHOME/probes/linux2x86/message_bus.rules'
+    NHttpd.EnableHTTP : TRUE
+    NHttpd.ListeningPort : {{.Values.probe.httpPort}}
+    RetryCount: 20
+    RetryInterval: 15
+    Inactivity: 600
+
+  kafkaTransport.properties: |-
+    kafkaClientMode=CONSUMER
+    connectionPropertiesFile=$OMNIHOME/java/conf/kafkaConnectionProperties.json
+    # comment at the end of the file.
+
+  kafkaConnectionProperties.json: |-
+    {
+        "zookeeper_client" :
+            {
+                "target" : "{{ .Release.Name }}-zookeeper:2181",
+                "properties" : "",
+                "java_sys_props" : "",
+                "topic_watch": true,
+                "broker_watch": true
+            },
+        "brokers" : "PLAINTEXT://{{ .Release.Name }}-kafka:9092",
+        "topics": "itsm.status.json",
+        "kafka_client" :
+            {
+                "properties" : "/opt/IBM/tivoli/netcool/omnibus/java/conf/kafkaClient.properties",
+                "java_sys_props" : ""
+            }
+    }
+
+  kafkaClient.properties: |-
+    group.id=asm_probe
+    key.deserializer=org.apache.kafka.common.serialization.StringDeserializer
+    value.deserializer=org.apache.kafka.common.serialization.StringDeserializer
+    pollInterval=1000
+    max.poll.records=100
+
+  register_event_sink.sh: |-
+
+    # create the event-sink spec
+    echo "POSTing this event-sink specification:"
+    cat <<EOF | tee /opt/ibm/netcool/asm/asm-status-to-probe.json;
+    {
+       "url" : "http://{{ include "sch.names.fullName" (list .) }}:{{.Values.probe.httpPort}}",
+       "keyIndexName" : "{{ include "sch.names.fullName" (list .) }}:{{.Values.probe.httpPort}}",
+       "tags" : [
+          "ASM_OBSERVER_CONFIG"
+       ],
+       "entityTypes" : [
+          "ASM_EVENT_SINK"
+       ]
+    }
+    EOF
+
+    # post the job to the observer
+    echo
+    STATUS=`curl -X POST --silent -w "%{http_code}\n\n" --header 'Content-Type: application/json' --header 'Accept: application/json' --header 'X-TenantID: cfd95b7e-3bc7-4006-a4a8-a73a79c71255' --data-binary "@/opt/ibm/netcool/asm/asm-status-to-probe.json" 'http://{{ .Release.Name }}-topology.{{ .Release.Namespace }}:8080/1.0/topology/mgmt_artifacts'`
+
+    echo "Response code is : ${STATUS}"
+    if [ "${STATUS}" != "201" ] && [ "${STATUS}" != "303" ]; then
+        exit 1
+    fi
+
+  load-asm-triggers.sh: |-
+
+    # generate interfaces file
+    /opt/IBM/tivoli/netcool/bin/nco_igen
+
+    for OS in AGG_P AGG_B; do
+
+      echo -n "${OS} - "
+      /opt/IBM/tivoli/netcool/omnibus/bin/nco_ping ${OS}
+
+      echo "${OS} - NCO_SQL: Install the ASM triggers..."
+      if [ -z "$OMNIBUS_ROOT_PWD" ]; then
+        /opt/IBM/tivoli/netcool/omnibus/bin/nco_sql -S ${OS} -U root -P '' < /opt/ibm/netcool/asm/asm-trigger.sql
+      else
+        /opt/IBM/tivoli/netcool/omnibus/bin/nco_sql -S ${OS} -U root -P ${OMNIBUS_ROOT_PWD} < /opt/ibm/netcool/asm/asm-trigger.sql
+      fi
+
+    done
+
+  asm-trigger.sql: |-
+    ------------------------------------------------------------------------
+    -- Define the AsmStatusId to hold the ASM topology service status _id
+    -- relating to an event. This can be used to identify whether ASM
+    -- knows about an event, and to launch in context from it
+    ------------------------------------------------------------------------
+    alter table alerts.status add column AsmStatusId varchar(64);
+    go
+
+    drop trigger asm_resource_deletion;
+    go
+    drop table alerts.asm_deleted_resources;
+    go
+
+    -- A workspace table used to clear events when ASM resources are deleted
+    -- Identifier - used for updates
+    -- NodeAlias - the ASM uniqueId
+    -- Agent - the ASM provider
+    -- Customer - the ASM tenant
+    -- LastOccurrence - only events older than the deletion are cleared, in case of resurrection
+    -- Older - set to true prior to clearing
+    create table alerts.asm_deleted_resources virtual
+    (
+        Identifier     varchar(255) primary key,
+        NodeAlias      varchar(64),
+        Agent          varchar(64),
+        Customer       varchar(64),
+        LastOccurrence date,
+        Older          boolean
+    );
+    go
+
+    create or replace trigger asm_resource_deletion
+    group primary_only
+    priority 20
+    comment 'Clears ASM events upon deletion of the relevant resource'
+    every 60 seconds
+    begin
+        -- Populate a table with ASM events corresponding to deleted resources
+        for each row asm_event in alerts.status where asm_event.Class = 45111 and asm_event.Severity > 0 and asm_event.Type != 13 and
+                                    (asm_event.NodeAlias + asm_event.Agent + asm_event.Customer) in
+                                    ( select NodeAlias + Agent + Customer from alerts.status
+                                      where
+                                      Class = 45111 and
+                                      Type = 13 and
+                                      AlertGroup = 'ASM Resource Deletion' and
+                                      Severity > 0 )
+        begin
+            insert into alerts.asm_deleted_resources values ( asm_event.Identifier,
+                                                              asm_event.NodeAlias,
+                                                              asm_event.Agent,
+                                                              asm_event.Customer,
+                                                              asm_event.LastOccurrence,
+                                                              false )
+        end;
+
+        -- For each resource deletion event, mark older corresponding asm_deleted_resources entry as obsolete
+        for each row resource_deletion in alerts.status where resource_deletion.Class = 45111 and
+                                  resource_deletion.Type = 13 and
+                                  resource_deletion.AlertGroup = 'ASM Resource Deletion' and
+                                  resource_deletion.Severity > 0
+        begin
+                update alerts.asm_deleted_resources set Older = true where
+                                LastOccurrence < resource_deletion.LastOccurrence and
+                                NodeAlias = resource_deletion.NodeAlias and
+                    	    Agent = resource_deletion.Agent and
+                                Customer = resource_deletion.Customer;
+        end;
+
+
+        -- now clear all of those asm_events that are older than the resource deletion event
+        for each row asm_event in alerts.asm_deleted_resources where asm_event.Older = true
+        begin
+            update alerts.status via asm_event.Identifier set Severity = 0
+        end;
+
+        -- Remove all entries from the asm table
+        delete from alerts.asm_deleted_resources;
+    end;
+    go

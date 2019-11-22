@@ -1,0 +1,103 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compNameLogstash :=  .sch.chart.components.logstash.name -}}
+{{- $compNamePrometheus :=  .sch.chart.components.prometheus.name -}}
+{{- $compNameCem :=  .sch.chart.components.cem.name -}}
+{{- $serviceNameLogstash := include "sch.names.fullCompName" (list .  $compNameLogstash) -}}
+{{- $serviceNamePrometheus := include "sch.names.fullCompName" (list .  $compNamePrometheus) -}}
+{{- $serviceNameCem := include "sch.names.fullCompName" (list .  $compNameCem) -}}
+{{- $serviceNameCem := include "sch.names.fullCompName" (list .  $compNameCem) -}}
+{{- if .Values.logstashProbe.enabled -}}
+Get the Logstash Webhook URL by running the commands below.
+{{- if contains "NodePort" .Values.logstashProbe.service.type }}
+  export NODE_PORT_LOGSTASH=$(kubectl get services --namespace {{ .Release.Namespace }} {{ $serviceNameLogstash }} -o jsonpath="{.spec.ports[0].nodePort}")
+  # You can obtain the External IP from the IBM Cloud Cluster Info Configmap using the command below.
+  export NODE_IP_LOGSTASH=$(kubectl get configmap --namespace kube-public ibmcloud-cluster-info -o jsonpath="{.data.proxy_address}")
+
+  echo http://$NODE_IP_LOGSTASH:$NODE_PORT_LOGSTASH/probe/webhook/logstash
+
+{{- else if contains "LoadBalancer" .Values.logstashProbe.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  You can watch the status of by running 'kubectl get services -w {{ $serviceNameLogstash }} --namespace {{ .Release.Namespace }}'
+  export SERVICE_IP_LOGSTASH=$(kubectl get services --namespace {{ .Release.Namespace }} {{ $serviceNameLogstash }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP_LOGSTASH:{{ .Values.logstashProbe.service.externalPort }}/probe/webhook/logstash
+{{- else if contains "ClusterIP" .Values.logstashProbe.service.type }}
+  export SVC_NAMESPACE={{ .Release.Namespace }}
+  export SVC_NAME=$(kubectl get services --namespace $SVC_NAMESPACE -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component={{ $compNameLogstash }}" -o jsonpath="{.items[0].metadata.name}")
+  export SVC_PORT=$(kubectl get services --namespace $SVC_NAMESPACE -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component={{ $compNameLogstash }}" -o jsonpath="{.items[0].spec.ports[0].port}")
+  echo "Applications within the cluster can reach the probe via http://$SVC_NAME.$SVC_NAMESPACE:$SVC_PORT/probe/webhook/logstash"
+
+  You can use kubectl port-forward command to map a local port to the pod port.
+  To send a test event from your host via kubectl port-forward, use the commands below:
+  export POD_NAME_LOGSTASH=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component={{ $compNameLogstash }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl port-forward --namespace {{ .Release.Namespace }} $POD_NAME_LOGSTASH {{ .Values.logstashProbe.service.externalPort }}:4080
+  echo "Send HTTP GET or POST to http://127.0.0.1:{{ .Values.logstashProbe.service.externalPort }}/probe/webhook/logstash"
+{{ end }}
+{{- end }}
+
+{{- if .Values.prometheusProbe.enabled }}
+-----------------------------------------
+Get the Prometheus Webhook URL by running the commands below.
+{{- if contains "NodePort" .Values.prometheusProbe.service.type }}
+  export NODE_PORT_PROMETHEUS=$(kubectl get services --namespace {{ .Release.Namespace }} {{ $serviceNamePrometheus }} -o jsonpath="{.spec.ports[0].nodePort}")
+  # You can obtain the External IP from the IBM Cloud Cluster Info Configmap using the command below.
+  export NODE_IP_PROMETHEUS=$(kubectl get configmap --namespace kube-public ibmcloud-cluster-info -o jsonpath="{.data.proxy_address}")
+
+  echo http://$NODE_IP_PROMETHEUS:$NODE_PORT_PROMETHEUS/probe/webhook/prometheus
+
+{{- else if contains "LoadBalancer" .Values.prometheusProbe.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  You can watch the status of by running 'kubectl get services -w {{ $serviceNamePrometheus }} --namespace {{ .Release.Namespace }}'
+  export SERVICE_IP_PROMETHEUS=$(kubectl get services --namespace {{ .Release.Namespace }} {{ $serviceNamePrometheus }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP_PROMETHEUS:{{ .Values.prometheusProbe.service.externalPort }}/probe/webhook/prometheus
+{{- else if contains "ClusterIP" .Values.prometheusProbe.service.type }}
+  export SVC_NAMESPACE={{ .Release.Namespace }}
+  export SVC_NAME=$(kubectl get services --namespace $SVC_NAMESPACE -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component={{ $compNamePrometheus }}" -o jsonpath="{.items[0].metadata.name}")
+  export SVC_PORT=$(kubectl get services --namespace $SVC_NAMESPACE -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component={{ $compNamePrometheus }}" -o jsonpath="{.items[0].spec.ports[0].port}")
+  echo "Applications within the cluster can reach the probe via http://$SVC_NAME.$SVC_NAMESPACE:$SVC_PORT/probe/webhook/prometheus"
+
+  You can use kubectl port-forward command to map a local port to the pod port.
+  To send a test event from your host via kubectl port-forward, use the commands below:
+  export POD_NAME_PROMETHEUS=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component={{ $compNamePrometheus }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl port-forward --namespace {{ .Release.Namespace }} $POD_NAME_PROMETHEUS {{ .Values.prometheusProbe.service.externalPort }}:4080
+  echo "Send HTTP GET or POST to http://127.0.0.1:{{ .Values.prometheusProbe.service.externalPort }}/probe/webhook/prometheus"
+{{- end }}
+{{- end }}
+
+{{- if .Values.cemProbe.enabled }}
+-----------------------------------------
+1. Get the CEM Webhook URL by running the commands below.
+{{- if contains "NodePort" .Values.cemProbe.service.type }}
+  export NODE_PORT_CEM=$(kubectl get services --namespace {{ .Release.Namespace }} {{ $serviceNameCem }} -o jsonpath="{.spec.ports[0].nodePort}")
+  # You can obtain the External IP from the IBM Cloud Cluster Info Configmap using the command below.
+  export NODE_IP_CEM=$(kubectl get configmap --namespace kube-public ibmcloud-cluster-info -o jsonpath="{.data.proxy_address}")
+
+  echo http://$NODE_IP_CEM:$NODE_PORT_CEM/probe/webhook/cem
+
+{{- else if contains "LoadBalancer" .Values.cemProbe.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  You can watch the status of by running 'kubectl get services -w {{ $serviceNameCem }} --namespace {{ .Release.Namespace }}'
+  export SERVICE_IP_CEM=$(kubectl get services --namespace {{ .Release.Namespace }} {{ $serviceNameCem }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP_CEM:{{ .Values.cemProbe.service.externalPort }}/probe/webhook/cem
+{{- else if contains "ClusterIP" .Values.cemProbe.service.type }}
+  export SVC_NAMESPACE={{ .Release.Namespace }}
+  export SVC_NAME=$(kubectl get services --namespace $SVC_NAMESPACE -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component={{ $compNameCem }}" -o jsonpath="{.items[0].metadata.name}")
+  export SVC_PORT=$(kubectl get services --namespace $SVC_NAMESPACE -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component={{ $compNameCem }}" -o jsonpath="{.items[0].spec.ports[0].port}")
+  echo "Applications within the cluster can reach the probe via http://$SVC_NAME.$SVC_NAMESPACE:$SVC_PORT/probe/webhook/cem"
+
+  You can use kubectl port-forward command to map a local port to the pod port.
+  To send a test event from your host via kubectl port-forward, use the commands below:
+  export POD_NAME_CEM=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component={{ $compNameCem }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl port-forward --namespace {{ .Release.Namespace }} $POD_NAME_CEM {{ .Values.cemProbe.service.externalPort }}:4080
+  echo "Send HTTP GET or POST to http://127.0.0.1:{{ .Values.cemProbe.service.externalPort }}/probe/webhook/cem"
+
+{{- end }}
+
+2. Login to the CEM UI and navigate to the Administration page.
+
+3. In the Administration page, configure an outgoing Netcool/OMNIbus outgoing integration in CEM and register the webhook URL parameter with the URL retrieved from the previous step.
+You may leave the credentials parameters empty. Enable the integration and click Save.
+
+4. In the Administration page, configure an event policy with a Forwarding action, choose the outgoing integration that was created earlier, enable the policy and click Save.
+
+CEM should start forwarding events to the probe.
+{{- end -}}

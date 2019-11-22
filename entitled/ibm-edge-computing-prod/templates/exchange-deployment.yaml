@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-exchange
+  labels:
+    app: {{ .Release.Name }}-exchange
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.exchange.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-exchange
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.common.maxSurge }}
+      maxUnavailable: {{ .Values.exchange.maxUnavailable }}
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-exchange
+        chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productID: 103bfba4a040493b8cb94bd489373ba3
+        productName: "IBM Edge Device Edition"
+        productVersion: 3.2.1
+        timestamp: '{{ date "20060102150405" .Release.Time }}'
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}-exchange
+      containers:
+      - name: {{ .Release.Name }}-exchange
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.exchange.image }}:{{ .Values.exchange.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.exchange.resources | indent 10 }}
+        ports:
+        - containerPort: {{ .Values.common.httpPort }}
+        readinessProbe:
+          httpGet:
+            path: /v1/admin/version
+            port: {{ .Values.common.httpPort }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 999
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: exchange-config
+          mountPath: /etc/horizon/exchange
+        - name: ca-cert
+          mountPath: /etc/horizon/exchange/icp
+       {{ if and .Values.remoteDBs.enableExchangeTLS (not .Values.localDBs.enabled) }}
+        - name: {{ .Release.Name }}-db-cert
+          mountPath: /home/jetty/.postgresql/root.crt
+          subPath: root.crt
+       {{ end }}
+      volumes:
+      - name: exchange-config
+        secret:
+          secretName: {{ .Release.Name }}
+          items:
+          - key: exchange-config
+            path: config.json
+      - name: ca-cert
+        secret:
+          secretName: cluster-ca-cert
+          items:
+          - key: tls.crt
+            path: ca.crt
+      {{ if and .Values.remoteDBs.enableExchangeTLS (not .Values.localDBs.enabled) }}
+      - name: {{ .Release.Name }}-db-cert
+        secret:
+          secretName: edge-computing-remote-dbs
+          items:
+          - key: trusted-certs
+            path: root.crt
+      {{ end }}
+      restartPolicy: Always

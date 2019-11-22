@@ -1,0 +1,54 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+{{ include "sch.config.init" (list . "sch.bastudio.config.values") }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "availability-test") }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "availability-test") | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  securityContext:
+    runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+    runAsUser: 50001
+{{- end }} 
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+  restartPolicy: "Never"
+  containers:
+  - name: main
+    image: alpine:3.8
+    imagePullPolicy: IfNotPresent
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+      runAsUser: 50001
+{{- end }} 
+      capabilities:
+        drop:
+        - ALL
+    resources:
+{{ .Values.resources.initProcess | toYaml | trim | indent 6}}
+    command: 
+    - "sh"
+    - "-ec"
+    - |
+      echo "Checking BA Studio:"
+      wget -T 3 --no-check-certificate -O - "https://{{.Values.global.baStudio.hostname}}:{{.Values.global.baStudio.port}}"

@@ -1,0 +1,328 @@
+# © Copyright IBM Corporation 2018
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{ if eq .Values.license "accept" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $deploymentName := include "sch.names.fullName" (list .) }}
+{{- $compName := .sch.chart.components.optools.compName }}
+{{- $labels := include "sch.metadata.labels.standard" (list . $compName) }}
+{{- $annotations := include "sch.metadata.annotations.metering" (list . .sch.chart.metering) }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ $labels | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+        deployment: "console"
+      annotations:
+{{- $annotations | indent 8 }}
+    spec:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      serviceAccountName: {{ .Values.app.serviceAccountName }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      ## 3 containers will be deployed
+      {{- if .Values.image.imagePullSecret }}
+      imagePullSecrets: 
+        - name: {{ .Values.image.imagePullSecret }}
+      {{- end }}
+      containers:
+        ############################ optools ############################
+        - name: optools
+{{- if .Values.app.multiArch }}
+          image: "{{ .Values.image.optoolsImage }}:{{ .Values.image.optoolsTag }}"
+{{- else }}
+          image: "{{ .Values.image.optoolsImage }}:{{ .Values.image.optoolsTag }}-{{ .Values.arch }}"
+{{- end }}
+          imagePullPolicy: Always
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - NET_BIND_SERVICE
+          ports:
+          - name: optools
+            containerPort: 3000
+            protocol: TCP
+          - name: proxy
+            containerPort: 3001
+            protocol: TCP
+          env:
+{{- include "license.accept.env.ref" . | indent 12 }}
+            - name: DEFAULT_USER_PASSWORD_INITIAL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.passwordSecretName }}
+                  key: password
+          envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-env
+          livenessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 16
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 5
+          resources:
+{{ toYaml .Values.resources.optools | indent 12 }}
+          volumeMounts:
+          {{- if ne .Values.ingress.tls.secret "" }}
+          - name: tls-certs
+            mountPath: /certs/tls 
+          {{- end }}
+          - name: template
+            mountPath: /template/
+          {{- if .Values.persistence.enabled }}
+          - name: {{ .Release.Name }}
+            mountPath: /certs/
+            subPath: tls
+          {{- end }}
+        ############################ deployer ############################
+        - name: deployer
+{{- if .Values.app.multiArch }}
+          image: "{{ .Values.image.deployerImage }}:{{ .Values.image.deployerTag }}"
+{{- else }}
+          image: "{{ .Values.image.deployerImage }}:{{ .Values.image.deployerTag }}-{{ .Values.arch }}"
+{{- end }}
+          imagePullPolicy: Always
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - NET_BIND_SERVICE
+          ports:
+            - name: api
+              containerPort: 8080
+              protocol: TCP
+          env:
+{{- include "license.accept.env.ref" . | indent 12 }}
+            - name: CONFIGPATH
+              value: /deployer/settings.yaml
+            - name: DEPLOY_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 16
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 5
+          resources:
+{{ toYaml .Values.resources.deployer | indent 12 }}
+          volumeMounts:
+          - name: deployer-template
+            mountPath: /deployer/
+        ############################ configtxlator ############################
+        - name: configtxlator
+{{- if .Values.app.multiArch }}
+          image: "{{ .Values.image.configtxlatorImage }}:{{ .Values.image.configtxlatorTag }}"
+{{- else }}
+          image: "{{ .Values.image.configtxlatorImage }}:{{ .Values.image.configtxlatorTag }}-{{ .Values.arch }}"
+{{- end }}
+          imagePullPolicy: Always
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - NET_BIND_SERVICE
+          ports:
+          - name: configtxlator
+            containerPort: 8083
+            protocol: TCP
+          env:
+{{- include "license.accept.env.ref" . | indent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: 8083
+            initialDelaySeconds: 16
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 8083
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 5
+          resources:
+{{ toYaml .Values.resources.configtxlator | indent 12 }}
+        ############################ operator ############################
+        - name: operator
+          {{- if .Values.app.multiArch }}
+          image: "{{ .Values.image.operatorImage }}:{{ .Values.image.operatorTag }}"
+          {{- else }}
+          image: "{{ .Values.image.operatorImage }}:{{ .Values.image.operatorTag }}-{{ .Values.arch }}"
+          {{- end }}
+          imagePullPolicy: Always
+          resources:
+{{ toYaml .Values.resources.operator | indent 12 }}
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - ALL
+          livenessProbe:
+            tcpSocket:
+              port: 8383
+            initialDelaySeconds: 16
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 8383
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 5
+          env:
+{{- include "license.accept.env.ref" . | indent 12 }}
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "ibp-operator"
+        ############################ couchdb ############################
+{{- if eq .Values.app.db.sidecar true }}
+        - name: couchdb
+          {{- if .Values.app.multiArch }}
+          image: "{{ .Values.image.couchdbImage }}:{{ .Values.image.couchdbTag }}"
+          {{- else }}
+          image: "{{ .Values.image.couchdbImage }}:{{ .Values.image.couchdbTag }}-{{ .Values.arch }}"
+          {{- end }}
+          imagePullPolicy: Always
+          command: 
+          - sh
+          - -c
+          - "/opt/couchdb/bin/couchdb"
+          env:
+{{- include "license.accept.env.ref" . | indent 12 }}
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 5984
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - NET_BIND_SERVICE
+              - CHOWN
+              - DAC_OVERRIDE
+              - SETGID
+              - SETUID
+          ports: 
+          - name: http
+            containerPort: 5984
+          livenessProbe:
+            tcpSocket:
+              port: 5984
+            initialDelaySeconds: 16
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 5984
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 5
+          resources:
+{{ toYaml .Values.resources.couchdb | indent 12 }}
+          volumeMounts:
+          {{- if .Values.persistence.enabled }}
+          - name: {{ .Release.Name }}
+            mountPath: /opt/couchdb/data
+            subPath: data
+          {{- end }}
+{{- end }}
+      volumes:
+        - name: deployer-template
+          configMap:
+            name: {{ .Release.Name }}-deployer-template
+        {{- if ne .Values.ingress.tls.secret "" }}
+        - name: tls-certs
+          secret:
+            secretName: {{ .Values.ingress.tls.secret }}
+        {{- end }}
+        - name: template
+          configMap:
+            name: {{ .Release.Name }}-template
+        {{- if .Values.persistence.enabled }}
+{{- if eq .Values.app.db.sidecar true }}
+        - name: {{ .Release.Name }}
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}
+        {{- end }}
+{{- end }} 
+{{- end }}

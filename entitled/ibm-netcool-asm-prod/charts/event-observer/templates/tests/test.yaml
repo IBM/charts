@@ -1,0 +1,83 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullName" (list .) }}-test"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ include "sch.names.appName" (list .) }}-test
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  supplementalGroups:
+  {{- range $group := .Values.global.persistence.supplementalGroups }}
+    - {{ $group -}}
+  {{ end }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            {{- range $arch := .Values.arch }}
+              - {{ $arch -}}
+            {{ end }}
+  containers:
+    - name: "{{ include "sch.names.fullName" (list .) }}-test"
+      image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+      command:
+      - /bin/sh
+      - -c
+      - /opt/ibm/netcool/asm/bin/helm-test.sh
+      env:
+      - name: RELEASE
+        value: {{ .Release.Name }}
+      - name: APP_NAME
+        value: {{ include "sch.names.appName" (list .) }}
+      - name: SERVICE_PORT
+        value: {{ .Values.httpPort | quote }}
+      - name: SERVICE_ADMIN_PORT
+        value: {{ .Values.adminPort | quote}}
+      - name: HTTP
+        value: {{ .Values.global.asm.disableHTTPS | quote }}
+      - name: AUTH
+        value: {{ .Values.global.asm.authentication | quote }}
+      - name: ASM_USER
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Release.Name }}-asm-credentials
+            key: username
+      - name: ASM_PASS
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Release.Name }}-asm-credentials
+            key: password
+      volumeMounts:
+      - mountPath: /opt/ibm/netcool/asm/security
+        name: asm-security
+      resources:
+{{ include "asm.minimalPodResources" . | indent 8 }}
+      securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 8 }}
+  restartPolicy: Never
+  volumes:
+  - name: asm-security
+    projected:
+      sources:
+        - secret:
+            name: "{{ .Release.Name }}-ca-secret"
+            optional: false
+        - secret:
+            name: "{{ .Release.Name }}-custom-secrets"
+            optional: true

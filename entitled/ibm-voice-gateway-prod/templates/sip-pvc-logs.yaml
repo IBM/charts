@@ -1,0 +1,30 @@
+{{- if eq .Values.sip.enable true }}
+{{- if eq .Values.persistence.logsVolume.enablePersistentLogs true }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := "sip" }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-{{ .Values.persistence.logsVolume.name }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+{{- if .Values.persistence.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.persistence.logsVolume.storageClassName | quote }}
+{{- else }}
+  storageClassName: {{ default "" .Values.persistence.logsVolume.storageClassName | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.logsVolume.size | quote }}
+  selector:
+    matchLabels:
+      name: {{ .Values.persistence.logsVolume.name }}
+  accessModes:
+  - ReadWriteOnce
+{{- end }}
+{{- end }}

@@ -1,0 +1,39 @@
+{{- if .Values.global.baseInstaller }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: dash-post-install-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dash-post-install
+    component: dash-post-install-job
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-failed
+spec:
+  template:
+    metadata:
+      labels:
+        app: dash-post-install
+        component: dash-post-install-job
+    spec:
+      nodeSelector:
+        is_control: "true"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+      - name: dash-post-install-job-container
+        image: {{ .Values.dashPostInstall.image.repository }}:{{ .Values.dashPostInstall.image.tag }}
+        env:
+          - name: BACKEND_NAMESPACE
+            value: {{.Values.dashboard.backendNamespace}}
+      restartPolicy: OnFailure
+{{- end }}

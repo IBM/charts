@@ -1,0 +1,171 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-audit-service
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        io.kompose.service: cb-audit-service
+        name: cb-audit-service # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      initContainers:
+        - name: core-couchdb-claim0
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "k8_jumpbox") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "k8_jumpbox" .Values.imageCredentials.registry) }}
+          {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              add: ["CHOWN"]
+              drop:
+              - ALL
+          command: ['sh', '-c', 'chmod -R 766 /pvcs_mount/ &&  chown -R 1104:1105 /pvcs_mount/']
+          volumeMounts:
+            - mountPath: /pvcs_mount/audit_downloads
+              name: core-couchdb-claim0
+              subPath: audit_downloads
+            - mountPath: /pvcs_mount/audit_archives
+              name: core-couchdb-claim0
+              subPath: audit_archives
+            - mountPath: /opt/ibm/certs
+              name: grav-certificates
+      containers:
+        - env:
+            - name: SERVICE_NAME
+              value: cb-audit-service
+            - name: DB_PROTOCOL
+              value: http
+            - name: DB_CONTAINER
+              value: couchdb
+            - name: DB_PORT
+              value: "5984"
+            - name: DB_NAME
+              value: auditlogdb
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-creds
+                  key: couchdb.username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-creds
+                  key: couchdb.password
+            - name: CONNECTION_PROTOCOL
+              value: HTTP
+            - name: MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+            - name: MONGODB_HOSTNAME
+              value: "mongodb"
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: AUDIT_CER
+              value: /opt/ibm/certs/consume.crt
+            - name: AUDIT_KEY
+              value: /opt/ibm/certs/consume.key
+            - name: CONFIG_SERVICE
+              value: http://cb-core-configuration-service:5054
+            - name: audit_downloads
+              value: /pvcs_mount/audit_downloads
+            - name: audit_archives
+              value: /pvcs_mount/audit_archives
+            - name: S3_URL
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: s3.url
+            - name: ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: s3.access_key_id
+            - name: SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3
+                  key: s3.secret_access_key
+            # K8_CLUSTER and K8_NAMESPACE to uniquely identify this system
+            - name: K8_CLUSTER
+              value: "{{ .Values.k8Cluster }}"
+            - name: K8_NAMESPACE
+              value: "{{ .Release.Namespace }}"
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_audit_service") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_audit_service" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "core.container.securityContext" .  | indent 10 }}
+          name: cb-audit-service
+          ports:
+            - containerPort: 5050
+          volumeMounts:
+            - mountPath: /pvcs_mount/audit_downloads
+              name: core-couchdb-claim0
+              subPath: audit_downloads
+            - mountPath: /pvcs_mount/audit_archives
+              name: core-couchdb-claim0
+              subPath: audit_archives
+            - mountPath: /opt/ibm/certs
+              name: grav-certificates
+          resources:
+{{ include "deployClassConfig" (list . "cb_audit_service") | indent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: 5050
+          livenessProbe:
+            httpGet:
+              path: /core/v2/audit/health
+              port: 5050
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 20
+            failureThreshold: 4
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+      restartPolicy: Always
+      volumes:
+        - name: core-couchdb-claim0
+          persistentVolumeClaim:
+            claimName: core-couchdb-claim0
+        - name: grav-certificates
+          secret:
+            secretName: grav-certificates
+            items:
+              - key: grav.crt
+                path: consume.crt
+              - key: grav.key
+                path: consume.key

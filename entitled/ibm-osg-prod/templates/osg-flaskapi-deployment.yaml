@@ -1,0 +1,91 @@
+{{- include "sch.config.init" (list . "osgflask.sch.chart.config.values") -}}
+{{- $pvcName := "pvc" }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list . ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+      annotations: 
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      serviceAccount: {{ .Values.global.defaultRole }}
+      serviceAccountName: {{ .Values.global.defaultRole }}
+      volumes:
+        - name: osg-flaskapi-logs
+          persistentVolumeClaim:
+              claimName: {{ include "sch.names.persistentVolumeClaimName" (list . $pvcName) }}
+        - name: internal-tls
+          secret:
+            defaultMode: 420
+            items:
+            - key: tls.crt
+              path: tls.crt
+            - key: tls.key
+              path: tls.key
+            secretName: internal-tls
+      containers:
+        - name: osg-flaskapi
+          image: "{{ .Values.global.docker_registry_prefix }}/{{ .Values.image.name.flaskapi }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+            runAsUser: {{ .Values.global.userId }}
+            runAsNonRoot: true
+          volumeMounts:
+            - mountPath: /osg-pvc/logs
+              name: osg-flaskapi-logs
+            - mountPath: /etc/internal-tls
+              name: internal-tls
+          livenessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 90
+            periodSeconds : 60
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 60
+            periodSeconds : 60
+          resources:
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: beta.kubernetes.io/arch
+                  operator: In
+                  values:
+                  - {{ .Values.global.architecture }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: flaskapi

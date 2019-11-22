@@ -1,0 +1,266 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.spbackend.name }}
+  labels:
+    app: {{ .Values.spbackend.name }}
+    chart: {{ $.Chart.Name }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+    component: {{ .Values.spbackend.name }}
+spec:
+  replicas: {{ default "2" .Values.spbackend.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.spbackend.name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: {{ .Values.spbackend.maxUnavailableCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.spbackend.name }}
+        release: {{ .Release.Name }}
+        component: {{ .Values.spbackend.name }}
+        chart: {{ $.Chart.Name }}
+        heritage: {{ $.Release.Service }}
+      annotations:
+    {{- range $key, $value := .Values.global.annotations }}
+        {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    spec:
+      {{- if .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.global.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end}}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: celery{{ .Values.global.namespace.name }}
+                operator: In
+                values:
+                - "baca"
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.global.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ .Values.spbackend.name }}
+              topologyKey: "kubernetes.io/hostname"
+      volumes:
+      - name: log
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.logs.claimname | quote }}
+      - name: storage
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.configs.claimname | quote }}
+      - name: certs
+        secret:
+          secretName: baca-secrets{{ $.Values.global.namespace.name }}
+      - name: ingress-secrets
+        secret:
+          secretName: "baca-ingress-secret"
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 51000
+        fsGroup: 51001
+        supplementalGroups:
+          - 51001
+      containers:
+        - name: {{ .Values.spbackend.name }}
+          image: "{{ .Values.spbackend.repository }}:{{ .Values.spbackend.tag }}"
+          imagePullPolicy: {{ .Values.spbackend.pullPolicy }}
+          securityContext:
+            runAsUser: 51000
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+{{ toYaml .Values.spbackend.resources | indent 12 }}
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+          - name: storage # must match the volume name, above
+            mountPath: "/var/storage/backend"
+            subPath: backend
+          - name: certs # must match the volume name, above
+            mountPath: "/etc/certs"
+          - name: ingress-secrets
+            mountPath: "/etc/certs/backend"
+          - name: log
+            mountPath: "/var/log/backend"
+            subPath: backend
+            readOnly: false
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: LOG_PATH
+              value: "/var/log/backend"
+            - name: LOG_LEVEL
+              value: {{ .Values.global.logs.logLevel }}
+            - name: STORAGE_PATH
+              value: "/var/storage/backend"
+            - name: BASE_DB
+              value: {{ .Values.spbackend.baseDB | quote }}
+            - name: BASE_DB_SERVER
+              value: {{ .Values.spbackend.baseDBServer | quote }}
+            - name: BASE_DB_PORT
+              value: {{ .Values.spbackend.baseDBPort | quote }}
+            - name: BASE_DB_USER
+              value: {{ .Values.spbackend.baseDBUser | quote }}
+            - name: BASE_DB_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-basedb"
+                  key: BASE_DB_PWD
+            - name: RDBENGINE
+              value: "DB2"
+            - name: DB_SSL
+              value: {{ default "false" .Values.spbackend.dbSSL | quote }}
+            - name: MONGOENTRYPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-mongo"
+                  key: MONGOPASSWORD
+            - name: MONGOUSER
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-mongo"
+                  key: MONGOUSER
+            - name: MONGOAUTHDB
+              value: "bacauser"
+            - name: MONGOIPADDRESS
+              {{- if .Values.global.mongoadmin.HA }}
+              value: mongos-service.{{ .Values.global.namespace.name }}.svc.cluster.local
+              {{- else}}
+              value: {{ template "subchart.mongo.fullname" $ | quote }}
+              {{- end}}
+            - name: MONGOPORT
+              value: {{ .Values.global.mongo.mongoPort | quote }}
+            - name: MONGOADMINENTRYPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-mongo-admin"
+                  key: MONGOADMINPASSWORD
+            - name: MONGOADMINUSER
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-mongo-admin"
+                  key: MONGOADMINUSER
+            - name: MONGOADMINAUTHDB
+              value: "smartpages"
+            - name: MONGOADMINIPADDRESS
+              {{- if .Values.global.mongoadmin.HA }}
+              value: mongos-admin-service.{{ .Values.global.namespace.name }}.svc.cluster.local
+              {{- else}}
+              value: {{ template "subchart.mongoadmin.fullname" $ | quote }}
+              {{- end}}
+            - name: MONGOADMINPORT
+              value: {{ .Values.global.mongoadmin.mongoAdminPort | quote }}
+            - name: BACKEND_PROTOCOL
+              value: "https"
+            - name: BACKEND_HOST
+              value: {{ .Values.spbackendsvc.name | quote }}
+            - name: BACKEND_PORT
+              value: {{ .Values.spbackend.backendPort | quote }}
+            - name: BACKEND_PATH
+              value: {{ .Values.spbackend.backendPath | quote }}
+            - name: CALLER_API_PROTOCOL
+              value: {{ .Values.spbackend.callerAPIProtocol | quote }}
+            - name: CALLER_API_HOST
+              value: {{  .Values.callerapisvc.name | quote }}  
+            - name: CALLER_API_PORT
+              value: {{ .Values.callerapisvc.internalPort | quote }}
+            - name: FULL_CALLER_API_PATH
+              value: {{ .Values.spbackend.fullCallerAPIPath | quote }}
+            - name: NODE_TLS_REJECT_UNAUTHORIZED
+              value: {{ .Values.spbackend.nodeTLSRejectUnauthorized | quote }}
+            - name: LDAP
+              value: {{ default "false" .Values.spbackend.ldap | quote }}
+            - name: LDAP_FILTER
+              value: {{ .Values.spbackend.ldapFilter | quote }}
+            - name: LDAP_DN
+              value: {{ .Values.spbackend.ldapDN | quote }}
+            - name: LDAP_URL
+              value: {{ .Values.spbackend.ldapURL | quote }}
+            - name: USERNAME
+              value: {{ .Values.spbackend.userName | quote }}
+            - name: LDAP_PASSWORD
+              {{- if .Values.spbackend.ldap }}
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-ldap"
+                  key: LDAP_PASSWORD
+                  optional: true
+              {{- end }}
+            - name: LDAP_PORT
+              value: {{ .Values.spbackend.ldapPort | quote }}
+            - name: LDAP_BASE
+              value: {{ .Values.spbackend.ldapBase | quote }}
+            - name: LDAP_CRT_NAME
+              value: {{ .Values.spbackend.ldapCrtName | quote }}
+            - name: LDAP_SELF_SIGNED_CRT
+              value: {{ .Values.spbackend.ldapSelfSignedCrt | quote }}
+            {{- if .Values.global.redis.HA }}
+            - name: RESULTS_URL
+              value: "sentinel://celery{{ $.Values.global.namespace.name }}-redis-ha:26379"
+            - name: RESULT_MASTER_NAME
+              value: {{  .Values.global.redis.masterGroupName | quote }}
+            - name: REDIS_HA
+              value: "true"
+            {{- else}}
+            - name: RESULT_HOST
+              value: {{ template "subchart.redis.fullname" $ }}-master
+            - name: RESULT_PORT
+              value: "6379"
+            {{- end}}
+            - name: RESULTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "baca-redis"
+                  key: redis-password
+            - name: CERTIFICATE_DIR
+              value: "/etc/certs"
+            - name: INGRESS_CERTIFICATE_DIR
+              value: "/etc/certs/backend"
+            - name: TLS_PREFIX
+              value: "tls"
+          livenessProbe:
+            initialDelaySeconds: 120
+            periodSeconds: 300
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command: ["curl", "-X", "GET", "https://0.0.0.0:8002", "--insecure"]
+          readinessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 300
+            timeoutSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+            exec:
+              command: ["curl", "-X", "GET", "https://0.0.0.0:8002/health", "--insecure"]

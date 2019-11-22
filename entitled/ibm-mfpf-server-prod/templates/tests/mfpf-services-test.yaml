@@ -1,0 +1,52 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ template "fullname" . }}-server-services-test
+  labels:
+    app: {{ template "fullname" . }}-server-services-test
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    {{- include "nodeAffinity" . | indent 6 }}
+  containers:
+  - name: {{ template "fullname" . }}-server-admindb-test
+    image: "radial/busyboxplus:curl"
+    env:
+    - name: DIAGNOSTIC_API
+      value: "curl -X GET http://{{ .Values.mobileFirstOperationsConsole.user }}:{{ .Values.mobileFirstOperationsConsole.password }}@{{ template "fullname" . }}:9080/mfpadmin/management-apis/2.0/diagnostic"
+    - name: ADMINDB
+      value: "\"adminDB\":{\"status\":\"available\"}"
+    command: ["/bin/sh"]
+    args: ["-c", "$(DIAGNOSTIC_API) | grep '\"adminDB\":{\"status\":\"available\"}'"]  
+  - name: {{ template "fullname" . }}-server-config-test
+    image: "radial/busyboxplus:curl"
+    env:
+    - name: DIAGNOSTIC_API
+      value: "curl -X GET http://{{ .Values.mobileFirstOperationsConsole.user }}:{{ .Values.mobileFirstOperationsConsole.password }}@{{ template "fullname" . }}:9080/mfpadmin/management-apis/2.0/diagnostic"    
+    - name: CONFIGSERVICE
+      value: "\"configService\":{\"status\":\"available\"}"
+    command: ["/bin/sh"]
+    args: ['-c', "$(DIAGNOSTIC_API) | grep '\"configService\":{\"status\":\"available\"}'"]
+  - name: {{ template "fullname" . }}-server-runtime-test
+    image: "radial/busyboxplus:curl"
+    env:
+    - name: DIAGNOSTIC_API
+      value: "curl -X GET http://{{ .Values.mobileFirstOperationsConsole.user }}:{{ .Values.mobileFirstOperationsConsole.password }}@{{ template "fullname" . }}:9080/mfpadmin/management-apis/2.0/diagnostic"    
+    - name: RUNTIME
+      value: "\"runtimeDiagnostic\":[{\"name\":\"mfp\",\"instances\":[{\"Providers\":{\"DatabaseDiagnosticBean\":{\"message\":\"Database is OK\",\"ok\":true}},\"overallStatus\":\"Ok\"}]}]"
+    command: ['/bin/sh']
+    args: ['-c', "$(DIAGNOSTIC_API) | grep '\"runtimeDiagnostic\":.{\"name\":\"mfp\",\"instances\":.{\"Providers\":{\"DatabaseDiagnosticBean\":{\"message\":\"Database is OK\",\"ok\":true}},\"overallStatus\":\"Ok\"}.}.'"]
+  restartPolicy: Never

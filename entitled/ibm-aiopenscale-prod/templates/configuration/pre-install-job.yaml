@@ -1,0 +1,130 @@
+{{ if .Values.global.dockerRegistryPrefix }}
+{{ $namePrefix := "pre-install-config-job" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $compName := "config" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $serviceAccountName := "cpd-editor-sa" -}}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "3"
+spec:
+  activeDeadlineSeconds: 100
+  template:
+    metadata:
+      name: {{ $name | quote }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: "aios-kubectl"
+          image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+          resources:
+{{ toYaml .Values.ephemeralPod.resources | indent 12 }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          command: 
+            - "/bin/sh"
+            - "-ec"
+            - |
+              secret_exists() {
+                  set +e
+                  kubectl -n {{ .Release.Namespace }} get secret $1 >/dev/null 2>&1
+                  echo $?
+                  set -e
+              }
+              
+              cpdNameSpace="{{ .Values.cpd.namespace | default .Release.Namespace }}"
+              if [ "$cpdNameSpace" != "{{ .Release.Namespace }}" ]
+              then
+                echo "Current job only support installation in the same namespace as CPD."
+                # let current installation script handle configuration
+                exit 0
+              fi
+               
+              cd ~
+              #check ICP token for WML
+              tokenSecretFound=$(secret_exists '{{ .Values.icp4DToken.secretName }}')
+              if [ $tokenSecretFound -ne 0 ]
+              then
+                #check icp credentials
+                credSecretFound=$(secret_exists '{{ .Values.icp4dCredential.secretName }}')
+                icp4DToken=""
+                # default cpd credential - needs to be set via secret if updated
+                username="admin"
+                password="password"
+                if [ $credSecretFound -eq 0 ]
+                then
+                   kubectl -n {{ .Release.Namespace }} get secrets {{ .Values.icp4dCredential.secretName }} -o yaml > icp4DCredential.yaml
+                   username=`cat icp4DCredential.yaml | grep "{{ .Values.icp4dCredential.usernameKey }}" | cut -f2 -d ':' | cut -c2- | base64 --decode`
+                   password=`cat icp4DCredential.yaml | grep "{{ .Values.icp4dCredential.passwordkey }}" | cut -f2 -d ':' | cut -c2- | base64 --decode`
+                else
+                   echo "Using default CP4D credentials."
+                fi
+                cp4dNginx="ibm-nginx-svc.{{ .Values.cpd.namespace | default .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+                accessToken=`curl -sSk https://${cp4dNginx}/v1/preauth/validateAuth -u ${username}:${password} | tr ',' '\n' | grep "accessToken" | cut -f2 -d ':' | sed 's/"//g'`
+                echo "accessToken: $accessToken"
+                if [ $? -eq 0 ]
+                then
+                   icp4DToken=`curl -sSk -m 10 -H "Authorization: Bearer ${accessToken}" -H "lifetime: 87600" -X POST https://${cp4dNginx}/api/v1/usermgmt/v1/usermgmt/getTimedToken | tr ',' '\n' | grep "accessToken" | cut -f2 -d ':' | sed 's/"//g'`
+                   if [ $? -ne 0 ]
+                   then
+                      echo "Unable to genareted timed token for CPD via https://${cp4dNginx}/api/v1/usermgmt/v1/usermgmt/getTimedToken"
+                      exit 1
+                   fi
+                   icp4DToken=`printf "%s" "${icp4DToken}" | base64 | tr -d '\n'`
+                else
+                   echo "Unabled to generated access token for CPD via https:/${cp4dNginx}/v1/preauth/validateAuth"
+                   echo "curl -sSk https://${cp4dNginx}/v1/preauth/validateAuth -u ${username}:${password} | tr ',' '\n' | grep \"accessToken\" | cut -f2 -d ':' | sed 's/\"//g'"
+                   exit 1
+                fi
+                cat <<EOF | kubectl -n {{ .Release.Namespace }} create -f - 
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: "{{ .Values.icp4DToken.secretName }}"
+                labels:
+                  app: {{ template "fullname" . }}
+                  chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+                  release: "{{ .Release.Name }}"
+                  heritage: "{{ .Release.Service }}"
+              type: Opaque
+              data: 
+                token: "${icp4DToken}"
+              EOF
+              else
+                 echo "Secret {{ .Values.icp4DToken.secretName }} already exists."
+              fi
+{{ end }}

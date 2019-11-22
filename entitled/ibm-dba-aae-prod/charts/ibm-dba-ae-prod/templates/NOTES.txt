@@ -1,0 +1,15 @@
+App Engine is available at:
+{{- if contains "Ingress" .Values.global.appEngine.serviceType }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}{{ $.Values.ingress.path }}
+{{- else if contains "NodePort" .Values.global.appEngine.serviceType }}
+  https://{{ .Values.global.appEngine.hostname }}:{{ .Values.global.appEngine.port }}
+{{- else if contains "LoadBalancer" .Values.global.appEngine.serviceType }}
+     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+           You can watch the status of by running 'kubectl get svc -w {{ template "solution-server-chart.fullname" . }}'
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ template "solution-server-chart.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP:{{ .Values.global.appEngine.port }}
+{{- else if contains "ClusterIP" .Values.global.appEngine.serviceType }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ template "solution-server-chart.name" . }},release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  kubectl port-forward $POD_NAME 8080:80
+{{- end }}

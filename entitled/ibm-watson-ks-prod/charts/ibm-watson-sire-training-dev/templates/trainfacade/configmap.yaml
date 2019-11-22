@@ -1,0 +1,190 @@
+{{- include "sch.config.init" (list . "sireTraining.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.facade.deploymentName -}}
+{{- $jobqCompName :=  .sch.chart.components.jobq.deploymentName -}}
+{{- $tf := .Values.trainFacade -}}
+{{- $trainJob := .Values.trainJob -}}
+{{- $batchApplyJob := .Values.batchApplyJob -}}
+{{- if $tf.enabled -}}
+{{- $jobq := .Values.jobq -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  train-job-template: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: sire-train # not relevant, jobq scheduler will overwrite
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      backoffLimit: {{ $trainJob.backoff_limit }}
+      activeDeadlineSeconds: {{ $trainJob.timeout_seconds }} # this will be used as overall timeout, including time in queue
+      template:
+        metadata:
+          labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 12 }}
+        spec:
+          restartPolicy: Never
+          ### IMAGE PULL SECRET
+{{ include "sireTraining.pullSecretTemplate" . | indent 10 }}
+
+          volumes:
+          {{ if .Values.global.s3.tlsSecret.fieldRootCertificate -}}
+          # secret reference that contains the etcd connection string for the model mesh sidecar container
+          - name: s3-root-certificate-secret
+            secret:
+              defaultMode: 420
+              secretName: {{ default (include .Values.global.s3.tlsSecret.nameTpl .) .Values.global.s3.tlsSecret.fixedName }}
+              items:
+              - key: {{ .Values.global.s3.tlsSecret.fieldRootCertificate }}
+                path: root.pem
+          {{- end }}
+          - name: workspace
+            emptyDir: {}
+
+          containers:
+          - name: sire
+            {{ include "sireTraining.imageTpl" (list $ $trainJob) }}
+            {{ include "sireTraining.pullPolicyTemplate" . }}
+            command: {{ $trainJob.command }}
+            resources:
+              requests:
+                cpu:  {{ $trainJob.cpu_requested }}
+              limits:
+                cpu: {{ $trainJob.cpu_limit }}
+                memory:  {{ $trainJob.memory_limit }}
+            volumeMounts:
+            - name: workspace
+              mountPath: /opt/ibm/mnlp/workspace
+            {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+            - name: s3-root-certificate-secret
+              mountPath: /etc/ssl/s3/
+            {{- end }}
+
+            env:
+            - name: SIRE_TRAIN_S3_ENDPOINT
+              value: {{ default (include .Values.global.s3.endpointTpl .) .Values.global.s3.endpointFixed }}
+            {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+            - name: AWS_CA_BUNDLE
+              value: /etc/ssl/s3/root.pem
+            {{- end }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+                  key: {{ .Values.global.s3.accessSecret.fieldAccessKey }}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+                  key: {{ .Values.global.s3.accessSecret.fieldSecretKey }}
+            - name: K8S_JOB_QUEUE_ADDRESS
+              value: {{ include "sch.names.fullCompName" (list . $jobqCompName) }}:{{ $jobq.unsecurePort }}
+
+            - name: SIRE_TRAIN_LANGUAGE
+              value: [[.Language]]
+            - name: SIRE_TRAIN_TRAIN_DATA_URI
+              value: [[.TrainDataUri]]
+            - name: SIRE_TRAIN_MODEL_OUT_URI
+              value: [[.ModelOutUri]]
+            - name: SIRE_TRAIN_LOGS_OUT_URI
+              value: [[.LogsOutUri]]
+            [[if .TemplateMention -]]
+            - name: SIRE_TRAIN_TEMPLATE_MENTION
+              value: [[.TemplateMention]]
+            [[end -]]
+            [[if .TemplateCoref -]]
+            - name: SIRE_TRAIN_TEMPLATE_COREF
+              value: [[.TemplateCoref]]
+            [[end -]]
+            [[if .TemplateRelation -]]
+            - name: SIRE_TRAIN_TEMPLATE_RELATION
+              value: [[.TemplateRelation]]
+            [[end -]]
+
+
+  batchapply-job-template: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: sire-batch-apply # not relevant
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      backoffLimit: {{ $batchApplyJob.backoff_limit }}
+      activeDeadlineSeconds: {{ $batchApplyJob.timeout_seconds }} # this will be used as overall timeout, including time in queue
+      template:
+        metadata:
+          labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 12 }}
+        spec:
+          restartPolicy: Never
+          ### IMAGE PULL SECRET
+{{ include "sireTraining.pullSecretTemplate" . | indent 10 }}
+
+          volumes:
+          {{ if .Values.global.s3.tlsSecret.fieldRootCertificate -}}
+          # secret reference that contains the etcd connection string for the model mesh sidecar container
+          - name: s3-root-certificate-secret
+            secret:
+              defaultMode: 420
+              secretName: {{ default (include .Values.global.s3.tlsSecret.nameTpl .) .Values.global.s3.tlsSecret.fixedName }}
+              items:
+              - key: {{ .Values.global.s3.tlsSecret.fieldRootCertificate }}
+                path: root.pem
+          {{- end }}
+          - name: workspace
+            emptyDir: {}
+
+          containers:
+          - name: sire
+            {{ include "sireTraining.imageTpl" (list $ $batchApplyJob) }}
+            {{ include "sireTraining.pullPolicyTemplate" . }}
+            command: {{ $batchApplyJob.command }}
+            resources:
+              requests:
+                cpu:  {{ $batchApplyJob.cpu_requested }}
+              limits:
+                cpu: {{ $batchApplyJob.cpu_limit}}
+                memory:  {{ $batchApplyJob.memory_limit }}
+            volumeMounts:
+            - name: workspace
+              mountPath: /opt/ibm/mnlp/workspace
+            {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+            - name: s3-root-certificate-secret
+              mountPath: /etc/ssl/s3/
+            {{- end }}
+
+            env:
+            - name: SIRE_TRAIN_S3_ENDPOINT
+              value: {{ default (include .Values.global.s3.endpointTpl .) .Values.global.s3.endpointFixed }}
+            {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+            - name: AWS_CA_BUNDLE
+              value: /etc/ssl/s3/root.pem
+            {{- end }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+                  key: {{ .Values.global.s3.accessSecret.fieldAccessKey }}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+                  key: {{ .Values.global.s3.accessSecret.fieldSecretKey }}
+            - name: K8S_JOB_QUEUE_ADDRESS
+              value: {{ include "sch.names.fullCompName" (list . $jobqCompName) }}:{{ $jobq.unsecurePort }}
+
+            - name: SIRE_TRAIN_TEST_DATA_URI
+              value: [[.TestDataUri]]
+            - name: SIRE_TRAIN_MODEL_URI
+              value: [[.ModelUri]]
+            - name: SIRE_TRAIN_EVAL_RESULTS_URI
+              value: [[.TestResultsOutUri]]
+            - name: SIRE_TRAIN_LOGS_OUT_URI
+              value: [[.LogsOutUri]]
+{{- end -}}

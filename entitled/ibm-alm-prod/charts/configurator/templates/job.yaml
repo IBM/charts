@@ -1,0 +1,110 @@
+{{- include "sch.config.init" (list . "alm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "sch.names.fullName" (list .) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  template:
+    metadata:
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+{{ include "alm.podSecurityContext" (list . "") | indent 6 }}
+      #https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      initContainers:
+      - name: wait-for-cassandra
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.baseImage.name}}:{{.Values.baseImage.tag}}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: SERVICE
+          value: {{ .Release.Name }}-cassandra
+        - name: EXPECTED_COUNT
+          value: {{ .Values.global.cassandraNodeReplicas | quote }}
+        command:
+        - /bin/sh
+        - -c
+        - python3 /scripts/check-service-endpoint-count.py
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+      - name: wait-for-elasticsearch
+        image: {{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.baseImage.name}}:{{.Values.baseImage.tag}}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: SERVICE
+          value: {{ .Release.Name }}-elasticsearch
+        - name: EXPECTED_COUNT
+          value: {{ .Values.global.elasticsearch.replicaCount | quote }}
+        - name: JVM_OPTIONS
+          value: {{ .Values.jvmOptions }}
+        command:
+        - /bin/sh
+        - -c
+        - python3 /scripts/check-service-endpoint-count.py
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+      containers:
+      - name: lm-schemas
+        command:
+        - /data/start.sh
+        image: "{{ include "alm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+        - name: alm_janusConfiguration_storage_hostname
+          value: {{ .Values.app.config.cassandra.hostname | default (printf "%s-%s.%s" .Release.Name "cassandra" .Release.Namespace ) }}
+        - name: alm_janusConfiguration_storage_username
+          value: {{ .Values.app.config.cassandra.username | default "cassandra"}}
+        - name: alm_janusConfiguration_storage_password
+          value: {{ .Values.app.config.cassandra.password | default "cassandra"}}
+        - name: alm_janusConfiguration_storage_replicationFactor
+          value: {{ include "alm.getCassandraReplicationFactor" . | quote }}
+        - name: alm_janusConfiguration_index_hostname
+          value: {{ .Values.app.config.elasticsearch.hostname | default (printf "%s-%s.%s" .Release.Name "elasticsearch" .Release.Namespace ) }}
+        - name: alm_janusConfiguration_index_numberOfReplicas
+          {{- if eq .Values.global.elasticsearch.replicaCount 1.0 }}
+          value: "0"
+          {{- else if eq .Values.global.elasticsearch.replicaCount 2.0 }}
+          value: "1"
+          {{- else }}
+          value: "2"
+          {{- end }}
+        # - name: galileo_schema_version
+        #   value: "9"
+        # - name: talledega_schema_version
+        #   value: "1"
+        - name: LOG_FOLDER
+          value: {{ .Values.logFolder }}
+        resources:
+{{ include "alm.getResources" . | indent 10 }}
+        securityContext:
+{{ include "alm.containerSecurityContext" (list . "") | indent 10 }}
+        volumeMounts:
+        - name: logs
+          mountPath: {{ .Values.logFolder }}
+        - name: tmp
+          mountPath: /tmp
+        - name: truststore
+          mountPath: /var/lm/truststore
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      - name: truststore
+        emptyDir: {}
+      restartPolicy: OnFailure
+  backoffLimit: 4

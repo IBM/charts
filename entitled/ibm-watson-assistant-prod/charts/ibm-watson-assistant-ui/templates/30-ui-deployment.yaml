@@ -1,0 +1,251 @@
+{{- include "sch.config.init" (list . .Values.global.schConfigTemplate) -}}apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-ui"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:   "conversation"
+      component: "ui"
+      slot:      "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    app:       "ibm-watson-assistant-prod-1.3.0"
+    chart:     "ibm-watson-assistant"
+    heritage:  "{{ .Release.Service }}"
+    release:   "{{ .Release.Name }}"
+spec:
+  replicas: {{ include "assistant.ui.replicas" . }}
+  selector:
+    matchLabels: *primary_labels # Don't touch or extend!
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge:       1
+
+  revisionHistoryLimit: 4
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+    spec:
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+        - name: redis-running
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 2000
+
+          image: "{{ if tpl ( .Values.init.redis.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.init.redis.image.repository | toString ) . ) }}{{ end }}/{{ .Values.init.redis.image.name }}:{{ .Values.init.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.init.redis.image.pullPolicy | quote }}
+          command: [ "/scripts/redis_running.sh" ]
+          env:
+            - name:  "VCAP_SERVICES"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-ui-vcap"
+                  key: "vcap_services"
+          volumeMounts:
+            - name: "init-scripts"
+              mountPath: /scripts
+
+      containers:
+        - name: "ui"
+          image: "{{ if tpl ( .Values.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.image.repository | toString ) . ) }}{{ end }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 2000
+
+          ports:
+          - containerPort: 9000
+          livenessProbe:
+            httpGet:
+              path: /login/
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /login/
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+
+          env:
+            - name:  "IP"
+              value: "0.0.0.0"
+            - name:  "PORT"
+              value: "9000"
+            - name:  "HOST_SLOT"
+              value: "1"
+            - name: "ICP"
+              value: "true"
+            - name: "BASE_URL"
+              value: "{{ include "ui.ingress.path" . }}"
+            - name: "NODE_TLS_REJECT_UNAUTHORIZED"
+              value: "0"
+            - name: "PLATFORM_TYPE"
+              value: "kubernetes"
+            - name: "TOKEN_PUBLIC_KEY_URL"
+              value: "https://ibm-nginx-svc.zen.svc.{{ tpl .Values.clusterDomain . }}/auth/jwtpublic"
+            - name: "AUTHORIZATION_ENDPOINT"
+              value: "https://{{ include "assistant.icp.proxyHostname" . }}:31843/zen/login"
+            - name:  "RESOURCE_CATALOG_SERVICE_NAME"
+              value: "assistant"
+            - name: "RESOURCE_CATALOG_SERVICE_PLAN_NAMES"
+              value: '[\"standard\"]'
+            - name:  "COOKIE_SECRET"
+              value: "{{ .Values.cookieSecret }}"
+            - name:  "WEA_CONVERSATIONAL_STORE"
+              value: "{{ include "ui.store_service" . }}"
+            - name:  "BLUEMIX_SERVICE_NAME"
+              value: "conversation"
+            - name:  "BLUEMIX_SERVICE_PLAN_NAMES"
+              value: ''
+            - name:  "BLUEMIX_CALLBACK"
+              value: "https://{{ include "assistant.icp.proxyHostname" . }}{{ include "ui.ingress.path" . }}/auth/bluemix/return"
+            - name:  "BLUEMIX_REGIONS"
+              value: '{}'
+            - name:  "BLUEMIX_SERVICE_GUIDS"
+              value: '{}'
+            - name:  "BLUEMIX_SERVICE_PLAN_GUIDS"
+              value: '{}'
+            - name:  "BLUEMIX_APP_MGMT_ENABLE"
+              value: ""
+            - name:  "BLUEMIX_PLAN_HOSTS"
+              value: ''
+            - name:  "ACCOUNT_MANAGEMENT_URL"
+              value: "{{-  include "ui.ibmcloudApi" . -}}/account-management"
+            - name:  "RESOURCE_CONTROLLER_URL"
+              value: "{{-  include "ui.ibmcloudApi" . -}}/resource-controller"
+            - name:  "RESOURCE_MANAGER_URL"
+              value: "{{-  include "ui.ibmcloudApi" . -}}/resource-manager"
+            - name:  "RESOURCE_CATALOG_URL"
+              value: "{{-  include "ui.ibmcloudApi" . -}}/resource-catalog/assistant"
+            - name:  "USE_RESOURCE_CONTROLLER"
+              value: "true"
+            - name:  "USE_CLOUD_FOUNDRY"
+              value: "false"
+            - name:  "USE_ENVIRONMENT_RESOURCE_CATALOG"
+              value: "false"
+            - name: "PREFER_ENV_STORE_URL"
+              value: "false"
+            - name:  "AUTH_PROVIDER"
+              value: "jwt"
+            - name:  "IAM_CLIENT_ID"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-ui-iam"
+                  key:  "iam_client_id"
+            - name:  "IAM_CLIENT_SECRET"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-ui-iam"
+                  key:  "iam_client_secret"
+            - name:  "IAM_ENDPOINT"
+              value: ""
+            - name:  "RESOURCE_CONTROLLER_REGIONS"
+              value: '[\"us-south\"]'              
+            - name:  "REDIS_SERVICE_NAME"
+              value: "icp-redis"
+            - name:  "REDIS_TLS_CONFIG"
+              value: ""
+            - name:  "DEPLOY_ENV"
+              value: "dev"
+            - name:  "FEATURES"
+              value: '{{ include "ui.features" . }}'
+            - name:  "FEATURE_RULES"
+              value: '{{ .Values.featureRules }}'
+            - name:  "LANGUAGES"
+              value: '{{ include "ui.languages" . }}'
+            - name:  "CORS_WHITELIST"
+              value: "[]"
+            - name:  "API_MINOR_VERSION"
+              value: "2018-07-10"
+            - name:  "SEGMENT_CONFIG"
+              value: ''
+            - name:  "WEB_EXPERIENCE_CONFIG"
+              value: '{}'
+            - name:  "USE_ENVIRONMENT_BLUEMIX_REGIONS"
+              value: "true"
+            - name:  "SESSION_SECRET"
+              value: "{{ .Values.sessionSecret }}"
+            - name:  "ORIGIN_IDENTIFIER"
+              value: 'a064c34f-73f7-4ddf-8e24-d963879af26c'
+            - name:  "CRYPTO_KEY"
+              value: "{{ .Values.cryptoKey }}"
+            - name:  "SESSION_TIMEOUT"
+              value: "{{ .Values.sessionTimeout }}"
+            - name:  "NODE_ENV"
+              value: "production"
+            - name:  "VCAP_SERVICES"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Release.Name }}-ui-vcap"
+                  key: "vcap_services"
+            - name: "SEARCH_SKILL_WORKER_URL"
+              value: "https://{{ .Release.Name }}-skill-search.{{ .Release.Namespace }}:443"{{- if .Values.global.apiV2.enabled }}
+            - name: "SKILL_SEARCH_AUTHORIZATION_ENCRYPTION_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ include "skillSearch.authorization-encryption.secretName"        . }}"
+                  key: "authorization_encryption_key"{{- end }}
+
+            - name: "DISCOVERY_API_VERSION"
+              value: '2018-12-03'
+
+          resources:
+            requests:
+              cpu:    50m
+              memory: 250Mi
+            limits:
+              # cpu limits removed if variable is set to false, "" or 0 (eg in ICP environments where we want cpu limit disabled)
+              memory: 250Mi
+      volumes:
+        - name: "init-scripts"
+          configMap:
+            name: "{{ .Release.Name }}-ui-init-scripts"
+            defaultMode: 0755
+    {{- if .Values.global.icp.masterIP }}
+      hostAliases:
+      - hostnames:
+         - "{{ .Values.global.icp.masterHostname }}"
+        ip: {{ .Values.global.icp.masterIP }}
+    {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+
+{{- $_ := set . "compName" "ui" }}
+{{ include "assistant.podAntiAffinity" . | indent 8 }}

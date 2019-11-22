@@ -1,0 +1,55 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.sysIbmAdmData) -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: redis-repo
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: redis-repo-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: redis-repo-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: redis
+        component: redis-repo
+        run: redis-repo-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: redis-repo-container
+        image: {{ .Values.redisRepoContainer.image.repository }}:{{ .Values.redisRepoContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["docker-entrypoint.sh"]
+        args: ["/etc/redis/redis.conf"]
+        resources:
+{{ toYaml .Values.redisRepoContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 6379
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "/usr/local/bin/redis-cli -h $(hostname) ping"
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        volumeMounts:
+          - mountPath: /redis-storage
+            name: redis-mount
+      volumes:
+        - name: redis-mount
+          persistentVolumeClaim:
+            {{- if .Values.redisPvc.persistence.existingClaimName }}
+              claimName: {{ .Values.redisPvc.persistence.existingClaimName }}
+            {{- else }}
+              claimName: {{ template "fullname" . }}-{{ .Values.redisPvc.name }}
+            {{- end }}
+{{- end }}

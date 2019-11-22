@@ -1,0 +1,101 @@
+{{ if eq .Values.global.ibmProduct "zen" }}
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: zen-scripted-data-python2
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: zen-scripted-data-python2
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: zen-scripted-data-python2
+  template:
+    metadata:
+      labels:
+        app: zen-scripted-data-python2
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: zen-scripted-data-python2
+        enabled: "true"
+      annotations:
+        productName: IBM Cloud Private Data
+        productID: IBMCloudPrivateData_001_perpetual_00000
+        productVersion: 0.0.1
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      containers:
+      - name: zen-scripted-data-python2
+        image: {{ .Values.jupyterD8a2rls2xShell.image.repository }}:{{ .Values.jupyterD8a2rls2xShell.image.tag }}
+        command: 
+        - python
+        - /user-home/zen/scripts/pythonServer/app.py
+        env:
+        - name: PATH
+          value: "/opt/conda/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:$PATH"
+        - name: LC_ALL
+          value: "en_US.UTF-8"
+        - name: LANG
+          value: "en_US.UTF-8"
+        - name: LANGUAGE
+          value: "en_US.UTF-8"
+        - name: CONDA_DIR
+          value: "/opt/conda"
+        - name: SHELL
+          value: "/bin/bash"
+        - name: HOME
+          value: "/root"
+        - name: XDG_CACHE_HOME
+          value: "/root/.cache/"
+        - name: LD_LIBRARY_PATH
+          value: "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64:/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server"
+        - name: JAVA_HOME
+          value: "/usr/lib/jvm/java-8-openjdk-amd64"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          protocol: TCP
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /v3/monitor
+            port: 5000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /v3/monitor
+            port: 5000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}
+{{- end }}

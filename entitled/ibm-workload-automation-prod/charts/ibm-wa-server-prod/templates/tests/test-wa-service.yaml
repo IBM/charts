@@ -1,0 +1,47 @@
+####################################################################
+# Licensed Materials - Property of HCL*
+# (c) Copyright HCL Technologies Ltd. 2019. All rights reserved.
+#
+# * Trademark of HCL Technologies Limited
+####################################################################
+{{- include "sch.config.init" (list . "waserver.sch.chart.config.values") }}
+{{ $dataPvcName := .Values.persistence.dataPVC.name }}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list .) }}
+{{ $fullName := include "sch.names.fullName" (list .) }}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullName }}-test
+  labels:
+    app.kubernetes.io/name: {{ include "sch.names.appName" (list .) }}-test
+    helm.sh/chart: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    release: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false      
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: {{ default 999 .Values.fsGroupId }}  
+    supplementalGroups: [{{ .Values.supplementalGroupId | default 999 }}]
+  serviceAccountName: {{ .Values.global.serviceAccountName | default "default" }}    
+  containers:
+    - name: {{ $fullName }}-test
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      command: ["sh", "-xc","cd /tmp && wget https://{{ template "waMdm.ServiceName" . }}:31116/twsd/ --no-check-certificate"]
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false     
+        capabilities:
+          drop:
+          - ALL        
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }} 

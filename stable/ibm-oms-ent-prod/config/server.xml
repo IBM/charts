@@ -1,0 +1,60 @@
+<!--
+ Licensed Materials - Property of IBM
+ IBM Order Management Software (5725-D10)
+ (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+ US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp. 
+-->
+<server description="Default server">
+
+        <!-- Enable features -->
+        <featureManager>
+                <feature>adminCenter-1.0</feature>
+                <feature>jdbc-4.1</feature>
+                <feature>jndi-1.0</feature>
+                <feature>jsp-2.3</feature>
+                <feature>servlet-3.1</feature>
+                <feature>ssl-1.0</feature>
+                <feature>monitor-1.0</feature>
+                <feature>localConnector-1.0</feature>
+        </featureManager>
+
+       <!-- Define an Administrator and non-Administrator -->
+        <basicRegistry id="basic">
+                <user name="admin" password="${env.consoleadminpassword}" />
+                <user name="nonadmin" password="${env.consolenonadminpassword}" />
+        </basicRegistry>
+
+        <!-- Assign 'admin' to Administrator -->
+        <administrator-role>
+                <user>admin</user>
+        </administrator-role>
+
+
+        <!-- Automatically expand WAR files and EAR files . -->
+
+        <httpEndpoint id="defaultHttpEndpoint" host="*" httpPort="{{ .Values.appserver.service.http.port | default 9080 }}"
+                httpsPort="{{ .Values.appserver.service.https.port | default 9443 }}" />
+
+        <executor name="Default Executor" coreThreads="{{ .Values.appserver.config.corethreads }}" maxThreads="{{ .Values.appserver.config.maxthreads }}"/>
+
+				
+        <dataSource id="DefaultDataSource" jndiName="{{ .Values.global.database.datasourceName }}">
+                <jdbcDriver libraryRef="dblib" />
+                <connectionManager maxPoolSize="{{ .Values.appserver.config.database.maxPoolSize }}" minPoolSize="{{ .Values.appserver.config.database.minPoolSize }}" />
+                {{- if eq (.Values.global.database.dbvendor | lower) "oracle" }}
+                <properties.oracle databaseName="{{ .Values.global.database.dbname }}" serverName="{{ .Values.global.database.serverName }}"
+                        portNumber="{{ .Values.global.database.port }}" user="{{ .Values.global.database.user }}" password="${env.dbpassword}" />
+                {{- else }}
+                <properties.db2.jcc databaseName="{{ .Values.global.database.dbname }}" serverName="{{ .Values.global.database.serverName }}"
+                        portNumber="{{ .Values.global.database.port }}" user="{{ .Values.global.database.user }}" password="${env.dbpassword}" 
+                        currentSchema="{{ .Values.global.database.schema | default (.Values.global.database.dbname | default "" | upper) }}" />
+                {{- end }}
+        </dataSource>
+
+        <library id="dblib">
+                <fileset dir="/opt/ibm/jars/" includes="*.jar" />
+        </library>
+
+        <!-- Automatically expand WAR files and EAR files -->
+        <applicationManager autoExpand="true" />
+</server>

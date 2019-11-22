@@ -1,0 +1,95 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2019, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-upgrade-instance"
+  labels:
+{{- include "streams.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-upgrade-instance"
+  annotations:
+    "helm.sh/hook": post-upgrade,post-rollback
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-upgrade-instance"
+      labels:
+{{- include "streams.defaultLabels" . | indent 8 }}
+{{- include "streams.serviceability" . | indent 8 }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-upgrade-instance"
+      annotations:
+{{- include "streams.metering" . | indent 8 }}
+        
+    spec:
+      affinity:
+      {{- include "streams.nodeaffinity" . | indent 8 }}   
+
+      restartPolicy: Never
+      
+      serviceAccountName: {{ template "streams.instanceServiceAccountName" . }}
+     
+{{- include "streams.podGeneralSecurityPolicies" . | indent 6 }}      
+      securityContext:
+{{- include "streams.streamsinstallPodSecurityContext" . | indent 8 }}  
+        
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      {{- end }}
+           
+      volumes:
+{{- include "streams.basicVolumes" . | indent 8 }}
+        - name: upgrade-config
+          configMap:
+            name: "{{ .Release.Name }}-upgrade-instance-config"
+            
+      containers:
+      - name: upgradeinstance
+        {{- if .Values.image.prefix }}
+        image: "{{ .Values.image.prefix }}/{{ .Values.image.security }}:{{ .Values.image.securityTag }}"
+        {{- else }}
+        image: "{{ .Values.image.security }}:{{ .Values.image.securityTag }}"
+        {{- end }} 
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+        
+        workingDir: {{ include "streams.installdir" . }}
+        
+        securityContext:
+{{- include "streams.containerSecurityContext" . | indent 10 }}
+        
+        env:
+{{- include "streams.basicEnv" . | indent 10 }}
+{{- include "streams.controllerSecurityEnv" . | indent 10 }}
+          - name: STREAMS_UPGRADE_CONFIG
+            value: "/opt/ibm/streams-upgrade/instance.properties"
+            
+        command: ["$(STREAMS_INSTALL)/system/impl/bin/upgradeinstance.sh"]
+        
+        volumeMounts:
+{{- include "streams.basicVolumeMounts" . | indent 10 }}
+          - name: upgrade-config
+            mountPath: "/opt/ibm/streams-upgrade"
+            
+        resources:
+          requests:
+            cpu: 1
+            memory: 1Gi
+          limits:
+            cpu: 1
+            memory: 1Gi
+          

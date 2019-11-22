@@ -1,0 +1,166 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+{{ $secretName := .Values.probe.snmpv3.secretName | default (include "sch.names.fullName" (list . ) ) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: {{ $compName }}
+  {{ if .Values.autoscaling.enabled -}}
+  replicas: {{ .Values.autoscaling.minReplicas | default 1 }}
+  {{- else -}}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  minReadySeconds: 20
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        checksum/config.configmap: {{ include (print $.Template.BasePath "/probe-snmp-config-configmap.yaml") . | sha256sum }}
+{{- if ne (.Values.probe.rulesFile | upper ) "NCKL"  }}
+        checksum/rules.configmap: {{ include (print $.Template.BasePath "/probe-snmp-rules-configmap.yaml") . | sha256sum }}
+{{- end }}
+        checksum/snmpv3.secret: {{ include (print $.Template.BasePath "/probe-snmpv3-secret.yaml") . | sha256sum }}
+    spec:
+      #https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: interfaces-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: omni.dat
+              path: omni.dat
+        - name: props-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-config
+            items:
+            - key: mttrapd.props
+              path: mttrapd.props
+        {{- if ne (.Values.probe.rulesFile | upper ) "NCKL" }}
+        - name: rules-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: mttrapd.rules
+              path: mttrapd.rules
+        - name: rules-file-flood-control
+          configMap:
+            name: {{ include "sch.names.fullName" (list . ) }}-rules
+            items:
+            - key: mttrapd_flood_control.rules
+              path: mttrapd_flood_control.rules
+      {{- end }}
+        - name: mttrapd-conf
+          secret:
+            secretName: {{ $secretName }}
+            items:
+            - key: mttrapd.conf
+              path: mttrapd.conf
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 2001
+      containers:
+        - name: snmp-probe
+          image: "{{ .Values.image.repository}}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            privileged: false
+            allowPrivilegeEscalation: false
+            {{/* readOnlyRootFilesystem must be false to allow probe to create interfaces file */ -}}
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          env:
+          - name: LICENSE
+            value: {{ .Values.license | default "not accepted" }}
+          - name: PROBE_NAME
+            value: "nco_p_mttrapd"
+          ports:
+            - name: snmp-port-tcp
+              containerPort: 4162
+              protocol: TCP
+            - name: snmp-port-udp
+              containerPort: 4162
+              protocol: UDP
+            - name: nhttpd-port
+              containerPort: 8080
+          volumeMounts:
+          - name: interfaces-file
+            mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+            subPath: omni.dat
+          - name: props-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/mttrapd.props
+            subPath: mttrapd.props
+          {{- if ne ( .Values.probe.rulesFile | upper ) "NCKL" }}
+          - name: rules-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/mttrapd.rules
+            subPath: mttrapd.rules
+          - name: rules-file-flood-control
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/mttrapd_flood_control.rules
+            subPath: mttrapd_flood_control.rules
+          {{- end }}
+          - name: mttrapd-conf
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/etc/mttrapd.conf
+            subPath: mttrapd.conf
+          livenessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:8080/probe/common
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: snmp-port-tcp
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{ if .Values.global.image.secretName -}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}

@@ -1,0 +1,88 @@
+{{- include "sch.config.init" (list . "sireTraining.sch.chart.config.values") -}}
+{{- $compName :=  printf "%s-s3-bucket-create" .sch.chart.components.facade.deploymentName -}}
+{{- $tf := .Values.trainFacade -}}
+{{- if $tf.enabled -}}
+{{- if $tf.createS3BucketIfNotExists -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "post-install" # bucket creation should be executed after install of minio
+    "helm.sh/hook-weight": {{ .Values.preInstallHookWeightAnchor | quote }}
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: "{{ include "sch.names.fullCompName" (list . $compName) }}-s3-bucket-create"
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      restartPolicy: Never
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- /* nodeaffinity for github.com charts, remove the following for PPA charts */}}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+
+{{ include "sireTraining.pullSecretTemplate" . | indent 6 }}
+
+      {{ if .Values.global.s3.tlsSecret.fieldRootCertificate -}}
+      volumes:
+      # secret reference that contains the etcd connection string for the model mesh sidecar container
+      - name: s3-root-certificate-secret
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.s3.tlsSecret.nameTpl .) .Values.global.s3.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.s3.tlsSecret.fieldRootCertificate }}
+            path: root.pem
+       {{- end }}
+
+      containers:
+      - name: mc
+        {{ include "sireTraining.imageTpl" (list $ $tf) }}
+        {{ include "sireTraining.pullPolicyTemplate" . }}
+
+        command:
+          - "/bin/sh"
+          - "-c"
+          - |
+            mc config --insecure host add s3 {{ default (include .Values.global.s3.endpointTpl .) .Values.global.s3.endpointFixed }} $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY && \
+            if mc --insecure ls s3/{{ default (include .Values.global.s3.bucketTpl .) .Values.global.s3.bucketFixed }}; \
+            then echo "bucket already exists"; \
+            else if mc --insecure mb s3/{{ default (include .Values.global.s3.bucketTpl .) .Values.global.s3.bucketFixed }}; \
+              then echo "bucket successfully created"; \
+              else echo "failed to create bucket"  && exit 1; \
+            fi fi
+        volumeMounts:
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: s3-root-certificate-secret
+          mountPath: /etc/ssl/s3/
+        {{- end }}
+        env:
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: AWS_CA_BUNDLE
+          value: /etc/ssl/s3/root.pem
+        {{- end }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+              key: {{ .Values.global.s3.accessSecret.fieldAccessKey }}
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+              key: {{ .Values.global.s3.accessSecret.fieldSecretKey }}
+        resources:
+          limits:
+            memory: "100Mi"
+            cpu: "100m"
+          requests:
+            memory: "100Mi"
+            cpu: "100m"
+{{- end -}}
+{{- end -}}

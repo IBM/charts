@@ -1,0 +1,24 @@
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.keeperService) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+    component: "stolon-keeper"
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.keep . ) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+{{- end }}
+spec:
+{{- if tpl .Values.keeper.serviceType . }}
+  type: {{ tpl .Values.keeper.serviceType . | quote }}
+{{- end }}
+  ports:
+    - name: "keeper"
+      port: {{ .Values.ports.externalPort }}
+      targetPort: {{ .Values.ports.internalPort }}
+  selector:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+    component: "stolon-keeper"
+    stolon-cluster: {{ template "stolon.clusterName" . }}

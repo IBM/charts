@@ -1,0 +1,39 @@
+{{- if or .Values.master.uiEnabled .Values.master.egoRestEnabled .Values.master.symRestEnabled }}
+{{- include "sch.config.init" (list . "ibm-spectrum-symphony.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+{{- $role := "master" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}-{{ $role }}
+  labels:
+    role: {{ $role }}
+{{ toYaml .sch.chart.labels | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      role: {{ $role }}
+{{ toYaml .sch.chart.labels | indent 6 }}
+  type: NodePort
+  ports:
+{{- if .Values.master.uiEnabled }}
+    - name: webgui
+      protocol: TCP
+      port: 8443
+{{- end }}
+{{- if .Values.master.egoRestEnabled }}
+    - name: egorest
+      protocol: TCP
+      port: 8543
+{{- end }}
+{{- if .Values.master.symRestEnabled }}
+    - name: symrest
+      protocol: TCP
+      port: 8050
+{{- end }}
+  selector:
+    app: {{ include "sch.names.appName" (list .) }}
+    release: {{ .Release.Name }}
+    role: {{ $role }}
+{{- end }}
+    

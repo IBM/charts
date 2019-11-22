@@ -1,0 +1,63 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "addon-cleanup") | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "addon-cleanup") | indent 4 }}
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . "addon-cleanup") | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "addon-cleanup") | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 8000
+{{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ include "wcn-addon.privileged-account.name" . }}
+      containers:
+      - name: delete-tls-secret
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 8000
+{{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ include "wcn-addon.icpDockerRepo" . }}{{ .Values.addon.tls.image.repository }}:{{ .Values.addon.tls.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+            set -x
+            kubectl delete secret {{ include "sch.names.fullCompName" (list . "addon") }}
+{{- if not .Values.privilegedServiceAccount.name }}
+            kubectl delete role {{ include "sch.names.fullCompName" (list . "addon") }}
+            kubectl delete rolebinding {{ include "sch.names.fullCompName" (list . "addon") }}
+            kubectl delete serviceaccount {{ include "wcn-addon.privileged-account.name" . }}
+{{- end }}

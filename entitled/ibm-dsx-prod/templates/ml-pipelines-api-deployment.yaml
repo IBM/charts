@@ -1,0 +1,80 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: ml-pipelines-api
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: ml-pipelines-api
+    run: ml-pipelines-api-deployment
+spec:
+  replicas: {{ .Values.mlPipelinesApi.replicas }}
+  selector:
+    matchLabels:
+      run: ml-pipelines-api-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: ml-pipelines-api
+        run: ml-pipelines-api-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_storage: "true"
+      {{- end }}
+      containers:
+      - name: ml-pipelines-api-container
+        image: {{ .Values.mlPipelinesApi.image.repository }}:{{ .Values.mlPipelinesApi.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        env:
+        - name: CLOUDANT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_username
+        - name: CLOUDANT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_password
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.mlPipelinesApi.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 4700
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /monitor
+            port: 4700
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /monitor
+            port: 4700
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30

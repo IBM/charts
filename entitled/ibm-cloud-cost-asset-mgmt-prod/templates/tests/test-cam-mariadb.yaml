@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mariadb-test
+  labels:
+    name: mariadb-test
+{{ include "cam.test-labels" .  | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  affinity:
+{{- include "cam.nodeaffinity" . | indent 4 }}
+{{ include "cam.securityContext" .  | indent 2 }}
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 2 }}
+  volumes:
+      - name: maria-cert
+        secret:
+          secretName: grav-certificates
+          items:
+          - key: maria_dev.crt
+            path: maria_dev.crt
+          - key: maria_dev.key
+            path: maria_dev.key
+          - key: rootca.pem
+            path: rootCA.pem
+  containers:
+    - name: mariadb-test
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+      image: {{ template "cam.readConfig" (list . "k8s_mariadb") }}
+      {{ else }}
+      image: {{ template "camicp.readConfig" (list . "k8s_mariadb" .Values.imageCredentials.registry) }}
+      {{ end }}
+      env:
+      - name: MARIADB_USER
+        valueFrom:
+          secretKeyRef:
+            name: mysql-username
+            key: mysql.username
+      - name: MARIADB_PASS
+        valueFrom:
+          secretKeyRef:
+            name: mysql-password
+            key: mysql.key
+      volumeMounts:
+      - mountPath: /etc/mysql/certs
+        name: maria-cert
+{{ include "cam.container.securityContext.NonRoot" . | indent 6  }}
+      command: ["sh", "-c", "mysql -h mariadb -u$MARIADB_USER -p$MARIADB_PASS"]
+  restartPolicy: Never

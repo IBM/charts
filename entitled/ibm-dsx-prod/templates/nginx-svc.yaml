@@ -1,0 +1,32 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: ibm-nginx-svc
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: ibm-nginx-svc
+    component: ibm-nginx
+spec:
+{{- if .Values.global.virtualIP }}
+  externalIPs:
+  {{- range  (.Values.global.virtualIP | split "," ) }}
+  - {{ . | trim }}
+  {{- end }}
+{{- else }}
+  type: NodePort
+{{- end }}
+  ports:
+    - name: ibm-nginx-https-port
+      protocol: TCP
+      port: 443
+      targetPort: 443
+      {{- if not .Values.global.virtualIP }}
+      nodePort: {{ .Values.dsxservice.externalPort }}
+      {{- end }}
+  selector:
+    run: ibm-nginx-deployment-pod
+    component: ibm-nginx
+  sessionAffinity: ClientIP

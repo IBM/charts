@@ -1,0 +1,32 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-scripts
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+data:
+  event_observer_listen_start.sh: |-
+
+    # create the job spec
+    echo "POSTing this job specification:"
+    cat <<EOF | tee /tmp/noi-in-icp-listen-job.json;
+    {
+      "unique_id": "noi-in-icp-listen-job",
+      "type": "listen",
+      "parameters": {
+        "netcool_sources": "*",
+        "thread_limit": 100
+      }
+    }
+    EOF
+
+    # post the job to the observer
+    echo
+    STATUS=`curl -k -X POST --silent -u${ASM_USER}:${ASM_PASS} -w "%{http_code}\n\n" -o /tmp/noi-in-icp-listen-job.response --header 'Content-Type: application/json' --header 'Accept: application/json' --header 'X-TenantID: cfd95b7e-3bc7-4006-a4a8-a73a79c71255' --data-binary "@/tmp/noi-in-icp-listen-job.json" 'http{{ if not .Values.global.asm.disableHTTPS }}s{{ end }}://{{ .Release.Name }}-event-observer.{{ .Release.Namespace }}:9284/1.0/event-observer/jobs/netcool'`
+
+    echo "Response code is : ${STATUS}"
+    if [ "${STATUS}" != "201" ] && [ "${STATUS}" != "422" ]; then
+        cat /tmp/noi-in-icp-listen-job.response
+        exit 1
+    fi

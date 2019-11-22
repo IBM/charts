@@ -1,0 +1,38 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-ltpa-creation-job-{{ randNumeric 5 }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "ums") | indent 4 }}
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        kubectl: "true"
+{{ include "sch.metadata.labels.standard" (list . "ums") | indent 8 }}
+    spec:
+{{ include "ums.constants.pod.securityContext" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }} 
+      serviceAccountName: {{ include "sch.names.fullName" (list .) }}-ltpa-creation-service-account
+      restartPolicy: Never
+      containers:
+      - name: create-ltpa-key
+        image: {{ .Values.images.ltpa | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        securityContext:
+{{ include "ums.constants.container.securityContext" . | indent 10 }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        env:
+          - name: LTPA_SECRET_NAME
+            value: {{ .Values.global.ums.ltpaSecretName | quote }}
+          - name: KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.ums.adminSecretName | quote }}
+                key: ltpaPassword
+
+

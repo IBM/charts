@@ -1,0 +1,40 @@
+{{- include "sch.config.init" (list . "ibm-spectrum-computing.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+{{- $role := "test" -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullName }}-{{ $role }}
+  labels:
+    role: {{ $role }}
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  annotations:
+    helm.sh/hook: test-success
+    helm.sh/hook-delete-policy: hook-succeeded,hook-failed
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+  - name: {{ $fullName }}-{{ $role }}
+    image: "{{ .Values.compute.image }}:{{ .Values.compute.tag }}"
+    imagePullPolicy: Always
+    command: ["/start_lsf.sh" ]
+    args: ["test" ]
+    securityContext:
+      privileged: false
+      capabilities:
+        drop:
+          - ALL
+        add:
+          - SETUID
+    resources:
+      requests:
+        cpu: 200m
+        memory: 128M
+      limits:
+        cpu: 200m
+        memory: 256M
+  affinity:
+{{ toYaml .sch.chart.affinity | indent 4 }}
+  restartPolicy: Never

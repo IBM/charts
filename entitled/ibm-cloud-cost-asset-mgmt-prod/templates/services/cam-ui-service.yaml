@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cam-ui
+  labels:
+    name: cam-ui
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  # DO NOT modify this conditional check
+  {{ if eq (.Values.enableDevSettings|quote|lower) "\"true\"" }}
+  type: NodePort
+  {{ else if eq ( .Values.serviceType | lower ) "ingress" }}
+  type: ClusterIP
+  {{ else }}
+  type: {{ .Values.serviceType }}
+  {{ end }}
+  ports:
+    - name: https
+      port: 443
+      targetPort: cam-ui
+      protocol: TCP
+      # DO NOT modify this conditional check
+      {{ if or (eq (.Values.enableDevSettings|quote|lower) "\"true\"") ( eq .Values.serviceType "NodePort" ) }}
+      nodePort: {{ .Values.uiNodeport }}
+      {{ end }}
+  # DO NOT modify this conditional check
+  {{ if eq (.Values.enableServiceExternalIPs|quote|lower) "\"true\"" }}
+  externalIPs:
+    {# # externalIpCamUi be defined in secrets.json or JINJA__externalIpCamUi env variable #}
+    - {{ .Values.externalIpCamUi }}
+  {{ end }}
+  selector:
+    name: camui-deploy

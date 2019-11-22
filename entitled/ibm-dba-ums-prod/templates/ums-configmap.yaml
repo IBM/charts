@@ -1,0 +1,171 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "ums") | indent 4 }}
+data:
+
+  ums.xml: |+
+    <server>
+{{- if .Values.global.ums.serviceType }}
+{{- if eq .Values.global.ums.serviceType "NodePort" }}
+      <!-- use defined hostname/port combination as external host -->
+      <variable name="ums.externalHostName" value="{{ .Values.global.ums.hostname }}:{{ .Values.global.ums.port }}" />
+{{- else }}
+      <!-- use defined Ingress hostname as external host -->
+      <variable name="ums.externalHostName" value="{{ .Values.global.ums.hostname }}" />
+{{- end }}
+{{- end }}
+      <!-- directly access localhost for internal requests -->
+      <variable name="ums.internalHostName" value="localhost:{{ include "ums.constants.container.port" . }}" />
+
+      <variable name="ums.oauth.clientmanager.group" value="{{ .Values.oauth.clientManagerGroup }}" />
+
+      <variable name="ums.oauthdb.type" value="{{ .Values.oauth.database.type }}" />
+      <variable name="ums.oauthdb.databaseName" value="{{ .Values.oauth.database.name }}" />
+      <variable name="ums.oauthdb.host" value="{{ .Values.oauth.database.host }}" />
+      <variable name="ums.oauthdb.port" value="{{ .Values.oauth.database.port }}" />
+{{- if .Values.oauth.database.driverfiles }}
+      <variable name="ums.oauthdb.jdbcFiles" value="{{ .Values.oauth.database.driverfiles }}" />
+{{- end }}
+
+      <variable name="ums.tsdb.type" value="{{ .Values.teamserver.database.type }}" />
+      <variable name="ums.tsdb.databaseName" value="{{ .Values.teamserver.database.name }}" />
+      <variable name="ums.tsdb.host" value="{{ .Values.teamserver.database.host }}" />
+      <variable name="ums.tsdb.port" value="{{ .Values.teamserver.database.port }}" />
+{{- if .Values.teamserver.database.driverfiles }}
+      <variable name="ums.tsdb.jdbcFiles" value="{{ .Values.teamserver.database.driverfiles }}" />
+{{- end }}
+
+      <variable name="ums.logs.consoleFormat" value="{{ .Values.logs.consoleFormat }}" />
+      <variable name="ums.logs.consoleLogLevel" value="{{ .Values.logs.consoleLogLevel }}" />
+      <variable name="ums.logs.consoleSource" value="{{ .Values.logs.consoleSource }}" />
+      <variable name="ums.logs.traceFormat" value="{{ .Values.logs.traceFormat }}" />
+
+      <!-- fixed locations as defined by the volume mounts -->
+      <variable name="ums.ssl.keystore.location" value="/opt/ibm/wlp/usr/shared/resources/security/keystore/jks/server.jks" />
+      <variable name="ums.ssl.jwtKeystore.location" value="/opt/ibm/wlp/usr/shared/resources/security/jwt-keystore/jks/server.jks" />
+
+      <include optional="false" location="/opt/ibm/wlp/usr/shared/resources/config/dataSource.xml" />
+      <include optional="true"  location="/opt/ibm/wlp/usr/shared/resources/config/trace-specification.xml" />
+
+{{- if and .Values.useCustomJDBCDrivers (eq .Values.useCustomJDBCDrivers true) }}
+      <variable name="ums.oauthdb.jdbcPath" value="/opt/ibm/wlp/usr/shared/resources/jdbc/{{ .Values.oauth.database.type }}" />
+      <variable name="ums.tsdb.jdbcPath" value="/opt/ibm/wlp/usr/shared/resources/jdbc/{{ .Values.teamserver.database.type }}" />
+{{- end }}
+
+{{- if eq .Values.oauth.database.ssl true }}
+      <!-- SSL enabled for OAuth DB connection (Db2 only) -->
+      <variable name="ums.oauthdb.ssl" value="true" />
+      <variable name="ums.oauthdb.sslCertLocation" value="/opt/ibm/wlp/usr/shared/resources/oauthdb-cacert/cacert.crt" />
+{{- else }}
+      <!-- SSL disabled for OAuth DB connection -->
+      <variable name="ums.oauthdb.ssl" value="false" />
+      <variable name="ums.oauthdb.sslCertLocation" value="" />
+{{- end }}
+
+{{- if eq .Values.teamserver.database.ssl true }}
+      <!-- SSL enabled for Teamserver DB connection (Db2 only) -->
+      <variable name="ums.tsdb.ssl" value="true" />
+      <variable name="ums.tsdb.sslCertLocation" value="/opt/ibm/wlp/usr/shared/resources/teamserverdb-cacert/cacert.crt" />
+{{- else }}
+      <!-- SSL disabled for Teamserver DB connection -->
+      <variable name="ums.tsdb.ssl" value="false" />
+      <variable name="ums.tsdb.sslCertLocation" value="" />
+{{- end }}
+    </server>
+
+  trace-specification.xml: |+
+    <server>
+      <variable name="ums.logs.traceSpecification" value="{{ .Values.logs.traceSpecification }}" />
+    </server>
+
+  dataSource.xml: |+
+    <server>
+{{- if .Values.oauth.database.type }}
+{{- if eq .Values.oauth.database.type "derby" }}
+      <!-- generic Derby dataSource using pre-defined driver -->
+      <dataSource
+        id="oauthDatasource"
+        jndiName="jdbc/oauthDerbyDS">
+
+        <jdbcDriver libraryRef="DerbyEmbeddedLib"/>
+
+        <properties.derby.embedded
+          databaseName="UMSDB"
+          createDatabase="create"/>
+
+      </dataSource>
+{{- else }}
+      <!-- dataSource is based on provided values (using generic driver/credentials) -->
+      <dataSource
+        id="oauthDatasource"
+        jdbcDriverRef="oauthJdbcDriver"
+        jndiName="jdbc/oauthProvider"
+        containerAuthDataRef="oauthdbcredential">
+
+        <{{ include "ums.constants.oauth.database.properties" . }}
+          databaseName="${ums.oauthdb.databaseName}"
+          driverType={{ include "ums.constants.oauth.database.driverType" . }}
+          serverName="${ums.oauthdb.host}"
+          portNumber="${ums.oauthdb.port}"
+{{- if eq .Values.oauth.database.type "db2" }}
+          sslConnection="${ums.oauthdb.ssl}"
+          sslCertLocation="${ums.oauthdb.sslCertLocation}"
+{{- if .Values.oauth.database.alternateHosts }}
+          clientRerouteAlternateServerName="{{ .Values.oauth.database.alternateHosts }}"
+          clientRerouteAlternatePortNumber="{{ .Values.oauth.database.alternatePorts }}"
+          retryIntervalForClientReroute="15"
+          maxRetriesForClientReroute="3"
+{{- end }}
+{{- end }}
+        />
+
+      </dataSource>
+{{- end }}
+{{- end }}
+{{- if .Values.teamserver.database.type }}
+{{- if eq .Values.teamserver.database.type "derby" }}
+      <!-- generic Derby dataSource using pre-defined driver -->
+      <dataSource
+        id="tsDatasource"
+        jndiName="jdbc/tsDerbyDS">
+
+        <jdbcDriver libraryRef="DerbyEmbeddedLib"/>
+
+        <properties.derby.embedded
+          databaseName="TSDB"
+          createDatabase="create"/>
+
+      </dataSource>
+{{- else }}
+      <!-- dataSource is based on provided values (using generic driver/credentials) -->
+      <dataSource
+        id="tsDatasource"
+        jdbcDriverRef="tsJdbcDriver"
+        jndiName="jdbc/teamServer"
+        containerAuthDataRef="tsdbcredential">
+
+        <{{ include "ums.constants.ts.database.properties" . }}
+          databaseName="${ums.tsdb.databaseName}"
+          driverType={{ include "ums.constants.ts.database.driverType" . }}
+          serverName="${ums.tsdb.host}"
+          portNumber="${ums.tsdb.port}"
+{{- if eq .Values.teamserver.database.type "db2" }}
+          sslConnection="${ums.tsdb.ssl}"
+          sslCertLocation="${ums.tsdb.sslCertLocation}"
+{{- if .Values.teamserver.database.alternateHosts }}
+          clientRerouteAlternateServerName="{{ .Values.teamserver.database.alternateHosts }}"
+          clientRerouteAlternatePortNumber="{{ .Values.teamserver.database.alternatePorts }}"
+          retryIntervalForClientReroute="15"
+          maxRetriesForClientReroute="3"
+{{- end }}
+{{- end }}
+        />
+
+      </dataSource>
+{{- end }}
+{{- end }}
+    </server>

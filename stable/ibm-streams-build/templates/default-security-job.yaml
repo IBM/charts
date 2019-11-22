@@ -1,0 +1,93 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2019, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog
+
+{{- if ( empty .Values.build.securitySecret ) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-build-default-security"
+  labels:
+{{- include "build.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-build-default-security"
+  annotations:
+    "helm.sh/hook": post-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-build-default-security"
+      labels:
+{{- include "build.defaultLabels" . | indent 8 }}
+{{- include "build.serviceability" . | indent 8 }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-build-default-security"
+      annotations:
+{{- include "build.metering" . | indent 8 }}
+
+    spec:
+      affinity:
+{{- include "build.nodeaffinity" . | indent 8 }}
+
+      restartPolicy: Never
+      
+      serviceAccountName: {{ template "build.serviceAccountName" . }}
+      
+{{- include "build.podGeneralSecurityPolicies" . | indent 6 }}          
+      securityContext:
+{{- include "build.streamsinstallPodSecurityContext" . | indent 8 }}        
+               
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      {{- end }}
+        
+      volumes:
+        - name: default-security-config
+          configMap:
+            name: "{{ .Release.Name }}-build-default-security"        
+          
+      containers:
+      - name: default-secret
+        {{- if .Values.image.prefix }}
+        image: "{{ .Values.image.prefix }}/{{ .Values.image.build }}:{{ .Values.image.buildTag }}"
+        {{- else }}
+        image: "{{ .Values.image.build }}:{{ .Values.image.buildTag }}"
+        {{- end }}
+        imagePullPolicy: {{.Values.image.pullPolicy | default "IfNotPresent"}} 
+ 
+        workingDir: {{ include "build.installdir" . }}
+        
+        env:
+{{- include "build.basicEnv" . | indent 10 }}
+          - name: STREAMS_DEFAULT_SECURITY_CONFIG
+            value: {{ template "build.defaultSecurityMountPath" . }}
+
+        securityContext:
+{{- include "build.containerSecurityContext" . | indent 10 }}
+          
+        command: [ "$(STREAMS_INSTALL)/system/impl/bin/defaultsecret.sh" ]
+        
+        volumeMounts:
+          - name: default-security-config
+            mountPath: {{ template "build.defaultSecurityMountPath" . }}
+        
+        resources:
+          requests:
+            cpu: 1
+            memory: "1Gi"
+          limits:
+            cpu: 1
+            memory: "1Gi"
+{{- end }}     

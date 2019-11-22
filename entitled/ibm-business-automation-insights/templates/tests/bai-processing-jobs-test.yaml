@@ -1,0 +1,166 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018, 2019. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Checks that processing jobs are successfully running after Helm installation
+#
+# 1. wait until jobmanager is ready (check 60 times, frequency: 5 sec),
+#    or exit on error.
+# 2. for each installed job:
+#   - check job state until it is RUNNING (check 10 times, frequency 3 sec),
+#     or exit on error.
+#   - exit on error if state is RESTARTING, FAILING, SUSPENDED or FAILED
+#   - Job must stay ~10 sec in RUNNING state (check 3 times, frequency 3 sec) to
+#     be declared RUNNING.
+#
+# Note: In case of an upgrade there can be 2 instances of the same job; one
+#       in a CANCEL state and the new instance to be in a RUNNING state.
+###############################################################################
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-test-bai-processing-jobs
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: test-bai-processing-jobs
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
+{{- if and .Values.imageCredentials .Values.imageCredentials.imagePullSecret }}
+  imagePullSecrets:
+    - name: {{ .Values.imageCredentials.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.imageCredentials .Values.imageCredentials.registry }}
+  imagePullSecrets:
+    - name: {{ .Release.Name }}-bai-docker-secret
+  {{- end }}
+{{- end }}
+  serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+  containers:
+    - name: {{ template "ibm-bai.name" . }}
+      image: {{ .Values.initImage.image.repository }}:{{ .Values.initImage.image.tag }}
+      {{- if .Values.imagePullPolicy }}
+      imagePullPolicy: {{ .Values.imagePullPolicy }}
+      {{- end}}
+      command: ['sh', '-c','
+        log_msg()
+        {
+          echo "[`date`] $1";
+        }
+
+        log_msg "starting test-bai-processing-jobs...";
+
+        readonly getJobsOverview="wget http://{{ .Release.Name }}-bai-flink-jobmanager:8081/jobs/overview -qO- -T 5 --no-check-certificate";
+        jobsOverview="";
+
+        secondsBeforeRetry="5";
+        maximumRetries="100";
+        tryCount=0;
+
+        while :; do
+          log_msg "trying... ${getJobsOverview}";
+
+          jobsOverview=`${getJobsOverview}`;
+          returnCode=$?;
+          if [ "${returnCode}" = "0" ]; then
+            break;
+          fi;
+
+          tryCount=`expr ${tryCount} + 1`;
+          if [ "${tryCount}" = "${maximumRetries}" ]; then
+            log_msg "ERROR (${returnCode}) - unable to reach Flink jobmanager.";
+            exit 1;
+          fi;
+
+          log_msg "waiting for the jobmanager to be available... (${tryCount}/${maximumRetries})";
+          sleep ${secondsBeforeRetry};
+        done;
+
+        log_msg "jobmanager is ready.";
+
+        secondsBeforeRetry=3;
+        maximumRetries=10;
+
+        check_job()
+        {
+          jobName="dba/bai-$1";
+          isJobInstalled=$2;
+
+          if [ "${isJobInstalled}" == "true" ]; then
+            log_msg "checking installed job ${jobName}...";
+            echo "${jobsOverview}" | jq .;
+
+            tryCount=0;
+            successCount=0;
+            minimumConsecutiveSuccess=3;
+
+            while :; do
+              state=`echo "${jobsOverview}" | jq -r ''.[] | .[] | select(.name==''\"$jobName\"'') | .state''`;
+
+              if [ "`echo "${state}" | grep RUNNING`" ]; then
+                successCount=`expr ${successCount} + 1`;
+                log_msg "job ${jobName} state: ${state} (${successCount}/${minimumConsecutiveSuccess})";
+                if [ "${successCount}" = "${minimumConsecutiveSuccess}" ]; then
+                  break;
+                fi;
+              else
+                successCount=0;
+
+                if [ -n "${state}" ]; then
+                  log_msg "job ${jobName} state: ${state}";
+                fi;
+
+                if [ "${state}" = "RESTARTING" ] ||
+                   [ "${state}" = "FAILING"    ] ||
+                   [ "${state}" = "SUSPENDED"  ] ||
+                   [ "${state}" = "FAILED"     ];
+                then
+                  tryCount="${maximumRetries}";
+                else
+                  tryCount=`expr ${tryCount} + 1`;
+                fi;
+
+                if [ "${tryCount}" = "${maximumRetries}" ]; then
+                  log_msg "ERROR - job ${jobName} is not running.";
+                  exit 1;
+                fi;
+
+                log_msg "waiting for job ${jobName} to be running... (${tryCount}/${maximumRetries})";
+              fi;
+              sleep ${secondsBeforeRetry};
+              jobsOverview=`${getJobsOverview}`;
+            done;
+          fi;
+        }
+
+        check_job ingestion {{ .Values.ingestion.install }};
+        check_job bpmn {{ .Values.bpmn.install }};
+        check_job bawadv {{ .Values.bawadv.install }};
+        check_job icm {{ .Values.icm.install }};
+        check_job odm {{ .Values.odm.install }};
+        check_job content {{ .Values.content.install }};
+
+        log_msg "All installed jobs are in RUNNING state.";
+        exit 0;
+      ']
+  restartPolicy: Never
+

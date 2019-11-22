@@ -1,0 +1,192 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cam-recommend
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      name: cam-recommend
+  template:
+    metadata:
+      labels:
+        io.kompose.service: cam-recommend
+        name: cam-recommend
+{{ include "cam.labels" .  | indent 8 }}
+      annotations:
+{{ include "cam.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets/configmaps change
+        checksums/mysql-username: "{{ .Values.secrets.mysqlUsername | b64enc | sha256sum }}"
+        checksums/mysql-password: "{{ .Values.secrets.mysqlKey | b64enc | sha256sum }}"
+        checksums/rabbitmq.username: "{{ .Values.secrets.rabbitmqDefaultUser | b64enc | sha256sum }}"
+        checksums/rabbitmq.password: "{{ .Values.secrets.rabbitmqDefaultPassword | b64enc | sha256sum }}"
+        {{ end }}
+    spec:
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      initContainers:
+        - name: user-change
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "cam.readConfig" (list . "k8_jumpbox") }}
+          {{ else }}
+          image: {{ template "camicp.readConfig" (list . "k8_jumpbox" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "cam.container.securityContext.InitContainer" . | indent 10  }}
+          command: ['sh', '-c', 'chown -R 1100:1101 /var/camrecommend/']
+          volumeMounts:
+            - name: cam-data
+              mountPath: /var/camrecommend/aws-extract
+              subPath: camrecommend/aws-extract
+            - name: cam-data
+              mountPath: /var/camrecommend/aws-ingest
+              subPath: camrecommend/aws-ingest
+            - name: cam-data
+              mountPath: /var/camrecommend/aws-analyze
+              subPath: camrecommend/aws-analyze
+            - name: cam-data
+              mountPath: /var/camrecommend/output
+              subPath: camrecommend/output
+            - name: cam-data
+              mountPath: /var/camrecommend/aws-extract/output
+              subPath: camrecommend/aws-extract/output
+            - name: cam-data
+              mountPath: /var/camrecommend/aws-ingest/output
+              subPath: camrecommend/aws-ingest/output
+            - name: cam-data
+              mountPath: /var/camrecommend/aws-analyze/output
+              subPath: camrecommend/aws-analyze/output
+      containers:
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+      - image: {{ template "cam.readConfig" (list . "cam_recommendation_engine") }}
+      {{ else }}
+      - image: {{ template "camicp.readConfig" (list . "cam_recommendation_engine" .Values.imageCredentials.registry) }}
+      {{ end }}
+{{ include "cam.container.securityContext.NonRoot" . | indent 8  }}
+        name: cam-recommend
+        resources:
+{{ include "deployClassConfig" (list . "cam_recommendation_engine") | indent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - /tmp/health.sh
+          initialDelaySeconds: 120
+          periodSeconds: 120
+          timeoutSeconds: 10
+          failureThreshold: 4
+        env:
+          - name: APP_SETTINGS
+            value: production
+          - name: SERVER_NAME
+            value: cam-recommendation
+          - name: DB_HOST
+            value: "mariadb"
+          - name: DB_PORT
+            # DO NOT modify this conditional check
+            {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+            value: "{{ .Values.secrets.mariadbServicePort}}"
+            {{ else }}
+            value: "{{ .Values.secrets.mariadbServicePort}}"
+            {{ end }}
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                key: mysql.username
+                name: mysql-username
+          - name: DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: mysql-password
+                key: mysql.key
+          - name: DB_KEY
+            value: /var/www/cam-recommendation-ingestor/certs/maria_dev.key
+          - name: DB_CRT
+            value: /var/www/cam-recommendation-ingestor/certs/maria_dev.crt
+          - name: BROKER_QUEUE
+            value: "cam-recommendation-ingestor"
+          - name: PUBLISH_QUEUE
+            value: "recommend-status"
+          - name: BROKER_HOST
+            value: rabbitmq
+          - name: BROKER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-creds
+                key: rabbitmq.password
+          - name: BROKER_PORT
+            value: "5672"
+          - name: BROKER_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: rabbitmq-creds
+                key: rabbitmq.username
+          - name: CAM_RECOMMENDATION_OUTPUT
+            value: /var/camrecommend/output/
+          - name: EXTRACT_OUTPUT_PATH
+            value: /var/camrecommend/aws-extract/output/
+          - name: ANALYZE_OUTPUT_PATH
+            value: /var/camrecommend/aws-analyze/output/
+          - name: INGEST_OUTPUT_PATH
+            value: /var/camrecommend/aws-ingest/output/
+          - name: REC_API_PATH
+            value: http://0.0.0.0:5000
+          - name: GRACE_DAYS
+            value: "5"
+          - name: ALWAYS_USE_CURRENT
+            value: "True"
+          - name: MAX_PRIORITY_LEVEL
+            value: "3"
+          - name: DISABLE_EBS_FLAG
+            value: "{{ .Values.recommendationEBSDisable }}"
+        volumeMounts:
+          - name: cm-keystore-file
+            mountPath: /var/www/cam-recommendation-ingestor/certs/
+          - name: cam-data
+            mountPath: /var/camrecommend/aws-extract
+            subPath: camrecommend/aws-extract
+          - name: cam-data
+            mountPath: /var/camrecommend/aws-ingest
+            subPath: camrecommend/aws-ingest
+          - name: cam-data
+            mountPath: /var/camrecommend/aws-analyze
+            subPath: camrecommend/aws-analyze
+          - name: cam-data
+            mountPath: /var/camrecommend/output
+            subPath: camrecommend/output
+          - name: cam-data
+            mountPath: /var/camrecommend/aws-extract/output
+            subPath: camrecommend/aws-extract/output
+          - name: cam-data
+            mountPath: /var/camrecommend/aws-ingest/output
+            subPath: camrecommend/aws-ingest/output
+          - name: cam-data
+            mountPath: /var/camrecommend/aws-analyze/output
+            subPath: camrecommend/aws-analyze/output
+      volumes:
+        - name: cam-data
+          persistentVolumeClaim:
+            claimName: cam-data-claim
+        - name: cm-keystore-file
+          secret:
+            secretName: grav-certificates
+            items:
+              - key: maria_dev.crt
+                path: maria_dev.crt
+              - key: maria_dev.key
+                path: maria_dev.key
+      # DO NOT modify this conditional check
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

@@ -1,0 +1,149 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compConfigName := .sch.chart.components.wex.config.name }}
+{{- $compConfigServiceHeadlessName := .sch.chart.components.wex.config.service.headlessName }}
+{{- $compConfigLabelComponent := .sch.chart.components.wex.config.label.component }}
+{{- $compConfigLabelRunStatefulset := .sch.chart.components.wex.config.label.runStatefulset }}
+
+{{- $compConfigmapName := .sch.chart.components.wex.configmap.name }}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compConfigName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-config
+    run: {{ $compConfigLabelRunStatefulset }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "{{ .Chart.Name }}.fullname" . }}
+      component: wex-config
+      run: {{ $compConfigLabelRunStatefulset }}
+  serviceName: {{ include "sch.names.fullCompName" (list . $compConfigServiceHeadlessName ) }}
+  replicas: {{ .Values.config.replica }}
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-config
+        run: {{ $compConfigLabelRunStatefulset }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+        {{- if eq .Values.config.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels:
+                app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                component: wex-config
+                run: {{ $compConfigLabelRunStatefulset }}
+        {{- else if eq .Values.config.antiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            podAffinityTerm:
+              topologyKey: "kubernetes.io/hostname"
+              labelSelector:
+                matchLabels:
+                  app: {{ template "{{ .Chart.Name }}.fullname" . }}
+                  component: wex-config
+                  run: {{ $compConfigLabelRunStatefulset }}
+        {{- end }}
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: config
+        image: "{{ .Values.general.image.core }}"
+        imagePullPolicy: {{ .Values.general.image.pullPolicy }}
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 8 }}
+        env:
+        - name: WEX_ALL_COMPONENTS
+          value: "zk"
+        ports:
+        - name: zk-client
+          containerPort: 2181
+          protocol: TCP
+        - name: zk-server
+          containerPort: 2888
+          protocol: TCP
+        - name: zk-leader
+          containerPort: 3888
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . $compConfigmapName ) }}
+        resources:
+{{ toYaml .Values.config.resources | indent 10 }}
+        volumeMounts:
+        - name: datadir
+          mountPath: /wexdata
+          subPath: data
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - |
+              curl http://127.0.0.1:65380/commands/ruok | grep "\"error\" : null"
+              exit $?
+          initialDelaySeconds: {{ .Values.config.readinessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.config.readinessProbe.timeoutSeconds }}
+          failureThreshold: 12
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - |
+              curl http://127.0.0.1:65380/commands/ruok | grep "\"error\" : null"
+              exit $?
+          initialDelaySeconds: {{ .Values.config.livenessProbe.initialDelaySeconds }}
+          periodSeconds: 15
+          timeoutSeconds: {{ .Values.config.livenessProbe.timeoutSeconds }}
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+      labels:
+        app: {{ template "{{ .Chart.Name }}.fullname" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: wex-config
+        run: {{ $compConfigLabelRunStatefulset }}
+    spec:
+      {{- if .Values.general.persistence.useDynamicProvisioning }}
+      # if present, use the storageClassName from the values.yaml, else use the
+      # default storageClass setup by kubernetes Administrator
+      # setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.general.persistence.storageClassName | quote }}
+      {{- else }}
+      # bind to an existing pv.
+      # setting storageClassName to "" disables dynamic provisioning
+      storageClassName: {{ default "" .Values.general.persistence.storageClassName | quote }}
+      selector:
+        matchLabels:
+          assign-to: "wex-config"
+        {{- if .Values.general.persistence.selector.label }}
+        matchExpressions:
+          - {key: "{{ .Values.general.persistence.selector.label }}", operator: In, values: ["{{ .Values.general.persistence.selector.value }}"]}
+        {{- end }}
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.config.persistence.size }}

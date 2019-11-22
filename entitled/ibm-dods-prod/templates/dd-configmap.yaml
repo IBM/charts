@@ -1,0 +1,109 @@
+{{- include "sch.config.init" (list . "ibm-dods-prod.sch.chart.config.values") -}}
+apiVersion: v1
+# a config map used by ICP4D to detect that the add-on is installed, and to setup our 
+# nginx routes and software tags
+kind: ConfigMap
+metadata:
+  name: {{ template "ibm-dods-prod.addon-do.configname" . }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+    icpdata_addon: "true"
+data:
+  # main add-on manifest in PrivateCloud-analytics/zen-core-api/blob/master/build/content/meta/add-ons.json
+  # we just update it (there is a merge mecanism) with the version installed here
+  # Need to have x.x.x.x number here to be compliant with entitlement api, so add a trailing .0  
+  add-ons.json: |
+   {
+      "do":{  
+        "versions": {
+          "{{ .Chart.Version }}.0" : {
+            "state":"enabled"
+          }
+        }
+      }
+   }
+
+  nginx.conf: |
+    ### dsx-local deep decision related
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    set $dd_scenario_ui dd-scenario-ui-svc.$nsdomain;
+    set $dd_scenario_api dd-scenario-api-svc.$nsdomain;
+    set $dd_cognitive_api dd-cognitive-svc.$nsdomain;
+        
+    location /decision-optimization {
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        sub_filter "ibm-nginx-svc" $host;
+        sub_filter_once off;
+        sub_filter_types application/x-javascript application/javascript;
+        proxy_pass https://$dd_scenario_ui:8449;
+        proxy_redirect https://ibm-nginx-svc/ https://$host/;
+        proxy_read_timeout 6m;
+    }
+
+    location /scenario {
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_set_header Accept-Encoding "";
+        sub_filter "ibm-nginx-svc" $host;
+        sub_filter_once off;
+        sub_filter_types application/x-javascript application/javascript;
+        proxy_pass https://$dd_scenario_ui:8449;
+        proxy_redirect https://ibm-nginx-svc/ https://$host/;
+    }
+
+    location /v2/containers {
+        proxy_pass https://dd-scenario-api-svc.$nsdomain:8450/dd-scenario-api$request_uri;
+        proxy_redirect https://dd-scenario-api-svc:8450/dd-scenario-api/ https://$http_host/;
+        proxy_set_header Host dd-scenario-api-svc:8450;
+        sub_filter "https://dd-scenario-api-svc:8450/dd-scenario-api" https://$http_host;
+        sub_filter_once off;
+        sub_filter_types application/json;
+    }
+    
+    location /v2/decisions {
+        proxy_pass https://dd-scenario-api-svc.$nsdomain:8450/dd-scenario-api$request_uri;
+        proxy_redirect https://dd-scenario-api-svc:8450/dd-scenario-api/ https://$http_host/;
+        proxy_set_header Host dd-scenario-api-svc:8450;
+        proxy_read_timeout 6m;
+        sub_filter "https://dd-scenario-api-svc:8450/dd-scenario-api" https://$http_host;
+        sub_filter_once off;
+        sub_filter_types application/json;
+    }
+    
+    location /v1/cognitive/ {
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_set_header Accept-Encoding "";
+        sub_filter "ibm-nginx-svc" $host;
+        sub_filter_once off;
+        sub_filter_types application/x-javascript application/javascript;
+        proxy_pass https://$dd_cognitive_api:8451;
+        proxy_redirect https://ibm-nginx-svc/ https://$host/;
+        proxy_read_timeout 6m;
+    }   
+    
+  dods_deployment.swidtag: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <SoftwareIdentity name="IBM Decision Optimization for Watson Studio Deployment" tagId="ibm.com-28052828632646e49d74c952fe14a5dd-2.1.0" version="2.1.0" versionScheme="multipartnumeric" xml:lang="en" xmlns="http://standards.iso.org/iso/19770/-2/2015/schema.xsd" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.iso.org/iso/19770/-2/2015-current/schema.xsd schema.xsd">
+        <Meta persistentId="28052828632646e49d74c952fe14a5dd"/>
+        <Meta generator="4-1-20170912"/>
+        <Entity name="IBM" regid="ibm.com" role="licensor tagCreator softwareCreator"/>
+    </SoftwareIdentity>
+    
+  dods_development.swidtag: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <SoftwareIdentity name="IBM Decision Optimization for Watson Studio Development" tagId="ibm.com-a2543af48ed446dc8afac58a6cf810a4-2.1.0" version="2.1.0" versionScheme="multipartnumeric" xml:lang="en" xmlns="http://standards.iso.org/iso/19770/-2/2015/schema.xsd" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.iso.org/iso/19770/-2/2015-current/schema.xsd schema.xsd">
+        <Meta persistentId="a2543af48ed446dc8afac58a6cf810a4"/>
+        <Meta generator="4-1-20170912"/>
+        <Entity name="IBM" regid="ibm.com" role="licensor tagCreator softwareCreator"/>
+    </SoftwareIdentity>
+    
+  files: |
+    [
+      {
+        "dest": "/user-home/_global_/config/dods_deployment.swidtag",
+        "contentKey": "dods_deployment.swidtag"
+      },
+      {
+        "dest": "/user-home/_global_/config/dods_development.swidtag",
+        "contentKey": "dods_development.swidtag"
+      }
+    ]     

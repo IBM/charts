@@ -1,0 +1,85 @@
+{{- include "sch.config.init" (list . "ibmMongodb.sch.chart.config.values") -}}
+{{- if not (include "ibm-mongodb.boolConvertor" (list .Values.keep . )) }}
+{{- if or (and (include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . )) (or (not (tpl .Values.auth.authSecretName . )) (and (.Values.metrics.enabled) (not (tpl .Values.auth.metricsSecretName . ))) (not (tpl .Values.auth.keySecretName . )))) (and (include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . ))) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 4 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 4 }}
+{{- end }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsCleanup) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsCleanup) | indent 8 }}
+{{- if .Values.extraLabels }}
+{{ toYaml .Values.extraLabels | indent 8 }}
+{{- end }}
+    spec:
+      affinity:
+        {{- if .Values.affinity }}
+{{ .Values.affinity | toYaml | indent 8 }}
+        {{- else }}
+          {{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+      serviceAccountName: {{ include "ibm-mongodb.serviceAccount.name" . | quote }}
+{{- if tpl .Values.global.image.pullSecret . }}
+      imagePullSecrets:
+      - name: {{ tpl .Values.global.image.pullSecret . }}
+{{- end }}
+      containers:
+      - name: cleanup
+        image:  {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}
+        imagePullPolicy:  {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          set -ex
+{{- if and (include "ibm-mongodb.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . )) }}
+          if kubectl get    secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }} ; then
+             kubectl delete secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+          fi
+{{- end }}
+{{- if and (include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . )) (not (tpl .Values.auth.authSecretName . )) }}
+          if kubectl get    secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }} ; then
+             kubectl delete secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+          fi
+{{- end }}
+{{- if and (include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . )) (.Values.metrics.enabled) (not (tpl .Values.auth.metricsSecretName . )) }}
+          if kubectl get    secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.metricsSecret) | quote }} ; then
+             kubectl delete secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.metricsSecret) | quote }}
+          fi
+{{- end }}
+{{- if and (include "ibm-mongodb.boolConvertor" (list .Values.auth.enabled . )) (not (tpl .Values.auth.keySecretName . )) }}
+          if kubectl get    secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.keySecret) | quote }} ; then
+             kubectl delete secret -n {{ .Release.Namespace }} {{ include "sch.names.fullCompName" (list . .sch.chart.components.keySecret) | quote }}
+          fi
+{{- end }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+      restartPolicy: Never
+{{- end }}
+{{- end }}

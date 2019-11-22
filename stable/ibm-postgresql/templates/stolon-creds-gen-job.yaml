@@ -1,0 +1,83 @@
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+{{ if .Release.IsInstall }}
+{{- if or (not (tpl .Values.auth.authSecretName . )) (and (include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . ))) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsGen) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 4 }}
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.credsGen) | indent 8 }}
+      name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.credsGen) | quote }}
+    spec:
+      serviceAccountName: {{ include "stolon.serviceAccountName" . | quote }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsPodSecurityContext) | indent 8 }}
+{{- if tpl .Values.global.image.pullSecret . }}
+      imagePullSecrets:
+      - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+{{- end }}
+      containers:
+      - name: cred-gen
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}/{{ end }}{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 10 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+{{- if and (include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . )) }}
+          openssl genrsa -out ca.key 2048
+          openssl req -x509 -new -nodes -key ca.key -subj "/CN={{ include "sch.names.fullCompName" (list . .sch.chart.components.proxyService) }}" -days 3650 -reqexts v3_req -extensions v3_ca -out ca.crt
+          echo "Dumping CA certificate"
+          openssl x509 -in ca.crt -text -noout
+{{- end }}
+          cat <<EOF | kubectl apply -n {{ .Release.Namespace }} -f -
+{{- if and (include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . )) (not (tpl .Values.tls.tlsSecretName . )) }}
+          apiVersion: v1
+          kind: Secret
+          type: kubernetes.io/tls
+          metadata:
+            labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+          data:
+            tls.crt: $(cat ca.crt | base64 | tr -d '\n')
+            tls.key: $(cat ca.key | base64 | tr -d '\n')
+{{- end }}
+{{- if not (tpl .Values.auth.authSecretName . ) }}
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 14 }}
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+          data:
+            pg_su_password:   $(openssl rand -base64 20 | tr -d '\n' | base64 | tr -d '\n')
+            pg_repl_password: $(openssl rand -base64 20 | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+          EOF
+      restartPolicy: Never
+{{- end }}
+{{ end }}

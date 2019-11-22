@@ -1,0 +1,170 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Unique key of the Deployment instance
+  name: {{ .Values.servicename }}-tools-slave
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+spec:
+  replicas: {{ .Values.eventstoreService.replicas }}
+  # Keep record of 2 revisions for rollback
+  revisionHistoryLimit: 2
+  selector:
+      matchLabels:
+        app.kubernetes.io/name: {{ .Values.servicename }}-tools-slave
+  template:
+    metadata:
+      labels:
+        # Apply this label to pods and default
+        # the Deployment label selector to this value
+        app.kubernetes.io/name: {{ .Values.servicename }}-tools-slave
+        helm.sh/chart: "{{ .Chart.Name }}"
+        name: {{ template "eventstore.name" . }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        component: eventstore
+        enabled: "true"
+      annotations:
+        {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app.kubernetes.io/name"
+                    operator: In
+                    values:
+                    - {{ .Values.servicename }}-tools-slave
+              topologyKey: "kubernetes.io/hostname"
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      securityContext:
+        runAsUser: {{ regexFind "([1-9]{1}[0-9]{0,8}$)|(eventstore$)" .Values.servicename | replace "eventstore" "1000" }}
+        runAsGroup: 0
+        fsGroup: 0
+      initContainers:
+      {{- include "eventstore.wait-db2nodes-cfg" . | indent 6 }}
+      containers:
+      - name: bar
+        {{- if .Values.engine.image.tag }}
+        image: {{ .Values.engine.image.repository }}:{{ .Values.engine.image.tag }}
+        {{- else }}
+        image: {{ .Values.engine.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/ksh']
+        args: ["-l","-c","/home/db2inst1/base_entrypoint.sh /eventstore/nova_toolslave_entrypoint.sh"]
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        readinessProbe:
+           exec:
+             command:
+             - sudo
+             - cat
+             - /home/db2inst1/sqllib/db2nodes.cfg
+           initialDelaySeconds: 5
+           periodSeconds: 10
+        livenessProbe:
+           exec:
+             command:
+             - sudo
+             - cat
+             - /home/db2inst1/sqllib/db2nodes.cfg
+           initialDelaySeconds: 300
+           periodSeconds: 20
+        env:
+        # ME=${USER}
+        - name: ME
+          value: "root"
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+             secretKeyRef:
+                name: cos-{{ .Values.servicename }}
+                key: access-key
+                optional: true
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+             secretKeyRef:
+                name: cos-{{ .Values.servicename }}
+                key: secret-key
+                optional: true
+        - name: SERVICENAME
+          value: "{{ .Values.servicename }}"
+        - name: DB2INSTANCE
+          value: "{{ .Values.db2InstanceUser }}"
+        - name: INSTANCE_ID
+          value: '{{ regexFind "([1-9]{1}[0-9]{0,8}$)|(eventstore$)" .Values.servicename | replace "eventstore" "1000" }}'
+        - name: SQLLIB_SHARED
+          value: "/eventstorefs/{{ .Values.servicename }}/{{ .Values.db2InstanceUser }}/sqllib_shared"
+        - name: LOCAL_SSD_PATH
+          value: "/eventstore/db/ssd/{{ .Values.servicename }}"
+        - name: LOCAL_ZK_PATH
+          value: "/eventstore/db/zookeeper"
+        - name: STORAGE_DATA_UNDERFS
+          value: "/eventstorefs/data"
+        - name: STORAGE_CATALOG_UNDERFS
+          value: "/eventstorefs/db2inst1"
+        - name: DB2_CLIENT_PORT
+          value: "{{ .Values.engine.db2ClientPort }}"
+        - name: DB2_COMMUNICATION_PORT
+          value: "{{ .Values.engine.db2CommunicationPort }}"
+        - name: EXTERNAL_STORAGE
+          value: "/eventstore/db/external_db"
+        volumeMounts:
+        - mountPath: /eventstorefs
+          name: storage-underfs
+        - mountPath: /eventstore/ssl:z
+          name: eventstore-ssl-certificate
+        - mountPath: /eventstore/eventstore_external_conf
+          name: eventstore-config-volume
+        - mountPath: /eventstore/db/external_db
+          name: eventstore-external-db
+          mountPropagation: HostToContainer
+        - mountPath: /eventstore/db/ssd/{{ .Values.servicename }}:z
+          name: eventstore-local-db
+        - mountPath: /eventstore/db/zookeeper:z
+          name: zookeeper
+      # Restart policy for all containers within the pod
+      # One of Always, OnFailure, Never. Default to Always.
+      restartPolicy: Always
+      volumes:
+      - name: storage-underfs
+        persistentVolumeClaim:
+        {{- if .Values.pvcSettings.existingClaimName }}
+          claimName: {{ .Values.pvcSettings.existingClaimName }}
+        {{- else }}
+          claimName: {{ .Values.servicename }}-pvc
+        {{- end }}
+      - name: eventstore-ssl-certificate
+        hostPath:
+          path: {{ .Values.disk.computePath }}/{{ .Values.servicename }}/engine/ssl 
+      - name: eventstore-external-db
+        hostPath:
+          path: {{ .Values.disk.storagePath }}/{{ .Values.servicename }}/engine/utils/external_db
+      - name: eventstore-local-db
+        hostPath:
+          path: {{ .Values.disk.computePath }}/{{ .Values.servicename }}/engine/local_db
+      - name: zookeeper
+        hostPath:
+          path: {{ tpl .Values.disk.zookeeperPath . }}/{{ .Values.servicename }}/zookeeper
+      - name: eventstore-config-volume
+        configMap:
+          name: "{{ .Values.servicename }}-config-files"
+          items:
+          - key: db2eventstore-reg-var
+            path: db2eventstore-reg-var.conf

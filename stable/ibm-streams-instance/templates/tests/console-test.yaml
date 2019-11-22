@@ -1,0 +1,108 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2019, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog                               
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-console-test"
+  labels:
+{{- include "streams.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-console-test"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+  {{- include "streams.nodeaffinity" . | indent 4 }}
+  serviceAccountName: {{ template "streams.instanceServiceAccountName" . }}
+{{- include "streams.podGeneralSecurityPolicies" . | indent 2 }}
+  securityContext:
+{{- include "streams.streamsopsPodSecurityContext" . | indent 4 }}
+
+  terminationGracePeriodSeconds: 1
+  containers:
+  - name: {{ .Release.Name }}-console-test
+    {{- if .Values.image.prefix }}
+    image: "{{ .Values.image.prefix }}/{{ .Values.image.operations }}:{{ .Values.image.operationsTag }}"
+    {{- else }}
+    image: "{{ .Values.image.operations }}:{{ .Values.image.operationsTag }}"
+    {{- end }}
+    imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+    securityContext:
+{{- include "streams.containerSecurityContext" . | indent 6 }}
+
+    env:
+      - name: LANG
+        value: "en_US.utf-8"
+      - name: STREAMS_INSTALL
+        value: {{ include "streams.installdir" . }}
+      - name: STREAMS_INSTANCE_ID
+        value: "{{ .Release.Name }}"
+      - name: STREAMS_ZKCONNECT
+        value: "{{ .Values.zkconnect }}"
+
+      {{- if .Values.controller.securitySecret }}
+      - name: STREAMS_KEYSTORE
+        value: "/etc/{{ .Release.Name }}/security/streams.jks"
+      - name: STREAMS_KEYSTORE_PW
+        valueFrom:
+          secretKeyRef:
+            name: "{{ .Values.controller.securitySecret }}"
+            key: keystorepw
+      - name: STREAMS_TRUSTSTORE
+        value: "/etc/{{ .Release.Name }}/security/streams.jts"
+      - name: STREAMS_TRUSTSTORE_PW
+        valueFrom:
+          secretKeyRef:
+            name: "{{ .Values.controller.securitySecret }}"
+            key: truststorepw
+      {{- end }}
+
+      {{- if .Values.mkinstance.env }}
+{{ toYaml .Values.mkinstance.env | indent 6 }}
+      {{- end }}
+
+    command: ["bash", "-c", "set -x ; MAX_TRIES=120 ; HEALTHY=0 ; for (( TRIES=0; TRIES<=$MAX_TRIES; TRIES++ )) ; do result=$(streamtool geturl) ; echo $result ; echo $result | grep -v 'https' ; if [ $? -eq 1 ]; then HEALTHY=1 ; break ; else sleep 1 ; fi ; done ; url=$(streamtool geturl) ; curl ${url} --insecure | grep '<title>IBM Streams</title>'"]
+
+    resources:
+      requests:
+        cpu: "1"
+        memory: "1Gi"
+      limits:
+        cpu: "2" 
+        memory: "1Gi"    
+    
+    volumeMounts:
+      {{- if .Values.controller.securitySecret }}
+      - name: security-secret
+        mountPath: "/etc/{{ .Release.Name }}/security"
+      {{- end }}
+
+      {{- if .Values.mkinstance.volumeMounts }}
+{{ toYaml .Values.mkinstance.volumeMounts | indent 6 }}
+      {{- end }}
+    volumes:
+      {{- if .Values.controller.securitySecret }}
+      - name: security-secret
+        secret:
+          secretName: {{ .Values.controller.securitySecret }}
+          items:
+            - key: streams.jks
+              path: streams.jks
+            - key: streams.jts
+              path: streams.jts
+      {{- end }}
+
+      {{- if .Values.mkinstance.volumes }}
+{{ toYaml .Values.mkinstance.volumes | indent 6 }}
+      {{- end }}
+  restartPolicy: Never

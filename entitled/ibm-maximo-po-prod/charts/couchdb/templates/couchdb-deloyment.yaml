@@ -1,0 +1,138 @@
+{{- include "sch.config.init" (list . "poRef.sch.chart.config.values") -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "couchdb.fullname" . }}
+  labels:
+    app: {{ template "couchdb.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    run: {{ .Release.Name }}-couchdb-deployment-pod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: {{ .Release.Name }}-couchdb-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: {{ template "couchdb.fullname" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: couchdb
+        run: {{ .Release.Name }}-couchdb-deployment-pod
+      annotations:
+        productName: IBM Maximo Production Optimization On-Premises
+        productID: 5737J42
+        productVersion: v1.0
+    spec:
+{{- include "po.image.pull.secret" . | indent 6 }}
+      {{- include "po.securitycontext.couchdb.pod" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      terminationGracePeriodSeconds: 5
+      initContainers:
+        - name: init-copy
+          image: "{{ .Values.global.supportT.image.repository }}:{{.Values.global.supportT.image.tag  }}"
+          command: ['sh','-c','cp /tmp/customized.ini /default.d; ls -lrt /default.d;']
+          volumeMounts:
+          - name: config
+            mountPath: /tmp/
+          - name: config-storage
+            mountPath: /default.d
+          resources:
+          {{- if .Values.resources }}
+{{ toYaml .Values.resources | indent 12 }}
+          {{- else }}
+            requests:
+              cpu: 100m
+              memory: 500Mi
+            limits:
+              cpu: 500m
+              memory: 1024Mi
+          {{- end }}
+{{- include "po.securitycontext.couchdb.container" . | indent 10 }}
+      containers:
+        - name: couchdb
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ default "Always" .Values.image.pullPolicy | quote }}
+{{ include "po.image.pull.secret" . | indent 10 }}
+          ports:
+            - name: couchdb
+              containerPort: 5984
+            - name: couchdb-ssl
+              containerPort: 6984
+            - name: epmd
+              containerPort: 4369
+            - containerPort: 9100
+          env:
+            - name: COUCHDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "couchdb.secret.name" . }}
+                  key: couchdbAdminUsername
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "couchdb.secret.name" . }}
+                  key: couchdbAdminPassword
+            - name: COUCHDB_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "couchdb.secret.name" . }}
+                  key: couchdbCookieAuthSecret
+          livenessProbe:
+            periodSeconds: 10
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -G --silent --fail http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@localhost:5984/
+          readinessProbe:
+            periodSeconds: 10
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -G --silent --fail http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@localhost:5984/_up
+          resources:
+          {{- if .Values.resources }}
+{{ toYaml .Values.resources | indent 12 }}
+          {{- else }}
+            requests:
+              cpu: 100m
+              memory: 500Mi
+            limits:
+              cpu: 500m
+              memory: 1024Mi
+          {{- end }}
+          volumeMounts:
+          - name: config-storage
+            mountPath: /opt/couchdb/etc/default.d
+          - name: database-storage
+            mountPath: /opt/couchdb/data
+          - mountPath: /po-cert
+            name: cert-volume
+            readOnly: true     
+{{- include "po.securitycontext.couchdb.container" . | indent 10 }}
+      volumes:
+        - name: cert-volume
+          secret:
+            secretName: {{ template "couchdb.cert.name" . }}
+        - name: config
+          configMap:
+            name: {{ template "couchdb.fullname" . }}-cfgmp
+            items:
+              - key: inifile
+                path: customized.ini
+        - name: config-storage
+          emptyDir: {}
+        - name: database-storage
+          persistentVolumeClaim:
+            {{- if .Values.persistentVolume.existingDataVolumeClaimName }}
+              claimName: {{ .Values.persistentVolume.existingDataVolumeClaimName }}
+            {{- else }}
+              claimName: {{ template "couchdb.fullname" . }}-data-pvc
+            {{- end }}

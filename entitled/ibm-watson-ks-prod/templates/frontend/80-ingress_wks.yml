@@ -1,0 +1,29 @@
+{{- include "sch.config.init" (list . "wks.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.frontend.name -}}{{- if .Values.ingress.enabled -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ include "sch.names.fullName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "product" .Values.global.productName)) | indent 4 }}
+  annotations:
+{{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  backend:
+    serviceName: {{ include "sch.names.fullName" (list .) | quote }}
+    servicePort: {{ .Values.service.port }}
+  rules:
+  - host: {{ index .Values.ingress.hosts 0 }}
+    http:
+      paths:
+      - backend:
+          serviceName: {{ include "sch.names.fullName" (list .) | quote }}
+          servicePort: {{ .Values.service.port }}
+        path: /{{ .Release.Name }}
+{{- if ne (len .Values.ingress.tls) 0 }}
+  tls:
+  - hosts:
+    - {{ (index .Values.ingress.tls 0).hosts }}
+    secretName: {{ (index .Values.ingress.tls 0).secretName }}
+{{- end }}
+{{- end }}

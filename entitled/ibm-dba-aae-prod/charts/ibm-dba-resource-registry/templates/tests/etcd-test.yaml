@@ -1,0 +1,69 @@
+{{/* 
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "sch.rr.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "rr-test") }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "test" ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  restartPolicy: Never
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: {{ include "sch.names.fullCompName" (list . "sa") }}
+  securityContext:
+{{ include "ibm-dba-rr.pod.securitycontext" . | indent 4 }}
+  containers:
+  - name: "etcd-test"
+    image: {{ .Values.images.resourceRegistry | quote }} 
+    command:
+      - bash
+      - -c
+      - "etcdctl --debug --endpoints=https://{{ .Values.global.resourceRegistry.hostname }}:{{ toString .Values.global.resourceRegistry.port }} --cacert=$ETCD_PEER_TRUSTED_CA_FILE --user=root:$ROOT_PASSWORD --insecure-skip-tls-verify endpoint health"
+    env:
+      - name: ETCDCTL_API
+        value: "3"
+      - name: ROOT_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.global.resourceRegistry.adminSecretName }}
+            key: rootPassword
+      - name: ETCD_PEER_TRUSTED_CA_FILE
+        value: "/shared/resources/tls/ca-cert.pem"
+      - name: ETCDL_ENDPOINTS
+        value: "https://{{ include "sch.names.fullCompName" (list . "service") }}:2379"
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+    volumeMounts:
+      - name: client-key-store
+        mountPath: /shared/resources/tls
+    securityContext:
+{{ include "ibm-dba-rr.container.securitycontext" . | indent 6 }}
+  volumes:
+    - name: client-key-store
+      projected:
+        defaultMode: 0454
+        sources:
+        - secret:
+            name: {{ .Values.global.caSecretName }}
+            items:
+            - key: tls.crt
+              path: ca-cert.pem
+    - name: global-ca
+      secret:
+        secretName: {{ .Values.global.caSecretName}}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . ) | indent 4 }}

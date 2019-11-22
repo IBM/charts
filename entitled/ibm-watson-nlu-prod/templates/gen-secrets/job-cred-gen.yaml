@@ -1,0 +1,149 @@
+{{- include "sch.config.init" (list . "nlu.sch.chart.config.values") -}}
+{{- $compName := "creds-create" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": {{ add 2 .Values.preInstallHookWeightAnchor | quote }}
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      name: cred-gen
+    spec:
+      serviceAccountName: {{ template "nlu.serviceAccountName" . }}
+{{- include "sch.security.securityContext" (list . .sch.chart.credsSpecSecurityContext) | indent 6 }}
+      containers:
+      - name: cred-gen
+        image: "{{ .Values.global.icpDockerRepo }}{{ .Values.creds.image.repository }}:{{ .Values.creds.image.tag }}"
+        resources:
+          requests:
+            cpu: 1
+            memory: 500Mi
+          limits:
+            cpu: 2
+            memory: 1Gi
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 8 }}
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          export CN="*.{{ .Release.Namespace }}"
+          export CLUSTER_DOMAIN="{{ .Values.global.clusterDomain }}"
+          export SUBJ="/C=US/ST=New York/L=New York/O=IBM Watson/CN=$CN"
+          cat << EOF > openssl.cnf
+          [req]
+          default_bits = 2048
+          default_keyfile = public.crt
+          distinguished_name  = req_distinguished_name
+          req_extensions     = req_ext
+          x509_extensions = x509_ext
+          string_mask = utf8only
+
+          [req_distinguished_name]
+          commonName_max        = 64
+
+          [x509_ext]
+          subjectKeyIdentifier = hash
+          authorityKeyIdentifier = keyid,issuer
+          basicConstraints = CA:FALSE
+          subjectAltName = @alt_names
+
+          [req_ext]
+          subjectAltName = @alt_names
+
+          [alt_names]
+          DNS.1 = ${CN}
+          DNS.2 = ${CN}.${CLUSTER_DOMAIN}
+          DNS.3 = localhost
+          DNS.4 = mnlp
+          DNS.5 = "*.{{ .Release.Name }}-ibm-minio-headless-svc.{{ .Release.Namespace }}.${CLUSTER_DOMAIN}"
+          DNS.6 = "{{ .Release.Name }}-ibm-minio-svc.{{ .Release.Namespace }}.${CLUSTER_DOMAIN}"
+          IP.1 = "127.0.0.1"
+          EOF
+
+          cat openssl.cnf
+          openssl genrsa -out private.key 2048
+          # pkcs8 format required by gRPC Java
+          openssl pkcs8 -topk8 -nocrypt -in private.key -out private.key.pkcs8
+          openssl req -new -x509 -days 3650 -key private.key -out public.crt -config openssl.cnf -subj "/C=US/ST=NY/L=NY/O=IBM/CN=$CN"
+          cp public.crt ca.crt
+          sharedPassword=$(openssl rand -hex 20)
+
+          # Create TLS secret, if it does not already exist
+          retval=0 && kubectl get secret {{ include .Values.global.tls.secret.nameTpl . }} || retval=$?
+          if [[ $retval != 0 ]]; then
+            cat <<EOF | kubectl create -n {{ .Release.Namespace }} -f -
+            apiVersion: v1
+            kind: Secret
+            type: Opaque
+            metadata:
+              name: {{ include .Values.global.tls.secret.nameTpl . | quote }}
+              labels:
+{{ include "sch.metadata.labels.standard" (list . "tls" ) | indent 16 }}
+            data:
+              ### Public cert/private key in Minio Naming Scheme
+              public.crt: $(cat public.crt | base64 | tr -d '\n')
+              private.key: $(cat private.key | base64 | tr -d '\n')
+              ca.crt: $(cat ca.crt | base64 | tr -d '\n')
+
+              ### Public cert/private key in ETCD and Postgres Naming Scheme
+              tls.crt: $(cat public.crt | base64 | tr -d '\n')
+              tls.key: $(cat private.key | base64 | tr -d '\n')
+              tls.cacrt: $(cat ca.crt | base64 | tr -d '\n')
+
+              ### Private key in pkcs8 format
+              private.key.pkcs8: $(cat private.key.pkcs8 | base64 | tr -d '\n')
+          EOF
+          fi
+
+          # Create s3 access secret, if it does not already exist
+          retval=0 && kubectl get secret {{ include .Values.global.s3.accessSecret.nameTpl . }} || retval=$?
+          if [[ $retval != 0 ]]; then
+            cat <<EOF | kubectl create -n {{ .Release.Namespace }} -f -
+            apiVersion: v1
+            kind: Secret
+            type: Opaque
+            metadata:
+              name: {{ include .Values.global.s3.accessSecret.nameTpl . | quote }}
+              labels:
+{{ include "sch.metadata.labels.standard" (list . "minio-access" ) | indent 16 }}
+            data:
+              accesskey: $(echo -n "admin" | base64)
+              secretkey: $(echo -n ${sharedPassword} | base64)
+          EOF
+          fi
+
+          # Create Postgres auth secret, if it does not already exist
+          retval=0 && kubectl get secret {{ include .Values.global.postgres.authSecret.nameTpl . }} || retval=$?
+          if [[ $retval != 0 ]]; then
+            cat <<EOF | kubectl create -n {{ .Release.Namespace }} -f -
+            apiVersion: v1
+            kind: Secret
+            type: Opaque
+            metadata:
+              name: {{ include .Values.global.postgres.authSecret.nameTpl . | quote }}
+              labels:
+{{ include "sch.metadata.labels.standard" (list . "postgres-auth" ) | indent 16 }}
+            data:
+              {{ .Values.global.postgres.authSecret.suPasswordField }}: $(openssl rand -base64 20 | tr -d '\n' | base64 | tr -d '\n')
+              {{ .Values.global.postgres.authSecret.replPasswordField }}: $(openssl rand -base64 20 | tr -d '\n' | base64 | tr -d '\n')
+          EOF
+          fi
+      restartPolicy: Never
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}

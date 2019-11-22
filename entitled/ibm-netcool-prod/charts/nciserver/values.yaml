@@ -1,0 +1,118 @@
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+
+global:
+  # Review and accept the license terms? ['accept','not accepted']
+  license: "not accepted"
+  
+  omnisecretname: "%s-omni-secret"
+  
+  # Enable sub-chart resource requests
+  resource:
+    requests:
+      enable: true
+  # Define where/who the images will be pulled from
+  image:
+    # This is the artifactory server to pull the docker images from
+    repository: 
+    # Secret used to access the docker repository above
+    secret: 
+    # pullPolicy: IfNotPresent change to Always to make the latest is always picked up
+    pullPolicy: Always
+  
+  ldapservice:
+    name: ldapservice
+    verifypasswords : true
+    internal:
+      ldapPort: 389
+      ldapSSLPort: 636
+      suffix: "dc=mycluster,dc=icp"
+      baseDN: dc=mycluster,dc=icp
+      bindDN: "cn=admin,dc=mycluster,dc=icp"
+  cluster:
+    # Public name or IP the deployment cluster will be accessible from.
+    fqdn: "mycluster.icp"
+
+image:
+  name: nciserver
+  tag: 1.6.0.1-110
+
+subdomain: nciservers
+
+ingress:
+  proxyReadTimeout: 300
+  proxySendTimeout: 300
+
+impactcore:
+  service:
+    name: nciserver
+  setPrimary: "false"
+  internal:
+    nameserverPort: 9080
+    derbyPort: 1527
+    derbyPort2: 4851
+    nciPort: 2000
+    rmiPort: 3000
+    rmiPort2: 3001
+  env:
+    dbPath: /space
+  liveness:
+    initialDelaySeconds: 300
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 40
+  readiness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 250
+
+impactgui:
+  service:
+    name: impactgui
+
+objserv:
+  primary:
+    service:
+      name: objserv-agg-primary
+  backup:
+    service:
+      name: objserv-agg-backup
+      port: 4100
+
+database:
+  service:
+    name: db2ese-service
+
+pvc:
+  name: "space"
+  # specify the storageClassName you want to use
+  # if you don't specify a storageClassName it will use the default
+  storageClassName: ""
+
+  # if your not using dynamic provisioning, you can use selectors to 
+  # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+  selector:
+    label: ""
+    value: ""
+
+  size: 5Gi
+
+sso:
+  internal:
+    ltpaKeyFile: dash_ltpa.key
+
+ltpakeys:
+  status: keys/dash_ltpa.key

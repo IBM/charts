@@ -1,0 +1,324 @@
+# Default values for probe_cluster.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+#
+arch:
+  amd64: "3 - Most preferred"
+
+global:
+  authentication:
+    objectserver:
+      secretRelease: ''
+      secretTemplate: ''
+  common:
+    eventanalytics:
+      tenantId: cfd95b7e-3bc7-4006-a4a8-a73a79c71255
+  rbac:
+    serviceAccountName: noi-service-account
+  image:
+    repository: ""
+    secret: ""
+#environmentSize defines the size of deployment you want.
+#size0 is current default and is intended for demo purposes only.
+#size1 is recommended for development use.
+#Future work for production settings coming soon.
+  environmentSize: "size0"
+  persistence:
+    storageClassOption:
+      cassandradata: "local-storage-cassandra"
+      cassandrabak:  "local-storage-cassandra-bak"
+      zookeeperdata: "local-storage-zookeeper"
+      kafkadata:     "local-storage-kafka"
+      couchdbdata:   "local-storage-couchdb"
+    storageSize:
+      kafkadata: 5Gi
+      cassandradata: 10Gi
+      cassandrabak: 10Gi
+  cassandra:
+    superuserRole: true
+  #to accept license set paramater to: 'license: accept'
+  license: "not accepted"
+  kafka:
+    clientUserSecret: "{{ .Release.Name }}-kafka-client-secret"
+    allowInsecure: true
+    usePodIpForListeners: true
+  internalTLS:
+    enabled: false
+  isIcamDeployment: false
+  schLabelType: "prefixed"
+
+# External requirements
+cassandra:
+  enabled: true
+  global:
+    cassandraNodeReplicas: "environmentSizeDefault"
+
+kafka:
+  enabled: true
+  adminUserSecret: "{{ .Release.Name }}-kafka-admin-secret"
+  clusterSize: "environmentSizeDefault"
+  topics:
+    initialise: true
+
+zookeeper:
+  enabled: true
+  clusterSize: "environmentSizeDefault"
+
+# Redis dependency
+ibmRedis:
+  enabled: true
+  replicas:
+    servers: "environmentSizeDefault"
+    sentinels: "environmentSizeDefault"
+  persistence:
+    enabled: false
+  auth:
+    authSecretName: "{{ .Release.Name }}-ibm-redis-authsecret"
+  serviceAccount:
+    create: false
+
+# couchdb dependency
+couchdb:
+  enabled: true
+  clusterSize: "environmentSizeDefault"
+  port: 5984
+  secretName: couchdb-secret
+  autoClusterConfig:
+    enabled: "environmentSizeDefault"
+
+spark:
+  master:
+    enabled: true
+  slave:
+    enabled: true
+
+# Internal services
+inference:
+  enabled: true
+  serviceType: ClusterIP
+  pullPolicy: Always
+  port: 8080
+  image:
+    name: ea/inference-service
+    tag: 2.0.100-20191015153016BST
+  expectedEventId: EventAnalyticsSelfMonitoring
+
+trainer:
+  enabled: true
+  serviceType: ClusterIP
+  pullPolicy: Always
+  port: 8080
+  image:
+    name: ea/training-service
+    tag: 2.0.110-20191015133219BST
+
+archivingservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: ea/archiving-service
+    tag: 2.0.18-20191015153016BST
+  logLevel: 30
+  eventTTL: 7862400
+
+ingestionservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: ea/ingestion-service
+    tag: 2.0.20-20191015153015BST
+  logLevel: 30
+  swagger:
+    enabled: false
+  payloadSizeLimit: 1048576
+
+aggregationdedupservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: ea/aggregation-dedup-service
+    tag: 2.0.22-20191015153015BST
+  logLevel: 30
+
+aggregationcollaterservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: ea/aggregation-collater-java-service
+    tag: 2.0.0-20191015153014BST
+  logLevel: INFO
+  pollingInterval: 20
+  initialWindowInterval: 120
+  latenessThreshold: 10
+  quietPeriod: 900
+  maxConnectedItems: 10000
+  savebackup: true
+
+aggregationnormalizerservice:
+  enabled: true
+  repFactor: 1
+  evtMgmtEndpoint:
+    targetUrl:
+    username: root
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: ea/aggregation-normalizer-service
+    tag: 2.0.20-20191015153017BST
+  logLevel: 30
+
+policyregistryservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: ea/policy-registry-service
+    tag: 2.0.31-20191015153017BST
+
+  logLevel: 30
+  swagger:
+    enabled: false
+  payloadSizeLimit: 2097152
+
+eventsqueryservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: ea/eventsquery-service
+    tag: 2.0.14-20191015153016BST
+  logLevel: 30
+  swagger:
+    enabled: false
+  payloadSizeLimit: 1048576
+
+servicemonitorservice:
+  enabled: true
+  repFactor: 1
+  pullPolicy: Always
+  serviceType: ClusterIP
+  image:
+    name: ea/servicemonitor
+    tag: 2.0.13-20191015153015BST
+  logLevel: 30
+  swagger:
+    enabled: false
+  services:
+  - ingestionservice
+  - archivingservice
+  - policyregistryservice
+  - eventsqueryservice
+  - inferenceservice
+  - trainer
+  - collater-aggregationservice
+  - dedup-aggregationservice
+  - normalizer-aggregationservice
+
+eventstooling:
+  # Scripts to install and train the system with sample data
+  image:
+    name: ea/ea-events-tooling
+    tag: 2.0.6-20191009101328BST
+
+common:
+  seasonalityDeployFirst: true
+  temporalGroupingDeployFirst: true
+  restApi:
+    port: 5600
+    portSsl: 5601
+  topics:
+    events:
+      name: ea-events
+      enabled: true
+    eventactions:
+      name: ea-actions
+      enabled: true
+    collatedactions:
+      name: ea-collatedactions
+      enabled: true
+    metrics:
+      name: metric.json
+      enabled: false
+    baseline:
+      name: baseline.metric.json
+      enabled: false
+    baselinePersistence:
+      name: baseline.persistence.metric.json
+      enabled: false
+    asmMessages:
+      name: ea-asm-enriched-events
+      enabled: false
+
+
+  # These are the common definitions for the Cassandra keyspaces.
+  #
+  # NOTE: The default setting of zero for 'replicationFactor' means
+  # that there is no override and the replication factor shoud be
+  # deduced based on the cluster size. To override this default
+  # set the required replication factor to a value between 1-3 here.
+  keyspaces:
+    events:
+      name: ea_events
+      replicationFactor: 0
+    policies:
+      name: ea_policies
+      replicationFactor: 0
+  # Base URL settings for services outside of the event analytics deployment.
+  services:
+    uagUrl: https://dummyUrl
+
+    # The accessible URL to the dash authentication servlet will be dependent
+    # on whether the services are spun up in the same namespace or not.
+    # If in the same namespace, the service name of DASH/WAS can be used. If
+    # external or in a seperate namespace, then the external cluster hostname
+    # or IP along with the node port need to be specified. The node port will
+    # need to be determined from the service definition as this will be
+    # assigned at creation. Can be determined via following command.
+    #
+    #   PORT = kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services myhelmname-ibm-netcool-webgui
+    #
+    # Same Namespace: https://myhelmname-ibm-netcool-webgui:16311
+    # External: https://netcool.myhelmname.myclustername.mydomain.net:32484
+    #
+    # NOTE: The hostname and port of the DASH authentication source will be the
+    # default subscription/tenant id of all users authentication against the
+    # DASH authenticator, unless a specific setting is defined in authentication
+    # scheme section.
+    #
+    noiDashAuthUrl:  ""
+
+  # These are the common definitions for specifying to the API services which
+  # authentication scheme should be used to validate tenant requests to the
+  # APIs.
+  #
+  # The default for now is 'cemusers' in order to maintain the status quo for
+  # existing deployments. Available options are 'cemusers', 'noiusers' and
+  # 'statickey'.
+  authentication:
+  # Definitions required for cemusers. Ensure that services.uagUrl is set
+  # accordingly.
+  #  scheme: cemusers
+
+  # Definitions required for noiusers. Ensure that services.noiDashAuthUrl is
+  # set accordingly. If a specific tenant needs to be used in place of the
+  # derived default, define it in the tenantid memeber of the credentials
+  # section.
+    scheme: noiusers
+
+  # Definitions required for statickey. Ensure that credentials are set as
+  # required in the a secret named $RELEASE_NAME-statickey-secret. A static key authentication scheme
+  # has no tenantid definition, so this is set by the tenantid value and
+  # set where required.
+  #  scheme: statickey
+  #  credentials:
+  #    tenantid:

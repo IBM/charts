@@ -1,0 +1,161 @@
+apiVersion: v1
+data:
+  log4j.properties: |
+    log4j.rootLogger=INFO,all,console
+    log4j.logger.com.ibm.analytics=DEBUG
+    log4j.logger.activityLogger=INFO,activityAppender
+    log4j.logger.security=INFO,securityAppender
+
+    # Definition of log appender for 'console' log messages
+    log4j.appender.console=org.apache.log4j.ConsoleAppender
+    log4j.appender.console.Target=System.out
+    log4j.appender.console.layout=org.apache.log4j.EnhancedPatternLayout
+    log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss}|%-5p|%C.$%M(%F:%L)|%X{Request-ID}|%t|%m%n
+
+    # Definition of log appender for 'all' log messages
+    log4j.appender.all=org.apache.log4j.RollingFileAppender
+    log4j.appender.all.MaxFileSize=500MB
+    log4j.appender.all.MaxBackupIndex=2
+    log4j.appender.all.File=/opt/ibm/training/logs/training_service_all.log
+    log4j.appender.all.layout=org.apache.log4j.PatternLayout
+    log4j.appender.all.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss}|%-5p|%C.$%M(%F:%L)|%X{Request-ID}|%t|%m%n
+
+    # Definition of log appender for security log messages
+    log4j.appender.securityAppender=org.apache.log4j.RollingFileAppender
+    log4j.appender.securityAppender.MaxFileSize=500MB
+    log4j.appender.securityAppender.MaxBackupIndex=2
+    log4j.appender.securityAppender.File=/opt/ibm/training/logs/training_service_security.log
+    log4j.appender.securityAppender.layout=org.apache.log4j.PatternLayout
+    log4j.appender.securityAppender.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss}|%-5p|%C.$%M(%F:%L)|%X{Request-ID}|%t|%m%n
+
+    # Definition of log appender for security log messages
+    log4j.appender.activityAppender=org.apache.log4j.RollingFileAppender
+    log4j.appender.activityAppender.MaxFileSize=500MB
+    log4j.appender.activityAppender.MaxBackupIndex=2
+    log4j.appender.activityAppender.File=/opt/ibm/training/logs/training_service_activity.log
+    log4j.appender.activityAppender.layout=org.apache.log4j.PatternLayout
+    log4j.appender.activityAppender.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss}|%-5p|%C.$%M(%F:%L)|%X{Request-ID}|%t|%m%n
+
+  trainingService.conf: |
+    akka {
+      loggers = ["akka.event.Logging$DefaultLogger"]
+      loglevel = "WARNING"
+      logging-filter = "akka.event.slf4j.Slf4jLoggingFilter"
+
+      http {
+        server {
+          max-connections = 1024
+          idle-timeout = 130s
+          request-timeout = 200s
+        }
+
+      }
+
+    }
+
+    service {
+          rmq-icd=false
+          redis-icd=false
+          wml-training-data-pvc = "wml-training-data"
+
+          validateTokenService.ml.pubkey.path = "/opt/ibm/training/keys/mltoken.pub"
+          validateTokenService.icp.pubkey.path = "/user-home/_global_/config/jwt/public.pem"
+
+          enable-ssl = true
+          enable-queue = false
+          runtimes = ["scala-spark-2.1", "scala-spark-2.3"]
+          request.timeout.seconds = 115
+
+          threadpool.size = 150
+
+          http {
+            port = 13300
+          }
+
+          security {
+            key-store = "/opt/ibm/training/keys/icpkeystore.jks"
+            key-store-type = "JKS"
+          }
+
+
+          repository {
+            url = "https://internal-nginx-svc:12443"
+          }
+
+          cloudant {
+            db-name = "d21sLXRyYWluaW5n"
+            port = 6984
+            cleanup.interval.hours = 24
+            cleanup.older.days = 14
+            cleanup.delay.ms = 500
+          }
+
+          api-docs {
+            url = "http://watson-ml-api.mybluemix.net/"
+          }
+
+          wmla {
+            use_proxy = false
+            proxy_host = "9.21.55.13"
+            proxy_port = 30123
+            use_url_metrics=true
+          }
+
+          rabbitmq {
+            subscriber.timeout.seconds = 60
+            exchange = "training-prod"
+            queue_expiration_hours = 24
+            threadpool.size = 100
+          }
+
+
+
+          compute {
+            tshirt_sizes {
+              xs.cpu = "1"
+              xs.mem = "4Gi"
+
+              s.cpu = "2"
+              s.mem = "8Gi"
+
+              m.cpu = "4"
+              m.mem = "16Gi"
+
+              l.cpu = "8"
+              l.mem = "32Gi"
+
+              xl.cpu = "16"
+              xl.mem = "64Gi"
+            }
+          }
+
+          auto_ai.kb {
+            image = "{{ .Values.global.docker_registry_prefix }}/wml-autoai-kb"
+            default.version = "v.0.1.282"
+            port = 5449
+        }
+
+          kube-config {
+            encrypted-certificate-authority = "/opt/ibm/wml-training/encrypted/ca.pem"
+            encrypted-client-certificate = "/opt/ibm/wml-training/encrypted/admin.pem"
+            encrypted-client-key = "/opt/ibm/wml-training/encrypted/admin-key.pem"
+            yaml = "/opt/ibm/wml-training/kube-config.yml"
+          }
+
+          training-affinity = "wml"
+        }
+  host : default
+  port : default
+  default_instance_group : default
+  default_instance_group_edt : default
+  external_url:  default
+  cloudant_host : couchdb-ha-svc
+kind: ConfigMap
+metadata:
+  name: wmltrainingconfigmap
+  labels:
+    app: mltraining4icp
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+

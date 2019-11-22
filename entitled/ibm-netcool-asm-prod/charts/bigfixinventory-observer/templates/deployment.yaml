@@ -1,0 +1,177 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  progressDeadlineSeconds: 900
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      supplementalGroups:
+      {{- range $group := .Values.global.persistence.supplementalGroups }}
+        - {{ $group -}}
+      {{ end }}
+      initContainers:
+      - name: wait-for-topology
+        image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+        imagePullPolicy: {{.Values.global.image.pullPolicy}}
+        resources:
+{{ include "asm.minimalPodResources" . | indent 10 }}
+        securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 10 }}
+        env:
+        - name: SERVICE
+          value: {{ .Release.Name }}-topology
+        - name: EXPECTED_COUNT
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - /opt/ibm/netcool/asm/bin/check-service-endpoint-count.sh
+      containers:
+      - name: {{ include "sch.names.fullName" (list .) }}
+        image: "{{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{.Values.image.name}}:{{.Values.image.tag}}"
+        imagePullPolicy: {{.Values.global.image.pullPolicy}}
+        env:
+        - name: BIGFIXINVENTORY_OBSERVER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: DISTINGUISHED_NAME
+          value: {{ include "sch.names.fullName" (list .) }}.{{ .Release.Namespace }}.svc
+        {{- if .Values.global.asm.disableHTTPS }}
+        - name: SERVER_APPCONNECTOR_TYPE
+          value: http
+        - name: SERVER_ADMINCONNECTOR_TYPE
+          value: http
+        {{- end }}
+        {{- if not .Values.global.kafka.disabled }}
+        - name: KAFKA_SERVER
+          value: {{ .Release.Name }}-kafka:9092
+        - name: KAFKA_SERVICE_HOST
+          value: {{ .Release.Name }}-kafka
+        - name: KAFKA_SERVICE_PORT_KAFKAREST
+          value: {{ .Values.global.kafka.kafkaRestInsecurePort | quote }}
+        {{- end }}
+        - name: TOPOLOGY_SERVICE_HOST
+          value: {{ .Release.Name }}-topology
+        - name: TOPOLOGY_SERVICE_PORT
+          value: "8080"
+        - name: LOG_LEVEL
+          value: {{ .Values.logging.level }}
+        - name: LOGGING_CONSOLE_THRESHOLD
+          value: {{ .Values.logging.console.threshold | quote }}
+        - name: LOGGING_FILE_THRESHOLD
+          value: {{ .Values.logging.file.threshold | quote }}
+        - name: LOG_RETENTION_DAYS
+          value: {{ .Values.logging.file.archivedFileCount | quote}}
+        - name: JVM_ARGS
+          value: {{ include "asm.sizeData" (list . "jvmArgs") | quote }}
+        {{- if .Values.global.asm.authentication }}
+        - name: ASM_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: username
+        - name: ASM_PASS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-asm-credentials
+              key: password
+        - name: AUTH_ENABLED
+          value: "1"
+        {{- end }}
+        ports:
+        - containerPort: {{ .Values.httpPort }}
+        - containerPort: {{ .Values.adminPort }}
+        resources:
+{{ include "asm.sizeData" (list . "resources") | indent 10 }}
+        securityContext:
+{{ include "asm.containerSecurityContext" (list . "") | indent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /healthcheck
+            port: {{ .Values.adminPort }}
+            scheme: HTTP{{ if not .Values.global.asm.disableHTTPS }}S{{ end }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+        livenessProbe:
+          httpGet:
+            path: /healthcheck
+            port: {{ .Values.adminPort }}
+            scheme: HTTP{{ if not .Values.global.asm.disableHTTPS }}S{{ end }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /opt/ibm/netcool/asm/security
+          name: asm-security
+          readOnly: true
+        - mountPath: /var/log/itsm
+          name: logs
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: NotIn
+                  values:
+                  - {{ include "sch.names.appName" (list .) }}
+                - key: release
+                  operator: NotIn
+                  values:
+                  - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+            weight: 50
+      dnsPolicy: ClusterFirst
+      volumes:
+      - name: asm-security
+        projected:
+          sources:
+            - secret:
+                name: "{{ .Release.Name }}-ca-secret"
+                optional: false
+            - secret:
+                name: "{{ .Release.Name }}-custom-secrets"
+                optional: true
+      - name: logs
+        emptyDir: {}

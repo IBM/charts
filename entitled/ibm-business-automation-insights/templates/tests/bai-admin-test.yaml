@@ -1,0 +1,61 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Checks that bai-admin service run successfully after Helm installation
+###############################################################################
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-bai-admin-test
+  labels:
+    app: {{ template "ibm-bai.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: bai-admin-test
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
+{{- if and .Values.imageCredentials .Values.imageCredentials.imagePullSecret }}
+  imagePullSecrets:
+    - name: {{ .Values.imageCredentials.imagePullSecret }}
+{{- else }}
+  {{- if and .Values.imageCredentials .Values.imageCredentials.registry }}
+  imagePullSecrets:
+    - name: {{ .Release.Name }}-bai-docker-secret
+  {{- end }}
+{{- end }}
+  serviceAccountName: {{ if .Values.security }}{{ .Values.security.serviceAccountName | default "default" }}{{ else }}"default"{{ end }}
+  containers:
+    - name: {{ template "ibm-bai.name" . }}
+      image: {{ .Values.initImage.image.repository }}:{{ .Values.initImage.image.tag }}
+      {{- if .Values.imagePullPolicy }}
+      imagePullPolicy: {{ .Values.imagePullPolicy }}
+      {{- end}}
+      command:
+        - "sh"
+        - "-c"
+        - "echo 'Testing API health at https://taiga-admin-service:6892'
+        && curl -s https://{{ .Release.Name }}-bai-admin-service:6892/api/health --insecure | grep '\"status\":0'
+        && echo 'Testing API is secure at https://taiga-admin-service:6892'
+        && touch file.txt && curl -s -X POST -F \"file=@file.txt\" -u user:pass https://{{ .Release.Name }}-bai-admin-service:6892/api/actions --insecure | grep Unauthorized
+        && echo 'Testing API has valid credentials at https://{{ .Release.Name }}-bai-admin-service:6892'
+        && curl -s -X POST -F \"file=@file.txt\" -u {{ .Values.admin.username }}:{{ .Values.admin.password }} https://{{ .Release.Name }}-bai-admin-service:6892/api/actions --insecure | grep 'File must be in JSON format.'"
+  restartPolicy: Never

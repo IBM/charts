@@ -1,0 +1,109 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-core-ibus-delivery-agent
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cb-core-ibus-delivery-agent # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      containers:
+        - env:
+            - name: audit_service_url
+              value: cb-audit-service:80
+            - name: BROKER_HOST
+              value: rabbit1
+            - name: AMQP_PORT
+              value: "5672"
+            - name: BROKER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-creds
+                  key: rabbitmq.username
+            - name: BROKER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-creds
+                  key: rabbitmq.password
+            - name: LOGGING_LEVEL
+              value: INFO
+            - name: CERT_PATH
+              value: /opt/ibm/cert/
+            - name: SUBSCRIBER_INFO
+              value: http://cb-core-ibus-admin:4100/subscribers
+            - name: DB_TYPE
+              value: MONGO
+            - name: DB_URL
+              value: http://mongodb:27017
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+            - name: DB_HOST
+              value: "mongodb"
+            - name: DB_PORT
+              value: "27017"
+            - name: CONNECT_DB_PROTOCOL
+              value: mongodb
+            - name: IBUS_SUBSCRIBERS_DB
+              value: ibus_subscribers
+            - name: connection_protocol
+              value: http
+            - name: GATEWAY_URL
+              value: https://cb-core-auth-internal:4001
+          {{ if .Values.httpProxy }}
+            # httpProxy support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_core_ibus_delivery_agent") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_core_ibus_delivery_agent" .Values.imageCredentials.registry) }}
+          {{ end }}
+{{ include "core.container.securityContext" .  | indent 10 }}
+          name: cb-core-ibus-delivery-agent
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+          livenessProbe:
+            httpGet:
+              path: /mda/liveness
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            failureThreshold: 4
+            timeoutSeconds: 20
+          resources:
+{{ include "deployClassConfig" (list . "cb_core_ibus_delivery_agent") | indent 13 }}
+      restartPolicy: Always

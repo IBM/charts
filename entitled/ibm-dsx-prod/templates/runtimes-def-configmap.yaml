@@ -1,0 +1,1106 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtimes-def-configmap
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: runtimes-def-configmap
+data:
+  jupyter-server.json: |
+    {
+      "displayName": "Jupyter with Python 2.7, Scala 2.11, R 3.4.3, Spark 2.0.2",
+      "description": "Jupyter Notebook Server with Anaconda2 4.4, Python 2.7, Scala 2.11, R 3.4.3, Spark 2.0.2",
+      "author": "IBM",
+      "tested": true,
+      "isService": true,
+      "features": ["environment"],
+      "runtimeType": "jupyter",
+      "portMappings": [
+        {
+          "servicePort": 8888,
+          "containerPort": 8888,
+          "protocol": "TCP"
+        },
+        {
+          "servicePort": 31415,
+          "containerPort": 31415,
+          "protocol": "TCP"
+        },
+        {
+          "servicePort": 27182,
+          "containerPort": 27182,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.jupyterD8a2rls2xShell.image.repository }}:{{ .Values.jupyterD8a2rls2xShell.image.tag }}",
+      "command": ["/usr/local/bin/start-dsx-notebook.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "spark-metrics-vol00",
+          "mountPath": "/tmp/spark-events",
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          "claimName": {{ .Values.sparkMetricsPVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          "claimName": "{{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}"
+          {{- end }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/dsx-jupyter/${userNS}/${projectId}/tree",
+          "scheme": "https",
+          "port": 8888,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/dsx-jupyter/${userNS}/${projectId}/tree",
+          "scheme": "https",
+          "port": 8888,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": -1,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": -1,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  jupyter-py35-server.json: |
+    {
+      "displayName": "Jupyter with Python 3.5, Scala 2.11, R 3.4.3, Spark 2.2.1",
+      "description": "Jupyter Notebook Server with Anaconda3 4.2, Python 3.5, Scala 2.11, R 3.4.3, Spark 2.2.1",
+      "author": "IBM",
+      "tested": true,
+      "isService": true,
+      "features": ["environment"],
+      "runtimeType": "jupyter-py35",
+      "portMappings": [
+        {
+          "servicePort": 8888,
+          "containerPort": 8888,
+          "protocol": "TCP"
+        },
+        {
+          "servicePort": 31415,
+          "containerPort": 31415,
+          "protocol": "TCP"
+        },
+        {
+          "servicePort": 27182,
+          "containerPort": 27182,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.jupyterD8a3rls2xShell.image.repository }}:{{ .Values.jupyterD8a3rls2xShell.image.tag }}",
+      "command": ["/usr/local/bin/start-dsx-notebook.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "spark-metrics-vol00",
+          "mountPath": "/tmp/spark-events",
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          "claimName": {{ .Values.sparkMetricsPVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          "claimName": "{{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}"
+          {{- end }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/dsx-jupyter-py35/${userNS}/${projectId}/tree",
+          "scheme": "https",
+          "port": 8888,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/dsx-jupyter-py35/${userNS}/${projectId}/tree",
+          "scheme": "https",
+          "port": 8888,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": -1,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": -1,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  jupyter-gpu-py35-server.json: |
+    {
+      "displayName": "Jupyter with Python 3.5 for GPU",
+      "description": "Jupyter Notebook Server 4.4 with Python 3.5 for GPU (CUDA 8.0)",
+      "author": "IBM",
+      "tested": true,
+      "isService": true,
+      "features": ["environment"],
+      "runtimeType": "jupyter-gpu-py35",
+      "portMappings": [
+        {
+          "servicePort": 8888,
+          "containerPort": 8888,
+          "protocol": "TCP"
+        },
+        {
+          "servicePort": 31415,
+          "containerPort": 31415,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.jupyterGpuPy35.image.repository }}:{{ .Values.jupyterGpuPy35.image.tag }}",
+      "command": ["/usr/local/bin/start-dsx-notebook.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "spark-metrics-vol00",
+          "mountPath": "/tmp/spark-events",
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          "claimName": {{ .Values.sparkMetricsPVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          "claimName": "{{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}"
+          {{- end }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/dsx-jupyter-gpu-py35/${userNS}/${projectId}/tree",
+          "scheme": "https",
+          "port": 8888,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/dsx-jupyter-gpu-py35/${userNS}/${projectId}/tree",
+          "scheme": "https",
+          "port": 8888,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": -1,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": -1,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  zeppelin-server.json: |
+    {
+      "displayName": "Zeppelin with Anaconda2, Python 2.7",
+      "description": "Zeppelin Notebook Server 0.7.3 with Anaconda2 4.4, Python 2.7",
+      "author": "IBM",
+      "tested": true,
+      "isService": true,
+      "features": ["environment"],
+      "runtimeType": "zeppelin",
+      "portMappings": [
+        {
+          "servicePort": 8080,
+          "containerPort": 8080,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.hdpzeppelinDsxD8a2ls2x.image.repository }}:{{ .Values.hdpzeppelinDsxD8a2ls2x.image.tag }}",
+      "command": ["/usr/local/bin/start-dsx-notebook.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "spark-metrics-vol00",
+          "mountPath": "/tmp/spark-events",
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          "claimName": {{ .Values.sparkMetricsPVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          "claimName": "{{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}"
+          {{- end }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/#",
+          "scheme": "http",
+          "port": 8080,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/#",
+          "scheme": "http",
+          "port": 8080,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": -1,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": -1,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  rstudio-server.json: |
+    {
+      "displayName": "RStudio with R 3.4.3",
+      "description": "RStudio Server 1.0 with R 3.4.3",
+      "author": "IBM",
+      "tested": true,
+      "isService": true,
+      "runtimeType": "rstudio",
+      "features": ["environment"],
+      "portMappings": [
+        {
+          "servicePort": 8787,
+          "containerPort": 8787,
+          "protocol": "TCP"
+        },
+        {
+          "servicePort": 3838,
+          "containerPort": 3838,
+          "protocol": "TCP"
+        },
+        {
+          "servicePort": 8011,
+          "containerPort": 8011,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.rstudioD8a2rls2xShell.image.repository }}:{{ .Values.rstudioD8a2rls2xShell.image.tag }}",
+      "privileged": false,
+      "command": ["/scripts/startup.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/",
+          "scheme": "http",
+          "port": 8787,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/",
+          "scheme": "http",
+          "port": 8787,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": -1,
+          "minimum": 2000
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": -1,
+          "minimum": 5120
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  dsx-scripted-ml-python2-server.json: |
+    {
+      "displayName": "Jupyter with Python 2.7, Scala 2.11, R 3.4.3",
+      "description": "Jupyter Notebook Server with Anaconda2 4.4, Python 2.7, Scala 2.11, R 3.4.3",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "features": ["worker"],
+      "runtimeType": "dsx-scripted-ml-python2",
+      "portMappings": [
+        {
+          "servicePort": 7300,
+          "containerPort": 7300,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.jupyterD8a2rls2xShell.image.repository }}:{{ .Values.jupyterD8a2rls2xShell.image.tag }}",
+      "command": ["/dsx-scripted-ml/scripts/startup.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "spark-metrics-vol00",
+          "mountPath": "/tmp/spark-events",
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          "claimName": {{ .Values.sparkMetricsPVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          "claimName": "{{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}"
+          {{- end }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/monitor",
+          "scheme": "http",
+          "port": 7300,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/monitor",
+          "scheme": "http",
+          "port": 7300,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": 1000,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": 0,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 5120,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  dsx-scripted-ml-python3-server.json: |
+    {
+      "displayName": "Jupyter with Python 3.5",
+      "description": "Jupyter Notebook Server, Anaconda2 4.2, Python 3.5",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "features": ["worker"],
+      "runtimeType": "dsx-scripted-ml-python3",
+      "portMappings": [
+        {
+          "servicePort": 7300,
+          "containerPort": 7300,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.jupyterD8a3rls2xShell.image.repository }}:{{ .Values.jupyterD8a3rls2xShell.image.tag }}",
+      "command": ["/dsx-scripted-ml/scripts/startup.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "spark-metrics-vol00",
+          "mountPath": "/tmp/spark-events",
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          "claimName": {{ .Values.sparkMetricsPVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          "claimName": "{{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}"
+          {{- end }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/monitor",
+          "scheme": "http",
+          "port": 7300,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/monitor",
+          "scheme": "http",
+          "port": 7300,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": 1000,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": 0,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 5120,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  dsx-scripted-ml-gpu-python3-server.json: |
+    {
+      "displayName": "Jupyter 4.4 and Python 3.5 for GPU",
+      "description": "Jupyter Notebook Server 4.4 and Python 3.5 for GPU (CUDA 8.0)",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "features": ["worker"],
+      "runtimeType": "dsx-scripted-ml-gpu-python3",
+      "portMappings": [
+        {
+          "servicePort": 7300,
+          "containerPort": 7300,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.jupyterGpuPy35.image.repository }}:{{ .Values.jupyterGpuPy35.image.tag }}",
+      "command": ["/dsx-scripted-ml/scripts/startup.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "spark-metrics-vol00",
+          "mountPath": "/tmp/spark-events",
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          "claimName": {{ .Values.sparkMetricsPVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          "claimName": "{{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}"
+          {{- end }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/monitor",
+          "scheme": "http",
+          "port": 7300,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/monitor",
+          "scheme": "http",
+          "port": 7300,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": 1000,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": 0,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 5120,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  rstudio-worker-server.json: |
+    {
+      "displayName": "RStudio with R 3.4.3",
+      "description": "RStudio Server 1.0 with R 3.4.3",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "runtimeType": "rstudio-worker",
+      "features": ["worker"],
+      "portMappings": [
+        {
+          "servicePort": 8787,
+          "containerPort": 8787,
+          "protocol": "TCP"
+        },
+        {
+          "servicePort": 3838,
+          "containerPort": 3838,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.rstudioD8a2rls2xShell.image.repository }}:{{ .Values.rstudioD8a2rls2xShell.image.tag }}",
+      "command": ["/scripts/startup.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/",
+          "scheme": "http",
+          "port": 8787,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/",
+          "scheme": "http",
+          "port": 8787,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": 2000,
+          "minimum": 2000
+        },
+        "gpu": {
+          "request": 0,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 5120,
+          "minimum": 5120
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  spss-worker-server.json: |
+    {
+      "displayName": "SPSS Modeler",
+      "description": "SPSS Modeler streams batch",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "runtimeType": "spss-worker",
+      "features": ["worker"],
+      "portMappings": [
+        {
+          "servicePort": 28057,
+          "containerPort": 28057,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.modelerBatch.image.repository }}:{{ .Values.modelerBatch.image.tag }}",
+      "command": ["sh", "-c", "exec /Scripts/start.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        }
+      ],
+      "resources": {
+        "cpu": {
+          "request": -1,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": -1,
+          "minimum": 4048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  python27-script-as-a-service-server.json: |
+    {
+      "displayName": "Python 2.7 - Script as a Service",
+      "description": "API Web Server with Python 2.7 and Anaconda2 4.4",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "features": ["script-as-a-service"],
+      "runtimeType": "python27-script-as-a-service",
+      "portMappings": [
+        {
+          "servicePort": 7330,
+          "containerPort": 7330,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.jupyterD8a2rls2xShell.image.repository }}:{{ .Values.jupyterD8a2rls2xShell.image.tag }}",
+      "command": ["/user-home/.scripts/system/spawner/deployments/startup-py-server.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "spark-metrics-vol00",
+          "mountPath": "/tmp/spark-events",
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          "claimName": {{ .Values.sparkMetricsPVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          "claimName": "{{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}"
+          {{- end }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/pyaas-server-healthcheck/healthcheck",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 60,
+          "timeoutSeconds": 20,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/pyaas-server-healthcheck/healthcheck",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 62,
+          "timeoutSeconds": 22,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": 1000,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": 0,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 5120,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  python35-script-as-a-service-server.json: |
+    {
+      "displayName": "Python 3.5 - Script as a Service",
+      "description": "API Web Server with Python 3.5 and Anaconda2 4.2",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "features": ["script-as-a-service"],
+      "runtimeType": "python35-script-as-a-service",
+      "portMappings": [
+        {
+          "servicePort": 7330,
+          "containerPort": 7330,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.jupyterD8a3rls2xShell.image.repository }}:{{ .Values.jupyterD8a3rls2xShell.image.tag }}",
+      "command": ["/user-home/.scripts/system/spawner/deployments/startup-py-server.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "spark-metrics-vol00",
+          "mountPath": "/tmp/spark-events",
+          {{- if .Values.sparkMetricsPVC.persistence.existingClaimName }}
+          "claimName": {{ .Values.sparkMetricsPVC.persistence.existingClaimName | quote }}
+          {{- else }}
+          "claimName": "{{ template "fullname" . }}-{{ .Values.sparkMetricsPVC.name }}"
+          {{- end }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/pyaas-server-healthcheck/healthcheck",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 60,
+          "timeoutSeconds": 20,
+          "periodSeconds": 10
+        },
+        "readiness": {
+          "path": "/pyaas-server-healthcheck/healthcheck",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 62,
+          "timeoutSeconds": 22,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": 1000,
+          "minimum": 1000
+        },
+        "gpu": {
+          "request": 0,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 5120,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  r-script-as-a-service-server.json: |
+    {
+      "displayName": "R 3.4.3 - Script as a Service",
+      "description": "R 3.4.3 running Plumber Server",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "features": ["script-as-a-service"],
+      "runtimeType": "r-script-as-a-service",
+      "portMappings": [
+        {
+          "servicePort": 7330,
+          "containerPort": 7330,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.rstudioD8a2rls2xShell.image.repository }}:{{ .Values.rstudioD8a2rls2xShell.image.tag }}",
+      "command": ["/user-home/.scripts/system/spawner/deployments/startup-r-server.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/raas-server-healthcheck/healthcheck",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 60,
+          "timeoutSeconds": 20,
+          "periodSeconds": 15
+        },
+        "readiness": {
+          "path": "/raas-server-healthcheck/healthcheck",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 62,
+          "timeoutSeconds": 22,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": 1000,
+          "minimum": 2000
+        },
+        "gpu": {
+          "request": 0,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 5120,
+          "minimum": 5120
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  shiny-app-server.json: |
+    {
+      "displayName": "Shiny Server",
+      "description": "Used to serve R shiny apps",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "features": ["shiny-app-server"],
+      "runtimeType": "shiny-server",
+      "portMappings": [
+        {
+          "servicePort": 7330,
+          "containerPort": 7330,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.rstudioD8a2rls2xShell.image.repository }}:{{ .Values.rstudioD8a2rls2xShell.image.tag }}",
+      "command": ["/user-home/.scripts/system/spawner/deployments/startup-shiny-server.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        }
+      ],
+      "probes": {
+        "liveness": {
+          "path": "/shiny-server-healthcheck",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 15
+        },
+        "readiness": {
+          "path": "/shiny-server-healthcheck",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 10
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": 1000,
+          "minimum": 2000
+        },
+        "gpu": {
+          "request": 0,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 2048,
+          "minimum": 2048
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      },
+      "sessionAffinity": "ClientIP"
+    }
+  shaper-server.json: |
+    {
+      "displayName": "Data Refinery",
+      "description": "Data Refinery with OpenCPU and R support",
+      "author": "IBM",
+      "tested": true,
+      "isService": true,
+      "features": ["environment"],
+      "runtimeType": "shaper",
+      "portMappings": [
+        {
+          "servicePort": 7330,
+          "containerPort": 7330,
+          "protocol": "TCP"
+        }
+      ],
+      "replicas": 1,
+      "image": "{{ .Values.rstudioD8a2rls2xShell.image.repository }}:{{ .Values.rstudioD8a2rls2xShell.image.tag }}",
+      "privileged": false,
+      "command": ["/shaper-scripts/startup_shaperapp.sh"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        }
+      ],
+      "probes": {
+         "liveness": {
+          "path": "/shaper-api-health",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 120,
+          "timeoutSeconds": 10,
+          "periodSeconds": 30
+        },
+        "readiness": {
+          "path": "/shaper-api-health",
+          "scheme": "http",
+          "port": 7330,
+          "initialDelaySeconds": 15,
+          "timeoutSeconds": 10,
+          "periodSeconds": 30
+        }
+      },
+      "resources": {
+        "cpu": {
+          "request": -1,
+          "minimum": 2000
+        },
+        "gpu": {
+          "request": -1,
+          "minimum": 0
+        },
+        "memory": {
+          "request": -1,
+          "minimum": 5120
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }
+  dsx-hi-server.json: |
+    {
+      "displayName": "DSX Hadoop Integration Proxy",
+      "description": "Proxy pod for forwarding DSXL python jobs to a registered remote DSX Hadoop Integration edge node.",
+      "author": "IBM",
+      "tested": true,
+      "isService": false,
+      "isHidden": true,
+      "runtimeType": "dsx-hi",
+      "replicas": 1,
+      "image": "{{ .Values.dsxHIProxy.image.repository }}:{{ .Values.dsxHIProxy.image.tag }}",
+      "privileged": true,
+      "command": ["/proxy_job"],
+      "volumes": [
+        {
+          "volume": "user-home",
+          "mountPath": "/user-home",
+          {{- template "rt-user-home-pvc" }}
+        },
+        {
+          "volume": "/var/run/docker.sock",
+          "mountPath": "/var/run/docker.sock",
+          "type": "hostPath"
+        }
+      ],
+      "resources": {
+        "cpu": {
+          "request": 200,
+          "minimum": 200
+        },
+        "gpu": {
+          "request": 0,
+          "minimum": 0
+        },
+        "memory": {
+          "request": 256,
+          "minimum": 256
+        },
+        "duration": {
+          "value": -1,
+          "units": "unix"
+        }
+      }
+    }

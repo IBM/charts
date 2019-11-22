@@ -1,0 +1,477 @@
+{{/*********************************************************** {COPYRIGHT-TOP} ****
+* Licensed Materials - Property of IBM
+*
+* (C) Copyright IBM Corporation 2019.  All rights reserved.
+*
+* The source code for this program is not published or otherwise
+* divested of its trade secrets, irrespective of what has been
+* deposited with the U.S. Copyright Office.
+********************************************************* {COPYRIGHT-END} ****/}}
+## create map for my data
+{{- $rootData := fromYaml (include "root.data" .) }}
+## get root metering data
+{{- $rootMetering := $rootData.metering -}}
+{{- include "sch.config.init" (list . "kafka.sch.chart.config.values") -}}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
+{{- $kkConfigTemplateName := include "sch.names.volumeClaimTemplateName" (list . "config" $statefulSetName) -}}
+{{- $kkDataTemplateName := include "sch.names.volumeClaimTemplateName" (list . "data" $statefulSetName) -}}
+{{- $kkCaSecretDirTemplateName := include "sch.names.volumeClaimTemplateName" (list . "cacerts" $statefulSetName) -}}
+{{- $resSize := (index .Values .Values.global.environmentSize ) -}}
+{{- if semverCompare ">=1.11.1" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: apps/v1
+{{- else if .Capabilities.APIVersions.Has "apps/v1beta2" }}
+apiVersion: apps/v1beta2
+{{- else }}
+apiVersion: apps/v1beta1
+{{- end }}
+kind: StatefulSet
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/change-cause: Initial application creation.
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+  name: {{ $statefulSetName }}
+spec:
+  serviceName:  {{ include "sch.names.fullCompName" (list . ) | quote }}
+  podManagementPolicy: "Parallel"
+  replicas: {{ include "kafka.replicationFactor" .  }}
+  selector:
+    matchLabels:
+      app: {{ include "sch.names.appName" (list .) | quote }}
+      heritage: {{ .Release.Service }}
+      release: {{ .Release.Name }}
+  {{- if semverCompare ">=1.7.0" .Capabilities.KubeVersion.GitVersion }}
+  updateStrategy:
+    type: RollingUpdate
+  {{- end }}
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list .) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config/kafka.yaml") . | sha256sum }}
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        supplementalGroups:
+        {{- range $group := .Values.global.persistence.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          #If you specify multiple nodeSelectorTerms associated with nodeAffinity types,
+          #then the pod can be scheduled onto a node if one of the nodeSelectorTerms is satisfied.
+          #
+          #If you specify multiple matchExpressions associated with nodeSelectorTerms,
+          #then the pod can be scheduled onto a node only if all matchExpressions can be satisfied.
+          #
+          #valid operators: In, NotIn, Exists, DoesNotExist, Gt, Lt
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
+      terminationGracePeriodSeconds: 10
+      initContainers:
+{{- if eq .Values.global.privileged true }}
+      - name: set-volume-permissions
+        image: "{{ include "kafka.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["sh", "-c", "chown -R kafka:kafka /var/lib/kafka/"]
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
+        volumeMounts:
+        - name: {{ $kkConfigTemplateName }}
+          mountPath: /etc/kafka
+{{ if .Values.global.kafka.clientEncryption }}
+        - name: {{ $kkCaSecretDirTemplateName }}
+          mountPath: /opt/cacerts
+{{ end }}
+        - name: {{ $kkDataTemplateName }}
+          mountPath: /var/lib/kafka/data
+{{- end }}
+      - name: waitforzookeeper
+        image: "{{ include "kafka.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        command: ["sh", "-c", "i=1;until getent hosts {{ template "kafka.releasename" . }}-zookeeper.{{ .Release.Namespace }}.svc; do echo waiting for zookeeper $i;i=$((i+1)); sleep 2; done;"]
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
+      {{- if kindIs "slice" .Values.advertisedListeners }}
+      - name: get-nodeports
+        image: "{{ include "kafka.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        command:
+        - /bin/sh
+        - -c
+        - python /etc/kafka/get-service-nodeport.py
+        env:
+        - name: PODNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['statefulset.kubernetes.io/pod-name']
+        volumeMounts:
+        - name: {{ $kkConfigTemplateName }}
+          mountPath: /etc/kafka
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
+      {{- end }}
+      - name: init-config
+        image: "{{ include "kafka.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        command: ['/bin/bash', '/etc/kafka/init.sh']
+        volumeMounts:
+        - name: {{ $kkConfigTemplateName }}
+          mountPath: /etc/kafka
+{{ if .Values.global.kafka.clientEncryption }}
+        - name: {{ $kkCaSecretDirTemplateName }}
+          mountPath: /opt/cacerts
+{{ end }}
+        - name: {{ $kkDataTemplateName }}
+          mountPath: /var/lib/kafka/data
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
+{{ if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{ end }}
+      containers:
+        - name: {{ include "sch.names.fullCompName" (list .) | quote }}
+          image: "{{ include "kafka.getImageRepo" . }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: 9092
+              protocol: TCP
+{{ if .Values.global.kafka.clientEncryption }}
+            - containerPort: 9093
+              protocol: TCP
+{{ end }}
+          command:
+            - /opt/kafka/bin/start-kafka.sh
+          env:
+            - name: NAMESPACE
+              value: "{{ .Release.Namespace }}"
+            - name: SERVICE
+              value: "{{ .Release.Name }}-kafka"
+            - name: KAFKA_HEAP_OPTS
+              value: {{ include "kafka.comp.size.data" (list . "kafka" "kafkaHeapOpts") | quote }}
+{{ if .Values.global.kafka.clientEncryption }}
+            - name: KAFKA_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ tpl .Values.adminUserSecret . }}"
+                  key: username
+            - name: KAFKA_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ tpl .Values.adminUserSecret . }}"
+                  key: password
+            - name: KAFKA_CLIENT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ tpl .Values.global.kafka.clientUserSecret . }}"
+                  key: username
+            - name: KAFKA_CLIENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ tpl .Values.global.kafka.clientUserSecret . }}"
+                  key: password
+            - name: ZK_KAFKA_CLIENT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.global.zookeeper.kafkaClientUserSecret }}"
+                  key: username
+            - name: ZK_KAFKA_CLIENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.global.zookeeper.kafkaClientUserSecret }}"
+                  key: password
+            - name: CA_CERTIFICATE
+              value: "/opt/cacerts/{{ .Values.global.internalCaCertificate.certificateName }}"
+            - name: CA_KEY
+              value: "/opt/cacerts/{{ .Values.global.internalCaCertificate.certificateKeyName }}"
+            - name: KAFKA_OPTS
+              value: "-Djava.security.auth.login.config=/opt/secureconfig/kafka/kafka_server_jaas.conf"
+{{ end }}
+            - name: ZOOKEEPER_URL
+              value: "{{ template "kafka.releasename" . }}-zookeeper:2181"
+            - name: KAFKA_NUM_BROKERS
+              value: {{ include "kafka.replicationFactor" . | quote }}
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+{{ include "kafka.comp.size.data" (list . "kafka" "resources") | indent 12 }}
+          livenessProbe:
+            exec:
+              command:
+              - /opt/kafka/liveness.sh
+            initialDelaySeconds: 60
+            timeoutSeconds: 60
+          readinessProbe:
+            exec:
+              command:
+              - /opt/kafka/readiness.sh
+            initialDelaySeconds: 60
+            timeoutSeconds: 60
+          volumeMounts:
+          - name: {{ $kkDataTemplateName }}
+            mountPath: /var/lib/kafka/data
+          - name: {{ $kkConfigTemplateName }}
+            mountPath: /etc/kafka
+{{ if .Values.global.kafka.clientEncryption }}
+          - name: secureconfig
+            mountPath: /opt/secureconfig
+          - name:  {{ $kkCaSecretDirTemplateName }}
+            mountPath: /opt/cacerts
+{{ end }}
+{{ if .Values.kafkarest.enabled }}
+        - name: {{ include "sch.names.fullCompName" (list . "rest") | quote }}
+          image: "{{ include "kafka.getImageRepo" . }}/{{ .Values.kafkarest.image.name }}:{{ .Values.kafkarest.image.tag }}"
+          imagePullPolicy: {{ .Values.kafkarest.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            {{- if .Values.kafkarest.enablePrivilegedPorts }}
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+               add:
+               - NET_BIND_SERVICE
+               drop:
+               - ALL
+            {{- else }}
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+            {{- end }}
+          ports:
+            - containerPort: 8080
+              name: rest-client
+              protocol: TCP
+            - containerPort: 8443
+              name: secure-client
+              protocol: TCP
+          env:
+            - name: NAMESPACE
+              value: "{{ .Release.Namespace }}"
+            - name: SERVICE
+              value: "{{ .Release.Name }}-kafka"
+            - name: KAFKA_SERVICE_HOST
+              value: {{ include "sch.names.fullCompName" (list . ) | quote }}
+            {{- if .Values.global.kafka.clientEncryption }}
+            - name: KAFKA_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ tpl .Values.adminUserSecret . }}"
+                  key: username
+            - name: KAFKA_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ tpl .Values.adminUserSecret . }}"
+                  key: password
+            - name: KAFKA_CLIENT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ tpl .Values.global.kafka.clientUserSecret . }}"
+                  key: username
+            - name: KAFKA_CLIENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ tpl .Values.global.kafka.clientUserSecret . }}"
+                  key: password
+            - name: ZK_KAFKA_CLIENT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.global.zookeeper.kafkaClientUserSecret }}"
+                  key: username
+            - name: ZK_KAFKA_CLIENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.global.zookeeper.kafkaClientUserSecret }}"
+                  key: password
+            - name: CA_CERTIFICATE
+              value: "/opt/cacerts/{{ .Values.global.internalCaCertificate.certificateName }}"
+            - name: CA_KEY
+              value: "/opt/cacerts/{{ .Values.global.internalCaCertificate.certificateKeyName }}"
+            - name: KAFKA_SERVICE_PORT
+              value: "9093"
+            - name: KAFKA_OPTS
+              value: "-Djava.security.auth.login.config=/opt/secureconfig/kafkarest/kafka_client_jaas.conf"
+            {{- else }}
+            - name: KAFKA_SERVICE_PORT
+              value: "9092"
+            {{- end }}
+            - name: LOGGER
+              value: "kafka"
+            - name: LOG_LEVEL
+              value: "{{ default "INFO" .Values.logLevel }}"
+            {{- if .Values.kafkarest.enablePrivilegedPorts }}
+            - name: RUN_AS_ROOT
+              value: "true"
+            {{- end }}
+            {{- if .Values.global.kafka.allowInsecure }}
+            - name: ALLOW_INSECURE
+              value: "true"
+            {{- end }}
+            - name: ZOOKEEPER_URL
+              value: "{{ template "kafka.releasename" . }}-zookeeper:2181"
+            - name: TOPIC_REPLICATION_FACTOR
+              value: {{ include "kafka.replicationFactor" . | quote }}
+            - name: TOPIC_PARTITIONS
+              value: {{ .Values.defaultTopicPartitions | quote }}
+            - name: JVM_ARGS
+              value: {{ include "kafka.comp.size.data" (list . "kafkarest" "jvmArgs") | quote }}
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+{{ include "kafka.comp.size.data" (list . "kafkarest" "resources") | indent 12 }}
+          livenessProbe:
+            exec:
+              command:
+              - /opt/kafkarest/liveness.sh
+            initialDelaySeconds: 180
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+              - /opt/kafkarest/readiness.sh
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: {{ $kkConfigTemplateName }}
+              mountPath: /opt/kafka/config/shared
+              readOnly: true
+            - name: logs
+              mountPath: /var/log/kafkarest
+            - name: {{ $kkConfigTemplateName }}
+              mountPath: /etc/kafka
+{{ if .Values.global.kafka.clientEncryption }}
+            - name: secureconfig
+              mountPath: /opt/secureconfig
+            - name:  {{ $kkCaSecretDirTemplateName }}
+              mountPath: /opt/cacerts
+{{ end }}
+{{ end }}
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: secureconfig
+        emptyDir:
+          medium: "Memory"
+      - name: tmp
+        emptyDir: {}
+      - name: {{ $kkConfigTemplateName }}
+        configMap:
+          name: {{ template "kafka.fullname" . }}
+{{ if .Values.global.kafka.clientEncryption }}
+      - name: {{ $kkCaSecretDirTemplateName }}
+        secret:
+          secretName: {{ .Values.global.internalCaCertificate.secretName }}
+{{ end }}
+{{ if .Values.global.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ $kkDataTemplateName }}
+        labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 10 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.global.persistence.storageSize.kafkadata }}
+        {{ if eq .Values.global.persistence.storageClassOption.kafkadata "default" }}
+        storageClassName: {{ .Values.global.persistence.storageClassName }}
+        {{ else }}
+        storageClassName: {{ .Values.global.persistence.storageClassOption.kafkadata }}
+        {{ end }}
+{{ else }}
+      - name: {{ $kkDataTemplateName }}
+        emptyDir: {}
+{{ end }}

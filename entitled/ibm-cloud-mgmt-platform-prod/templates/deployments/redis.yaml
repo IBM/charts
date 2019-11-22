@@ -1,0 +1,76 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+      labels:
+        name: redis # referenced by dash.gravitant.net for Pod Name
+{{ include "core.labels" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+      containers:
+        - env:
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          {{- template "isIcp" . -}}
+          {{- if not (.Values.isIcp) }}
+          image: {{ template "core.readConfig" (list . "cb_redis") }}
+          {{ else }}
+          image: {{ template "coreicp.readConfig" (list . "cb_redis" .Values.imageCredentials.registry) }}
+          {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              add:
+              - SETGID
+              - CHOWN
+              - SETUID
+              drop:
+              - ALL
+          name: redis
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 60
+            periodSeconds: 120
+            failureThreshold: 4
+          resources:
+{{ include "deployClassConfig" (list . "cb_redis") | indent 12 }}
+          volumeMounts:
+            - mountPath: /data
+              name: core-couchdb-claim0
+              subPath: opt/redisdb/data
+      restartPolicy: Always
+      volumes:
+        - name: core-couchdb-claim0
+          persistentVolumeClaim:
+            claimName: core-couchdb-claim0

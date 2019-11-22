@@ -1,0 +1,661 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Kubernetes pods that will make up the cluster of Kafka brokers
+###############################################################################
+# Check Event Streams is being installed on a supported Platform
+{{ include "eventstreams.supported.platform" (list .) }}
+
+{{ if eq .Values.license "accept" -}}
+{{ $zookeeperConfig := include "sch.config.init" (list . "zookeeper.sch.chart.config.values" ) -}}
+{{ $securityConfig := include "sch.config.init" (list . "security.sch.chart.config.values") -}}
+{{ $namePrefix := .sch.chart.components.kafka.statefulSet.name -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $namePrefix) -}}
+# Component is 'kafka' as this makes up part of implementing the Kafka cluster
+{{ $compName := .sch.chart.components.kafka.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# The headless service that will provide access to the Kafka brokers defined below
+{{ $serviceName := .sch.chart.components.kafka.headless.name -}}
+# Name of the ZooKeeper stateful deployment that will orchestrate the Kafka brokers
+{{ $zookeeperName := .sch.chart.components.zookeeper.statefulSet.name -}}
+# Services allowing access to individual ZooKeeper nodes - there will be one of these for each node
+{{ $zookeeperFixedIPService := .sch.chart.components.zookeeper.fixed.name -}}
+{{ $zookeeperFixedIPServiceName := include "sch.names.fullCompName" (list . $zookeeperFixedIPService) -}}
+# Name of ZooKeeper headless service
+{{ $zookeeperHeadlessService := .sch.chart.components.zookeeper.headless.name -}}
+{{ $zookeeperHeadlessServiceName := include "sch.names.fullCompName" (list . $zookeeperHeadlessService ) -}}
+# number of ZooKeeper nodes in the cluster
+{{ $zookeeperReplicas := int .sch.config.zookeeper.replicas -}}
+# Config map that identifies the metrics that should be pushed to Prometheus
+{{ $kafkaMetricsConfigMap := .sch.chart.components.kafka.metricsConfigMap.name -}}
+{{ $kafkaMetricsConfigMapName := include "sch.names.fullCompName" (list . $kafkaMetricsConfigMap) | quote -}}
+# Service Account to grant Kubernetes access
+{{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+# Kafka ports are defined in a helper template
+{{ $kafkaconfig := include "sch.config.init" (list . "kafka.listeners.sch.chart.config.values") -}}
+{{ $kafkaListeners := .sch.config.kafka.listeners -}}
+{{ $kafkaProtocols := .sch.config.kafka.protocols -}}
+{{ $kafkaAdvertisedListeners := .sch.config.kafka.internalAdvertisedListeners -}}
+# Elastic search service name required by kafka-metrics-proxy
+{{ $elasticSearchService := .sch.chart.components.elasticSearch.service.name -}}
+{{ $elasticSearchServiceName := include "sch.names.fullCompName" (list . $elasticSearchService) -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+# Oauth secret name which is used to get the cluster name
+{{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
+{{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
+# IAM Secret name containing the API Key
+{{ $iamSecret := .sch.chart.components.security.iamSecret.name -}}
+{{ $iamSecretName := include "sch.names.fullCompName" (list . $iamSecret ) -}}
+# Eventstreams IAM Service Name
+{{ $iamServiceName := .sch.chart.components.security.serviceName -}}
+# Access controller service that we need to connect to do IAM Authorisations
+{{ $accessControllerService := .sch.chart.components.security.accesscontroller.service.name -}}
+{{ $accessControllerServiceName := include "sch.names.fullCompName" (list . $accessControllerService) -}}
+# JMX Secret name containing the username & password for JMX
+{{ $jmxSecret := .sch.chart.components.kafka.jmxSecret.name -}}
+{{ $jmxSecretName := include "sch.names.fullCompName" (list . $jmxSecret ) -}}
+# Proxy Secret name containing the private key and public cert for Kafka to open JMX securely
+{{ $proxySecret := .sch.chart.components.proxy.secret.name -}}
+{{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecret ) -}}
+
+{{ $releaseConfigMap := .sch.chart.components.essential.releaseConfigMap.name -}}
+{{ $releaseConfigMapName := include "sch.names.fullCompName" (list . $releaseConfigMap) -}}
+
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
+# length chewcked pvc name
+{{ $shortPvcName := include "sch.names.volumeClaimTemplateName" (list . .Values.persistence.dataPVC.name $statefulSetName) -}}
+# Proxy config map name
+{{ $configMap := .sch.chart.components.kafka.mproxyConfigMap.name -}}
+{{ $configMapName := include "sch.names.fullCompName" (list . $configMap ) }}
+# TLS Proxy config map name
+{{ $tlsConfigMap := .sch.chart.components.kafka.configMap.name -}}
+{{ $tlsConfigMapName := include "sch.names.fullCompName" (list . $tlsConfigMap ) }}
+# k8s configuration
+{{ $clusterName := .Values.global.k8s.clusterName -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  # identify the headless service that will enable access to these pods
+  serviceName: {{ include "sch.names.fullCompName" (list . $serviceName) | quote }}
+  # Kafka pods are deployed in parallel to enable faster deployments
+  podManagementPolicy: "Parallel"
+  # the number of brokers in the kafka cluster
+  {{- if not (regexMatch "(^[3-9]+[0-9]*$)|(^[1-9]+[0-9]+$)" (.Values.kafka.brokers | toString)) }}
+    {{ fail "Configuration error: Minimum of 3 Kafka brokers required." }}
+  {{- end }}
+  replicas: {{ .Values.kafka.brokers }}
+  # Kafka broker pods are uniquely identified based on the release name
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  updateStrategy:
+    type: RollingUpdate
+  # definition of the pods that run the Kafka brokers in the cluster
+  template:
+    metadata:
+      # Check release name is valid.
+      {{- if not (regexMatch "^[a-z][a-z0-9-]*[a-z0-9]*$" .Release.Name) }}
+        {{ fail (cat "Configuration error: Format of release name is invalid:" .Release.Name) }}
+      {{- end }}
+      # Check release name does not end with a dash.
+      {{- if regexMatch "-$" .Release.Name }}
+        {{ fail (cat "Configuration error: Format of release name is invalid:" .Release.Name) }}
+      {{- end }}
+      name: {{ .Release.Name | quote }}
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+        configMapRevision: "default"
+        releaseConfigMapRevision: "default"
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '{{ $ports.prometheus.collectorKafka }}'
+        prometheus.io/scheme: https
+{{- if .Values.externalMonitoring.datadog }}
+  {{- range $annotation, $value := .Values.externalMonitoring.datadog }}
+    {{- if not (regexMatch "^([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$" $annotation ) }}
+      {{ fail (cat "Configuration error: Format of datadog annotation is invalid:" $annotation) }}
+    {{- end }}
+    {{- if not (kindIs "string" $value) }}
+        ad.datadoghq.com/kafka.{{ $annotation | trim }}: {{ $value | toJson | quote }}
+    {{- else }}
+        ad.datadoghq.com/kafka.{{ $annotation | trim }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{ include "metering" (list . "kafka") | indent 8 }}
+    spec:
+      # # Hostname is kafka, used for internal pod communication
+      # hostname: kafka
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
+{{ include "fsGroupGid" (list . ) | indent 8 }}
+      affinity:
+{{ include "customNodeaffinity"  (list .) | indent 8 }}
+        # we don't want multiple co-located Kafka nodes
+        #  so this anti-affinity rule should prevent
+        #  nodes with the kafka name being scheduled on
+        #  the same host
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $namePrefix | quote }}
+                topologyKey: "kubernetes.io/hostname"
+        # colocating Kafka nodes with ZooKeeper nodes could
+        #  help minimise network traffic between them, so
+        #  this affinity rule requests this where possible
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+             - weight: 1
+               podAffinityTerm:
+                 labelSelector:
+                    matchExpressions:
+                      - key: "release"
+                        operator: In
+                        values:
+                          -  {{ .Release.Name | quote }}
+                      - key: "serviceSelector"
+                        operator: In
+                        values:
+                          -  {{ $zookeeperName }}
+                 topologyKey: "kubernetes.io/hostname"
+      # Kafka pods are made up of four containers
+      #  1) Kafka broker
+      #  2) Metrics reporter that submits metrics from the Kafka broker to Prometheus
+      #  3) Kafka metrics proxy, an interceptor that reads kafka protocol and pipes out metadata to elasticsearch
+      #  4) Healthcheck
+      containers:
+        #
+        # Kafka broker pods
+        - name: kafka
+          image: {{ include "eventstreams.image" (list . "eventstreams-kafka" .Values.global.image.imageTags.kafkaTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            # Running as user 65534 for backwards compatability with upgrades
+            runAsUser: {{ $defaultUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            limits:
+{{ toYaml .Values.kafka.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.kafka.resources.requests | indent 14 }}
+          ports:
+            - containerPort: {{ $ports.kafka.internalKafka }}
+              name: "kafka"
+            - containerPort: {{ $ports.kafka.externalSecure }}
+              name: "ext-secure"
+            - containerPort: {{ $ports.kafka.internalEventStreamsSecure }}
+              name: "es-tlsonly"
+            - containerPort: {{ $ports.kafka.internalLoopback }}
+              name: "es-loopback"
+            {{- if .Values.kafka.openJMX }}
+            - containerPort: {{ $ports.kafka.jmx }}
+              name: "jmx"
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              port: {{ $ports.kafka.healthcheck }}
+              path: /readiness
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            failureThreshold: 1
+            timeoutSeconds: 15
+          livenessProbe:
+            httpGet:
+              port: {{ $ports.kafka.healthcheck }}
+              path: /liveness
+            initialDelaySeconds: 360
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 15
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ZK_FIXED_IP_NAME
+              value: "127.0.0.1"
+            - name: ZK_CLIENT_PORT
+              value: {{ $ports.zookeeper.clientInternal | quote}}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: RELEASE
+              value: {{ .Release.Name | quote }}
+            - name: "CLUSTER_NAME"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterName"
+            - name: "ES_API_KEY"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ $iamSecretName }}"
+                  key: "{{ $iamServiceName }}-{{ $.Release.Name }}-api-key"
+            - name: KAFKA_HEAP_OPTS
+              value: {{ .Values.kafka.heapOpts | quote }}
+            - name: KAFKA_LISTENERS
+              value: {{ $kafkaListeners }}
+            - name: LISTENER_SECURITY_PROTOCOL_MAP
+              value: {{ $kafkaProtocols }}
+            - name: ACCESS_CONTROLLER_HOSTNAME
+              value: "{{ $accessControllerServiceName }}.{{ .Release.Namespace }}.svc.{{ $clusterName }}"
+            - name: ACCESS_CONTROLLER_PORT
+              value: {{ $ports.security.accessController | quote }}
+            - name: ADVERTISED_LISTENERS
+              value: {{ $kafkaAdvertisedListeners }}
+            - name: INTER_BROKER_PROTOCOL_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ $releaseConfigMapName }}"
+                  key: "inter.broker.protocol.version"
+            - name: LOG_MESSAGE_FORMAT_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: "{{ $releaseConfigMapName }}"
+                  key: "log.message.format.version"
+            - name: ROOT_LOGGING_LEVEL
+              value: "INFO"
+            - name: BROKER_LOGGING_LEVEL
+              value: "INFO"
+            - name: REQUEST_LOGGING_LEVEL
+              value: "WARN"
+            - name: LOG_CLEANER_LOGGING_LEVEL
+              value: "INFO"
+            - name: KAFKA_AUTH_LOGGING_LEVEL
+              value: "INFO"
+            - name: LOG_TO_STDOUT
+              value: "false"
+            {{- if .Values.kafka.openJMX }}
+            - name: TLS_JMX
+              value: "true"
+            - name: JMX_HOST
+              value: "127.0.0.1"
+            - name: JMX_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $jmxSecretName }}
+                  key: "jmx_username"
+            - name: JMX_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $jmxSecretName }}
+                  key: "jmx_password"
+            {{- end }}
+          volumeMounts:
+            - name: proxy-secret
+              mountPath: /etc/tls-cert
+              readOnly: true
+          {{- if .Values.kafka.configMapName }}
+            - name: cluster-config-volume
+              mountPath: /opt/cluster-configmap
+              readOnly: true
+          {{- end }}
+          {{- if .Values.persistence.enabled }}
+            - name: {{ $shortPvcName }}
+              mountPath: /var/data
+          {{- else }}
+            - name: "tempdir"
+              mountPath: /var/data
+          {{- end }}
+        #
+        # Metrics reporter sidecar - receives Kafka metrics and pushes to Prometheus
+        - name: metrics-reporter
+          image: {{ include "eventstreams.image" (list . "eventstreams-kafka-metrics-reporter" .Values.global.image.imageTags.metricsReporterTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $defaultUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            limits:
+{{ toYaml .Values.kafka.metricsReporterResources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.kafka.metricsReporterResources.requests | indent 14 }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: METRICS_PORT
+              value: "{{ $ports.kafka.metrics }}"
+            - name: IBM_JAVA_OPTIONS
+              value: "-XX:+UseContainerSupport"
+            {{- if .Values.kafka.openJMX }}
+            - name: JMX_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $jmxSecretName }}
+                  key: "jmx_username"
+            - name: JMX_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $jmxSecretName }}
+                  key: "jmx_password"
+            - name: JMX_HOST
+              value: "127.0.0.1"
+            - name: TRUST_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $jmxSecretName }}
+                  key: "trust_store_password"
+            {{- end }}
+          ports:
+            - containerPort: {{ $ports.kafka.metrics }}
+              name: metrics-port
+          readinessProbe:
+            timeoutSeconds: 30
+            periodSeconds: 30
+            initialDelaySeconds: 90
+            failureThreshold: 100
+            httpGet:
+              port: {{ $ports.kafka.metrics }}
+              path: /metrics
+          livenessProbe:
+            timeoutSeconds: 30
+            periodSeconds: 30
+            initialDelaySeconds: 120
+            failureThreshold: 100
+            tcpSocket:
+              port: {{ $ports.kafka.metrics }}
+          volumeMounts:
+            - name: metrics-config-volume
+              mountPath: /etc/kafka-metrics-reporter
+            {{- if .Values.kafka.openJMX }}
+            - name: jmx-secret
+              mountPath: /etc/jmx-cert
+           {{- end }}
+        #
+        # Metrics proxy sidecar - interprets Kafka traffic metrics from the protocol and pushes to the index manager
+        - name: metrics-proxy
+          image: {{ include "eventstreams.image" (list . "eventstreams-kafka-metrics-proxy" .Values.global.image.imageTags.kafkaMetricsProxyTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+            limits:
+{{ toYaml .Values.kafka.metricsProxyResources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.kafka.metricsProxyResources.requests | indent 14 }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $defaultUser }}
+            capabilities:
+              drop:
+              - ALL
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ES_CONFIG_PATH
+              value: {{ .sch.chart.components.kafka.configPath | quote }}
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.cert"
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.key"
+            - name: "ICP_CLUSTER_EXTERNAL_IP"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterExternalIP"
+            - name: "ICP_CLUSTER_EXTERNAL_PORT"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oauthSecretName }}
+                  key: "clusterExternalPort"
+            - name: MESSAGE_INDEXING_DISABLED
+              value: {{ (ne .Values.messageIndexing.messageIndexingEnabled true) | toString | quote }}
+          volumeMounts:
+            - name: ca-certs-volume
+              mountPath: /etc/ssl/certs
+              readOnly: true
+            - name: proxy-config-map
+              mountPath: {{ .sch.chart.components.kafka.configPath | quote }}
+              readOnly: true
+          ports:
+            - containerPort: {{ $ports.kafka.externalProxySecure }}
+              name: external
+            - containerPort: {{ $ports.kafka.internalEventStreamsSecureIntercept }}
+              name: internal
+            - containerPort: {{ $ports.kafka.internalLoopbackIntercept }}
+              name: loopback
+            - containerPort: {{ $ports.proxy.health }}
+              name: proxy-health
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: "/live"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 15
+        # tls proxy sidecar - encrypts traffic to zookeeper and between kafka peers
+        - name: tls-proxy
+          image: {{ include "eventstreams.image" (list . "eventstreams-proxy" .Values.global.image.imageTags.proxyTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $defaultUser }}
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            limits:
+{{ toYaml .Values.kafka.tlsProxyResources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.kafka.tlsProxyResources.requests | indent 14 }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ES_CONFIG_PATH
+              value: {{ .sch.chart.components.kafka.tlsConfigPath | quote }}
+            - name: HEALTH_PORT
+              value: {{ $ports.proxy.altHealth | quote }}
+            - name: READY_PORT
+              value: {{ $ports.proxy.altHealth | quote }}
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.cert"
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.key"
+          volumeMounts:
+            - name: proxy-certs-volume
+              mountPath: /etc/ssl/certs
+              readOnly: true
+            - name: tlsproxy-config-map
+              mountPath: {{ .sch.chart.components.kafka.tlsConfigPath | quote }}
+              readOnly: true
+          ports:
+            - containerPort: {{ $ports.proxy.altHealth }}
+              name: proxy-health
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: {{ $ports.proxy.altHealth }}
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: "/live"
+              port: {{ $ports.proxy.altHealth }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 15
+        #
+        # Healthcheck container
+        - name: healthcheck
+          image: {{ include "eventstreams.image" (list . "eventstreams-healthcheck" .Values.global.image.imageTags.healthcheckTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+            limits:
+{{ toYaml .Values.kafka.healthcheckResources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.kafka.healthcheckResources.requests | indent 14 }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $defaultUser }}
+            capabilities:
+              drop:
+              - ALL
+          ports:
+            - containerPort: {{ $ports.kafka.healthcheck }}
+              name: hc-port
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: ZOOKEEPER_CONNECT
+              value: '{{ range $index, $_ := until $zookeeperReplicas }}{{ $uniquePort := $index | add1 }}{{if $index}},{{end}}127.0.0.1:10{{ $uniquePort }}00{{ end }}'
+          readinessProbe:
+            httpGet:
+              port: {{ $ports.kafka.healthcheck }}
+              path: /healthz
+            initialDelaySeconds: 150
+            periodSeconds: 15
+            timeoutSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              port: {{ $ports.kafka.healthcheck }}
+              path: /healthz
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            timeoutSeconds: 15
+            failureThreshold: 3
+      volumes:
+        - name: metrics-config-volume
+          configMap:
+            name: {{ $kafkaMetricsConfigMapName }}
+        - name: ca-certs-volume
+          secret:
+            secretName: {{ $proxySecretName }}
+            items:
+            - key: tls.cluster
+              path: ca-certificates.crt
+        - name: proxy-certs-volume
+          secret:
+            secretName: {{ $proxySecretName }}
+            items:
+            - key: podtls.cert
+              path: ca-certificates.crt
+        - name: proxy-config-map
+          configMap:
+            name: {{ $configMapName }}
+        - name: tlsproxy-config-map
+          configMap:
+            name: {{ $tlsConfigMapName }}
+        {{- if .Values.kafka.configMapName }}
+        - name: cluster-config-volume
+          configMap:
+            name: {{ .Values.kafka.configMapName }}
+        {{- end }}
+        {{ if .Values.persistence.enabled -}}
+        {{ else }}
+        - name: "tempdir"
+          emptyDir: {}
+        {{ end }}
+        - name: proxy-secret
+          secret:
+            secretName: {{$proxySecretName}}
+            items:
+              - key: tls.cert
+                path: tls.cert
+              - key: tls.key
+                path: tls.key
+        {{- if .Values.kafka.openJMX }}
+        - name: jmx-secret
+          secret:
+            secretName: {{$jmxSecretName}}
+            items:
+              - key: truststore.jks
+                path: truststore.jks
+        {{- end }}
+  {{ if .Values.persistence.enabled -}}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ $shortPvcName }}
+        labels:
+{{ $labels | indent 10 }}
+      spec:
+        {{ if .Values.persistence.useDynamicProvisioning -}}
+        # If present, use the storageClassName from the values.yaml, else use the
+        # default storageClass setup by Kubernetes Administrator
+        #
+        # Setting storageClassName to nil means use the default storage class
+        storageClassName: {{ default nil .Values.persistence.dataPVC.storageClassName | quote }}
+        {{ else -}}
+        # Disable dynamic provisioning
+        storageClassName: ""
+        {{ end -}}
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.persistence.dataPVC.size | quote }}
+  {{ end -}}
+{{ end -}}

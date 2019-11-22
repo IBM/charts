@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-ui-init-scripts"
+  labels:
+    service:   "conversation"
+    component: "ui"
+    slot:      "{{ .Release.Name }}"
+    app: "ibm-watson-assistant-prod-1.3.0"
+    chart: "ibm-watson-assistant"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+data:
+  redis_running.sh: |
+    #!/bin/sh
+    # Checks if redis is running and respond to PING commands
+    # Assumes VCAP_SERVICES env var is set.
+    # Requires container with redis-cli and jq  (e.g., conan-tools)
+    if [ ${DEBUG} ] ; then
+      set -x
+    fi
+    
+    REDIS_HOST=$(    echo "${VCAP_SERVICES}" | jq -r '.["user-provided"][0].credentials.hostname')
+    REDIS_PORT=$(    echo "${VCAP_SERVICES}" | jq -r '.["user-provided"][0].credentials.port'    )
+    REDIS_PASSWORD=$(echo "${VCAP_SERVICES}" | jq -r '.["user-provided"][0].credentials.password')
+    
+    while true ; do
+      echo "redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ********** PING"
+      RESULT=$(timeout 5 redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} PING 2>&1 )
+      EXIT_CODE=$?
+      echo "${RESULT}"
+      if [ "_${EXIT_CODE}" = "_0" -a "_${RESULT}" = "_PONG" ] ; then
+        break;
+      fi
+      
+      echo "  command failed (exit code: ${EXIT_CODE}). Waiting 5 sec before next retry"
+      sleep 5
+    done
+    
+    echo "Redis service seems to be ready. Going to start the microservice."

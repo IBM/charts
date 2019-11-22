@@ -1,0 +1,115 @@
+{{- include "sch.config.init" (list . "sch.chart.ttsvoices.config.values") -}}
+{{- $compName := .sch.chart.components.voices.name -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{.Release.Name}}-upload-voices-{{ .Release.Revision }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  template:
+    metadata:
+      name: "{{.Release.Name}}"
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 999
+        {{- end }}
+      restartPolicy: Never
+      initContainers:
+        - name: wait4minio
+          image: "{{ .Values.global.image.repository }}/{{ .Values.global.images.utils.image }}:{{ .Values.global.images.utils.tag }}"
+{{ include "initContainerResources" . | indent 10}}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 1001
+            {{- end }}
+            capabilities:
+              drop:
+              - ALL
+          command: ['sh', '-c']
+          args:
+            - echo trying to access minio at {{ include "ibm-watson-speech-prod.object-storage-endpoint" . }};
+              while true;
+                do echo waiting for Minio;
+                curl {{ include "ibm-watson-speech-prod.object-storage-endpoint" . }} -k --connect-timeout 5;
+                if [ $? == 0 ]; then break; fi;
+                sleep 5;
+              done;
+              sleep 10;
+      containers:
+      {{- $global := . -}}
+      {{- $values := .Values -}}
+      {{- $modelVersion := $values.modelVersion }}
+      {{- $baseModelsBucket := $values.global.datastores.minio.baseModelsBucket }}
+      {{- $multipartUploadThreads := $values.multipartUpload.threads }}
+      {{- $imagePullPolicy := $values.imagePullPolicy -}}
+      {{- range $name, $model := $values.global.ttsVoices }}
+      {{- $m := (index $values.global.ttsVoices $name ) }}
+      {{- if include "chuck.isModelEnabled" $m }}
+      - name: {{ include "chuck.catalogNameToImageName" (list $model.catalogName "generic-models") }}
+        {{ if not (hasKey $model "catalogName") -}}
+        imagePullPolicy: Always
+        {{ else -}}
+        imagePullPolicy: {{ $imagePullPolicy }}
+        {{ end -}}
+        image: "{{ $global.Values.global.image.repository }}/{{ include "chuck.catalogNameToImageName" (list $model.catalogName (default "generic-models" $values.global.dbgGenericModelsImageName)) }}:{{ $modelVersion }}"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          {{- if not ($global.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 999
+          {{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "0.1"
+          limits:
+            memory: "256Mi"
+            cpu: "0.1"
+        command: ["/usr/bin/python"]
+        args: ["/upload_models.py"]
+        env:
+        - name: speech_models_endpoint_url
+          value: {{ include "ibm-watson-speech-prod.object-storage-endpoint" $global }}
+        - name: speech_models_bucket
+          value: {{ $baseModelsBucket }}
+        - name: speech_models_secrets
+          value: /etc/chuck/minio
+        {{- if eq $name "genericModels" }}
+        - name: speech_models_catalog_file
+          value: "/catalog.json"
+        {{- end }}
+        - name: speech_models_surl_suffix
+          value: {{ $modelVersion }}
+        - name: speech_models_local_dir
+          value: "/model"
+        - name: speech_models_multipart_upload
+          value: "{{ $multipartUploadThreads }}"
+        volumeMounts:
+        - mountPath: /etc/chuck/minio
+          name: minio-account
+          readOnly: true
+      {{- end }}
+      {{- end }}
+      volumes:
+        - name: minio-account
+          secret:
+            secretName: {{ .Values.global.datastores.minio.secretName }}
+      affinity:
+{{- include "ibm-watson-speech-prod.watson-speech-nodeaffinity" .Values.arch | indent 8 }}

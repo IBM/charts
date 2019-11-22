@@ -1,0 +1,103 @@
+{{- include "sch.config.init" (list . "sireTraining.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.jobq.deploymentName -}}
+{{- $rootContext := . -}}
+{{- $jobq := .Values.jobq -}}
+{{- if $jobq.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName) }}-pg-init"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "post-install" # bucket creation should be run after the install of minio
+    "helm.sh/hook-weight": {{ .Values.preInstallHookWeightAnchor | quote }}
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: {{ .Values.jobq.pgInit.backoffLimit }}
+  template:
+    metadata:
+      name: "{{ include "sch.names.fullCompName" (list . $compName) }}-pg-init"
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      restartPolicy: Never
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- /* nodeaffinity for github.com charts, remove the following for PPA charts */}}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+
+{{ include "sireTraining.pullSecretTemplate" . | indent 6 }}
+
+      {{- if (and .Values.global.postgresql.sslEnabled .Values.global.postgresql.tlsSecret.fieldRootCertificate) }}
+      volumes:
+      ### POSTGRESQL
+      # secret reference that contains the postgresql secrets
+      - name: pg-cert-secret
+        secret:
+          # defaultMode: 0600
+          secretName: {{ default (include .Values.global.postgresql.tlsSecret.nameTpl .) .Values.global.postgresql.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.postgresql.tlsSecret.fieldRootCertificate }}
+            path: "root.pem"
+      {{- end }}
+
+      containers:
+      - name: psql
+        {{ include "sireTraining.imageTpl" (list $ $jobq) }}
+        {{ include "sireTraining.pullPolicyTemplate" . }}
+
+        command:
+          - "/bin/sh"
+          - "-c"
+          - |
+            psql -a -c "CREATE ROLE {{$jobq.postgres.user}} WITH PASSWORD '${JOBQ_PGPASSWORD}' LOGIN"; \
+            psql -a -c "GRANT {{$jobq.postgres.user}} TO {{ .Values.global.postgresql.adminUser }}"; \
+            psql -a -f /etc/jobq/schema.sql -v JOBQ_DBNAME={{ include "sireTraining.jobqDbName" $rootContext }} -v JOBQ_OWNER={{$jobq.postgres.user}}; \
+            psql -a -d {{ include "sireTraining.jobqDbName" $rootContext }} -c "INSERT INTO leader_election (hostname, lease_deadline) SELECT 'init', '1970-01-01' WHERE NOT EXISTS (SELECT * FROM leader_election)"; \
+            {{ range $mapKey, $tenant := $jobq.tenants -}}
+            psql -a -d {{ include "sireTraining.jobqDbName" $rootContext }} -c "{{ printf "INSERT INTO tenant (tenant_id, description, quota_cpu_millis, quota_memory_megabytes, quota_gpus, max_queued_and_active_per_user, max_active_per_user) VALUES ('%s', '%s', %d, %d, %d, %d, %d)" $tenant.tenant_id $tenant.description (int64 $tenant.quota_cpu_millis) (int64 $tenant.quota_memory_megabytes) (int64 $tenant.quota_gpus) (int64 $tenant.max_queued_and_active_per_user) (int64 $tenant.max_active_per_user) }}";\
+            psql -a -d {{ include "sireTraining.jobqDbName" $rootContext }} -c "SELECT tenant_id FROM tenant WHERE tenant_id = '{{ $tenant.tenant_id }}'" | grep '1 row' && \
+            {{ end -}}
+            echo "done"
+
+        {{- if (and .Values.global.postgresql.sslEnabled .Values.global.postgresql.tlsSecret.fieldRootCertificate) }}
+        volumeMounts:
+        - name: pg-cert-secret
+          mountPath: "/etc/ssl/postgresql"
+          readOnly: true
+        {{- end }}
+
+        env:
+        - name: PGHOST
+          value: "{{ default (include .Values.global.postgresql.hostNameTpl .) .Values.global.postgresql.fixedHostName }}"
+        - name: PGPORT
+          value: "{{ .Values.global.postgresql.port }}"
+        - name: PGDATABASE
+          value: "{{ .Values.global.postgresql.adminDB }}"
+        - name: PGUSER
+          value: "{{ .Values.global.postgresql.adminUser }}"
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.postgresql.authSecret.nameTpl .) .Values.global.postgresql.authSecret.fixedName }}
+              key: {{ .Values.global.postgresql.authSecret.fieldAdminPassword }}
+        - name: JOBQ_PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.postgresql.authSecret.nameTpl .) .Values.global.postgresql.authSecret.fixedName }}
+              key: {{ .Values.global.postgresql.authSecret.fieldJobqPassword }}
+        - name: PGSSLMODE
+          value: {{ template "sireTraining.postgresqlSslModeTpl" . }}
+        {{- if (and .Values.global.postgresql.sslEnabled .Values.global.postgresql.tlsSecret.fieldRootCertificate) }}
+        - name: PGSSLROOTCERT
+          value: "/etc/ssl/postgresql/root.pem"
+        {{- end }}
+        resources:
+          limits:
+            memory: "100Mi"
+            cpu: "100m"
+          requests:
+            memory: "100Mi"
+            cpu: "100m"
+{{- end -}}

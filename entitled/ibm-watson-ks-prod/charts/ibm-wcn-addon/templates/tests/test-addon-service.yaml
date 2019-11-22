@@ -1,0 +1,51 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . "test-container") }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "addon-test") | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "addon-test") | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  {{- if ne .Values.serviceAccount.name "" }}
+  serviceAccountName: {{ include "wcn-addon.account.name" . }}
+  {{- end }}
+{{- if tpl (.Values.global.imagePullSecretName | toString ) . }}
+  imagePullSecrets:
+  - name:  {{ tpl (.Values.global.imagePullSecretName | toString ) . }}
+{{- end }}
+  securityContext:
+    runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+    runAsUser: 8000
+{{- end }}
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    image: "{{ include "wcn-addon.icpDockerRepo" . }}{{ .Values.addon.tls.image.repository }}:{{ .Values.addon.tls.image.tag }}"
+    command: ["sh", "-c", "curl -k --fail {{ include "wcn-addon.addonService.endpoint" . -}}/healthz"]
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+      runAsUser: 8000
+{{- end }}
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        memory: 100Mi
+        cpu: '.2'
+      limits:
+        memory: 200Mi
+        cpu: '.5'
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}

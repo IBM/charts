@@ -1,0 +1,84 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+{{- $resourceName := include "sch.names.fullCompName" (list . $compName) }}
+{{- $releaseName := .Release.Name -}}
+{{- $secretName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $checktls := include "ibm-netcool-probe-messagebus-webhook-prod.checkfortls" .Values.ingress.tls.enabled -}}
+{{- $ingresshost := .Values.ingress.host -}}
+To reach the application visit the following URL:
+{{- if .Values.ingress.enabled }}
+{{- if empty $ingresshost }}
+  {{- if eq $checktls "ON" }}
+  export PROXY_NODE=$(kubectl get ingress  --namespace {{ .Release.Namespace }} -l app.kubernetes.io/instance=={{ $releaseName }}  -o jsonpath='{.items[0].status.loadBalancer.ingress[].ip}')
+
+  1) Retrieve ca_crt.pem by running following command (Administrator role or higher is required):
+  `kubectl get secrets/{{ $secretName }}  --namespace {{ .Release.Namespace }} --output=jsonpath={.data.tls-ca\\.crt} | base64 --decode > ca_crt.pem`   
+  2) Use curl command with option "--cacert" to specify the ca_crt.pem file.
+
+  - Send HTTPS requests to the Webhook URL, where $PROXY_NODE is the Ingress external IP address:
+  https://$PROXY_NODE{{ include "ibm-netcool-probe-messagebus-webhook-prod.getFinalURI" . }}
+  {{- end }}
+{{- else }}
+{{- $fullHostName := printf "%s.%s" $releaseName $ingresshost }}
+  {{- if eq $checktls "ON" }}
+  {{- if .Values.ingress.tls.secretName }}
+  export PROXY_NODE=$(kubectl get ingress  --namespace {{ .Release.Namespace }} -l app.kubernetes.io/instance=={{ $releaseName }} -o jsonpath='{.items[0].status.loadBalancer.ingress[].ip}')
+
+  1) If a signed certificate is provided for the secret, use curl command with option "--cacert" to specify the CA file and "--resolve" to resolve the hostname {{ $fullHostName }}.
+  2) If a self-signed certificate is provided for the secret, use curl command with option "--cacert" to specify the server cert and "--resolve" to resolve the hostname {{ $fullHostName }}.
+
+  - The Proxy Node IP: echo $PROXY_NODE
+  - Send HTTPS requests to the Webhook URL: https://{{ $fullHostName }}{{ include "ibm-netcool-probe-messagebus-webhook-prod.getFinalURI" . }}
+  {{- end }}
+  {{- if not .Values.ingress.tls.secretName }}
+  export PROXY_NODE=$(kubectl get ingress  --namespace {{ .Release.Namespace }} -l app.kubernetes.io/instance=={{ $releaseName }} -o jsonpath='{.items[0].status.loadBalancer.ingress[].ip}')
+  
+  1) Retrieve ca_crt.pem by running following command (Administrator role or higher is required):
+  `kubectl get secrets/{{ $secretName }} --namespace {{ .Release.Namespace }} --output=jsonpath={.data.tls-ca\\.crt} | base64 --decode > ca_crt.pem`   
+  2) Make sure that the hostname is added to your /etc/hosts file pointing to the IP address of your proxy node.
+  3) Use curl command with option "--cacert" to specify the ca_crt.pem file and "--resolve" to resolve the hostname {{ $fullHostName }}.
+
+  - The Proxy Node IP: echo $PROXY_NODE
+  - Send HTTPS requests to the Webhook URL: https://{{ $fullHostName }}{{ include "ibm-netcool-probe-messagebus-webhook-prod.getFinalURI" . }}
+  {{- end }}
+  {{- else }}
+  export PROXY_NODE=$(kubectl get ingress --namespace {{ .Release.Namespace }} -l app.kubernetes.io/instance=={{ $releaseName }} -o jsonpath='{.items[0].status.loadBalancer.ingress[].ip}')
+
+  Make sure that the hostname printed below is added to your /etc/hosts file pointing to the Ingress external IP address.
+
+  - The Ingress external IP address:
+  echo $PROXY_NODE
+  
+  - Send HTTP requests to the Webhook URL:
+  http://{{ $fullHostName }}{{ include "ibm-netcool-probe-messagebus-webhook-prod.getFinalURI" . }}
+
+  {{ $servicePort := include "ibm-netcool-probe-messagebus-webhook-prod.getportno" . }}
+  You can use kubectl port-forward command to map a local port to the pod port for verification. Example command below.
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Send HTTP POST requests to http://127.0.0.1:{{ $servicePort }}{{ include "ibm-netcool-probe-messagebus-webhook-prod.getFinalURI" . }}"
+  kubectl port-forward --namespace {{ .Release.Namespace }} $POD_NAME {{ $servicePort }}:4080
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.probe.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{$resourceName}} )
+
+  # On ICP 3.1.1, you can obtain the External IP from the IBM Cloud Cluster Info Configmap using the command below.
+  export NODE_IP=$(kubectl get configmap --namespace kube-public ibmcloud-cluster-info -o jsonpath="{.data.proxy_address}")
+
+  echo http://$NODE_IP:$NODE_PORT
+
+  # On ICP 3.1.0, get the External IP from the Nodes resource. This command requires Cluster Administrator role.
+  export NODE_IP=$(kubectl get nodes -l proxy=true -o jsonpath="{.items[0].status.addresses[0].address}")
+{{- else if contains "LoadBalancer" .Values.service.probe.type }}
+{{ $servicePort := include "ibm-netcool-probe-messagebus-webhook-prod.getportno" . }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        You can watch the status of by running 'kubectl get services -w {{ $resourceName }}'
+  export SERVICE_IP=$(kubectl get services --namespace {{ .Release.Namespace }} {{ $resourceName }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP:{{ $servicePort }}
+{{- else if contains "ClusterIP" .Values.service.probe.type }}
+{{ $servicePort := include "ibm-netcool-probe-messagebus-webhook-prod.getportno" . }}
+  You can use kubectl port-forward command to map a local port to the pod port for verification. Example command below.
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "sch.names.appName" (list .) }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Send HTTP POST requests to http://127.0.0.1:{{ $servicePort }}{{ include "ibm-netcool-probe-messagebus-webhook-prod.getFinalURI" . }}"
+  kubectl port-forward --namespace {{ .Release.Namespace }} $POD_NAME {{ $servicePort }}:4080
+{{- end }}

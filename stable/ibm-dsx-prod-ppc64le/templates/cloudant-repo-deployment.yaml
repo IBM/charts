@@ -1,0 +1,62 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.sysIbmAdmData) -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cloudant-repo
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: cloudant-repo-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: cloudant-repo-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: cloudant
+        component: cloudant-repo
+        run: cloudant-repo-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: cloudant-repo-container
+        image: {{ .Values.cloudantRepoContainer.image.repository }}:{{ .Values.cloudantRepoContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/scripts/startup.sh"]
+        resources:
+{{ toYaml .Values.cloudantRepoContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        - containerPort: 443
+          protocol: TCP
+        volumeMounts:
+          - mountPath: /srv
+            name: cloudant-srv-mount
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 300
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 40
+          periodSeconds: 30
+      volumes:
+        - name: cloudant-srv-mount
+          persistentVolumeClaim:
+            {{- if .Values.cloudantSrvPvc.persistence.existingClaimName }}
+              claimName: {{ .Values.cloudantSrvPvc.persistence.existingClaimName }}
+            {{- else }}
+              claimName: {{ template "fullname" . }}-{{ .Values.cloudantSrvPvc.name }}
+            {{- end }}
+{{- end }}

@@ -1,0 +1,29 @@
+# helm test - verify po service : graph management is running
+{{- include "sch.config.init" (list . "poRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.graphmgmt.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "helmtest" -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $fullTestCompName }}"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app: {{ include "sch.names.appName" (list .) }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: {{ $testCompName }}
+spec:
+  {{- include "po.securitycontext.pod" . | indent 2 }}
+  {{- include "po.image.pull.secret" . | indent 2 }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    image: {{ .Values.graphmgmt.image.repository }}:{{ .Values.graphmgmt.image.tag }}
+    {{- include "po.securitycontext.container" . | indent 4 }}
+    command: ['curl']
+    args:  ['{{ template "graphmgmt.service.url" . }}/instances']
+  restartPolicy: Never

@@ -1,0 +1,46 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018, 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "redis.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullCompName" (list . "") -}}
+{{- $replicas := int .Values.maxReplicas }}
+{{- $root := . }}
+{{- range $i := until $replicas }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}-announce-{{ $i }}
+  labels:
+    app: "redis"
+    chart: "redis"
+    heritage: "Tiller"
+    release: "test"
+  {{- if $root.Values.serviceAnnotations }}
+{{ toYaml $root.Values.serviceAnnotations | indent 4 }}
+  {{- end }}
+spec:
+  publishNotReadyAddresses: true
+  type: ClusterIP
+  ports:
+  - name: server-{{ $i }}
+    port: {{ $root.Values.redis.port }}
+    protocol: TCP
+    targetPort: redis
+  - name: sentinel-{{ $i }}
+    port: {{ $root.Values.sentinel.port }}
+    protocol: TCP
+    targetPort: sentinel
+  selector:
+    release: {{ $root.Release.Name }}
+    app: {{ include "redis.name" $root }}
+    "statefulset.kubernetes.io/pod-name": {{ $fullName }}-server-{{ $i }}
+{{- end }}

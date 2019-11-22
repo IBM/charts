@@ -1,0 +1,215 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "ilmt.fullname" . }}
+  labels:
+    app: {{ include "ilmt.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "ilmt.name" . }}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+  serviceName: {{ include "ilmt.name" . }}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ include "ilmt.name" . }}
+        chart: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+      annotations:
+        productName: "IBM License Reporter Beta"
+        productID: "b6384f89630a4116a3568009fb04c294"
+        productVersion: "9.2.15.0"
+        productMetric: "PROCESSOR_VALUE_UNIT"
+        productChargedContainers: "server"    
+    spec:
+      securityContext:
+        fsGroup: 1000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - {{ .Values.arch }}
+      hostAliases:
+      - ip: "127.0.0.1"
+        hostnames:
+        - "db2"
+      volumes:
+      - name: cgvol
+        hostPath:
+          path: /sys/fs/cgroup
+      - name: sys
+        hostPath:
+          path: /proc/sys
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: ilmt-storage
+        persistentVolumeClaim:
+          claimName: {{ include "ilmt.name" . }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: true
+      initContainers:
+        - name: init-db2
+          image: "{{ .Values.images.serverdb.repository }}:{{ .Values.images.serverdb.tag }}"
+          imagePullPolicy: Always
+          command: ['sh','-c','/opt/dbinit.sh']
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          volumeMounts:
+          - name: proc
+            mountPath: /host/proc
+            readOnly:  false
+          - name: sys
+            mountPath: /host/proc/sys
+            readOnly: false
+          - mountPath: "/storage"
+            name: ilmt-storage
+
+      containers:
+      - name: db2
+        image: "{{ .Values.images.serverdb.repository }}:{{ .Values.images.serverdb.tag }}"
+        imagePullPolicy: Always
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            drop:
+            - ALL
+            #Need the default Docker capabilities. Additional ones are "SYS_RESOURCE", "IPC_OWNER", "SYS_NICE"
+            add: ["SYS_RESOURCE", "IPC_OWNER", "SYS_NICE", "SETPCAP", "CHOWN", "FOWNER", "NET_RAW", "DAC_OVERRIDE", "FSETID", "KILL", "SETGID", "SETUID", "MKNOD", "AUDIT_WRITE", "SYS_CHROOT", "NET_BIND_SERVICE", "SETFCAP"]
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+          privileged: false
+        ports:
+          - containerPort: 50000
+          - containerPort: 55000
+        env:
+        - name: IS_KUBE
+          value: "true"
+        volumeMounts:
+        - mountPath: /sys/fs/cgroup
+          name: cgvol
+          readOnly: true
+        - mountPath: "/database"
+          name: ilmt-storage
+          subPath: database
+        resources:
+          requests:
+            memory: "{{ .Values.resources.serverdb.requests.memory }}"
+            cpu: "{{ .Values.resources.serverdb.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.serverdb.limits.memory }}"
+            cpu: "{{ .Values.resources.serverdb.limits.cpu }}"  
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - su - db2inst1  -c '/database/config/db2inst1/sqllib/bin/db2gcf -s'
+          initialDelaySeconds: 810
+          periodSeconds: 90
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - su - db2inst1  -c '/database/config/db2inst1/sqllib/bin/db2gcf -s'
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 50
+      - name: server
+        image: "{{ .Values.images.server.repository }}:{{ .Values.images.server.tag }}"
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 9081
+        volumeMounts:
+        - mountPath: "/ilmtdata"
+          name: ilmt-storage
+          subPath: datacollector/data
+        - mountPath: "/opt/ibm/server/wlp/usr/servers/server1/logs"
+          name: ilmt-storage
+          subPath: server/logs
+        - mountPath: "/opt/ibm/server/wlp/usr/servers/server1/data_k8s/raw_data"
+          name: ilmt-storage
+          subPath: server/raw_data
+        - mountPath: "/opt/ibm/server/wlp/usr/servers/server1/LMT/VmManagersScanFiles"
+          name: ilmt-storage
+          subPath: server/vmtool_data
+        - mountPath: "/opt/ibm/server/wlp/usr/servers/server1/data_k8s/licensing_data"
+          name: ilmt-storage
+          subPath: output/licensing_data
+        - mountPath: "/opt/ibm/server/wlp/usr/servers/server1/data_k8s/supporting_data"
+          name: ilmt-storage
+          subPath: output/supporting_data
+        resources:
+          requests:
+            memory: "{{ .Values.resources.server.requests.memory }}"
+            cpu: "{{ .Values.resources.server.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.server.limits.memory }}"
+            cpu: "{{ .Values.resources.server.limits.cpu }}"
+        livenessProbe:
+          exec:
+            command:
+            - /opt/serverprobe.sh
+          initialDelaySeconds: 300 
+          periodSeconds: 1200
+        readinessProbe:
+          exec:
+            command:
+            - /opt/serverprobe.sh
+          initialDelaySeconds: 240 
+          periodSeconds: 600
+      - name: datacollector
+        image: "{{ .Values.images.datacollector.repository }}:{{ .Values.images.datacollector.tag }}"
+        imagePullPolicy: Always
+        securityContext:
+          privileged: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: "/opt/ibm/datacollector/data"
+          name: ilmt-storage
+          subPath: datacollector/data
+        - mountPath: "/opt/ibm/datacollector/logs"
+          name: ilmt-storage
+          subPath: datacollector/logs
+        resources:
+          requests:
+            memory: "{{ .Values.resources.datacollector.requests.memory }}"
+            cpu: "{{ .Values.resources.datacollector.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.datacollector.limits.memory }}"
+            cpu: "{{ .Values.resources.datacollector.limits.cpu }}"
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - 'ps | grep -w java | grep -v grep'
+          initialDelaySeconds: 60
+          periodSeconds: 600

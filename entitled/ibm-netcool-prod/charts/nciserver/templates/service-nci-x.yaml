@@ -1,0 +1,38 @@
+{{- /*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/ -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{ $nodeCount := .Values.global.nciservers.replicaCount | int -}}
+{{ $global := . }}
+{{- range $i := until $nodeCount }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $global.Release.Name }}-nci-{{ $i }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $global "") | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "sch.names.appName" (list $global) }}
+    app.kubernetes.io/instance: {{ $global.Release.Name }}
+    statefulset.kubernetes.io/pod-name: "{{ include "sch.names.fullName" (list $global 63) }}-{{ $i }}"
+  type: ClusterIP
+  ports:
+    - name: nameserver
+      protocol: TCP
+      port: {{ $global.Values.impactcore.internal.nameserverPort }}
+{{ end }}

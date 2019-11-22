@@ -1,0 +1,148 @@
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018-2019 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+
+global:
+  # Review and accept the license terms? ['accept','not accepted']
+  license: "not accepted"
+
+  # Enable sub-chart resource requests
+  resource:
+    requests:
+      enable: true
+  # Define where/who the images will be pulled from
+    
+  image:
+    # This is the artifactory server to pull the docker images from
+    repository: 
+     # Secret used to access the docker repository above
+    secret: ""
+    # pullPolicy: IfNotPresent change to Always to make the latest is always picked up
+    pullPolicy: Always
+    sharedTag: 1.6.0.1-99
+  ldapservice:
+    name: ldapservice
+    verifypasswords : true
+    internal:
+      ldapPort: 389
+      ldapSSLPort: 636
+      suffix: "dc=mycluster,dc=icp"
+      baseDN: dc=mycluster,dc=icp
+      bindDN: "cn=admin,dc=mycluster,dc=icp"
+
+  cluster:
+    # Public name or IP the deployment cluster will be accessible from.
+    fqdn: "mycluster.icp"
+  rbac:
+    serviceAccountName: noi-service-account
+ 
+replicaCount: 1
+image:
+  unity:
+    name: log-analysis
+    tag: 1.6.0.1-110
+  gateway:
+    name: xml-gateway
+    tag: 1.6.0.1-99
+
+test:
+  image:
+    name: "configuration-share"
+    tag:  "1.6.0.1-99"
+
+log:
+  # XML-Gateway log level.
+  level: info
+
+ingress:
+  port: 443
+  proxyReadTimeout: 1200
+  proxySendTimeout: 1200
+
+liveness:
+  unity:
+    initialDelaySeconds: 3000
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 10
+  gateway:
+    command: "/home/netcool/IBM/core/omnibus/bin/nco_ping"
+    initialDelaySeconds: 3000
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 10
+
+readiness:
+  unity:
+    initialDelaySeconds: 300
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 55
+  gateway:
+    command: "/home/netcool/IBM/core/omnibus/bin/nco_ping"
+    initialDelaySeconds: 300
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 55
+
+# Time it takes to shutdown the POD in seconds.
+terminationGracePeriodSeconds: 120
+gateway:
+  name: LA_GATE
+  env:
+    propsPath: "/home/netcool/IBM/core/omnibus/etc"
+# Resources requirement for the Unity server and the gateway. These are for production.
+
+pvc:
+  # specify the storageClassName you want to use
+  # if you don't specify a storageClassName it will use the default
+  storageClassName: ""
+
+  # Specify the name of the Existing Claim to be used by your application
+  # empty string means don't use an existClaim
+  existingClaimName: ""
+
+  # if your not using dynamic provisioning, you can use selectors to
+  # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+  selector:
+    label: ""
+    value: ""
+
+  size: 20Gi
+
+service:
+  name: log-analysis-service
+  internal:
+    port:
+      http: 9988
+      https: 9987
+      db: 1627
+      eif: 5529
+      zookeeper: 12181
+      solrSearch: 8983
+      solrStop: 7205
+      xmlGateway: 4300
+  objserv:
+    primary:
+      name: objserv-agg-primary
+    backup:
+      name: objserv-agg-backup
+sso:
+  internal:
+    ltpaKeyFile: dash_ltpa.key
+
+unity:
+  adminUser: unityadmin
+  env:
+    locale: en_US.utf8

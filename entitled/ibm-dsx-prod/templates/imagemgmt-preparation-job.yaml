@@ -1,0 +1,45 @@
+{{- if .Values.global.baseInstaller }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: imagemgmt-preparation-job
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    metadata:
+      labels:
+        component: imagemgmt
+        run: imagemgmt-preparation-job
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        is_compute: "true"
+      containers:
+      - name: imagemgmt-preparation-job
+        image: {{ .Values.imagemgmt.image.repository }}:{{ .Values.imagemgmt.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/bin/sh","-c"]
+        args: ["cd /scripts; ./retag_images.sh; node ./builtin-image-info.js; ./update_nginx.sh; /user-home/.scripts/system/utils/nginx-reload"]
+        env:
+        - name: REGISTRY_URL
+          value: "idp-registry.sysibm-adm.svc.cluster.local:31006/"
+        volumeMounts:
+        - name: user-home-mount
+          mountPath: /user-home
+        - name: rt-def-mount
+          mountPath: "/user-home/_global_/config/.runtime-definitions/ibm"
+        - name: local-docker
+          mountPath: /var/run/docker.sock
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}
+      - name: rt-def-mount
+        configMap:
+          name: runtimes-def-configmap
+      - name: local-docker
+        hostPath:
+          path: /var/run/docker.sock
+{{- end }}

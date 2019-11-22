@@ -1,0 +1,857 @@
+{{- if .Values.nginx }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wml-base-routes
+  labels:
+    icpdata_addon: "true"
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    set $envoy_service wml-os-envoy;
+    set $repo_service wmlrepositoryservice;
+    set $training_service wmltrainingservice;
+
+    location /v2/artifacts {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+
+
+    location ~ /v2/published_models/([a-z0-9-]+)/evaluation_metrics {
+      rewrite /v2/published_models/([a-z0-9-]+)/evaluation_metrics /v2/artifacts/models/$1/metrics break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+
+    location ~ /v3/wml_instances/([a-z0-9-]+)/published_models/([a-z0-9-]+)/deployments/([a-z0-9-]+)/online {
+      rewrite ^\/v3/wml_instances/([a-z0-9-]+)/published_models/([a-z0-9-]+)/deployments/([a-z0-9-]+)/online /v3/scoring/online/$3 break;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $host;
+      proxy_set_header ML-Instance-Id "";
+      proxy_set_header ML-Instance-Id $1;
+      proxy_pass_request_headers      on;
+    }
+
+
+    location ~ /v3/wml_instances/([a-z0-9-]+)/deployments/([a-z0-9-]+)/online {
+      rewrite ^\/v3/wml_instances/([a-z0-9-]+)/deployments/([a-z0-9-]+)/online /v3/scoring/online/$2 break;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $host;
+      proxy_set_header ML-Instance-Id "";
+      proxy_set_header ML-Instance-Id $1;
+      proxy_pass_request_headers      on;
+    }
+
+
+    location /v3/scoring/online {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $host;
+      proxy_pass_request_headers      on;
+    }
+
+    location /v3/scoring/batch {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+    }
+
+
+    location ~ /v3/ml_assets/models/([a-z0-9-]+)/versions/([a-z0-9-]+)/content {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v3/ml_assets {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+
+    location /v3/experiments {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+
+    }
+
+    location /v3/pipelines {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v3/functions/([a-z0-9-]+)/revisions/([a-z0-9-]+)/content {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v3/functions {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v3/libraries/([a-z0-9-]+)/content {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v3/libraries {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v3/runtimes/([a-z0-9-]+)/content {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v3/runtimes {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    ## New V4 API
+
+    location ~ /v4/functions/([a-z0-9-]+)/revisions/([a-z0-9-]+)/content {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v4/functions {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/libraries/([a-z0-9-]+)/content {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v4/libraries {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/runtimes/([a-z0-9-]+)/content {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v4/runtimes {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/models/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/models/([a-z0-9-]+)/revisions {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/models/([a-z0-9-]+)/content {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/models/([a-z0-9-]+)/clone {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/models/([a-z0-9-]+)/export {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v4/models {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4_private/shareable_keys/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    } 
+
+    location /v4_private/shareable_keys {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/spaces/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v4/spaces {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/spaces/([a-z0-9-]+)/members {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+
+    }
+
+    location ~ /v4/spaces/([a-z0-9-]+)/members/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+
+    }
+
+    location /v4/spaces/([a-z0-9-]+)/assets {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+ 
+    }
+
+    location  /v4/data_references/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+
+    }
+
+    location  /v4/data_references {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+ 
+    }
+
+    location /v4/pipelines {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v4/experiments {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$repo_service.$nsdomain:12505;
+      proxy_set_header Host $host;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    # V4 Deployment
+
+    location /v4/deployments {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v4/deployments/environments {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    } 
+
+    location ~ /v4/deployments/environments/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/deployments/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/deployments/([a-z0-9-]+)/predictions {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/deployments/([a-z0-9-]+)/jobs {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/deployments/([a-z0-9-]+)/jobs/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/jobs {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/jobs/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/jobs/([a-z0-9-]+)/runtime-internal/tenant/([a-z0-9-]+)/fetch {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/jobs/([a-z0-9-]+)/runtime-internal/tenant/([a-z0-9-]+)/update {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/deployment_jobs {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/deployment_jobs/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/deployments/([a-z0-9-]+)/runtime-internal/([a-z0-9-]+)/tenant/([a-z0-9-]+)/fetch {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4/deployments/([a-z0-9-]+)/runtime-internal/([a-z0-9-]+)/tenant/([a-z0-9-]+)/update {
+      rewrite ^\/(.*) /$1 break;
+      proxy_request_buffering off;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+           ## V4 Training endpoints
+
+    location ~ /v4/trainings/([a-z0-9-]+) {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$training_service.$nsdomain:13300;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /v4/trainings {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$training_service.$nsdomain:13300;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location /wml_services/training/heartbeat {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$training_service.$nsdomain:13300;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+    location ~ /v4_private/([a-z0-9-]+)/payload_logging_configuration {
+      rewrite ^\/(.*) /$1 break;
+      proxy_pass https://$envoy_service.$nsdomain:16600;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "";
+      proxy_set_header Host $http_host;
+      proxy_pass_request_headers      on;
+      proxy_connect_timeout       30;
+      proxy_send_timeout          300;
+      proxy_read_timeout          300;
+      send_timeout                300;
+      proxy_next_upstream error timeout;
+    }
+
+{{- end }}

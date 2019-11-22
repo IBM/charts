@@ -1,0 +1,77 @@
+{{/*
+########################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5725Q09
+#
+# (C) Copyright IBM Corp.
+#
+# 2018 All Rights Reserved
+#
+# US Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+########################################################################
+*/}}
+{{- $compName := "backend-ingress" -}}
+{{- include "sch.config.init" (list . "ibm-hdm-analytics-dev.sch.chart.config.values") -}}
+{{- $serviceName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $rootData := fromYaml (include "root.data" .) -}}
+{{- $rootMetering := $rootData.metering -}}
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+    origin: helm-ibm-hdm-analytics-dev
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 4 }}
+spec:
+  rules:
+  - http:
+      paths:
+{{- if .Values.ingestionservice.enabled }}
+      - backend:
+          serviceName: {{ include "ibm-hdm-analytics-dev.ingestionservice.service.name" . }}
+          servicePort: {{ .Values.common.restApi.port }}
+        path: /api/ingestion
+{{- end }}
+{{- if .Values.policyregistryservice.enabled }}
+      - backend:
+          serviceName: {{ include "ibm-hdm-analytics-dev.policyregistryservice.service.name" . }}
+          servicePort: {{ .Values.common.restApi.port }}
+        path: /api/policies
+{{- end }}
+{{- if .Values.eventsqueryservice.enabled }}
+      - backend:
+          serviceName: {{ include "ibm-hdm-analytics-dev.eventsqueryservice.service.name" . }}
+          servicePort: {{ .Values.common.restApi.port }}
+        path: /api/events
+{{- end }}
+{{- if .Values.servicemonitorservice.enabled }}
+      - backend:
+          serviceName: {{ include "ibm-hdm-analytics-dev.servicemonitorservice.service.name" . }}
+          servicePort: {{ .Values.common.restApi.port }}
+        path: /api/monitor
+{{- end }}
+{{- if .Values.inference.enabled }}
+      - backend:
+          serviceName: {{ include "ibm-hdm-analytics-dev.inference.service.name" . }}
+          servicePort: {{ .Values.common.restApi.port }}
+        path: /api/inference/monitoring
+{{- end }}
+{{- if .Values.global.cluster }}
+  {{- if .Values.global.cluster.fqdn }}
+    host: {{ if .Values.global.ingress.prefixWithReleaseName }}{{- default "netcool" .Values.global.ingress.productNamePrefix}}.{{- .Release.Name }}.{{- end }}{{- .Values.global.cluster.fqdn }}
+    {{- if .Values.global.ingress.tlsSecret }}
+  tls:
+  - hosts:
+    - {{ if .Values.global.ingress.prefixWithReleaseName }}{{- default "netcool" .Values.global.ingress.productNamePrefix}}.{{- .Release.Name }}.{{- end }}{{- .Values.global.cluster.fqdn }}
+    secretName: {{ tpl .Values.global.ingress.tlsSecret .}}
+    {{- end }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,85 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-core-job-service
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        name: cb-core-job-service
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "core.nodeaffinity" . | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      containers:
+      - env:
+        - name: audit_service_url
+          value: cb-audit-service:80
+        - name: MONGO_URL
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-creds
+              key: mongodb.url
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-creds
+              key: mongodb.username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-creds
+              key: mongodb.password
+        - name: DB_HOST
+          value: "mongodb"
+        - name: DB_PORT
+          value: "27017"
+        - name: CONNECT_DB_PROTOCOL
+          value: mongodb
+      {{ if .Values.httpProxy }}
+        # httpProxy support
+        - name: http_proxy
+          value: {{ .Values.httpProxy }}
+        - name: https_proxy
+          value: {{ .Values.httpsProxy }}
+        - name: no_proxy
+          value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+      {{ end }}
+      {{- template "isIcp" . -}}
+      {{- if not (.Values.isIcp) }}
+        image: {{ template "core.readConfig" (list . "cb_core_job_service") }}
+      {{ else }}
+        image: {{ template "coreicp.readConfig" (list . "cb_core_job_service" .Values.imageCredentials.registry) }}
+      {{ end }}
+{{ include "core.container.securityContext" .  | indent 8 }}
+        name: cb-core-job-service
+        ports:
+        - containerPort: 5062
+        resources:
+{{ include "deployClassConfig" (list . "cb_core_job_service") | indent 10 }}
+        readinessProbe:
+          tcpSocket:
+            port: 5062
+        livenessProbe:
+            httpGet:
+              path: /health
+              port: 5062
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 20
+            failureThreshold: 4
+      restartPolicy: Always
+      # DO NOT modify this condition
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

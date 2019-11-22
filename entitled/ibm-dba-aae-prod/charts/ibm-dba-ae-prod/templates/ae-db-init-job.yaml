@@ -1,0 +1,53 @@
+{{ include "sch.config.init" (list . "sch.appengine.config.values") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "db-init") }}-{{ randNumeric 3}}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "db-init") | indent 4 }}
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      name: solution-server-db-init
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "db-init") | indent 8 }}
+    spec:
+{{ include "appengine.constants.pod.securityContext" . | indent 6 }}
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . "deployment-access") }}
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 50001
+{{- end }}
+{{- include "appengine.imagePullSecrets" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      restartPolicy: OnFailure
+      containers:
+      - name: ae-db-init
+        image: {{ .Values.images.dbJob | quote}}
+        imagePullPolicy: {{ .Values.images.pullPolicy | quote }}
+        securityContext:
+{{ include "appengine.constants.container.securityContext" . | indent 10 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . "env") }}
+        - secretRef:
+            name: {{ .Values.adminSecretName | quote}}
+        resources:
+{{ .Values.resources.initContainer | toYaml | trim | indent 10 }}
+{{- if and .Values.useCustomJDBCDrivers (eq .Values.useCustomJDBCDrivers true) }}
+        volumeMounts:
+          - mountPath: /shared/resources/jdbc
+            name: {{ include "sch.names.fullCompName" (list . "db-init-jdbc") }}
+            subPath: jdbc
+{{- end }}
+      restartPolicy: Never
+{{- if and .Values.useCustomJDBCDrivers (eq .Values.useCustomJDBCDrivers true) }}
+      # PV is only used when required
+      volumes:
+      - name: {{ include "sch.names.fullCompName" (list . "db-init-jdbc") }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.existingClaimName }}
+{{- end }}

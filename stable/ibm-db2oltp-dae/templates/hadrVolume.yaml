@@ -1,0 +1,27 @@
+{{ if and .Values.persistence.enabled (not .Values.hadrVolume.existingClaimName) (.Values.hadr.enabled) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "hadrstorname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  {{- if .Values.hadr.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.hadrVolume.storageClassName | quote }}
+  {{- else }}
+  storageClassName: {{ default "" .Values.hadrVolume.storageClassName | quote }}
+  {{- end }}
+
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: {{ .Values.hadrVolume.size | quote }}
+{{- end }}

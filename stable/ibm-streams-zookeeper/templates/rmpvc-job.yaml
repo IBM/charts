@@ -1,0 +1,89 @@
+# begin_generated_IBM_copyright_prolog                             
+#                                                                  
+# This is an automatically generated copyright prolog.             
+# After initializing,  DO NOT MODIFY OR MOVE                       
+# **************************************************************** 
+# Licensed Materials - Property of IBM                             
+# 5724-Y95                                                         
+# (C) Copyright IBM Corp.  2018, 2019    All Rights Reserved.      
+# US Government Users Restricted Rights - Use, duplication or      
+# disclosure restricted by GSA ADP Schedule Contract with          
+# IBM Corp.                                                        
+#                                                                  
+# end_generated_IBM_copyright_prolog   
+{{- if .Values.persistence.enabled }}                            
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-rmpvc"
+  labels:
+{{- include "zookeeper.defaultLabels" . | indent 4 }}
+    app.kubernetes.io/name: "{{ .Release.Name }}-rmpvc"
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "0"
+    {{- if .Values.debug }} 
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- else }}
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    {{- end }}
+    
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-rmpvc"
+      labels:
+{{- include "zookeeper.defaultLabels" . | indent 8 }}
+{{- include "zookeeper.serviceability" . | indent 8 }}
+        app.kubernetes.io/name: "{{ .Release.Name }}-rmpvc"
+      annotations:
+{{- include "zookeeper.metering" . | indent 8 }}
+        
+    spec:
+      affinity:
+      {{- include "zookeeper.nodeaffinity" . | indent 8 }}   
+
+      restartPolicy: Never      
+           
+      serviceAccountName: {{ include "zookeeper.serviceAccountName" . }} 
+     
+{{- include "zookeeper.podGeneralSecurityPolicies" . | indent 6 }}      
+      securityContext:
+        runAsUser: {{ template "zookeeper.streamsinstall" . }}
+        fsGroup: {{ template "zookeeper.streamsinstall" . }}
+{{- include "zookeeper.podSecurityContext" . | indent 8 }}  
+        
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      {{- end }}
+           
+      containers:
+      - name: rmpvc
+        {{- if .Values.image.prefix }}
+        image: "{{ .Values.image.prefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        {{- else }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}       
+   
+        securityContext:
+{{- include "zookeeper.containerSecurityContext" . | indent 10 }}
+        env:
+          - name: ENV_TYPE
+            {{- if ( .Values.environmentType ) and eq .Values.environmentType "icp4data"  }}
+            value: {{ .Values.environmentType }} 
+            {{- else }}
+            value: "nonicp4data"
+            {{- end }}
+        command: ["bash", "-c", "set -e ; /bin/kubectl config set-cluster cfc --server=https://kubernetes.default --certificate-authority=/run/secrets/kubernetes.io/serviceaccount/ca.crt ; token=$(cat /run/secrets/kubernetes.io/serviceaccount/token) ; /bin/kubectl config set-credentials user --token=${token} ; /bin/kubectl config set-context cfc --cluster=cfc ; /bin/kubectl config set-context cfc --user=user --namespace={{ .Release.Namespace }} ; /bin/kubectl config use-context cfc ; set +ex ; pvcname=\"data-{{ .Release.Name }}-zookeeper-0\"; /bin/kubectl delete pvc \"$pvcname\"  ; rc=\"$?\" ; if [[ \"$rc\" != \"0\" ]]; then echo \"Did not remove the following persistent volume claim:  $pvcname. If PVC exists you may have to remove it manually\" ; exit \"$rc\"; fi ;"]
+           
+        resources:
+          requests:
+            cpu: 250m
+            memory: 500Mi
+          limits:
+            cpu: 250m
+            memory: 500Mi
+ {{- end }}

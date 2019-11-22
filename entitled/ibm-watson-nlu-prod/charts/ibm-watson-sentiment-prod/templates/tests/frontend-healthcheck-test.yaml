@@ -1,0 +1,58 @@
+{{- include "sch.config.init" (list . "sentiment.sch.chart.config.values") -}}
+{{- $icpSentimentCompName :=  .sch.chart.components.sentiment.name -}}
+{{- $icpSentimentTest := printf "sentiment-%s-health-test" $icpSentimentCompName -}}
+{{- $icpPullSecrets := include "sentiment-icp.icp-pull-secrets" . -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpSentimentTest) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $icpSentimentTest) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+    runAsUser: 1234
+    {{- end }}
+  containers:
+    - name: {{ include "sch.names.fullCompName" (list . $icpSentimentTest) }}
+      image: "{{ .Values.global.icpDockerRepo }}{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1234
+        runAsGroup: 1234
+        {{- end }}
+        capabilities:
+          drop:
+          - ALL
+      resources:
+        requests:
+          memory: {{ .Values.frontend.resources.requests.memory }}
+          cpu: {{ .Values.frontend.resources.requests.cpu }}
+        limits:
+          memory: {{ .Values.frontend.resources.limits.memory }}
+          cpu: {{ .Values.frontend.resources.limits.cpu }}
+      command: ['curl']
+      args:  ['-k', '-i', 'https://{{ include "sch.names.fullCompName" (list . $icpSentimentCompName) }}:443/service/api/v2/healthcheck']
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+  imagePullSecrets:
+  - name: {{ $icpPullSecrets | quote }}

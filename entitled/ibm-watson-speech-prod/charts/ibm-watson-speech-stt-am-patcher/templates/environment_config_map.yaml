@@ -1,0 +1,76 @@
+{{- include "sch.config.init" (list . "sch.chart.chuck.stt.ampatcher.config.values") -}}
+{{- $compName := .sch.chart.components.amPatcher.name -}}
+{{- $compRuntimeName := .sch.chart.components.runtime.name -}}
+{{- $fullCompName := include "sch.names.fullCompName" (list . $compName) -}}
+{{- $fullCompRuntimeName := include "sch.names.fullCompName" (list . $compRuntimeName) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullCompName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  env_config.json: |
+    {
+       "allowDashboard": true,
+       "anonymizeLogs": {{ .Values.anonymizeLogs }},
+       "baseModelsSURL": {
+          "service": "baseModelsStore",
+          "urlSuffix": "{{ .Values.modelVersion }}"
+       },
+       "clusterGroups": {
+          "stt-am-patcher": {
+             "component": "am-patcher",
+             "dns": "{{ $fullCompName }}",
+             "group": "N-A",
+             "models": [
+                "TrainAMModel",
+                "ValidateAudioModel"
+             ],
+             "service_type": "speech-to-text"
+          },
+          "stt-rt-default": {
+             "component": "runtime",
+             "dns": "{{ $fullCompRuntimeName }}",
+             "group": "default",
+             "models": [
+                "PatchGeneratorModel", {{ include "chuck.getEnabledModels" (list .Values.global.sttModels true) }}
+             ],
+             "service_type": "speech-to-text"
+          }
+       },
+       "defaultVerbosity": "INFO",
+       "meteringEnabled": false,
+       "serviceDependencies": {
+          "asrCustomization": {
+             "baseUrl": "https://{{ .Release.Name }}-speech-to-text-stt-customization/speech-to-text/api/v1",
+             "healthCheckSuffix": "../health/check",
+             "type": "UrlService"
+          },
+          "baseModelsStore": {
+             "accessKey": "MINIO_ACCESS_KEY",
+             "secretKey": "MINIO_SECRET_KEY",
+             "baseDirectory": "models",
+             "bucketId": "{{ .Values.global.datastores.minio.baseModelsBucket }}",
+             "endpointUrl": "{{ include "ibm-watson-speech-prod.object-storage-endpoint" . }}",
+             "type": "CloudObjectStorageService"
+          },
+          "customizationsStore": {
+             "accessKey": "MINIO_ACCESS_KEY",
+             "secretKey": "MINIO_SECRET_KEY",
+             "bucketId": "stt-customization-icp",
+             "endpointUrl": "{{ include "ibm-watson-speech-prod.object-storage-endpoint" . }}",
+             "type": "CloudObjectStorageService"
+          }
+       },
+       "setCookies": true
+    }
+
+  resourceRequirements.py: |
+{{ include "chuck.chuckResourceRequirements" (list .Values.groups.sttAMPatcher.resources.threads .Values.global.ttsVoiceMarginalCPU) | indent 4 }}
+
+  sessionPools.yaml: |
+{{ include "chuck.chuckSessionPoolsYaml" nil | indent 4 }}
+
+  sessionPools.py: |
+{{ include "chuck.chuckSessionPoolsPy" . | indent 4 }}

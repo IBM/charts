@@ -1,0 +1,33 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "ums") | indent 4 }}
+spec:
+{{- if .Values.global.ums.serviceType }}
+{{- if eq .Values.global.ums.serviceType "NodePort" }}
+  # use NodePort when Ingress is not available in the cluster
+  type: NodePort
+  ports:
+    - name: {{ include "ums.constants.service.portname" . }}
+      protocol: TCP
+      port: {{ include "ums.constants.container.port" . }}
+      nodePort: {{ .Values.global.ums.port }}
+{{- else }}
+  # use ClusterIP when Ingress is available in the cluster
+  type: ClusterIP
+  ports:
+    - name: {{ include "ums.constants.service.portname" . }}
+      protocol: TCP
+      port: {{ include "ums.constants.service.port" . }}
+      targetPort: {{ include "ums.constants.container.port" . }}
+    - name: {{ include "ums.constants.service.portname" . }}-443
+      protocol: TCP
+      port: 443
+      targetPort: {{ include "ums.constants.container.port" . }}
+{{- end }}
+{{- end }}
+  selector:
+{{ include "sch.metadata.labels.standard" (list . "ums") | indent 4 }}

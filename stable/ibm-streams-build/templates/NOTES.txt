@@ -1,0 +1,33 @@
+{{-  $buildservice := printf "%s-%s" .Release.Name "build" -}}
+Your Streams build service is created and started. The name of the Streams build service release is: {{ .Release.Name }}. You can use the
+build service rest APIs to manage the build service and compile Streams applications.
+
+Before you can use REST APIs, run the following command and verify all pods are ready (1/1) and the status of each pod is 'Running'.
+NOTE: This command uses -w to watch for changes. Use ctrl-c to stop watching.
+  kubectl get pod -l 'streams-build in ({{ .Release.Name }}),streams-builder notin (active)' -w
+
+{{- if ( eq .Values.build.serviceType "NodePort" ) }}
+
+To access the build service REST APIS, you need to obtain the URL.
+
+Run the following command to get the node port:
+  export NODE_PORT=$(kubectl get svc -n {{ .Release.Namespace }} {{ $buildservice | quote }} -o 'jsonpath={.spec.ports[?(@.name=="https-build-rest")].nodePort}')
+
+Run the following command to get the external IP address:
+{{- if ( .Values.build.serviceExternalIPs ) }}
+  export NODE_IP=$(kubectl get service -n {{ .Release.Namespace }}  {{ $buildservice | quote }} -o jsonpath="{range .spec.externalIPs[0]}{@}{'\n'}{end}")
+{{- else }}
+  export NODE_IP=$(kubectl cluster-info | grep "Kubernetes master" | awk 'match($0,/^(.*:)\/\/([A-Za-z0-9\-\.]+)(:[0-9]+)?(.*)$/,m) { print substr( m[2], RSTART, RLENGTH )}')
+{{- end }}
+
+Copy and paste the URL returned by the following command into your browser:
+  echo https://$NODE_IP:$NODE_PORT/streams/html/rest/doc/
+
+{{- else }}
+{{- if ( eq .Values.build.serviceType "LoadBalancer" ) }}
+To access the build service REST APIs you need to determine the IP address of the load balancer and replace load-balancer-address in the following URL.
+
+URL for REST APIs:  https://<load-balancer-address>/streams/html/rest/doc
+
+{{- end }}
+{{- end }}

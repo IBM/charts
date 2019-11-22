@@ -1,0 +1,92 @@
+{{- include "sch.config.init" (list . "nlu.sch.chart.config.values") -}}
+{{- $icpPullSecrets := include "icp-pull-secrets" . -}}
+{{- $icpKeywordsCompName :=  .sch.chart.components.keywords.name -}}
+
+{{/* DRY variables */}}
+{{- $keywordsPort := 8553 -}}
+{{- $tlsVolumeMountName := "shared-tls-secrets" -}}
+{{- $tlsVolumeMountPath := "/mnt/ssl/shared" -}}
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpKeywordsCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $icpKeywordsCompName) | indent 4 }}
+spec:
+  replicas: {{ .Values.keywords.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $icpKeywordsCompName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $icpKeywordsCompName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering .) | indent 8 }}
+
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+
+      containers:
+      - name: {{ include "sch.names.fullCompName" (list . $icpKeywordsCompName) }}
+        image: {{ .Values.global.icpDockerRepo }}{{ .Values.keywords.image.repository }}:{{ .Values.keywords.image.tag }}
+        env:
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: SSL_KEY_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerKey }}
+        - name: SSL_CERT_FILE
+          value: {{ $tlsVolumeMountPath }}/{{ .Values.global.tls.secret.fieldServerCertificate }}
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        ports:
+        - containerPort: {{ $keywordsPort }}
+          protocol: TCP
+        volumeMounts:
+        - name: {{ $tlsVolumeMountName }}
+          mountPath: {{ $tlsVolumeMountPath }}
+          readOnly: true
+        - mountPath: "/tmp"
+          name: tmp-volume
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            port: {{ $keywordsPort }}
+            path: "/api/v2/keywords/ready"
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            port: {{ $keywordsPort }}
+            path: "/api/v2/keywords/health"
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          timeoutSeconds: 60
+        resources:
+          requests:
+            memory: {{ .Values.keywords.resources.requests.memory }}
+            cpu: {{ .Values.keywords.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.keywords.resources.limits.memory }}
+            cpu: {{ .Values.keywords.resources.limits.cpu }}
+      volumes:
+      - name: {{ $tlsVolumeMountName }}
+        secret:
+          secretName: {{ default (include .Values.global.tls.secret.nameTpl .) .Values.global.tls.secret.fixedName }}
+      - name: tmp-volume
+        emptyDir: {}
+
+      imagePullSecrets:
+        - name: {{ $icpPullSecrets | quote }}
+
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64

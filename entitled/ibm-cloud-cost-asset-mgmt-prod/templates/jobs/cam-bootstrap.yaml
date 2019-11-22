@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cam-bootstrap
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: hook-failed,hook-succeeded
+    helm.sh/hook-weight: "3"
+spec:
+  template:
+    metadata:
+      name: cam-bootstrap
+      labels:
+        task: cam-bootstrap
+{{ include "cam.labels" .  | indent 8 }}
+    spec:
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      containers:
+        - name: cam-bootstrap
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+          image: {{ template "cam.readConfig" (list . "cam_bootstrap") }}
+        {{ else }}
+          image: {{ template "camicp.readConfig" (list . "cam_bootstrap" .Values.imageCredentials.registry) }}
+        {{ end }}
+{{ include "cam.container.securityContext" . | indent 10  }}
+          env:
+            - name: protocol
+              value: http
+            - name: gateway_url
+              value: https://cb-core-auth-internal.{{ .Values.coreNamespace }}:4001
+            - name: cam_services_url
+              value: http://camservice:8000/api
+            - name: core_authorization_url
+              value: http://cb-core-authorization-service.{{ .Values.coreNamespace }}:4004
+            - name: config_service
+              value: http://cb-core-configuration-service.{{ .Values.coreNamespace }}:5054
+            - name: CAM_NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: NOTIFICATION_SERVICE
+              value: "http://cb-notification-api.{{ .Values.coreNamespace }}:5056"
+      restartPolicy: Never

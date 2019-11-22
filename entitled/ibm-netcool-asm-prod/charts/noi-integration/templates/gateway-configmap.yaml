@@ -1,0 +1,122 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-gateway-config
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+data:
+  omni.dat: |-
+    [AGG_P]
+    {
+    {{- if .Values.omnibus.primary.name }}
+      {{- if .Values.omnibus.primary.port }}
+        Primary: {{ .Values.omnibus.primary.name }} {{ .Values.omnibus.primary.port }}
+      {{- else }}
+        Primary: {{ .Values.omnibus.primary.name }} 4100
+      {{- end }}
+    {{- else }}
+      Primary: {{ .Release.Name }}-objserv-primary 4100
+    {{- end }}
+    }
+    [AGG_B]
+    {
+      {{- if .Values.omnibus.backup.name }}
+        {{- if .Values.omnibus.backup.port }}
+          Primary: {{ .Values.omnibus.backup.name }} {{ .Values.omnibus.backup.port }}
+        {{- else }}
+          Primary: {{ .Values.omnibus.backup.name }} 4100
+        {{- end }}
+      {{- else }}
+        Primary: {{ .Release.Name }}-objserv-backup 4100
+      {{- end }}
+    }
+    [AGG_V]
+    {
+      {{- if .Values.omnibus.primary.name }}
+        {{- if .Values.omnibus.primary.port }}
+          Primary: {{ .Values.omnibus.primary.name }} {{ .Values.omnibus.primary.port }}
+        {{- else }}
+          Primary: {{ .Values.omnibus.primary.name }} 4100
+        {{- end }}
+      {{- else }}
+        Primary: {{ .Release.Name }}-objserv-primary 4100
+      {{- end }}
+      {{- if .Values.omnibus.backup.name }}
+        {{- if .Values.omnibus.backup.port }}
+          Backup: {{ .Values.omnibus.backup.name }} {{ .Values.omnibus.backup.port }}
+        {{- else }}
+          Backup: {{ .Values.omnibus.backup.name }} 4100
+        {{- end }}
+      {{- else }}
+        Backup: {{ .Release.Name }}-objserv-backup 4100
+      {{- end }}
+    }
+    [{{ .Values.gateway.name }}]
+    {
+        Primary: 0.0.0.0 4300
+    }
+
+  ASM_GATE.props: |-
+    # Standard properties
+    Gate.Reader.Server                      : 'AGG_V'
+    MessageLog                              : '$OMNIHOME/log/ASM_GATE.log'
+    Gate.Reader.IducFlushRate               : 5
+
+    # Properties defining XML messages over HTTP
+    Gate.MapFile                            : '$NCHOME/omnibus/gates/xml/asm_xml.map'
+    Gate.Reader.TblReplicateDefFile         : '$NCHOME/omnibus/gates/xml/asm_xml.reader.tblrep.def'
+    Gate.XMLGateway.TransformerFile         : '$NCHOME/omnibus/java/conf/asm_transformers.xml'
+    Gate.XMLGateway.TransportFile           : '$NCHOME/omnibus/java/conf/asm_httpTransport.properties'
+    Gate.XMLGateway.TransportType           : 'HTTP'
+
+    # The event observer requires the timestamp in this format, including the timezone
+    Gate.XMLGateway.DateFormat              : 'yyyy-MM-dd\'T\'HH:mm:ssZ'
+
+  asm_xml.map: |-
+    CREATE MAPPING StatusMap
+    (
+      'Agent'             = '@Agent',
+      'AlertGroup'        = '@AlertGroup',
+      'AsmStatusId'        = '@AsmStatusId',
+      'Class'	          = '@Class',
+      'Customer'	      = '@Customer',
+      'EventId'	        = '@EventId',
+      'Identifier'	    = '@Identifier',
+      'LastOccurrence'  =   '@LastOccurrence',
+      'LastOccurrenceUSec'  =   '@LastOccurrenceUSec',
+      'LocalPriObj'	    =	'@LocalPriObj',
+      'LocalRootObj'	  =	'@LocalRootObj',
+      'Manager'         =	'@Manager',
+      'Node'		        =	'@Node',
+      'NodeAlias'	      =	'@NodeAlias',
+      'ServerName'	    =	'@ServerName',
+      'ServerSerial'    =	'@ServerSerial',
+      'Severity'	      =	'@Severity',
+      'StateChange'     =	'@StateChange',
+      'Summary'	        =	'@Summary',
+      'Type'		        =	'@Type'
+    );
+
+  asm_xml.reader.tblrep.def: |-
+    REPLICATE ALL FROM TABLE 'alerts.status'
+    USING MAP 'StatusMap'
+    FILTER WITH 'Type IN (1, 13, 20) AND Class != 99999 AND Manager NOT LIKE \'^.*Watch$\''; 
+
+  asm_httpTransport.properties: |-
+    batchHeader=<?xml version="1.0" encoding="UTF-8"?><tns:netcoolEventList xmlns:tns="http://item.tivoli.ibm.com/omnibus/netcool">
+    batchFooter=</tns:netcoolEventList>
+    bufferSize=10
+    bufferFlushTime=15
+    trustStore=/opt/ibm/netcool/asm/security/truststore.jks
+    trustStorePassword=changeit
+
+  asm_transformers.xml: |-
+    <?xml version="1.0" encoding="UTF-8"?>
+    <tns:transformers
+      xmlns:tns="http://item.tivoli.ibm.com/omnibus/netcool/transformer"
+      xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+      <tns:transformer name="netcoolEvents" type="northbound"  endpoint="http{{ if not .Values.global.asm.disableHTTPS }}s{{ end }}://{{ .Release.Name }}-event-observer.{{ .Release.Namespace }}.svc:9284/1.0/event-observer/netcool/list" className="com.ibm.tivoli.netcool.integrations.transformer.XSLTTransformer">
+        <tns:property name="xsltFilename" type="java.lang.String" value="${OMNIHOME}/java/conf/netcoolstripxmlheader.xsl" description="XSLT file for converting Netcool events to NC events"/>
+      </tns:transformer>
+    </tns:transformers>

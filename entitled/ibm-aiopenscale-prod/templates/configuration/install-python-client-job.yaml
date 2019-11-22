@@ -1,0 +1,87 @@
+{{ if .Values.global.dockerRegistryPrefix }}
+{{ $namePrefix := "install-python-client-job" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values" ) -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $compName := "post-config" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $serviceAccountName := "cpd-editor-sa" -}}
+{{ $nonRootUser := include "aios.nonroot.uid" (list .) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "0"
+spec:
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: {{ $name | quote }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      {{- if .Values.imagePullSecrets }}
+      {{- if ne .Values.imagePullSecrets "default" }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $nonRootUser }}
+      affinity:
+      {{- include "aios.nodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: "aios-kubectl"
+          image: {{ include "aios.image" (list . .Values.kubectl.image.name .Values.kubectl.image.tag) | quote }}
+          resources:
+{{ toYaml .Values.ephemeralPod.resources | indent 12 }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $nonRootUser }}
+            capabilities:
+              drop:
+              - ALL
+          command: 
+            - "/bin/sh"
+            - "-ec"
+            - |
+              set +e
+              # This PVC is created by WSL, which is a prereq for WML
+              kubectl -n {{ .Release.Namespace }} get pvc cc-home-pvc
+              if [ $? -ne 0 ]
+              then
+                echo "Unable to locate pvc cc-home-pvc. WSL component for Jupyter notebook is not installed."
+                exit 0
+              fi
+              wslUser="1000320999"
+              kubectl -n {{ .Release.Namespace }} get job ibm-wsl-environments-prod-notebook-init-job2 -o yaml > /tmp/job.yaml
+              if [ $? -eq 0 ]
+              then
+                 # Retrieve current wsl user
+                 wslUser=`cat /tmp/job.yaml | grep "runAsUser" | awk '{ print $NF }'`
+              fi
+              jobName="{{ $name }}"
+              jobName="${jobName}2"
+              kubectl -n {{ .Release.Namespace }} get job $jobName
+              if [ $? -eq 0 ]
+              then
+                kubectl -n {{ .Release.Namespace }} delete job $jobName
+              fi
+              #This will launch another job to do the actual installation
+              #WLS doesn't have any pod that has cc-home-pvc mounted after installtion; Jupyter notebook pods will mount the pv with read-only permission.
+              ( /home/aios/install_python_client.sh -n {{ .Release.Namespace }} -r {{ .Release.Name }} -j $jobName -i {{ include "aios.image" (list . .Values.etcd.image.name .Values.etcd.image.tag) | quote }} -u $wslUser )  
+{{ end }}

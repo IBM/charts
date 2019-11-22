@@ -1,0 +1,240 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+      app.kubernetes.io/component: "{{ $compName }}"
+  {{ if .Values.autoscaling.enabled -}}
+  replicas: {{ .Values.autoscaling.minReplicas | default 1 }}
+  {{- else -}}
+  replicas: {{ .Values.replicaCount }}
+  {{- end  }}
+  minReadySeconds: 30
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+        checksum/config.configmap: {{ include (print $.Template.BasePath "/probe-messagebus-webhook-config-configmap.yaml") . | sha256sum }}
+        {{- if not .Values.probe.rulesConfigmap }}
+        checksum/rules.configmap: {{ include (print $.Template.BasePath "/probe-messagebus-webhook-rules-configmap.yaml") . | sha256sum }}
+        {{- end }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: interfaces-file
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName) }}-config
+            items:
+            - key: omni.dat
+              path: omni.dat
+        - name: props-file
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName ) }}-config
+            items:
+            - key: message_bus.props
+              path: message_bus.props
+        - name: rules-file
+          configMap:
+          {{- if .Values.probe.rulesConfigmap }}
+            name: {{ .Values.probe.rulesConfigmap }}
+          {{- else }}
+            name: {{ include "sch.names.fullCompName" (list . $compName ) }}-rules
+          {{- end }}
+            items:
+            - key: message_bus.rules
+              path: message_bus.rules
+        - name: transport-file
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName ) }}-config
+            items:
+            - key: Transport.properties
+              path: Transport.properties
+        - name: transformer-file
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName ) }}-config
+            items:
+            - key: message_bus_parser_config.json
+              path: message_bus_parser_config.json
+      {{- if .Values.probe.sslSecretName }}
+        - name: tls-secret
+          secret:
+            # Use a user defined pre-created secret. 
+            secretName: {{ .Values.probe.sslSecretName }}
+            items:
+            - key: server.crt
+              path: server.crt
+            - key: keystorepassword.txt
+              path: keystorepassword.txt
+        - name: shared-dir
+          # using emptyDir so that both the initcontainer and the main probe container can
+          # read/write to the same pod level storage
+          emptyDir: {}
+        - name: scripts-setup
+          # Contains SSL setup script
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName ) }}-config
+            items:
+            - key: setup.sh
+              path: setup.sh
+            defaultMode: 0744
+      initContainers:
+        - name: init-webhook
+          image: "{{ .Values.image.repository}}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: LICENSE
+              value: {{ .Values.license | default "not accepted" }}
+            - name: PROBE_NAME
+              value: "nco_p_message_bus"
+          volumeMounts:
+            - name: props-file
+              mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus.props
+              subPath: message_bus.props
+            - name: tls-secret
+              mountPath: /home/server.crt
+              subPath: server.crt
+            - name: tls-secret
+              mountPath: /home/keystorepassword.txt
+              subPath: keystorepassword.txt
+            - name: shared-dir
+              mountPath: /home/netcool/etc
+            - name: scripts-setup
+              mountPath: /home/netcool/scripts/setup.sh
+              subPath: setup.sh
+          command:
+            - "bash"
+            - /home/netcool/scripts/setup.sh
+          args:            
+            - -d 
+            - /home/netcool/etc
+            - -h
+            - {{ .Values.probe.host }}
+            - -s
+            - {{ .Values.probe.sslSecretName }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            privileged: false
+            allowPrivilegeEscalation: false
+            {{- /* readOnlyRootFilesystem must be false to allow probe to create interfaces file */}}
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 2001
+      containers:
+        - name: messagebus-probe-webhook
+          image: "{{ .Values.image.repository}}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            privileged: false
+            allowPrivilegeEscalation: false
+            {{- /* readOnlyRootFilesystem must be false to allow probe to create interfaces file */}}
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          env:
+          - name: LICENSE
+            value: {{ .Values.license | default "not accepted" | quote }}
+          - name: PROBE_NAME
+            value: "nco_p_message_bus"
+          ports:
+            - name: http
+              containerPort: 4080
+          volumeMounts:
+            - name: interfaces-file
+              mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+              subPath: omni.dat
+            - name: rules-file
+              mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus.rules
+              subPath: message_bus.rules
+            - name: transport-file
+              mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/Transport.properties
+              subPath: Transport.properties
+            - name: transformer-file
+              mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus_parser_config.json
+              subPath: message_bus_parser_config.json
+            {{- if .Values.probe.sslSecretName}}
+            - name: shared-dir
+              mountPath: /home/netcool/etc
+            - name: shared-dir
+              mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus.props
+              subPath: message_bus.props
+            {{- else }}
+            - name: props-file
+              mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus.props
+              subPath: message_bus.props
+            {{- end }}
+          livenessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:8080/probe/common
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3    
+          readinessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:8080/probe/common
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{ if .Values.global.image.secretName -}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}

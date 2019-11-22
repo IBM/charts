@@ -1,0 +1,48 @@
+{{- if .Values.logstashProbe.enabled -}}
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.logstash.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "test" -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) -}}
+
+{{- $saName := include "ibm-netcool-probe.commonServiceAccountName" ( . ) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullTestCompName }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+spec:
+  serviceAccountName: {{ .Values.global.serviceAccountName | default $saName }}
+  automountServiceAccountToken: false
+{{- if .Values.global.image.secretName }}
+  imagePullSecrets:
+    - name: {{ .Values.global.image.secretName }}
+{{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+  containers:
+  - name: {{ .Release.Name }}-get-test
+    image: "{{ .Values.image.testRepository }}:{{ .Values.image.testImageTag }}"
+    command:
+      - "/bin/sh"
+    args:
+      ["-c","curl -X POST -H 'cache-control: no-cache' -H 'content-type: application/json' -d '{\"liveness\" : \"probe-check\"}' http://{{ include "sch.names.fullCompName" (list .  $compName) }}.{{ .Release.Namespace }}/probe/webhook/logstash"]
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+{{- end }}

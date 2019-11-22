@@ -1,0 +1,177 @@
+###############################################################################
+###  IBM Tivoli Netcool/OMNIbus Message Bus Probe for Webhook Integrations. ###
+###############################################################################
+
+# Must set to "accept" to proceed with installation
+license: "not accepted"
+
+## deployment replicaCount
+replicaCount: 1
+
+###############################################################################
+## Common image variables
+###############################################################################
+global:
+  image:
+    secretName: ""
+
+image:
+  repository: "netcool-probe-messagebus"
+  tag: '9.0.9'
+  testRepository: "busybox"
+  testImageTag: '1.28.4'
+  pullPolicy: IfNotPresent
+
+# Netcool OMNIBus connection configuration.
+netcool:
+  primaryServer: ""
+  primaryHost: ""
+  primaryPort: ""
+  backupServer: ""
+  backupHost: ""
+  backupPort: ""
+
+probe:
+  # Probe log level
+  messageLevel: warn
+  heartbeatInterval: 1
+
+  ## Host and Port parameters are used by the HTTP client component to connect 
+  ## to an event source.
+  host: ""
+  port: 80
+
+  ## Username and Password are used by HTTP client component.
+  username: ""
+  password: ""
+  
+  ## initialResync, resyncInterval are only for HTTP client component.
+  initialResync: false
+  resyncInterval: 0
+
+  ## To connect to an event source which is TLS/SSL enabled, a pre-created Kubernetes secret is required with
+  ## keystorepassword.txt and server.crt keys.
+  sslSecretName: ""
+
+  ## A configmap containing the probe rules files in message_bus.props key to override the default
+  ## rules file template for event parsing.
+  rulesConfigmap: ""
+  
+  ## JSON PARSER CONFIGURATION
+  jsonParserConfig:
+    ## Notification parser configuration is required to parse webhook events.
+    notification:
+      messagePayload: "json"
+      messageHeader: ""
+      jsonNestedPayload: ""
+      jsonNestedHeader: ""
+      messageDepth: 3
+    ## Resync parser configuration is optional and only enabled if the probe is not configured to perform a resync. 
+    ## To enable resync, set probe.initialResync: true and/or resyncInterval > 0 , and webhook.resyncRequest.* parameters.
+    resync:
+      messagePayload: "json"
+      messageHeader: ""
+      jsonNestedPayload: ""
+      jsonNestedHeader: ""
+      messageDepth: 3
+
+# For easy URL access during testing may use NodePort instead of ClusterIP,
+# but for prod ensure the correct type is defaulted.
+service:
+  probe:
+    type: ClusterIP
+
+ingress:
+  enabled: false
+  # To set ingress.annotations, delete the curly braces {} and specify annotations to use as
+  # shown in example below. Note that each value must be quoted with ("").
+  annotations: {}
+    #ingress.kubernetes.io/ssl-redirect: "true"
+  
+  # Hostname must be set when ingress is enabled.
+  # Ignored when ingress is disabled and the default value can be used as dummy value to proceed with installation.
+  host: netcool-probe-messagebus-webhook.local
+  tls:
+    enabled: false
+    secretName: ""
+    caName: "IBM Netcool/OMNIbus Integration"
+
+# Transport (Webhook) specified configuration
+webhook:
+  uri: /probe
+  # HTTP Versions supported are 1.1 or 1.0
+  httpVersion: "1.1"
+  respondWithContent: "OFF"
+  validateBodySyntax: "ON"
+  validateRequestURI: "ON"
+  idleTimeout: 180
+
+  #### HTTP Client Configuration ###
+  httpHeaders: ""
+  responseTimeout: 60
+  autoReconnect: "ON"
+
+  ## HTTP request parameters :
+  ## uri - the API URI
+  ## method - HTTP Method (GET,POST,PUT,DELETE,PATCH)
+  ## headers - HTTP Headers to send in the request
+  ## content - The HTTP body
+  ## interval - Only applies to refresh (periodic) requests. This is the interval between each request.
+  loginRequest:
+    uri: ""
+    method: ""
+    content: ""
+    headers: ""
+  loginRefresh:
+    uri: ""
+    method: ""
+    content: ""
+    headers: ""
+    interval: ""
+  logoutRequest:
+    uri: ""
+    method: ""
+    content: ""
+    headers: ""
+  resyncRequest:
+    uri: ""
+    method: ""
+    content: ""
+    headers: ""
+  subscribeRequest:
+    uri: ""
+    method: ""
+    content: ""
+    headers: ""
+  subscribeRefresh:
+    uri: ""
+    method: ""
+    content: ""
+    headers: ""
+    interval: ""
+  keepTokens: ""
+  refreshRetryCount: 0
+  securityProtocol: ""
+
+## Configure resource requests and limits
+## ref: http://kubernetes.io/docs/user-guide/compute-resources/
+resources: 
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  cpuUtil: 60
+
+poddisruptionbudget:
+  enabled: false
+  minAvailable: 1
+
+# Specify architecture (amd64) Only amd64 arch is supported.
+arch: "amd64"

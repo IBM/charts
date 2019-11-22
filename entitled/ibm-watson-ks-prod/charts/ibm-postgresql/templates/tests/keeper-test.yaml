@@ -1,0 +1,68 @@
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name:  {{ include "sch.names.statefulSetName" (list . .sch.chart.components.masterTest) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.masterTest) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresPodSecurityContext) | indent 4 }}
+  restartPolicy: Never
+{{- if tpl .Values.global.image.pullSecret . }}
+  imagePullSecrets:
+  - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+{{- end }}
+  serviceAccountName: {{ include "stolon.serviceAccountName" . | quote }}
+  containers:
+  - name: master-test
+    image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.postgres.image.name }}:{{ .Values.postgres.image.tag }}
+    imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+    securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresContainerSecurityContext) | indent 8 }}
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 10m
+      limits: 
+        memory: 128Mi
+        cpu: 50m
+    command: 
+      - "psql"
+      - "-c"
+      - "select * from pg_catalog.pg_tables;"
+    env:
+    - name: PGHOST
+      value: {{ include "sch.names.fullCompName" (list . .sch.chart.components.proxyService) | quote }}
+    - name: PGUSER
+      value: {{tpl .Values.auth.pgSuperuserName . | quote }}
+    - name: PGDATABASE
+      value: "postgres"
+    - name: PGPASSWORD
+      valueFrom:
+        secretKeyRef:
+          {{- if not (tpl .Values.auth.authSecretName . ) }}
+          name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+          {{- else }}
+          name: {{ tpl .Values.auth.authSecretName . }}
+          {{- end }}
+          key: pg_su_password

@@ -1,0 +1,240 @@
+{{- include "sch.config.init" (list . "gw.cem.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.gatecem.name -}}
+{{/* Gateway config ConfigMap Name */}}
+{{- $configName :=  .sch.chart.components.gatecem.configmap.config.name -}}
+{{- $configMapName := include "sch.names.fullCompName" (list . $configName) -}}
+
+{{- $netcoolsslenabled := include "ibm-netcool-gateway-cem-prod.netcoolConnectionSslEnabled" ( . ) -}}
+{{- $netcoolauthenabled := include "ibm-netcool-gateway-cem-prod.netcoolConnectionAuthEnabled" ( . ) -}}
+{{- $netcoolsecretrequired := include "ibm-netcool-gateway-cem-prod.keySecretRequired" ( . ) -}}
+
+{{- $pvcName := "pvc" -}}
+{{- $statefulSetName := include "sch.names.statefulSetName" (list .) -}}
+{{- $volumeClaimTemplateName := include "sch.names.volumeClaimTemplateName" (list . $pvcName $statefulSetName) -}}
+
+{{- $gatewayPort := .sch.chart.components.gatecem.gatewayPort -}}
+{{- $gatewayHttpPort := .sch.chart.components.gatecem.gatewayHttpPort -}}
+{{- $gatewayName :=  .sch.chart.components.gatecem.gatewayName -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  serviceName: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $compName }}
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{ include "ibm-netcool-gateway-cem-prod.addHostAliases" . | indent 6 -}}
+{{- if .Values.global.serviceAccountName }}
+      serviceAccountName: {{ .Values.global.serviceAccountName }}
+{{- end }}
+      automountServiceAccountToken: false
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: interfaces-file
+          configMap:
+            name: {{ $configMapName }}
+            items:
+            - key: omni.dat.init
+              path: omni.dat.init
+        - name: props-file
+          configMap:
+            name: {{ $configMapName }}
+            items:
+            - key: G_CEM.props
+              path: G_CEM.props
+        - name: gw-tblrep-replace
+          configMap:
+            name: {{ $configMapName }}
+            items:
+            - key: cem.rdrwtr.tblrep.def.replace
+              path: cem.rdrwtr.tblrep.def.replace
+        - name: gw-map-replace
+          configMap:
+            name: {{ $configMapName }}
+            items:
+            - key: cem.map.replace
+              path: cem.map.replace
+        {{- if .Values.cemgateway.cemTlsSecretName }}
+        - name: cem-tls-secret
+          secret:
+            secretName: {{ .Values.cemgateway.cemTlsSecretName }}
+        {{- end }}
+        - name: shared-dir
+          {{- /* Using emptyDir as temporary directory to modify configuration files. */}}
+          emptyDir: {}
+        {{- if and .Values.netcool.secretName (eq $netcoolsecretrequired "true") }}
+        - name: netcool-secret
+          secret:
+            # Use a user defined pre-created secret. 
+            secretName: {{ .Values.netcool.secretName }}
+            optional: true
+            items:
+            {{- if (eq $netcoolauthenabled "true") }}
+            - key: encryption.keyfile
+              path: encryption.keyfile
+            {{- end }}
+            {{- if (eq $netcoolsslenabled "true") }}
+            - key: omni.kdb
+              path: omni.kdb
+            - key: omni.sth
+              path: omni.sth
+            {{- end }}
+        {{- end }}
+{{ include "ibm-netcool-gateway-cem-prod.securitySettingsStatefulset" . | indent 6 }}
+      containers:
+        - name: gateway-cem
+          image: "{{ .Values.image.repository}}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{ include "ibm-netcool-gateway-cem-prod.securitySettingsContainer" . | indent 10 }}
+          env:
+          - name: LICENSE
+            value: {{ .Values.license | default "not accepted" | quote }}
+          - name: INT_NAME
+            value: "nco_g_cem"
+          - name: GATEWAY_NAME
+            value: {{ $gatewayName | quote }}
+          - name: LC_ALL
+            value: {{ .Values.cemgateway.locale | default "en_US.utf8" | quote }}
+          - name: TLS_ENABLED
+            value: {{ $netcoolsslenabled | quote }}
+          - name: AUTH_ENABLED
+            value: {{ $netcoolauthenabled | quote }}
+          - name: INIT
+            value: "true"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          {{- if and (.Values.netcool.secretName) (eq $netcoolauthenabled "true") }}
+          {{- /* Required to append credentials into props file. */}}
+          - name: AUTHUSERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.netcool.secretName }}
+                key: AuthUserName
+          - name: AUTHPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.netcool.secretName }}
+                key: AuthPassword
+          - name: SECRETNAME
+            value: {{ .Values.netcool.secretName }}
+          {{- end }}
+          {{- if .Values.cemgateway.cemTlsSecretName }} 
+          - name: CEMTLSSECRETNAME
+            value: {{ .Values.cemgateway.cemTlsSecretName }}
+          {{- end }}
+          {{- if .Values.cemgateway.cemSecretName }} 
+          - name: CEMSECRETNAME
+            value: {{ .Values.cemgateway.cemSecretName }}
+          - name: NEW_KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.cemgateway.cemSecretName }}
+                key: NewKeystorePassword
+                optional: true
+          - name: HTTP_AUTH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.cemgateway.cemSecretName }}
+                key: HttpAuthenticationPassword
+                optional: true
+          - name: CEM_WEBHOOK_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.cemgateway.cemSecretName }}
+                key: CEMWebhookURL
+          {{- end }}
+          ports:
+            - containerPort: {{ $gatewayPort }}
+            - containerPort: {{ $gatewayHttpPort }}
+          volumeMounts:
+{{ include "ibm-netcool-gateway-cem-prod.volumeMounts" . | indent 10 }}
+          livenessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - ps --pid 1
+          readinessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 60
+            timeoutSeconds: 5
+            exec:
+              command:
+              - "/bin/sh"
+              - -c
+              - |
+                PASS=$(echo -n "netcool:$(echo $HTTP_AUTH_PASSWORD)" | base64);
+                RES=$(curl -X GET -H 'cache-control: no-cache' -H 'Authorization: Basic '$(echo $PASS)'' http://localhost:{{ $gatewayHttpPort }}/cachegateway -k -silent --write-out '%{http_code}' --output /dev/null);
+                test "$RES" -ne "200" && echo "Failed to send HTTP request. Expecting a 200 OK , but got $RES." && exit 1 || echo "OK - Got $RES"
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{ if .Values.global.image.secretName -}}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }} 
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ $volumeClaimTemplateName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      {{- /* if using dynamic provisioning */}}
+      {{- if .Values.global.persistence.useDynamicProvisioning }}
+      {{- /*
+        if storageClassName is not specified then default storageClass will be used to create PV
+        if storageClassName is specified then the storageClass will be used to create PV
+      */}}
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+      {{- /* if not using dynamic provisioning i.e. bind to pre-created PV */}}
+      {{- else }}
+      {{- /*
+        bind to a pre-created PV
+        setting storageClassName to "" disables dynamic provisioning
+      */}}
+      {{- /* use selector in the binding process */}}
+      {{- if .Values.global.persistence.selector.label }}
+      storageClassName: {{ default "" .Values.global.persistence.storageClassName | quote }}
+      selector:
+        matchLabels:
+          {{ .Values.global.persistence.selector.label }}: "{{ .Values.global.persistence.selector.value }}"
+      {{- end }}
+      {{- end }}
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.global.persistence.storageSize }}

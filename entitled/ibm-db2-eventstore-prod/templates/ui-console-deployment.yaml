@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Unique key of the Deployment instance
+  name: {{ .Values.servicename }}-dm-frontend
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    component: eventstore
+spec:
+  # 1 Pods should exist at all times.
+  replicas: {{ .Values.dmFrontend.replicas }}
+  # Keep record of 2 revisions for rollback
+  revisionHistoryLimit: 2
+  selector:
+      matchLabels:
+        app.kubernetes.io/name: {{ .Values.servicename }}-dm-frontend
+  template:
+    metadata:
+      labels:
+        # Apply this label to pods and default
+        # the Deployment label selector to this value
+        app.kubernetes.io/name: {{ .Values.servicename }}-dm-frontend
+        helm.sh/chart: "{{ .Chart.Name }}"
+        name: {{ template "eventstore.name" . }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        component: eventstore
+        enabled: "true"
+      annotations:
+        {{- include "eventstore.annotations" . | indent 8 }}
+    spec:
+      affinity:
+        {{- include "eventstore.nodeAffinity" . | indent 6 }}
+      {{- include "eventstore.tolerations" . | indent 6 }}
+      {{- include "eventstore.security" . | indent 6 }}
+      serviceAccountName: {{ default "default" .Values.serviceAccountName }}
+      containers:
+      - name: dm-frontend
+        {{- if .Values.dmFrontend.image.tag }}
+        image: {{ .Values.dmFrontend.image.repository }}:{{ .Values.dmFrontend.image.tag }}
+        {{- else }}
+        image: {{ .Values.dmFrontend.image.repository }}:{{ .Values.image.universalTag }}
+        {{- end }} 
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- include "eventstore.securityContext" . | indent 8 }}
+        command: ['sh']
+        args: ['-c','sudo chown -R db2inst1:root /var/log/nginx/ && sudo chmod -R g=u /var/log/nginx/ && /scripts/startup.sh']
+        ports:
+        - containerPort: 3030
+          name: dm-frontend-p
+        readinessProbe:
+          tcpSocket:
+            port: 3030
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 3030
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        env:
+          - name: RUNTIME_CONTEXT
+            value: {{ .Values.runtime }}
+          - name: SERVICE_NAME
+            value: "{{ .Release.Name }}"
+          - name: NAMESPACE
+            value: {{ .Release.Namespace }}
+      # Restart policy for all containers within the pod
+      # One of Always, OnFailure, Never. Default to Always.
+      restartPolicy: Always

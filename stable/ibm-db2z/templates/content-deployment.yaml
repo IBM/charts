@@ -1,0 +1,52 @@
+{{- include "sch.config.init" (list . "db2z.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.addon.name -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ include "sch.names.appName" (list .) }}-{{ $compName }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdata_addon" "true") ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.security.podSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+{{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.secretName }}
+{{- end }}
+      containers:
+        - name: "{{ include "sch.names.appName" (list .) }}-{{ $compName }}"
+          image: "{{ if .Values.global.dockerRegistryPrefix }}{{ trimSuffix "/" .Values.global.dockerRegistryPrefix }}/{{ end }}{{ .Values.db2z.addon.image.repository }}:{{ .Values.db2z.addon.image.tag }}"
+          imagePullPolicy: {{ .Values.db2z.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /static
+              port: https
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /static
+              port: https
+              scheme: HTTPS
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.security.containerSecurityContext) | indent 10 }}

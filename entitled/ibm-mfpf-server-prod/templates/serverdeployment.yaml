@@ -1,0 +1,116 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.scaling.replicaCount }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/dbconfigmap.yaml") . | sha256sum }}
+        productName: IBM MobileFirst Platform Foundation
+        productID: IBMMobileFirstPlatformFoundation_8000_perpetual_00000
+        productVersion: 8.0.0.0
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+    spec:
+      affinity:
+        {{- include "nodeAffinity" . | indent 6 }}
+      volumes:
+        - name: dbconfig-volume
+          configMap:
+            name: {{ .Release.Name }}-dbconfigmap
+        - name: config-volume
+          configMap:
+            name: {{ .Release.Name }}-configmap
+{{- if .Values.keystores.keystoresSecretName }}
+        - name: mfpf-certs
+          secret:
+            secretName: {{ .Values.keystores.keystoresSecretName }}
+{{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        readinessProbe:
+          exec:
+            command:
+            - wget
+            - --quiet
+            - --user 
+            - {{ .Values.mobileFirstOperationsConsole.user }}
+            - --password
+            - {{ .Values.mobileFirstOperationsConsole.password }}
+            - http://localhost:9080/mfpadmin/management-apis/2.0/diagnostic/healthCheck
+            - -O healthCheck
+          initialDelaySeconds: 240
+          periodSeconds: 20
+          timeoutSeconds: 15
+          successThreshold: 1
+          failureThreshold: 5
+        livenessProbe:
+          exec:
+            command:
+            - wget
+            - --quiet
+            - --user 
+            - {{ .Values.mobileFirstOperationsConsole.user }}
+            - --password
+            - {{ .Values.mobileFirstOperationsConsole.password }}
+            - http://localhost:9080/mfpadmin/management-apis/2.0/diagnostic/healthCheck
+            - -O healthCheck
+          initialDelaySeconds: 300
+          periodSeconds: 10
+          timeoutSeconds: 15
+          successThreshold: 1
+          failureThreshold: 2  
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+          - name: WLP_LOGGING_CONSOLE_FORMAT
+            value: {{ .Values.logs.consoleFormat }}
+          - name: WLP_LOGGING_CONSOLE_LOGLEVEL
+            value: {{ .Values.logs.consoleLogLevel }}
+          - name : WLP_LOGGING_CONSOLE_SOURCE
+            value: {{ .Values.logs.consoleSource }}
+        ports:
+          - containerPort: 9080
+          - containerPort: 9443
+        volumeMounts:
+          - name: config-volume
+            mountPath: /opt/ibm/MobileFirst/envs/mfpenvfile
+          - name: dbconfig-volume
+            mountPath: /opt/ibm/MobileFirst/envs/mfpdbenvfile
+{{- if .Values.keystores.keystoresSecretName }}
+          - name: mfpf-certs
+            mountPath: /opt/ibm/wlp/usr/servers/mfp/resources/security/certs
+{{- end }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+      initContainers:
+      - name: {{ .Chart.Name }}-dbconfig
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command: [ "/bin/bash" ]
+        args: [ "-c", "/opt/ibm/MobileFirst/mfpdbconfig.sh" ]
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+          - name: dbconfig-volume
+            mountPath: /opt/ibm/MobileFirst/envs/mfpdbenvfile
+        resources:
+{{ toYaml .Values.resources | indent 10 }}

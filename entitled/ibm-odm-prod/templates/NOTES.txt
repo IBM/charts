@@ -1,0 +1,90 @@
+{{ .Release.Name }} is ready to use. {{ .Release.Name }} is an instance of the {{ .Chart.Name }} chart.
+
+{{ .Release.Name }} uses version {{ .Values.image.tag }} of the IBM® Operational Decision Manager (ODM) components.
+
+ODM Information
+----------------
+
+{{- if empty .Values.customization.authSecretRef }}
+  Username/Password :
+
+  {{- if .Values.decisionCenter.enabled }}
+    - For Decision Center: odmAdmin/odmAdmin
+  {{- end }}
+
+  {{- if (or .Values.decisionServerRuntime.enabled .Values.decisionRunner.enabled) }}
+    - For Decision Server Console: odmAdmin/odmAdmin
+  {{- end }}
+
+  {{- if .Values.decisionServerRuntime.enabled }}
+    - For Decision Server Runtime: odmAdmin/odmAdmin
+  {{- end }}
+
+  {{- if .Values.decisionRunner.enabled }}
+    - For Decision Runner: odmAdmin/odmAdmin
+  {{- end }}
+
+{{- end }}
+
+  Get the application URLs by running these commands:
+
+  {{- if contains "NodePort" .Values.service.type }}
+
+    {{- if .Values.service.enableTLS }}
+    export SCHEME=https
+    {{- else }}
+    export SCHEME=http
+    {{- end }}
+
+    {{- if .Values.decisionCenter.enabled }}
+
+    -- Decision Center Business Console
+       export NODE_PORT_DC=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "odm.decisioncenter.fullname" . }})
+       export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+       echo $SCHEME://$NODE_IP:$NODE_PORT_DC/decisioncenter
+
+    -- Decision Center Enterprise Console
+       export NODE_PORT_DC=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "odm.decisioncenter.fullname" . }})
+       export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+       echo $SCHEME://$NODE_IP:$NODE_PORT_DC/teamserver
+
+    {{- end }}
+
+    {{- if .Values.decisionRunner.enabled }}
+
+    -- Decision Runner
+       export NODE_PORT_DR=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "odm.decisionrunner.fullname" . }})
+       export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+       echo $SCHEME://$NODE_IP:$NODE_PORT_DR/DecisionRunner
+
+    {{- end }}
+
+    {{- if or (.Values.decisionServerRuntime.enabled) (.Values.decisionRunner.enabled) }}
+
+    -- Decision Server Console
+       export NODE_PORT_DSC=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "odm.decisionserverconsole.fullname" . }})
+       export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+       echo $SCHEME://$NODE_IP:$NODE_PORT_DSC/res
+
+    {{- end }}
+
+    {{- if .Values.decisionServerRuntime.enabled }}
+
+    -- Decision Server Runtime
+       export NODE_PORT_DSR=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "odm.decisionserverruntime.fullname" . }})
+       export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+       echo $SCHEME://$NODE_IP:$NODE_PORT_DSR/DecisionService
+       
+    {{- end }}
+
+  {{- else if contains "LoadBalancer" .Values.service.type }}
+    NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+
+  {{- else if contains "ClusterIP" .Values.service.type }}
+
+  {{- end }}
+
+  To learn more about the {{ .Release.Name }} release, try:
+
+    $ helm status {{ .Release.Name }}
+    $ helm get {{ .Release.Name }}

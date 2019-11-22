@@ -1,0 +1,53 @@
+{{- if .Values.poweraiVisionDevicePlugins.enableFpgaDaemon}}
+# IBM_SHIP_PROLOG_BEGIN_TAG
+# *****************************************************************
+#
+# Licensed Materials - Property of IBM
+#
+# (C) Copyright IBM Corp. 2018. All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# *****************************************************************
+# IBM_SHIP_PROLOG_END_TAG
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: {{ template "shortname" . }}-fpga-device-plugin
+  labels:
+    {{ include "vision-standard-labels" . | indent 4 }}
+spec:
+  template:
+    metadata:
+      {{ include "vision-release-annotations" . | indent 6 }}
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+      labels:
+        {{ include "vision-standard-labels" . | indent 8 }}
+    spec:
+      tolerations:
+      # Toleration to allow daemon's pods to deploy on nodes which are set to
+      # only allow critical addons.
+      - key: CriticalAddonsOnly
+        operator: Exists
+      # Toleration to allow daemon's pods to deploy on nodes which are tainted
+      # to generally only allow pods which request the device.
+      - key: ibm.com/fpga
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: {{ template "shortname" . }}-fpga-device-plugin
+        image: "{{ template "repoprefix" . }}powerai-vision-fpga-device-plugin:{{ .Values.image.releaseTag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+          - name: device-plugin
+            mountPath: /var/lib/kubelet/device-plugins
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+  {{- end }}

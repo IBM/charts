@@ -1,0 +1,118 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-cam-diagnostics
+  labels:
+{{ include "core.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      name: cb-cam-diagnostics
+  template:
+    metadata:
+      labels:
+        name: cb-cam-diagnostics
+{{ include "core.labels" .  | indent 8 }}
+      annotations:
+{{ include "core.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets change
+        checksums/couchdb.password: "{{ .Values.secrets.couchdb.password | b64enc | sha256sum }}"
+        checksums/mongodb.password: "{{ .Values.secrets.mongodb.password | b64enc | sha256sum }}"
+        {{ end }}
+    spec:
+{{ include "core.imagePullSecrets" .  | indent 6 }}
+      affinity:
+{{- include "core.nodeaffinity" . | indent 6 }}
+{{ include "core.securityContext" .  | indent 6 }}
+      containers:
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        - image: {{ template "core.readConfig" (list . "cb_cam_diagnostics") }}
+        {{ else }}
+        - image: {{ template "coreicp.readConfig" (list . "cb_cam_diagnostics" .Values.imageCredentials.registry) }}
+        {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              add:
+              - SETGID
+              - SETFCAP
+              - CHOWN
+              drop:
+              - ALL
+          name: cb-cam-diagnostics
+          resources:
+{{ include "deployClassConfig" (list . "cb_cam_diagnostics") | indent 12 }}
+          env:
+            - name: COUCH_HOST
+              value: couchdb:5984
+            - name: COUCH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-creds
+                  key: couchdb.username
+            - name: COUCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-creds
+                  key: couchdb.password
+            - name: MONGO_HOST
+              value: mongodb
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.url
+            - name: MONGO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.username
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-creds
+                  key: mongodb.password
+          {{ if .Values.httpProxy }}
+            # HTTP_PROXY support
+            - name: http_proxy
+              value: {{ .Values.httpProxy }}
+            - name: https_proxy
+              value: {{ .Values.httpsProxy }}
+            - name: no_proxy
+              value: "{{ .Release.Namespace }},{{ .Values.noProxy }}"
+          {{ end }}
+          ports:
+            - containerPort: 5000
+              name: cam-diagnostics
+          readinessProbe:
+              tcpSocket:
+                port: cam-diagnostics
+              initialDelaySeconds: 5
+              periodSeconds: 10
+          livenessProbe:
+              httpGet:
+                path: /
+                port: cam-diagnostics
+              initialDelaySeconds: 60
+              periodSeconds: 300
+              failureThreshold: 4
+              timeoutSeconds: 20
+          volumeMounts:
+            - mountPath: /pvcs_mount/core-couchdb-claim0
+              name: core-couchdb-claim0
+              readOnly: true
+      volumes:
+        - name: core-couchdb-claim0
+          persistentVolumeClaim:
+            claimName: core-couchdb-claim0

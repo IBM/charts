@@ -1,0 +1,35 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compTestResourceName := .sch.chart.components.wex.test.resource.name }}
+{{- $compTestResourceLabelComponent := .sch.chart.components.wex.test.resource.label.component }}
+
+{{- $compOrchestratorName := .sch.chart.components.wex.orchestrator.name }}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compTestResourceName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-test-resource
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  serviceAccountName: {{ .Values.general.serviceAccount.name | default "default" | quote }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 2 }}
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+  containers:
+    - name: "test-resource"
+      image: "{{ .Values.general.image.core }}"
+{{- include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | indent 6 }}
+      resources:
+{{ toYaml .Values.test.resources | indent 8 }}
+      command:
+      - 'bash'
+      - '-c'
+      - |
+        curl -v http://{{ include "sch.names.fullCompName" (list . $compOrchestratorName ) }}:3000/sidecar/status/defaultFileUpload | grep DONE

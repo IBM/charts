@@ -1,0 +1,255 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-dba-navigator.fullname" . }}
+  labels:
+    app: {{ template "ibm-dba-navigator.name" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-dba-navigator.name" . }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1  
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-dba-navigator.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ .Chart.Name }}
+        heritage: {{ .Release.Service }}        
+      annotations:
+        productID: "5737-I23"
+        productName: "IBM Cloud Pak for Automation"
+        productVersion: "19.0.1"
+        productMetric: "PROCESSOR_VALUE_UNIT"
+        productChargedContainers: "All"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 50001
+        fsGroup: 50000
+        supplementalGroups:
+        - 50000
+      affinity:
+      {{- include "ibm-dba-navigator.nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "ibm-dba-navigator.name" . }}
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: {{ template "ibm-dba-navigator.name" . }}
+        securityContext:
+          runAsUser: 50001
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "{{ .Values.resources.requests.memory }}"
+            cpu: "{{ .Values.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.resources.limits.memory }}"
+            cpu: "{{ .Values.resources.limits.cpu }}"
+        ports:
+        - containerPort: 9080
+          name: http
+        - containerPort: 9443
+          name: https
+        env:
+          - name: LICENSE
+            value: {{ .Values.icnProductionSetting.license | quote }}
+          - name: PRODUCT
+            value: "DBAMC"
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "json" }}
+          - name: JVM_HEAP_XMS
+            value: "{{ .Values.icnProductionSetting.jvmHeapXms }}m"
+          - name: JVM_HEAP_XMX
+            value: "{{ .Values.icnProductionSetting.jvmHeapXmx }}m"
+          - name: TZ
+            value: {{ .Values.icnProductionSetting.timeZone | quote }}
+          - name: ICNDBTYPE
+            value: {{ .Values.icnProductionSetting.icnDBType | quote }}
+          - name: ICNJNDIDS
+            value: {{ .Values.icnProductionSetting.icnJNDIDSName | quote }}
+          - name: ICNSCHEMA
+            value: {{ .Values.icnProductionSetting.icnSChema | quote }}
+          - name: ICNTS
+            value: {{ .Values.icnProductionSetting.icnTableSpace | quote }}
+          - name: ICNADMIN
+            value: {{ .Values.icnProductionSetting.icnAdmin | quote }}            
+          - name: navigatorMode
+            value: {{ .Values.icnProductionSetting.navigatorMode | quote }}  
+{{- if .Values.monitoring.enabled }}
+          - name: MON_METRICS_WRITER_OPTION
+            value: {{ .Values.monitoringConfiguration.monMetricsWriterOpt | quote }}
+          - name: MON_METRICS_SERVICE_ENDPOINT
+            value: {{ .Values.monitoringConfiguration.monMetricsSvcEndpoint | quote }}
+          - name: MON_BMX_GROUP
+            value: {{ .Values.monitoringConfiguration.monBMXGroup | quote }}
+          - name: MON_BMX_METRICS_SCOPE_ID
+            value: {{ .Values.monitoringConfiguration.monBMXMetricsScopeID | quote }}
+          - name: MON_BMX_API_KEY
+            value: {{ .Values.monitoringConfiguration.monBMXAPIKey | quote }}
+          - name: MON_ECM_METRICS_COLLECT_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monCollectInterval | quote }}
+          - name: MON_ECM_METRICS_FLUSH_INTERVAL
+            value: {{ .Values.monitoringConfiguration.monFlushInterval | quote }}
+{{- end }}
+{{- if .Values.logging.enabled }}
+          - name: MON_LOG_SHIPPER_OPTION
+            value: {{ .Values.loggingConfiguration.monLogShipperOpt | quote }}
+          - name: MON_LOG_SERVICE_ENDPOINT
+            value: {{ .Values.loggingConfiguration.monLogSvcEndpoint | quote }}
+          - name: MON_BMX_LOGS_LOGGING_TOKEN
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXLogsLoggingToken | quote }}
+          - name: MON_BMX_SPACE_ID
+            value: {{ default "MISSING" .Values.loggingConfiguration.monBMXSpaceID | quote }}
+{{- end }}
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+        readinessProbe:
+          httpGet:
+            path: /navigator
+            port: 9080
+            httpHeaders:
+              - name: Content-Encoding
+                value: gzip
+          initialDelaySeconds: 90
+          periodSeconds: 5
+          timeoutSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /navigator
+            port: 9080
+            httpHeaders:
+              - name: Content-Encoding
+                value: gzip
+          initialDelaySeconds: 300
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 6
+        volumeMounts:
+{{- if and (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNAsperastore) (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNLogstore) (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNPluginstore) (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNVWCachestore) (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNVWLogstore) }}
+          - name: "{{ .Values.dataVolume.nameforICNCfgstore }}"
+            mountPath: "/opt/ibm/plugins"
+            subPath: icn/plugins
+          - name: "{{ .Values.dataVolume.nameforICNCfgstore }}"
+            mountPath: "/opt/ibm/viewerconfig/logs"
+            subPath: icn/viewerlogs
+          - name: "{{ .Values.dataVolume.nameforICNCfgstore }}"
+            mountPath: "/opt/ibm/viewerconfig/cache"
+            subPath: icn/viewercache
+          - name: "{{ .Values.dataVolume.nameforICNCfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/logs"
+            subPath: icn/logs
+          - name: "{{ .Values.dataVolume.nameforICNCfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides"
+            subPath: icn/configDropins/overrides
+          - name: "{{ .Values.dataVolume.nameforICNCfgstore }}"
+            mountPath: "/opt/ibm/Aspera"
+            subPath: icn/Aspera
+{{- else }}
+          - name: "{{ .Values.dataVolume.nameforICNPluginstore }}"
+            mountPath: "/opt/ibm/plugins"
+          - name: "{{ .Values.dataVolume.nameforICNVWLogstore }}"
+            mountPath: "/opt/ibm/viewerconfig/logs"
+          - name: "{{ .Values.dataVolume.nameforICNVWCachestore }}"
+            mountPath: "/opt/ibm/viewerconfig/cache"
+          - name: "{{ .Values.dataVolume.nameforICNLogstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/logs"
+          - name: "{{ .Values.dataVolume.nameforICNCfgstore }}"
+            mountPath: "/opt/ibm/wlp/usr/servers/defaultServer/configDropins/overrides"
+          - name: "{{ .Values.dataVolume.nameforICNAspera }}"
+            mountPath: "/opt/ibm/Aspera"
+{{- end }}
+      imagePullSecrets:
+      - name: "{{ .Values.imagePullSecrets.name }}"
+      volumes:
+{{- if and (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNAsperastore) (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNLogstore) (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNPluginstore) (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNVWCachestore) (eq .Values.dataVolume.existingPVCforICNCfgstore .Values.dataVolume.existingPVCforICNVWLogstore) }}
+        - name: "{{ .Values.dataVolume.nameforICNCfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforICNCfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- else }}
+        - name: "{{ .Values.dataVolume.nameforICNCfgstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforICNCfgstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforICNLogstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforICNLogstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforICNPluginstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforICNPluginstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforICNVWCachestore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforICNVWCachestore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforICNVWLogstore }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforICNVWLogstore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: "{{ .Values.dataVolume.nameforICNAspera }}"
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.dataVolume.existingPVCforICNAsperastore }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- end }}
+

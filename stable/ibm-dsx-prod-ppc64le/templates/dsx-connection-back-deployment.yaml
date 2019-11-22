@@ -1,0 +1,55 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.ibmPrivateCloud) -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: dsx-connection-back
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: dsx-connection-back-deployment
+spec:
+  replicas: {{ .Values.dsxConnectionBackContainer.replicas }}
+  selector:
+    matchLabels:
+      run: dsx-connection-back-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: dsx-connection-back
+        component: dsx-connection-back
+        run: dsx-connection-back-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: dsx-connection-back-container
+        image: {{ .Values.dsxConnectionBackContainer.image.repository }}:{{ .Values.dsxConnectionBackContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        env:
+        - name: AUTH_URL
+          value: "http://usermgmt-svc.sysibm-adm.svc.cluster.local:8080/v1"
+        - name: USER_HOME
+          value: "/user-home"
+        resources:
+{{ toYaml .Values.dsxConnectionBackContainer.resources | indent 12 }}
+        ports:
+        - name: dsx-back-port
+          containerPort: 10010
+        volumeMounts:
+        - name: secrets-volume
+          mountPath: /etc/kubecert
+        - name: user-home-mount
+          mountPath: /user-home
+      volumes:
+      - name: secrets-volume
+        hostPath:
+          path: /etc/kubernetes/ssl
+      - name: user-home-mount
+        persistentVolumeClaim:
+          {{- if .Values.userHomePvc.persistence.existingClaimName }}
+            claimName: {{ .Values.userHomePvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}-{{ .Values.userHomePvc.name }}
+          {{- end }}
+{{- end }}

@@ -1,0 +1,51 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+{{- $test :=  printf "%s" "test" -}}
+{{- $testCompName := printf "%s-%s" $compName "test" -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $test) -}}
+{{- $saName := include "ibm-netcool-probe-messagebus-kafka-prod.rbac.serviceAccountName" ( . ) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullTestCompName }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+spec:
+  serviceAccountName: {{ .Values.messagebus.global.serviceAccountName | default $saName }}
+  automountServiceAccountToken: false
+{{- if .Values.messagebus.global.image.secretName }}
+  imagePullSecrets:
+    - name: {{ .Values.messagebus.global.image.secretName }}
+{{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+  containers:
+  - name: {{ $fullTestCompName }}
+    image: "{{ .Values.messagebus.image.testRepository }}:{{ .Values.messagebus.image.testImageTag }}"
+    command:
+      - "/bin/sh"
+    args:
+      ["-c","curl -X GET -H 'cache-control: no-cache' -H 'content-type: application/json' http://{{ include "sch.names.fullName" (list .) }}.{{ .Release.Namespace }}:8081/probe/common"]
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      limits:
+        cpu: 250m
+        memory: 256Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}

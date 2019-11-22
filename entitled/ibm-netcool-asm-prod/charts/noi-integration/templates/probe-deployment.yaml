@@ -1,0 +1,256 @@
+{{- include "sch.config.init" (list . "asm.sch.chart.config.values") -}}
+{{- $rootData := fromYaml (include "parent.data" .) }}
+{{- $rootMetering := $rootData.metering -}}
+{{- $component := "probe" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullName" (list .) }}-probe
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $component) | indent 4 }}
+spec:
+  replicas: {{ .Values.probe.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $component) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/probe-configmap.yaml") . | sha256sum }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $component) | indent 8 }}
+    spec:
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 2001
+      supplementalGroups:
+      {{- range $group := .Values.global.persistence.supplementalGroups }}
+        - {{ $group -}}
+      {{ end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.probe.arch }}
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: NotIn
+                  values:
+                  - {{ include "sch.names.appName" (list .) }}
+                - key: component
+                  operator: NotIn
+                  values:
+                  - {{ $component }}
+                - key: release
+                  operator: NotIn
+                  values:
+                  - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+            weight: 50
+      initContainers:
+      - name: wait-for-topology
+        image: {{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{ .Values.baseImage.name }}:{{ .Values.baseImage.tag }}
+        env:
+        - name: SERVICE
+          value: {{ .Release.Name }}-topology
+        - name: EXPECTED_COUNT
+          value: "1"
+        command:
+        - /bin/sh
+        - -c
+        - /opt/ibm/netcool/asm/bin/check-service-endpoint-count.sh
+        terminationMessagePolicy: FallbackToLogsOnError
+        resources:
+{{ include "asm.minimalPodResources" . | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+      - name: {{ include "sch.names.fullName" (list .) }}-triggers
+        image: "{{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{.Values.probe.image.name}}:{{.Values.probe.image.tag}}"
+        env:
+        - name: OMNIBUS_ROOT_PWD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.releaseName }}-omni-secret
+              key: OMNIBUS_ROOT_PASSWORD
+              optional: true
+        command: ["/bin/sh"]
+        args: [ "-c", "/opt/ibm/netcool/asm/load-asm-triggers.sh"]
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /opt/ibm/netcool/asm/asm-trigger.sql
+          subPath: asm-trigger.sql
+          name: asm-trigger
+        - mountPath: /opt/ibm/netcool/asm/load-asm-triggers.sh
+          subPath: load-asm-triggers.sh
+          name: load-asm-triggers
+        - name: interfaces-file
+          mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+          subPath: omni.dat
+        resources:
+{{ include "asm.minimalPodResources" . | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+      containers:
+        - name: {{ include "sch.names.appName" (list .) }}
+          image: "{{ include "asm.getImageRepo" . | trimSuffix "/" }}/{{.Values.probe.image.name}}:{{.Values.probe.image.tag}}"
+          imagePullPolicy: {{ .Values.probe.image.pullPolicy }}
+          env:
+            - name: LICENSE
+              value: "accept"
+            - name: PROBE_NAME
+              value: nco_p_message_bus
+          ports:
+          - containerPort: {{ .Values.probe.httpPort }}
+          volumeMounts:
+          - name: interfaces-file
+            mountPath: /opt/IBM/tivoli/netcool/etc/omni.dat
+            subPath: omni.dat
+          - name: rules-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus.rules
+            subPath: message_bus.rules
+          - name: props-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/probes/linux2x86/message_bus.props
+            subPath: message_bus.props
+          - name: transport-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/kafkaTransport.properties
+            subPath: kafkaTransport.properties
+          - name: kafka-connection-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/kafkaConnectionProperties.json
+            subPath: kafkaConnectionProperties.json
+          - name: kafka-client-file
+            mountPath: /opt/IBM/tivoli/netcool/omnibus/java/conf/kafkaClient.properties
+            subPath: kafkaClient.properties
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          terminationMessagePolicy: FallbackToLogsOnError
+          livenessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:{{ .Values.probe.httpPort }}/probe/common
+            initialDelaySeconds: {{ .Values.probe.livenessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.probe.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.probe.livenessProbe.failureThreshold }}
+            periodSeconds: {{ .Values.probe.livenessProbe.periodSeconds }}
+          readinessProbe:
+            exec:
+              command:
+              - curl
+              - -X
+              - GET
+              - -H
+              - 'cache-control: no-cache'
+              - -H
+              - 'content-type: application/json'
+              - http://localhost:{{ .Values.probe.httpPort }}/probe/common
+            initialDelaySeconds: {{ .Values.probe.readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.probe.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.probe.readinessProbe.failureThreshold }}
+            periodSeconds: {{ .Values.probe.readinessProbe.periodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.probe.terminationGracePeriodSeconds }}
+      volumes:
+        - name: interfaces-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-probe-config
+            items:
+            - key: omni.dat
+              path: omni.dat
+        - name: rules-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-probe-config
+            items:
+            - key: message_bus.rules
+              path: message_bus.rules
+        - name: props-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-probe-config
+            items:
+            - key: message_bus.props
+              path: message_bus.props
+        - name: transport-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-probe-config
+            items:
+            - key: kafkaTransport.properties
+              path: kafkaTransport.properties
+        - name: kafka-connection-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-probe-config
+            items:
+            - key: kafkaConnectionProperties.json
+              path: kafkaConnectionProperties.json
+        - name: kafka-client-file
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-probe-config
+            items:
+            - key: kafkaClient.properties
+              path: kafkaClient.properties
+        - name: asm-trigger
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-probe-config
+            items:
+            - key: asm-trigger.sql
+              path: asm-trigger.sql
+            defaultMode: 0755
+        - name: load-asm-triggers
+          configMap:
+            name: {{ include "sch.names.fullName" (list .) }}-probe-config
+            items:
+            - key: load-asm-triggers.sh
+              path: load-asm-triggers.sh
+            defaultMode: 0755
+        - name: global-config
+          configMap:
+            name: "{{ .Release.Name }}-global-config"
+            defaultMode: 0755

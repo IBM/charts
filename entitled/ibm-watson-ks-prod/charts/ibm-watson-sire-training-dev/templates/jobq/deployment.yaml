@@ -1,0 +1,100 @@
+{{- include "sch.config.init" (list . "sireTraining.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.jobq.deploymentName -}}
+{{- $jobq := .Values.jobq -}}
+{{- if $jobq.enabled -}}
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ include "sireTraining.replicaCountTemplate" . }}
+  selector:
+    matchLabels:
+      release: "{{ .Release.Name }}"
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccount: {{ include "sireTraining.serviceAccountName" . }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- /* nodeaffinity for github.com charts, remove the following for PPA charts */}}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+
+### IMAGE PULL SECRET
+{{ include "sireTraining.pullSecretTemplate" . | indent 6 }}
+
+      volumes:
+      {{- if (and .Values.global.postgresql.sslEnabled .Values.global.postgresql.tlsSecret.fieldRootCertificate) }}
+      ### POSTGRESQL
+      - name: pg-root-certificate-secret
+        secret:
+          # defaultMode: 0600
+          secretName: {{ default (include .Values.global.postgresql.tlsSecret.nameTpl .) .Values.global.postgresql.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.postgresql.tlsSecret.fieldRootCertificate }}
+            path: "root.pem"
+      {{- end }}
+
+      - name: jobq-config
+        configMap:
+          name: "{{ include "sch.names.fullCompName" (list . $compName "config") }}-config"
+          items:
+          - key: config.yaml
+            path: config.yaml
+
+#######################################################################################################################
+########## CONTAINERS #################################################################################################
+#######################################################################################################################
+      containers:
+      - name: jobq
+        {{ include "sireTraining.imageTpl" (list $ $jobq) }}
+        {{ include "sireTraining.pullPolicyTemplate" . }}
+        resources:
+          requests:
+            cpu: {{ $jobq.cpuRequestsMillis }}m
+          limits:
+            cpu: {{ $jobq.cpuLimitMillis }}m
+            memory: {{ $jobq.memoryLimitMB }}Mi
+        workingDir: "/opt/ibm/mnlp"
+        command:
+        - "server"
+        - "-l"
+        - "{{ $jobq.logLevel }}"
+
+        volumeMounts:
+        - name: jobq-config
+          mountPath: "/etc/jobq/"
+          readOnly: true
+        {{- if (and .Values.global.postgresql.sslEnabled .Values.global.postgresql.tlsSecret.fieldRootCertificate) }}
+        - name: pg-root-certificate-secret
+          mountPath: "/etc/ssl/postgresql"
+          readOnly: true
+        {{- end }}
+
+        env:
+        - name: PGHOST
+          value: "{{ default (include .Values.global.postgresql.hostNameTpl .) .Values.global.postgresql.fixedHostName }}"
+        - name: PGPORT
+          value: "{{ .Values.global.postgresql.port }}"
+        - name: PGDATABASE
+          value: "{{ include "sireTraining.jobqDbName" . }}"
+        - name: PGUSER
+          value: "{{ $jobq.postgres.user }}"
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.postgresql.authSecret.nameTpl .) .Values.global.postgresql.authSecret.fixedName }}
+              key: {{ .Values.global.postgresql.authSecret.fieldJobqPassword }}
+        - name: PGSSLMODE
+          value: {{ template "sireTraining.postgresqlSslModeTpl" . }}
+        {{- if (and .Values.global.postgresql.sslEnabled .Values.global.postgresql.tlsSecret.fieldRootCertificate) }}
+        - name: PGSSLROOTCERT
+          value: "/etc/ssl/postgresql/root.pem"
+        {{- end }}
+{{- end -}}

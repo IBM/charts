@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-svc-fail-test"
+  annotations:
+    "helm.sh/hook": test-failure
+  labels:
+    app: {{ template "fullname" . }}-svc-fail-test
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  containers:
+  - name: {{ .Release.Name }}-service-test
+    image: busybox
+    env:
+    - name: DSM_ADMIN_PWD
+      valueFrom:
+        secretKeyRef:
+          name: {{ template "fullname" . }}-dsm-passwd
+          key: password
+    command: ["/bin/sh","-c"]
+    args: ['wget http://{{ .Values.login.user }}:$(DSM_ADMIN_PWD)1@{{ template "fullname" . }}:{{ .Values.service.httpPort }} -O /dev/null']
+    livenessProbe:
+      initialDelaySeconds: 5
+      exec:
+        command: ["echo","0"]
+    readinessProbe:
+      initialDelaySeconds: 5
+      exec:
+        command: ["echo","0"]
+  restartPolicy: Never
+

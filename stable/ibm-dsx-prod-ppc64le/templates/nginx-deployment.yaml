@@ -1,0 +1,73 @@
+{{ if (eq .Release.Namespace .Values.dsxNamespaces.ibmPrivateCloud) -}}
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: ibm-nginx
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: ibm-nginx-deployment
+spec:
+  replicas: {{ .Values.nginxContainer.replicas }}
+  selector:
+    matchLabels:
+      run: ibm-nginx-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        component: ibm-nginx
+        run: ibm-nginx-deployment-pod
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: ibm-nginx-container
+        image: {{ .Values.nginxContainer.image.repository }}:{{ .Values.nginxContainer.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/scripts/startup.sh"]
+        env:
+        - name: NODE_ENV
+          value: "production"
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        resources:
+{{ toYaml .Values.nginxContainer.resources | indent 12 }}
+        ports:
+        - containerPort: 443
+          protocol: TCP
+          name: external-https
+        - containerPort: 80
+          protocol: TCP
+          name: external-http
+        - containerPort: 12443
+          protocol: TCP
+          name: internal-https
+        - containerPort: 12080
+          protocol: TCP
+          name: internal-http
+        livenessProbe:
+          httpGet:
+            path: /diag
+            port: 443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /diag
+            port: 443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - name: user-home-mount
+        persistentVolumeClaim:
+          {{- if .Values.userHomePvc.persistence.existingClaimName }}
+            claimName: {{ .Values.userHomePvc.persistence.existingClaimName }}
+          {{- else }}
+            claimName: {{ template "fullname" . }}-{{ .Values.userHomePvc.name }}
+          {{- end }}
+{{- end }}

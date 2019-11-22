@@ -1,0 +1,41 @@
+{{- include "sch.config.init" (list . "probe.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.probe.name -}}
+{{- $test :=  printf "%s" "test" -}}
+{{- $testcompName := printf "%s-%s" $compName "test" -}}
+{{- $fullTestcompName := include "sch.names.fullCompName" (list . $test) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullTestcompName }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testcompName ) | indent 4 }}
+spec:
+{{- if .Values.global.image.secretName }}
+  imagePullSecrets:
+  - name: {{ .Values.global.image.secretName }}
+{{- end }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+  containers:
+  - name: {{ $fullTestcompName }}
+    image: "{{ .Values.image.testRepository }}:{{ .Values.image.testImageTag }}"
+    command:
+      - "/bin/sh"
+    args:
+      ["-c","wget -S -T 60 --header \'cache-control: no-cache\' --header \'content-type: application/x-www-form-urlencoded\' -O- {{ include "ibm-netcool-probe-messagebus-webhook-prod.getProtocolAndServiceNameForTest" . -}}{{ include "ibm-netcool-probe-messagebus-webhook-prod.getFinalURI" . -}}?service=test"]
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+  restartPolicy: Never
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}

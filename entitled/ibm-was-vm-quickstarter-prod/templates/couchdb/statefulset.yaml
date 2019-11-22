@@ -1,0 +1,136 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $compName := .sch.chart.components.couchdb.name }}
+{{- $commonName := .sch.chart.components.common.name }}
+{{- $secretGeneratorName := .sch.chart.components.common.secretGeneratorName }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name:   {{ include "sch.names.statefulSetName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  podManagementPolicy: "Parallel"
+  selector:
+    matchLabels:
+{{ include "selector.matchLabels" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      {{- include "wasaas.security.pod.host" . | indent 6 }}
+      affinity:
+      {{- include "nodeaffinity" . | indent 6 }}
+      initContainers:
+        - name: init-copy
+          image: "{{ .Values.devops.image.repository }}:{{ .Values.devops.image.tag }}"
+          command: ['sh','-c','cp /tmp/chart.ini /default.d; ls -lrt /default.d;']
+          {{- include "wasaas.security.container.init" . | indent 10 }}
+          volumeMounts:
+          - name: config-map
+            mountPath: /tmp/chart.ini
+            subPath: chart.ini
+          - name: config-storage
+            mountPath: /default.d
+      containers:
+        - name: couchdb
+          image: "{{ .Values.couchdb.image.repository }}:{{ .Values.couchdb.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "/opt/init.sh", "bg"]
+          ports:
+            - name: couchdb
+              containerPort: 5984
+            - name: epmd
+              containerPort: 4369
+            - containerPort: 9100
+          env:
+            - name: COUCHDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+                  key: couchdbUsername
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+                  key: couchdbPassword
+            - name: COUCHDB_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . $commonName) | quote }}
+                  key: couchdbCookieAuthSecret
+            - name: ERL_FLAGS
+              value: "-name couchdb -setcookie monster"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5984
+          readinessProbe:
+            httpGet:
+              path: /_up
+              port: 5984
+          {{- include "wasaas.security.container.root" . | indent 10 }}
+          volumeMounts:
+          - name: config-storage
+            mountPath: /opt/couchdb/etc/default.d
+          - name: config-map
+            mountPath: /opt/init.sh
+            subPath: init.sh
+          - name: data
+            mountPath: /opt/couchdb/data
+          - name: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
+            mountPath: /opt/certs
+      volumes:
+        - name: config-storage
+          emptyDir: {}
+        - name: config-map
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+        - name: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
+          secret:
+            secretName: {{ include "sch.names.fullCompName" (list . $secretGeneratorName) | quote }}
+            items:
+             - key: server.crt
+               path: server.crt
+             - key: server.key
+               path: server.key
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 10 }}
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: {{ .Values.couchdb.persistentVolume.size | quote }}
+        {{- if .Values.couchdb.persistentVolume.useDynamicProvisioning }}
+        # if present, use the storageClassName from the values.yaml, else use the
+        # default storageClass setup by kube Administrator
+        # setting storageClassName to nil means use the default storage class
+        storageClassName: {{ default nil .Values.couchdb.persistentVolume.storageClass | quote }}
+        {{- else }}
+        storageClassName: {{ default "" .Values.couchdb.persistentVolume.storageClass | quote }}
+        # use selectors in the binding process
+        selector:
+          matchLabels:
+            component: "{{ .sch.chart.components.couchdb.name }}"
+            release: "{{ .Release.Name }}"
+        {{- end }}

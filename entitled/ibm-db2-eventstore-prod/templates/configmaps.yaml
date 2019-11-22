@@ -1,0 +1,239 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Values.servicename }}-config-files"
+  labels:
+    app.kubernetes.io/name: {{ template "eventstore.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    run: "{{ .Values.servicename }}-config-files"
+data:
+  bluspark-conf: |
+    {{- if eq .Values.eventstoreService.replicas 1.0 }}
+    data.numShards 1
+    data.replicationFactor 1
+    {{- else }}
+    cluster.numVnodes 36
+    data.numShards 36
+    {{- end }}
+    daemon.clusterMode
+    daemon.server.startPort {{ .Values.engine.internalPort }}
+    daemon.server.endPort {{ .Values.engine.internalPort }}
+    daemon.clientPort {{ .Values.engine.publicPort }}
+    logger.heartbeaterFreqMs 10
+    # logger.memoryLimitReplica -1
+    data.sharedFileSystemBasePath /eventstorefs/data
+    groomer.groomIntervalInMs 30000
+    groomer.tableGroomingFrequencyInMs 30001
+    {{- if eq .Values.eventstoreService.replicas 1.0 }}
+    recovery.quorumGroomingEnabled false
+    {{- else }}
+    #recovery.quorumGroomingEnabled false
+    {{- end }}
+    # recovery.quorumReadsEnabled false
+    recovery.quorumWritesMode quorum
+    recovery.rpcTimeoutInMs 1200000
+    recovery.fenceTimeoutInSecs 20
+    zookeeper.sessionTimeoutInMs 30000
+    # security.LDAP_URI ldap://openldap:389/
+    # security.LDAPBaseDN dc=example,dc=org
+    # trace.debugEnabled true
+    # trace.asyncModeEnabled false
+    # trace.synchronousFlushEnabled true
+    # trace.defaultVerbosity WARN
+    internal.data.groomedDir /ibm/htap/db/TWCDB
+    internal.client.connection.endpoints {{ .Values.servicename }}-tenant-engine-svc:1100
+    {{- if .Values.objectStorage.useObjectStorage }}
+    data.sharedFS.objectstorage.name {{ .Values.objectStorage.type }}
+    data.sharedFS.objectstorage.bucketName {{ .Values.objectStorage.bucketName }}
+    {{- if eq .Values.objectStorage.type "S3" }}
+    data.sharedFS.objectstorage.S3.region {{ .Values.objectStorage.S3.region }}
+    {{- end }}
+    {{- if eq .Values.objectStorage.type "COS" }}
+    data.sharedFS.objectstorage.endpointOverride {{ .Values.objectStorage.COS.endpointURL }}
+    {{- end }}
+    {{- end }}
+
+  # This is used for user provide db2 registry variables. which are set per node
+  db2eventstore-reg-var: |
+    #PLACEHOLDER TEXT
+
+  # This is used for install time db2 registry variables. which are set per instance
+  db2eventstore-reg-var-global: |
+    {{- if ge .Values.catalog.replicas 1.0 }}
+    DB2_DEDICATED_CATALOG_MEMBER 999
+    {{- end }}
+    DB2_ES_DAEMON_CLIENTPORT {{ .Values.engine.publicPort }}
+    DB2_ES_DAEMON_SERVERPORT {{ .Values.engine.internalPort }}
+    DB2_ES_RECOVERY_REPLICATION_PORT {{ .Values.engine.replicationPort }}
+    {{- if eq .Values.eventstoreService.replicas 1.0 }}
+    DB2_ES_RECOVERY_QUORUMGROOMINGENABLED false
+    {{- end }}
+    DB2_ES_ZOOKEEPER_CONNECTIONSTRING1 {{ .Values.servicename }}-tenant-zk-svc:2181
+    {{- if eq .Values.eventstoreService.replicas 1.0 }}
+    DB2_ES_CLUSTER_NUMNODES {{ .Values.eventstoreService.replicas }}
+    DB2_ES_CLUSTER_NUMVNODES 1
+    DB2_ES_DATA_NUMSHARDS 1
+    DB2_ES_DATA_REPLICATIONFACTOR 1
+    {{- else }}
+    DB2_ES_CLUSTER_NUMNODES {{ .Values.eventstoreService.replicas }}
+    DB2_ES_DATA_REPLICATIONFACTOR 3
+    {{- end }}
+    {{- if .Values.objectStorage.useObjectStorage }}
+    DB2_ES_DATA_SHAREDFS_TYPE objectstorage
+    DB2_ES_DATA_SHAREDFS_OBJECTSTORAGE_NAME {{ .Values.objectStorage.type }}
+    {{- if eq .Values.objectStorage.type "COS" }}
+    DB2_ES_DATA_SHAREDFS_OBJECTSTORAGE_ENDPOINTOVERRIDE {{ .Values.objectStorage.COS.endpointURL }}
+    DB2_ES_DATA_SHAREDFS_OBJECTSTORAGE_BUCKETNAME {{ .Values.objectStorage.bucketName }}
+    {{- else if eq .Values.objectStorage.type "S3" }}
+    DB2_ES_DATA_SHAREDFS_OBJECTSTORAGE_S3_REGION {{ .Values.objectStorage.S3.region }}
+    DB2_ES_DATA_SHAREDFS_OBJECTSTORAGE_BUCKETNAME {{ .Values.objectStorage.bucketName }}
+    {{- end }}
+    {{- end }}
+    {{- if not .Values.objectStorage.useObjectStorage }}
+    DB2_ES_DATA_SHAREDFILESYSTEMBASEPATH /eventstorefs/data
+    {{- if eq .Values.storage.type "nfs" }}
+    DB2_ES_DATA_SHAREDFS_TYPE native
+    {{- else }}
+    DB2_ES_DATA_SHAREDFS_TYPE glusterFS
+    {{- end }}
+    {{- end }}
+    DB2_WORKLOAD ANALYTICS_EVENTSTORE
+    DB2DBDFT {{ .Values.database.name }}
+    DB2RSHCMD /usr/local/bin/eventstore_ssh
+
+  bluspark-dm-backend-conf: |
+    eventstore.rest.host 0.0.0.0
+    eventstore.rest.port 3020
+    eventstore.rest.monitoring.level engine
+    {{- if eq .Values.runtime "ICP4Data" }}
+    idp.alert.server http://dash-back-svc.kube-system.svc:3010
+    metrics.alert.server http://dash-back-svc.kube-system.svc:3010
+    {{- else }}
+    idp.alert.server http://dash-back-svc.sysibm-adm.svc:3010
+    metrics.alert.server http://dash-back-svc.sysibm-adm.svc:3010
+    {{- end }}
+    idp.spark.server local[3]
+    internal.idp.monitoring.poll 2
+    eventstore.rest.monitoring.metrics.cpu.yellow 99
+    eventstore.rest.monitoring.metrics.memory.yellow 90
+    eventstore.rest.monitoring.metrics.logbuffermem.yellow 50
+    eventstore.rest.monitoring.metrics.computestorage.yellow 80
+    eventstore.rest.monitoring.metrics.ssdstorage.yellow 80
+    eventstore.rest.monitoring.metrics.sharedstorage.yellow 80
+    eventstore.rest.monitoring.metrics.cpu.red 99
+    eventstore.rest.monitoring.metrics.memory.red 95
+    eventstore.rest.monitoring.metrics.logbuffermem.red 90
+    eventstore.rest.monitoring.metrics.computestorage.red 90
+    eventstore.rest.monitoring.metrics.ssdstorage.red 90
+    eventstore.rest.monitoring.metrics.sharedstorage.red 90
+    eventstore.rest.monitoring.metrics.generateAlerts false
+    eventstore.rest.monitoring.retry.count 20
+    eventstore.rest.ingest.timeout 90
+    internal.eventstore.client.ingest.timeout 1
+    internal.eventstore.client.timeout 20
+    internal.eventstore.engine.service {{ .Values.servicename }}-tenant-engine-svc.{{ .Release.Namespace }}.svc
+    internal.eventstore.logging.sidecar {{ .Values.servicename }}-node-exporter-svc-
+    {{- if .Values.objectStorage.useObjectStorage }}
+    data.sharedFS.objectstorage.name {{ .Values.objectStorage.type }}
+    data.sharedFS.objectstorage.bucketName {{ .Values.objectStorage.bucketName }}
+    {{- if eq .Values.objectStorage.type "S3" }}
+    data.sharedFS.objectstorage.S3.region {{ .Values.objectStorage.S3.region }}
+    {{- end }}
+    {{- if eq .Values.objectStorage.type "COS" }}
+    data.sharedFS.objectstorage.endpointOverride {{ .Values.objectStorage.COS.endpointURL }}
+    {{- end }}
+    {{- end }}
+    {{- if .Values.objectStorage.useObjectStorage }}
+    internal.client.storage.type COS
+    {{- else }}
+    internal.client.storage.type {{ .Values.storage.type }}
+    {{- end }}
+    internal.client.eventUser admin
+    internal.client.connection.endpoints {{ .Values.servicename }}-tenant-engine-svc.{{ .Release.Namespace }}.svc:{{ .Values.engine.db2ServicePort }}
+    internal.client.security.sslTrustStoreLocation /user-home/_global_/eventstore/{{ .Values.servicename }}/clientkeystore
+    internal.client.security.sslKeyStoreLocation /user-home/_global_/eventstore/{{ .Values.servicename }}/clientkeystore
+    internal.client.security.sslCertificateLocation /user-home/_global_/eventstore/{{ .Values.servicename }}/eventstore.cert
+    internal.client.security.plugin true
+    internal.client.security.pluginName IBMIAMauth
+    security.SSLEnabled true
+    internal.client.database {{ .Values.database.name }}
+
+  bluspark-query-conf: |
+    eventstore.rest.host 0.0.0.0
+    eventstore.rest.port 3020
+    eventstore.rest.monitoring.level off
+    {{- if eq .Values.runtime "ICP4Data" }}
+    idp.alert.server http://dash-back-svc.kube-system.svc:3010
+    metrics.alert.server http://dash-back-svc.kube-system.svc:3010
+    {{- end }}
+    {{- if ne .Values.runtime "ICP4Data" }}
+    idp.alert.server http://dash-back-svc.sysibm-adm.svc:3010
+    metrics.alert.server http://dash-back-svc.sysibm-adm.svc:3010
+    {{- end }}
+    idp.spark.server local[3]
+    internal.idp.monitoring.poll 2
+    eventstore.rest.monitoring.metrics.cpu.yellow 99
+    eventstore.rest.monitoring.metrics.memory.yellow 90
+    eventstore.rest.monitoring.metrics.logbuffermem.yellow 50
+    eventstore.rest.monitoring.metrics.computestorage.yellow 80
+    eventstore.rest.monitoring.metrics.ssdstorage.yellow 80
+    eventstore.rest.monitoring.metrics.sharedstorage.yellow 80
+    eventstore.rest.monitoring.metrics.cpu.red 99
+    eventstore.rest.monitoring.metrics.memory.red 95
+    eventstore.rest.monitoring.metrics.logbuffermem.red 90
+    eventstore.rest.monitoring.metrics.computestorage.red 90
+    eventstore.rest.monitoring.metrics.ssdstorage.red 90
+    eventstore.rest.monitoring.metrics.sharedstorage.red 90
+    eventstore.rest.monitoring.metrics.generateAlerts false
+    eventstore.rest.monitoring.retry.count 20
+    eventstore.rest.ingest.timeout 90
+    internal.eventstore.client.ingest.timeout 1
+    internal.eventstore.client.timeout 20
+    internal.eventstore.engine.service {{ .Values.servicename }}-tenant-engine-svc.{{ .Release.Namespace }}.svc
+    internal.eventstore.logging.sidecar {{ .Values.servicename }}-node-exporter-svc-
+
+  zoo-cfg: |
+    tickTime 5000
+    initLimit 10
+    syncLimit 5
+    dataDir /var/zookeeper/data
+    dataLogDir /var/zookeeper/datalog
+    clientPort 2181
+    maxClientCnxns 6000
+    # autopurge.snapRetainCount 3
+    # autopurge.purgeInterval 1
+    {{- if eq .Values.eventstoreService.replicas 1.0 }}
+    server.1 {{ .Values.servicename }}-tenant-zk-0.{{ .Values.servicename }}-tenant-zk-svc.{{ .Release.Namespace }}.svc:2888:3888
+    {{- else }}
+    server.1 {{ .Values.servicename }}-tenant-zk-0.{{ .Values.servicename }}-tenant-zk-svc.{{ .Release.Namespace }}.svc:2888:3888
+    server.2 {{ .Values.servicename }}-tenant-zk-1.{{ .Values.servicename }}-tenant-zk-svc.{{ .Release.Namespace }}.svc:2888:3888
+    server.3 {{ .Values.servicename }}-tenant-zk-2.{{ .Values.servicename }}-tenant-zk-svc.{{ .Release.Namespace }}.svc:2888:3888
+    {{- end }}
+
+  svt-perf-conf: |
+    logger.heartbeaterFreqMs 10
+    recovery.quorumWritesMode quorum
+    recovery.quorumWriteTimeoutInMs 180000
+    recovery.quorumReadTimeoutInMs 180000
+    groomer.queryWaitTimeoutInMs 240000
+    internal.client.connection.retry 20
+    internal.client.security.sslTrustStoreLocation /user-home/_global_/eventstore/{{ .Values.servicename }}/clientkeystore
+    internal.client.security.sslKeyStoreLocation /user-home/_global_/eventstore/{{ .Values.servicename }}/clientkeystore
+    internal.client.security.sslCertificateLocation /user-home/_global_/eventstore/{{ .Values.servicename }}/eventstore.cert
+    internal.client.security.plugin true
+    internal.client.security.pluginName IBMIAMauth
+    security.SSLEnabled true
+
+  # Mounted as bluspark.conf in user_home pvc, consumed by Jupyter Notebook app
+  link-global-files-conf: |
+    internal.client.connection.endpoints {{ .Values.servicename }}-tenant-engine-svc.{{ .Release.Namespace }}.svc:{{ .Values.engine.db2ServicePort }};{{ .Values.servicename }}-tenant-engine-svc.{{ .Release.Namespace }}.svc:{{ .Values.engine.servicePort }}
+    internal.client.eventUser admin
+    internal.client.security.sslTrustStoreLocation /user-home/_global_/eventstore/{{ .Values.servicename }}/clientkeystore
+    internal.client.security.sslKeyStoreLocation /user-home/_global_/eventstore/{{ .Values.servicename }}/clientkeystore
+    internal.client.security.sslCertificateLocation /user-home/_global_/eventstore/{{ .Values.servicename }}/eventstore.cert
+    internal.client.security.plugin true
+    internal.client.security.pluginName IBMIAMauth
+    security.SSLEnabled true

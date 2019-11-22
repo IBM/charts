@@ -1,0 +1,44 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.frontend.name -}}
+{{- $compNameTest :=  .sch.chart.components.test.name -}}
+{{- $icpPullSecrets := include "icp-pull-secrets" . -}}
+{{- $testCompName :=  printf "%s-%s" $compName "script-test" -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) }}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $fullTestCompName }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compNameTest) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  imagePullSecrets:
+  - name: "{{ $icpPullSecrets }}"
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 4 }}
+{{ include "ibm-watson-compare-comply-prod.securityKeys" . | indent 2 }}
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    image: "hyc-icpcontent-docker-local.artifactory.swg-devops.com/discovery_cnc/opencontent-common-utils:1.1.2-amd64"
+    command: ["sh", "-c", '/tests/test-script.sh {{ include "sch.names.fullCompName" (list . $compName) }}']
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "50Mi"
+      limits:
+        cpu: "500m"
+        memory: "50Mi"
+    volumeMounts:
+      - name: tests
+        mountPath: /tests
+{{ include "ibm-watson-compare-comply-prod.securityContext" . | indent 4 }}
+  volumes:
+    - name: tests
+      configMap:
+        defaultMode: 0755
+        name: {{ .Release.Name }}-configmap.test
+  restartPolicy: Never
+  affinity:
+    {{ include "sch.affinity.nodeAffinity" (list .) | indent 8 }}

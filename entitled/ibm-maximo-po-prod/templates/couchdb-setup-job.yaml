@@ -1,0 +1,69 @@
+{{ if .Release.IsInstall -}}
+{{- include "sch.config.init" (list . "poRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.createpodb.name -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      {{- include "po.securitycontext.pod" . | indent 6 }}
+      {{- include "po.image.pull.secret" . | indent 6}}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: script
+        configMap:
+          name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+          items:
+          - key:  setupCouchdb4po.sh
+            path: setupCouchdb4po.sh
+            mode: 0777
+      restartPolicy: Never
+      containers:
+      - name: create-couch-po-job
+        image: "{{ .Values.global.supportT.image.repository }}:{{.Values.global.supportT.image.tag  }}"
+        env:
+          - name: COUCHDB_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "couchdb.secret.name" . }}
+                key: couchdbAdminUsername
+          - name: COUCHDB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "couchdb.secret.name" . }}
+                key: couchdbAdminPassword
+          - name: COUCHDB_COMMONUSER
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "couchdb.secret.name" . }}
+                key: couchdbCommonUsername
+          - name: COUCHDB_COMMONPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "couchdb.secret.name" . }}
+                key: couchdbCommonPassword
+        command: ["bash", "/usr/local/bin/setupCouchdb4po.sh"]
+        resources:
+          requests:
+            cpu: 50m
+            memory: 200Mi
+          limits:
+            cpu: 500m
+            memory: 500Mi
+        volumeMounts:
+        - name: script
+          mountPath: /usr/local/bin/setupCouchdb4po.sh
+          subPath: setupCouchdb4po.sh
+{{ include "po.securitycontext.container" . | indent 8 }}
+{{- end }}

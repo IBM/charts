@@ -1,0 +1,37 @@
+{{- include "sch.config.init" (list . "ibm-wex-prod.sch.chart.config.values") -}}
+{{- $compIngestionPVCName := .sch.chart.components.wex.ingestion.pvc.name }}
+{{- $compIngestionLabelComponent := .sch.chart.components.wex.ingestion.label.component }}
+{{- $compIngestionLabelRunPvc := .sch.chart.components.wex.ingestion.label.runPvc }}
+
+{{- if .Values.general.mount.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compIngestionPVCName ) }}
+  labels:
+    app: {{ template "{{ .Chart.Name }}.fullname" . }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: wex-ingestion
+    run: {{ $compIngestionLabelRunPvc }}
+spec:
+  {{- if .Values.general.persistence.useDynamicProvisioning }}
+  # if present, use the storageClassName from the values.yaml, else use the
+  # default storageClass setup by kubernetes Administrator
+  # setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.general.persistence.storageClassName | quote }}
+  {{- else }}
+  # bind to an existing pv.
+  # setting storageClassName to "" disables dynamic provisioning
+  storageClassName: {{ default "" .Values.general.persistence.storageClassName | quote }}
+  selector:
+    matchLabels:
+      assign-to: {{ .Values.ingestion.mount.label }}
+  {{- end }}
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Ki
+{{- end -}}

@@ -1,0 +1,135 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cb-cam-diagnostics
+  labels:
+{{ include "cam.labels" .  | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      name: cb-cam-diagnostics
+  template:
+    metadata:
+      labels:
+        name: cb-cam-diagnostics
+{{ include "cam.labels" .  | indent 8 }}
+      annotations:
+{{ include "cam.icpMetering" .  | indent 8 }}
+        # this check will be removed when  IBMPrivateCloud/roadmap/issues/9525
+        # and IBMPrivateCloud/roadmap/issues/10640 is fixed by ICP
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        # checksums -- to force pod restarts if secrets change
+        checksums/mysql-username: "{{ .Values.secrets.mysqlUsername | b64enc | sha256sum }}"
+        checksums/mysql-password: "{{ .Values.secrets.mysqlKey | b64enc | sha256sum }}"
+        checksums/rabbitmq.username: "{{ .Values.secrets.rabbitmqDefaultUser | b64enc | sha256sum }}"
+        checksums/rabbitmq.password: "{{ .Values.secrets.rabbitmqDefaultPassword | b64enc | sha256sum }}"
+        {{ end }}
+    spec:
+{{ include "ibm-cloud-brokerage-cam.imagePullSecrets" .  | indent 6 }}
+      affinity:
+      {{- include "cam.nodeaffinity" . | indent 6 }}
+{{ include "cam.securityContext" .  | indent 6 }}
+      containers:
+        {{- template "isIcp" . -}}
+        {{- if not (.Values.isIcp) }}
+        - image: {{ template "cam.readConfig" (list . "cb_cam_diagnostics") }}
+        {{ else }}
+        - image: {{ template "camicp.readConfig" (list . "cb_cam_diagnostics" .Values.imageCredentials.registry) }}
+        {{ end }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+              - ALL
+          name: cb-cam-diagnostics
+          resources:
+{{ include "deployClassConfig" (list . "cb_cam_diagnostics") | indent 12 }}
+          env:
+            - name: CAM
+              value: "True"
+            - name: MYSQL_HOST
+              value: mariadb:3168
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                   name: mysql-username
+                   key: mysql.username
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-password
+                  key: mysql.key
+            - name: RABBIT_HOST
+              value: rabbitmq:15672
+            - name: RABBIT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-creds
+                  key: rabbitmq.username
+            - name: RABBIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-creds
+                  key: rabbitmq.password
+          ports:
+            - containerPort: 5000
+              name: cam-diagnostics
+          readinessProbe:
+              tcpSocket:
+                port: cam-diagnostics
+              initialDelaySeconds: 5
+              periodSeconds: 10
+          livenessProbe:
+              httpGet:
+                path: /
+                port: cam-diagnostics
+              initialDelaySeconds: 60
+              periodSeconds: 300
+              failureThreshold: 4
+              timeoutSeconds: 20
+          volumeMounts:
+            - mountPath: /pvcs_mount/cam-data-claim
+              name: cam-data-claim
+              readOnly: true
+            - mountPath: /pvcs_mount/cam-rabbitmq-claim0
+              name: cam-rabbitmq-claim0
+              readOnly: true
+            - mountPath: /pvcs_mount/mariadb-data-claim
+              name: mariadb-data-claim
+              readOnly: true
+            - mountPath: /pvcs_mount/mariadb-tmp-claim
+              name: mariadb-tmp-claim
+              readOnly: true
+            - mountPath: /pvcs_mount/mariadb-backup-claim
+              name: mariadb-backup-claim
+              readOnly: true
+
+      volumes:
+        - name: cam-data-claim
+          persistentVolumeClaim:
+            claimName: cam-data-claim
+        - name: cam-rabbitmq-claim0
+          persistentVolumeClaim:
+            claimName: cam-rabbitmq-claim0
+        - name: mariadb-data-claim
+          persistentVolumeClaim:
+            claimName: mariadb-data-claim
+        - name: mariadb-tmp-claim
+          persistentVolumeClaim:
+            claimName: mariadb-tmp-claim
+        - name: mariadb-backup-claim
+          persistentVolumeClaim:
+            claimName: mariadb-backup-claim
+      # DO NOT modify this conditional check
+      {{ if eq (.Values.externalDB.enableExternalDB|quote|lower) "\"true\"" }}
+      nodeSelector:
+        role: {{ .Values.nodeRole }}
+        datacenter: {{ .Values.externalDB.dataCenter }}
+      {{ end }}

@@ -1,0 +1,61 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: dd-processor
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: dd-processor
+    run: dd-processor-deployment
+spec:
+  # this is a fake deployment, to be sure the image is there and to retrieve its number in dd-init. So no replica.
+  replicas: 0
+  selector:
+    matchLabels:
+      run: dd-processor-deployment-pod
+  template:
+    metadata:
+      labels:
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        app: portal
+        component: dd-processor
+        run: dd-processor-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      containers:
+      - name: dd-processor-container
+        image: {{ .Values.ddProcessor.image.repository }}:{{ .Values.ddProcessor.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        # those will not be used in real life, as this deployment has no replicas.
+        # added to make lint happy
+        livenessProbe:
+          httpGet:
+            path: /fake
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 180
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /fake
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 180
+          periodSeconds: 30

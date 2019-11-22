@@ -1,0 +1,100 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: dsx-core
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    run: dsx-core-deployment
+spec:
+  replicas: {{ .Values.dsxCore.replicas }}
+  selector:
+    matchLabels:
+      run: dsx-core-deployment-pod
+  template:
+    metadata:
+      labels:
+        app: portal
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: dsx-core
+        run: dsx-core-deployment-pod
+      annotations:
+        productName: IBM Data Science Experience Local
+        productID: IBMDataScienceExperienceLocal_120_perpetual_00000
+        productVersion: 1.2.0.3
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+      {{- if .Values.global.baseInstaller }}
+      nodeSelector:
+        is_compute: "true"
+      {{- end }}
+      containers:
+      - name: dsx-core-container
+        image: {{ .Values.dsxCore.image.repository }}:{{ .Values.dsxCore.image.tag }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        command: ["/scripts/startup.sh"]
+        env:
+        {{ if eq .Values.global.ibmProduct "zen" }}
+        - name: ZEN_COGNOS_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: SERVICE_BROKER_AUTH
+              name: {{ .Values.cognosDDE.secretName }}
+        {{- end }}
+        - name: NODE_ENV
+          value: "production"
+        - name: CLOUDANT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_username
+        - name: CLOUDANT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cloudant-secrets
+              key: service_cloudant_password
+        {{ if eq .Values.global.ibmProduct "zen" }}
+        - name: RUN_TYPE
+          value: ZEN
+        {{- end }}
+        - name: IS_ICP_ENV
+          value: {{ not .Values.global.baseInstaller | quote }}
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home-mount
+        {{- if not .Values.global.baseInstaller }}
+        resources:
+{{ toYaml .Values.dsxCore.resources | indent 12 }}
+        {{- end }}
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /#/monitor
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /#/monitor
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      {{- include "user-home-pvc" .  | indent 6 }}
