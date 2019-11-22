@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-db2u-tools
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: "{{ .Values.global.dbType }}"
+spec:
+  replicas: {{ .Values.images.tools.replicas }}
+  selector:
+    matchLabels:
+      type: tools
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: "{{ .Values.global.dbType }}"
+        api-database-status: "{{ .Values.servicename }}{{ .Values.global.dbType }}-api"
+        type: tools
+      annotations:
+        {{- include "db2oltp.annotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "podAffinityDedicated" . | indent 8 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "root.securityContext" . | indent 6 }}
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      containers:
+      - name: {{ template "fullname" . }}-db2u-tools
+        image: '{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}'
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "root.containers.securityContext" . | indent 8 }}
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "100Mi"
+          limits:
+            memory: "1Gi"
+        env:
+        - name: SERVICE_NAME
+          value: {{ template "fullname" . }}
+        - name: DB2U_SERVICE_NAME
+          value: {{ template "fullname" . }}-db2u
+        volumeMounts:
+        - mountPath: /mnt/bludata0
+          {{- if .Values.storage.storageLocation.dataStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: "/secrets/db2instancepwd"
+          name: db2instance-secret
+          readOnly: true
+      volumes:
+      {{- if .Values.storage.storageLocation.dataStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.dataStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.dataStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.dataStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-data-storage
+          {{- end }}
+        {{- end }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-meta-storage
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      - name: db2instance-secret
+        secret:
+          secretName: {{ template "fullname" . }}-db2u-instance
+          defaultMode: 256
