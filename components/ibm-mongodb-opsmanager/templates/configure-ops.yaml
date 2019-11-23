@@ -1,0 +1,38 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.servicename }}-configure-job"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  {{ if eq .Values.allowHooks "enabled" -}}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+  {{- end }}
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        {{- include "mongo.annotations" .  | indent 8 }}
+    spec:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "mongodbSecurityContext" . | indent 6 }}
+      serviceAccount: {{ .Values.global.serviceAccount }}
+      containers:
+      - name: mongodb-addfirstuser
+        image: {{ .Values.opsmanagerConfigs.image.repository }}:{{ .Values.opsmanagerConfigs.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh']
+        args: ['-cx', '/var/mongodb_setup/configure-ops/configure.sh --username {{ .Values.username }} --password {{ .Values.password }} --firstname {{ .Values.firstname }} --lastname {{ .Values.lastname }} --emailaddress {{ .Values.emailaddress }} --projectname {{ .Values.projectname }} --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }}']
+      restartPolicy: Never

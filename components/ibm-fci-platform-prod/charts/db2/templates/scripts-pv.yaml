@@ -1,0 +1,29 @@
+{{- if .Values.global.createPv }}
+{{- range $i, $e := until (.Values.global.db2Instances | int) }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "db2.fullname" $ }}-scripts-{{ $i }}
+  labels:
+    app: {{ template "db2.name" $ }}-scripts
+    chart: {{ template "db2.chart" $ }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+spec:
+  nfs:
+    path: {{ $.Values.scriptsPvNfsPath }}-{{ add $i 1 }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." $.Values.global.nfsServer }}
+    readOnly: false
+{{-   if $.Values.scriptsPvcSpec.size }}
+  capacity:
+    storage: {{ $.Values.scriptsPvcSpec.size }}
+{{-   end }}
+{{-   if $.Values.scriptsPvcSpec.storageClassName }}
+  storageClassName: {{ $.Values.scriptsPvcSpec.storageClassName }}
+{{-   else }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   end }}
+  accessModes: [ "ReadWriteMany" ]
+---
+{{- end -}}
+{{- end -}}

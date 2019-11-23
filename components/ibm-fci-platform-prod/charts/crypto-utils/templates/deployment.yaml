@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "crypto-utils.fullname" . }}
+  labels:
+    app: {{ template "crypto-utils.name" . }}
+    chart: {{ template "crypto-utils.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  selector:
+    matchLabels:
+      app: {{ template "crypto-utils.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "crypto-utils.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "crypto-utils.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: {{ .Release.Name }}-common
+      containers:
+      - name: 'crypto'
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{ include "common.readinessProbe" . | indent 8 }}
+{{ include "common.livenessProbe" . | indent 8 }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+      restartPolicy: Always

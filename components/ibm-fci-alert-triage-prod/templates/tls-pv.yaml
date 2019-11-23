@@ -1,0 +1,31 @@
+{{- if .Values.global.createPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "ibm-fci-alert-triage.fullname" . }}-tls-analytics
+  labels:
+    app: {{ template "ibm-fci-alert-triage.name" . }}-tls-analytics
+    chart: {{ template "ibm-fci-alert-triage.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  nfs:
+    path: {{ .Values.tlsPvNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.nfsServer }}
+    readOnly: false
+{{-   if .Values.tlsPvcSpec.size }}
+  capacity:
+    storage: {{ .Values.tlsPvcSpec.size }}
+{{-   end }}
+{{-   if .Values.tlsPvcSpec.storageClassName }}
+  storageClassName: {{ .Values.tlsPvcSpec.storageClassName | quote }}
+{{- else }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   end }}
+{{-   if .Values.tlsPvcSpec.accessModes }}
+{{-     with .Values.tlsPvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- end -}}

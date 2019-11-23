@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common-ui.fullname" . }}-nginx
+  labels:
+    app: {{ template "common-ui.name" . }}-nginx
+    chart: {{ template "common-ui.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "common-ui.name" . }}-nginx
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "common-ui.name" . }}-nginx
+        release: {{ .Release.Name }}
+        chart: {{ template "common-ui.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: {{ template "common-ui.core-release-name" . }}-common-scripts
+      volumes:
+        - name: iui-nginx-data
+          persistentVolumeClaim:
+            claimName: {{ template "common-ui.fullname" . }}-nginx
+        - name: config-volume
+          configMap:
+            name: {{ .Release.Name }}-platform-config-files
+{{- if hasKey .Values "global" }}
+{{-   if hasKey .Values.global "swidtag" }}
+{{-     if hasKey .Values.global.swidtag "file" }}
+        - name: swidtags
+          configMap:
+            name: {{ .Release.Name }}-swidtag-files
+{{-     end }}
+{{-   end }}
+{{- end }}
+        - name: file-secrets
+          secret:
+            secretName: {{ template "common-ui.core-release-name" . }}-platform-secret-files
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          args: [ "{{ .Release.Namespace }}/{{ template "common-ui.fullname" . }}-nodejs" ]
+        {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
+        - name: pv-permissions
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+            runAsNonRoot: false
+            privileged: false
+            readOnlyRootFilesystem:  true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - CHOWN
+          args:
+          - chown -R 100 /mount;
+          command:
+          - /bin/sh
+          - -c
+          volumeMounts:
+          - mountPath: /mount
+            name: iui-nginx-data
+        {{- end }}
+      containers:
+      - name: nginx
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag }}
+        imagePullPolicy: {{ .Values.nginx.image.pullPolicy }}
+{{ include "common.readinessProbe" . | indent 8 }}
+{{ include "common.livenessProbe" . | indent 8 }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        resources:
+{{ toYaml .Values.nginx.resources | indent 10 }}
+{{- with .Values.nginx.nodeSelector }}
+        nodeSelector:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.nginx.affinity }}
+        affinity:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.nginx.tolerations }}
+        tolerations:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        env:
+        - name: SI_ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "common-ui.core-release-name" . }}-platform-secrets-env
+              key: ELASTIC_ADMIN_PASSWORD
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: {{ template "common-ui.fullname" . }}-nginx
+        volumeMounts:
+{{- if hasKey .Values "global" }}
+{{-   if hasKey .Values.global "swidtag" }}
+{{-     if hasKey .Values.global.swidtag "file" }}
+        - name: swidtags
+          mountPath: /opt/ibm/fci/swidtag/{{ .Values.global.swidtag.file }}
+          subPath: {{ .Values.global.swidtag.file }}
+{{-     end }}
+{{-   end }}
+{{- end }}
+        - name: config-volume
+          mountPath: /etc/nginx/conf.d/custom/custom.conf
+          subPath: custom.conf
+        - name: file-secrets
+          mountPath: /etc/nginx/certs/fci-web.pem
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /etc/nginx/certs/fci-web.crt
+          subPath: fci_universal_ks.crt.pem
+        - name: iui-nginx-data
+          mountPath: /etc/nginx/conf.d
+      restartPolicy: Always

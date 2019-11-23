@@ -1,0 +1,33 @@
+{{- if and .Values.global.enableMonitoring (not (or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS .Values.global.deployOnCP4D)) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    {{- include "prometheus.alertmanager.labels" . | nindent 4 }}
+  name: {{ template "prometheus.alertmanager.fullname" . }}
+spec:
+{{- if .Values.alertmanager.pvcSpec.accessModes }}
+{{-   with .Values.alertmanager.pvcSpec.accessModes }}
+  accessModes:
+{{      toYaml . | indent 4 -}}
+{{-   end -}}
+{{- end }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.alertmanager.pvcSpec.storageClassName }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ .Values.alertmanager.pvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+  storageClassName: {{ default "" .Values.alertmanager.pvcSpec.storageClassName | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.alertmanager.pvcSpec.size }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+  selector:
+    matchLabels:
+      app: {{ template "prometheus.name" . }}-am
+      release: {{ .Release.Name -}}
+{{- end -}}
+{{- end -}}

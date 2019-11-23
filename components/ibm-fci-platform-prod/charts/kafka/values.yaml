@@ -1,0 +1,131 @@
+global:
+  dockerRepository: ""
+  createPv: true
+  nfsServer: ""
+
+zookeeperReplicaCount: 3
+
+service:
+  type: ClusterIP
+  port: 80
+
+sideCarContainers:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "0.05"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+
+#Kafka
+
+resources:
+  requests:
+    cpu: "0.05"
+    memory: "256Mi"
+  limits:
+    cpu: "4"
+    memory: "4Gi"
+
+arch: amd64
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+pvNfsPath: /fci-kafka-data
+
+pvcSpec:
+  storageClassName: nfs-storage-class
+  size: 10Gi
+
+## The kafka image repository
+image:
+  repository: "ibmcom/fci-kafka"
+  tag: "1.0.3.1"
+  pullPolicy: IfNotPresent
+
+
+zookeeper:
+  enabled: true
+  url: ""
+  port: 2181
+  tickTime: 2000
+
+  externalNodePort: 32181
+
+  #Zookeeper
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "0.05"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
+  image:
+    repository: ibmcom/fci-zookeeper
+    tag: 1.0.3.1
+    pullPolicy: IfNotPresent
+
+
+  dataPvNfsPath: /fci-zk-data
+  dataPvcSpec:
+    storageClassName: nfs-storage-class
+    size: 10Gi
+
+  logPvNfsPath: /fci-zk-log
+  logPvcSpec:
+    storageClassName: nfs-storage-class
+    size: 10Gi
+
+## Start and stop pods in Parallel or OrderedReady (one-by-one.)  Note - Can not change after first release.
+## ref: https://kubernetes.io/docs/tutorials/stateful-application/basic-stateful-set/#pod-management-policy
+podManagementPolicy: OrderedReady
+
+replicas: 3
+
+# messageMaxBytes is the the largest record batch size allowed by Kafka.
+messageMaxBytes: "20000012"
+
+livenessProbe:
+  initialDelaySeconds: 240
+  periodSeconds: 30
+  timeoutSeconds: 10
+  successThreshold: 1
+  failureThreshold: 3
+
+
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 10
+  successThreshold: 1
+  failureThreshold: 3
+
+## Configure resource requests and limits
+## ref: http://kubernetes.io/docs/user-guide/compute-resources/
+kafkaHeapOptions: "-Xmx1G -Xms1G"
+
+terminationGracePeriodSeconds: 60
+
+## The subpath within the Kafka container's PV where logs will be stored.
+## This is combined with `persistence.mountPath`, to create, by default: /opt/kafka/data/logs
+logSubPath: "logs"
+
+persistence:
+  ## The size of the PersistentVolume to allocate to each Kafka Pod in the StatefulSet. For
+  ## production servers this number should likely be much larger.
+  size: "1Gi"
+
+  ## The location within the Kafka container where the PV will mount its storage and Kafka will
+  ## store its logs.
+  mountPath: "/opt/kafka/data"
+
+nodeport:
+  enabled: true
+  servicePort: 19092
+  firstListenerPort: 31090

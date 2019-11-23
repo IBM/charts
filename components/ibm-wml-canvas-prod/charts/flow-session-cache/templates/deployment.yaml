@@ -1,0 +1,108 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "flow-session-cache.fullname" . }}
+  labels:
+    app: {{ template "flow-session-cache.name" . }}
+    chart: {{ template "flow-session-cache.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    build: {{ .Values.global.buildVersion | quote }}
+spec:
+  revisionHistoryLimit: 2
+  replicas: {{ .Values.resources.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 2
+  selector:
+    matchLabels:
+      app: {{ template "flow-session-cache.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "flow-session-cache.name" . }}
+        release: {{ .Release.Name }}
+      annotations:
+        build: {{ .Values.global.buildVersion | quote }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - "amd64"
+                      - "ppc64le"
+      {{ if .Values.global.docker.useImagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+        - name: flow-session-cache
+          image: {{ template "full-image-url" . }}
+          imagePullPolicy : IfNotPresent
+          securityContext:
+            runAsUser: {{ $.Values.global.runAsUser }}
+            capabilities:
+              drop:
+              - ALL
+            allowPrivilegeEscalation: false
+            privileged: false
+            runAsNonRoot: true
+          # TODO, only if have a kube-config secret on cloud
+          # volumeMounts:
+          #   - name: flow-session-cache-kube-config
+          #     mountPath: /session_manager/kube-config
+          resources:
+            limits:
+              cpu: {{ .Values.resources.cpuLimits }}
+              memory: {{ .Values.resources.memory }}
+            requests:
+              cpu: {{ .Values.resources.cpuRequests }}
+              memory: {{ .Values.resources.memory }}
+          env:
+            - name: POSTGRES_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "cache-db.password-secret" . }}
+                  key: POSTGRES_URI
+# TODO, only if have a kube-config secret on cloud
+            # - name: KUBECONFIG
+            #   value: /session_manager/kube-config/kube-config
+            - name: MAX_DELETE_COUNT
+              value: "24"
+            - name: MAX_SECONDS_SINCE_CREATION_FOR_PLAY_TO_RESPOND
+              value: "300"
+            - name: MAX_SECONDS_SINCE_CREATION_FOR_POD_TO_START
+              value: "60"
+            - name: NODE_ENV
+              value: production
+            - name: NODE_MODULES_CACHE
+              value: "false"
+            - name: namespaceParam
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - name: SESSION_POOL_CPUS
+              value: {{ .Values.sessionPool.cpus | quote }}
+            - name: SESSION_POOL_MEMORY_GIB
+              value: {{ .Values.sessionPool.memoryGiB | quote }}
+            - name: SESSION_POOL_MAX_RUNNING_PERCENT
+              value: {{ .Values.sessionPool.maxRunningPercent | quote }}
+            - name: SESSION_POD_NAME_PREFIX
+              value: {{ template "flow-session-cache.session-pod-name-prefix" . }}
+            - name: SESSION_POD_SELECTOR
+              value: "release={{ .Release.Name }},app={{ .Values.sessionPodName }}"
+          command: ["/bin/sh", "-c"]
+          args: ["npm start"]
+# TODO, only if have a kube-config secret on cloud
+      # volumes:
+      #   - name: flow-session-cache-kube-config
+      #     secret:
+      #       secretName: flow-session-cache-kube-config

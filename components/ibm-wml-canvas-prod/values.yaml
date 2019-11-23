@@ -1,0 +1,207 @@
+# Default values for wml-canvas.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  # This value will have the unique-id of the build which created the addon injected
+  # as part of the build process.
+  buildVersion: "0.0"
+
+  bluemix:
+    enabled: false
+    domain: "stage1.ng.bluemix.net"
+    extDomain: "stage1.mybluemix.net"
+
+  runAsUser: "1000320999"
+  editor:
+    sa: cpd-editor-sa
+  viewer:
+    sa: cpd-viewer-sa
+
+  billing:
+    enabled: false
+    serviceId: "???"
+
+  activityTracker:
+    enabled: false
+    region: "ng"
+    project:
+      # The activity tracker project we want our logged activity to appear in.
+      id: "2c71e962-6bef-441c-98b5-9be8143c31be"
+    # How to reach the activity tracker APIs
+    url: "https://???"
+
+  rabbitmq:
+    enabled: false
+
+  crn:
+    name: "???"
+    location: "???"
+
+  watsonStudio:
+    url: "https://internal-nginx-svc:12443"
+    operatingEnvironment: "local"
+    deploymentTarget: "icp"
+    trustSelfSignedCertificates: false
+
+  auth:
+    iam:
+      # IAM Authentication related setting. Disabled for local.
+      enabled: false
+    icp4d:
+      # ICP4D Authentication related settings. Enabled for local.
+      enabled: true
+      publicKeyUrl: "https://internal-nginx-svc:12443/auth/jwtpublic"
+
+  cloudant:
+    enabled: false
+
+  newRelic:
+    enabled: false
+
+  nginx:
+    enabled: true
+    importSSLCertificate:
+      enabled: true
+      certificateSecret:
+        name: internal-nginx-svc-tls
+        key: certificate.pem
+
+  docker:
+    useNameSpace: false
+    useImagePullSecret: false
+
+  redis:
+    enabled: true
+    # Indicates that the encryption_token is being passed-in from the environment or not.
+    # If not, then it must be being picked-up from a secret which already exists in the environment.
+    tokenFromValue: false
+    # If tokenFromValue is set, we expect this encryption_token to be over-ridden.
+    encryption_token: ""
+
+    # The name of the configmap to get the redis URL from
+    configMap: "redis-ha-configmap"
+
+  modelViewer:
+    # Where can we access the model viewer ?
+    # TODO: make sure this matches Don P's service name..
+    url: "https://internal-nginx-svc:12443/model-viewer"
+
+  canvasApi:
+    # Where can the canvas components call to reach the canvas-api REST service ?
+    url: "https://internal-nginx-svc:12443/flow-api"
+
+  cacheDb:
+    serviceName: modeler-flow-cache-db
+    chartName: cache-db
+
+  flowApi:
+    nginxPath: "flow-api"
+
+  flowSession:
+    # How much CPU the flow-session container needs. Must be a whole number, not expressed in millis-of-a-cpu.
+    cpuLimits: 4
+    cpuRequests: 4
+  wml:
+    # Tells the canvas service how it can connect to the machine learning api
+    url: "https://internal-nginx-svc:12443"
+
+# Values specific to the canvas API deployment.
+flow-api:
+  image:
+    repository: flow-api
+    tag: "1638"
+  # TODO Set these initially to work in Terry's cluster
+  resources:
+    replicaCount: 3
+    memory: 2Gi
+    cpuLimits: 1000m
+    cpuRequests: 500m
+
+
+# Values specific to the cache-db deployment.
+cache-db:
+  postgres:
+    user: postgres_user
+    database: cache_db
+  service:
+    port: "5432"
+  image:
+    repository: cache-db-local
+    tag: "6054"
+  # TODO Set these initially to work in Terry's cluster
+  resources:
+    memory: 2Gi
+    cpuLimits: 2000m
+    cpuRequests: 500m
+    # Passed to the database, affects how many connections can be serviced.
+    # Should be set to the <memory> - 1024MB
+    sharedBuffers: 1024MB
+    # Passed to the database. Should be sharedBuffers/2MB.
+    maxConnections: 512
+
+
+# Values specific to the flow-session-cache deployment.
+flow-session-cache:
+  image:
+    repository: flow-session-cache
+    tag: "5926"
+  # TODO Set these initially to work in Terry's cluster
+  resources:
+    replicaCount: 3
+    memory: 2Gi
+    cpuLimits: 1000m
+    cpuRequests: 500m
+  sessionPool:
+    # The number of cpus to use for the pods in the session pool
+    cpus: 6
+    # The amount of memory to use for the pods in the session pool
+    memoryGiB: 24
+    # The percentage of pods in the pool used for those in the running state. The
+    # remaining cpu/memory will be used for pods in other states, such as in the
+    # cache state (ready for new sessions), or deleting/waiting to start etc
+    # states. Typically this will be around 80%, unless running on very limited
+    # resources.
+    maxRunningPercent: 50
+
+
+# The migrator and zip import/export service
+migrator:
+  # Is it enabled ? Do we want to deploy it ?
+  # Not on local right now.
+  enabled: false
+  image:
+    repository: wml-canvas-migrator
+    tag: "0.0.52-master"
+
+# The flow session container...
+flow-session:
+  usePVCForTempDiskSpace: false
+
+  image:
+    repository: flow-session
+    tag: "4976"
+
+  resources:
+    memory: 4Gi
+
+flow-ui:
+  image:
+    repository: flow-ui
+    tag: "5961"
+  # TODO Set these initially to work in Terry's cluster
+  resources:
+    replicaCount: 3
+    memory: 2Gi
+    cpuLimits: 1000m
+    cpuRequests: 500m
+
+pre-installer:
+  image:
+    repository: pre-installer
+    tag: "290"
+
+# Setting this allows an override of the name of kube objects created by this chart.
+# Not defining them makes lint fail.
+nameOverride: ""
+fullnameOverride: ""

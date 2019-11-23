@@ -1,0 +1,79 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "addon.fullname" . }}
+  labels:
+    app: {{ template "addon.name" . }}
+    chart: {{ template "addon.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    icpdata_addon: "true"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "addon.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "addon.name" . }}
+        release: {{ .Release.Name }}
+      annotations:
+        checksum/addon-config-map: {{ include (print $.Template.BasePath "/addon-config.yaml") . | sha256sum }}
+        productID: ICP4D-addon-{{ .Values.metering.productID }}
+        productName: {{ .Values.metering.productName }}
+        productVersion: {{ .Values.metering.productVersion }}
+    spec:
+{{ toYaml .Values.hostOptions | indent 6 }}
+      containers:
+      - name: {{ .Chart.Name }}
+{{/*        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"*/}}
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: https
+          containerPort: 8443
+          protocol: TCP            
+        livenessProbe:
+          httpGet:
+            path: /static
+            port: https
+            scheme: HTTPS
+        readinessProbe:
+          httpGet:
+            path: /static
+            port: https
+            scheme: HTTPS
+        volumeMounts:
+          - name: addon-config
+            mountPath: /content/add-ons/meta/add-ons.json
+            subPath: add-ons.json
+          - name: addon-config
+            mountPath: /content/add-ons/meta/nginx.conf
+            subPath: nginx.conf
+
+        resources:
+{{ toYaml .Values.image.resources | indent 12 }}
+        securityContext:
+{{ toYaml .Values.securityContext | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+
+      volumes:
+        - name: addon-config
+          configMap:
+            name: {{ template "addon.fullname" . }}-config

@@ -1,0 +1,170 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-fci-alert-triage.fullname" . }}-tls-analytics
+  labels:
+    app: {{ template "ibm-fci-alert-triage.name" . }}-tls-analytics
+    chart: {{ template "ibm-fci-alert-triage.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  {{   if .Values.fcai_transaction_list_screening.enabled }}
+  replicas: 1
+  {{   else }}
+  replicas: 0
+  {{   end }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-fci-alert-triage.name" . }}-tls-analytics
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "ibm-fci-alert-triage.name" . }}-tls-analytics
+        release: {{ .Release.Name }}
+        chart: {{ template "ibm-fci-alert-triage.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: {{ template "ibm-fci-alert-triage.core-release-name" . }}-common-scripts
+      volumes:
+{{- if hasKey .Values "global" }}
+{{-   if hasKey .Values.global "swidtag" }}
+{{-     if hasKey .Values.global.swidtag "file" }}
+        - name: swidtags
+          configMap:
+            name: {{ .Release.Name }}-swidtag-files
+{{-     end }}
+{{-   end }}
+{{- end }}
+        - name: tls
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-alert-triage.fullname" . }}-tls-analytics
+        - name: file-secrets
+          secret:
+            secretName: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secret-files
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      initContainers:
+      - name: init-svc-depend-gnm
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        command: [ "/common-scripts/init-container-svc-depend.sh" ]
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        args: [ "{{ .Release.Namespace }}/{{ template "ibm-fci-alert-triage.core-release-name" . }}-global-name-mgmt" ]
+        {{- with .Values.sideCarContainers.resources }}
+        resources:
+{{    toYaml . | indent 12 }}
+        {{- end }}
+      - name: init-svc-depend-mongodb
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        command: [ "/common-scripts/init-container-svc-depend.sh" ]
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        args: [ "{{ .Release.Namespace }}/{{ template "ibm-fci-alert-triage.core-release-name" . }}-mongodb" ]
+        {{- with .Values.sideCarContainers.resources }}
+        resources:
+{{    toYaml . | indent 12 }}
+        {{- end }}
+      containers:
+      - name: tls
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.fcai_transaction_list_screening.tlsAnalytics.image.repository }}:{{ .Values.fcai_transaction_list_screening.tlsAnalytics.image.tag }}
+        imagePullPolicy: {{ .Values.fcai_transaction_list_screening.tlsAnalytics.image.pullPolicy }}
+        {{- with .Values.fcai_transaction_list_screening.tlsAnalytics.resources }}
+        resources:
+{{    toYaml . | indent 12 }}
+        {{- end }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fcai/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 30
+          successThreshold: 1
+          failureThreshold: 2
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fcai/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          initialDelaySeconds: 180
+          periodSeconds: 60
+          timeoutSeconds: 30
+          successThreshold: 1
+          failureThreshold: 2
+        volumeMounts:
+{{- if hasKey .Values "global" }}
+{{-   if hasKey .Values.global "swidtag" }}
+{{-     if hasKey .Values.global.swidtag "file" }}
+        - name: swidtags
+          mountPath: /opt/ibm/fci/swidtag/{{ .Values.global.swidtag.file }}
+          subPath: {{ .Values.global.swidtag.file }}
+{{-     end }}
+{{-   end }}
+{{- end }}
+        - name: tls
+          mountPath: "/opt/ibm/fcai/TLS/external"
+        - name: file-secrets
+          mountPath: /opt/ibm/fcai/sslCerts/fci_universal_ks.crt.pem
+          subPath: fci_universal_ks.crt.pem
+        - name: file-secrets
+          mountPath: /opt/ibm/fcai/sslCerts/fci_universal_ks.pvtk.pem
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /etc/kafka/conf/fci_kafka_msg.p12
+          subPath: fci_kafka_msg.p12
+        envFrom:
+        - configMapRef:
+            name: {{ template "ibm-fci-alert-triage.fullname" . }}-tls-analytics
+        env:
+        - name: TLS_ssl_ks_password
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              key: FCI_JKS_PASSWORD
+        - name: MONGODB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              key: mongodb-root-password
+        - name: MONGODB_TLS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              key: mongodb-fcai-tls-password
+        - name: JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              key: JWT_KEY
+        - name: SSL_KEY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              key: FCI_JKS_PASSWORD
+        - name: FCI_KAFKA_MSG_KS_ALIASNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              key: FCI_KAFKA_MSG_JKS_ALIASNAME
+        - name: FCI_KAFKA_MSG_KS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              key: FCI_KAFKA_MSG_JKS_PASSWORD
+      restartPolicy: Always
