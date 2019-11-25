@@ -1,0 +1,31 @@
+{{- if .Values.global.createPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "graph-writer.fullname" . }}-liberty
+  labels:
+    app: {{ template "graph-writer.name" . }}-liberty
+    chart: {{ template "graph-writer.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  nfs:
+    path: {{ .Values.libertyPvNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.nfsServer }}
+    readOnly: false
+{{-   if .Values.libertyPvcSpec.size }}
+  capacity:
+    storage: {{ .Values.libertyPvcSpec.size }}
+{{-   end }}
+{{-   if .Values.libertyPvcSpec.storageClassName }}
+  storageClassName: {{ .Values.libertyPvcSpec.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   end }}
+{{-   if .Values.libertyPvcSpec.accessModes }}
+{{-     with .Values.libertyPvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- end -}}

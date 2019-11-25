@@ -1,0 +1,32 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.servicename }}-load-crdjob"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        {{- include "mongo.annotations" .  | indent 8 }}
+    spec:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "mongodbSecurityContext" . | indent 6 }}
+      serviceAccount: {{ .Values.global.serviceAccount }}
+      containers:
+      - name: mongodb-startreplicaset
+        image: {{ .Values.opsmanagerConfigs.image.repository }}:{{ .Values.opsmanagerConfigs.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh']
+        args: ['-cx', '/var/mongodb_setup/operator/manage-operator.sh --namespace {{ .Release.Namespace }} --opimage {{ .Values.operator.image.repository }} --optag {{ .Values.operator.image.tag }} --env {{ .Values.env }} --dbimage {{ .Values.database.image.repository }}  --dbtag {{ .Values.database.image.tag }}']
+      restartPolicy: Never

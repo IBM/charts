@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "graph-writer.fullname" . }}-gremlin
+  labels:
+    app: {{ template "graph-writer.name" . }}-gremlin
+    chart: {{ template "graph-writer.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  selector:
+    matchLabels:
+      app: {{ template "graph-writer.name" . }}-gremlin
+      release: {{ .Release.Name }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+        name: {{ template "graph-writer.fullname" . }}-gremlin
+        app: {{ template "graph-writer.name" . }}-gremlin
+        release: {{ .Release.Name }}
+        chart: {{ template "graph-writer.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+        fci/build: {{ .Values.image.timestamp | default .Release.Time}}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+      serviceAccountName: {{ .Release.Name }}-common-scripts
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-elasticsearch" ]
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+      containers:
+        - name: gremlin
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.gremlin.image.repository }}:{{ .Values.gremlin.image.tag }}"
+          imagePullPolicy: {{ .Values.gremlin.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.gremlin.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /home/ibmadmin/readiness-healthcheck.sh ]; then /home/ibmadmin/readiness-healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.graphWriterGremlin.readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: 30
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /home/ibmadmin/liveness-healthcheck.sh ]; then /home/ibmadmin/liveness-healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.graphWriterGremlin.livenessProbe.initialDelaySeconds }}
+            failureThreshold: 3
+            periodSeconds: 60
+            timeoutSeconds: 30
+          envFrom:
+          - configMapRef:
+              name: {{ template "graph-writer.fullname" . }}-gremlin
+          env:
+          - name: FCI_JKS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "graph-writer.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: ELASTICSEARCH_USERNAME
+            value: fci_admin
+          - name: ELASTICSEARCH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: ELASTIC_ADMIN_PASSWORD
+          - name: hbase_zookeeper_quorum
+            value: "{{ .Values.global.hbase.hbase_zookeeper_quorum }}"
+          - name: ELASTICSEARCH_SERVICE_NAME
+            value: "{{ .Release.Name }}-elasticsearch"
+          ports:
+          - containerPort: 8182
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /fciexports/graph-writer/fci_universal_ks.jks
+            subPath: fci_universal_ks.jks          

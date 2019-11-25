@@ -1,0 +1,29 @@
+{{- if .Values.global.createPv }}
+{{- range $i, $e := until (.Values.replicas | int) }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "kafka.fullname" $ }}-{{ add $i 1 }}
+  labels:
+    app: {{ template "kafka.name" $ }}
+    chart: {{ template "kafka.chart" $ }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+spec:
+  nfs:
+    path: {{ $.Values.pvNfsPath }}-{{ add $i 1 }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." $.Values.global.nfsServer }}
+    readOnly: false
+{{-   if $.Values.pvcSpec.size }}
+  capacity:
+    storage: {{ $.Values.pvcSpec.size }}
+{{-   end }}
+{{-   if $.Values.pvcSpec.storageClassName }}
+  storageClassName: {{ $.Values.pvcSpec.storageClassName }}
+{{-   else }}
+  storageClassName: {{ default nil $.Values.global.persistence.storageClassName | quote }}
+{{-   end }}
+  accessModes: [ "ReadWriteOnce" ]
+---
+{{- end }}
+{{- end }}

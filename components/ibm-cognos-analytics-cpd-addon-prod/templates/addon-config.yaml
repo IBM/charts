@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "addon.fullname" . }}-config
+  labels:
+    app: {{ template "addon.name" . }}
+    chart: {{ template "addon.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+
+data:
+  add-ons.json: |
+    {
+      "cognos-analytics-app": {
+        "access_management_enable": true,
+        "add_on_type": "application",
+        "category": "ds",
+        "details": {
+          "short_description": "Self-service analytics, infused with AI and machine learning, enable you to create stunning visualizations and share your findings through dashboards and reports.",
+          "long_description": "The Cognos Analytics add-on makes it easier for you to extract meaning from your data with features such as:\n\n<ul><li>Automated data preparation</li><li>Automated modeling</li><li>Automated creation of visualizations and dashboards</li><li>Data exploration</li></ul>\nThe add-on also enables you to easily share your findings with others through stunning visualizations, dashboards, reports, and interactive stories.",
+          "deploy_docs": "https://docs-icpdata.mybluemix.net/docs/content/SSQNUZ_current/com.ibm.icpdata.doc/zen/admin/extend-ai-analytics.html",
+          "product_docs": "https://docs-icpdata.mybluemix.net/docs/content/SSQNUZ_current/com.ibm.icpdata.doc/cognos-analytics/ca-overview.html",
+          "provisionURL": "/{{ .Release.Name }}-cognos-analytics-content/webpage/index.html",
+          "consoleURL": "/cognosanalytics",
+          "external_console": true,
+          "generate_username": false,
+          "service_provider_url": "http://admin:password@ibm-cognos-addon-sp-service:3100",
+          "accessManagementURL": "/{{ .Release.Name }}-cognos-analytics-content/webpage/#/caUserManagement",
+          "serviceDetailsURL": "/{{ .Release.Name }}-cognos-analytics-content/webpage/#/caDetails",
+          "premium": "true"
+        },
+        "display_name": "Cognos Analytics",
+        "extensions": {
+        },
+        "max_instances": "1",
+        "vendor": "IBM",
+        "versions": {
+          "{{- .Chart.Version }}": {
+            "description": "IBM Cognos Analytics addon in IBM Cloud Private for Data",
+            "helm_location": {
+              "chart_path": [
+                {{- $rname := .Release.Name -}}
+                {{- $local := dict "first" true -}}
+                {{- range .Files.Lines "packages.txt" }}
+                {{- if not $local.first -}},{{- end }}
+                  {{ printf "http://%s-cognos-analytics-addon:8080/charts/cognos-analytics-service/%s" $rname .  | quote }}
+                {{- $_ := set $local "first" false -}}
+                {{- end }}
+              ]
+            },
+            "state": "installed",
+            "details": {
+            }
+          }
+        }
+      }
+    }
+  nginx.conf: |
+    underscores_in_headers on;
+
+    location ~ ^/cognosanalytics/bi/(.*)$ {
+        error_log  /dev/stdout notice;
+        access_log /dev/stdout;
+        rewrite_log on;
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-BI-PATH /cognosanalytics/bi/v1;
+
+        proxy_pass http://biapp.{{ .Release.Namespace }}.svc.cluster.local:9300/bi/$1$is_args$args;
+        proxy_read_timeout     300s;
+        proxy_send_timeout     300s;
+        proxy_connect_timeout  300s;
+        client_body_buffer_size     3m;
+        client_max_body_size 15m;
+    }
+
+    location ~ ^/bi/v1/disp(.*) {
+        error_log  /dev/stdout notice;
+        access_log /dev/stdout;
+        rewrite_log on;
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_http_version 1.1;
+        proxy_read_timeout     300s;
+        proxy_send_timeout     300s;
+        proxy_connect_timeout  300s;
+        client_body_buffer_size     3m;
+        client_max_body_size 15m;
+        proxy_set_header Host $host;
+        rewrite ^/bi/v1/disp(.*) $scheme://$http_host/cognosanalytics/bi/v1/disp$1 last;
+    }
+
+    location ~ ^/cognosanalytics/(dojo16|dojo17|skins|cr1|camcrypto|fragments|ps|hal|cchl|ps|common|ccl|skins|rv|icd|schemas|prompting)/(.*)$ {
+        error_log  /dev/stdout notice;
+        access_log /dev/stdout;
+        rewrite_log on;
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-BI-PATH /cognosanalytics/bi/v1;
+
+        proxy_pass http://biapp.{{ .Release.Namespace }}.svc.cluster.local:9300/$1/$2$is_args$args;
+        proxy_read_timeout     300s;
+        proxy_send_timeout     300s;
+        proxy_connect_timeout  300s;
+        client_body_buffer_size     3m;
+        client_max_body_size 15m;
+    }
+
+    location ~ ^/cognosanalytics/(.*\.js)$ {
+        error_log  /dev/stdout notice;
+        access_log /dev/stdout;
+        rewrite_log on;
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-BI-PATH /cognosanalytics/bi/v1;
+
+        proxy_pass http://biapp.{{ .Release.Namespace }}.svc.cluster.local:9300/$1$is_args$args;
+        proxy_read_timeout     300s;
+        proxy_send_timeout     300s;
+        proxy_connect_timeout  300s;
+        client_body_buffer_size     3m;
+        client_max_body_size 15m;
+    }
+
+    location ~ ^/cognosanalytics/cognos-analytics-app(.*)$ {
+        error_log  /dev/stdout notice;
+        access_log /dev/stdout;
+        rewrite_log on;
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_http_version 1.1;
+        proxy_read_timeout     300s;
+        proxy_send_timeout     300s;
+        proxy_connect_timeout  300s;
+        client_body_buffer_size     3m;
+        client_max_body_size 15m;
+        proxy_set_header Host $host;
+        # proxy_cookie_path /bi /cognosanalytics/bi;
+        rewrite ^/cognosanalytics/cognos-analytics-app-(.*) $scheme://$http_host/cognosanalytics/bi/ last;
+    }
+
+    location /{{ .Release.Name }}-cognos-analytics-content/ {
+        access_by_lua_file /nginx_data/checkjwt.lua;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+
+        # proxy_pass http://nginx-server-$2-$1-svc:8080;
+        # TODO: remote hard coded
+        proxy_pass http://{{ .Release.Name }}-cognos-analytics-addon:8080/;
+        proxy_read_timeout     300s;
+        proxy_send_timeout     300s;
+        proxy_connect_timeout  300s;
+        client_body_buffer_size     3m;
+        client_max_body_size 15m;
+    }

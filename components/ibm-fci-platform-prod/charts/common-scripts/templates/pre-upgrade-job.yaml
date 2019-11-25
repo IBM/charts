@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "common-scripts.fullname" . }}
+  labels:
+    app: {{ template "common-scripts.name" . }}
+    chart: {{ template "common-scripts.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "common-scripts.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "common-scripts.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-common-scripts
+      containers:
+        - name: {{ template "common-scripts.fullname" . }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          command:
+            - bash
+            - -cx
+            - |
+              . /common-scripts/configure && \
+              $KUBECTL delete job -l "release in ({{ .Release.Name }})"
+          resources:
+{{ toYaml .Values.resources | indent 12 }}

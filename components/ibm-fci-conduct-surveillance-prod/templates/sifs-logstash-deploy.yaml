@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-logstash
+  labels:
+    app: {{ template "ibm-fci-conduct-surveillance.name" . }}-logstash
+    chart: {{ template "ibm-fci-conduct-surveillance.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "ibm-fci-conduct-surveillance.name" . }}-logstash
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "ibm-fci-conduct-surveillance.name" . }}-logstash
+        release: {{ .Release.Name }}
+        chart: {{ template "ibm-fci-conduct-surveillance.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+    spec:
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      serviceAccountName: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-common-scripts
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secret-files
+        - name: sifs-logstash-volume
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-logstash
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          args: [ "{{ .Release.Namespace }}/{{ template "ibm-fci-conduct-surveillance.fullname" . }}-liberty" ]
+          resources:
+{{ toYaml .Values.initContainerResource.resources | indent 12 }}
+      containers:
+        - name: sifs-logstash-1
+          image: {{ .Values.global.dockerRepository }}/{{ .Values.surveillanceLogstash.image.repository }}:{{ .Values.surveillanceLogstash.image.tag }}
+          imagePullPolicy: {{ .Values.surveillanceLogstash.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          env:
+          - name: ELASTICSEARCH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: ELASTIC_ADMIN_PASSWORD
+          - name: ELASTICSEARCH_HOST
+            value: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-elasticsearch
+          - name: ELASTICSEARCH_USERNAME
+            value: {{ .Values.config.esUsername }}
+          - name: HDP_RM_HOST
+            value: {{ .Values.config.HDP_MASTER_HOST }}
+          - name: ELASTICSEARCH_PORT
+            value: "9200"
+          - name: ECOMM_USERPASS
+            value: ibmrest1:ibmrest@pwd1
+          - name: SIFS_LIBERTY
+            value: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-liberty
+          - name: STREAMS_USERPASS
+            value: streamsadmin:SIFS#123
+          - name: RMS_STREAMS
+            value: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-rms-streams
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/sifs/logstash/healthcheck.sh ]; then /opt/ibm/sifs/logstash/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/sifs/logstash/healthcheck.sh ]; then /opt/ibm/sifs/logstash/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          ports:
+          - containerPort: 5044
+          volumeMounts:
+            - name: sifs-logstash-volume
+              mountPath: /home/logstash-anchor
+          resources:
+{{ toYaml .Values.surveillanceLogstash.resources | indent 12 }}
+        - name: logstash-proxy
+          image: {{ .Values.global.dockerRepository }}/{{ .Values.surveillanceLogstashproxy.image.repository }}:{{ .Values.surveillanceLogstashproxy.image.tag }}
+          imagePullPolicy: {{ .Values.surveillanceLogstashproxy.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          env:
+          - name: "SERVICE_HOST_ENV_NAME"
+            value: "localhost"
+          - name: "SERVICE_PORT_ENV_NAME"
+            value: "5044"
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/sifs/logstash/healthcheck.sh ]; then /opt/ibm/sifs/logstash/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/sifs/logstash/healthcheck.sh ]; then /opt/ibm/sifs/logstash/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /etc/secrets/proxykey
+            subPath: fci_universal_ks.pvtk.pem
+          - name: file-secrets
+            mountPath: /etc/secrets/proxycert
+            subPath: fci_universal_ks.crt.pem
+          resources:
+{{ toYaml .Values.surveillanceLogstashproxy.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
