@@ -111,3 +111,10 @@ securityContext:
     drop:
     - ALL
 {{- end -}}
+
+{{- define "odm-additional-labels" -}}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/name: {{ template "name" . }}
+helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+{{- end -}}

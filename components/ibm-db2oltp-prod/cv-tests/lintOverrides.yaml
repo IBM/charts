@@ -1,0 +1,144 @@
+# Overrides automatically generated from /tmp/ibm-db2wh-prod/stable/ibm-db2wh-prod/cv-tests/lintOverrides.yaml
+#
+# The following keys may be defined to filter messages:
+# overrides:
+#  - reason: ""    # REQUIRED, a justification for the override.
+#    rule: ""      # the name of a rule to ignore, must be exact match.
+#    filenames: [] # a list of filenames to match on, must be a superset
+#                  # of the filenames listed in the message to match. If
+#                  # a message includes a line number with the filename,
+#                  # omit the line number in the override.
+#    message: ""   # a regular expression matching the whole message as
+#                  # it appears in the console output.
+#    severity: ""  # the severity name to ignore, "INFO", "ERROR", etc.
+#    reduceTo: ""  # the severity to map to a matching message. If
+#                  # undefined, corresponds to ignore.
+
+overrides:
+- rule: DefinedParametersAreUsed
+  reason: "cv lint can not handle the way we use 20+ parameters, we use the function index to loop to many of the parameters"
+
+- message: \[ERROR\] templates/db2u-statefulset\.yaml.*\((NoHostPort|NoHostPath)\)
+  reason: "Hostpath for stroage and host port to bypass overlay network speed limit"
+
+- rule: NoHostNetwork
+  reason: "Hostpath for stroage and host port to bypass overlay network speed limit"
+
+- message: '\[ERROR\] templates/db2u-instance-secret\.yaml\: found Secret resource.*'
+  reason: "Needed for now, we doc how to change it"
+
+- message: \[ERROR\] templates/(db2u-ldap-secret|db2u-bluadmin-secret)\.yaml.*found
+    Secret resource.*\(NoSecretResources\)
+  reason: "Needed for now, we doc how to change it"
+
+- rule: NoRunAsRootUser
+  reason: "db2 need root to start"
+- message: \[ERROR\] templates/db2u-statefulset\.yaml.*\(ContainerHasLivenessProbe\)
+  reason: "There is no safe way to tell if db2 is really down or just doing some task that require it to be down"
+- message: \[ERROR\] templates/db2u-tools-deployment\.yaml.*\((ContainerHasLivenessProbe|ContainerHasReadinessProbe)\)
+  reason: "Container sleep when it come up, We connect with k8s api and exec binary"
+
+- message: \[ERROR\].*description under.*should be more descriptive than its label.*\(MetadataDescriptionIsValid\)
+  reason: "No on will be able to see this, we don't support deployment from ICP console."
+- message: \[REVIEW\] README\.md.*\(NoICPReferences\)
+  reason: " enable psp from icp UI and one of the helm key value have icp in the name."
+- message: \[REVIEW\] ibm_cloud_pak/RELEASENOTES\.md.* ICP references not allowed.*\(NoICPReferences\)
+  reason: "one of the prerequisites is IBM Cloud Private for Data"
+
+- message: \[REVIEW\] values.yaml.*images.auth.*\(NoSensitiveInfoInValues\)
+  reason: "One of the pod name is auth. No sensitive info"
+- message: \[REVIEW\] values.yaml.*[sS]ecretName.*\(NoSensitiveInfoInValues\)
+  reason: "Asking for the secret name. No sensitive info"
+
+- rule: ParametersMustBeCamelCase
+  reason: " will review in later release as changing this will break deployment of this charts"
+
+- rule: ValuesMetadataStructureMatchesValues
+  reason: "value metadata file is not in use for icp4d"
+
+- rule: AppTestMustExist
+  reason: "There is no app test that can be done in the pipeline, it require nodes being added and then test it on that node"
+
+- message: \[WARNING\] requirements\.yaml.*\(NoHyphensInSubchartNames\)
+  reason: " If change, deployment will break on old system. Will be change in the comming release where the deployment pods can handle this"
+
+- message: '\[REVIEW\] templates: found use of old standard labels.*\(CheckForOldMetadataLabels\)'
+  reason: "This will break the deployment on ICP4D as that image will need to be updated to handle this change"
+
+- message: .*\(ChartUsesSCH\)
+  reason: "Usecase of using it to create secret require another image to be add, we already ship kubectl in one of our images and no way to change the image to be use. Maybe look into this in the future"
+
+- message: .*\(HelpersHavePrefix\)
+  reason: "Will look into when adding sch"
+
+- message: .*templates/db2u-shared-sqllib.*found helm hook \(ReviewHelmHooks\)
+  reason: "All the helm hooks are added"
+
+- message: \[REVIEW\] templates/_securityContextDb2Wh\.tpl.* use of \.Capabilities
+    in template condition not recommended.*(NoCapabilitiesInConditions)
+  reason: "statefulset does not support procMount until kube 1.12, we need to check what version we are using to either add it or not
+"
+- message: '\[ERROR\] templates/db2u-statefulset\.yaml\: invalid schema for kube version
+    1\.11\.0: ValidationError\(StatefulSet\.spec\.template\.spec\.containers\[.*\]\.securityContext\)\:
+    unknown field "procMount" in io\.k8s\.api\.core\.v1\.SecurityContext \(ValidateSchema\)'
+  reason: "statefulset does not support procMount until kube 1.12, we need to check what version we are using to either add it or not
+"
+- message: \[REVIEW\] templates/db2u-statefulset\.yaml\:.*\(NoCapabilitiesInConditions\)
+  reason: "statefulset does not support procMount until kube 1.12, we need to check what version we are using to either add it or not"
+
+- rule: OneYAMLDocPerFile
+  reason: "Only service are added to make sure everything match when change." # REQUIRED
+
+- rule: MidLevelValueHasNoMetadata
+  reason: "value-metadata.yaml is not use in ICP4D. "
+
+- message: \[ERROR\].*\(NoLatestImageTags\)
+  reason: "During the build pipeline, the image tag will get updated"
+
+- message: '\[ERROR\].*duplicate template definition: template.*(ucCustomNodeSelectorTerms|ucTolerations).*\(NoDuplicateHelmTemplates\)'
+  reason: "From helm code; it seem to already handle this, highest level tpl first before sub chart"
+
+- message: \[ERROR\] templates/db2u-etcd-statefulset.yaml.*\(ContainerHasReadinessProbe\)
+  reason: "etcd is only started once all the etcd pods are in a ready state, adding any readiness probe will hang this forever."
+
+- message: '.*pvc\.claim\.volumeLabel(Value)?.*'
+  reason: "Needed for a future release, options are added into the chart"
+  
+- rule: 'ServiceAccountHasSANamespacePullSecret'
+  reason: "Openshift will auto add pull secret into sa"
+
+- rule: 'ServiceAccountHasPullSecret'
+  reason: "Openshift will auto add pull secret into sa"
+
+- message: '.*templates/db2u-statefulset\.yaml.*UsedParametersAreDefined.*'
+  reason: "Will be use in a future release, added to still be able to overwrite if needed"
+
+- message: '.*templates/db2u-sa.yaml.*\(RequiredMetadataLabels\)'
+  reason: "Will be use in a future release, added to still be able to overwrite if needed"
+
+- message: '.charts/ibm-unified-console.*'
+  reason: "Cv does not take sub chart lint overrides, all error are overrides"
+
+- message: '.*ibm-db2wh-prod/templates/db2u-statefulset\.yaml.*NoCapabilitiesInConditions.*'
+  reason: "There is no condition, don't know why this get set off"
+
+- message: '.*values-metadata.yaml.*'
+  reason: "We are not keeping values-metadata upto date, this is not needed for cp4d"
+
+- message: '.*templates/db2u-statefulset\.yaml.*securityContext\.privileged=true not allowed on container at spec\.template\.spec\.initContainers\[0\] \(NoPrivilegedContainers\)'
+  reason: "privileged is needed to set kernel settings in the init container, this will be remove in openshift 4.x with the Tuned operator"
+
+- rule: AppTestExists
+  reason: "Not needed for cp4d"
+
+- rule: NoDefaultServiceAccountName
+  reason: "The service is defined and will exist before this helm chart will get deploy"
+
+- rule: RequiredMetadataLabelsDefined
+  reason: "We will look into changing these in the next release, only a issue with cv lint v2."
+
+- rule: NoNodePortServices
+  reason: "We need to remove the overhead from the overlay network"
+
+- rule: UseEntitledRegistry
+  reason: "cp.icr.io at the moment is not the registry we are using for cp4d"
