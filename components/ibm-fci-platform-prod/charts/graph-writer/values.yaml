@@ -1,0 +1,108 @@
+global:
+  createPv: true
+  # The fully qualified domain name of the kubernetes manager node.
+  managerFQDN: ""
+  # The docker repository that holds the images to be deployed.
+  dockerRepository: ""
+  # The NFS server that maintains the PVs.  When createPv is set to true,
+  # this must contain the name of the NFS server.  When createPv is set to
+  # false, this value can be left blank.
+  nfsServer: ""
+  # Image pull secret name
+  # imagePullSecrets: regcred
+  foundationalServicesReleaseName: ""
+
+
+#Leightweight init container
+sideCarContainers:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "0.01"
+    limits:
+      memory: "512Mi"
+      cpu: "0.5"
+
+arch: amd64
+
+liberty:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.1"
+    limits:
+      memory: "6Gi"
+      cpu: "4"
+  image:
+    repository: /ibmcom/fci-graph-writer
+    tag: 6.5.0
+    pullPolicy: IfNotPresent
+
+libertyInitPv:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "0.05"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+  image:
+    repository: /ibmcom/fci-graph-writer-init-pv
+    tag: 6.5.0
+    pullPolicy: IfNotPresent
+
+gremlin:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.05"
+    limits:
+      memory: "1Gi"
+      cpu: "2"
+  image:
+    repository: /ibmcom/fci-graph-gremlin-server
+    tag: 6.5.0
+    pullPolicy: IfNotPresent
+
+
+image:
+  tag: latest
+  pullPolicy: IfNotPresent
+  liberty: /ibmcom/fci-graph-writer
+  gremlin: /ibmcom/fci-graph-gremlin-server
+  initPvLiberty: /ibmcom/fci-graph-writer-init-pv
+
+enabled: True
+# revision_history_limit the amount of revisions we should keep
+revision_history_limit: "20"
+
+graphWriterLiberty:
+  replicas: 1
+  livenessProbe:
+    initialDelaySeconds: 180
+  readinessProbe:
+    initialDelaySeconds: 180
+
+graphWriterGremlin:
+  replicas: 1
+  livenessProbe:
+    initialDelaySeconds: 420
+  readinessProbe:
+    initialDelaySeconds: 120
+
+graphLibertyConfig:
+  GRAPHAPI_WAR_NAME: GraphAPIService-1.0.war
+  GRAPHUI_WAR_NAME: GraphUI-1.0.war
+  PROPERTIES_FOLDER: /fciexports/graph-writer/context
+  REMOTE_OBJECTS_FILE: /fciexports/graph-writer/remote-objects.yaml
+  FCI_GRAPH_CONFIG: /home/fcigraph/GraphAnalytics/conf/janusgraph-fci-graph.properties
+  FCI_INSIGHTS_GRAPH_CONFIG: /home/fcigraph/GraphAnalytics/conf/janusgraph-fci-insights-graph.properties
+  JWT_ISSUER: fci.ibm.com
+  LOG_LEVEL: INFO
+
+libertyPvNfsPath: /fci-graph-writer-liberty
+libertyPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 1Gi

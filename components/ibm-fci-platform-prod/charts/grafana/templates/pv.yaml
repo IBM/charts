@@ -1,0 +1,31 @@
+{{- if .Values.global.createPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "grafana.fullname" . }}
+  labels:
+    app: {{ template "grafana.name" . }}
+    chart: {{ template "grafana.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  nfs:
+    path: {{ .Values.pvNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.nfsServer }}
+    readOnly: false
+{{-   if .Values.pvcSpec.size }}
+  capacity:
+    storage: {{ .Values.pvcSpec.size }}
+{{-   end }}
+{{-   if .Values.pvcSpec.storageClassName }}
+  storageClassName: {{ .Values.pvcSpec.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   end }}
+{{-   if .Values.pvcSpec.accessModes }}
+{{-     with .Values.pvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- end }}

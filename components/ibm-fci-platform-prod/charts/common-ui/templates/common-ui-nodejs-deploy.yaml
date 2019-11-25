@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "common-ui.fullname" . }}-nodejs
+  labels:
+    app: {{ template "common-ui.name" . }}-nodejs
+    chart: {{ template "common-ui.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "common-ui.name" . }}-nodejs
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "common-ui.name" . }}-nodejs
+        release: {{ .Release.Name }}
+        chart: {{ template "common-ui.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: {{ .Release.Name }}-common
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ template "common-ui.core-release-name" . }}-platform-secret-files
+      containers:
+      - name: nodejs
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.nodejs.image.repository }}:{{ .Values.nodejs.image.tag }}
+        imagePullPolicy: {{ .Values.nodejs.image.pullPolicy }}
+{{ include "common.readinessProbe" . | indent 8 }}
+{{ include "common.livenessProbe" . | indent 8 }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        resources:
+{{ toYaml .Values.nodejs.resources | indent 10 }}
+{{- with .Values.nodejs.nodeSelector }}
+        nodeSelector:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.nodejs.affinity }}
+        affinity:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.nodejs.tolerations }}
+        tolerations:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        env:
+        - name: JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: JWT_KEY
+        envFrom:
+        - configMapRef:
+            name: {{ template "common-ui.fullname" . }}
+        volumeMounts:
+        - name: file-secrets
+          mountPath: /code/certs/common-ui.pem
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /code/certs/common-ui.crt
+          subPath: fci_universal_ks.crt.pem
+        ports:
+        - containerPort: 3000
+      restartPolicy: Always

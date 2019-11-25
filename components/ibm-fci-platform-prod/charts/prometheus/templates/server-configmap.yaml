@@ -1,0 +1,31 @@
+{{- if and .Values.global.enableMonitoring (not (or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS .Values.global.deployOnCP4D)) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    {{- include "prometheus.server.labels" . | nindent 4 }}
+  name: {{ template "prometheus.server.fullname" . }}
+data:
+{{- $root := . -}}
+{{- range $key, $value := .Values.serverFiles }}
+  {{ $key }}: |
+{{- if eq $key "prometheus.yml" }}
+    global:
+{{ $root.Values.server.global | toYaml | trimSuffix "\n" | indent 6 }}
+{{- end }}
+{{ toYaml $value | default "{}" | indent 4 }}
+{{- if eq $key "prometheus.yml" -}}
+{{- if $root.Values.extraScrapeConfigs }}
+{{ tpl $root.Values.extraScrapeConfigs $root | indent 4 }}
+{{- end -}}
+    alerting:
+      alertmanagers:
+      - scheme: https
+        tls_config:
+          insecure_skip_verify: true
+        static_configs:
+        - targets:
+          - {{ $root.Release.Name }}-prometheus-alertmanager:9093
+{{- end -}}
+{{- end -}}
+{{- end -}}

@@ -1,0 +1,156 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: {{ template "mongodb.name" . }}
+    chart: {{ template "mongodb.chart" . }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  name: {{ template "mongodb.fullname" . }}-secondary
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "mongodb.name" . }}
+      release: {{ .Release.Name }}
+      component: secondary
+  podManagementPolicy: "Parallel"
+  serviceName: {{ template "mongodb.fullname" . }}-headless
+  replicas: {{ .Values.replicaSet.replicas.secondary }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "mongodb.name" . }}
+        chart: {{ template "mongodb.chart" . }}
+        release: {{ .Release.Name }}
+        component: secondary
+        heritage: {{ .Release.Service }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      {{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-common
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      {{- if and (.Values.securityContext.enabled) (not (or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS)) }}
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+      {{- else }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ template "mongodb.name" . }}-secondary
+          image: "{{ .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          {{- if .Values.global.deployOnCP4D }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          {{- end }}
+          ports:
+          - containerPort: {{ .Values.service.port }}
+            name: mongodb
+          env:
+          - name: MONGODB_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MONGODB_REPLICA_SET_MODE
+            value: "secondary"
+          - name: MONGODB_PRIMARY_HOST
+            value: {{ template "mongodb.fullname" . }}
+          - name: MONGODB_REPLICA_SET_NAME
+            value: {{ .Values.replicaSet.name | quote }}
+          - name: MONGODB_ADVERTISED_HOSTNAME
+            value: "$(MONGODB_POD_NAME).{{ template "mongodb.fullname" . }}-headless.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+          - name: MONGODB_PRIMARY_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-root-password
+          - name: MONGODB_REPLICA_SET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-replica-set-key
+          - name: MONGODB_ENABLE_IPV6
+          {{- if .Values.mongodbEnableIPv6 }}
+            value: "yes"
+          {{- else }}
+            value: "no"
+          {{- end }}
+          - name: MONGODB_EXTRA_FLAGS
+            value: {{ default "" .Values.mongodbExtraFlags | join " " }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - mongo
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command:
+                - mongo
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          volumeMounts:
+            - name: {{ .Release.Name }}-data
+              mountPath: /bitnami/mongodb
+            {{- if .Values.configmap }}
+            - name: config
+              mountPath: /opt/bitnami/mongodb/conf/mongodb.conf
+              subPath: mongodb.conf
+            {{- end }}
+      volumes:
+        {{- if .Values.configmap }}
+        - name: config
+          configMap:
+            name: {{ template "mongodb.fullname" . }}
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Release.Name }}-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.pvcSpec.size }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.pvcSpec.storageClassName }}
+        storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+        storageClassName: {{ .Values.pvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+        storageClassName: {{ default "" .Values.pvcSpec.storageClassName | quote }}
+{{- end }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+        selector:
+          matchLabels:
+            app: {{ template "mongodb.name" . }}-secondary
+            release: {{ .Release.Name }}
+{{- end -}}

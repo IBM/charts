@@ -1,0 +1,31 @@
+{{- if .Values.global.createPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "common-ui.fullname" . }}-nginx
+  labels:
+    app: {{ template "common-ui.fullname" . }}-nginx
+    chart: {{ template "common-ui.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  nfs:
+    path: {{ .Values.nginxPvNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.nfsServer }}
+    readOnly: false
+{{- if .Values.nginxPvcSpec.size }}
+  capacity:
+    storage: {{ .Values.nginxPvcSpec.size }}
+{{-   end }}
+{{-   if .Values.nginxPvcSpec.storageClassName }}
+  storageClassName: {{ .Values.nginxPvcSpec.storageClassName }}
+{{-   else }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   end }}
+{{-   if .Values.nginxPvcSpec.accessModes }}
+{{-     with .Values.nginxPvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- end -}}

@@ -1,0 +1,118 @@
+{{- include "sch.config.init" (list . "ibm-dods-prod.sch.chart.config.values") -}}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ddScenarioUi.compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioUi.compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.ddScenarioUi.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioUi.compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.ddScenarioUi.compName) | indent 8 }}
+      annotations:
+        {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}      
+    spec:
+      terminationGracePeriodSeconds: 0
+      affinity:
+        {{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      {{- if .Values.global.serviceAccount }}
+      serviceAccountName: {{ .Values.global.serviceAccount }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "sch.security.securityContext" (list . .sch.chart.securityContextPodNode) | indent 6 }}
+      containers:
+      - name: {{ .sch.chart.components.ddScenarioUi.compName }}-container
+        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.ddScenarioUi.image.repository }}:{{ .Values.ddScenarioUi.image.tag }}-{{ .Values.global.architecture }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy | quote }}
+        {{- include "sch.security.securityContext" (list . .sch.chart.securityContextContainerNoRoot) | indent 8 }}
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PROPERTY_PREFIX
+          value: "k8s_local_"
+        # this is used in unit tests to allow this pod to run without REDIS
+        {{- if .Values.ddScenarioUi.noRedis }}
+        - name: NO_REDIS
+          value: "true"
+        {{- end }}        
+        # Add a set of secrets from watson studio that we need. Source for whole list is 
+        # helm charts in dap/dap-helm project.
+        # Basically we define only those we really need here, esp. those getting values from secrets.
+        # For the more basic ones, we use the deploy.properties in the pod with the proper PROPERTY_PREFIX, as 
+        # for cloud deployment. 
+        - name: ZEN_DOMAIN
+          value: "ibm-nginx-svc:443"
+        - name: SELF_SIGNED_CERTIFICATE_BASE64
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: self-signed-certificate-base64.txt
+        - name: SELF_SIGNED_PRIVATE_KEY_BASE64
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: self-signed-private-key-base64.txt
+        - name: TENANT_TOKEN_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: tenant-token-secret.txt
+        - name: CRYPTO_PASSWORD_IV
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: crypto-password-iv.txt
+        - name: SESSION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: session-key.txt
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: session-secret.txt
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: redis-ha-configmap
+              key: redis-url
+        - name: REDISSTORE_ENCRYPTION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: redis-encryption-token.txt
+        - name: WDP_SERVICE_ID
+          valueFrom:
+            secretKeyRef:
+              name: wdp-service-id
+              key: service-id-credentials
+        resources:
+{{ toYaml .Values.ddScenarioUi.resources | indent 10 }}
+        ports:
+        - containerPort: 8449
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /decision-optimization/ping
+            port: 8449
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 2          
+        readinessProbe:
+          httpGet:
+            path: /decision-optimization/ping
+            port: 8449
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 2
+          

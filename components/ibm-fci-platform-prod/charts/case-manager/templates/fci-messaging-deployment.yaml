@@ -1,0 +1,236 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "case.fullname" . }}-fci-messaging
+  labels:
+    app: {{ template "case.name" . }}-fci-messaging
+    chart: {{ template "case.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: {{ template "case.name" . }}-fci-messaging
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "case.name" . }}-fci-messaging
+        release: {{ .Release.Name }}
+        chart: {{ template "case.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccount: {{ template "case.fullname" . }}
+      serviceAccountName: {{ template "case.fullname" . }}
+      volumes:
+      - name: fci-messaging-volume
+        persistentVolumeClaim:
+          claimName: {{ template "case.fullname" . }}-fci-messaging
+      - name: file-secrets
+        secret:
+          secretName: {{ .Release.Name }}-platform-secret-files
+      - name: system-errors
+        emptyDir: {}
+      - name: fciqm-errors
+        emptyDir: {}
+      initContainers:
+      - name: volume-mount-hack
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        command: ["sh", "-c", "chown -R 1502:1502 /mqmInit/errors; chown -R 1502:1502 /mqmInit/FCIQM "]
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}      
+        volumeMounts:
+        - name: system-errors
+          mountPath: /mqmInit/errors
+        - name: fciqm-errors
+          mountPath: /mqmInit/FCIQM/errors
+        securityContext:
+          runAsNonRoot: false
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - CHOWN    
+      containers:
+      - image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.mq.image.repository }}:{{ .Values.mq.image.tag }}
+        name: fci-messaging
+{{ include "common.readinessProbe" . | indent 8 }}
+{{ include "common.livenessProbe" . | indent 8 }}
+        imagePullPolicy: {{ .Values.mq.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.mq.resources | indent 10 }}
+{{- with .Values.mq.nodeSelector }}
+        nodeSelector:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.mq.affinity }}
+        affinity:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.mq.tolerations }}
+        tolerations:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - IPC_OWNER
+          privileged: true
+          readOnlyRootFilesystem: false
+          seLinuxOptions:
+            type: spc_t
+        resources:
+{{ toYaml .Values.mq.resources | indent 10 }}
+        envFrom:
+        - configMapRef:
+            name: {{ template "case.fullname" . }}-fci-messaging
+        env:
+        - name: FCIMQTT_sslkeyp
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: FCI_JKS_PASSWORD
+        - name: MQM_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: mqm_password
+        ports:
+        - containerPort: 1883
+        - containerPort: 6883
+        - containerPort: 1414
+        - containerPort: 9997
+        volumeMounts:
+        - mountPath: /var/mqm
+          name: fci-messaging-volume
+        - name: file-secrets
+          mountPath: /var/mqm/fci_universal_ks.jks
+          subPath: fci_universal_ks.jks
+        - name: file-secrets
+          mountPath: /var/mqm/fci_universal_ks.kdb
+          subPath: fci_universal_ks.kdb
+        - name: file-secrets
+          mountPath: /var/mqm/fci_universal_ks.sth
+          subPath: fci_universal_ks.sth
+        - mountPath: /var/mqm/errors
+          name: system-errors
+        - mountPath: /var/mqm/FCIQM/errors
+          name: fciqm-errors
+      - name: fciqm-amqerr01-log
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        args: [/bin/sh, -c, 'tail -n+1 -F /logs/AMQERR01.LOG']
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}  
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: fciqm-errors
+          mountPath: /logs
+      - name: fciqm-amqerr02-log
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        args: [/bin/sh, -c, 'tail -n+1 -F /logs/AMQERR02.LOG']
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}  
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: fciqm-errors
+          mountPath: /logs
+      - name: fciqm-amqerr03-log
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        args: [/bin/sh, -c, 'tail -n+1 -F /logs/AMQERR03.LOG']
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}  
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: fciqm-errors
+          mountPath: /logs
+      - name: fciqm-mqxr-0-log
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}  
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        args: [/bin/sh, -c, 'tail -n+1 -F /logs/mqxr_0.log']
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        volumeMounts:
+        - name: fciqm-errors
+          mountPath: /logs
+      - name: system-amqerr01-log
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}  
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        args: [/bin/sh, -c, 'tail -n+1 -F /logs/AMQERR01.LOG']
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        volumeMounts:
+        - name: system-errors
+          mountPath: /logs
+      - name: system-amqerr02-log
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}  
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        args: [/bin/sh, -c, 'tail -n+1 -F /logs/AMQERR02.LOG']
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        volumeMounts:
+        - name: system-errors
+          mountPath: /logs
+      - name: system-amqerr03-log
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}  
+        securityContext:
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+          capabilities:
+            drop:
+            - ALL
+        args: [/bin/sh, -c, 'tail -n+1 -F /logs/AMQERR03.LOG']
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
+        volumeMounts:
+        - name: system-errors
+          mountPath: /logs
+      restartPolicy: Always

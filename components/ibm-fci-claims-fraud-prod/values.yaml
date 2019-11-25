@@ -1,0 +1,119 @@
+global:
+  # The fully qualified domain name of the kubernetes manager node.
+  managerFQDN: ""
+  
+  
+  # Set to true if deploying on IBM Cloud Pak for Data
+  deployOnCP4D: true
+  
+  # The docker repository that holds the images to be deployed.
+  dockerRepository: ""
+  # The type of LDAP server being used.
+  # Options include 'msad', 'sds', 'open', or 'none' (Keep the ' around the value)
+  # msad -- Microsoft Active Directory
+  # sds -- IBM Security Directory Server, formerly known as Tivoli Directory Server
+  # open -- OpenLDAP
+  # none -- no LDAP server, use basic registry instead
+  IDENTITY_SERVER_TYPE: 'msad'
+  # If this chart is not part of the core, and needs to make references
+  # to services provided by the core, use the coreReleaseName as the prefix
+  # for the services.
+  coreReleaseName: fci
+
+  commonScripts:
+    image:
+      repository: ibmcom/fci-common-scripts
+      tag: <BUILD_TAG>
+      
+  #For Non Cloud-Pak deployments, set the userid for non-root containers to run
+  runAsUser: 1000
+    
+  #Set the Additional Group ID settings that the containers should run as
+  #This depends on the GID of the shared storage like NFS
+  fsGroupConfig:
+    supplementalGroups:
+    - 0
+
+## Image names are kept in the yaml, they typically do not change.  However
+## the tag is here so it is easy to change and test a new release using an
+## old chart.
+
+#This includes message-log, trace-log and init-svc-depend containers
+sideCarContainers:
+  resources:
+    limits:
+      memory: "128Mi"
+      cpu: "200m"
+    requests:
+      cpu: "10m"
+      memory: "16Mi"
+
+dbClient:
+  image:
+    repository: "ibmcom/fcii-data-store-client"
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      memory: "1Gi"
+      cpu: "0.5"
+    requests:
+      cpu: "0.1"
+      memory: "128Mi"
+
+fciiUi:
+  image:
+    repository: "ibmcom/fcii-ui"
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      memory: "4Gi"
+      cpu: "1"
+    requests:
+      cpu: "0.1"
+      memory: "256Mi"
+## Add configmap entries to the values.xml
+## Note that if there are URLs that reference
+## either the manager node using global.managerFQDN
+## or {{ .Release.Name }} then they will have to be placed
+## directly in the configmap (templates/liberty-config.yaml) file.
+##
+## Note that use of the config map is commented out in the
+## nodejs-deploy.yaml and liberty-deploy.yaml files in case
+## it's not needed.
+readinessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 60
+  timeoutSeconds: 10
+  successThreshold: 1
+  failureThreshold: 2
+
+livenessProbe:
+  initialDelaySeconds: 180
+  periodSeconds: 60
+  timeoutSeconds: 10
+  successThreshold: 1
+  failureThreshold: 2
+
+config:
+  FLYWAY_USER: db2inst1
+  FLYWAY_BASELINE_ON_MIGRATE: 'true'
+  DB2_SERVICE: db2-datastore-0
+  com_fci_db2_config: fcii_server_ssl_db2.xml
+  com_fci_db2_dbname: fcidb
+  com_fci_db2_java: /opt/ibm/fci/db2/java
+  com_fci_db2_port: "50000"
+  com_fci_db2_ssl_port: "56000"
+  com_fci_db2_userid: fciauthid
+  com_fci_home: /opt/ibm/fci
+  JWT_ISSUER: 'fci.ibm.com'
+  LICENSE: 'accept'
+
+
+
+  #-- Kafka variables:
+  AUDIT_ACTIVE: "0"
+  #-- End Kafka variables
+
+arch: "amd64"
