@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: setup-user-home
+  labels:
+    app.kubernetes.io/name: "ibm-dods-prod"
+    app.kubernetes.io/component: "test"
+spec:
+  affinity:    
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false  
+  securityContext:
+    runAsNonRoot: false
+    runAsUser: 0         
+  containers:
+  - name: setup-user-home
+    image: "alpine:3.9"
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"    
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL    
+    volumeMounts:
+      - mountPath: /user-home
+        name: user-home-mount
+    command: ["sh", "-c", "whoami ; rm -rf /user-home/_global_ ; mkdir /user-home/_global_ ; chmod -R 777 /user-home/_global_; chown -R 1000330999 /user-home/_global_ ; ls -al /user-home"]
+  volumes:      
+    - name: user-home-mount
+      persistentVolumeClaim:
+        claimName: user-home-pvc    
+  restartPolicy: Never
