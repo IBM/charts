@@ -1,0 +1,31 @@
+{{- if .Values.global.createPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "common-ui.fullname" . }}-bk
+  labels:
+    app: {{ template "common-ui.name" . }}-bk
+    chart: {{ template "common-ui.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  nfs:
+    path: {{ .Values.bkPvNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.nfsServer }}
+    readOnly: false
+{{-   if .Values.bkPvcSpec.size }}
+  capacity:
+    storage: {{ .Values.bkPvcSpec.size }}
+{{-   end }}
+{{-   if .Values.bkPvcSpec.storageClassName }}
+  storageClassName: {{ .Values.bkPvcSpec.storageClassName }}
+{{-   else }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   end }}
+{{-   if .Values.bkPvcSpec.accessModes }}
+{{-     with .Values.bkPvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- end -}}

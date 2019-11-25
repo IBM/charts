@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "global-name-mgmt.fullname" . }}
+  labels:
+    app: {{ template "global-name-mgmt.name" . }}
+    chart: {{ template "global-name-mgmt.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  selector:
+    matchLabels:
+      app: {{ template "global-name-mgmt.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "global-name-mgmt.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "global-name-mgmt.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-common
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: {{ .Release.Name }}-platform-config-files
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+      containers:
+        - name: global-name-mgmt
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{ include "common.readinessProbe" . | indent 10 }}
+{{ include "common.livenessProbe" . | indent 10 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "global-name-mgmt.fullname" . }}
+          env:
+          - name: GNM_ssl_ks_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          ports:
+          - containerPort: 14500
+          - containerPort: 14501
+          volumeMounts:
+            - name: file-secrets
+              mountPath: /opt/IBM/GNM/wlp/usr/servers/gnmServer/resources/security/fci_universal_ks.jks
+              subPath: fci_universal_ks.jks
+            - name: config-volume
+              mountPath: /opt/IBM/GNM/data/compparms.config
+              subPath: gnm_compparms.config
+            - name: config-volume
+              mountPath: /opt/IBM/GNM/data/ds.config
+              subPath: gnm_ds.config
+            - name: config-volume
+              mountPath: /opt/IBM/GNM/data/nameworks.config
+              subPath: gnm_nameworks.config
+            - name: config-volume
+              mountPath: /opt/IBM/GNM/data/npp.config
+              subPath: gnm_npp.config
+            - name: logs
+              mountPath: /opt/IBM/GNM/wlp/usr/servers/gnmServer/logs
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+        - name: message-log
+{{ include "common.sideCarHealthCheck" . | indent 10 }}
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          volumeMounts:
+          - name: logs
+            mountPath: /logs
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+    {{- with .Values.affinity }}
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}

@@ -1,0 +1,267 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: {{ template "mongodb.name" . }}
+    chart: {{ template "mongodb.chart" . }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  name: {{ template "mongodb.fullname" . }}-primary
+spec:
+  serviceName: {{ template "mongodb.fullname" . }}-headless
+{{ if .Values.enabled }}
+  replicas: {{ default 1 .Values.replicas }}
+{{ else }}
+  replicas: 0
+{{ end }}
+  selector:
+    matchLabels:
+      app: {{ template "mongodb.name" . }}
+      release: {{ .Release.Name }}
+      component: primary
+  template:
+    metadata:
+      labels:
+        app: {{ template "mongodb.name" . }}
+        chart: {{ template "mongodb.chart" . }}
+        release: {{ .Release.Name }}
+        component: primary
+        heritage: {{ .Release.Service }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      {{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-common
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      {{- if and (.Values.securityContext.enabled) (not (or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS)) }}
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+      {{- else }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      {{- end }}
+      initContainers:
+      {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS}}
+      - name: permissionsfix
+        args:
+        - chown -R 1001:1001 /mount;
+        command:
+        - /bin/sh
+        - -c
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        securityContext:
+          runAsNonRoot: false
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - CHOWN 
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /mount
+          name: {{ .Release.Name }}-data
+        {{- end }}
+      containers:
+        - name: {{ template "mongodb.name" . }}-primary
+          image: "{{ .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          {{- if .Values.global.deployOnCP4D }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          {{- end }}
+          ports:
+          - containerPort: {{ .Values.service.port }}
+            name: mongodb
+          envFrom:
+          - configMapRef:
+              name: {{ template "mongodb.fullname" . }}-db
+          env:
+          {{- if .Values.image.debug}}
+          - name: BITNAMI_DEBUG
+            value: "true"
+          {{- end }}
+          - name: MONGODB_SYSTEM_LOG_VERBOSITY
+            value: {{ .Values.mongodbSystemLogVerbosity | quote }}
+          - name: MONGODB_DISABLE_SYSTEM_LOG
+            {{- if .Values.mongodbDisableSystemLog }}
+            value: "yes"
+            {{- else }}
+            value: "no"
+            {{- end }}
+          - name: MONGODB_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MONGODB_REPLICA_SET_MODE
+            value: "primary"
+          - name: MONGODB_REPLICA_SET_NAME
+            value: {{ .Values.replicaSet.name | quote }}
+          - name: MONGODB_ADVERTISED_HOSTNAME
+            value: "$(MONGODB_POD_NAME).{{ template "mongodb.fullname" . }}-headless.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+          {{- if .Values.mongodbUsername }}
+          - name: MONGODB_USERNAME
+            value: {{ .Values.mongodbUsername | quote }}
+          {{- end }}
+          {{- if .Values.mongodbDatabase }}
+          - name: MONGODB_DATABASE
+            value: {{ .Values.mongodbDatabase | quote }}
+          {{- end }}
+          - name: MONGODB_ENABLE_IPV6
+          {{- if .Values.mongodbEnableIPv6 }}
+            value: "yes"
+          {{- else }}
+            value: "no"
+          {{- end }}
+          - name: MONGODB_ENABLE_DIRECTORY_PER_DB
+          {{- if .Values.mongodbDirectoryPerDB }}
+            value: "yes"
+          {{- else }}
+            value: "no"
+          {{- end }}
+          - name: MONGODB_EXTRA_FLAGS
+            value: {{ .Values.mongodbExtraFlags | join " " }}
+          - name: MONGODB_CLIENT_EXTRA_FLAGS
+            value: {{ .Values.mongodbClientExtraFlags | join " " }}
+          - name: MONGODB_IUI_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-iui-password
+          - name: MONGODB_FCDD_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-fcdd-password
+          - name: MONGODB_TLS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-fcai-tls-password
+          - name: MONGODB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-password
+          - name: MONGODB_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-root-password
+          - name: MONGODB_DSF_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-dsf-password
+          - name: MONGODB_ERAAS_INVESTIGATION_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-eraas-investigation-password
+          - name: MONGODB_ERAAS_PROXY_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-eraas-proxy-password
+          - name: MONGODB_ERAAS_KYC_ADAPTER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-eraas-kyc-adapter-password
+          - name: MONGODB_REPLICA_SET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: mongodb-replica-set-key
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - mongo
+                - --sslAllowInvalidCertificates
+                - --ssl                
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command:
+                - mongo
+                - --sslAllowInvalidCertificates
+                - --ssl                
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          volumeMounts:
+            - name: {{ .Release.Name }}-data
+              mountPath: /bitnami/mongodb
+            {{- if .Values.configmap }}
+            - name: config
+              mountPath: /opt/bitnami/mongodb/conf/mongodb.conf
+              subPath: mongodb.conf
+            {{- end }}
+            - name: file-secrets
+              mountPath: /mongodb.key
+              subPath: fci_universal_ks.pvtk.pem
+            - name: file-secrets
+              mountPath: /mongodb.crt
+              subPath: fci_universal_ks.crt.pem
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+        {{- if .Values.configmap }}
+        - name: config
+          configMap:
+            name: {{ template "mongodb.fullname" . }}
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Release.Name }}-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.pvcSpec.size }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.pvcSpec.storageClassName }}
+        storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+        storageClassName: {{ .Values.pvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+        storageClassName: {{ default "" .Values.pvcSpec.storageClassName | quote }}
+{{- end }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+        selector:
+          matchLabels:
+            app: {{ template "mongodb.name" . }}-primary
+            release: {{ .Release.Name }}
+{{ end }}
+

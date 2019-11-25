@@ -1,0 +1,96 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ template "fullname" . }}-db2u-nodes-cfg-job"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  backoffLimit: 30
+  template:
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "root.securityContext" . | indent 6 }}
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      initContainers:
+      - name: db2u-sqllib-shared-job
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "root.containers.securityContext" . | indent 8 }}
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "100Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        command: ['/bin/sh']
+        args: ["-cx", 'kubectl wait --for=condition=complete job/{{ template "fullname" . }}-db2u-sqllib-shared-job -n {{ .Release.Namespace }}']
+
+      containers:
+      - name: db2u-db2nodes-cfg-init
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "root.containers.securityContext" . | indent 8 }}
+        command: ['/bin/sh']
+        args: ['-cx', '/tools/pre-install/generate_mln_distribution.sh -mlns {{ .Values.mln.total }} -replicas {{ .Values.images.db2u.replicas }}']
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "100Mi"
+          limits:
+            memory: "512Mi"
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/blumeta0/configmap
+          name: {{ template "fullname" . }}-db2u-config-volume
+      restartPolicy: Never
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      volumes:
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-meta-storage
+          {{- end }}
+        {{- end }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      - name: {{ template "fullname" . }}-db2u-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-config-files
+          items:
+          - key: db2u-db2cfg-var
+            path: db2u-config-var

@@ -1,0 +1,35 @@
+{{- if .Values.global.createPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "mongodb.fullname" $ }}-primary
+  labels:
+    app: {{ template "mongodb.name" $ }}-primary
+    chart: {{ template "mongodb.chart" $ }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+spec:
+  nfs:
+    path: {{ $.Values.pvPrimaryNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." $.Values.global.nfsServer }}
+    readOnly: false
+{{-   if $.Values.pvcSpec.size }}
+  capacity:
+    storage: {{ $.Values.pvcSpec.size }}
+{{-   end }}
+{{- if $.Values.global.persistence.useDynamicProvisioning }}
+{{-   if not $.Values.pvcSpec.storageClassName }}
+  storageClassName: {{ default nil $.Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ $.Values.pvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+  storageClassName: {{ default "" $.Values.pvcSpec.storageClassName | quote }}
+{{- end }}
+{{-   if $.Values.pvcSpec.accessModes }}
+{{-     with $.Values.pvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- end -}}

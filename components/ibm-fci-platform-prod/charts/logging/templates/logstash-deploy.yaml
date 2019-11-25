@@ -1,0 +1,118 @@
+{{- if .Values.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "logging.fullname" . }}-ls 
+  labels:
+    app: {{ template "logging.name" . }}-ls
+    chart: {{ template "logging.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{   if .Values.enabled }}
+  replicas: {{ .Values.logstash.replicas }}
+{{   else }}
+  replicas: 0
+{{   end }}
+  selector:
+    matchLabels:
+      app: {{ template "logging.name" . }}-ls
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "logging.name" . }}-ls
+        release: {{ .Release.Name }}
+        chart: {{ template "logging.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-common
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "common-ui.core-release-name" . }}-platform-secret-files
+        - name: config-volume
+          configMap:
+            name: {{ .Release.Name }}-platform-config-files
+      containers:
+        - name: logstash
+          image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.logstash.image.repository }}:{{ .Values.logstash.image.tag }}
+          imagePullPolicy: {{ .Values.logstash.image.pullPolicy }}
+          livenessProbe:
+{{ toYaml .Values.logstash.livenessProbe | indent 12 }}
+          readinessProbe:
+{{ toYaml .Values.logstash.readinessProbe | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          ports:
+            - containerPort: 5044
+          env:
+            ## Elasticsearch output
+            - name: ELASTICSEARCH_HOST
+              value: {{ .Release.Name }}-elasticsearch
+            - name: ELASTICSEARCH_PORT
+              value: "9200"
+            - name: ELASTICSEARCH_USERNAME
+              value: {{ .Values.elasticsearchUsername }}
+            - name: ELASTICSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-platform-secrets-env
+                  key: ELASTIC_ADMIN_PASSWORD
+            ## Additional env vars
+          {{- range $key, $value := .Values.esConfig }}
+            - name: {{ $key | upper | replace "." "_" }}
+              value: {{ $value | quote }}
+          {{- end }}
+          volumeMounts:
+          - name: config-volume
+            mountPath: /usr/share/logstash/pipeline/logstash.conf
+            subPath: input_logstash
+          - name: config-volume
+            mountPath: /usr/share/logstash/pipeline/output_logstash
+            subPath: output_logstash
+          - name: config-volume
+            mountPath: /usr/share/logstash/pipeline/filter_logstash
+            subPath: filter_logstash
+          resources:
+{{ toYaml .Values.logstash.resources | indent 12 }}
+        - name: logstash-proxy
+          image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+          resources:
+{{ toYaml .Values.logstash.resources | indent 12 }}
+          imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
+{{ include "common.sideCarHealthCheck" . | indent 10 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          env:
+          - name: "SERVICE_HOST_ENV_NAME"
+            value: "localhost"
+          - name: "SERVICE_PORT_ENV_NAME"
+            value: "5044"
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /etc/secrets/proxykey
+            subPath: fci_universal_ks.pvtk.pem
+          - name: file-secrets
+            mountPath: /etc/secrets/proxycert
+            subPath: fci_universal_ks.crt.pem
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+    {{- with .Values.affinity }}
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- end -}}

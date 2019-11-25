@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "minio.fullname" . }}
+  labels:
+    app: {{ template "minio.name" . }}
+    chart: {{ template "minio.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.minio.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "minio.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "minio.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "minio.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ template "minio.core-release-name" . }}-platform-secret-files
+      serviceAccountName: {{ .Release.Name }}-common
+      containers:
+      - name: minio
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
+        imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.minio.resources | indent 10 }}
+{{- with .Values.minio.nodeSelector }}
+        nodeSelector:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.minio.affinity }}
+        affinity:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.minio.tolerations }}
+        tolerations:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        env:
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "minio.core-release-name" . }}-platform-secrets-env
+              key: MINIO_SECRET_KEY
+        envFrom:
+        - configMapRef:
+            name: {{ template "minio.fullname" . }}-cm
+        volumeMounts:
+        - name: file-secrets
+          mountPath: /code/certs/investigative-ui.pem
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /code/certs/investigative-ui.crt
+          subPath: fci_universal_ks.crt.pem
+        ports:
+        - containerPort: 9000
+        livenessProbe:
+          httpGet:
+            path: /minio/health/live
+            port: 9000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /minio/health/ready
+            port: 9000
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 1
+          failureThreshold: 3
+      restartPolicy: Always

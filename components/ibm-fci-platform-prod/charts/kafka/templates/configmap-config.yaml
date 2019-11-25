@@ -1,0 +1,38 @@
+{{- if .Values.topics -}}
+{{- $zk := include "zookeeper.url" . -}}
+{{- $replicas := .Values.replicas -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "kafka.fullname" . }}
+  labels:
+    app: {{ template "kafka.name" . }}
+    chart: {{ template "kafka.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+data:
+  runtimeConfig.sh: |
+    #!/bin/sh
+    set -ex
+    cd /usr/bin
+    until kafka-configs --zookeeper {{ $zk }} --entity-type topics --describe || (( count++ >= 6 ))
+    do
+      echo "Waiting for Zookeeper..."
+      sleep 20
+    done
+    echo "Applying runtime configuration using {{ .Values.image }}:{{ .Values.image.tag }}"
+    {{- range $n, $topic := .Values.topics }}
+    {{- if $topic.partitions }}
+    kafka-topics --zookeeper {{ $zk }} --create --if-not-exists --force --topic {{ $topic.name }} --partitions {{ $topic.partitions }} --replication-factor {{ $replicas }}
+    kafka-topics --zookeeper {{ $zk }} --alter --force --topic {{ $topic.name }} --partitions {{ $topic.partitions }} || true
+    {{- end }}
+    {{- if $topic.defaultConfig }}
+    kafka-configs --zookeeper {{ $zk }} --entity-type topics --entity-name {{ $topic.name }} --alter --force --delete-config {{ nospace $topic.defaultConfig }} || true
+    {{- end }}
+    {{- if $topic.config }}
+    kafka-configs --zookeeper {{ $zk }} --entity-type topics --entity-name {{ $topic.name }} --alter --force --add-config {{ nospace $topic.config }}
+    {{- end }}
+    kafka-configs --zookeeper {{ $zk }} --entity-type topics --entity-name {{ $topic.name }} --describe
+    {{- end }}
+{{- end -}}
+

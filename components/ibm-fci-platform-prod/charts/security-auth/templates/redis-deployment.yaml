@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "security-auth.fullname" . }}-redis
+  labels:
+    app: {{ template "security-auth.name" . }}-redis
+    chart: {{ template "security-auth.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "security-auth.name" . }}-redis
+      release: {{ .Release.Name }}
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        name: {{ template "security-auth.fullname" . }}-redis
+        app: {{ template "security-auth.name" . }}-redis
+        chart: {{ template "security-auth.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: {{ .Release.Name }}-common
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ template "common-ui.core-release-name" . }}-platform-secret-files
+      containers:
+      - name: 'redis'
+        args:
+        - redis-server
+        - --protected-mode
+        - "no"
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}
+{{ include "common.readinessProbe" . | indent 8 }}
+{{ include "common.livenessProbe" . | indent 8 }}
+        resources:
+{{ toYaml .Values.redis.resources | indent 10 }}
+        ports:
+        - containerPort: 6379  
+      - name: 'redis-proxy'
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+        imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.redis.resources | indent 10 }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+{{ include "common.sideCarHealthCheck" . | indent 8 }}        
+        env:
+        - name: "SERVICE_HOST_ENV_NAME"
+          value: "localhost"
+        - name: "SERVICE_PORT_ENV_NAME"
+          value: "6379"
+        volumeMounts:
+        - name: file-secrets
+          mountPath: /etc/secrets/proxykey
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /etc/secrets/proxycert
+          subPath: fci_universal_ks.crt.pem
+      restartPolicy: Always

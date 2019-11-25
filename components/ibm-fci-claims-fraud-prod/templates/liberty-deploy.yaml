@@ -1,0 +1,224 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fci-insurance.fullname" . }}-liberty
+  labels:
+    app: {{ template "fci-insurance.name" . }}-liberty
+    chart: {{ template "fci-insurance.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "fci-insurance.name" . }}-liberty
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fci-insurance.name" . }}-liberty
+        release: {{ .Release.Name }}
+        chart: {{ template "fci-insurance.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      serviceAccountName: {{ .Values.global.coreReleaseName }}-common-scripts
+      volumes:
+{{- if hasKey .Values "global" }}
+{{-   if hasKey .Values.global "swidtag" }}
+{{-     if hasKey .Values.global.swidtag "file" }}
+      - name: swidtags
+        configMap:
+          name: {{ .Release.Name }}-swidtag-files
+{{-     end }}
+{{-   end }}
+{{- end }}
+      - name: logs
+        emptyDir: {}
+      - name: config-volume
+        configMap:
+          name: {{ .Values.global.coreReleaseName }}-platform-config-files
+      - name: file-secrets
+        secret:
+          secretName: {{ .Values.global.coreReleaseName }}-platform-secret-files
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      initContainers:
+        - name: init-svc-depend
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          args: [ "{{ .Release.Namespace }}/{{ .Values.global.coreReleaseName }}-{{ .Values.config.DB2_SERVICE }}" ]
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+        - name: fcii-data-store-client
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.dbClient.image.repository }}:{{ .Values.dbClient.image.tag }}"
+          imagePullPolicy: {{ .Values.dbClient.image.pullPolicy }}
+          args: ["migrate"]
+          envFrom:
+          - configMapRef:
+              name: {{ template "fci-insurance.fullname" . }}
+          env:
+          - name: FLYWAY_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
+                key: DB2INST1_PASSWORD
+          - name: SSL_KEYSTORE_PASSWORD_CONFIG
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: FLYWAY_URL
+            value: "{{ printf "jdbc:db2://%s-%s:56000/fcidb:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" .Values.global.coreReleaseName .Values.config.DB2_SERVICE }}"
+          resources:
+{{ toYaml .Values.dbClient.resources | indent 12 }}
+          volumeMounts:
+{{- if hasKey .Values "global" }}
+{{-   if hasKey .Values.global "swidtag" }}
+{{-     if hasKey .Values.global.swidtag "file" }}
+            - name: swidtags
+              mountPath: /opt/ibm/fci/swidtag/{{ .Values.global.swidtag.file }}
+              subPath: {{ .Values.global.swidtag.file }}
+{{-     end }}
+{{-   end }}
+{{- end }}
+            - name: file-secrets
+              mountPath: /fci_universal_ks.jks
+              subPath: fci_universal_ks.jks      
+      containers:
+        - name: liberty
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.fciiUi.image.repository }}:{{ .Values.fciiUi.image.tag }}"
+          imagePullPolicy: {{ .Values.fciiUi.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.fciiUi.resources | indent 12 }}
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "timeout --kill-after=30s --signal=INT 25s /opt/ibm/fci/scripts/healthcheck.sh"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }} 
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "timeout --kill-after=30s --signal=INT 25s /opt/ibm/fci/scripts/healthcheck.sh"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }} 
+          env:
+          - name: JWT_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
+                key: JWT_KEY
+          - name: com_fci_keystore_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: com_fci_db2_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
+                key: FCIAUTHID_PASSWORD
+{{- if ne .Values.global.IDENTITY_SERVER_TYPE "none" }}
+          - name: LDAP_SERVER_BIND_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
+                key: LDAP_SERVER_BINDCREDENTIALS    
+{{- end }}        
+          envFrom:
+          - configMapRef:
+              name: {{ template "fci-insurance.fullname" . }}
+          - configMapRef:
+              name: {{ .Values.global.coreReleaseName }}-case-manager-ldap
+          ports:
+          - containerPort: 9080
+          - containerPort: 9443
+          volumeMounts:
+          - name: config-volume
+            mountPath: /opt/ibm/wlp/usr/servers/fciServer/server_basic_registry.xml
+            subPath: server_basic_registry.xml
+          - name: file-secrets
+            mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+          - mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
+            name: logs
+        - image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          name: message-log
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']
+          livenessProbe:
+            exec:
+              command:
+              - echo
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+              - echo
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+          volumeMounts:
+          - name: logs
+            mountPath: /logs
+        - image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          livenessProbe:
+            exec:
+              command:
+              - echo
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+              - echo
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+          name: trace-log
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          args: [/bin/sh, -c, 'tail -n+1 -F /logs/trace.log']
+          volumeMounts:
+          - name: logs
+            mountPath: /logs

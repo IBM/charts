@@ -1,0 +1,27 @@
+{{- range $i, $e := until (.Values.global.db2Instances | int) }}
+{{- if $.Values.global.deployOnCP4D }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "db2.fullname" $ }}-datastore-external-{{ $i }}
+  labels:
+    app: {{ template "db2.name" $ }}-datastore
+    chart: {{ template "db2.chart" $ }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 56000
+      targetPort: 56000
+      name: ssl-db2inst1
+      {{- if (not (empty $.Values.sslNodePort)) }}
+      nodePort: {{ $.Values.sslNodePort }}
+      {{- end }}
+  selector:
+    app: {{ template "db2.name" $ }}-datastore
+    release: {{ $.Release.Name }}
+    statefulset.kubernetes.io/pod-name: {{ $.Release.Name }}-{{ template "db2.name" $ }}-datastore-{{ $i }}
+---
+{{- end }}
+{{- end -}}

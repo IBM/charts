@@ -1,0 +1,57 @@
+{{- if .Values.enabled -}}
+{{- if .Values.topics -}}
+{{- $scriptHash := include (print $.Template.BasePath "/configmap-config.yaml") . | sha256sum | trunc 8 -}}
+{{- $lastReplica := sub .Values.replicas 1 -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ template "kafka.fullname" . }}-config-{{ $scriptHash }}"
+  labels:
+    app: {{ template "kafka.name" . }}-config
+    chart: {{ template "kafka.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "kafka.name" . }}-config
+        release: {{ .Release.Name }}
+        chart: {{ template "kafka.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: OnFailure
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ template "kafka.fullname" . }}
+            defaultMode: 0755
+      serviceAccountName: {{ .Release.Name }}-common-scripts
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          args: [ "{{ .Release.Namespace }}/{{ include "kafka.fullname" . }}-{{ $lastReplica }}-external" ]
+      containers:
+        - name: {{ template "kafka.fullname" . }}-config
+          image: "{{ .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["/usr/local/script/runtimeConfig.sh"]
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: "/usr/local/script"
+{{- end -}}
+{{- end -}}

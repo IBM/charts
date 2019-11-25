@@ -1,0 +1,28 @@
+{{- if .Values.global.createPv -}}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "prometheus.alertmanager.fullname" . }}
+  labels:
+    {{- include "prometheus.alertmanager.labels" . | nindent 4 }}
+spec:
+  nfs:
+    path: {{ .Values.alertmanager.pvNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.nfsServer }}
+    readOnly: false
+{{-   if .Values.alertmanager.pvcSpec.size }}
+  capacity:
+    storage: {{ .Values.alertmanager.pvcSpec.size }}
+{{-   end }}
+{{-   if .Values.alertmanager.pvcSpec.storageClassName }}
+  storageClassName: {{ .Values.alertmanager.pvcSpec.storageClassName }}
+{{-   else }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   end }}
+{{-   if .Values.alertmanager.pvcSpec.accessModes }}
+{{-     with .Values.alertmanager.pvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end }}
+{{-   end }}
+{{-   end }}
