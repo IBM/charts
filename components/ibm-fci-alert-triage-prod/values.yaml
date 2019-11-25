@@ -1,0 +1,220 @@
+# Default values for ibm-fci-alert-triage.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+# This file determines the Kubernetes deployment of fci-alerts-insight.
+
+
+global:
+  # The fully qualified domain name of the kubernetes manager node.
+  managerFQDN: ""
+  
+  # Set to true if deploying on IBM Cloud Pak for Data
+  deployOnCP4D: true
+  
+  # If this chart is not part of the core, and needs to make references
+  # to services provided by the core, use the coreReleaseName as the prefix
+  # for the services.
+  coreReleaseName: fci
+  # The docker repository that holds the images to be deployed.
+  dockerRepository: ""
+  # When set to true, the installer will create the PVs.  When set to
+  # false, the PVs must be created ahead of time by the kubernetes admin
+  # using the correct names, and then the install script run.
+  createPv: true
+  # The NFS server that maintains the PVs.  When createPv is set to true,
+  # this must contain the name of the NFS server.  When createPv is set to
+  # false, this value can be left blank.
+  nfsServer: ""
+
+  persistence:
+    storageClassName: ''
+    useDynamicProvisioning: true
+
+  commonScripts:
+    image:
+      repository: ibmcom/fci-common-scripts
+      tag: <BUILD_TAG>
+  
+  #For Non Cloud-Pak deployments, set the userid for non-root containers to run
+  runAsUser: 1000
+    
+  #Set the Additional Group ID settings that the containers should run as
+  #This depends on the GID of the shared storage like NFS
+  fsGroupConfig:
+    supplementalGroups:
+    - 0
+
+# This includes init-svc-depend containers
+sideCarContainers:
+  resources:
+    limits:
+      memory: "64Mi"
+      cpu: ".2"
+    requests:
+      memory: "16Mi"
+
+
+fcai_alert_review:
+
+  # Whether or not to enable the containers for the FCAI Alerts Insight offering
+  # The enabled value must be true for both Customer Risk Rating (CRR) and Transaction List Screening (TLS)
+  enabled: true
+
+
+  alertReview:
+    livenessProbe:
+      initialDelaySeconds: 300
+      periodSeconds: 60
+      timeoutSeconds: 30
+      successThreshold: 1
+      failureThreshold: 2
+    image:
+      repository: ibmcom/fci-alert-review
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        memory: "512Mi"
+        cpu: ".5"
+      requests:
+        memory: "128Mi"
+
+    alertReviewConfig:
+      NODE_ENV: "production"
+      LOG_FILE_LEVEL: "info"
+      HTTPS_KEY: "alert-review.pem"
+      HTTPS_CERT: "alert-review.crt"
+      DATABASE_NAME: "FCIDB"
+      DATABASE_PORT: "56000"
+      DATABASE_USERNAME: "fciauthid"
+      CEDM_API_PORT: "9443"
+      JWT_ISSUER: "fci.ibm.com"
+      AUDIT_API_PORT: "9443"
+      AUDIT_ACTIVE: "1"
+      AUDIT_TIMEOUT: "100"
+      CEDM_CERT_SELF_SIGNED: "true"
+      DB2CODEPAGE: "1208"
+
+  dbclient:
+    image:
+      repository: ibmcom/fci-alert-review-db
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    databaseConfig:
+      FLYWAY_USER: db2inst1
+      FLYWAY_BASELINE_ON_MIGRATE: 'true'
+      FLYWAY_BASELINE_VERSION: '01.01.01.00.003'
+      DB2_SERVICE: 'db2-datastore-0'
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: ".1"
+      requests:
+        memory: "32Mi"
+
+  fcaiShiny:
+    shinyConfig:
+      SPARK_HOME: "/home/shiny/spark/spark-2.2.0-bin-hadoop2.7"
+
+      # Set the spark driver memory. Leave at least .5G of memory for the rest of the container
+      SPARK_DRIVER_MEMORY: "3G"
+
+      # At installation  time of the FCI Data Platform, the user must select either "dev" or "prod" as the "environment type"
+      # For a "prod" defined environment type for the FCI Data Platform (Hortonworks Data Platform [HDP]) topology - default 6 node topology
+         # <master_hostname> should be replaced with the Fully Qualified Domain Name (FQDN) of the hadoop master node
+         # <secondary_hostname> should be replaced with the FQDN of the hadoop secondary node
+      # For a "dev" defined environment type for the FCI  Data Platform (HDP) - default 3 node topology
+         # <master_hostname> should be replaced with the FQDN of the hadoop master node
+         # <secondary_hostname> should be replaced with the FQDN of the hadoop master node
+         # For the "dev" defined environment type, the HDP_MASTER and HDP_SECONDARY are both set to hadoop master
+      HDP_MASTER: <master_hostname>
+      HDP_SECONDARY: <secondary_hostname>
+
+    image:
+      repository: ibmcom/fcai-shiny
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+
+    resources:
+      limits:
+        # Limit of 3.5G for the container
+        memory: "3584Mi"
+        cpu: ".5"
+      requests:
+        memory: "64Mi"
+
+fcai_transaction_list_screening:
+  # Whether or not to enable the containers for the FCAI Transaction List Screening (TLS) offering
+  # If TLS is not being used, specify enabled: false
+  enabled: true
+
+  tlsAnalytics:
+    image:
+      repository: ibmcom/fcai-tls-analytics
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+
+    resources:
+      limits:
+        memory: "32768Mi"
+        cpu: "8"
+      requests:
+        memory: "8192Mi"
+        cpu: "2"
+
+    # Extra configuration properties for FCAI Transaction List Screening
+    tlsConfig:
+      TLS_ssl_ks_paths: "/opt/ibm/fcai/sslCerts"
+      TLS_ssl_ks_names: "fci_universal_ks.crt.pem"
+      TLS_ssl_ks_key_names: "fci_universal_ks.pvtk.pem"
+      GNM_NONSSL_PORT: "14500"
+      GNM_SSL_PORT: "14501"
+      MONGODB_TLS_DB: "fcai_tls"
+      MONGODB_TLS_PORT: "27017"
+      MONGODB_TLS_USER: "fcai_tls_user"
+      MONGODB_ROOT_USER: "root"
+      JWT_ISSUER: "fci.ibm.com"
+
+      # If Auditing is enabled, leave a "true". If Auditing was disabled as part of the
+      # FCI install for FCAI Transaction List Screening, set to "false"
+      AUDITING_ENABLED: "true"
+
+      # Kafka properties
+      # BOOTSTRAP_SERVERS: defined in tls-cm.yaml
+      KAFKA_SECURITY_PROTOCOL: SSL
+      SSL_KEY_LOCATION: /opt/ibm/fcai/sslCerts/fci_universal_ks.pvtk.pem
+      #SSL_KEY_PASSWORD:  defined in tls-deploy.yaml
+      SSL_CERTIFICATE_LOCATION: /opt/ibm/fcai/sslCerts/fci_universal_ks.crt.pem
+      SSL_CA_LOCATION: /opt/ibm/fcai/sslCerts/fci_universal_ks.crt.pem
+      FCI_KAFKA_MSG_KS_PATH: /etc/kafka/conf/fci_kafka_msg.p12
+      #FCI_KAFKA_MSG_KS_PASSWORD: defined in tls-deploy.yaml
+      #FCI_KAFKA_MSG_KS_ALIASNAME:  defined in tls-deploy.yaml
+
+      # Kafka Topics
+      FCI_AUDIT_TOPIC: FCI_SEC_AuditRecords
+
+  tlsUI:
+    image:
+      repository: ibmcom/fcai-tls-ui
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+
+    resources:
+      limits:
+        memory: "256Mi"
+        cpu: ".2"
+      requests:
+        memory: "16Mi"
+
+    config:
+      JWT_ISSUER: "fci.ibm.com"
+
+tlsPvNfsPath: /fcai-tls
+
+tlsPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 30Gi
+
+arch: amd64

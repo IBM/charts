@@ -1,0 +1,170 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "kafka.fullname" . }}-zk
+  labels:
+    app: {{ template "kafka.name" . }}-zk
+    chart: {{ template "kafka.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  serviceName: {{ template "kafka.fullname" . }}-zk
+{{ if .Values.enabled }}
+  replicas: {{ .Values.zookeeperReplicaCount }}
+{{ else }}
+  replicas: 0
+{{ end }}
+  selector:
+    matchLabels:
+      app: {{ template "kafka.name" . }}-zk
+      release: {{ .Release.Name }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ .Release.Name }}-data-zk
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.zookeeper.dataPvcSpec.size }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.zookeeper.dataPvcSpec.storageClassName }}
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+      storageClassName: {{ .Values.zookeeper.dataPvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+      storageClassName: {{ default "" .Values.zookeeper.dataPvcSpec.storageClassName | quote }}
+{{- end }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+      selector:
+        matchLabels:
+          app: {{ template "kafka.name" . }}-zk
+          release: {{ .Release.Name }}
+{{ end }}
+  - metadata:
+      name: {{ .Release.Name }}-log-zk
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.zookeeper.logPvcSpec.size }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.zookeeper.logPvcSpec.storageClassName }}
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+      storageClassName: {{ .Values.zookeeper.logPvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+      storageClassName: {{ default "" .Values.zookeeper.logPvcSpec.storageClassName | quote }}
+{{- end }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+      selector:
+        matchLabels:
+          app: {{ template "kafka.name" . }}-zk-log
+          release: {{ .Release.Name }}
+{{ end }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "kafka.name" . }}-zk
+        chart: {{ template "kafka.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      serviceAccountName: {{ .Release.Name }}-common
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      initContainers:
+        {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
+        - name: permissionsfix
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          args:
+          - chown -R 1000:1000 /mount;
+          securityContext:
+            runAsNonRoot: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - CHOWN 
+          command:
+          - /bin/sh
+          - -c
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          volumeMounts:
+          - mountPath: /mount
+            name: {{ .Release.Name }}-data-zk
+        - name: permissionsfix-log
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          args:
+          - chown -R 1000:1000 /mount;
+          securityContext:
+            runAsNonRoot: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - CHOWN 
+          command:
+          - /bin/sh
+          - -c
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          volumeMounts:
+          - mountPath: /mount
+            name: {{ .Release.Name }}-log-zk
+        {{- end }}
+      containers:
+        - name: zookeeper
+          image: "{{ .Values.global.dockerRepository }}/{{ .Values.zookeeper.image.repository }}:{{ .Values.zookeeper.image.tag }}"
+          resources:
+{{ toYaml .Values.zookeeper.resources | indent 12 }}
+          imagePullPolicy: {{ .Values.zookeeper.image.pullPolicy }}
+{{ include "common.sideCarHealthCheck" . | indent 10 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          ports:
+          - containerPort: 2181
+            name: client
+          - containerPort: 2888
+            name: server
+          - containerPort: 3888
+            name: leader-election
+          env:
+          - name: ZOOKEEPER_TICK_TIME
+            value: "{{ .Values.zookeeper.tickTime }}"
+          - name: ZOOKEEPER_CLIENT_PORT
+            value: "2181"
+          - name: ZOOKEEPER_ELECTION_PORT
+            value: "3888"
+          - name: ZOOKEEPER_SERVER_PORT
+            value: "2888"
+          - name: ZOOKEEPER_SERVERS
+            value: {{ include "zookeeper.servers" . }}
+          command:
+          - sh
+          - -exc
+          - |
+            ZK_FIX_HOST_REGEX="s/${HOSTNAME}\.[^:]*:/0.0.0.0:/g" && \
+            ZOOKEEPER_SERVERS=`echo $ZOOKEEPER_SERVERS | sed -e "$ZK_FIX_HOST_REGEX"` && \
+            [ -z "$ID_OFFSET" ] && ID_OFFSET=1 && \
+            export ZOOKEEPER_SERVER_ID=$((${HOSTNAME##*-} + $ID_OFFSET)) && \
+            exec /etc/confluent/docker/run
+          volumeMounts:
+            - name: {{ .Release.Name }}-data-zk
+              mountPath: /var/lib/zookeeper/data
+            - name: {{ .Release.Name }}-log-zk
+              mountPath: /var/lib/zookeeper/log

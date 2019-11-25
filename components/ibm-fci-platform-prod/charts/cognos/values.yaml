@@ -1,0 +1,79 @@
+global:
+  foundationalServicesReleaseName:
+  dockerRepository:
+  createPv: true
+  nfsServer:
+
+db2_service: db2-datastore-0
+
+#This is for all the light weight init container that waits for db2 to start
+sideCarContainers:
+  resources:
+    requests:
+      memory: "16Mi"
+      cpu: "0.1"
+    limits:
+      memory: "256Mi"
+      cpu: "0.2"
+
+config:
+  COGNOS_DB2_PORT: '56000'
+  COGNOS_DB2_USERID: 'fciauthid'
+  COGNOS_DB2_DB: 'COGNOSDB'
+  COGNOS_KEYSTORE_ALIAS: 'fci_universal_label'
+  COGNOS_DB2_SSL_ENABLED: 'true'
+  COGNOS_SERVICE_URL: http://localhost:9300
+  COGNOS_ADMIN_URL: 'b_action=cogadmin'
+  ALLOWED_DASHBOARD_ROLES: 'admin,analyst,investigator,supervisor,data_scientist'
+  ALLOWED_ADMIN_ROLES: 'admin'
+  LOG_LEVEL: 'info'
+  JWT_ISSUER: 'fci.ibm.com'
+
+image:
+  repository: ibmcom/fci-cognos
+  tag: 6.5.0
+  pullPolicy: IfNotPresent
+
+#Cognos container Resources
+resources:
+  requests:
+    memory: "4Gi"
+    cpu: "0.1"
+  limits:
+    memory: "16Gi"
+    cpu: "4"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+arch: amd64
+
+proxy:
+  image:
+    repository: ibmcom/fci-dashboards-proxy
+    tag: 6.5.0
+    pullPolicy: IfNotPresent
+  #Proxy container resources
+  resources:
+    requests:
+      memory: "16Mi"
+      cpu: "0.1"
+    limits:
+      memory: "512Mi"
+      cpu: "0.5"
+
+pvNfsPath: /fci-cognos
+
+pvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 30Gi
+
+livenessProbe:
+  initialDelaySeconds: 1800
+  periodSeconds: 60
+  timeoutSeconds: 30
+  successThreshold: 1
+  failureThreshold: 3

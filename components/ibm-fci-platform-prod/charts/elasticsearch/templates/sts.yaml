@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "elasticsearch.fullname" . }}
+  labels:
+    app: {{ template "elasticsearch.name" . }}
+    chart: {{ template "elasticsearch.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  serviceName: {{ template "elasticsearch.name" . }}
+  selector:
+    matchLabels:
+      app: {{ template "elasticsearch.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "elasticsearch.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "elasticsearch.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: {{ .Release.Name }}-common
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ template "common-ui.core-release-name" . }}-platform-secret-files
+      - name: es-data
+        persistentVolumeClaim:
+          claimName: {{ template "elasticsearch.fullname" . }}
+      initContainers:
+      {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
+      - name: permissionsfix
+        securityContext:
+          runAsNonRoot: false
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - CHOWN 
+        args:
+        - chown -R 1000:1000 /mount;
+        command:
+        - /bin/sh
+        - -c
+        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 10 }}
+        volumeMounts:
+        - mountPath: /mount
+          name: es-data
+      {{- end }}
+      containers:
+        - name: elasticsearch
+          image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{ include "common.readinessProbe" . | indent 10 }}
+{{ include "common.livenessProbe" . | indent 10 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          env:
+          - name: "bootstrap.memory_lock"
+            value: "true"
+          envFrom:
+          - configMapRef:
+              name: {{ template "elasticsearch.fullname" . }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+            - mountPath: "/usr/share/elasticsearch/data"
+              name: es-data
+            - name: file-secrets
+              mountPath: /usr/share/elasticsearch/config/fci_universal_ks.pvtk.pem
+              subPath: fci_universal_ks.pvtk.pem
+            - name: file-secrets
+              mountPath: /usr/share/elasticsearch/config/fci_universal_ks.crt.pem
+              subPath: fci_universal_ks.crt.pem
+            - name: file-secrets
+              mountPath: /usr/share/elasticsearch/config/searchguard_admin.crt.pem
+              subPath: searchguard_admin.crt.pem
+            - name: file-secrets
+              mountPath: /usr/share/elasticsearch/config/searchguard_admin.pvtk.pem
+              subPath: searchguard_admin.pvtk.pem
+          ports:
+            - containerPort: 9200
+        - name: elasticsearch-proxy
+          image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+          resources:
+{{ toYaml .Values.global.nginxSslProxy.resources | indent 12 }}
+          imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
+{{ include "common.sideCarHealthCheck" . | indent 10 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          env:
+          - name: "SERVICE_HOST_ENV_NAME"
+            value: "localhost"
+          - name: "SERVICE_PORT_ENV_NAME"
+            value: "9200"
+          - name: "HTTP_PROXY"
+            value: "true"
+          - name: "HTTP_AUTH"
+            value: "true"
+          - name: "HTTP_AUTH_USERID"
+            value: "fci_admin"
+          - name: "HTTP_AUTH_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-platform-secrets-env
+                key: ELASTIC_ADMIN_PASSWORD
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /etc/secrets/proxykey
+            subPath: fci_universal_ks.pvtk.pem
+          - name: file-secrets
+            mountPath: /etc/secrets/proxycert
+            subPath: fci_universal_ks.crt.pem

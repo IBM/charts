@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "cdn-proxy.fullname" . }}
+  labels:
+    app: {{ template "cdn-proxy.name" . }}
+    chart: {{ template "cdn-proxy.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.cdnProxy.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "cdn-proxy.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "cdn-proxy.name" . }}
+        release: {{ .Release.Name }}
+        chart: {{ template "cdn-proxy.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+      - name: file-secrets
+        secret:
+          secretName: {{ template "cdn-proxy.core-release-name" . }}-platform-secret-files
+      serviceAccountName: {{ .Release.Name }}-common-scripts
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-minio" ]
+      containers:
+      - name: cdn-proxy
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.cdnProxy.image.repository }}:{{ .Values.cdnProxy.image.tag }}
+        imagePullPolicy: {{ .Values.cdnProxy.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.cdnProxy.resources | indent 10 }}
+{{- with .Values.cdnProxy.nodeSelector }}
+        nodeSelector:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.cdnProxy.affinity }}
+        affinity:
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- with .Values.cdnProxy.tolerations }}
+        tolerations:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        env:
+        - name: JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "cdn-proxy.core-release-name" . }}-platform-secrets-env
+              key: JWT_KEY
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "minio.core-release-name" . }}-platform-secrets-env
+              key: MINIO_SECRET_KEY
+        envFrom:
+        - configMapRef:
+            name: {{ template "cdn-proxy.fullname" . }}-cm
+        volumeMounts:
+        - name: file-secrets
+          mountPath: /code/certs/investigative-ui.pem
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /code/certs/investigative-ui.crt
+          subPath: fci_universal_ks.crt.pem
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /cdn/healthcheck
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /cdn/healthcheck
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+      restartPolicy: Always

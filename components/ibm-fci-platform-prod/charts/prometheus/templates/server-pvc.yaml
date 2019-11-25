@@ -1,0 +1,34 @@
+{{- if and .Values.global.enableMonitoring (not (or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS .Values.global.deployOnCP4D)) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    {{- include "prometheus.server.labels" . | nindent 4 }}
+  name: {{ template "prometheus.server.fullname" . }}
+spec:
+{{- if .Values.server.pvcSpec.accessModes }}
+{{-   with .Values.server.pvcSpec.accessModes }}
+  accessModes:
+{{      toYaml . | indent 4 -}}
+{{-   end -}}
+{{- end }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.server.pvcSpec.storageClassName }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ .Values.server.pvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+  storageClassName: {{ default "" .Values.server.pvcSpec.storageClassName | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.server.pvcSpec.size }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+  selector:
+    matchLabels:
+      app: {{ template "prometheus.name" . }}-server
+      release: {{ .Release.Name -}}
+{{- end -}}
+{{- end -}}
+

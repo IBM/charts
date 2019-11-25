@@ -1,0 +1,39 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: "{{ .Values.servicename }}-api-management"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: mongodb
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  template:
+    metadata:
+      name: mongodb-api-management
+      labels:
+        app: {{ template "fullname" . }}
+        api-database-status: "{{ .Values.servicename }}-mongodb-api"
+        api-database-jdbc: "{{ .Values.servicename }}-driver"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        component: mongodb
+      annotations:
+        {{- include "mongo.annotations" .  | indent 8 }}
+    spec:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "mongodbSecurityContext" . | indent 6 }}
+      serviceAccount: {{ .Values.global.serviceAccount }}
+      containers:
+      - name: mongo-status
+        image: {{ .Values.apiManagement.image.repository }}:{{ .Values.apiManagement.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+      restartPolicy: Always

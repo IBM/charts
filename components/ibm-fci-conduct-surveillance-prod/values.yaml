@@ -1,0 +1,214 @@
+config:
+  #<hdp_host> normally would be the Active name node
+  DISCLAIMER_URL: "https://<hdp_host>:5026/analytics/models/v1/disclaimer/"
+  KEY_LIVY_URL: "https://<hdp_host>:8998/batches"
+
+  esUsername: fci_admin
+
+  #If using 3 node HDP topology use 'dev' below.
+  hdp_env_type: prod
+
+  #Fill the details of your HDP cluster below.
+  HDP_MASTER_IP: x.x.x.x
+  HDP_MASTER_HOST: hdpmaster.example.com
+  HDP_GATEWAY_IP: x.x.x.x
+  HDP_GATEWAY_HOST: hdpgateway.example.com
+  HDP_AMBARI_IP: x.x.x.x
+  HDP_AMBARI_HOST: hdpambari.example.com
+
+  #Fill below details only if you are using 'prod' topology(6 node HDP)
+  HDP_SECONDARY_IP: x.x.x.x
+  HDP_SECONDARY_HOST: hdpsecondary.example.com
+  HDP_SLAVE1_IP: x.x.x.x
+  HDP_SLAVE1_HOST: hdpslave1.example.com
+  HDP_SLAVE2_IP: x.x.x.x
+  HDP_SLAVE2_HOST: hdpslave2.example.com
+
+  #The below is for 6 node HDP cluster. if you are using 3 node HDP, replace it with active_namenode_hostname:8020
+  HDFS_NAMENODE: fcicluster
+
+  #values of below parameters hbase.zookeeper.quorum and hbase.zookeeper.property.clientPort can be found on Ambari -> HBase -> Configs -> Advanced -> Advanced hbase-site
+  HDP_ZOOKEEPER_URL: "<hbase.zookeeper.quorum>:<hbase.zookeeper.property.clientPort>"
+
+  HDP_SECURITY_TYPE: "/hbase-secure:sifsuser@FCI.IBM"
+
+  #Below is default value. update the below value accordingly to your nfs server and it's path.
+  VOICE_BULK_EXPORT_ARCHIVE_FILE_DESTINATION_EXTERNALIZED: "/fci-exports/sifs-liberty-instance/voice/bulk-export"
+
+  COMMDATA_PROP_LOC: ""
+  COMMDATA_FULL_CLASSNAME: ""
+
+  #Comma separated value of each kafka host and its corresponding port.
+  FCI_KAFKA_BOOTSTRAP_SERVERS: "<cp4d.com>:31090,<cp4d.com>:31091,<cp4d.com>:31092"
+
+
+global:
+  managerFQDN: ""
+  coreReleaseName: fci
+  dockerRepository: ""
+  createPv: true
+  nfsServer: ""
+  persistence:
+    storageClassName: ''
+    useDynamicProvisioning: false
+    
+  #UnComment the below section according to the component installation
+  #swidtag:
+     #EComm: ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_-_Electronic_Communication_component-6.5.0.swidtag
+     #Voice: ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_Voice-6.5.0.swidtag
+     #Trade: ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_Trade-6.5.0.swidtag
+     #Complaints: ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_-_Complaint_Analytics-6.5.0.swidtag
+    
+  # Set to true if deploying on IBM Cloud Pak for Data
+  deployOnCP4D: true
+
+  #For Non Cloud-Pak deployments, set the userid for non-root containers to run
+  runAsUser: 1000
+    
+  #Set the Additional Group ID settings that the containers should run as
+  #This depends on the GID of the shared storage like NFS
+  fsGroupConfig:
+    supplementalGroups:
+    - 0
+
+  commonScripts:
+    image:
+      repository: ibmcom/fci-common-scripts
+      tag: <BUILD_TAG>
+
+dbConfig:
+   FLYWAY_BASELINE_VERSION: '01.01.01.00.006'
+   DB_SERVICE: 'db2-datastore-0'
+
+arch: "amd64"
+
+initContainerResource:
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: "0.5Gi"
+    limits:
+      cpu: "0.5"
+      memory: "0.5Gi"
+
+db2Container:
+  image:
+    repository: ibmcom/sifs-data-store-client
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+surveillanceLiberty:
+  image:
+    repository: ibmcom/sifs-liberty
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1.5Gi"
+    limits:
+      cpu: "1"
+      memory: "1.5Gi"
+
+surveillanceLogstash:
+  image:
+    repository: ibmcom/sifs-logstash
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "1"
+      memory: "3Gi"
+    limits:
+      cpu: "1"
+      memory: "3Gi"
+
+surveillanceLogstashproxy:
+  image:
+    repository: ibmcom/sifs-nginx-ssl-proxy
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+surveillanceFilebeat:
+  image:
+    repository: ibmcom/sifs-filebeat
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+libertyPvNfsPath: /sifs-liberty-instance
+libertyPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 30Gi
+
+logstashPvNfsPath: /sifs-logstash-instance
+logstashPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 30Gi
+
+filebeatPvNfsPath: /sifs-filebeat-instance
+filebeatPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 30Gi
+
+filebeatlibPvNfsPath: /sifs-liberty-instance
+filebeatlibPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 30Gi
+
+filebeatstreamsPvNfsPath: /fci-rms-voice-data
+filebeatstreamsPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 30Gi
+
+livenessProbe:
+  initialDelaySeconds: 600
+  periodSeconds: 60
+  timeoutSeconds: 30
+  successThreshold: 1
+  failureThreshold: 3
+
+readinessProbe:
+  initialDelaySeconds: 70
+  periodSeconds: 20
+  timeoutSeconds: 10
+  successThreshold: 1
+  failureThreshold: 3
+
+affinity: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+arch: amd64

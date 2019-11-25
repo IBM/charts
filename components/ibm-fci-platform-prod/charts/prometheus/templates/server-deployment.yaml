@@ -1,0 +1,166 @@
+{{- if and .Values.global.enableMonitoring (not (or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS .Values.global.deployOnCP4D)) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+{{- if .Values.server.deploymentAnnotations }}
+  annotations:
+{{ toYaml .Values.server.deploymentAnnotations | indent 4 }}
+{{- end }}
+  labels:
+    {{- include "prometheus.server.labels" . | nindent 4 }}
+  name: {{ template "prometheus.server.fullname" . }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "prometheus.server.matchLabels" . | nindent 6 }}
+{{ include "prometheus.scaleDownIfDisabled" . | indent 2 }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+    {{- if .Values.server.podAnnotations }}
+{{ toYaml .Values.server.podAnnotations | indent 8 }}
+    {{- end }}
+      labels:
+        {{- include "prometheus.server.labels" . | nindent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+{{- with .Values.server.affinity }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- if .Values.server.priorityClassName }}
+      priorityClassName: "{{ .Values.server.priorityClassName }}"
+{{- end }}
+      serviceAccountName: {{ template "prometheus.serviceAccountName.server" . }}
+      initContainers:
+        - name: permissionsfix
+          args:
+          - chown -R 65534:65534 {{ .Values.server.pvNfsPath }};
+          command:
+          - /bin/sh
+          - -c
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          volumeMounts:
+          - mountPath: {{ .Values.server.pvNfsPath }}
+            name: storage-volume
+      containers:
+        - name: {{ template "prometheus.name" . }}-{{ .Values.server.name }}
+          image: "{{ .Values.global.dockerRepository }}/{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          imagePullPolicy: "{{ .Values.server.image.pullPolicy }}"
+          args:
+          {{- if .Values.server.retention }}
+            - --storage.tsdb.retention={{ .Values.server.retention }}
+          {{- end }}
+            - --config.file=/etc/config/prometheus.yml
+            - --storage.tsdb.path={{ .Values.server.pvNfsPath }}
+            - --web.console.libraries=/etc/prometheus/console_libraries
+            - --web.console.templates=/etc/prometheus/consoles
+            - --web.enable-lifecycle
+          {{- range $key, $value := .Values.server.extraArgs }}
+            - --{{ $key }}={{ $value }}
+          {{- end }}
+          {{- if .Values.server.baseURL }}
+            - --web.external-url={{ .Values.server.baseURL }}
+          {{- end }}
+          {{- if .Values.server.enableAdminApi }}
+            - --web.enable-admin-api
+          {{- end }}
+          ports:
+            - containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.server.prefixURL }}/-/ready
+              port: 9090
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.server.prefixURL }}/-/healthy
+              port: 9090
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+          resources:
+{{ toYaml .Values.server.resources | indent 12 }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+            - name: storage-volume
+              mountPath: {{ .Values.server.pvNfsPath }}
+          {{- range .Values.server.extraHostPathMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              subPath: {{ .subPath }}
+              readOnly: {{ .readOnly }}
+          {{- end }}
+          {{- range .Values.server.extraConfigmapMounts }}
+            - name: {{ $.Values.server.name }}-{{ .name }}
+              mountPath: {{ .mountPath }}
+              subPath: {{ .subPath }}
+              readOnly: {{ .readOnly }}
+          {{- end }}
+          {{- range .Values.server.extraSecretMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              subPath: {{ .subPath }}
+              readOnly: {{ .readOnly }}
+          {{- end }}
+        - name: {{ template "prometheus.name" . }}-{{ .Values.server.name }}-proxy
+          image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+          imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
+          env:
+          - name: "SERVICE_HOST_ENV_NAME"
+            value: "localhost"
+          - name: "SERVICE_PORT_ENV_NAME"
+            value: "9090"
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /etc/secrets/proxykey
+            subPath: fci_universal_ks.pvtk.pem
+          - name: file-secrets
+            mountPath: /etc/secrets/proxycert
+            subPath: fci_universal_ks.crt.pem
+    {{- if .Values.server.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.server.nodeSelector | indent 8 }}
+    {{- end }}
+    {{- if .Values.server.securityContext }}
+      securityContext:
+{{ toYaml .Values.server.securityContext | indent 8 }}
+    {{- end }}
+    {{- if .Values.server.tolerations }}
+      tolerations:
+{{ toYaml .Values.server.tolerations | indent 8 }}
+    {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.server.terminationGracePeriodSeconds }}
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+        - name: config-volume
+          configMap:
+            name: {{ template "prometheus.server.fullname" . }}
+        - name: storage-volume
+        {{- if .Values.server.pvcSpec.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "prometheus.server.fullname" . }}
+        {{- else }}
+          emptyDir: {}
+        {{- end -}}
+      {{- range .Values.server.extraHostPathMounts }}
+        - name: {{ .name }}
+          hostPath:
+            path: {{ .hostPath }}
+      {{- end }}
+      {{- range .Values.server.extraConfigmapMounts }}
+        - name: {{ $.Values.server.name }}-{{ .name }}
+          configMap:
+            name: {{ .configMap }}
+      {{- end }}
+      {{- range .Values.server.extraSecretMounts }}
+        - name: {{ .name }}
+          secret:
+            secretName: {{ .secretName }}
+      {{- end }}
+{{- end -}}

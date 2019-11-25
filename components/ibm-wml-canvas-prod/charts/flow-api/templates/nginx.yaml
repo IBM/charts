@@ -1,0 +1,27 @@
+{{- if .Values.global.nginx.enabled }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "flow-api.fullname" . }}
+  labels:
+    app: {{ template "flow-api.name" . }}
+    chart: {{ template "flow-api.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    # Apparently, we need this for every configMap associated with our addon,
+    # not just the top level one which declares our addon metadata.
+    icpdata_addon: "true"
+data:
+  nginx.conf: |
+    location /{{ .Values.global.flowApi.nginxPath }} {
+      proxy_set_header Host $host:31843;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      set $url "http://{{ template "flow-api.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}";
+      proxy_pass $url;
+      rewrite ^/{{ .Values.global.flowApi.nginxPath }}(.*) $1 break;
+    }
+
+{{- end }}
