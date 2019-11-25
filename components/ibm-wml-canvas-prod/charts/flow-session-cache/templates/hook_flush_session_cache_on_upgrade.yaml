@@ -1,0 +1,83 @@
+#
+# Objective:
+# - To flush the flow-session cache of older flow-session instances just after we do an upgrade.
+# - This should mean that requests for new flow-sessions taken from the cache are using post-upgrade code
+#   rather than the pods which were warmed-up using the older code which has been upgraded.
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "flow-session-cache.jobname" . }}-flush
+  labels:
+    app: {{ template "flow-session-cache.name" . }}
+    chart: {{ template "flow-session-cache.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation, hook-succeeded
+    build: {{ .Values.global.buildVersion | quote }}
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 0
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - "amd64"
+                      - "ppc64le"
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      containers:
+      - name: flush-flow-session-cache-job
+        image: {{ template "full-image-url" . }}
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsUser: {{ $.Values.global.runAsUser }}
+          capabilities:
+            drop:
+            - ALL
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsNonRoot: true
+        resources:
+          limits:
+            cpu: {{ .Values.resources.hook.cpuLimits }}
+            memory: {{ .Values.resources.hook.memory }}
+          requests:
+            cpu: {{ .Values.resources.hook.cpuRequests }}
+            memory: {{ .Values.resources.hook.memory }}
+        env:
+        # The app-name of the cache-db pods, used to find the cache-db pod to talk to.
+        - name: APP_LABEL
+          value: {{ .Values.global.cacheDb.chartName }}
+        - name: RELEASE_LABEL
+          value: {{ .Release.Name }}
+
+        # The number of pods that the flow-session should have. Must be a whole number, not
+        # a fractional number expressed in milli-cpu units. eg: 2 is good, 2000m is bad.
+        - name: CPUS_PER_POD
+          value: "{{ .Values.global.flowSession.cpuRequests }}"
+
+        # The number of cpus to use for the pods in the session pool
+        - name: SESSION_POOL_CPUS
+          value: {{ .Values.sessionPool.cpus | quote }}
+
+        # The percentage of pods in the pool used for those in the running state. The
+        # remaining cpu/memory will be used for pods in other states, such as in the
+        # cache state (ready for new sessions), or deleting/waiting to start etc
+        # states. Typically this will be around 80%, unless running on very limited
+        # resources.
+        - name: SESSION_POOL_MAX_RUNNING_PERCENT
+          value: {{ .Values.sessionPool.maxRunningPercent | quote }}
+
+        command: [ "/bin/bash" , "-c" ,
+                   "/home/hook/flush_cache.sh" ]
+      restartPolicy: Never

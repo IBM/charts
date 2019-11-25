@@ -1,0 +1,35 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ .Values.servicename }}-delete-replicajob"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        {{- include "mongo.annotations" .  | indent 8 }}
+    spec:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "mongodbSecurityContext" . | indent 6 }}
+      serviceAccount: {{ .Values.global.serviceAccount }}
+      containers:
+      - name: mongodb-startreplicaset
+        image: {{ .Values.opsmanagerConfigs.image.repository }}:{{ .Values.opsmanagerConfigs.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh']
+        args: ['-cx', '/var/mongodb_setup/replica-set/manage-replica-set.sh --delete --namespace {{ .Release.Namespace }} --service-name {{ .Values.servicename }}']
+      restartPolicy: Never

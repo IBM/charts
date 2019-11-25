@@ -1,0 +1,259 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "flow-ui.fullname" . }}
+  labels:
+    app: {{ template "flow-ui.name" . }}
+    chart: {{ template "flow-ui.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    build: {{ .Values.global.buildVersion | quote }}
+spec:
+  replicas: {{ .Values.resources.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "flow-ui.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "flow-ui.name" . }}
+        release: {{ .Release.Name }}
+      annotations:
+        build: {{ .Values.global.buildVersion | quote }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - "amd64"
+                      - "ppc64le"
+      strategy:
+        rollingUpdate:
+          maxSurge: 4
+          maxUnavailable: 0
+        type: RollingUpdate
+
+
+      {{- if .Values.global.nginx.importSSLCertificate.enabled }}
+      volumes:
+      - name: certificates
+        secret:
+          secretName: {{ .Values.global.nginx.importSSLCertificate.certificateSecret.name }}
+          items:
+          # The key name is dictated by the installer team - who created the secret.
+          - key: {{ .Values.global.nginx.importSSLCertificate.certificateSecret.key }}
+            # The path where we mount the secret is up to us.
+            path: {{ .Values.nginx.internalSSLCertificate.fileName }}
+      {{- end }}
+
+      serviceAccount: {{ .Values.global.viewer.sa }}
+      serviceAccountName: {{ .Values.global.viewer.sa }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: {{ template "full-image-url" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: {{ $.Values.global.runAsUser }}
+          capabilities:
+            drop:
+            - ALL
+          allowPrivilegeEscalation: false
+          privileged: false
+          runAsNonRoot: true
+        ports:
+          - name: https
+            containerPort: {{ .Values.container.https_port }}
+            protocol: TCP
+          - name: http
+            containerPort: {{ .Values.container.http_port }}
+            protocol: TCP
+        resources:
+          limits:
+            cpu: {{ .Values.resources.cpuLimits }}
+            memory: {{ .Values.resources.memory }}
+          requests:
+            cpu: {{ .Values.resources.cpuRequests }}
+            memory: {{ .Values.resources.memory }}
+        livenessProbe:
+          httpGet:
+            path: /monitor
+            port: {{ .Values.container.https_port }}
+            scheme: HTTPS
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /monitor
+            port: {{ .Values.container.https_port }}
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+
+        {{ if .Values.global.nginx.importSSLCertificate.enabled }}
+        volumeMounts:
+        - name: certificates
+          mountPath: {{ .Values.nginx.internalSSLCertificate.mountFolder }}
+          readOnly: true
+        {{- end }}
+
+        env:
+
+        {{- if .Values.global.bluemix.enabled }}
+        # Bluemix
+        - name: DOMAIN
+          value: {{ .Values.global.bluemix.domain }}
+        - name: EXT_DOMAIN
+          value: {{ .Values.global.bluemix.extDomain }}
+        {{- end }}
+
+        # Control the node runtime
+        - name: NODE_ENV
+          value: {{ .Values.node.env }}
+        - name: NODE_MODULES_CACHE
+          value: "{{ .Values.node.modules.cache }}"
+
+        # Which environment are we deploying into.
+        - name: DSX_OPERATING_ENVIRONMENT
+          value: {{ .Values.global.watsonStudio.operatingEnvironment }}
+        - name: DEPLOYMENT_TARGET
+          value: {{ .Values.global.watsonStudio.deploymentTarget }}
+
+        # Product where application is running
+        - name: IBM_PRODUCT
+          value: {{ .Values.global.ibmProduct }}
+
+        # flow-ui specific settings
+        - name: CACHE_ACCESS_RETRY_INTERVAL
+          value: {{ .Values.flowUiSettings.cache_access_retry_interval | quote }}
+        - name: DISABLE_NONCE
+          value: {{ .Values.flowUiSettings.disable_nonce | quote }}
+        - name: MAX_CACHE_ACCESS_RETRY
+          value: {{ .Values.flowUiSettings.max_cache_access_retry | quote }}
+        - name: MAX_CACHE_RETRY
+          value: {{ .Values.flowUiSettings.max_cache_retry | quote }}
+        - name: NNM_DISABLED
+          value: {{ .Values.flowUiSettings.nnm_disabled | quote }}
+        - name: SESSION_CACHE_ENABLED
+          value: {{ .Values.flowUiSettings.session_cache_enabled | quote }}
+        - name: SESSION_NOT_ACCESSIBLE_RETRY
+          value: {{ .Values.flowUiSettings.session_not_accessible_retry | quote }}
+        - name: USE_FLOW_SESSION
+          value: {{ .Values.flowUiSettings.use_flow_session | quote }}
+        - name: host_port_http
+          value: {{ .Values.container.http_port | quote }}
+        - name: host_port_https
+          value: {{ .Values.container.https_port | quote }}
+
+        # Session
+        - name: APP_ENV_SESSION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: session-key.txt
+        - name: APP_ENV_SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: session-secret.txt
+
+        {{- if .Values.global.auth.iam.enabled }}
+        # Authentication...
+        # Used in cloud, some varialbes/values missing
+        - name: IAM_JWKS_URL
+          value: {{ .Values.global.auth.iam.jwks.url }}
+        - name: IAM_TOKEN_URL
+          value: {{ .Values.global.auth.iam.token.url }}
+        {{- end }}
+
+        {{- if .Values.global.auth.icp4d.enabled }}
+        # icp4d auth.
+        - name: auth__icp4d__authorizationUrl
+          value: {{ .Values.global.auth.icp4d.authorizationUrl }}
+        - name: auth__icp4d__publicKeyUrl
+          value: {{ .Values.global.auth.icp4d.publicKeyUrl }}
+        - name: auth__icp4d__callbackUrl
+          value: {{ .Values.global.auth.icp4d.callbackUrl }}
+        - name: auth__icp4d__logoutUrl
+          value: {{ .Values.global.auth.icp4d.logoutUrl }}
+        {{- end }}
+
+        - name: config__commonApi__url
+          value: {{ .Values.global.commonApi.url }}
+        - name: config__commonUI__url
+          value: {{ .Values.global.commonUI.url }}
+
+        {{- if .Values.global.activityTracker.enabled }}
+        # Activity tracker-related things:
+        - name: APP_ENV_ACTIVITY_TRACKER_REGION
+          value: {{ .Values.global.activityTracker.region }}
+        - name: APP_ENV_ACTIVITY_TRACKER_PROJECTID
+          value: {{ .Values.global.activityTracker.project.id }}
+        - name: APP_ENV_ACTIVITY_TRACKER_URL
+          value: {{ .Values.global.activityTracker.url }}
+        - name: APP_ENV_CRN_CNAME
+          value: {{ .Values.global.crn.name }}
+        - name: APP_ENV_CRN_LOCATION
+          value: {{ .Values.global.crn.location }}
+        - name: ACTIVITY_TRACKER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "flow-ui.secrets" . }}
+              key: activity-tracker-token
+        {{- end }}
+
+        {{- if .Values.global.newRelic.enabled }}
+        - name: NEW_RELIC_LICENSE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "flow-ui.secrets" . }}
+              key: new-relic-license-key
+        - name: NEW_RELIC_APP_NAME
+          value: {{ .Values.newRelic.applicationName }}
+        {{- end }}
+
+        {{- if .Values.global.redis.enabled }}
+        - name: composeRedis_url
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.global.redis.configMap }}
+              key: redis-url
+        - name: APP_ENV_REDIS_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: watson-studio-secrets
+              key: redis-encryption-token.txt
+        {{- end }}
+
+        - name: POSTGRES_URI
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "cache-db.password-secret" . }}
+              key: POSTGRES_URI
+
+        {{ if .Values.global.nginx.importSSLCertificate.enabled }}
+        - name: NODE_EXTRA_CA_CERTS
+          value: {{ .Values.nginx.internalSSLCertificate.mountFolder }}/{{ .Values.nginx.internalSSLCertificate.fileName }}
+        {{- end }}
+
+        {{- if .Values.global.auth.icp4d.enabled }}
+        # icp4d auth.
+        - name: auth__icp4d__publicKeyUrl
+          value: {{ .Values.global.auth.icp4d.publicKeyUrl }}
+        - name: auth__icp4d__serviceIdAuth
+          valueFrom:
+            secretKeyRef:
+              name: wdp-service-id
+              key: service-id-credentials
+        {{- end }}
+
+      {{ if .Values.global.docker.useImagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.imagePullSecretName }}
+      {{ end }}

@@ -1,0 +1,121 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: "{{ template "fullname" . }}-db2u-restore-morph-job"
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  template:
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      {{- include "root.securityContext" . | indent 6 }}
+      initContainers:
+      - name: condition-ready
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "root.containers.securityContext" . | indent 8 }}
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "100Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        command: ['/bin/sh']
+        args: ['-cx', '/tools/post-install/condition_ready.sh --replicas {{ .Values.images.db2u.replicas }} --template {{ template "fullname" . }} --namespace {{ .Release.Namespace }} --dbType {{ .Values.global.dbType }}']
+      containers:
+      - name: restore-morph
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "root.containers.securityContext" . | indent 8 }}
+        command:
+          - "/bin/sh"
+          - "-ec"
+          - |
+            DETERMINATION_FILE=/mnt/blumeta0/nodeslist
+            CAT_NODE=$(head -1 $DETERMINATION_FILE)
+            kubectl exec -it -n {{ .Release.Namespace }} ${CAT_NODE?} -- bash -c "su - db2inst1 -c \"/db2u/db2u_restore_morph.sh\""
+            exit $?
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "100Mi"
+          limits:
+            memory: "512Mi"
+        volumeMounts:
+        - mountPath: /mnt/blumeta0
+          {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/bludata0
+          {{- if .Values.storage.storageLocation.dataStorage.enabled }}
+          name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
+          {{- else }}
+          name: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+        - mountPath: /mnt/blumeta0/configmap
+          name: {{ template "fullname" . }}-config-volume
+      restartPolicy: Never
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      volumes:
+      {{- if .Values.storage.storageLocation.dataStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.dataStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.dataStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.dataStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-data-storage
+          {{- end }}
+        {{- end }}
+      {{- else }}
+      - name: {{ template "fullname" . }}-db2u-sqllib-shared
+        persistentVolumeClaim:
+          {{- if .Values.storage.existingClaimName }}
+          claimName: {{ .Values.storage.existingClaimName }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-sqllib-shared
+          {{- end }}
+      {{- end }}
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
+        hostPath:
+          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
+          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
+        {{- else }}
+        persistentVolumeClaim:
+          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
+          {{- else }}
+          claimName: {{ template "fullname" . }}-db2u-meta-storage
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      - name: {{ template "fullname" . }}-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-config-files
+          items:
+          - key: db2u-db2cfg-var
+            path: db2u-config-var

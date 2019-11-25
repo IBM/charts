@@ -1,0 +1,53 @@
+#Alert when there is a sudden spike in the volume of
+#exceptions and errors in case-manager
+
+#Rule Name
+name: Case-Manager-Exceptions
+
+# Type of alert.
+# the frequency rule type alerts when num_events events occur with timeframe time
+type: frequency
+
+# (Required)
+# Index to search, wildcard supported
+index: filebeat*
+
+# (Required, frequency specific)
+# Alert when this many documents matching the query occur within a timeframe
+num_events: 1
+
+# (Required, frequency specific)
+# num_events must occur within this amount of time to trigger an alert
+timeframe:
+  hours: 1
+
+realert:
+  minutes: 0
+
+aggregation:
+  hours: 2
+
+# (Required)
+# A list of Elasticsearch filters used for find events
+# These filters are joined with AND and nested in a filtered query
+# For more info: http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl.html
+
+filter:
+- query:
+    bool:
+      must:
+      - match:
+          kubernetes.labels.app: "case-manager-fci-solution"
+      - match:
+          kubernetes.container.name: "message-log"
+      - bool:
+          should:
+          - match_phrase:
+              message: "exception"
+          - match_phrase:
+              message: "error"
+# (Required)
+# The alert is use when a match is found
+alert:
+  - command
+command: ["echo", "case-manager error"]

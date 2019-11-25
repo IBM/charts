@@ -1,0 +1,189 @@
+global:
+  createPv: true
+  nfsServer: ""
+  dockerRepository: ""
+
+
+#Leightweight init container
+sideCarContainers:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "0.01"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+
+image:
+  repository: ibmcom/mongodb
+  tag: 3.6.8
+  pullPolicy: "IfNotPresent"
+  debug: false
+
+arch: amd64
+
+enabled: true
+
+dbConfig:
+  MONGODB_USERNAME: user
+  MONGODB_DATABASE: admin
+  MONGODB_IUI_DB: iui
+  MONGODB_IUI_USER: iui_user
+  MONGODB_FCDD_DB: fcdd
+  MONGODB_FCDD_USER: fcdd_user
+  MONGODB_TLS_DB: fcai_tls
+  MONGODB_TLS_USER: fcaiuser 
+  MONGODB_TLS_DEFAULT_DBNAME: default
+  MONGODB_DSF_DB: dataSourceFrameworkDB
+  MONGODB_DSF_USER: dsf_user
+  MONGODB_ERAAS_INVESTIGATION_USER: investigation_user
+  MONGODB_ERAAS_INVESTIGATION_DB: investigationDB
+  MONGODB_ERAAS_PROXY_USER: proxy_user
+  MONGODB_ERAAS_KYC_ADAPTER_USER: adapter_user
+  MONGODB_ERAAS_PROXY_DB: proxyDB
+  MONGODB_ERAAS_KYC_ADAPTER_DB: adapterDB
+
+## MongoDB custom user and database
+## ref: https://github.com/bitnami/bitnami-docker-mongodb/blob/master/README.md#creating-a-user-and-database-on-first-run
+##
+# mongodbUsername: username
+mongodbDatabase: admin
+
+## Whether enable/disable IPv6 on MongoDB
+## ref: https://github.com/bitnami/bitnami-docker-mongodb/blob/master/README.md#enabling/disabling-ipv6
+##
+mongodbEnableIPv6: true
+
+## MongoDB System Log configuration
+## ref: https://github.com/bitnami/bitnami-docker-mongodb#configuring-system-log-verbosity-level
+##
+mongodbSystemLogVerbosity: 0
+mongodbDisableSystemLog: false
+
+## MongoDB additional command line flags
+##
+## Can be used to specify command line flags, for example:
+##
+## mongodbExtraFlags:
+##  - "--wiredTigerCacheSizeGB=2"
+mongodbExtraFlags:
+- "--sslMode=requireSSL"
+- "--sslPEMKeyFile=/bitnami/mongodb.pem"
+mongodbClientExtraFlags:
+- "--ssl"
+- "--sslAllowInvalidCertificates"
+
+## Pod Security Context
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+##
+securityContext:
+  enabled: true
+  fsGroup: 1001
+  runAsUser: 1001
+
+## Kubernetes Cluster Domain
+clusterDomain: cluster.local
+
+## Kubernetes service type
+service:
+  annotations: {}
+  type: ClusterIP
+  port: 27017
+
+  ## Specify the nodePort value for the LoadBalancer and NodePort service types.
+  ## ref: https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport
+  ##
+  # nodePort:
+
+
+## Setting up replication
+## ref: https://github.com/bitnami/bitnami-docker-mongodb#setting-up-a-replication
+#
+replicaSet:
+  enabled: true
+  useHostnames: true
+  name: fcirs
+
+  ## Key used for replica set authentication
+  # key: key
+
+  replicas:
+    secondary: 0
+    arbiter: 0
+
+podAnnotations: {}
+#Mongo
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "0.05"
+  limits:
+    memory: "4Gi"
+    cpu: "2"
+nodeSelector: {}
+affinity: {}
+tolerations: []
+
+pvPrimaryNfsPath: /fci-mongodb-primary-data
+pvSecondaryNfsPath: /fci-mongodb-secondary-data
+pvcSpec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-storage-class
+  size: 10Gi
+
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 300
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+  successThreshold: 1
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+  successThreshold: 1
+
+# Entries for the MongoDB config file
+configmap:
+#  # Where and how to store data.
+#  storage:
+#    dbPath: /opt/bitnami/mongodb/data/db
+#    journal:
+#      enabled: true
+#    #engine:
+#    #wiredTiger:
+#  # where to write logging data.
+#  systemLog:
+#    destination: file
+#    logAppend: true
+#    path: /opt/bitnami/mongodb/logs/mongodb.log
+#  # network interfaces
+  # net:
+  #   ssl:
+  #     mode: requireSSL
+  #     PEMKeyFile: /mongodb.key
+  #     CAFile: /mongodb.crt
+#  net:
+#    port: 27017
+#    bindIp: 0.0.0.0
+#    unixDomainSocket:
+#      enabled: true
+#      pathPrefix: /opt/bitnami/mongodb/tmp
+#  # replica set options
+#  replication:
+#    replSetName: replicaset
+#  # process management options
+#  processManagement:
+#     fork: false
+#     pidFilePath: /opt/bitnami/mongodb/tmp/mongodb.pid
+#  # set parameter options
+#  setParameter:
+#     enableLocalhostAuthBypass: true
+#  # security options
+#  security:
+#    authorization: enabled
+#    keyFile: /opt/bitnami/mongodb/conf/keyfile

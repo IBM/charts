@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "graph-writer.fullname" . }}-liberty
+  labels:
+    app: {{ template "graph-writer.name" . }}-liberty
+    chart: {{ template "graph-writer.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+{{ include "common.scaleDownIfDisabled" . | indent 2 }}
+  selector:
+    matchLabels:
+      app: {{ template "graph-writer.name" . }}-liberty
+      release: {{ .Release.Name }}
+  revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
+  template:
+    metadata:
+      labels:
+        name: {{ template "graph-writer.fullname" . }}-liberty
+        app: {{ template "graph-writer.name" . }}-liberty
+        release: {{ .Release.Name }}
+        chart: {{ template "graph-writer.chart" . }}
+        heritage: {{ .Release.Service }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+        fci/build: {{ .Values.image.timestamp | default .Release.Time}}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      serviceAccountName: {{ .Release.Name }}-common
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+        - name: graph-writer-liberty-volume
+          persistentVolumeClaim:
+            claimName: {{ template "graph-writer.fullname" . }}-liberty
+        - name: logs
+          emptyDir: {}          
+      initContainers:
+        - name: init-pv
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.libertyInitPv.image.repository }}:{{ .Values.libertyInitPv.image.tag }}"
+          imagePullPolicy: {{ .Values.libertyInitPv.image.pullPolicy }}
+          resources:
+{{ toYaml .Values.libertyInitPv.resources | indent 12 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          command: [ "sh", "-c", "/init-pv.sh" ]
+          volumeMounts:
+          - name: graph-writer-liberty-volume
+            mountPath: /pv            
+      containers:
+        - name: liberty
+          resources:
+{{ toYaml .Values.liberty.resources | indent 12 }}
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.liberty.image.repository }}:{{ .Values.liberty.image.tag }}"
+          imagePullPolicy: {{ .Values.liberty.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.graphWriterLiberty.readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: 30
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ default 30 .Values.graphWriterLiberty.livenessProbe.initialDelaySeconds }}
+            failureThreshold: 3
+            periodSeconds: 60
+            timeoutSeconds: 30
+          envFrom:
+          - configMapRef:
+              name: {{ template "graph-writer.fullname" . }}-liberty
+          env:
+          - name: FCI_JKS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "graph-writer.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: JWT_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "graph-writer.core-release-name" . }}-platform-secrets-env
+                key: JWT_KEY
+          ports:
+          - containerPort: 9554
+          volumeMounts:
+          - name: file-secrets
+            mountPath: /fciexports/graph-writer/fci_universal_ks.jks
+            subPath: fci_universal_ks.jks
+          - name: graph-writer-liberty-volume
+            mountPath: /fciexports/graph-writer
+          - name: logs
+            mountPath: /opt/ibm/wlp/usr/servers/graphapiservice/logs
+        - name: graph-liberty-log
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+{{ include "common.livenessProbe" . | indent 10 }}
+{{ include "common.readinessProbe" . | indent 10 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']
+          volumeMounts:
+          - name: logs
+            mountPath: /logs

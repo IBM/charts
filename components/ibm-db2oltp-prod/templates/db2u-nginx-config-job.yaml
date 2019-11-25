@@ -1,0 +1,34 @@
+{{- if ( eq .Values.runtime "ICP4Data" ) }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{ template "fullname" . }}-db2u-nginx-config-job
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: "{{ .Values.global.dbType }}"
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+      annotations:
+        {{- include "db2oltp.annotations" .  | indent 8 }}
+    spec:
+      {{- include "nodeaffinity" . | indent 6 }}
+      {{- include "tolerations" . | indent 6 }}
+      containers:
+      - name: {{ template "fullname" . }}-db2u-tools
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        command: ['/bin/sh']
+        args: ["-cx", "/tools/nginx/reloadNginxConfig.sh --namespace {{ .Values.baseNamespace }} --runtime {{ .Values.runtime }} --service-name {{ .Values.servicename }} --dbType {{ .Values.global.dbType }}"]
+      restartPolicy: Never
+      serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+{{- end }}

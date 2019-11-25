@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "cedm.fullname" . }}
+  labels:
+    app: {{ template "cedm.name" . }}-integration
+    chart: {{ template "cedm.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+{{- with .Values.cedmConfig }}
+data:
+{{ toYaml . | indent 2 }}
+{{- end }}
+  AUDIT_HOST: "https://{{ .Release.Name }}-security-audit-app:9443"
+  SEARCH_HOST: "https://{{ .Release.Name }}-search-liberty:9443"
+  CASE_HOST: "https://{{ .Release.Name }}-case-manager-fci-solution:9443"
+  com_fci_db2_server: {{ .Release.Name }}-{{ .Values.cedmConfig.db2_service }}
+  BOOTSTRAP_SERVERS_CONFIG: {{ .Release.Name }}-kafka:9092
+{{ if .Values.global.webProxyServer }}  
+  com_fci_solution_server_rest_url: "https://{{ .Values.global.webProxyServer }}/"
+  com_fci_analytic_server_rest_url: "https://{{ .Values.global.webProxyServer }}/"
+{{ else  }}
+  com_fci_solution_server_rest_url: "https://{{ .Values.global.managerFQDN }}:3080/"
+  com_fci_analytic_server_rest_url: "https://{{ .Values.global.managerFQDN }}:3080/"
+{{ end }}
+{{- with .Values.global.hbase }}
+{{    toYaml . | indent 2 }}
+{{- end }}

@@ -1,0 +1,71 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: "{{  .Chart.Name }}-deployment"
+  labels:
+    chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  template:
+    metadata:
+      labels:
+        app: "{{  .Chart.Name }}-selector"
+        release: {{ .Release.Name }}
+      annotations:
+        productID: ICP4D-addon-{{ .Values.metering.productID }}
+        productName: {{ .Values.metering.productName }}
+        productVersion: {{ .Values.metering.productVersion }}
+
+    spec:
+{{ toYaml .Values.hostOptions | indent 6 }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{ if .Values.icp4Data }}
+      serviceAccountName: cpd-viewer-sa
+{{ else }}
+      serviceAccountName: {{  .Chart.Name }}-service-account
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+{{ end }}
+      containers:
+      - name: "{{  .Chart.Name  }}"
+{{/*        image: {{ .Values.image.repository }}{{ .Values.image.name }}:{{ .Values.image.tag }}*/}}
+        image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.image.name }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.service.servicePort }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds}}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds}}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.service.servicePort }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds}}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds}}
+        ports:
+        - containerPort: {{ .Values.service.servicePort}}
+        resources:
+{{ toYaml .Values.image.resources | indent 12 }}
+        securityContext:
+{{ toYaml .Values.securityContext | indent 12 }}
+
+        env:
+          - name: PORT
+            value : "{{ .Values.service.servicePort }}"
+          - name: APPLICATION_NAME
+            value: "{{ .Release.Name }}"
+          - name: KNJ_LOG_TO_CONSOLE
+            value: "true"
+          - name: LOG_LEVEL
+            value: "debug"

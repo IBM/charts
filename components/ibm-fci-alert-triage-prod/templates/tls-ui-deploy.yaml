@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-fci-alert-triage.fullname" . }}-tls-ui
+  labels:
+    app: {{ template "ibm-fci-alert-triage.name" . }}-tls-ui
+    chart: {{ template "ibm-fci-alert-triage.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  {{   if .Values.fcai_transaction_list_screening.enabled }}
+  replicas: 1
+  {{   else }}
+  replicas: 0
+  {{   end }}
+  selector:
+    matchLabels:
+      app: {{ template "ibm-fci-alert-triage.name" . }}-tls-ui
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+      labels:
+        app: {{ template "ibm-fci-alert-triage.name" . }}-tls-ui
+        release: {{ .Release.Name }}
+        chart: {{ template "ibm-fci-alert-triage.chart" . }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secret-files
+      serviceAccountName: {{ template "ibm-fci-alert-triage.core-release-name" . }}-common-scripts
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+      - name: tls-ui
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.fcai_transaction_list_screening.tlsUI.image.repository }}:{{ .Values.fcai_transaction_list_screening.tlsUI.image.tag }}
+        volumeMounts:
+        - name: file-secrets
+          mountPath: /opt/ibm/fcai/certs/fci_universal_ks.pvtk.pem
+          subPath: fci_universal_ks.pvtk.pem
+        - name: file-secrets
+          mountPath: /opt/ibm/fcai/certs/fci_universal_ks.crt.pem
+          subPath: fci_universal_ks.crt.pem
+        imagePullPolicy: {{ .Values.fcai_transaction_list_screening.tlsUI.image.pullPolicy }}
+        {{- with .Values.fcai_transaction_list_screening.tlsUI.resources }}
+        resources:
+{{    toYaml . | indent 12 }}
+        {{- end }}
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fcai/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 30
+          successThreshold: 1
+          failureThreshold: 2
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fcai/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+          initialDelaySeconds: 180
+          periodSeconds: 60
+          timeoutSeconds: 30
+          successThreshold: 1
+          failureThreshold: 2
+        env:
+        - name: JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              key: JWT_KEY
+        envFrom:
+        - configMapRef:
+            name: {{ template "ibm-fci-alert-triage.fullname" . }}-tls-ui
+        ports:
+        - containerPort: 4000
+      restartPolicy: Always
