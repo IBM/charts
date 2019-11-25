@@ -1,0 +1,126 @@
+# Default values for case.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  imagePullSecrets:
+  dockerRepository: ""
+  createPv: true
+  persistence:
+    storageClassName: ''
+    useDynamicProvisioning: false
+  nfsServer: ""
+  passwords:
+    mqm: __FCI_GENERATED_PW__
+    env_fci_batch_password: __FCI_GENERATED_PW__
+    fciadmin_password: __FCI_GENERATED_PW__
+
+enabled: True
+
+
+#This is for all the log containers of MQ, case-manager as well as light weight init containers
+sideCarContainers:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: ".01"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+
+arch: amd64
+
+#Mq container
+mq:
+  #Load Balancer Node Ports - Ports to expose in loadbalancer for CP4D installs
+  mqNodePort: 30683
+  image:
+    repository: ibmcom/fci-messaging
+    tag: 1.0.3.1
+    pullPolicy: IfNotPresent
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: ".1"
+    limits:
+      memory: "512Mi"
+      cpu: "2"
+
+liberty:
+  image:
+    repository: ibmcom/fci-solution
+    tag: 1.0.3.1
+    pullPolicy: IfNotPresent
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  #Liberty Container
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: ".1"
+    limits:
+      memory: "6Gi"
+      cpu: "4"
+
+solutionPvNfsPath: /fci-solution
+
+solutionPvcSpec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 1Gi
+
+mqPvNfsPath: /fci-messaging
+
+mqPvcSpec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: nfs-storage-class
+  size: 1Gi
+
+mqConfig:
+  FCIQM_certlabl: 'fci_universal_label'
+
+libertyConfig:
+  db2_service: "db2-datastore-0"
+  com_fci_db2_config: server_ssl_db2.xml
+  com_fci_db2_dbname: fcidb
+  com_fci_db2_java: /opt/ibm/fci/db2/java
+  com_fci_db2_port: "50000"
+  com_fci_db2_ssl_port: "56000"
+  com_fci_db2_userid: fciauthid
+  com_fci_extensions: /fci-shared/extensions
+  com_fci_home: /opt/ibm/fci
+  com_fci_inventory: /opt/ibm/fci/swidtag
+  com_fci_mq_config: server_ssl_mq.xml
+  com_fci_mq_java: /opt/ibm/fci/mqm/java
+  com_fci_mq_port: "1414"
+  com_fci_mq_qmgr: FCIQM
+  com_fci_mq_ssl_port: "9997"
+  com_fci_mq_user: mqm
+  com_fci_swagger_info_config: fci-swagger-info.json
+  com_fci_case_liberty_addins: addins.xml
+  JWT_ISSUER: "fci.ibm.com"
+
+  # For Insurance
+  com_fci_case_liberty_addins: '/fci-shared/mpf/conf/server_fcii_medical_provider_fraud_ear.xml'
+  com_fci_mpf_app_path: '/fci-shared/mpf/apps/'
+  env_fci_batch_userid: 'fcibatch'
+
+
+  #-- Kafka variables:
+  # BOOTSTRAP_SERVERS_CONFIG: defined in fci-values.yaml
+  KAFKA_SUBSCRIPTIONS: '[{"topic": "FCI_SEC_AuditRecords"}]'
+  SECURITY_PROTOCOL_CONFIG: "SSL"
+  SSL_TRUSTSTORE_LOCATION_CONFIG: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.truststore.jks
+  SSL_KEYSTORE_LOCATION_CONFIG: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.keystore.jks
+  FCI_KAFKA_MSG_KS_PATH: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_kafka_msg.p12
+  ACKS_CONFIG: "all"
+  RETRIES_CONFIG: "5"
+  GROUP_ID_CONFIG: "group_audit"
+  AUDIT_ACTIVE: "1"
+  #-- End Kafka variables

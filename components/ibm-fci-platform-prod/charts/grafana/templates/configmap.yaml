@@ -1,0 +1,52 @@
+{{- if and .Values.global.enableMonitoring (not (or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS .Values.global.deployOnCP4D)) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "grafana.fullname" . }}
+  labels:
+    app: {{ template "grafana.name" . }}
+    chart: {{ template "grafana.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+data:
+{{- if .Values.plugins }}
+  plugins: {{ join "," .Values.plugins }}
+{{- end }}
+  grafana.ini: |
+{{- range $key, $value := index .Values "grafana.ini" }}
+    [{{ $key }}]
+    {{- range $elem, $elemVal := $value }}
+    {{ $elem }} = {{ $elemVal }}
+    {{- end }}
+{{- end }}
+
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+    - access: proxy
+      isDefault: true
+      name: Prometheus
+      type: prometheus
+      url: https://{{ .Release.Name }}-prometheus-server:9090
+      jsonData:
+        tlsSkipVerify: true
+
+    - access: proxy
+      isDefault: false
+      name: 'Prometheus AlertManager'
+      type: camptocamp-prometheus-alertmanager-datasource
+      url: https://{{ .Release.Name }}-prometheus-alertmanager:9093
+      jsonData:
+        tlsSkipVerify: true
+        severity_critical: Critical
+        severity_high: Error
+        severity_warning: Warning
+        severity_info: Information
+
+{{- if .Values.dashboardProviders }}
+  {{- range $key, $value := .Values.dashboardProviders }}
+  {{ $key }}: |
+{{ toYaml $value | indent 4 }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}

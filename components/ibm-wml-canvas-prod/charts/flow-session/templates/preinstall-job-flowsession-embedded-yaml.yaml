@@ -1,0 +1,82 @@
+{{- $compName := "spss-preinstaller-embedded-yaml" -}}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{$compName}}
+  labels:
+    app: {{$compName}}
+    chart: {{$compName}}
+    release: {{$compName}}
+    run: {{$compName}}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{$compName}}
+        chart: {{$compName}}
+        component: {{$compName}}
+        release: {{$compName}}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.global.runAsUser }}
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      restartPolicy: Never
+      containers:
+        - name: {{$compName}}
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.preInstaller.name }}:{{ .Values.global.preInstaller.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "256Mi"
+            requests:
+              cpu: "0.5"
+              memory: "256Mi"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ .Values.global.runAsUser }}
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - "/bin/bash"
+            - -c
+            - |
+              cat <<EOF | kubectl apply -f -
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: flow-session-template-yml
+                labels:
+                  app: {{ template "flow-session.name" . }}
+                  chart: {{ template "flow-session.chart" . }}
+                  release: {{ .Release.Name }}
+                annotations:
+                  build: {{ .Values.global.buildVersion | quote }}
+              type: Opaque
+              data:
+                # This stanza puts an entire rendered yaml into the secret store, so that a pod can be
+                # launched using it. Substitutions are made by moustache as normal, and the result is base64 encoded
+                # as per normal secrets.
+                flow_session_deployment_snippet.yml: {{ include "launch_yaml" . | b64enc }}
+              EOF

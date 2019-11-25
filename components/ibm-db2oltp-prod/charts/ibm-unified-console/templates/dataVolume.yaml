@@ -1,0 +1,32 @@
+{{- if and .Values.persistence.enabled  (not  .Values.dataVolume.existingClaimName) (or (not .Values.dataServer.sharedPVC.enabled) (and .Values.dataServer.sharedPVC.enabled (.Values.dataServer.sharedPVC.onlyForShare))) }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "uc.fullname" . }}-{{ .Values.dataVolume.name }}
+  labels:
+    app: {{ template "uc.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}-{{ .Values.dataVolume.name }}
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: dataVolume
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  {{- if .Values.persistence.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.dataVolume.storageClassName | quote }}
+  {{- else }}
+  storageClassName: {{ default "" .Values.dataVolume.storageClassName | quote }}
+  {{- end }}
+
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: {{ .Values.dataVolume.size | quote }}
+{{- end }}
+

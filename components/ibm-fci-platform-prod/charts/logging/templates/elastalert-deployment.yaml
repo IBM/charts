@@ -1,0 +1,142 @@
+{{- if and .Values.enabled (not .Values.global.deployOnCP4D) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "logging.fullname" . }}-elastalert
+  labels:
+    app: {{ template "logging.name" . }}-elastalert
+    chart: {{ template "logging.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "logging.name" . }}-elastalert
+      release: {{ .Release.Name }}  
+{{ include "elastalert.scaleDownIfDisabled" . | indent 2 }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  template:
+    metadata:
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/elastalert-config.yaml") . | sha256sum }}
+        checksum/rules: {{ include (print $.Template.BasePath "/elastalert-rules-config.yaml") . | sha256sum }}
+      labels:
+        name: {{ template "logging.fullname" . }}-elastalert
+        app: {{ template "elastalert.name" . }}-elastalert
+        chart: {{ template "logging.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      containers:
+      - name: elastalert
+        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.elastalertConfig.image.repository }}:{{ .Values.elastalertConfig.image.tag }}
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        imagePullPolicy: {{ .Values.elastalertConfig.image.pullPolicy }}
+{{- if .Values.elastalertConfig.command }}
+        command:
+{{ toYaml .Values.elastalertConfig.command | indent 10 }}
+{{- end }}
+{{- if .Values.args }}
+        args:
+{{ toYaml .Values.elastalertConfig.args | indent 10 }}
+{{- end }}
+        env:
+        - name: ES_USERNAME
+          value: {{ .Values.elasticsearchUsername }}
+        - name: ES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-platform-secrets-env
+              key: ELASTIC_ADMIN_PASSWORD
+        - name: ES_HOST
+          value: {{ .Release.Name }}-{{ .Values.elastalertConfig.elasticsearch.host }}
+        - name: ES_PORT
+          value: {{ .Values.elastalertConfig.elasticsearch.port | quote }}
+        volumeMounts:
+          - name: config
+            mountPath: '/opt/config'
+{{- if .Values.elastalertConfig.rules }}
+{{- range $key, $value := .Values.elastalertConfig.rules }}
+{{- if hasKey $value "yaml" }}
+          - name: rules
+            mountPath: "/opt/rules/{{ $key }}.yaml"
+            subPath: "{{ $key }}.yaml"
+{{- end }}
+{{- end }}
+{{- end }}
+          - name: elastalert-data
+            mountPath: /opt/rules
+          - name: file-secrets
+            mountPath: /certs/fci_universal_ks.crt
+            subPath: fci_universal_ks.crt
+            readOnly: true
+{{- if .Values.elastalertConfig.emailAlerts }}
+          - name: smtp-auth
+            mountPath: "/opt/elastalert/smtp_auth.yml"
+            subPath: smtp_auth.yml
+{{- end }}
+{{- if and .Values.elastalertConfig.emailAlerts .Values.elastalertConfig.smtp_ssl }}
+          - name: file-secrets
+            mountPath: /certs/smtp_server.crt
+            subPath: smtp_server.crt
+            readOnly: true
+{{- end }}
+        resources:
+{{ toYaml .Values.elastalertConfig.resources | indent 12 }}
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - /opt/elastalert/.ready-to-run.lock
+          initialDelaySeconds: 60
+          periodSeconds: 60
+      restartPolicy: Always
+{{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+{{- end }}
+{{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+{{- end }}
+      volumes:
+{{- if .Values.elastalertConfig.rules }}
+        - name: rules
+          configMap:
+            name: {{ template "logging.fullname" . }}-elastalert-rules
+            items:
+{{- range $key, $value := .Values.elastalertConfig.rules }}
+            - key: {{ $key }}.yaml
+              path: {{ $key}}.yaml
+{{- end }}
+{{- end }}
+        - name: config
+          configMap:
+            name: {{ template "logging.fullname" . }}-elastalert-config
+            items:
+            - key: elastalert_config
+              path: elastalert_config.yaml
+{{- if .Values.elastalertConfig.emailAlerts }}
+        - name: smtp-auth
+          configMap:
+            name: {{ template "logging.fullname" . }}-elastalert-config
+            items:
+            - key: smtp_auth
+              path: smtp_auth.yml
+{{- end }}
+        - name: elastalert-data
+          persistentVolumeClaim:
+            claimName: {{ template "logging.pvcname" . }}-elastalert
+        - name: file-secrets
+          secret:
+            defaultMode: 420
+            secretName: {{ template "common-ui.core-release-name" . }}-platform-secret-files
+{{- end -}}
