@@ -23,11 +23,17 @@ spec:
         heritage: {{ .Release.Service }}
         component: {{ template "ibm-apiconnect-cip.name" . }}-operator
       annotations:
+        icp4i.ibm.com/product: apiconnect
+        icp4i.ibm.com/release: {{ .Release.Name }}
         productName: {{ template "ibm-apiconnect-cip.productName" . }}
         productID: {{ template "ibm-apiconnect-cip.productID" . }}
         productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
         productMetric: {{ template "ibm-apiconnect-cip.productMetric" . }}
         productChargedContainers: ""
+        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
+        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
+        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
+        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
     spec:
       serviceAccountName: {{ template "ibm-apiconnect-cip.serviceAccountName" . }}
       affinity:
@@ -45,6 +51,24 @@ spec:
       securityContext:
 {{ include "ibm-apiconnect-cip.podSecurityContext" . | indent 8 }}
       initContainers:
+{{- if not .Release.IsInstall }}
+        - name: patch-pullsecrets
+{{- if .Values.operator.registry }}
+          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- else }}
+          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+{{- end }}
+          imagePullPolicy: {{ .Values.operator.pullPolicy }}
+          command: [ "/home/apic/init-files/patch-pullsecrets.sh" ]
+          workingDir: /home/apic
+          resources:
+{{ include "ibm-apiconnect-cip.resources" . | indent 12 }}
+          volumeMounts:
+          - name: init-files
+            mountPath: "/home/apic/init-files"
+          securityContext:
+{{ include "ibm-apiconnect-cip.securityContext" . | indent 12 }}
+{{- end}}
         - name: wait
 {{- if .Values.operator.registry }}
           image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
@@ -172,6 +196,9 @@ spec:
                   mode: 0750
                 - key: register-oidc
                   path: register-oidc.sh
+                  mode: 0750
+                - key: patch-pullsecrets
+                  path: patch-pullsecrets.sh
                   mode: 0750
       {{- if .Values.global.certSecret }}
           - secret:

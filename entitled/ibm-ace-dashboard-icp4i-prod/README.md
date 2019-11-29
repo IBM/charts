@@ -33,17 +33,23 @@ The predefined SecurityContextConstraints [`ibm-anyuid-scc`](https://ibm.biz/cpk
 oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:default
 ```
 
-* Custom SecurityContextConstraints definition:
+### Custom SecurityContextConstraints definition:
 
 ```yaml
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
   name: ibm-ace-scc
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+fsGroup:
+  type: RunAsAny
 spec:
   allowPrivilegeEscalation: true
-  fsGroup:
-    rule: RunAsAny
   requiredDropCapabilities:
   - MKNOD
   allowedCapabilities:
@@ -60,12 +66,6 @@ spec:
   - NET_BIND_SERVICE
   - SYS_CHROOT
   - SETFCAP
-  runAsUser:
-    rule: RunAsAny
-  seLinux:
-    rule: RunAsAny
-  supplementalGroups:
-    rule: RunAsAny
   volumes:
   - configMap
   - emptyDir
@@ -82,25 +82,25 @@ Only one dashboard can be installed per namespace.
 
 **Important:** If using a private Docker registry, an image pull secret needs to be created before installing the chart. Supply the name of the secret as the value for `image.pullSecret`.
 
-To install the chart with the release name `ace-demo-ingress`:
+To install the chart with the release name `dashboard`:
 
 ```
-helm install --name ace-demo-ingress ibm-ace-dashboard-icp4i-prod --tls
+helm install --name dashboard ibm-ace-dashboard-icp4i-prod --tls --set license=accept --set tls.hostname=$(kubectl get configmap -n kube-public ibmcloud-cluster-info -o jsonpath="{.data.proxy_address}")
 ```
 
 ## Verifying the Chart
 
 See the instructions (from NOTES.txt, packaged with the chart) after the helm installation completes for chart verification. The instructions can also be viewed by running the command:
 ```
-helm status ace-demo-ingress --tls.
+helm status dashboard --tls.
 ```
 
 ## Uninstalling the Chart
 
-To uninstall/delete the `ace-demo-ingress` release:
+To uninstall/delete the `dashboard` release:
 
 ```
-helm delete ace-demo-ingress --purge --tls
+helm delete dashboard --purge --tls
 ```
 
 The command removes all the Kubernetes components associated with the chart.
@@ -110,18 +110,16 @@ The following table lists the configurable parameters of the `ibm-ace-dashboard-
 
 | Parameter                                 | Description                                     | Default                                                    |
 | ----------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
-| `image.contentServer`                     | Content server Docker image                     | `cp.icr.io/cp/icp4i/ace/ibm-ace-content-server-prod:11.0.0.6`                   |
-| `image.controlUI`                         | Control UI Docker image                         | `cp.icr.io/cp/icp4i/ace/ibm-ace-dashboard-prod:11.0.0.6`                       |
-| `image.configurator`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-ace-icp-configurator-prod:11.0.0.6`                 |
+| `image.contentServer`                     | Content server Docker image                     | `cp.icr.io/cp/icp4i/ace/ibm-ace-content-server-prod:11.0.0.6.1`                   |
+| `image.controlUI`                         | Control UI Docker image                         | `cp.icr.io/cp/icp4i/ace/ibm-ace-dashboard-prod:11.0.0.6.1`                       |
+| `image.configurator`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-ace-icp-configurator-prod:11.0.0.6.1`                 |
 | `image.pullPolicy`                        | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`                        | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `serverChartLocation`                     | The repository location that the charts were imported into. | `ibm-entitled-charts`          |
 | `arch`                                    | Architecture scheduling preference for worker node (only amd64 supported) - readonly. | `amd64`               |
-| `defaultRole`                             | Defines the access role the dashboard will use for all operations. | `viewer`                                 |
 | `security.fsGroupGid`                     | File system group ID for volumes that support ownership management. | `nil`                                   |
 | `security.initVolumeAsRoot`               | Whether or not storage provider requires root permissions to initialize. | `true` 
-| `tls.hostname`                            | The hostname of the ingress proxy that has to be configured in the ingress definition.  | `nil`               |
-| `tls.port`                                | Port of the ingress proxy to be configured when running on OpenShift Container Platform (OCP), this is often 3443. | `nil`               |
+| `tls.hostname`                            | The hostname of the ingress proxy that has to be configured in the ingress definition.  If left empty this will default to the common services `proxy_address` value | `nil`               |
 | `tls.secret`                              | Specifies the name of the secret for the certificate to be used in the Ingress definition. If not supplied the default ingress cert will be used. | `nil`   |
 | `contentServer.resources.limits.cpu`      | Kubernetes CPU limit for the dashboard content server container. | `1`                                        |
 | `contentServer.resources.limits.memory`   | Kubernetes memory limit for the dashboard content server container. | `1024Mi`                                |
@@ -137,6 +135,7 @@ The following table lists the configurable parameters of the `ibm-ace-dashboard-
 | `persistence.size`                        | Storage size of persistent storage to provision. | `5Gi`                                                      |
 | `persistence.storageClassName`            | Storage class name - if blank will use the default storage class. | `nil`                                     |
 | `log.format`                              | Output log format on container's console. Either `json` or `basic`. | `json`                                  |
+| `log.level`                              | Output log level on container's console. Either `info` or `debug`. | `info`                                  |
 | `replicaCount`                            | How many replicas of the dashboard pod to run. | `3`                                                      |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.

@@ -6,7 +6,7 @@
 # US Government Users Restricted Rights - Use, duplication or
 # disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 ###############################################################################
-{{- include "sch.config.init" (list . ) }}
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
 {{- $labels := include "sch.metadata.labels.standard" (list . "") }}
 {{- $icp4iPodLabels := include "sch.metadata.labels.standard" (list . "icp4i") }}
 {{- $name := include "sch.names.fullName" (list .) }}
@@ -32,11 +32,7 @@ spec:
   template:
     metadata:
       annotations:
-        {{- if .Values.productionDeployment }}
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
-        {{else }}
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
-        {{- end }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
       labels:
 {{ $icp4iPodLabels | indent 8 }}
     spec:
@@ -88,7 +84,7 @@ spec:
             periodSeconds: 2
           env:
             - name: INGRESS_PATH
-              value: {{ .Values.tls.ingresspath }}
+              value: ""
             - name: CIP_SERVICES_ENDPOINT
               value: "https://icp4i-services-{{ .Release.Namespace }}.{{ .Release.Namespace }}.svc:3000"
             - name: CLIENT_ID
@@ -153,13 +149,16 @@ spec:
             periodSeconds: 2
           env:
             - name: NAVIGATOR_HOST
-              value: {{ .Values.tls.hostname }}
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $icp4iConfigmapName }}
+                  key: navigatorHost
             - name: CIP_VERSION
               value: {{ .Chart.Version }}
             - name: NAMESPACE
               value: {{ .Release.Namespace }}
             - name: INGRESS_PATH
-              value: {{ .Values.tls.ingresspath }}
+              value: ""
             - name: CLIENT_ID
               valueFrom:
                 secretKeyRef:
@@ -195,9 +194,5 @@ spec:
                 secretKeyRef:
                   name: {{ $intTlsSecretName }}
                   key: tls.crt
-{{- if (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
-            - name: IS_RHEL
-              value: "1"
-{{- end }}
           resources:
 {{ toYaml .Values.resources.services | indent 12 }}

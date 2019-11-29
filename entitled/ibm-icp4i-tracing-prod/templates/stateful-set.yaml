@@ -15,6 +15,9 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ template "fullname" . }}
+  annotations:
+    "icp4i.ibm.com/product": tracing
+    "icp4i.ibm.com/release": {{ .Release.Name }}
   labels:
     app.kubernetes.io/component: icp4i-od-manager
     release: {{ .Release.Name }}
@@ -30,9 +33,15 @@ spec:
   template:
     metadata:
       annotations:
-        productName: 'IBM Cloud Pak for Integration Operations Dashboard Add-On'
-        productID: 'Tracing_5737_I89_ICIP_nonchargeable'
-        productVersion: '2019.3.2.2'
+        productID: 'c8b82d189e7545f0892db9ef2731b90d'
+        productName: 'IBM Cloud Pak for Integration OD Add-On'
+        productVersion: '1.0.1'
+        productMetric: 'VPC'
+        productChargedContainers:
+        productCloudpakRatio: '1:1'
+        cloudpakName: 'IBM Cloud Pak for Integration'
+        cloudpakId: 'c8b82d189e7545f0892db9ef2731b90d'
+        cloudpakVersion: '2019.4.1'
       labels:
         app.kubernetes.io/name: {{ template "fullname" . }}
         helm.sh/chart: "{{ .Chart.Name }}"
@@ -58,6 +67,8 @@ spec:
         - name: mng-shared
           mountPath: "/mnt/icp4iod/shared" 
           readOnly: false
+        resources:
+{{ toYaml .Values.resources.ui_manager | indent 11 }}
         env:          
           - name: "OD_ES_USER"
             valueFrom:
@@ -148,6 +159,8 @@ spec:
         volumeMounts:
         - name: ibm-ca-chain
           mountPath: "/etc/httpd/conf/cert/ibmca" 
+        resources:
+{{ toYaml .Values.resources.ui_proxy | indent 11 }}
         env:
           - name: OD_OIDC_PROVIDER_METADATA_URL
             valueFrom:
@@ -228,6 +241,8 @@ spec:
         volumeMounts:
         - name: registration-data
           mountPath: /var/log/httpd24
+        resources:
+{{ toYaml .Values.resources.registration_endpoint | indent 11 }}          
 ###########################################################################          
 ####################### sidecar config-db #################################         
       - name: config-db
@@ -256,6 +271,8 @@ spec:
           timeoutSeconds: 2
           periodSeconds: 5        
           failureThreshold: 2
+        resources:
+{{ toYaml .Values.configdb.resources | indent 11 }}                    
 ########################################################################################         
 ####################### sidecar registration-processor #################################         
       - name: registration-processor
@@ -284,11 +301,15 @@ spec:
         - name: mng-shared
           mountPath: "/mnt/icp4iod/shared" 
           readOnly: true
+        resources:
+{{ toYaml .Values.resources.registration_processor | indent 11 }}                              
 #################################################################################
 ####################### sidecar store-retention #################################         
       - name: store-retention
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdStoreRetention }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }} 
+        resources:
+{{ toYaml .Values.resources.store_retention | indent 11 }}                                      
         env:          
           - name: "OD_ES_USER"
             valueFrom:
@@ -337,6 +358,8 @@ spec:
       - name: housekeeping
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdRetention }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }} 
+        resources:
+{{ toYaml .Values.resources.housekeeping | indent 11 }}                             
         env:          
           - name: "OD_ES_USER"
             valueFrom:
@@ -376,6 +399,8 @@ spec:
       - name: reports
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdReports }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
+        resources:
+{{ toYaml .Values.resources.reports | indent 11 }}                                     
         env:          
           - name: "OD_ES_USER"
             valueFrom:
@@ -427,6 +452,8 @@ spec:
         volumeMounts:
         - name: icp4i-od-ca-certificate
           mountPath: "/usr/share/jaeger/ca/certs"
+        resources:
+{{ toYaml .Values.resources.legacy_ui | indent 11 }}                                              
         env:
           - name: SPAN_STORAGE_TYPE
             value: elasticsearch            
@@ -477,6 +504,8 @@ spec:
         - name: config-db
           mountPath: /mnt/data         
         terminationMessagePath: "/run/termination-log"
+        resources:
+{{ toYaml .Values.resources.config_db | indent 11 }}                                      
 ####################################################################### 
       volumes:
       - name: registration-data

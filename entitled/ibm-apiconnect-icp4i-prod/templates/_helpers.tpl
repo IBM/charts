@@ -32,15 +32,31 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{- define "ibm-apiconnect-cip.productVersion" -}}
-"2018.4.1.7"
+"2018.4.1.8"
 {{- end -}}
 
 {{- define "ibm-apiconnect-cip.productMetric" -}}
-"PROCESSOR_VALUE_UNIT"
+"VIRTUAL_PROCESSOR_CORE"
 {{- end -}}
 
 {{- define "ibm-apiconnect-cip.productChargedContainers" -}}
 "All"
+{{- end -}}
+
+{{- define "ibm-apiconnect-cip.productCloudpakRatio" -}}
+"1:1"
+{{- end -}}
+
+{{- define "ibm-apiconnect-cip.cloudpakName" -}}
+"IBM Cloud Pak for Integration"
+{{- end -}}
+
+{{- define "ibm-apiconnect-cip.cloudpakId" -}}
+"c8b82d189e7545f0892db9ef2731b90d"
+{{- end -}}
+
+{{- define "ibm-apiconnect-cip.cloudpakVersion" -}}
+"2019.4.1"
 {{- end -}}
 
 {{- define "ibm-apiconnect-cip.securityContext" -}}

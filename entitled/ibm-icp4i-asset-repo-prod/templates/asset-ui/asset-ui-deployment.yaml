@@ -1,0 +1,139 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "asset-ui") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "asset-ui") }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    icp4i.ibm.com/product: asset-repo
+    icp4i.ibm.com/release: {{ .Release.Name }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 4 }}
+spec:
+  minReadySeconds: 5
+  progressDeadlineSeconds: 480
+  replicas: {{ .Values.assetUI.replicas }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 40%
+    type: "RollingUpdate"
+  selector:
+    matchLabels:
+{{ $labels | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+{{- if .Values.global.images.pullSecret }}
+      imagePullSecrets:
+         - name: {{ .Values.global.images.pullSecret }}
+{{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - "{{ .Release.Name }}-asset-ui"
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      containers:
+      - name: {{ .Release.Name }}-asset-ui
+        image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.assetUI }}
+        imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 250m
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: "/health/readiness"
+            port: 8080
+            scheme: "HTTPS"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: "/health/liveness"
+            port: 8080
+            scheme: "HTTPS"
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+          timeoutSeconds: 5
+          initialDelaySeconds: 8
+        env:
+          - name: config__appRoot
+            value: "{{ .Values.global.tls.ingresspath }}"
+          - name: auth__clientSecret
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "oidc-secret") }}
+                key: CLIENT_SECRET
+          - name: auth__clientId
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "oidc-secret") }}
+                key: CLIENT_ID
+          - name: auth__iamUrl
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: iamUrl
+          - name: auth__externalIamUrl
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: externalIamUrl
+          - name: auth__crn
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: crn
+          - name: config__platform_services
+            value: "https://icp4i-services-{{ .Values.global.icp4iNamespace }}.{{ .Values.global.icp4iNamespace }}.svc:3000"
+          - name: config__assetSync_services
+            value: "https://{{ .Release.Name }}-asset-sync.{{ .Release.Namespace }}.svc:443"
+          - name: config__redis__password
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "redis-ha-secret") }}
+                key: auth
+          - name: config__redis__host
+            value: {{ .Release.Name }}-redis-ha-master-svc.{{ .Release.Namespace }}.svc
+          - name: config__redis__port
+            value: "6379"
+          - name: TLS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "int-tls-secret") }}
+                key: tls.key
+          - name: TLS_CERT
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "int-tls-secret") }}
+                key: tls.crt

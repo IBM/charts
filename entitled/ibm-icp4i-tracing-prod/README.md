@@ -32,9 +32,10 @@ From the user interface, you can copy and paste the following snippets to enable
           name: ibm-icp4i-od-anyuid-scc
           annotations:
             kubernetes.io/description: "This policy allows pods to run with any UID and GID, but preventing access to the host."
+        priority: 2
         allowPrivilegeEscalation: true
         fsGroup:
-          rule: RunAsAny
+          type: RunAsAny
         requiredDropCapabilities:
         - MKNOD
         allowedCapabilities:
@@ -52,11 +53,11 @@ From the user interface, you can copy and paste the following snippets to enable
         - SYS_CHROOT
         - SETFCAP
         runAsUser:
-          rule: RunAsAny
-        seLinux:
-          rule: RunAsAny
+          type: RunAsAny
+        seLinuxContext:
+          type: RunAsAny
         supplementalGroups:
-          rule: RunAsAny
+          type: RunAsAny
         volumes:
           - configMap
           - emptyDir
@@ -66,12 +67,23 @@ From the user interface, you can copy and paste the following snippets to enable
           - persistentVolumeClaim
         forbiddenSysctls: []
 
+
 ## Resources Required
 This chart has the following resource requirements by default:
 
-| Storage | CPU | Memory |
-| --- | --- | --- |
-| `17 Gi` persistent volume (minimum) | minimum of `2.0` up to `8.0` | minimum of `12 Gi` up to `18 Gi` |
+| Resource                 | Storage                             | Min CPU | Min Memory | Max CPU | Max Memory |
+| -----------------------  | ----------------------------------- | ------- | ---------- | ------- | ---------- |
+| `Configuration DB`       | `2 Gi` persistent volume (minimum)  |  `0.5`  | `1024Mi`   |  `2.0`  |  `2048Mi`  |
+| `Store (elasticsearch)`  | `10 Gi` persistent volume (minimum) |  `2.0`  | `9216Mi`   |  `4.0`  |  `10240Mi` |
+| `UI Manager`             |                                     |  `1.0`  | `1024Mi`   |  `4.0`  |  `4096Mi`  |
+| `UI Proxy`               |                                     |  `0.2`  | `512Mi`    |  `2.0`  |  `1024Mi`  |
+| `Registration Endpoint`  |                                     |  `0.1`  | `256Mi`    |  `0.5`  |  `1024Mi`  |
+| `Registration Processor` |                                     |  `0.1`  | `384Mi`    |  `0.5`  |  `1024Mi`  |
+| `Store Retention`        |                                     |  `0.8`  | `768Mi`    |  `2.0`  |  `2048Mi`  |
+| `Legacy Ui`              |                                     |  `0.25` | `1024Mi`   |  `1.0`  |  `2048Mi`  |
+| `Housekeeping`           |                                     |  `0.5`  | `768Mi`    |  `1.0`  |  `2048Mi`  |
+| `Reports`                |                                     |  `0.5`  | `1024Mi`   |  `8.0`  |  `4096Mi`  |
+| `Jobs`                   |                                     |  `0.25` | `256Mi`    |  `0.5`  |  `512Mi`   |
 
 ## Installing the Chart
 
@@ -106,18 +118,19 @@ The command removes all the Kubernetes components associated with the chart, exc
 
 The following table lists the configurable parameters of the `ibm-icp4i-tracing-prod` chart and their default values.
 
-| Parameter                       | Description                                                     | Default                                    |
-| ------------------------------- | --------------------------------------------------------------- | ------------------------------------------ |
-| `images.registry`               | Registry containing `IBM ICP4I Operations Dashboard` images     | `nil`                                      |
-| `image.pullSecret`              | Image pull secret, if you are using a private Docker registry   | `nil`                                      |
-| `image.pullPolicy`              | Image pull policy                                               | `IfNotPresent`                             |
-| `ingress.odUiHost`              | Hostname of the ingress proxy to be configured                  | `nil`                                      |
-| `ingress.odURI`                 | Path used by the ingress for the service. support only one level| `op`                                       |
-| `platformNavigatorHost`         | Hostname of the icp4i Platform Navigator                        | `nil`                                      |
-| `configdb.storageClassName`     | Storage class for the config DB persistent volumes              | `nil`                                      |
-| `configdb.storage`              | Size of volume for the config DB                                | `2Gi`                                      |
-| `elasticsearch.volumeClaimTemplate.storageClassName`     | Storage class for the elasticsearch persistent volumes              | `nil`                                      |
-| `elasticsearch.volumeClaimTemplate.resources.requests.storage`     | Size of volume for the elasticsearch              | `10Gi`                                      |
+| Parameter                                                          | Description                                                       | Default                                    |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------ |
+| `Integration platform navigator hostname`                          | The Hostname of the Integration Platform Navigator                | `nil`                                      |
+| `Registry`                                                         | Registry containing `IBM ICP4I Operations Dashboard` images       | `nil`                                      |
+| `Image registry secret`                                            | Image pull secret, if you are using a private Docker registry     | `nil`                                      |
+| `Docker image pull policy`                                         | Image pull policy                                                 | `IfNotPresent`                             |
+| `Hostname`                                                         | Hostname of the ingress proxy to be configured                    | `nil`                                      |
+| `Ingress path`                                                     | Path used by the ingress for the service. support only one level  | `op`                                       |
+| `Config DB storage class name`                                     | Storage class for the config DB persistent volumes                | `nil`                                      |
+| `Size`                                                             | Size of volume for the config DB                                  | `2Gi`                                      |
+| `Store storage class name`                                         | Storage class for the OD Store (elasticsearch) persistent volumes | `nil`                                      |
+| `Size`                                                             | Size of volume for the OD Store (elasticsearch)                   | `10Gi`                                     |
+| `Store java heap size`                                             | Size for the Store java heap                                      | `8192M`                                    |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 

@@ -24,6 +24,8 @@
 {{- $volumeClaimTemplateName := include "sch.names.volumeClaimTemplateName" (list . $pvcName $statefulSetName) }}
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{- $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
+{{- $httpRouteName := (print .Release.Name "-http") }}
+{{- $httpsRouteName := (print .Release.Name "-https") }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -64,10 +66,11 @@ spec:
                 values:
                 - {{ .Values.arch }}
       serviceAccountName: {{ $saName }}
-      {{- if .Values.image.pullSecret }}
       imagePullSecrets:
+      {{- if .Values.image.pullSecret }}
         - name: {{ .Values.image.pullSecret }}
       {{- end }}
+        - name: ibm-entitlement-key
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -116,8 +119,12 @@ spec:
               value: {{ .Values.metrics.enabled | default true | quote }}
             - name: ACE_ENABLE_OPEN_TRACING
               value: {{ .Values.odTracingConfig.enabled | default false | quote }}
-            - name: MQSI_OVERRIDE_HOSTNAME
-              value: {{ .Values.service.iP }}
+            - name: ACE_HTTP_ROUTE_NAME
+              value: {{ $httpRouteName }}
+            - name: ACE_HTTPS_ROUTE_NAME
+              value: {{ $httpsRouteName }}
+            - name: ACE_ENDPOINT_TYPE
+              value: {{ .Values.service.endpointType }}
             - name: "ACE_KEYSTORE_PASSWORD"
               valueFrom:
                  secretKeyRef:
@@ -199,7 +206,7 @@ spec:
               readonly: true
             {{- end }}
             {{- end }}
-            {{- if .Values.designerFlowsEnabled }}
+            {{- if ne .Values.designerFlowsOperationMode "disabled" }}
             - name: tmp
               mountPath: "/tmp"
             - name: workdir
@@ -253,7 +260,7 @@ spec:
 {{ toYaml .Values.acemq.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.acemq.resources.requests | indent 14 }}
-          {{- if .Values.designerFlowsEnabled }}
+          {{- if ne .Values.designerFlowsOperationMode "disabled" }}
         - name: "{{ $designerFlowsName }}"
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.designerflows "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -262,6 +269,8 @@ spec:
               value: {{ .Values.image.tag }}
             - name: bunyan__logfile__filename
               value: "/opt/ibm/app/ace-server/log/integration_server.{{ $serverName }}.designer_flows.txt"
+            - name: DESIGNER_FLOWS_OPERATION_MODE
+              value: {{ .Values.designerFlowsOperationMode }}
           volumeMounts:
             - name: tmp
               mountPath: "/tmp"
@@ -447,7 +456,9 @@ spec:
         - name: qmgr-init
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.acemq "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["runmqserver", "-i"]
+          terminationMessagePath: "/run/termination-log"
+          command: ["runmqserver"]
+          args: ["-i"]
           env:
           - name: LICENSE
             value: {{ .Values.license }}
@@ -455,6 +466,8 @@ spec:
             value: {{ .Values.acemq.qmname | default .Release.Name | replace "-" "" | quote }}
           - name: LOG_FORMAT
             value: {{ .Values.log.format | default "json" | quote }}
+          - name: DEBUG
+            value: "{{ .Values.log.mqDebug | default false }}"
           {{- if .Values.persistence.enabled }}
           volumeMounts:
           - mountPath: "/mnt/mqm"
@@ -634,7 +647,7 @@ spec:
         {{- end }}
         {{- end }}
         {{- end }}
-        {{- if .Values.designerFlowsEnabled }}
+        {{- if ne .Values.designerFlowsOperationMode "disabled" }}
         - name: tmp
           emptyDir: {}
         - name: workdir

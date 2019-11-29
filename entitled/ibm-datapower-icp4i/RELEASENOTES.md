@@ -1,13 +1,10 @@
 ## What's new...
-DataPower 2018.4.1.7 \
-Change snmpState metadata to conform to other config states \
-Grafana dashboard fixes \
-IBM Entitled Registry enablement
+DataPower 2018.4.1.8 \
+Entitled Registry pull secret \
+ILMT metering \
+Discovery Annotations
 
 ## Fixes
-snmpState now conforms to other config states. \
-Grafana dashboard loads Prometheus datasource properly. \
-Grafana dashboard Work List graph has better label.
 
 ## Prerequisites
 None
@@ -22,6 +19,7 @@ See README.md
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ------------ | ------- | -------------------- | ---- | -------------------------------------------------------------- |
+| 1.0.5 | Nov 30, 2019 | <1.16.0 | DataPower 2018.4.1.8 | None | ILMT, ER pull secret, discovery annotations |
 | 1.0.4 | Sep 27, 2019 | >=1.9.3 | DataPower 2018.4.1.7 | None | snmpState, Grafana fixes, entitled registry
 | 1.0.3 | Jul 05, 2019 | >=1.9.3 | DataPower 2018.4.1.6 | None | L2 certification, adminUserSecret |
 | 1.0.2 | Jun 07, 2019 | >=1.9.3 | DataPower 2018.4.1.5 | None | L1 updates, liveness probe improvement |

@@ -88,7 +88,7 @@ sch:
       overwriteExisting: false
       secrets:
       - name: access-key
-        create: "{{ empty .Values.asperanode.accessKeySecret }}"
+        create: {{ empty .Values.asperanode.accessKeySecret }}
         type: generic
         values:
         - name: ACCESS_KEY_ID
@@ -96,7 +96,7 @@ sch:
         - name: ACCESS_KEY_SECRET
           length: 40
       - name: node-admin
-        create: "{{ empty .Values.asperanode.nodeAdminSecret }}"
+        create: {{ empty .Values.asperanode.nodeAdminSecret }}
         type: generic
         values:
         - name: NODE_USER
@@ -104,7 +104,7 @@ sch:
         - name: NODE_PASS
           length: 40
       - name: cert
-        create: "{{ and (empty .Values.ingress.tlsSecret) (empty .Values.tls.issuer) }}"
+        create: {{ and (empty .Values.ingress.tlsSecret) (empty .Values.tls.issuer) }}
         type: tls
         cn: "{{ .Values.ingress.hostname }}"
       - name: sshd

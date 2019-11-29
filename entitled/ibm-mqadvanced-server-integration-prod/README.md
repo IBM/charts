@@ -13,13 +13,15 @@ This chart will do the following:
 * Create a [Job](https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/) to register the Queue Manager with the IBM Identity and Access Manager, for single sign-on
 * Create a [Service Account](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/), [Role and Role Binding](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) to secure what permissions the running container has.
 * Create a pre-upgrade and a post-delete Job, Role and Role Binding
+* Create an [OpenShift Route](https://docs.openshift.com/container-platform/3.9/architecture/networking/routes.html) for the web console
+* Create an [OpenShift Route](https://docs.openshift.com/container-platform/3.9/architecture/networking/routes.html) for the queue manager
 * [Optional] Create additional [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) for use with a multi-instance Queue Manager.
 * [Optional] Create a metrics [Service](https://kubernetes.io/docs/concepts/services-networking/service/) for accessing Queue Manager metrics.
 * [Optional] Create a Job to register the Queue Manager with the Operations Dashboard.
 
 ## Prerequisites
 
-* Red Hat OpenShift 3.11 (Kubernetes 1.11)
+* OpenShift Container Platform v4.2 (Kubernetes 1.14)
 * If persistence is enabled (see the **configuration** section), then you either need to create a Persistent Volume, or specify a Storage Class if classes are defined in your cluster.
 * Administrator is the minimum role required to install this chart.
 * The following IBM Platform Core Services are required: `tiller` & `auth-idp`.
@@ -166,7 +168,7 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `readinessProbe.periodSeconds`  | How often to run the probe                                      | 5                                          |
 | `readinessProbe.timeoutSeconds` | Number of seconds after which the probe times out               | 3                                          |
 | `readinessProbe.failureThreshold` | Minimum consecutive failures for the probe to be considered failed after having succeeded | 1              |
-| `log.format`                    | Error log format on container's console.  Either `json` or `basic` | `json`                                  |
+| `log.format`                    | Error log format on container's console.  Either `json` or `basic` | `basic`                                  |
 | `log.debug`                     | Enables additional log output for debug purposes                | `false`                                    |
 | `odTracingConfig.enabled`       | Whether or not to enable the OD for this release                | `false`                                    |
 | `odTracingConfig.odAgentImageRepository` | Repository where the OD agent image is located         | `OD agent image`                           |
