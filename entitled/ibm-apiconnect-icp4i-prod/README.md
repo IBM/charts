@@ -24,7 +24,7 @@ This chart requires a PodSecurityPolicy to be bound to the target namespace prio
 
 The predefined PodSecurityPolicy name: [`ibm-anyuid-hostpath-psp`](https://ibm.biz/cpkspec-psp) has been verified for this chart, if your target namespace is bound to this PodSecurityPolicy you can proceed to install the chart.
 
-This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the ICP user interface or the supplied instructions/scripts in the pak_extension pre-install directory.
+This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the user interface or the supplied instructions/scripts in the pak_extension pre-install directory.
 
 - From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
   - Custom PodSecurityPolicy definition:
@@ -217,12 +217,13 @@ $ kubectl delete pvc -l release=my-release
 
 ## Configuration
 
-| Parameter                           | Description                                                                                                              | Default       |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------- |
-| `productionDeployment`              | Indicates that chart will be installed to run with production workloads                                                  | `true`        |
-| `cloudAdministratorUsername`        | Username of IBM Cloud Private user to set as API Connect Cloud Manager admin                                             | `admin`       |
-| `cloudIntegrationPlatformEndpoint`  | Endpoint on which Cloud Integration Platform is running. This should NOT be set to a wildcard for production deployments | `*`           |
-| `cloudIntegrationPlatformNamespace` | Namespace in which Cloud Integration Platform is installed                                                               | `integration` |
+| Parameter                           | Description                                                                                                              | Default         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| `productionDeployment`              | Indicates that chart will be installed to run with production workloads                                                  | `true`          |
+| `cloudAdministratorUsername`        | Username of IBM Cloud Private user to set as API Connect Cloud Manager admin                                             | `admin`         |
+| `cloudIntegrationPlatformEndpoint`  | Endpoint on which Cloud Integration Platform is running. This should NOT be set to a wildcard for production deployments | `*`             |
+| `cloudIntegrationPlatformNamespace` | Namespace in which Cloud Integration Platform is installed                                                               | `integration`   |
+| `clusterDomainSuffix`               | Cluster DNS search domain suffux                                                                                         | `cluster.local` |
 
 ### Global configuration
 

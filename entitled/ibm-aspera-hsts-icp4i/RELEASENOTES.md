@@ -4,11 +4,11 @@ ___
 
 ## What's new
 
-* Secret generation flag hotfix
+* Metering annotations
 
 ## Fixes
 
-* Added resource limits to all jobs
+* None
 
 ## Breaking Changes
 
@@ -30,6 +30,7 @@ ___
 
 | Chart | Date        | Kubernetes Required | Image(s) Supported         | Details                                                             |
 | ----- | ----------- | ------------------- | -------------------------- | ------------------------------------------------------------------- |
+| 1.2.4 | November 30, 2019 | >= 1.9.1         | aspera-hsts-*  | Metering annotations |
 | 1.2.3 | October 31, 2019 | >= 1.9.1         | aspera-hsts-*  | Secret generation flag fix |
 | 1.2.2 | September 29, 2019 | >= 1.9.1         | aspera-hsts-*  | Entitled Registry support |
 | 1.2.1 | July 5, 2019 | >= 1.9.1         | aspera-hsts-*  | All deployments updated to support multiple replicas, default secret generation |

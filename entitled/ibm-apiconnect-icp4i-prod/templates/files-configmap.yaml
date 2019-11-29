@@ -3,11 +3,11 @@ kind: ConfigMap
 metadata:
   name: {{ template "ibm-apiconnect-cip.fullname" . }}-cr-files
   annotations:
+    icp4i.ibm.com/product: apiconnect
+    icp4i.ibm.com/release: {{ .Release.Name }}
     productName: {{ template "ibm-apiconnect-cip.productName" . }}
     productID: {{ template "ibm-apiconnect-cip.productID" . }}
     productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
-    productMetric: {{ template "ibm-apiconnect-cip.productMetric" . }}
-    productChargedContainers: ""
   labels:
     app: {{ template "ibm-apiconnect-cip.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
@@ -133,6 +133,37 @@ data:
     kubectl delete pvc,job -l release=$SUBSYS_RELEASE --namespace $SUBSYS_NAMESPACE
     kubectl delete pvc,job -l controller=$SUBSYS_RELEASE-apiconnect-cc --namespace $SUBSYS_NAMESPACE
     kubectl delete secrets -l heritage=apicup --namespace $SUBSYS_NAMESPACE
+  patch-pullsecrets: |-
+    #!/bin/bash
+    SERVICEACCOUNTS=$(kubectl get sa -o json | jq -r '.items[] | select(.imagePullSecrets) | select(.imagePullSecrets[] | .name | not) | .metadata.name')
+    for NAME in ${SERVICEACCOUNTS}; do
+      PULLSECRETS=$(kubectl get sa $NAME -o json | jq -r .imagePullSecrets)
+      UPDATED_PULLSECRETS=$(echo $PULLSECRETS | jq -c '. - [{}]')
+      kubectl patch sa $NAME --type='json' -p='[{"op": "replace", "path": "/imagePullSecrets", "value": '$UPDATED_PULLSECRETS'}]'
+    done
+
+    DEPLOYMENTS=$(kubectl get deployment -o json | jq -r '.items[] | select(.spec.template.spec.imagePullSecrets) | select(.spec.template.spec.imagePullSecrets[] | .name | not) | .metadata.name')
+    for NAME in ${DEPLOYMENTS}; do
+      PULLSECRETS=$(kubectl get deployment $NAME -o json | jq -r .spec.template.spec.imagePullSecrets)
+      UPDATED_PULLSECRETS=$(echo $PULLSECRETS | jq -c '. - [{}]')
+      kubectl patch deploy $NAME --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/imagePullSecrets", "value": '$UPDATED_PULLSECRETS'}]'
+    done
+
+    STATEFULSETS=$(kubectl get statefulsets -o json | jq -r '.items[] | select(.spec.template.spec.imagePullSecrets) | select(.spec.template.spec.imagePullSecrets[] | .name | not) | .metadata.name')
+    for NAME in ${STATEFULSETS}; do
+      PULLSECRETS=$(kubectl get statefulsets $NAME -o json | jq -r .spec.template.spec.imagePullSecrets)
+      UPDATED_PULLSECRETS=$(echo $PULLSECRETS | jq -c '. - [{}]')
+      kubectl patch statefulset $NAME --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/imagePullSecrets", "value": '$UPDATED_PULLSECRETS'}]'
+    done
+
+    CRONJOBS=$(kubectl get cronjobs -o json | jq -r '.items[] | select(.spec.jobTemplate.spec.template.spec.imagePullSecrets) | select(.spec.jobTemplate.spec.template.spec.imagePullSecrets[] | .name | not) | .metadata.name')
+    for NAME in ${CRONJOBS}; do
+      PULLSECRETS=$(kubectl get cronjob $NAME -o json | jq -r .spec.jobTemplate.spec.template.spec.imagePullSecrets)
+      UPDATED_PULLSECRETS=$(echo $PULLSECRETS | jq -c '. - [{}]')
+      kubectl patch cronjob $NAME --type='json' -p='[{"op": "replace", "path": "/spec/jobTemplate/spec/template/spec/imagePullSecrets", "value": '$UPDATED_PULLSECRETS'}]'
+    done
+
+    exit 0
   register-oidc: |-
     #!/bin/bash
     ######################################################
@@ -152,11 +183,11 @@ data:
     APIC_CLIENT_SECRET_NAME="{{ .Release.Name }}-registration-secret"
     APIC_CLIENT_SECRET_NAMESPACE="{{ .Release.Namespace }}"
 
-    # obtain icp master node endpoint
+    # obtain ics master node endpoint
     ICP_CLUSTER_INFO=$(kubectl get cm ibmcloud-cluster-info -n kube-public -o json)
     ICP_MASTER_EP="https://$(echo $ICP_CLUSTER_INFO | jq -r .data.cluster_address)"
     ICP_HTTPS_PORT=$(echo $ICP_CLUSTER_INFO | jq -r .data.cluster_router_https_port)
-    echo "Found ICP master node endpoint: ${ICP_MASTER_EP}"
+    echo "Found ICS master node endpoint: ${ICP_MASTER_EP}"
 
     MGMT_API_EP="{{ .Values.management.platformApiEndpoint }}"
     echo "Using APIC platform API endpoint: ${MGMT_API_EP}"
@@ -197,7 +228,7 @@ data:
     # for now, sleep; in the future, wait for a status
     sleep 120
 
-    # obtain icp client id and secret
+    # obtain ICS client id and secret
     ICP_CLIENT_DATA=$(kubectl get secret $ICP_CLIENT_SECRET_NAME --namespace=$APIC_CLIENT_SECRET_NAMESPACE -o json | jq .data)
     ICP_CLIENT_ID=$(echo $ICP_CLIENT_DATA | jq -r .CLIENT_ID | base64 --decode)
     ICP_CLIENT_SECRET=$(echo $ICP_CLIENT_DATA | jq -r .CLIENT_SECRET | base64 --decode)
@@ -259,8 +290,8 @@ data:
         -H "authorization: Bearer ${ADMIN_TOKEN}" \
         -H 'content-type: application/json' \
         -d '{
-          "name": "icp-cloud-private",
-          "title": "IBM Cloud Private",
+          "name": "ibm-common-services",
+          "title": "IBM Common Services",
           "client_type": "ibm_cloud",
           "client_id": "ibm_cloud_private",
           "client_secret": "'"$APIC_CLIENT_SECRET"'",
@@ -283,17 +314,17 @@ data:
       -H 'content-type: application/json' | jq -r .url)
 
     # get or create new user registry and obtain url
-    echo "Searching for existing IBM Cloud Private user registry..."
+    echo "Searching for existing Common Services user registry..."
     REG_URL=$(curl -k -sS GET \
       https://${MGMT_API_EP}/api/orgs/admin/user-registries \
       -H 'accept: application/json' \
       -H "authorization: Bearer ${ADMIN_TOKEN}" \
-      -H 'content-type: application/json' | jq -r '.results[] | select(.name == "ibm-cloud-private") | .url')
+      -H 'content-type: application/json' | jq -r '.results[] | select((.name == "ibm-cloud-private") or (.name == "ibm-common-services")) | .url')
 
     if [ "$REG_URL" != "" ]; then
-      echo "Found existing IBM Cloud Private user registry"
+      echo "Found existing Common Services user registry"
     else
-      echo "No IBM Cloud Private user registry found - creating new user registry..."
+      echo "No IBM Common Services user registry found - creating new user registry..."
       echo ""
       REG_URL=$(curl -k -sS -X POST \
         https://${MGMT_API_EP}/api/orgs/admin/user-registries \
@@ -301,8 +332,8 @@ data:
         -H "authorization: Bearer ${ADMIN_TOKEN}" \
         -H 'content-type: application/json' \
         -d '{
-          "name": "ibm-cloud-private",
-          "title": "IBM Cloud Private user registry",
+          "name": "ibm-common-services",
+          "title": "IBM Common Services user registry",
           "summary": null,
           "integration_url": "'"${INTEGRATION_URL}"'",
           "configuration": {
@@ -337,7 +368,7 @@ data:
     EXISTING_ADMIN_REG=$(echo $EXISTING_REG | jq -r .admin_user_registry_urls)
 
     if [[ "$EXISTING_PROVIDER_REG" =~ "$REG_URL" ]]; then
-      echo "IBM Cloud Private user registry already added to api provider scope..."
+      echo "IBM Common Services user registry already added to api provider scope..."
     else
       # concat existing provider and newly-created user registries
       UPDATED_PROVIDER_REGISTRIES=$(echo $EXISTING_PROVIDER_REG | jq -r --arg REG_URL "$REG_URL" '. += [$REG_URL] | join("\", \"")')
@@ -355,7 +386,7 @@ data:
     fi
 
     if [[ "$EXISTING_ADMIN_REG" =~ "$REG_URL" ]]; then
-      echo "IBM Cloud Private user registry already added to admin scope..."
+      echo "IBM Common Services user registry already added to admin scope..."
     else
       # concat existing admin and newly-created user registries
       UPDATED_ADMIN_REGISTRIES=$(echo $EXISTING_ADMIN_REG | jq -r --arg REG_URL "$REG_URL" '. += [$REG_URL] | join("\", \"")')
@@ -373,7 +404,7 @@ data:
     fi
 
     # set new user registry as default
-    echo "Setting ICP user registry as default..."
+    echo "Setting ICS user registry as default..."
     curl -k -sS -X PUT \
       https://${MGMT_API_EP}/api/cloud/settings/user-registries \
       -H 'accept: application/json' \
@@ -392,7 +423,7 @@ data:
       }'
 
     # remove other user registries from the api provider scope
-    echo "Removing non-ICP user registries from provider scope..."
+    echo "Removing non-ICS user registries from provider scope..."
     curl -k -sS -X PUT \
       https://${MGMT_API_EP}/api/cloud/settings/user-registries \
       -H 'accept: application/json' \
@@ -409,7 +440,7 @@ data:
       https://${MGMT_API_EP}/api/orgs/admin/user-registries \
       -H 'accept: application/json' \
       -H "authorization: Bearer ${ADMIN_TOKEN}" \
-      -H 'content-type: application/json' | jq -r '.results[] | select(.name == "ibm-cloud-private") | .id')
+      -H 'content-type: application/json' | jq -r '.results[] | select((.name == "ibm-cloud-private") or (.name == "ibm-common-services")) | .id')
 
     # search for existing user info
     USER_INFO=$(curl -k -sS GET \
@@ -420,7 +451,7 @@ data:
 
     # if no matching user is found, create one
     if [ "$USER_INFO" != "" ]; then
-      echo "Found existing ICP admin user"
+      echo "Found existing ICS admin user"
     else
       echo "Creating new user $ICP_ADMIN_USERNAME..."
       USER_INFO=$(curl -k -sS -X POST \
@@ -442,7 +473,7 @@ data:
       -H "authorization: Bearer ${ADMIN_TOKEN}" \
       -H 'content-type: application/json' | jq -r '.results[] | select(.title == "Administrator") | .url')
 
-    # create a new member using ICP admin user and assign administrator role
+    # create a new member using ICS admin user and assign administrator role
     echo "Creating new member with administrator role"
     MEMBER_INFO=$(curl -k -sS -X POST \
       https://${MGMT_API_EP}/api/orgs/admin/members \

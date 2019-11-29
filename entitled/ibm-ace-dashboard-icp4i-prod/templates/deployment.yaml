@@ -17,10 +17,14 @@
 {{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "ace-dashboard")) }}
 {{- $serverChartName := .sch.chart.serverChartName }}
 {{- $pvcName := "dataPVC" }}
+{{- $configMapName := include "sch.names.fullCompName" (list . "env")}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $deploymentName }}
+  annotations:
+    icp4i.ibm.com/product: appconnect
+    icp4i.ibm.com/release: {{ .Release.Name }}
   labels:
 {{ $labels | indent 4 }}
 spec:
@@ -54,10 +58,11 @@ spec:
                 values:
                 - {{ .Values.arch }}
       serviceAccountName: {{ $saName }}
-      {{- if .Values.image.pullSecret }}
       imagePullSecrets:
+      {{- if .Values.image.pullSecret }}
         - name: {{ .Values.image.pullSecret }}
       {{- end }}
+        - name: ibm-entitlement-key
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -118,7 +123,7 @@ spec:
                   name: {{ $deploymentName }}
                   key: ibmAceControlApiKey
             - name: LOG_FORMAT
-              value: {{ .Values.log.format | default "json" | quote }}
+              value: {{ .Values.log.format | default "basic" | quote }}
           volumeMounts:
             - name: tls
               mountPath: /home/contentserver/ssl
@@ -174,12 +179,6 @@ spec:
               value: "true"
             - name: CIP_SERVICES_ENDPOINT
               value: https://icp4i-services-{{ .Values.icp4iNamespace }}.{{ .Values.icp4iNamespace }}.svc:3000
-            - name: ACE_INGRESS_HOSTNAME
-              {{- if .Values.tls.port }}
-              value: "{{ .Values.tls.hostname }}:{{ .Values.tls.port }}"
-              {{- else }}
-              value: "{{ .Values.tls.hostname }}"
-              {{- end }}
             - name: ACE_SERVER_CHART_NAME
               value: {{ $serverChartName }}
             - name: ACE_SERVER_CHART_VERSION
@@ -192,6 +191,10 @@ spec:
               value: /home/dashboardui/ssl/controlui-cert.pem
             - name: ACE_DASHBOARD_NAMESPACE
               value: {{ .Release.Namespace | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.log.format | default "basic" | quote }}
+            - name: ACE_DASHBOARD_LOG_LEVEL
+              value: {{ .Values.log.level | default "info" | quote }}
             - name: ACE_DASHBOARD_SSO_ENABLED
               value: {{ .Values.ssoEnabled | quote }}
             - name: ACE_INGRESS_PATH
@@ -205,11 +208,6 @@ spec:
                   key: ibmAceControlApiKey
             - name: ACE_DISCOVERY_ANNOTATION
               value: appconnectenterprise=icp4i
-            - name: CLUSTER_EXTERNAL_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $deploymentName }}
-                  key: clusterExternalUrl
             {{- if .Values.ssoEnabled }}
             - name: CLIENT_ID
               valueFrom:
@@ -222,8 +220,6 @@ spec:
                   name: {{ include "sch.names.fullCompName" (list . "oidc") }}
                   key: CLIENT_SECRET
             {{- end }}
-            - name: ACE_DASHBOARD_ROLE
-              value: {{ .Values.defaultRole | quote }}
           volumeMounts:
             - name: tls
               mountPath: /home/dashboardui/ssl
@@ -262,6 +258,9 @@ spec:
 {{ toYaml .Values.controlUI.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.controlUI.resources.requests | indent 14 }}
+          envFrom:
+            - configMapRef:
+                name: {{ $configMapName }}
       volumes:
         - name: tls
           secret:

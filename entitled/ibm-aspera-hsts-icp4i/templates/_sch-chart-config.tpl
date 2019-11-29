@@ -77,12 +77,22 @@ sch:
     meteringProd:
       productName: "IBM Cloud Pak for Integration - Aspera High-Speed Transfer Server (Chargeable)"
       productID: "AsperaHSTS_5737_I89_ICP4I_chargeable"
+      productMetric: "VIRTUAL_PROCESSOR_CORE"
       productVersion: "3.9.5"
+      productCloudpakRatio: "1:2"
+      productChargedContainers: "All"
+      cloudpakName: "IBM Cloud Pak for Integration"
+      cloudpakId: "c8b82d189e7545f0892db9ef2731b90d"
 
     meteringNonProd:
       productName: "IBM Cloud Pak for Integration (non-production) - Aspera High-Speed Transfer Server (Chargeable)"
       productID: "AsperaHSTS_5737_I89_ICP4I_nonProd_chargeable"
+      productMetric: "VIRTUAL_PROCESSOR_CORE"
       productVersion: "3.9.5"
+      productCloudpakRatio: "1:1"
+      productChargedContainers: "All"
+      cloudpakName: "IBM Cloud Pak for Integration"
+      cloudpakId: "c8b82d189e7545f0892db9ef2731b90d"
 
     secretGen:
       suffix: "{{ .Release.Name }}-ibm-aspera-hsts"

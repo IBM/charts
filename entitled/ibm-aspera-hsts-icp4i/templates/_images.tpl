@@ -94,6 +94,6 @@
 {{- end }}
 
 {{ define "hsts.image.sch" -}}
-   {{- $params := (list . .Values.sch.image.repository .Values.sch.image.name .Values.sch.image.tag) -}}
+   {{- $params := (list . .Values.sch.global.image.repository .Values.sch.image.name .Values.sch.image.tag) -}}
    {{ include "hsts.image.assemble" ($params) }}
 {{- end }}

@@ -12,7 +12,7 @@ The installation of the ICP4I Asset Repository is carried out through the ICP4I 
 This is a Helm chart for the IBM Cloud Pak for Integration Asset Repository. It provides the ability to centrally store and manage integration assets across the platform capabilities.
 
 ## Prerequisites
-* Kubernetes 1.11.1 or greater, with beta APIs enabled
+* OpenShift 4.2 with Kubernetes 1.14 or greater, with beta APIs enabled
 * A user with cluster administrator role is required to install the chart.
 * A storage provider that supports Read Write Many (RWX) persistent volumes
 
@@ -38,7 +38,7 @@ The number of replicas for certain components can be configured during install w
 
 ## Installing the Chart
 
-**Important:** If you are using a private Docker registry (including an ICP Docker registry), an [image pull secret](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.1/manage_images/imagepullsecret.html) needs to be created before installing the chart. Supply the name of the secret as the value for `image.pullSecret`.
+**Important:** If you are using a private Docker registry (including an ICP Docker registry), an [image pull secret](https://docs.openshift.com/container-platform/4.2/openshift_images/managing-images/using-image-pull-secrets.html) needs to be created before installing the chart. Supply the name of the secret as the value for `image.pullSecret`.
 
 **Limitation:** The current version of this chart only supports Helm release names of 28 characters or less. The Helm release name must not exceed 28 characters.
 
@@ -83,12 +83,13 @@ The following table lists the configurable parameters of the ICP4I Asset Reposit
 | `prereqs.redis-ha.replicas.sentinels`                                         | Redis sentinel replicas                           | `3`                          |
 | `prereqs.wdp-cloudant:.ibm-cloudant-internal.db.storage.db..requests.storage` | Cloudant metadata store size                      | `1Gi`                        |
 | `wkcbase.catalog-api-charts.replicas`                                         | Catalog API replicas                              | `3`                          |
-| `wkcbase.dc-main.service.replicas`                                            | DC main replicas                                  | `3`                          |
-| `wkcbase.portal-catalog.service.replicas`                                     | Portal catalog replicas                           | `3`                          |
+| `assetUI..replicas`                                                           | Asset repository UI replicas                      | `3`                          |
 | `wsbase.asset-files-api.deployment.replicaCount`                              | Asset storage replicas                            | `3`                          |
 | `wsbase.asset-files-api.persistence.storageClassName`                         | Asset storage storage class                       | `glusterfs`                  |
 | `wsbase.asset-files-api.persistence.requests.storage`                         | Asset storage size                                | `1Gi`                        |
-| `wsbase.portal-common-api.deployment.replicaCount`                            | Portal common API replicas                        | `3`                          |
+| `assetSync.replicaCount`                                                      | Asset remotes replicas                            | `3`                          |
+| `assetSync.storageClassName`                                                  | Asset remotes storage class                       | `glusterfs`                  |
+| `assetSync.storage`                                                           | Asset remotes size                                | `2Gi`                        |
 
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.

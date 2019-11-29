@@ -14,7 +14,7 @@ at lower cost. This new product unifies disparate tools into one solution that i
 modern and traditional products. IBM Cloud Pak for Integration simplifies purchasing, deployment,
 management and maintenance. The following components are integrated in IBM Cloud Pak for Integration:
 * ICP4I Navigator, a simple integrated user interface spanning components
-* Cloud Private, providing a Kubernetes-based foundation
+* OpenShift, providing a Kubernetes-based foundation
 * API Connect, implementing managed APIs
 * App Connect Enterprise, providing integration workflows
 * MQ, for robust guaranteed transport
@@ -25,18 +25,18 @@ management and maintenance. The following components are integrated in IBM Cloud
 The initial installation procedure establishes a base Cloud framework.  Once you have logged in
 to the base framework, the ICP4I Navigator then allows seamless access to any other components
 you have running, without requiring any further logins.  You can then create instances of the other
-components you need to implemented solutions.
+components you need to implement solutions.
 
 ## Chart Details
 This is a Helm chart for the IBM Cloud Pak for Integration Navigator. It provides a UI to allow users to deploy new instances of the ICP4I components, and allows navigation between them in a simple, consistent manner.
 
 ## Prerequisites
-* Red Hat OpenShift version 3.11.
-* IBM Cloud Private fix pack 3.2.0.1907.
+* Red Hat OpenShift version 4.2 (3.11 on IBM Cloud Catalog only).
+* Cloud Pak Foundation fix pack 3.2.2.
 * A user with cluster administrator role is required to install the chart.
 
-### Red Hat OpenShift SecurityContextConstraints Requirements	
-This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.	
+### Red Hat OpenShift SecurityContextConstraints Requirements
+This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
 
 The predefined SecurityContextConstraints name: [`ibm-privileged-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
 
@@ -49,10 +49,10 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     kind: SecurityContextConstraints
     metadata:
       annotations:
-        kubernetes.io/description: "This policy grants access to all privileged 
-          host features and allows a pod to run with any 
+        kubernetes.io/description: "This policy grants access to all privileged
+          host features and allows a pod to run with any
           UID and GID and any volume.
-          WARNING:  This policy is the least restrictive and 
+          WARNING:  This policy is the least restrictive and
           should only be used for cluster administration.
           Use with caution."
         cloudpak.ibm.com/version: "1.1.0"
@@ -64,10 +64,10 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     allowHostPorts: true
     allowPrivilegedContainer: true
     allowPrivilegeEscalation: true
-    allowedCapabilities: 
+    allowedCapabilities:
     - '*'
     allowedFlexVolumes: []
-    allowedUnsafeSysctls: 
+    allowedUnsafeSysctls:
     - '*'
     defaultAddCapabilities: []
     defaultAllowPrivilegeEscalation: true
@@ -95,17 +95,17 @@ This chart also defines a custom SecurityContextConstraints which can be used to
 ## Resources Required
 This chart has the following resource requirements by default:
 
-| Resource | CPU | Memory |
-| --- | --- | --- |
-| Jobs | `0.25` | `265Mi` |
+| Resource  | CPU    | Memory  |
+| --------- | ------ | ------- |
+| Jobs      | `0.25` | `265Mi` |
 | Navigator | `0.25` | `265Mi` |
-| Services | `0.25` | `265Mi` |
+| Services  | `0.25` | `265Mi` |
 
 ## Installing the Chart
 
 **Only one dashboard can be installed per namespace.**
 
-**Important:** If you are using a private Docker registry (including an ICP Docker registry), an [image pull secret](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.1/manage_images/imagepullsecret.html) needs to be created before installing the chart. Supply the name of the secret as the value for `image.pullSecret`.
+**Important:** If you are using a private Docker registry, an [image pull secret](https://docs.openshift.com/container-platform/4.2/openshift_images/managing-images/using-image-pull-secrets.html) needs to be created before installing the chart. Supply the name of the secret as the value for `image.pullSecret`.
 
 To install the chart with the release name `my-release`:
 
@@ -119,21 +119,26 @@ The command deploys `ibm-icp4i-prod` on the Kubernetes cluster in the default co
 
 ### Setting vm.max_map_count on nodes
 
-Some capabilities within the Cloud Pak for Integration require the `vm.max_map_count` sysctl setting on worker
-nodes to be at least 1048576. This can be done manually using the command:
+This chart includes mechanisms to automatically set the `vm.max_map_count` sysctl setting, with the custom Tuned profile being the default.
+
+#### OpenShift 4.2
+
+For OpenShift 4.2 a custom Tuned profile is applied by the node tuning operator. The profile will update the `vm.max_map_count` sysctl setting to `1048576` on nodes that run pods with a specific label: `icp4i.ibm.com/high-max-map-count=true`.
+
+You can modify the default profile priority (i.e. if you lower the number = higher priority) if you are certain that you want to override other existing profiles. You can also specify a profile to inherit from and its settings will also be applied by the custom ICP4I profile.
+
+For more information see the [OpenShift 4.2 Tuning Operator documentation](https://docs.openshift.com/container-platform/4.2/scalability_and_performance/using-node-tuning-operator.html#custom-tuning-specification_node-tuning-operator).
+
+#### OpenShift 3.11
+
+For OpenShift 3.11 a kubernetes daemonset running privileged containers is used to alter the setting on each node, it requires cluster admin permissions to install and will apply the `ibm-privileged-scc` SCC to the daemonset. It will only increase the `vm.max_map_count` sysctl setting to 1048576; it will never decrease the setting.
+
+To disable node tuning set `nodeTuning.mechanism` to `disabled`, you must then change the `vm.max_map_count` sysctl setting manually, which can be done using the commands:
 
 ```
 sudo sysctl -w vm.max_map_count=1048576
 sudo su -c 'echo "vm.max_map_count = 1048576" >> /etc/sysctl.conf'
 ```
-
-This chart includes a mechanism to automatically set the `vm.max_map_count` sysctl setting on all worker nodes
-that is enabled by default. This uses a kubernetes daemonset running privileged containers to alter the setting
-on each node, it requires cluster admin permissions to install and will apply the `ibm-privileged-scc` SCC to
-the daemonset. It will only increase the `vm.max_map_count` sysctl setting to 1048576; it will never decrease
-the setting.
-
-To disable this mechanism use the `sysctlDaemon` value. You must then change the setting manually.
 
 ### Custom TLS certificates
 
@@ -171,34 +176,33 @@ The command removes all the Kubernetes components associated with the chart and 
 
 The following table lists the configurable parameters of the navigator chart and their default values.
 
-| Parameter                              | Description                                     | Default                      |
-| ---------------------------------------| ------------------------------------------------| -----------------------------|
-| `replicaCount`                         | Number of deployment replicas                   | `3`                          |
-| `image.navigator`                      | ICP4I Navigator docker image                    | `icip-navigator`             |
-| `image.configurator`                   | ICP4I Configurator docker image                 | `icip-configurator`          |
-| `image.services`                       | ICP4I Services docker image                     | `icip-services`              |
-| `image.pullPolicy`                     | Image pull policy                               | `IfNotPresent`               |
-| `image.pullSecret`                     | Image pull secret                               | `nil`                        |
-| `image.tag`                            | ICP4I image tag                                 | `2.2.0`                      |
-| `sysctlDaemon`                         | Update vm.max_map_count on worker nodes         | `true`                       |
-| `resources.jobs.requests.cpu`          | Jobs CPU resource requests                      | `0.25`                       |
-| `resources.jobs.requests.memory`       | Jobs memory resource requests                   | `256Mi`                      |
-| `resources.jobs.limits.cpu`            | Jobs CPU resource limits                        | `1`                          |
-| `resources.jobs.limits.memory`         | Jobs memory resource limits                     | `512Mi`                      |
-| `resources.navigator.requests.cpu`     | Navigator CPU resource requests                 | `0.25`                       |
-| `resources.navigator.requests.memory`  | Navigator memory resource requests              | `256Mi`                      |
-| `resources.navigator.limits.cpu`       | Navigator CPU resource limits                   | `1`                          |
-| `resources.navigator.limits.memory`    | Navigator memory resource limits                | `512Mi`                      |
-| `resources.services.requests.cpu`      | Services CPU resource requests                  | `0.25`                       |
-| `resources.services.requests.memory`   | Services memory resource requests               | `256Mi`                      |
-| `resources.services.limits.cpu`        | Services CPU resource limits                    | `1`                          |
-| `resources.services.limits.memory`     | Services memory resource limits                 | `512Mi`                      |
-| `tls.generate`                         | Whether to generate SSL certificates            | `true`                       |
-| `tls.hostname`                         | Hostname of the ingress proxy to be configured  | `mycluster.icp`              |
-| `tls.secret`                           | TLS secret name                                 | `icip-navigator-tls-secret`  |
-| `tls.ingresspath`                      | Path used by the ingress for the service        | `integration`                |
-| `arch`                                 | Architecture scheduling preference              | `amd64`                      |
-| `productionDeployment`                 | Will this release be used in production         | `true`                       |
+| Parameter                                                     | Description                                             | Default                      |
+| ------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------- |
+| `replicaCount`                                                | Number of deployment replicas                           | `3`                          |
+| `image.navigator`                                             | ICP4I Navigator docker image                            | `icip-navigator`             |
+| `image.configurator`                                          | ICP4I Configurator docker image                         | `icip-configurator`          |
+| `image.services`                                              | ICP4I Services docker image                             | `icip-services`              |
+| `image.pullPolicy`                                            | Image pull policy                                       | `IfNotPresent`               |
+| `image.pullSecret`                                            | Image pull secret                                       | `nil`                        |
+| `image.tag`                                                   | ICP4I image tag                                         | `2.0.0`                      |
+| `nodeTuning.mechanism`                                        | Select node tuning mechanism or disable node tuning     | `tuning-operator`            |
+| `nodeTuning.tuned.masterInfraProfile.inheritProfile`          | Inherit existing Tuned profile for master/infra profile | `openshift-control-plane`    |
+| `nodeTuning.tuned.masterInfraProfile.priority`                | Profile priority for master/infra profile               | `30`                         |
+| `nodeTuning.tuned.computeProfile.inheritProfile`              | Inherit existing Tuned profile for compute profile      | `openshift-node`             |
+| `nodeTuning.tuned.computeProfile.priority`                    | Profile priority for compute profile                    | `40`                         |
+| `resources.jobs.requests.cpu`                                 | Jobs CPU resource requests                              | `0.25`                       |
+| `resources.jobs.requests.memory`                              | Jobs memory resource requests                           | `256Mi`                      |
+| `resources.jobs.limits.cpu`                                   | Jobs CPU resource limits                                | `1`                          |
+| `resources.jobs.limits.memory`                                | Jobs memory resource limits                             | `512Mi`                      |
+| `resources.navigator.requests.cpu`                            | Navigator CPU resource requests                         | `0.25`                       |
+| `resources.navigator.requests.memory`                         | Navigator memory resource requests                      | `256Mi`                      |
+| `resources.navigator.limits.cpu`                              | Navigator CPU resource limits                           | `1`                          |
+| `resources.navigator.limits.memory`                           | Navigator memory resource limits                        | `512Mi`                      |
+| `resources.services.requests.cpu`                             | Services CPU resource requests                          | `0.25`                       |
+| `resources.services.requests.memory`                          | Services memory resource requests                       | `256Mi`                      |
+| `resources.services.limits.cpu`                               | Services CPU resource limits                            | `1`                          |
+| `resources.services.limits.memory`                            | Services memory resource limits                         | `512Mi`                      |
+| `arch`                                                        | Architecture scheduling preference                      | `amd64`                      |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
@@ -209,8 +213,17 @@ No storage is required for the ICP4I Navigator.
 
 ## Limitations
 * Chart can only run on amd64 architecture type.
+* For OpenShift 3.11, the latest supported version of each component that is as follows:
+   * ibm-apiconnect-icp4i-prod: 1.0.2
+   * ibm-ace-dashboard-icp4i-prod: 2.2.0
+   * ibm-eventstreams-rhel-icp4i-prod: 1.3.2
+   * ibm-mqadvanced-server-integration-prod: 4.1.0
+   * ibm-aspera-hsts-icp4i: 1.2.1
+   * ibm-datapower-icp4i: 1.0.4
+   * ibm-icp4i-asset-repo-prod: 2.2.0
+   * ibm-icp4i-tracing-prod: 1.0.0
 
 ## Documentation
-[IBM Cloud Pak for Integration Knowledge Center](https://www.ibm.com/support/knowledgecenter/en/SSGT7J/welcome.html)
+See the [IBM Cloud Pak for Integration Knowledge center](https://www.ibm.com/support/knowledgecenter/SSGT7J).
 
 _Copyright IBM Corporation 2019. All Rights Reserved._

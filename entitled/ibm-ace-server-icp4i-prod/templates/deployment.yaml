@@ -13,13 +13,17 @@
 # limitations under the License.
 {{- if ne .Values.imageType "acemqserver" }}
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
+{{- $fullName := include "sch.names.fullName" (list .) }}
 {{- $deploymentName := include "sch.names.fullName" (list . ) }}
 {{- $designerFlowsName := include "sch.names.fullCompName" (list . "designer-flows") }}
+{{- $connectorsName := include "sch.names.fullCompName" (list . "connectors") }}
 {{- $tracingAgentName := include "sch.names.fullCompName" (list . "od-tracing-agent") }}
 {{- $tracingCollectorName := include "sch.names.fullCompName" (list . "od-tracing-collector") }}
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{- $secretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $deploymentName "configuration") }}
 {{- $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
+{{- $httpRouteName := (print .Release.Name "-http") }}
+{{- $httpsRouteName := (print .Release.Name "-https") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -63,10 +67,11 @@ spec:
                 values:
                 - {{ .Values.arch }}
       serviceAccountName: {{ $saName }}
-      {{- if .Values.image.pullSecret }}
       imagePullSecrets:
+      {{- if .Values.image.pullSecret }}
         - name: {{ .Values.image.pullSecret }}
       {{- end }}
+        - name: ibm-entitlement-key
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -100,6 +105,24 @@ spec:
               value: {{ print $serverName | quote }}
             - name: SERVICE_NAME
               value: {{ include "sch.names.fullName" (list .) }}
+            {{- if .Values.customContentServer }}   
+            - name: CONTENT_SERVER_CA
+              value: /home/aceuser/initial-config/ssl/ca.crt.pem
+            - name: CONTENT_SERVER_CERT
+              value: /home/aceuser/initial-config/ssl/tls.crt.pem
+            - name: CONTENT_SERVER_KEY
+              value: /home/aceuser/initial-config/ssl/tls.key.pem
+            # ACE_CONTENT_SERVER_URL gets over-ridden by value below is value is specified.
+            - name: ACE_CONTENT_SERVER_URL
+              value: "https://{{ $fullName }}-runtime/v1/flowdeploymentsbar?userid={{ .Values.global.userID }}"
+            - name: ACE_CONTENT_SERVER_NAME
+              value: {{ $deploymentName }}
+            - name: DEFAULT_CONTENT_SERVER
+              value: "false" 
+            {{- else }}
+            - name: DEFAULT_CONTENT_SERVER
+              value: "true"  
+            {{- end }}
             {{- if .Values.contentServerURL }}
             - name: ACE_CONTENT_SERVER_URL
               value: {{ index (splitList "?" (trim .Values.contentServerURL)) 0 | quote }}
@@ -114,8 +137,12 @@ spec:
               value: {{ .Values.metrics.enabled | default true | quote }}
             - name: ACE_ENABLE_OPEN_TRACING
               value: {{ .Values.odTracingConfig.enabled | default false | quote }}
-            - name: MQSI_OVERRIDE_HOSTNAME
-              value: {{ .Values.service.iP }}
+            - name: ACE_HTTP_ROUTE_NAME
+              value: {{ $httpRouteName }}
+            - name: ACE_HTTPS_ROUTE_NAME
+              value: {{ $httpsRouteName }}
+            - name: ACE_ENDPOINT_TYPE
+              value: {{ .Values.service.endpointType }}
             - name: "ACE_KEYSTORE_PASSWORD"
               valueFrom:
                  secretKeyRef:
@@ -130,8 +157,21 @@ spec:
                    key: truststorePassword
             - name: ACE_DEFAULT_APPLICATION_NAME
               value: {{ .Values.integrationServer.defaultAppName | quote }}
-            - name: DEFAULT_CONTENT_SERVER
+            {{- if .Values.adminServerSecure }}
+            - name: ACE_ADMIN_SERVER_CA
+              value: /home/aceuser/initial-config/ssl/ca.crt.pem
+            - name: ACE_ADMIN_SERVER_CERT
+              value: /home/aceuser/initial-config/ssl/tls.crt.pem
+            - name: ACE_ADMIN_SERVER_KEY
+              value: /home/aceuser/initial-config/ssl/tls.key.pem
+            - name: ACE_ADMIN_SERVER_NAME
+              value: {{$deploymentName}}
+            - name: ACE_ADMIN_SERVER_SECURITY
               value: "true"
+            {{- else }}
+            - name: ACE_ADMIN_SERVER_SECURITY
+              value: "false"
+            {{- end }}
           volumeMounts:
             {{- if .Values.contentServerURL }}
             - name: webusers
@@ -163,7 +203,7 @@ spec:
             - name: contentservertls
               mountPath: "/home/aceuser/ssl"
             {{- end }}
-            {{- if .Values.designerFlowsEnabled }}
+            {{- if ne .Values.designerFlowsOperationMode "disabled" }}
             - name: tmp
               mountPath: "/tmp"
             - name: workdir
@@ -215,7 +255,7 @@ spec:
 {{ toYaml .Values.aceonly.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.aceonly.resources.requests | indent 14 }}
-        {{- if .Values.designerFlowsEnabled }}
+        {{- if ne .Values.designerFlowsOperationMode "disabled" }}
         - name: "{{ $designerFlowsName }}"
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.designerflows "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -224,6 +264,8 @@ spec:
               value: {{ .Values.image.tag }}
             - name: bunyan__logfile__filename
               value: "/opt/ibm/app/ace-server/log/integration_server.{{ $serverName }}.designer_flows.txt"
+            - name: DESIGNER_FLOWS_OPERATION_MODE
+              value: {{ .Values.designerFlowsOperationMode }}
           volumeMounts:
             - name: tmp
               mountPath: "/tmp"
@@ -261,6 +303,55 @@ spec:
 {{ toYaml .Values.designerflows.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.designerflows.resources.requests | indent 14 }}
+        - name: "{{ $connectorsName }}"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.connectors "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ACE_VERSION
+              value: {{ .Values.image.tag }}
+            - name: CONNECTOR_CREDENTIAL
+              value: "/opt/ibm/app/credentials"
+            - name: bunyan__logfile__filename
+              value: "/opt/ibm/app/ace-server/log/integration_server.{{ $serverName }}.connectors.txt"
+          volumeMounts:
+            - name: credentials
+              mountPath: "/opt/ibm/app/credentials"
+            - name: tmp
+              mountPath: "/tmp"
+            - name: workdir
+              mountPath: "/opt/ibm/app/ace-server"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          # Set liveness probe to determine if the designer flow sidecar is running
+          livenessProbe:
+            exec:
+              command:
+                - "/readiness/readyLCP.sh"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the designer flow sidecar is running
+          readinessProbe:
+            exec:
+              command:
+                - "/readiness/readyLCP.sh"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+            limits:
+{{ toYaml .Values.connectors.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.connectors.resources.requests | indent 14 }}
         {{- end }}
         {{- if .Values.odTracingConfig.enabled }}
         # OD Agent
@@ -268,7 +359,7 @@ spec:
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.odTracingConfig.odAgentImageRepository "${1}cp/icp4i/ace/" }}:{{ .Values.odTracingConfig.odAgentImageTag }}-{{ .Values.arch }}"
           volumeMounts:
             - name: icp4i-od-ca-certificate
-              mountPath: "/usr/share/jaeger/ca/certs" 
+              mountPath: "/usr/share/jaeger/ca/certs"
           command: ["/go/bin/agent-linux"]
           args: 
             - "--jaeger.tags=sourceNamespace={{ .Release.Namespace }}"
@@ -408,7 +499,7 @@ spec:
         {{- if .Values.contentServerURL }}
         - name: webusers
           secret:
-            secretName: {{ include "sch.names.fullName" (list .) }} 
+            secretName: {{ include "sch.names.fullName" (list .) }}
             optional: true
             items:
             - key: adminusers
@@ -518,7 +609,14 @@ spec:
             - key: contentServerCACert
               path: cacert.pem
         {{- end }}
-        {{- if .Values.designerFlowsEnabled }}
+        {{- if ne .Values.designerFlowsOperationMode "disabled" }}
+        - name: credentials
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: credentials
+              path: credentials.yaml
         - name: tmp
           emptyDir: {}
         - name: workdir

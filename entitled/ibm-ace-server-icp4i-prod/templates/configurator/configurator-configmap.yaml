@@ -1,0 +1,98 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+#  Script run by create secrets job
+#
+###############################################################################
+
+{{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
+{{- $cfgMapName := include "sch.names.fullCompName" (list . "create-configurator-config") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "config") }}
+{{- $secretName := include "sch.names.fullCompName" (list . "is-secret")}}
+{{- $baseURL := include "sch.names.fullCompName" (list . "baseurl") }}
+{{- $isServiceName := include "sch.names.fullCompName" (list . "is")  }}
+{{- $deploymentName := include "sch.names.fullName" (list .) }}
+{{- $ssName := include "sch.names.statefulSetName" (list .) }}
+{{- $secretName := ternary $ssName $deploymentName (eq .Values.imageType "acemqserver") }}
+{{- $httpRouteName := (print .Release.Name "-http") }}
+{{- $httpsRouteName := (print .Release.Name "-https") }}
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $cfgMapName }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+data:
+  generateConfig.sh: |
+    #!/bin/bash -e
+
+    ######################################################
+    # Generate uuid v4 apikey
+    ######################################################
+
+    IBM_ACE_DASHBOARD_ADMIN_USER="ibm-ace-dashboard-admin "$(uuid -v4)
+    IBM_ACE_DASHBOARD_OPERATOR_USER="ibm-ace-dashboard-operator "$(uuid -v4)
+    IBM_ACE_DASHBOARD_VIEWER_USER="ibm-ace-dashboard-viewer "$(uuid -v4)
+    IBM_ACE_DASHBOARD_EDITOR_USER="ibm-ace-dashboard-editor "$(uuid -v4)
+    IBM_ACE_DASHBOARD_AUDIT_USER="ibm-ace-dashboard-audit "$(uuid -v4)
+
+    ######################################################
+    # Create the Kubernetes secret resource
+    ######################################################
+
+    echo "Creating secret {{ $secretName }} for release {{ .Release.Name | quote }}"
+    # Create secret
+    /usr/local/bin/kubectl create secret generic {{ $secretName }} --from-literal=adminusers="${IBM_ACE_DASHBOARD_ADMIN_USER}" --from-literal=operatorusers="${IBM_ACE_DASHBOARD_OPERATOR_USER}" --from-literal=viewerusers="${IBM_ACE_DASHBOARD_VIEWER_USER}" --from-literal=editorusers="${IBM_ACE_DASHBOARD_EDITOR_USER}" --from-literal=auditusers="${IBM_ACE_DASHBOARD_AUDIT_USER}"
+    # Set secret label
+    /usr/local/bin/kubectl label secret {{ $secretName }} release={{ .Release.Name | quote }}
+
+    ######################################################
+    # Create the Routes
+    ######################################################
+
+    cat <<EOT >> ./http-route.yaml
+    apiVersion: route.openshift.io/v1
+    kind: Route
+    metadata:
+      name: {{ $httpRouteName }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      port:
+        targetPort: ace-http
+      to:
+        kind: Service
+        name: {{ $deploymentName }}
+    EOT
+
+    oc apply -f http-route.yaml
+
+    cat <<EOT >> ./https-route.yaml
+    apiVersion: route.openshift.io/v1
+    kind: Route
+    metadata:
+      name: {{ $httpsRouteName }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      port:
+        targetPort: ace-https
+      to:
+        kind: Service
+        name: {{ $deploymentName }}
+      tls:
+        termination: passthrough
+        insecureEdgeTerminationPolicy: None
+    EOT
+
+    oc apply -f https-route.yaml
