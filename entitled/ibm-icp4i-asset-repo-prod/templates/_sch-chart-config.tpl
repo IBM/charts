@@ -36,14 +36,15 @@ sch:
           weight: 2
           operator: In
           key: beta.kubernetes.io/arch
-    meteringProd:
-      productName: IBM Cloud Pak for Integration
-      productID: 5737_I89_ICP4I_nonChargeable
-      productVersion: 2019.3.2
-    meteringNonProd:
-      productName: IBM Cloud Pak for Integration (Non-production)
-      productID: 5737_I89_ICP4I_nonProd_nonChargeable
-      productVersion: 2019.3.2
+    metering:
+      productName: IBM Cloud Pak for Integration Asset Repository
+      productID: c8b82d189e7545f0892db9ef2731b90d
+      productVersion: 2019.4.1
+      productMetric: VIRTUAL_PROCESSOR_CORE
+      productChargedContainers: ''
+      cloudpakName: IBM Cloud Pak for Integration
+      cloudpakId: c8b82d189e7545f0892db9ef2731b90d
+      cloudpakVersion: 2019.4.1
     components:
       cloudant:
         statefulSet:

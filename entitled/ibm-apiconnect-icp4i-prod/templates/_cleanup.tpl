@@ -19,6 +19,18 @@ spec:
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
         component: {{ template "ibm-apiconnect-cip.name" . }}-delete-$SUBSYS_RELEASE
+      annotations:
+        icp4i.ibm.com/product: apiconnect
+        icp4i.ibm.com/release: {{ .Release.Name }}
+        productName: {{ template "ibm-apiconnect-cip.productName" . }}
+        productID: {{ template "ibm-apiconnect-cip.productID" . }}
+        productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
+        productMetric: {{ template "ibm-apiconnect-cip.productMetric" . }}
+        productChargedContainers: ""
+        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
+        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
+        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
+        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
     spec:
       serviceAccountName: {{ template "ibm-apiconnect-cip.serviceAccountName" . }}
       affinity:

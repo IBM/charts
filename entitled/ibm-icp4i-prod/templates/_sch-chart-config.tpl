@@ -26,14 +26,16 @@ additional configuration values used by the Shared Configurable Helpers.
 sch:
   chart:
     appName: {{ template "icip-navigator.name" . }}
-    meteringProd:
-      productName: IBM Cloud Pak for Integration
-      productID: 5737_I89_ICP4I_nonChargeable
-      productVersion: 2019.3.2
-    meteringNonProd:
-      productName: IBM Cloud Pak for Integration (non-production)
-      productID: 5737_I89_ICP4I_nonProd_nonChargeable
-      productVersion: 2019.3.2
+    labelType: prefixed
+    metering:
+      productID: c8b82d189e7545f0892db9ef2731b90d
+      productName: IBM Cloud Pak for Integration Platform Navigator
+      productVersion: 2019.4.1
+      productMetric: VIRTUAL_PROCESSOR_CORE
+      productChargedContainers: ''
+      cloudpakName: IBM Cloud Pak for Integration
+      cloudpakId: c8b82d189e7545f0892db9ef2731b90d
+      cloudpakVersion: 2019.4.1
     components:
       dashboard:
         name: "dashboard"

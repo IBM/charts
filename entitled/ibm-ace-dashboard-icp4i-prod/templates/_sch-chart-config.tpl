@@ -28,12 +28,24 @@ sch:
     appName: "ibm-ace-dashboard-icp4i-prod"
     serverChartName: "ibm-ace-server-icp4i-prod"
     meteringProd:
-      productName: IBM Cloud Pak for Integration - IBM App Connect Enterprise
-      productID: IBMAppConnectEnterprise_5737_I89_ICP4I_nonChargeable
-      productVersion: 11.0.0.6
+      productName: IBM Cloud Pak for Integration - IBM App Connect Enterprise (Chargeable)
+      productID: 606f1a9feb4f4cbc85b17a637f6a6b24
+      productVersion: "11.0.0.6"
+      productMetric: VIRTUAL_PROCESSOR_CORE
+      productChargedContainers: All
+      cloudpakName: IBM Cloud Pak for Integration
+      cloudpakId: c8b82d189e7545f0892db9ef2731b90d
+      cloudpakVersion: 2019.4.1
+      productCloudpakRatio: 1:3
     meteringNonProd:
-      productName: IBM Cloud Pak for Integration (non-production) - IBM App Connect Enterprise
-      productID: IBMAppConnectEnterprise_5737_I89_ICP4I_nonProd_nonChargeable
-      productVersion: 11.0.0.6
+      productName: IBM Cloud Pak for Integration (Non-production) - IBM App Connect Enterprise (Chargeable)
+      productID: 30fd0181a948441ebe3be59192171987
+      productVersion: "11.0.0.6"
+      productMetric: VIRTUAL_PROCESSOR_CORE
+      productChargedContainers: All
+      cloudpakName: IBM Cloud Pak for Integration
+      cloudpakId: c8b82d189e7545f0892db9ef2731b90d
+      cloudpakVersion: 2019.4.1
+      productCloudpakRatio: 2:3
     labelType: prefixed
 {{- end -}}

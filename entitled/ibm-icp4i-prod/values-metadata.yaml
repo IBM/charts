@@ -66,13 +66,6 @@ image:
       type: "string"
       required: false
 
-# Production Deployment metadata
-productionDeployment:
-  __metadata:
-      label: "Production deployment"
-      description: "Is this a production deployment of IBM Cloud Pak for Integration"
-      type: "boolean"
-
 # Architecture metadata
 arch:
   __metadata:
@@ -82,40 +75,49 @@ arch:
     immutable: true
     required: true
 
-# Settings specific to Ingress
-tls:
+# Increase vm.max_map_count with node tuning operator on ocp 4.2 or daemonset on ocp 3.11
+nodeTuning:
   __metadata:
-    label: "Ingress"
-    description: "Parameters to control the Ingress into the dashboard"
-  hostname:
+    label: "Node tuning"
+    description: "Increases vm.max_map_count of cluster nodes with either the tuning operator or a daemonset"
+  mechanism:
     __metadata:
-      label: "Hostname of the ingress proxy to be configured"
-      description: "The hostname of the ingress proxy that has to be configured in the ingress definition"
+      name: "mechanism"
+      label: "Mechanism"
+      description: "Apply a custom Tuned profile for the tuning operator, deploy a daemonset, or completely disable node tuning. Defaults to custom tuning profile (See chart overview for more information)"
       type: "string"
+      immutable: false
       required: true
-  generate:
-    __metadata:
-      label: "Generate SSL Certs"
-      description: "Whether to create a certificate using the ICP Certificate Authority and save it in the secret named below, or whether the secret already exists."
-      type: "boolean"
-  secret:
-    __metadata:
-      label: "TLS secret name"
-      description: "Specifies the name of the secret for the certificate that has to be used in the Ingress definition."
-      type: "string"
-      required: true
-  ingresspath:
-    __metadata:
-      label: "Ingress path"
-      description: "Path used by the ingress for the service"
-      type: "string"
-      required: true
-
-sysctlDaemon:
-  __metadata:
-    label: "Update vm.max_map_count on worker nodes"
-    description: "Runs a privileged daemonset that ensures all worker nodes have vm.max_map_count set to at least 1048576. Requires Cluster Admin permissions."
-    type: "boolean"
+      options:
+      - label: "Tuning Operator (OpenShift 4.2+)"
+        value: "tuning-operator"
+      - label: "Daemonset (OpenShift 3.11)"
+        value: "daemonset"
+      - label: "Disabled (vm.max_map_count must be adjusted manually)"
+        value: "disabled"
+  tuned:
+    masterInfraProfile:
+      inheritProfile:
+        __metadata:
+          label: "Inherit existing Tuned profile for control plane nodes"
+          description: "Name of an existing Tuned profile to inherit from when running on control plane nodes (See chart overview for more information)"
+          type: "string"
+      priority:
+        __metadata:
+          label: "Control plane profile priority"
+          description: "Priority for the control plane node profile (See chart overview for more information)"
+          type: "number"
+    computeProfile:
+      inheritProfile:
+        __metadata:
+          label: "Inherit existing Tuned profile for compute nodes"
+          description: "Name of an existing Tuned profile to inherit from when running on compute nodes (See chart overview for more information)"
+          type: "string"
+      priority:
+        __metadata:
+          label: "Compute profile priority"
+          description: "Priority for the compute node profile (See chart overview for more information)"
+          type: "number"
 
 # Replica count metadata.
 replicaCount:

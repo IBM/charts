@@ -108,6 +108,11 @@ fi
 if [ -s ./agentc.json ]; then
   SECRET_ARGS="${SECRET_ARGS} --from-file=agentc=./agentc.json "
 fi
+
+if [ -s ./credentials.yaml ]; then
+  SECRET_ARGS="${SECRET_ARGS} --from-file=credentials=./credentials.yaml"
+fi
+
 ######################################################
 # Create the Kubernetes secret resource
 ######################################################

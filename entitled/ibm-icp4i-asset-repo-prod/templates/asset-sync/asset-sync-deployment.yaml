@@ -21,11 +21,7 @@ spec:
   template:
     metadata:
       annotations:
-        {{- if .Values.global.productionDeployment }}
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
-        {{- else }}
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
-        {{- end }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
       labels:
 {{ $labels | indent 8 }}
     spec:
@@ -33,8 +29,10 @@ spec:
         fsGroup: 3000
         runAsUser: 0
       serviceAccountName: {{ include "sch.names.fullCompName" (list . "asset-sync-serviceaccount") }}
+{{- if .Values.global.images.pullSecret }}
       imagePullSecrets:
-        - name: {{ .Values.global.images.pullSecret }}
+         - name: {{ .Values.global.images.pullSecret }}
+{{- end }}
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -142,12 +140,15 @@ spec:
             value: "https://{{ .Release.Name }}-catalog-api.{{ .Release.Namespace }}.svc:443"
           - name: config__git_working_directory
             value: /mnt/assets
-          - name: config__portal_catalog
-            value: "https://{{ .Release.Name }}-portal-catalog.{{ .Release.Namespace }}.svc/{{ .Values.global.tls.ingresspath }}/data/catalogs"
           - name: config__asset_files_api
             value: "https://{{ .Release.Name }}-asset-files-api.{{ .Release.Namespace }}.svc:443"
           - name: auth__enabled
             value: "true"
+          - name: auth__crn
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
+                key: crn
           - name: auth__icp__clientId
             valueFrom:
               secretKeyRef:
@@ -168,8 +169,6 @@ spec:
               secretKeyRef:
                 key: api-key
                 name: {{ .Release.Name }}-service-id
-          - name: auth__icp__serviceTokenUrl
-            value: https://$(MASTER_HOST)$(OPTIONAL_MASTER_PORT)/iam-token/oidc/token
           - name: config__git_ssh_private_key
             valueFrom:
               secretKeyRef:
@@ -200,6 +199,27 @@ spec:
             value: {{ .Release.Name }}
           - name: namespace
             value: {{ .Release.Namespace }}
+          - name: cloudant__account
+            value: "https://{{ .Release.Name }}-clt:443"
+          - name: cloudant__user
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+                key: username
+          - name: cloudant__password
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+                key: password
+          - name: config__redis__password
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "redis-ha-secret") }}
+                key: auth
+          - name: config__redis__host
+            value: {{ .Release.Name }}-redis-ha-master-svc.{{ .Release.Namespace }}.svc
+          - name: config__redis__port
+            value: "6379"
         volumeMounts:
           - mountPath: "/mnt/assets"
             name: asset-sync-pv

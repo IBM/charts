@@ -1,10 +1,11 @@
 # Breaking Changes
 
-- None
+- If you have existing MQ connections via the NodePort service, they need to be changed to use an OpenShift Route.  A default Route will be created for the web console only.
 
-# What’s new in the MQ Advanced for Cloud Pak for Integration Chart, Version 4.1.x
+# What’s new in the MQ Advanced for Cloud Pak for Integration Chart, Version 5.0.x
 
-- Added tracing using the Operations Dashboard
+- Added OpenShift Routes for the web console & queue manager
+- `log.format` now defaults to `basic`
 
 # Fixes
 
@@ -12,6 +13,7 @@
 
 # Prerequisites
 
+- OpenShift Container Platform v4.2 (Kubernetes 1.14)
 - The following IBM Platform Core Services are required: `tiller` & `auth-idp`
 
 # Documentation
@@ -23,6 +25,7 @@
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 5.0.0 | November 2019 | >= 1.14.0 | = MQ 9.1.3.0 | Use OpenShift Routes instead of NodePorts | Added OpenShift Routes for the web console & queue manager; `log.format` now defaults to `basic` |
 | 4.1.0 | October 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Operations Dashboard |
 | 4.0.2 | October 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | SSO fix for ICP 3.2.1 IAM change; README updates |
 | 4.0.1 | September 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | SSO fix for ICP IAM bug; Updated go-toolset to version 1.11.13 |
