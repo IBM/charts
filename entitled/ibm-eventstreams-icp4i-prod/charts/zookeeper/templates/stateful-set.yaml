@@ -1,0 +1,303 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Kubernetes pods that will make up the cluster of ZooKeeper nodes
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "zookeeper.sch.chart.config.values" ) -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
+{{ $namePrefix := .sch.chart.components.zookeeper.statefulSet.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) }}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $namePrefix) -}}
+# Component is 'zookeeper' as this makes up part of implementing the ZooKeeper cluster
+{{ $compName := .sch.chart.components.zookeeper.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# The headless service that will provide access to the ZooKeeper nodes defined below
+{{ $service := .sch.chart.components.zookeeper.internalHeadless.name -}}
+{{ $serviceName := include "sch.names.fullCompName" (list . $service) -}}
+# Secret containing cert and key for pod to pod security
+{{ $proxySecretNamePrefix := .sch.chart.components.proxy.secret.name -}}
+{{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecretNamePrefix) | quote -}}
+# Service Account to run the ZooKeeper pods as
+{{ $serviceAccount := .sch.chart.components.kafka.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+# length chewcked pvc name
+{{ $shortPvcName := include "sch.names.volumeClaimTemplateName" (list . .Values.dataPVC.name $statefulSetName) -}}
+# Proxy config map name
+{{ $configMap := .sch.chart.components.zookeeper.configMap.name -}}
+{{ $configMapName := include "sch.names.fullCompName" (list . $configMap ) }}
+# Internal configmap name for cluster env vars
+{{ $releaseConfigMap := .sch.chart.components.essential.releaseConfigMap.name -}}
+{{ $releaseConfigMapName := include "sch.names.fullCompName" (list . $releaseConfigMap) -}}
+{{ $kafkaName := .sch.chart.components.kafka.statefulSet.name -}}
+# k8s configuration
+{{ $clusterName := .Values.global.k8s.clusterName -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName | quote }}
+  labels:
+{{ $labels | indent 4 }}
+    internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
+spec:
+  # identify the headless service that will enable access to ZooKeeper nodes
+  serviceName: {{ $serviceName | quote }}
+  # Deployed in parallel to enable faster deployments
+  podManagementPolicy: "Parallel"
+  # number of nodes in the ZooKeeper cluster
+  #  changing this after install may lead to problems with ZooKeeper
+  replicas: {{ .sch.config.zookeeper.replicas }}
+  # ZooKeeper node pods are uniquely identified based on release name
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+        internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
+      annotations:
+{{ include "ibm-eventstreams.metering" (list . ) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.pod) | indent 8 }}
+{{ include "ibm-eventstreams.fsGroupGid" (list . ) | indent 8 }}
+      volumes:
+        - name: proxy-config-map
+          configMap:
+            name: {{ $configMapName }}
+        - name: es-cert-volume
+          secret:
+            secretName: {{ $proxySecretName }}
+            items:
+            - key: podtls.cacert
+              path: ca-certificates.crt
+        {{ if .Values.persistence.enabled -}}
+        {{ else }}
+        - name: "tempdir"
+          emptyDir: {}
+        {{ end }}
+      {{- include "license.accept.ref" . | indent 6 }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+{{- include "ibm-eventstreams.archMatchExpression"  (list .) | indent 16 }}
+{{- include "ibm-eventstreams.stsMatchExpression"  (list . .Values.global.zones.zooKeeperLabel) | indent 16 }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+{{- if eq (int (include "zones.to.template" (list .)) ) 2 }}
+{{- include "ibm-eventstreams.zoneMatchExpression"  (list . 0) | indent 16 }}
+{{- end }}
+        #  we don't want multiple co-located Kafka nodes
+        #  so this anti-affinity rule should prevent
+        #  nodes with the kafka name being scheduled on
+        #  the same host
+        # it should then also try to separate zookeeper and kafka
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 5
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ .Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $kafkaName }}
+                topologyKey: "kubernetes.io/hostname"
+{{- if gt (int (include "zones.to.template" (list .)) ) 1 }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+{{- include "ibm-eventstreams.isolationMatchExpression"  (list . $namePrefix) | indent 14 }}
+{{- else }}
+            - weight: 10
+              podAffinityTerm:
+{{- include "ibm-eventstreams.isolationMatchExpression"  (list . $namePrefix) | indent 16 }}
+{{- end }}
+      containers:
+        - name: "zookeeper"
+          image: {{ include "eventstreams.image" (list . "eventstreams-zookeeper" .Values.global.image.imageTags.zookeeperTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerWritableFilesystem) | indent 12 }}
+          resources:
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+          ports:
+            - containerPort: {{ $ports.zookeeper.clientInternal }}
+              name: client
+            - containerPort: {{ $ports.zookeeper.serverInternal }}
+              name: server
+            - containerPort: {{ $ports.zookeeper.electionInternal }}
+              name: leader-election
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ZK_ENSEMBLE
+              value: '{{ range $index, $_ := until (.sch.config.zookeeper.replicas | int) }}{{ $statefulSetName }}-{{ $index }}.{{ $serviceName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }};{{ end }}'
+            - name: ZK_TICK_TIME
+              value: '2000'
+            - name: ZK_INIT_LIMIT
+              value: '10'
+            - name: ZK_SYNC_LIMIT
+              value: '5'
+            - name: ZK_MAX_CLIENT_CNXNS
+              value: '60'
+            - name: ZK_SNAP_RETAIN_COUNT
+              value: '3'
+            - name: ZK_PURGE_INTERVAL
+              value: '1'
+            - name: ZK_CLIENT_PORT
+              value: {{ $ports.zookeeper.clientInternal | quote }}
+            - name: ZK_SERVER_PORT
+              value: {{ $ports.zookeeper.serverInternal | quote }}
+            - name: ZK_ELECTION_PORT
+              value: {{ $ports.zookeeper.electionInternal | quote }}
+            - name: ZK_REPLICAS
+              value: {{ .sch.config.zookeeper.replicas | quote }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: ZK_ONPREM
+              value: "true"
+            - name: CONFIGMAP
+              value: {{ $releaseConfigMapName | quote }}
+          readinessProbe:
+            exec:
+              command:
+                - "zkReady.sh"
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 15
+            failureThreshold: 2
+          livenessProbe:
+            exec:
+              command:
+                - "zkOk.sh"
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 15
+            failureThreshold: 10
+          volumeMounts:
+          {{- if not .Values.persistence.enabled }}
+            # Validate persistence
+            {{- if .Values.persistence.useDynamicProvisioning }}
+              {{ fail "Cannot use dynamic provisioning with persistence disabled" }}
+            {{- end  }}
+            {{- if not (eq .Values.dataPVC.storageClassName "") }}
+              {{ fail "Cannot use a storage class if persistence disabled" }}
+            {{- end  }}
+          {{- end  }}
+          {{- if .Values.persistence.enabled }}
+            - name: {{ $shortPvcName }}
+              mountPath: /var/lib/zookeeper
+          {{- else }}
+            - name: "tempdir"
+              mountPath: /var/lib/zookeeper
+          {{ end }}
+        # Proxy sidecar
+        - name: proxy
+          image: {{ include "eventstreams.image" (list . "eventstreams-proxy" .Values.global.image.imageTags.proxyTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
+          resources:
+            requests:
+{{ toYaml .Values.global.resources.tlsProxy.requests | indent 14 }}
+            limits:
+{{ toYaml .Values.global.resources.tlsProxy.limits | indent 14 }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ES_CONFIG_PATH
+              value: {{ .sch.chart.components.zookeeper.configPath | quote }}
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.cert"
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.key"
+          ports:
+            - containerPort: {{ $ports.zookeeper.client }}
+              name: proxy
+            - containerPort: {{ $ports.zookeeper.server }}
+              name: zk-server
+            - containerPort: {{ $ports.zookeeper.election }}
+              name: zk-election
+            - containerPort: {{ $ports.proxy.health }}
+              name: proxy-health
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: "/live"
+              port: {{ $ports.proxy.health }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 15
+          volumeMounts:
+          - name: proxy-config-map
+            mountPath: {{ .sch.chart.components.zookeeper.configPath | quote }}
+            readOnly: true
+          - name: es-cert-volume
+            mountPath: /etc/ssl/certs
+            readOnly: true
+{{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ $shortPvcName }}
+        labels:
+{{ $labels | indent 10 }}
+      spec:
+        {{- if .Values.persistence.useDynamicProvisioning }}
+        # If present, use the storageClassName from the values.yaml, else use the
+        # default storageClass setup by Kubernetes Administrator
+        #
+        # Setting storageClassName to nil means use the default storage class
+        storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+        {{- else }}
+        # Disable dynamic provisioning
+        storageClassName: {{ default "" .Values.dataPVC.storageClassName | quote }}
+        {{- end }}
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.dataPVC.size | quote }}
+{{ end -}}

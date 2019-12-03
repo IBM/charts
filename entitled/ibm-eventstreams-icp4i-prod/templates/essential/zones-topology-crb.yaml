@@ -1,0 +1,50 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Cluster rolebinding for the Zone topology Cluster in the release namespace
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ if and .Values.global.generateClusterRoles (gt (int .Values.global.zones.count) 1) -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{ $namePrefix := .sch.chart.components.essential.zonesTopologyClusterRoleBinding.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'essential'
+{{ $compName := .sch.chart.components.essential.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# Name of the new temporary service account
+{{ $serviceAccount := .sch.chart.components.essential.preInstallSA.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount) -}}
+{{ $zonesTopologyClusterRole := .sch.chart.components.essential.zonesTopologyClusterRole.name -}}
+{{ $zonesTopologyClusterRoleName := include "sch.names.fullCompName" (list . $zonesTopologyClusterRole) -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade, pre-rollback
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "4"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $zonesTopologyClusterRoleName | quote }}
+subjects:
+  # ... to the temporary service account
+  - kind: ServiceAccount
+    name: {{ $serviceAccountName | quote }}
+    namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+{{ end -}}
+{{ end -}}
+
+

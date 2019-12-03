@@ -1,0 +1,243 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the pod that runs the access controller server
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ $root := . -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") | trim -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
+{{ $namePrefix := .sch.chart.components.security.accesscontroller.deployment.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $id := (include "ibm-eventstreams.asDnsLabel" .Release.Name) }}
+{{ $compName := .sch.chart.components.security.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# Service Account
+{{ $serviceAccount := .sch.chart.components.security.accesscontroller.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+# Oauth secret name
+{{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
+{{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
+# Names of other elements to refer to
+{{ $secret := .sch.chart.components.proxy.secret.name -}}
+{{ $secretName := include "sch.names.fullCompName" (list . $secret) | quote -}}
+# The IAM Secret that contains the IAM Service ID and API Key
+{{ $iamSecret := .sch.chart.components.security.iamSecret.name -}}
+{{ $iamSecretName := include "sch.names.fullCompName" (list $root $iamSecret ) -}}
+# Internal configmap name for cluster env vars
+{{ $releaseConfigMap := .sch.chart.components.essential.releaseConfigMap.name -}}
+{{ $releaseConfigMapName := include "sch.names.fullCompName" (list . $releaseConfigMap) -}}
+# ServiceName is used to define the initial part of the service name that we'll register with ICP.
+{{ $serviceName := .sch.chart.components.security.serviceName -}}
+# import security definitions
+{{- include "sch.config.init" (list . "security.sch.chart.config.values") | trim -}}
+# Management Ingress URL
+{{ $managementIngressDNSName := .sch.chart.components.security.managementIngress.dnsName -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+{{ $zonesToTemplate := int (include "zones.to.template" (list $root)) -}}
+{{ range $zoneIndex, $e := until $zonesToTemplate -}}
+{{ $nameLabel := include "name.including.zone" (list $namePrefix $zoneIndex) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "name.including.zone" (list $name $zoneIndex) | quote }}
+  labels:
+{{ $labels | indent 4 }}
+    internalCertificate: {{ $root.Values.global.security.internalCertificateLabel | quote }}
+spec:
+  replicas: {{ include "replicas.for.zone" (list $root 2 $root.Values.global.zones.accessControllerReplicas) }}
+  selector:
+    matchLabels:
+      release: {{ $root.Release.Name | quote }}
+      serviceSelector: {{ $nameLabel | quote }}
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list $root $root.Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+        internalCertificate: {{ $root.Values.global.security.internalCertificateLabel | quote }}
+        serviceSelector: {{ $nameLabel | quote }}
+      annotations:
+        # Used for identifying release candidates
+        releaseCandidate: ibm-eventstreams-icp4i-prod-2019.4.1-ICp4I-RESPIN
+{{ include "ibm-eventstreams.metering" (list $root ) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{- include "sch.security.securityContext" (list $root $root.sch.chart.securitycontexts.pod) | indent 8 }}
+      volumes:
+        - name: redis-storage
+          emptyDir: {}
+        - name: public-certs-volume
+          secret:
+            secretName: {{ $secretName }}
+        - name: ca-certs-volume
+          secret:
+            secretName: {{ $secretName }}
+            items:
+            - key: tls.cluster
+              path: ca-certificates.crt
+      {{- include "license.accept.ref" $root | indent 6 }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+{{- include "ibm-eventstreams.archMatchExpression"  (list $root) | indent 16 }}
+{{- include "ibm-eventstreams.zoneMatchExpression"  (list $root $zoneIndex) | indent 16 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 10
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "release"
+                      operator: In
+                      values:
+                        -  {{ $root.Release.Name | quote }}
+                    - key: "serviceSelector"
+                      operator: In
+                      values:
+                        -  {{ $nameLabel | quote }}
+                topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: redis
+        image: {{ include "eventstreams.image" (list $root "eventstreams-database" $root.Values.global.image.imageTags.databaseTag) | quote }}
+        imagePullPolicy: {{ $root.Values.global.image.pullPolicy }}
+        resources:
+          limits:
+{{ toYaml $root.Values.global.resources.database.limits | indent 12 }}
+          requests:
+{{ toYaml $root.Values.global.resources.database.requests | indent 12 }}
+        securityContext:
+{{- include "sch.security.securityContext" (list $root $root.sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
+        volumeMounts:
+          - name: redis-storage
+            mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - /usr/local/bin/redis-cli -h $(hostname) ping
+          failureThreshold: 2
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - /usr/local/bin/redis-cli -h $(hostname) ping
+          failureThreshold: 2
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        env:
+          {{- include "license.accept.env.ref" $root | indent 10 }}
+      - name: "access-controller"
+        image: {{ include "eventstreams.image" (list $root "eventstreams-access-controller" $root.Values.global.image.imageTags.accessControllerTag) | quote }}
+        imagePullPolicy: {{ $root.Values.global.image.pullPolicy }}
+        securityContext:
+{{- include "sch.security.securityContext" (list $root $root.sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
+        ports:
+          - containerPort: {{ $ports.security.accessController }}
+        readinessProbe:
+          timeoutSeconds: 15
+          periodSeconds: 15
+          httpGet:
+            port: {{ $ports.security.accessController }}
+            path: /v1/alive
+            scheme: HTTPS
+        livenessProbe:
+          timeoutSeconds: 15
+          periodSeconds: 15
+          httpGet:
+            port: {{ $ports.security.accessController }}
+            path: /v1/alive
+            scheme: HTTPS
+        resources:
+          requests:
+{{ toYaml $root.Values.global.resources.accessController.requests | indent 14 }}
+          limits:
+{{ toYaml $root.Values.global.resources.accessController.limits | indent 14 }}
+        env:
+        {{- include "license.accept.env.ref" $root | indent 6 }}
+        - name: NAMESPACE
+          value: {{ $root.Release.Namespace | quote }}
+        - name: CONFIGMAP
+          value: {{ $releaseConfigMapName | quote }}
+        - name: CONTROL_CLUSTER_INGRESS_HOST
+          value: ""
+        - name: LISTEN_PORT
+          value: "{{ $ports.security.accessController }}"
+        - name: ICP_PDP_SUFFIX
+          value: {{ $root.sch.config.security.iamPDPSuffix | quote }}
+        - name: REDIS_HOSTNAME
+          value: "127.0.0.1"
+        - name: TLS_CERT
+          value: /tls/podtls.cert
+        - name: TLS_PRIKEY
+          value: /tls/podtls.key
+        - name: DEPLOYMENT_MODE
+          value: "onprem"
+        - name: LOG_FORMAT
+          value: "basic"
+        - name: SERVICE_ID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $iamSecretName }}
+              key: "{{ $serviceName }}-{{ $root.Release.Name }}-api-key"
+        - name: SYSTEM_SERVICE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ $iamSecretName }}
+              key: "{{ $serviceName }}-{{ $root.Release.Name }}-service-id"
+        - name: PLATFORM
+          value: "onprem"
+        - name: "ICP_CLUSTER_EXTERNAL_HOST"
+          value: {{ $managementIngressDNSName | quote }}
+        - name: "IAM_CLIENT_ID"
+          valueFrom:
+            secretKeyRef:
+              name: {{ $oauthSecretName }}
+              key: "CLIENT_ID"
+        - name: "IAM_CLIENT_SECRET"
+          valueFrom:
+            secretKeyRef:
+              name: {{ $oauthSecretName }}
+              key: "CLIENT_SECRET"
+        - name: "ICP_CLUSTER_EXTERNAL_PORT"
+          valueFrom:
+            configMapKeyRef:
+              name: {{ $releaseConfigMapName | quote }}
+              key: "CLUSTER_ROUTER_HTTPS_PORT"
+        volumeMounts:
+          - name: public-certs-volume
+            mountPath: /tls
+            readOnly: true
+          - name: ca-certs-volume
+            mountPath: /etc/ssl/certs
+            readOnly: true
+{{ if lt $zoneIndex (sub $zonesToTemplate 1) -}}
+---
+{{ end -}}
+{{ end -}}
+{{ end }}
