@@ -1,0 +1,205 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the collector deployment
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
+{{ $namePrefix := .sch.chart.components.collector.deployment.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+{{ $compName := .sch.chart.components.collector.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName (dict "serviceSelector" $namePrefix)) -}}
+# Service Account
+{{ $serviceAccount := .sch.chart.components.collector.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+{{ $serviceNamePrefix := .sch.chart.components.collector.service.name -}}
+{{ $serviceName := include "sch.names.fullCompName" (list . $serviceNamePrefix) -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+# TLS Proxy config map name
+{{ $tlsConfigMap := .sch.chart.components.collector.configMap.name -}}
+{{ $tlsConfigMapName := include "sch.names.fullCompName" (list . $tlsConfigMap ) }}
+# Secrets with the certificates to use
+{{ $proxySecret := .sch.chart.components.proxy.secret.name -}}
+{{ $proxySecretName := include "sch.names.fullCompName" (list . $proxySecret ) -}}
+# Internal configmap name for cluster env vars
+{{ $releaseConfigMap := .sch.chart.components.essential.releaseConfigMap.name -}}
+{{ $releaseConfigMapName := include "sch.names.fullCompName" (list . $releaseConfigMap) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ $name }}"
+  labels:
+{{ $labels | indent 4 }}
+    internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
+    node: "0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name | quote }}
+      serviceSelector: {{ $namePrefix | quote }}
+  template:
+    metadata:
+      namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+      labels:
+{{ $labels | indent 8 }}
+        internalCertificate: {{ .Values.global.security.internalCertificateLabel | quote }}
+        node: "0"
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '{{ $ports.collector.prometheus }}'
+        prometheus.io/scheme: https
+{{ include "ibm-eventstreams.metering" (list . ) | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.pod) | indent 8 }}
+      volumes:
+      {{- include "license.accept.ref" . | indent 6 }}
+        - name: tlsproxy-config-map
+          configMap:
+            name: {{ $tlsConfigMapName }}
+        - name: proxy-certs-volume
+          secret:
+            secretName: {{ $proxySecretName }}
+            items:
+            - key: podtls.cacert
+              path: ca-certificates.crt
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+{{- include "ibm-eventstreams.archMatchExpression"  (list .) | indent 16 }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+{{- if eq (int (include "zones.to.template" (list .)) ) 2 }}
+{{- include "ibm-eventstreams.zoneMatchExpression"  (list . 0) | indent 16 }}
+{{- end }}
+      containers:
+# tls proxy sidecar - encrypts traffic to elastic search
+        - name: tls-proxy
+          image: {{ include "eventstreams.image" (list . "eventstreams-proxy" .Values.global.image.imageTags.proxyTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
+          resources:
+            requests:
+{{ toYaml .Values.global.resources.tlsProxy.requests | indent 14 }}
+            limits:
+{{ toYaml .Values.global.resources.tlsProxy.limits | indent 14 }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: ES_CONFIG_PATH
+              value: {{ .sch.chart.components.collector.tlsConfigPath | quote }}
+            - name: HEALTH_PORT
+              value: {{ $ports.proxy.altHealth | quote }}
+            - name: READY_PORT
+              value: {{ $ports.proxy.altHealth | quote }}
+            - name: TLS_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.cert"
+            - name: TLS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $proxySecretName }}
+                  key: "podtls.key"
+          volumeMounts:
+            - name: proxy-certs-volume
+              mountPath: /etc/ssl/certs
+              readOnly: true
+            - name: tlsproxy-config-map
+              mountPath: {{ .sch.chart.components.collector.tlsConfigPath | quote }}
+              readOnly: true
+          ports:
+            - containerPort: {{ $ports.proxy.altHealth }}
+              name: proxy-health
+            - containerPort: {{ $ports.collector.api }}
+              name: api
+          readinessProbe:
+            httpGet:
+              path: "/ready"
+              port: {{ $ports.proxy.altHealth }}
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: "/live"
+              port: {{ $ports.proxy.altHealth }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+        - name: collector
+          image: {{ include "eventstreams.image" (list . "eventstreams-collector" .Values.global.image.imageTags.collectorTag "true") | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          resources:
+            limits:
+{{ toYaml .Values.global.resources.collector.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.global.resources.collector.requests | indent 14 }}
+          securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerWritableFilesystem) | indent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ $ports.collector.api }}
+              {{- if eq .Values.global.security.tlsInternal "enabled" }}
+              scheme: HTTPS
+              {{- else }}
+              scheme: HTTP
+              {{- end }}
+              httpHeaders:
+                - name: Accept
+                  value: '*/*'
+            failureThreshold: 2
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ $ports.collector.api }}
+              {{- if eq .Values.global.security.tlsInternal "enabled" }}
+              scheme: HTTPS
+              {{- else }}
+              scheme: HTTP
+              {{- end }}
+              httpHeaders:
+                - name: Accept
+                  value: '*/*'
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 15
+          env:
+            {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: TRACE_LEVEL
+              value: "0"
+            - name: API_PORT
+              value: {{ $ports.collector.apiInternal | quote }}
+            - name: METRICS_PORT
+              value: {{ $ports.prometheus.collector | quote }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: CONFIGMAP
+              value: {{ $releaseConfigMapName | quote }}
+{{- end -}}

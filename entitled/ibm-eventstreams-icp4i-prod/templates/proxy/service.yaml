@@ -1,0 +1,63 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the service that exposes the proxy which enables external access to Kafka
+###############################################################################
+{{ $root := . -}}
+{{ if eq .Values.license "accept" -}}
+{{ $kafkaconfig:= include "sch.config.init" (list . "kafka.listeners.sch.chart.config.values") -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") | trim -}}
+{{ $namePrefix := .sch.chart.components.proxy.service.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
+# Component is 'proxy' as this makes up part of implementing the external access proxy
+{{ $compName := .sch.chart.components.proxy.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $brokerPrefix := .sch.chart.components.proxy.brokerPrefix -}}
+# number of Kafka brokers in the cluster - needed as a port will be created for each
+{{ $rep := int .Values.kafka.brokers -}}
+# Starting number for the ports that will be created
+{{ $nodePort := int 30000 -}}
+{{ $deploymentName := .sch.chart.components.proxy.controller.name -}}
+# Get the list of Kafka Listener Ports. We'll need to create node ports for each of these.
+{{ $listenerPorts := .sch.config.kafka.protocols -}}
+{{ $listeners := $listenerPorts | splitList "," }}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $ports := .sch.config.ports }}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  type: NodePort
+  selector:
+    release: {{ $root.Release.Name | quote }}
+    component: {{ $compName | quote }}
+  ports:
+    - name: bootstrap
+      protocol: TCP
+      port: {{ $nodePort }}
+    {{- range $brokerIndex, $broker := until $rep }}
+    {{- range $listenerIndex, $listenerType := $listeners -}}
+    {{ $portType := split ":" $listenerType -}}
+    {{- if not (hasPrefix "INTERNAL" $portType._0) }}
+    - name: "{{ $brokerPrefix }}{{ $brokerIndex }}-{{ $portType._0 | lower }}"
+      protocol: TCP
+      {{- $portNum := mul $brokerIndex 50 | add $listenerIndex}}
+      port: {{ add $nodePort $portNum }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+{{ end -}}

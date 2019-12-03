@@ -1,0 +1,86 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines a config map that allows configuration of the zookeeper proxy
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{ $namePrefix := .sch.chart.components.zookeeper.configMap.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
+# Component is 'zookeeper' as this makes up part of implementing zookeeper
+{{ $compName := .sch.chart.components.zookeeper.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# number of Zookeeper servers
+{{ $rep := int .sch.config.zookeeper.replicas -}}
+# Service allowing access to individual ZooKeeper pods when unready
+{{ $zookeeperInternalHeadless := .sch.chart.components.zookeeper.internalHeadless.name -}}
+{{ $zookeeperInternalHeadlessName := include "sch.names.fullCompName" (list . $zookeeperInternalHeadless) -}}
+{{ $stsNamePrefix := .sch.chart.components.zookeeper.statefulSet.name -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $stsNamePrefix) -}}
+# import port definitions
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $portdefs := .sch.config.ports }}
+# Define a tlsEnabled var from Values.
+{{- include "sch.config.init" (list . "tls.sch.chart.config.values") -}}
+{{ $tlsEnabled := .sch.config.tlsInternal.enabled | quote }}
+# k8s configuration
+{{ $clusterName := .Values.global.k8s.clusterName -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+data:
+  connectionTimeoutMs: "3600000"
+  # Set revision to current time (filling remaining nanoseconds) so config-map is re-read on upgrade
+  revision: "{{ .Release.Time.Seconds }}999999999"
+  tlsHandshakeTimeoutMs: "10000"
+  tarpitDuration: "0"
+  traceLevel: "0"
+  logFormat: "json"
+  closeOnSwitch: "true"
+  routes: |
+    [
+      {
+        "Port": {{ $portdefs.zookeeper.client }},
+        "Service": "127.0.0.1:{{ $portdefs.zookeeper.clientInternal }}",
+        "TLSIn": {{ $tlsEnabled }},
+        "TLSOut": "disabled"
+      },
+      {
+        "Port": {{ $portdefs.zookeeper.server }},
+        "Service": "127.0.0.1:{{ $portdefs.zookeeper.serverInternal }}",
+        "TLSIn": {{ $tlsEnabled }},
+        "TLSOut": "disabled"
+      },
+      {
+        "Port": {{ $portdefs.zookeeper.election }},
+        "Service": "127.0.0.1:{{ $portdefs.zookeeper.electionInternal }}",
+        "TLSIn": {{ $tlsEnabled }},
+        "TLSOut": "disabled"
+      },
+      {{- $zkservers := (.sch.config.zookeeper.replicas | int) -}}
+      {{- range $index, $_ := until $zkservers -}}
+      {{ $uniquePort := $index | add1 }}
+      {
+        "Port": 10{{ $uniquePort }}00,
+        "Service": "{{ $statefulSetName }}-{{ $index }}.{{ $zookeeperInternalHeadlessName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.zookeeper.server }}",
+        "TLSIn": "disabled",
+        "TLSOut": {{ $tlsEnabled }}
+      },{
+        "Port": 10{{ $uniquePort }}01,
+        "Service": "{{ $statefulSetName }}-{{ $index }}.{{ $zookeeperInternalHeadlessName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }}:{{ $portdefs.zookeeper.election }}",
+        "TLSIn": "disabled",
+        "TLSOut": {{ $tlsEnabled }}
+      }{{- if lt $uniquePort $zkservers -}},{{- end -}} 
+      {{- end -}}
+    ]
