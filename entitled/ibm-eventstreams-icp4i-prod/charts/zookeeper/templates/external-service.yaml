@@ -1,0 +1,47 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the headless service to allow access to the ZooKeeper cluster
+###############################################################################
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+{{ $namePrefix := .sch.chart.components.zookeeper.externalHeadless.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'zookeeper' as this makes up part of implementing the ZooKeeper cluster
+{{ $compName := .sch.chart.components.zookeeper.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+{{ $zookeeperStatefulset := .sch.chart.components.zookeeper.statefulSet.name -}}
+# import port definitions
+{{ $ports := .sch.config.ports }}
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "false"
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  publishNotReadyAddresses: false
+  ports:
+    # Incoming client connections
+    - port: {{ $ports.zookeeper.client }}
+      name: client
+    # Used for connections between ZooKeeper nodes
+    - port: {{ $ports.zookeeper.server }}
+      name: server
+    # Used by ZooKeeper nodes for connections to the leader
+    - port: {{ $ports.zookeeper.election }}
+      name: leader-election
+  clusterIP: None
+  selector:
+    release: {{ .Release.Name | quote }}
+    serviceSelector: {{ $zookeeperStatefulset | quote }}

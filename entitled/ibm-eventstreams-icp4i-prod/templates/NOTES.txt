@@ -1,0 +1,30 @@
+{{- if eq .Values.license "accept" }}
+{{- include "sch.config.init" (list . "sch.chart.config.values") | trim -}}
+{{- $uiService := .sch.chart.components.ui.service.name -}}
+{{- $uiServiceName := include "sch.names.fullCompName" (list . $uiService) -}}
+{{- $uiRoute := .sch.chart.components.ui.route.name -}}
+{{- $uiRouteName := include "sch.names.fullCompName" (list . $uiRoute) }}
+Chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+This IBM Event Streams release was created with {{ .Values.kafka.brokers }} Kafka brokers and 3 ZooKeeper servers.
+
+To test this release, use the helm test command: helm test {{ .Release.Name }} --cleanup
+
+To get the URL for the IBM Event Streams Administration UI, run the following command(s):
+{{- if (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+echo https://$(kubectl get route -n {{ .Release.Namespace }} {{ $uiRouteName | quote }} -o 'jsonpath={.spec.host}')
+{{- else }}
+export NODE_PORT=$(kubectl get svc -n {{ .Release.Namespace }} {{ $uiServiceName | quote }} -o 'jsonpath={.spec.ports[?(@.name=="admin-ui-https")].nodePort}')
+export NODE_IP=$( kubectl cluster-info | grep "catalog" | grep -Eo "https://[^\:]+" | cut -c 9- )
+echo https://$NODE_IP:$NODE_PORT
+{{- end }}
+{{- end }}
+
+{{- if eq .Values.license "view" }}
+**************************************************************************
+    LICENSE
+**************************************************************************
+
+{{ .Files.Get "LICENSES/LICENSE" }}
+
+**************************************************************************
+{{- end }}

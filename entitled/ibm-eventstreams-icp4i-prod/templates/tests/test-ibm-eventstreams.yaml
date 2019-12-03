@@ -1,0 +1,87 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# A simple test for validating Helm installs of IBM Event Streams by checking
+# that we can connect to all expected ports
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- $namePrefix :=  .sch.chart.components.helmTests.testServicesPod.name -}}
+{{- $name := include "sch.names.fullCompName" (list . $namePrefix) -}}
+{{ $compName := .sch.chart.components.helmTests.compName -}}
+{{ $serviceAccount := .sch.chart.components.helmTests.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+{{ $networkPolicyLabel := "kafka" -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $networkPolicyLabel) -}}
+{{ $kafkaHeadless := .sch.chart.components.kafka.internalHeadless.name -}}
+{{ $kafkaHeadlessName :=  (include "sch.names.fullCompName" (list . $kafkaHeadless)) -}}
+{{ $kafkaStsNamePrefix := .sch.chart.components.kafka.statefulSet.name -}}
+{{ $kafkaStatefulSetName := include "sch.names.statefulSetName" (list . $kafkaStsNamePrefix) -}}
+{{ $zookeeperHeadless := .sch.chart.components.zookeeper.internalHeadless.name -}}
+{{ $zookeeperHeadlessName :=  (include "sch.names.fullCompName" (list . $zookeeperHeadless)) }}
+{{ $zookeeperStsNamePrefix := .sch.chart.components.zookeeper.statefulSet.name -}}
+{{ $zookeeperStatefulSetName := include "sch.names.statefulSetName" (list . $zookeeperStsNamePrefix) -}}
+# init config for zookeeper replicas
+{{ $zookeeperConfig := include "sch.config.init" (list . "zookeeper.sch.chart.config.values" ) -}}
+{{ $zookeeperReplicas := int .sch.config.zookeeper.replicas -}}
+{{ $kafkaReplicas := int .Values.kafka.brokers -}}
+# k8s configuration
+{{ $clusterName := .Values.global.k8s.clusterName -}}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $name | quote }}
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+{{ $labels | indent 4 }}
+    serviceSelector: {{ $namePrefix | quote }}
+spec:
+  serviceAccountName: {{ $serviceAccountName | quote }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: {{ $defaultUser }}
+    fsGroup: 405
+  affinity:
+{{ include "ibm-eventstreams.customNodeaffinity"  (list .) | indent 4 }}
+  restartPolicy: Never
+  containers:
+    - name: "helm-test"
+      image: {{ include "eventstreams.image" (list . "eventstreams-vanilla" .Values.global.image.imageTags.vanillaTag) | quote }}
+      imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+      securityContext:
+        privileged: false
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 405
+        capabilities:
+          drop:
+          - ALL
+      env:
+        {{- include "license.accept.env.ref" . | indent 6 }}
+        - name: kafkaReplicas
+          value: {{ $kafkaReplicas | quote }}
+        - name: zookeeperReplicas
+          value: {{ $zookeeperReplicas | quote }}
+      command:
+        - /bin/sh
+        - -c
+        - "echo checking Kafka and ZooKeeper services are accessible; \
+          set -e; \
+          for i in `seq 0 $(($kafkaReplicas-1))`; do nc -w2 -v {{ $kafkaStatefulSetName }}-${i}.{{ $kafkaHeadlessName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }} 8092; done; \
+          for i in `seq 0 $(($zookeeperReplicas-1))`; do nc -w2 -v {{ $zookeeperStatefulSetName }}-${i}.{{ $zookeeperHeadlessName }}.{{ $.Release.Namespace }}.svc.{{ $clusterName }} 2181; done; \
+          echo Test complete"

@@ -1,0 +1,77 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Runs a job to send an install event to Segment
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{ if .Values.telemetry.enabled -}}
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") | trim -}}
+{{- include "sch.config.init" (list . "securitycontext.sch.chart.config.values") | trim -}}
+{{ $namePrefix := .sch.chart.components.telemetry.job.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Set up labels
+{{ $compName := .sch.chart.components.telemetry.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# Import product version
+{{ $edition := .sch.chart.edition }}
+{{ $values := fromYaml (include "sch.chart.config.values" . ) -}}
+{{ $productName := index $values.sch.chart.productName $edition | trim -}}
+{{ $appVersion := .Chart.AppVersion -}}
+# Service Account
+{{ $serviceAccount := .sch.chart.components.telemetry.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+spec:
+  template:
+    metadata:
+      name: {{ $name | quote }}
+      labels:
+{{ $labels | indent 8 }}
+        job: "post-install"
+    spec:
+      serviceAccountName: {{ $serviceAccountName | quote }}
+      volumes:
+      {{- include "license.accept.ref" . | indent 6 }}
+      securityContext:
+        # the fsGroup value is used in the Dockerfile in order to specify the uid, gid and the user to run as under
+        fsGroup: 1000
+      affinity:
+{{ include "ibm-eventstreams.customNodeaffinity"  (list .) | indent 8 }}
+      restartPolicy: Never
+      containers:
+      - name: telemetry-hook
+        image: {{ include "eventstreams.image" (list . "eventstreams-telemetry" .Values.global.image.imageTags.telemetryTag) | quote }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{- include "sch.security.securityContext" (list . .sch.chart.securitycontexts.containerReadOnlyFilesystem) | indent 12 }}
+        env:
+        {{- include "license.accept.env.ref" . | indent 10 }}
+            - name: PAYLOAD
+              value: '{"event":"Installed Hybrid Solution","properties":{"productTitle":"IBM Event Streams","productVersion":"{{ $productName }}-{{ $appVersion }}","milestoneName":"Deployed IBM Event Streams"},"persistence_for_kafka":"{{ .Values.persistence.enabled }}","kafka_broker_count":"{{ .Values.kafka.brokers }}","persistence_for_ZooKeeper":"{{ .Values.zookeeper.persistence.enabled }}"}'
+            - name: RELEASE_NAMESPACE
+              value: "{{ .Release.Namespace }}"
+            - name: RELEASE_NAME
+              value: "{{ .Release.Name }}"
+###############################################################################
+{{ end -}}
+{{ end -}}

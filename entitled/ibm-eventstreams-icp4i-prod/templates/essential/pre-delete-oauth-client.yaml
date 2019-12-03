@@ -1,0 +1,87 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# This job runs before upgrade. It deletes oauth job that was created
+# during the install. This job is required so that we can upgrade with re running
+# the oauth job.
+###############################################################################
+{{ if eq .Values.license "accept" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{ $namePrefix := .sch.chart.components.essential.oauthClientDeleterJob.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'essential'
+{{ $compName := .sch.chart.components.essential.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# Default user for security context
+{{ $defaultUser := .sch.securityContext.defaultUser -}}
+#  OAuth registration name which is used for registration and deletion.
+{{- $oauthRegistrationClient := .sch.chart.components.ui.oauth.client.name -}}
+{{- $oauthRegistrationClientName := include "sch.names.fullCompName" (list . $oauthRegistrationClient) -}}
+# Service Account
+{{ $serviceAccount := .sch.chart.components.ui.oauth.serviceAccount.name -}}
+{{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name | quote }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+   # This needs to run after a Helm delete is completed, as the secrets
+    #  are created by pre-install hooks and are therefore not automatically
+    #  deleted by a `helm delete`.
+    "helm.sh/hook": pre-delete
+    # We don't delete this pod in the event of a failed delete hook, as it
+    #  might have logs that would be useful for diagnosis.
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    # This needs to happen after all of the other post-delete
+    #  jobs, as this Job removes the pull secret that those post-delete
+    #  jobs depend on.
+    "helm.sh/hook-weight": "3"
+spec:
+  template:
+    metadata:
+      name: {{ $name | quote }}
+      labels:
+{{ $labels | indent 8 }}
+        job: "pre-delete-oauth-client-deleter"
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $defaultUser }}
+      affinity:
+{{ include "ibm-eventstreams.customNodeaffinity"  (list .) | indent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: "oauth-client-deleter"
+          image: {{ include "eventstreams.image" (list . "eventstreams-kubectl" .Values.global.image.imageTags.kubectlTag) | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          env:
+            {{- include "license.accept.env.ref" . | indent 12 }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ $defaultUser }}
+            capabilities:
+              drop:
+              - ALL
+          command:
+            - sh
+            - -c
+            - 'kubectl delete client {{ $oauthRegistrationClientName }} -n {{ .Release.Namespace }}; echo Done'
+{{ end -}}
