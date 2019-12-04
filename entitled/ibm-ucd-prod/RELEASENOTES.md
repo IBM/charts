@@ -1,13 +1,11 @@
-# What's new in Chart Version 6.0.4
+# What's new in Chart Version 6.0.5
 
-* Support for UCD 7.0.4.1
+* Support for UCD 7.0.4.2
 
 ## Breaking Changes
-* Upgrade from previous versions of UCD server is not supported because this version of the chart uses new kubernetes labels.  Migrating to this version can be accomplished by installing a new UCD server instance and using the previous database and persistent storage volumes.
 * Rollback to previous versions of UCD server is not supported without manual intervention because database schema changes are present.  Manual steps can be found [here](https://developer.ibm.com/urbancode/docs/running-urbancode-deploy-container-kubernetes/#upgrading-ucd-chart).
 
 # Fixes
-* External Agent URL and External User URL fields are now set automatically
 
 # Prerequisites
 * See README for prerequisites
@@ -16,6 +14,7 @@
 
 | Chart | Date | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------------ | ---------------- | ------- |
+| 6.0.5 | December 4th, 2019 | ucds: 7.0.4.2.1038002 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.4.2 |
 | 6.0.4 | November 5th, 2019 | ucds: 7.0.4.1.1036185 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.4.1 |
 | 5.0.3 | October 1st, 2019 | ucds: 7.0.4.0.1034011 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.4.0 |
 | 5.0.1 | September 3rd, 2019 | ucds: 7.0.3.3.1031820 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.3.3 |
