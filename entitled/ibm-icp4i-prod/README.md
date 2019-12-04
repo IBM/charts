@@ -184,7 +184,7 @@ The following table lists the configurable parameters of the navigator chart and
 | `image.services`                                              | ICP4I Services docker image                             | `icip-services`              |
 | `image.pullPolicy`                                            | Image pull policy                                       | `IfNotPresent`               |
 | `image.pullSecret`                                            | Image pull secret                                       | `nil`                        |
-| `image.tag`                                                   | ICP4I image tag                                         | `2.0.0`                      |
+| `image.tag`                                                   | ICP4I image tag                                         | `3.0.1`                      |
 | `nodeTuning.mechanism`                                        | Select node tuning mechanism or disable node tuning     | `tuning-operator`            |
 | `nodeTuning.tuned.masterInfraProfile.inheritProfile`          | Inherit existing Tuned profile for master/infra profile | `openshift-control-plane`    |
 | `nodeTuning.tuned.masterInfraProfile.priority`                | Profile priority for master/infra profile               | `30`                         |
@@ -214,11 +214,11 @@ No storage is required for the ICP4I Navigator.
 ## Limitations
 * Chart can only run on amd64 architecture type.
 * For OpenShift 3.11, the latest supported version of each component that is as follows:
-   * ibm-apiconnect-icp4i-prod: 1.0.2
+   * ibm-apiconnect-icp4i-prod: 1.0.3
    * ibm-ace-dashboard-icp4i-prod: 2.2.0
    * ibm-eventstreams-rhel-icp4i-prod: 1.3.2
    * ibm-mqadvanced-server-integration-prod: 4.1.0
-   * ibm-aspera-hsts-icp4i: 1.2.1
+   * ibm-aspera-hsts-icp4i: 1.2.3
    * ibm-datapower-icp4i: 1.0.4
    * ibm-icp4i-asset-repo-prod: 2.2.0
    * ibm-icp4i-tracing-prod: 1.0.0

@@ -1,4 +1,4 @@
-# What's new in Chart Version 2.1.5
+# What's new in Chart Version 2.1.6
 * IBM certified container
 
 ## Breaking Changes
@@ -15,7 +15,8 @@
 
 | Chart | Date | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------------ | ---------------- | ------- | 
-| 2.1.5 | November 5th, 2019| ucda: 7.0.4.1.1036185 | None | Version 7.0.4.1  |
+| 2.1.6 | December 4th, 2019| ucda: 7.0.4.2.1038002 | None | Version 7.0.4.2  |
+| 2.1.5 | November 5th, 2019| ucda: 7.0.4.1.1036185 | None | Support for latest UCD Server Release  |
 | 2.1.0 | October 1st, 2019 | ucda: 7.0.4.0.1034011 | None | Support for latest UCD Server Release |
 | 2.0.0 | September 3rd, 2019 | ucda: 7.0.3.3.1031820 | None | Support for latest UCD Server Release |
 | 1.0.8 | August 6th, 2019 | ucda: 7.0.3.2.1028848 | None | Support for latest UCD Server Release |

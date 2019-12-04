@@ -256,7 +256,7 @@ Kubernetes 1.9
 To install the chart into the namespace 'default', with the release name `my-ucdrelay`, and reading all remaining installation values from a file named my-relay-values.yaml:
 
 ```bash
-$ helm install ibm-ucdr-prod-2.0.5.tgz --namespace default --name my-ucdrelay -f my-relay-values.yaml --tls
+$ helm install ibm-ucdr-prod-2.0.6.tgz --namespace default --name my-ucdrelay -f my-relay-values.yaml --tls
 ```
 
 The [configuration](#Configuration) section lists the parameters that can be set during installation.
