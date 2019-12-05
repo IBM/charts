@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-smoke-test"
+  labels:
+    app: smoke-test
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    test: "true"
+  annotations:
+    "helm.sh/hook": test-success
+
+spec:
+{{ toYaml .Values.global.pod.hostOptinons | indent 2 }}
+{{- if .Values.imagePullSecrets }}
+  imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 4 }}
+{{- end }}
+  securityContext:
+{{ toYaml .Values.global.pod.ibmuser.securityContext | indent 4 }}
+
+  containers:
+  - name: {{ .Release.Name }}-smoke-test
+    image: {{ .Values.test.smoke.image }}:{{ .Values.test.smoke.tag | default "latest" }}
+    imagePullPolicy: "{{- if eq .Values.test.smoke.tag "latest" -}}Always{{- else -}}IfNotPresent{{- end -}}"
+    resources:
+{{ toYaml .Values.test.smoke.resources | indent 12 }}
+    securityContext:
+{{ toYaml .Values.global.container.ibmuser.securityContext | indent 6 }}
+
+    volumeMounts:
+      - name: smoketest-config
+        mountPath: /test-unity/script/jmSmoke.txt
+        subPath: jmSmoke.txt
+    env:
+    - name: TESTBEDID
+      value: "0989"
+    - name: BUILD
+      value: "18092406"
+    - name: ENDPOINT
+      value: "biapp"
+    - name: PORT
+      value: "9300"
+    - name: PROTOCOL
+      value: "http"
+    - name: STREAM
+      value: {{ .Values.global.caEdition | quote }}
+    - name: SCENARIOTXT
+      value: "jmSmoke.txt"
+
+    command: ["bash", "-c", "/test-unity/script/executeTest.sh"]
+#    command: ["bash", "-c", "pwd; cat /test-unity/script/jmSmoke.txt"]
+
+  volumes:
+  - name: smoketest-config
+    configMap:
+      name: {{ .Release.Name }}-smoke-test-config
+
+  restartPolicy: Never

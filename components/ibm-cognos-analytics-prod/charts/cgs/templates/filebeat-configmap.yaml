@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "fullname" . }}-filebeat-config
+
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+data:
+ filebeat.yml: |-
+   filebeat.prospectors:
+     {{ include "cgs-prospector" . | indent 5 }}
+     {{ include "session-prospector" . | indent 5 }}
+     {{ include "ipfinternal-prospector" . | indent 5 }}
+     {{ include "nginx-prospector" . | indent 5 }}
+   filebeat.config.modules:
+     # Set to true to enable config reloading
+     reload.enabled: true
+
+{{ if .Values.global.filebeat.output.logstashEnabled }}
+   output.logstash:
+     # Make sure the default points to an existing Logstash service
+     hosts: '${LOGSTASH:logstash:5000}'
+     timeout: 15
+{{ end }}
+{{ if .Values.global.filebeat.output.consoleEnabled }}
+   output.console:
+     pretty: true
+{{ end }}
+
+   logging.level: '${LOG_LEVEL:info}'
+
+

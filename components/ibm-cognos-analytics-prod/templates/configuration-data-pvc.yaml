@@ -1,0 +1,29 @@
+{{- if .Values.global.configDataPvc.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "configuration-data-pvc.name" . }}-pvc
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+spec:
+  {{- if eq .Values.global.configDataPvc.pvProvisioning "NoStorageClass" }}
+  # disable dynamic provisioning (static provision)
+  storageClassName: ""
+  {{- if .Values.global.configDataPvc.selector.label }}
+  # use selectors in the binding processl
+  selector:
+    matchExpressions:
+      - {key: {{ .Values.global.configDataPvc.selector.label }}, operator: In, values: [{{ .Values.global.configDataPvc.selector.value }}]}
+  {{- end }}
+  {{- else if eq .Values.global.configDataPvc.pvProvisioning "DefaultStorageClass" }}
+  # dynamic provsioning using default provisioner. Don't specify storageClassName
+  {{- else if eq .Values.global.configDataPvc.pvProvisioning "NamedStorageClass" }}
+  # dynamic provsioning using named storage class.
+  storageClassName: {{.Values.global.configDataPvc.storageClassName | quote}}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{.Values.global.configDataPvc.size}}
+  accessModes:
+    - {{.Values.global.configDataPvc.accessModes}}
+{{- end -}}
