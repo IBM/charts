@@ -1,0 +1,344 @@
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+
+#biapp:
+#  image:
+#    tag: 1.3.5
+
+#cgs:
+#  image:
+#    tag: 1.3.5
+
+#cm-0:
+#  image:
+#    tag: 1.3.6
+
+cs:
+  rbac:
+    create: false
+#  image:
+#    tag: 1.1.15
+  csPvc:
+    enabled: true
+    accessModes: ReadWriteMany
+    pvProvisioning: DefaultStorageClass
+    storageClassName: ""
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+    size: 10Gi
+
+ds:
+#  image:
+#    tag: 1.3.7
+  ingress:
+    enabled: true
+  route:
+    enabled: false
+
+rs:
+#  image:
+#    tag: 1.3.5
+  ingress:
+    enabled: true
+  route:
+    enabled: false
+
+#nginx-ns:
+#  serviceNginxIngress:
+#    enabled: true
+
+#gateway:
+##  image:
+##    tag: 1.3.7
+#  ingress:
+#    enabled: true
+#  route:
+#    enabled: false
+
+nginx-ingress:
+  controller:
+    ingressClass: canginx
+    scope:
+      enabled: true
+    containerPort:
+      http: 8080
+      https: 8443
+    service:
+      type: ClusterIP
+      enableHttp: true
+      enableHttps: true
+      targetPorts:
+        http: 8080
+        https: 8443
+    podSecurityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+    extraArgs:
+      v: 3
+      #    annotations-prefix: 'ingress.kubernetes.io'
+      enable-ssl-passthrough: 'true'
+      http-port: 8080
+      https-port: 8443
+    resources:
+      limits:
+        cpu: .5
+        memory: 300Mi
+      requests:
+        cpu: .3
+        memory: 100Mi
+
+    config:
+      enable-underscores-in-headers: "true"
+      #    log-format-upstream: '[$the_real_ip] - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status $req_id "$http_host" "$sent_http_host" ($sent_http_set_cookie) "$http_cookie" [$request_body]'
+      log-format-upstream: '[$the_real_ip] - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status $req_id "$http_host" "$sent_http_host" ($sent_http_set_cookie) "$http_cookie"'
+      ssl-redirect: "false"
+      proxy-body-size: "15m"
+      proxy-buffer-size: "3m"
+      proxy-read-timeout: "300"
+      proxy-send-timeout: "300"
+      client-body-buffer-size: "3m"
+      client-body-timeout: "300"
+      enable-access-log-for-default-backend: "true"
+  #      error-log-level: "debug"
+
+  ## Enable RBAC as per https://github.com/kubernetes/ingress/tree/master/examples/rbac/nginx and https://github.com/kubernetes/ingress/issues/266
+  rbac:
+    create: false
+
+  podSecurityPolicy:
+    enabled: false
+
+  serviceAccount:
+    name: "cognos-nginx-ingress-service-account"
+
+  defaultBackend:
+    enabled: false
+    service:
+      servicePort: 18080
+
+imagePullSecrets:
+#  - name: registrypullsecret
+  - name: artifactorypullsecret
+
+# All values under global can be seem by all charts and sub-charts
+global:
+  ## CA Edition - Endor
+  caEdition: endor
+
+  ## Creating a PPA Package
+  ppaChart: false
+
+  ## Running in ICP4Data
+  icp4Data: false
+
+  # used when you are trying to test the charts with an image branch other than "master"
+  branchTag: ''
+
+  initialAdminCamId: ""
+
+  # Used to set the format of http access_log sent to stdout; defaults to a custom format "nocookies".
+  # Other valid values are "main" and "custom" (which does log cookies).
+  http:
+    logformat:
+      formatName: "nocookies"
+
+  configDataPvc:
+    enabled: true
+    pvProvisioning: DefaultStorageClass
+    accessModes: ReadWriteMany
+    storageClassName: ""
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+    size: 100Mi
+
+  configOverridesPvc:
+    enabled: true
+    pvProvisioning: DefaultStorageClass
+    accessModes: ReadWriteMany
+    storageClassName: ""
+    # if your not using dynamic provisioning, you can use selectors to
+    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+    selector:
+      label: ""
+      value: ""
+    size: 200Mi
+
+  pvc:
+    artifacts:
+      enabled: true
+#    pvProvisioning: DefaultStorageClass
+#    accessModes: ReadWriteMany
+#    storageClassName: ""
+#    # if your not using dynamic provisioning, you can use selectors to
+#    # refine the binding process. You cannot specify a selector if your using dynamic provisioning!
+#    selector:
+#      label: ""
+#      value: ""
+#    size: 1Gi
+  ###############################################################################
+  ## for github.com charts
+  ###############################################################################
+  # Specify architecture (amd64, ppc64le, s390x) and weight to be
+  # used for scheduling as follows :
+  #   0 - Do not use
+  #   1 - Least preferred
+  #   2 - No preference
+  #   3 - Most preferred
+  ## comment out or remove if not github.ibm chart
+  arch:
+    amd64: "3 - Most preferred"
+
+  ###############################################################################
+  ## for PPA charts
+  ###############################################################################
+  ## Architecture - e.g. amd64, s390x, ppc64le. If left empty, arch type will try
+  ## to be determined.
+  ## Note: 'kubectl version' returns platform of given cluster
+  ## remove the arch comment and use the following nodeAffinity for PPA charts, can be removed if github.ibm chart
+#  arch: ""
+
+  image:
+#    registry: registry.local:5000
+    registry: hyc-ca-container-docker-local.artifactory.swg-devops.com
+
+  base:
+    image:
+      repository: /ca-endor-k8s/
+      name: ca-base
+      tag:  1.6.3
+      resources:
+        # We usually recommend not to specify default resources and to leave this as a conscious
+        # choice for the user. This also increases chances charts run on environments with little
+        # resources, such as Minikube. If you do want to specify resources, uncomment the following
+        # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+        # limits:
+        limits:
+          cpu: 2
+          memory: 8Gi
+        requests:
+          cpu: 1
+          memory: 4Gi
+#      pullPolicy: Always
+
+#  ubiMinimal:
+#    image:
+#      registry: registry.access.redhat.com/
+#      repository: ubi7/
+#      name: ubi-minimal
+#      tag: 7.6
+#      pullPolicy: IfNotPresent
+
+# Apatche Web Server
+#  httpd:
+#    image:
+#      registry:
+#      repository: 'bitnami/'
+#      name: apache
+##      name: httpd
+#      tag: 2.4
+#      pullPolicy: IfNotPresent
+
+    #securityContext:
+    #  allowPrivilegeEscalation: false
+    #  capabilities:
+    #    drop:
+    #      - ALL
+
+  # These settings are used for filebeat logging
+  filebeat:
+    output:
+      logstashEnabled: false
+      consoleEnabled: true
+
+    image:
+      registry: hyc-ca-container-docker-local.artifactory.swg-devops.com
+      repository: /ca-endor-k8s/
+      name: filebeat-secure
+      tag: 5.5.3
+      pullPolicy: IfNotPresent
+
+    resources:
+      # We usually recommend not to specify default resources and to leave this as a conscious
+      # choice for the user. This also increases chances charts run on environments with little
+      # resources, such as Minikube. If you do want to specify resources, uncomment the following
+      # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+      limits:
+#        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 100Mi
+
+    securityContext:
+      allowPrivilegeEscalation: false
+      privileged: false
+      readOnlyRootFilesystem: false
+      runAsNonRoot: true
+      runAsUser: 10001
+      #        fsGroup: 1000
+      capabilities:
+        drop:
+          - ALL
+
+  logstash:
+    ip: logstash.kube-system
+    port: 5044
+
+  pod:
+    hostOptinons:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+    ibmuser:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups: [ 1000 ]
+    db2user:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+#        fsGroup: 1000
+        supplementalGroups: [ 2000, 2001, 2002 ]
+
+  container:
+    ibmuser:
+      securityContext:
+        allowPrivilegeEscalation: false
+        privileged: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop:
+            - ALL
+
+  metering:
+    productID: IBMCognosAnalytics_11.1.4-0_ENTERPRISE_00000
+    productName: IBM Cognos Analytics
+    productVersion: 11.1.4-0
+
+# Values for helm test command
+test:
+  smoke:
+    image: registry.local:5000/waca/test-perf-ca-all
+    tag: "20181105191523"
+    resources:
+      # We usually recommend not to specify default resources and to leave this as a conscious
+      # choice for the user. This also increases chances charts run on environments with little
+      # resources, such as Minikube. If you do want to specify resources, uncomment the following
+      # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+      # limits:
+      limits:
+        cpu: 1
+        memory: 500Mi
+      requests:
+        cpu: .5
+        memory: 300Mi

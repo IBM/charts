@@ -1,0 +1,125 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "name" . }}
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+{{ toYaml .Values.strategy | indent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cognos-analytics.labels" . | indent 8 }}
+      annotations:
+        checksum/nginx-config-map: {{ include (print $.Template.BasePath "/nginx-configmap.yaml") . | sha256sum }}
+        checksum/filebeat-config-map: {{ include (print $.Template.BasePath "/filebeat-configmap.yaml") . | sha256sum }}
+        checksum/debug-config-map: {{ include (print $.Template.BasePath "/prop-configmap.yaml") . | sha256sum }}
+        {{- include "metering.annotations" . | indent 8 }}
+    spec:
+{{ toYaml .Values.global.pod.hostOptinons | indent 6 }}
+
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- else }}
+      serviceAccountName: {{ template "name" . }}-service-account
+      {{- end }}
+
+      affinity:
+      {{- include "deploymentNodeAffinity" . | indent 6 }}
+
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      securityContext:
+            {{- include "podSecurityContext" . | indent 8 }}
+
+      initContainers:
+        - name: wait-for-biapp
+          {{ include "imageBaseSpec" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [ 'sh', '-c', 'MY_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && MY_NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace) && while [ $(curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer ${MY_TOKEN}" https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_PORT_443_TCP_PORT/api/v1/namespaces/${MY_NAMESPACE}/pods?timeoutSeconds=10 | jq -r ".items[]?.status.containerStatuses[]?|tostring" | grep biapp | grep -c "\"ready\":true") -eq 0 ]; do echo "rs waiting for biapp"; sleep 15; done;' ]
+          resources:
+{{ toYaml .Values.global.base.image.resources | indent 12 }}
+          securityContext:
+{{ toYaml .Values.global.container.ibmuser.securityContext | indent 12 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{ include "imageSpec" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: CS_PASSWORD
+              value: ""
+          ports:
+            - containerPort: {{ .Values.serviceBackend.internalPort }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.serviceBackend.internalPort }}
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.serviceBackend.internalPort }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: logs-volume
+              mountPath: /home/ibmuser/cognos/analytics/logs
+            - name: rs-props-config
+              mountPath: /home/ibmuser/cognos/analytics/configuration2
+              readOnly: false
+            - name: configuration-data-volume
+              mountPath: /home/ibmuser/data
+              subPath: data
+            - name: configuration-overrides-volume
+              mountPath: /home/ibmuser/analytics-overrides
+              subPath: analytics-overrides
+            - name: nginx-proxy-config
+              mountPath: /home/ibmuser/nginx.conf
+              subPath: nginx.conf
+            - name: nginx-data-volume
+              mountPath: /var/nginx-data
+          resources:
+{{ toYaml .Values.rs.resources | indent 12 }}
+          securityContext:
+{{ toYaml .Values.global.container.ibmuser.securityContext | indent 12 }}
+
+{{ include "sidecar-filebeat" . | indent 8 }}
+
+      hostname: {{ .Chart.Name }}
+      volumes:
+      - name: logs-volume
+        emptyDir: {}
+      - name: nginx-proxy-config
+        configMap:
+          name: {{ template "fullname" . }}-proxy-conf
+      - name: nginx-data-volume
+        emptyDir: {}
+      - name: configuration-overrides-volume
+      {{- if .Values.global.configOverridesPvc.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "configuration-overrides-pvc.name" . }}-pvc
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: configuration-data-volume
+      {{- if .Values.global.configDataPvc.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "configuration-data-pvc.name" . }}-pvc
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      {{- include "standard-filebeat-volumes-config" . | indent 6 }}
+      - name: rs-props-config
+        configMap:
+          defaultMode: 0777
+          name: {{ template "fullname" . }}-prop-config
+          items:
+            - key: rsvpproperties.xml
+              path: rsvpproperties.xml
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}

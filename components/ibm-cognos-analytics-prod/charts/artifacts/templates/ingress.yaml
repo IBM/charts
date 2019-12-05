@@ -1,0 +1,30 @@
+{{- if .Values.ingress.enabled -}}
+{{- $servicePath := printf "/%s/%s/" (include "gateway-ingress.path" .) "artifacts" -}}
+{{- $serviceName := printf "%s-%s" (include "name" .) "backend" -}}
+{{- $servicePort := .Values.serviceBackend.externalPort -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ template "name" . }}-ingress
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+  annotations:
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  rules:
+#    {{- range $host := .Values.ingress.hosts }}
+#    - host: {{ $.Release.Namespace }}.{{ $host }}
+     - http:
+        paths:
+          - path: {{ $servicePath }}
+            backend:
+              serviceName: {{ $serviceName }}
+              servicePort: {{ $servicePort }}
+#    {{- end -}}
+  {{- if .Values.ingress.tls }}
+  tls:
+{{ toYaml .Values.ingress.tls | indent 4 }}
+  {{- end -}}
+{{- end -}}

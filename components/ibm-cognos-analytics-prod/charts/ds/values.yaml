@@ -1,0 +1,89 @@
+# Default values for ds.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+replicaCount: 1
+image:
+  repository: /ca-endor-k8s/
+  name: ds
+  tag: 1.6.6
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: artifactorypullsecret
+
+service:
+  name: port-9301-8080-ds
+  type: ClusterIP
+  externalPort: 9301
+  internalPort: 8080
+serviceBackend:
+  name: tcp-9301-9301-ds
+  type: ClusterIP
+  externalPort: 9301
+  internalPort: 9301
+ingress:
+  enabled: true
+  # Used to create an Ingress record.
+  hosts:
+#    - cognos.ibm.com
+    - ds
+  annotations:
+    kubernetes.io/ingress.class: canginx
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "dsingresscookie"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+#    nginx.ingress.kubernetes.io/enable-rewrite-log: "true"
+
+  tls:
+    # Secrets must be manually created in the namespace.
+    # - secretName: chart-example-tls
+    #   hosts:
+    #     - chart-example.local
+route:
+  enabled: false
+  # Used to create an Ingress record.
+  host: cognos.ibm.com
+  annotations:
+    haproxy.router.openshift.io/balance: source
+    haproxy.router.openshift.io/cookie_name: "dsingresscookie"
+    haproxy.router.openshift.io/timeout: 60s
+  tls:
+    # Secrets must be manually created in the namespace.
+    # - secretName: chart-example-tls
+    #   hosts:
+    #     - chart-example.local
+
+strategy:
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+  type: RollingUpdate
+
+serviceAccountName:
+
+ds:
+  resources:
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    limits:
+      cpu: 2
+      memory: 8Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+
+  hpa:
+    enabled: true
+    minReplicas: 1
+    # There is an issue with the datastack cookies so we are unable to scale this
+    # maxReplicas: 3
+    maxReplicas: 1
+    metrics:
+      cpu:
+        targetAverageUtilization: 80
+      memory:
+        targetAverageUtilization: 80

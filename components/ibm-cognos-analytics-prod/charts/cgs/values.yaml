@@ -1,0 +1,74 @@
+# Default values for cgs.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+replicaCount: 1
+image:
+  repository: /ca-endor-k8s/
+  name: cgs
+  tag: 1.6.4
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: artifactorypullsecret
+
+serviceBackend:
+  name: tcp-5080-5080-cgs-backend
+  type: ClusterIP
+  externalPort: 5080
+  internalPort: 5080
+
+service:
+  name: tcp-5080-5080-cgs
+  type: ClusterIP
+  externalPort: 5080
+  internalPort: 5080
+
+serviceTCPConnections: 50
+ingress:
+  enabled: false
+  # Used to create an Ingress record.
+  hosts:
+    - cognos.ibm.com
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    ingress.kubernetes.io/affinity: "cookie"
+    ingress.kubernetes.io/session-cookie-name: "cgs-ingress-cookie"
+    ingress.kubernetes.io/client-body-buffer-size: "64k"
+    ingress.kubernetes.io/proxy-read-timeout: "3m"
+    ingress.kubernetes.io/proxy-send-timeout: "3m"
+  tls:
+    # Secrets must be manually created in the namespace.
+    # - secretName: chart-example-tls
+    #   hosts:
+    #     - chart-example.local
+
+strategy:
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+  type: RollingUpdate
+
+serviceAccountName:
+
+cgs:
+  resources:
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    #limits:
+    limits:
+      cpu: 1.5
+      memory: 500Mi
+    requests:
+      cpu: 1
+      memory: 200Mi
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    metrics:
+      cpu:
+        targetAverageUtilization: 80
+      memory:
+        targetAverageUtilization: 80

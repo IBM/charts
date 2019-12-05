@@ -1,0 +1,126 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "name" . }}
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+{{ toYaml .Values.strategy | indent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cognos-analytics.labels" . | indent 8 }}
+      annotations:
+        checksum/filebeat-config-map: {{ include (print $.Template.BasePath "/filebeat-configmap.yaml") . | sha256sum }}
+        {{- include "metering.annotations" . | indent 8 }}
+    spec:
+{{ toYaml .Values.global.pod.hostOptinons | indent 6 }}
+
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- else }}
+      serviceAccountName: {{ template "name" . }}-service-account
+      {{- end }}
+
+      affinity:
+      {{- include "deploymentNodeAffinity" . | indent 6 }}
+
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      securityContext:
+            {{- include "podSecurityContext" . | indent 8 }}
+      initContainers:
+        - name: wait-for-cs
+          {{ include "imageBaseSpec" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [ 'sh', '-c', 'MY_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && MY_NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace) && while [ $(curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer ${MY_TOKEN}" https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_PORT_443_TCP_PORT/api/v1/namespaces/${MY_NAMESPACE}/pods?timeoutSeconds=10 | jq -r ".items[]?.status.containerStatuses[]?|tostring" | grep "\"cs\"" | grep -c "\"ready\":true") -eq 0 ]; do echo "waiting for content store"; sleep 15; done;' ]
+          resources:
+{{ toYaml .Values.global.base.image.resources | indent 12 }}
+          securityContext:
+{{ toYaml .Values.global.container.ibmuser.securityContext | indent 12 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{ include "imageSpec" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: CS_USERNAME
+              value: db2inst1
+            - name: AUTH_ANON
+              value: {{ .Values.cm.anonymous | quote }}
+            - name: ICP4DATA
+              value: {{ .Values.global.icp4Data | quote }}
+            {{- if .Values.global.icp4Data }}
+            - name: ICP4DATA_CERT_URI
+              value: {{ .Values.global.icp4DataJWTCert | quote }}
+            {{- end }}
+            - name: INITIAL_ADMIN_CAMID
+{{ include "jwt.camid" . | indent 14 }}
+          ports:
+            - containerPort: {{ .Values.service.internalPort }}
+              name: dispatcher-port
+          livenessProbe:
+            tcpSocket:
+              port: dispatcher-port
+            initialDelaySeconds: 180
+            periodSeconds: 60
+          readinessProbe:
+            exec:
+              command: [ 'sh', '-c', 'curl -s -o /dev/null -w "%{http_code}" http://localhost:${CM_0_SERVICE_PORT}/bi/ | grep 200 || exit 1' ]
+            initialDelaySeconds: 240
+            periodSeconds: 60
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: logs-volume
+              mountPath: /home/ibmuser/cognos/analytics/logs
+            - name: secret-volume
+              mountPath: /creds/db2
+              readOnly: true
+            - name: configuration-data-volume
+              mountPath: /home/ibmuser/cognos/analytics/configuration/data
+              subPath: data
+            - name: configuration-overrides-volume
+              mountPath: /home/ibmuser/analytics-overrides
+              subPath: analytics-overrides
+            - name: artifacts-volume
+              mountPath: /data/deployment
+              subPath: artifacts-data/deployment/files
+          resources:
+{{ toYaml .Values.cm.resources | indent 12 }}
+          securityContext:
+{{ toYaml .Values.global.container.ibmuser.securityContext | indent 12 }}
+
+{{ include "sidecar-filebeat" . | indent 8 }}
+
+      hostname: {{ .Chart.Name }}
+      volumes:
+      - name: logs-volume
+        emptyDir: {}
+      - name: secret-volume
+        secret:
+          secretName: {{ template "cs-secrets-name" . }}
+      - name: configuration-data-volume
+      {{- if .Values.global.pvc.artifacts.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "configuration-data-pvc.name" . }}-pvc
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: configuration-overrides-volume
+      {{- if .Values.global.pvc.artifacts.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "configuration-overrides-pvc.name" . }}-pvc
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      - name: artifacts-volume
+      {{- if .Values.global.pvc.artifacts.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "artifacts-pvc.name" . }}-pvc
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+{{- include "standard-filebeat-volumes-config" . | indent 6 }}

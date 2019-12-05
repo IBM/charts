@@ -1,0 +1,72 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "name" . }}
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+{{ toYaml .Values.strategy | indent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cognos-analytics.labels" . | indent 8 }}
+      annotations:
+        {{- include "metering.annotations" . | indent 8 }}
+    spec:
+{{ toYaml .Values.global.pod.hostOptinons | indent 6 }}
+      affinity:
+      {{- include "deploymentNodeAffinity" . | indent 6 }}
+
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      securityContext:
+            {{- include "podSecurityContext" . | indent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{ include "imageSpec" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          livenessProbe:
+            httpGet:
+              path: "/v1/health/liveness"
+              port: {{ .Values.service.internalPort }}
+              scheme: "HTTP"
+
+            initialDelaySeconds: 20
+            timeoutSeconds: 1
+            periodSeconds: 30
+
+          readinessProbe:
+            httpGet:
+              path: "/v1/health/readiness"
+              port: {{ .Values.service.internalPort }}
+              scheme: "HTTP"
+
+            initialDelaySeconds: 10
+            timeoutSeconds: 1
+            periodSeconds: 30
+
+          volumeMounts:
+            - name: artifact-volume
+              mountPath: /artifacts-data
+              subPath: artifacts-data
+          resources:
+{{ toYaml .Values.artifacts.resources | indent 12 }}
+          securityContext:
+{{ toYaml .Values.global.container.ibmuser.securityContext | indent 12 }}
+      hostname: {{ .Chart.Name }}
+      volumes:
+      - name: artifact-volume
+      {{- if .Values.global.pvc.artifacts.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "artifacts-pvc.name" . }}-pvc
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}

@@ -1,0 +1,123 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "name" . }}
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+{{ toYaml .Values.strategy | indent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cognos-analytics.labels" . | indent 8 }}
+      annotations:
+        checksum/cs-secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        checksum/db2-entrypoint-config-map: {{ include (print $.Template.BasePath "/db2-entrypoint-configmap.yaml") . | sha256sum }}
+        {{- include "metering.annotations" . | indent 8 }}
+    spec:
+{{ toYaml .Values.global.pod.hostOptinons | indent 6 }}
+
+      {{- if .Values.cs.serviceAccountName }}
+      serviceAccountName: {{ .Values.cs.serviceAccountName }}
+      {{- else }}
+      serviceAccountName: {{ template "name" . }}-service-account
+      {{- end }}
+
+      affinity:
+      {{- include "deploymentNodeAffinity" . | indent 6 }}
+      {{- include "additionalNodeAffinity" ( .Values.cs ) | indent 6 }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      securityContext:
+{{ toYaml .Values.global.pod.db2user.securityContext | indent 12 }}
+
+      containers:
+        - name: {{ .Chart.Name }}
+          {{ include "imageSpec" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: LICENSE
+              value: accept
+            - name: GL_USEGLU
+              value: "1"
+            - name: DB_LOCALE
+              value: en_us.utf8
+            - name: DB2INST1_PASSWORD
+              value: ""
+            - name: COGNOS_PASSWORD
+              value: ""
+            - name: KEYSTORE_CHANGE_PASSWORD
+              value: "{{ .Values.keystore_change_password }}"
+            - name: KEY_STORE_DEFAULT_PASSWORD
+              value: "{{ .Values.key_store_default_password }}"
+            - name: KEYSTORE_OLD_PASSWORD
+              value: ""
+            - name: KEYSTORE_BACKUP_NEW_PASSWORD
+              value: "{{ .Values.keystore_backup_new_password }}"
+            - name: KEYSTORE_VERIFY_NEW_PASSWORD
+              value: "{{ .Values.keystore_verify_new_password }}"
+          ports:
+            - containerPort: {{ .Values.service.internalPort }}
+          command: ["sh", "-c", "/home/db2inst1/cs-startup.sh"]
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /bin/waca/db2run.sh '/home/db2inst1/sqllib/bin/db2gcf -s'
+            initialDelaySeconds: 340
+            periodSeconds: 30
+            failureThreshold: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /bin/waca/db2run.sh '/home/db2inst1/sqllib/adm/db2pd -alldbs'
+            initialDelaySeconds: 400
+            periodSeconds: 30
+            failureThreshold: 50
+            timeoutSeconds: 10
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+              add: ["SYS_RESOURCE", "IPC_OWNER", "SYS_NICE", "SETGID", "SETUID", "DAC_OVERRIDE"]
+            allowPrivilegeEscalation: true
+            privileged: false
+            readOnlyRootFilesystem: false
+          volumeMounts:
+            - name: secret-volume
+              mountPath: /creds/db2
+            - name: db2-entrypoint
+              mountPath: /home/db2inst1/cs-startup.sh
+              subPath: cs-startup.sh
+            - name: datadir
+              mountPath: "/data"
+          resources:
+{{ toYaml .Values.cs.resources | indent 12 }}
+      hostname: db2server1
+      volumes:
+      - name: secret-volume
+        secret:
+          secretName: {{ template "cs-secrets-name" . }}
+      - name: db2-entrypoint
+        configMap:
+          name: {{ template "fullname" . }}-entrypoint-config-map
+          defaultMode: 0755
+      - name: datadir
+{{- if .Values.csPvc.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "fullname" . }}-pvc
+{{- else }}
+        emptyDir: {}
+{{- end }}
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}
