@@ -1,0 +1,134 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "fullname" . }}-proxy-conf
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+data:
+  nginx.conf: |-
+    #user www-data;
+    #worker_processes auto;
+    #pid /run/nginx.pid;
+    worker_processes 2;
+    pid /var/nginx-data/nginx.pid;
+    # Load dynamic modules. See /usr/share/nginx/README.dynamic.
+    include /usr/share/nginx/modules/*.conf;
+    error_log /dev/stdout warn;
+
+    events {
+      worker_connections 768;
+      multi_accept on;
+    }
+
+    http {
+
+    ##
+    # Basic Settings
+    ##
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    proxy_read_timeout     300s;
+    proxy_send_timeout     300s;
+    proxy_connect_timeout  300s;
+    client_body_buffer_size     3m;
+    client_max_body_size 15m;
+    client_header_buffer_size   5120k;
+    large_client_header_buffers 16 5120k;
+    # server_tokens off;
+
+    # server_names_hash_bucket_size 64;
+    server_names_hash_bucket_size 128;
+    # server_name_in_redirect off;
+        # Set an array of temp and cache file options that will otherwise default to
+        # restricted locations accessible only to root.
+    client_body_temp_path /var/nginx-data/client_body;
+    fastcgi_temp_path /var/nginx-data/fastcgi_temp;
+    proxy_temp_path /var/nginx-data/proxy_temp;
+    scgi_temp_path /var/nginx-data/scgi_temp;
+    uwsgi_temp_path /var/nginx-data/uwsgi_temp;
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+          '$status $body_bytes_sent "$http_referer" '
+          '"$http_user_agent" "$http_x_forwarded_for"';
+    log_format custom '$remote_addr - $remote_user [$time_local] "$request" '
+          '$status $body_bytes_sent "$http_referer"'
+          '"$http_user_agent" "$http_x_forwarded_for" '
+          '$request_length $request_time '
+          '[$upstream_response_length $upstream_response_time $upstream_status] '
+          '($sent_http_set_cookie) "$http_cookie"';
+    log_format nocookies '$remote_addr - $remote_user [$time_local] "$request" '
+          '$status $body_bytes_sent "$http_referer"'
+          '"$http_user_agent" "$http_x_forwarded_for" '
+          '$request_length $request_time '
+          '[$upstream_response_length $upstream_response_time $upstream_status] ';
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    ##
+    # SSL Settings
+    ##
+
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
+    ssl_prefer_server_ciphers on;
+
+    ##
+    # Logging Settings
+    ##
+{{- $valid := list "main" "custom" "nocookies" }}
+{{- if not (has .Values.global.http.logformat.formatName $valid) }}
+    access_log /dev/stdout nocookies;
+{{- else }}
+    access_log /dev/stdout {{ .Values.global.http.logformat.formatName }};
+{{- end }}
+
+    ##
+    # Gzip Settings
+    ##
+
+    gzip on;
+
+    # gzip_vary on;
+    # gzip_proxied any;
+    # gzip_comp_level 6;
+    # gzip_buffers 16 8k;
+    # gzip_http_version 1.1;
+    # gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    ##
+    # Virtual Host Configs
+    ##
+    server {
+      listen 9301;
+      listen [::]:9301;
+      server_name biapp;
+      underscores_in_headers on;
+      chunked_transfer_encoding on;
+
+      location /nginx-health {
+        access_log off;
+        return 200 "healthy\n";
+        # because default content-type is application/octet-stream,
+        # browser will offer to "save the file"...
+        # the next line allows you to see it in the browser so you can test
+        add_header Content-Type text/plain;
+      }
+
+      location / {
+        proxy_set_header   X-Forwarded-For $remote_addr;
+        proxy_set_header   Host $http_host;
+        proxy_pass         "http://ds:9301";
+        proxy_http_version 1.1;
+        proxy_read_timeout     300;
+        proxy_connect_timeout  300;
+        # Remove the Connection header if the client sends it,
+        # it could be "close" to close a keepalive connection
+        proxy_set_header Connection "";
+      }
+
+    }
+
+    }
+

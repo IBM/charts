@@ -1,0 +1,34 @@
+{{ define "sidecar-filebeat" }}
+- name: sidecar-filebeat
+{{/*  image: "{{ .Values.global.filebeat.image.registry }}{{ .Values.global.filebeat.image.repository }}{{ .Values.global.filebeat.image.name }}:{{ .Values.global.filebeat.image.tag }}"*/}}
+  {{- include "imageFilebeatSpec" . | indent 2 }}
+  imagePullPolicy: {{ .Values.global.filebeat.image.pullPolicy }}
+  env:
+    - name: FIELDS_TYPE
+      value: cognos-log
+    - name: LOG_DIRS
+      value: /home/ibmuser/cognos/analytics/logs
+{{- include "standard-filebeat-fields" . | indent 4 }}
+  readinessProbe:
+    exec:
+      command:
+        - sh
+        - -c
+        - "ps aux | grep '[f]ilebeat' || exit 1"
+    initialDelaySeconds: 10
+  livenessProbe:
+    exec:
+      command:
+        - sh
+        - -c
+        - "ps aux | grep '[f]ilebeat' || exit 1"
+    periodSeconds: 30
+  volumeMounts:
+    - name: logs-volume
+      mountPath: /home/ibmuser/cognos/analytics/logs
+{{- include "standard-filebeat-volumeMounts-config" . | indent 4 }}
+  resources:
+{{ toYaml .Values.global.filebeat.resources | indent 4 }}
+  securityContext:
+{{ toYaml .Values.global.filebeat.securityContext | indent 4 }}
+{{ end }}

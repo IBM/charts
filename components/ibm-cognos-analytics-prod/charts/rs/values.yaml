@@ -1,0 +1,88 @@
+# Default values for rs.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+replicaCount: 1
+image:
+  repository: /ca-endor-k8s/
+  name: rsvp
+  tag: 1.6.4
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: artifactorypullsecret
+
+service:
+  name: port-5031-8080-rs
+  type: ClusterIP
+  externalPort: 5031
+  internalPort: 8080
+serviceStat:
+  name: stat
+  type: NodePort
+  externalPort: 1936
+  internalPort: 1936
+serviceBackend:
+  name: tcp-5031-5031-rs
+  type: ClusterIP
+  externalPort: 5031
+  internalPort: 5031
+ingress:
+  enabled: true
+  # Used to create an Ingress record.
+  hosts:
+#    - cognos.ibm.com
+    - rs
+  annotations:
+#    kubernetes.io/ingress.class: haproxy
+#    ingress.kubernetes.io/rewrite-target: /
+    kubernetes.io/ingress.class: canginx
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "rsingresscookie"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+
+  tls:
+    # Secrets must be manually created in the namespace.
+    # - secretName: chart-example-tls
+    #   hosts:
+    #     - chart-example.local
+route:
+  enabled: false
+  # Used to create an Ingress record.
+  host: cognos.ibm.com
+  annotations:
+    haproxy.router.openshift.io/balance: source
+    haproxy.router.openshift.io/cookie_name: "rsingresscookie"
+  tls:
+    # Secrets must be manually created in the namespace.
+    # - secretName: chart-example-tls
+    #   hosts:
+    #     - chart-example.local
+strategy:
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+  type: RollingUpdate
+
+serviceAccountName:
+
+rs:
+  resources:
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    limits:
+      cpu: 2
+      memory: 4Gi
+    requests:
+      cpu: 1
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    metrics:
+      cpu:
+        targetAverageUtilization: 80
+      memory:
+        targetAverageUtilization: 80

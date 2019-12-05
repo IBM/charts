@@ -1,0 +1,26 @@
+{{- if .Values.route.enabled -}}
+{{- $serviceName := printf "%s-%s" (include "name" .) "backend" -}}
+{{- $servicePort := .Values.serviceBackend.externalPort -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ template "service.name" . }}-route
+  labels:
+    {{- include "cognos-analytics.labels" . | indent 4 }}
+  annotations:
+    {{- range $key, $value := .Values.route.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  host: {{ $.Release.Namespace }}.{{ .Values.route.host }}
+  path: "/"
+  port:
+    targetPort: {{ .Values.serviceBackend.name }}
+  to:
+    kind: Service
+    name: {{ $serviceName }}
+  {{- if .Values.route.tls }}
+  tls:
+{{ toYaml .Values.route.tls | indent 4 }}
+  {{- end -}}
+{{- end -}}
