@@ -17,15 +17,7 @@
 
 . ../../common/kubhelper.sh
 
-
 if supports_scc; then
   echo "Removing the SCC..."
-  # Note: this script only works on OpenShift >= 3.11, otherwise you must run the following command manually
   kubectl delete -f ../../pre-install/clusterAdministration/ibm-mq-dev-scc.yaml
-fi
-
-if supports_psp; then
-    echo "Removing the PSP and ClusterRole..."
-    kubectl delete -f ../../pre-install/clusterAdministration/ibm-mq-dev-cr.yaml
-    kubectl delete -f ../../pre-install/clusterAdministration/ibm-mq-dev-psp.yaml
 fi

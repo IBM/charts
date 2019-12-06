@@ -1,0 +1,288 @@
+# © Copyright IBM Corporation 2017, 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- include "sch.config.init" (list . "ibm-mq.sch.chart.config.values") }}
+{{ $validate := include "ibm-mq.chart.config.validate-multi-instance-persistence" . | required "Persistence must be enabled for multi-instance queue managers" }}
+{{ $dataPVCName := .Values.dataPVC.name }}
+{{ $logPVCName := .Values.logPVC.name }}
+{{ $qmPVCName := .Values.qmPVC.name }}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list .) }}
+{{ $dataVolumeClaimName := include "sch.names.volumeClaimTemplateName" (list . $dataPVCName $statefulSetName) }}
+{{ $logVolumeClaimName := include "sch.names.persistentVolumeClaimName" (list . $logPVCName) }}
+{{ $qmVolumeClaimName := include "sch.names.persistentVolumeClaimName" (list . $qmPVCName) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+{{- include "ibm-mq.sch.chart.config.metadata.labels" . | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  serviceName: qm
+  {{- if .Values.queueManager.multiInstance }}
+  replicas: 2
+  {{- else }}
+  replicas: 1
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      labels:
+        statefulSetName: {{ $statefulSetName | quote }}
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+{{- include "ibm-mq.sch.chart.config.metadata.labels" . | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- if .Values.arch }}
+                - {{ .Values.arch }}
+                {{- else }}
+                - {{ template "ibm-mq.chart.helpers.arch" . }}
+                {{- end }}
+              - key: beta.kubernetes.io/os
+                operator: In
+                values:
+                - "linux"
+        {{- if .Values.queueManager.multiInstance }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: statefulSetName
+                operator: In
+                values:
+                - "{{ $statefulSetName }}"
+            topologyKey: "kubernetes.io/hostname"
+        {{- end }}
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      serviceAccountName: {{ include "sch.names.fullName" (list .) }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        fsGroup: {{ .Values.security.context.fsGroup }}
+        supplementalGroups:
+        {{- range $group := .Values.security.context.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
+      {{- if or (or (.Values.pki.trust) (.Values.pki.keys)) (and .Values.persistence.enabled (or .Values.logPVC.enabled .Values.qmPVC.enabled .Values.queueManager.multiInstance)) }}
+      volumes:
+      {{- range $index, $source := .Values.pki.trust }}
+      {{- if $source.secret }}
+      - name: trust{{- $index }}
+        secret:
+          secretName: {{ $source.secret.secretName }}
+          defaultMode: 0440
+          items:
+          {{- range $source.secret.items }}
+            - key: {{ . }}
+              path: {{ . }}
+          {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- range $index, $source := .Values.pki.keys }}
+      {{- if $source.secret }}
+      - name: {{ $source.name }}
+        secret:
+          secretName: {{ $source.secret.secretName }}
+          defaultMode: 0440
+          items:
+          {{- range $source.secret.items }}
+            - key: {{ . }}
+              path: {{ . }}
+          {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- if and .Values.persistence.enabled (or .Values.logPVC.enabled .Values.qmPVC.enabled .Values.queueManager.multiInstance) }}
+      {{- if or .Values.logPVC.enabled .Values.queueManager.multiInstance }}
+      - name: {{ $logVolumeClaimName }}
+        persistentVolumeClaim:
+          claimName: {{ $logVolumeClaimName }}
+      {{- end }}
+      {{- if or .Values.qmPVC.enabled .Values.queueManager.multiInstance }}
+      - name: {{ $qmVolumeClaimName }}
+        persistentVolumeClaim:
+          claimName: {{ $qmVolumeClaimName }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      containers:
+        - name: qmgr
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}{{ template "ibm-mq.chart.helpers.platform" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          terminationMessagePath: "/run/termination-log"
+          ports:
+          - containerPort: 1414
+          - containerPort: 9157
+          env:
+          - name: LICENSE
+            value: {{ .Values.license }}
+          - name: MQ_QMGR_NAME
+            value: {{ .Values.queueManager.name | default .Release.Name | replace "-" "" }}
+          - name: MQ_MULTI_INSTANCE
+            value: "{{ .Values.queueManager.multiInstance | default false }}"
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "json" }}
+          - name: MQ_ENABLE_METRICS
+            value: "{{ .Values.metrics.enabled | default false }}"
+          - name: DEBUG
+            value: "{{ .Values.log.debug | default false }}"
+          - name: MQ_EPHEMERAL_PREFIX
+            value: "/run/mqm"
+          {{- if or (.Values.persistence.enabled) (or (.Values.pki.trust) (.Values.pki.keys)) }}
+          volumeMounts:
+          {{- if .Values.pki.trust }}
+          {{- range $index, $source := .Values.pki.trust }}
+          - name: trust{{- $index }}
+            mountPath: "/etc/mqm/pki/trust/{{- $index }}"
+            readOnly: true
+          {{- end }}
+          {{- end }}
+          {{- if .Values.pki.keys }}
+          {{- range $index, $source := .Values.pki.keys }}
+          - name: {{ $source.name }}
+            mountPath: "/etc/mqm/pki/keys/{{- $source.name }}"
+            readOnly: true
+          {{- end }}
+          {{- end }}
+          {{- if .Values.persistence.enabled }}
+          - mountPath: "/mnt/mqm"
+            name: {{ $dataVolumeClaimName }}
+          {{- if or .Values.logPVC.enabled .Values.queueManager.multiInstance }}
+          - mountPath: "/mnt/mqm-log"
+            name: {{ $logVolumeClaimName }}
+          {{- end }}
+          {{- if or .Values.qmPVC.enabled .Values.queueManager.multiInstance }}
+          - mountPath: "/mnt/mqm-data"
+            name: {{ $qmVolumeClaimName }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+          securityContext:
+            seLinuxOptions:
+              type: spc_t
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 888
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          # Set liveness probe to determine if the queue manager is running
+          livenessProbe:
+            exec:
+              command:
+              - chkmqhealthy
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the MQ listener is running
+          readinessProbe:
+            exec:
+              command:
+              - chkmqready
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+            limits:
+{{ toYaml .Values.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.resources.requests | indent 14 }}
+      {{- if .Values.security.initVolumeAsRoot }}
+      initContainers:
+        - name: qmgr-init
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}{{ template "ibm-mq.chart.helpers.platform" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          terminationMessagePath: "/run/termination-log"
+          args: ["-i"]
+          env:
+          - name: LICENSE
+            value: {{ .Values.license }}
+          - name: MQ_QMGR_NAME
+            value: {{ .Values.queueManager.name | default .Release.Name | replace "-" "" }}
+          - name: MQ_MULTI_INSTANCE
+            value: "{{ .Values.queueManager.multiInstance | default false }}"
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "json" }}
+          - name: DEBUG
+            value: "{{ .Values.log.debug | default false }}"
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+          - mountPath: "/mnt/mqm"
+            name: {{ $dataVolumeClaimName }}
+          {{- if or .Values.logPVC.enabled .Values.queueManager.multiInstance }}
+          - mountPath: "/mnt/mqm-log"
+            name: {{ $logVolumeClaimName }}
+          {{- end }}
+          {{- if or .Values.qmPVC.enabled .Values.queueManager.multiInstance }}
+          - mountPath: "/mnt/mqm-data"
+            name: {{ $qmVolumeClaimName }}
+          {{- end }}
+          {{- end }}
+          securityContext:
+            seLinuxOptions:
+              type: spc_t
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            privileged: false
+            capabilities:
+              add:
+                - CHOWN
+                - FOWNER
+                - DAC_OVERRIDE
+              drop:
+                - ALL
+      {{- end }}
+  volumeClaimTemplates:
+  {{- if .Values.persistence.enabled }}
+  - metadata:
+      name: {{ $dataVolumeClaimName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+{{- include "ibm-mq.sch.chart.config.metadata.labels" . | indent 8 }}
+    spec:
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      ## If present, use the storageClassName from the values.yaml, else use the
+      ## default storageClass setup by Kubernetes Administrator
+      ##
+      ## Setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+      {{- else }}
+      ## Disable dynamic provisioning
+      storageClassName: ""
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.dataPVC.size | quote }}
+  {{- end }}

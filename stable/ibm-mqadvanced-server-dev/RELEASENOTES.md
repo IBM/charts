@@ -1,14 +1,16 @@
 # Breaking Changes
 
-- None
+- If you have existing MQ connections via the NodePort service, they need to be changed to use an OpenShift Route.  A default Route will be created for the web console only.
 
-# What’s new in the MQ Advanced for Developers Chart, Version 4.1.x
+# What’s new in the MQ Advanced for Developers Chart, Version 5.0.x
 
-- Updated to IBM MQ 9.1.3
+- Updated to IBM MQ 9.1.4
+- Added OpenShift Routes for the web console & queue manager
+- Added a Service Account
 
 # Fixes
 
-- Updated go-toolset to version 1.11.13
+- None
 
 # Prerequisites
 
@@ -23,6 +25,7 @@
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 5.0.0 | December 2019 | >= 1.11.0 | = MQ 9.1.4.0 | Use OpenShift Routes instead of NodePorts | Updated to IBM MQ 9.1.4; Added an OpenShift Route for the web console & queue manager; Added a Service Account |
 | 4.1.2 | September 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated go-toolset to version 1.11.13 |
 | 4.1.1 | August 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated UBI 7 base image |
 | 4.1.0 | July 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated to IBM MQ 9.1.3 |
