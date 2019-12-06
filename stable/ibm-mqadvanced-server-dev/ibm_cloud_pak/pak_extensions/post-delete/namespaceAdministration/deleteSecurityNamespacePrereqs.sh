@@ -35,21 +35,8 @@ fi
 if supports_scc; then
   echo "Removing all namespace users from SCC..."
   if command -v oc >/dev/null 2>&1 ; then
-    # Note: this script only works on OpenShift >= 3.11, otherwise you must run the following command manually
     oc adm policy remove-scc-from-group ibm-mq-dev-scc system:serviceaccounts:$namespace
   else
     echo "ERROR:  The OpenShift CLI is not available..."
   fi
-fi
-
-
-if supports_psp; then
-  # Replace the NAMESPACE tag with the namespace specified in a temporary yaml file.
-  sed 's/{{ NAMESPACE }}/'$namespace'/g' ../../pre-install/namespaceAdministration/ibm-mq-dev-rb.yaml > $namespace-ibm-mq-dev-rb.yaml
-
-  # Delete the role binding for all service accounts in the current namespace
-  kubectl delete -f $namespace-ibm-mq-dev-rb.yaml -n $namespace
-
-  # Clean up - delete the temporary yaml file.
-  rm $namespace-ibm-mq-dev-rb.yaml
 fi
