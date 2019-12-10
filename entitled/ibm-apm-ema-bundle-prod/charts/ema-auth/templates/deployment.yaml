@@ -1,0 +1,191 @@
+{{- include "sch.config.init" (list . "emaRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.auth.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  namespace: {{ .Values.global.icp4dNamespace }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      initContainers:
+      - name: init-copy
+        image: {{ .Values.global.icpDockerRepo }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 1
+            memory: 1024Mi
+        command: ['sh','-c','/usr/src/app/config/ema-auth-init.sh']
+        volumeMounts:
+          - mountPath: /user-home
+            name: user-home
+        securityContext:
+          capabilities:
+            drop:
+              - ALL
+            add: []
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          privileged: false
+        env:
+        - name: EMA_NAMESPACE
+          value: {{ .Release.Namespace }}
+
+        - name: ICP4D_NAMESPACE
+          value: {{ .Values.global.icp4dNamespace }}
+
+      - name: apply-nginx-config
+        image: {{ .Values.global.jksJob.image.repository }}:{{ .Values.global.jksJob.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          requests:
+            cpu: 500m
+            memory: 500Mi
+          limits:
+            cpu: 1
+            memory: 1024Mi
+        command: ['sh','-c',"for i in `kubectl get pods -n  $ICP4D_NAMESPACE  | grep -i ibm-nginx | awk '{print $1}'`;do echo $i; kubectl exec -it $i -n  $ICP4D_NAMESPACE  -- /scripts/reload.sh;done"]
+        securityContext:
+          capabilities:
+            drop:
+              - ALL
+            add: []
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          privileged: false
+        env:
+          - name: ICP4D_NAMESPACE
+            value: {{ .Values.global.icp4dNamespace }}
+      containers:
+      - name: {{ .Values.name }}
+        image: {{ .Values.global.icpDockerRepo }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          requests:
+            cpu: 500m
+            memory: 500Mi
+          limits:
+            cpu: 1
+            memory: 1024Mi
+        volumeMounts:
+        - mountPath: /user-home
+          name: user-home
+        livenessProbe:
+          httpGet:
+            path: /ema/ui/auth/healthcheck
+            port: 3000
+            scheme: HTTPS
+          initialDelaySeconds: 60 ## equals to the maximum startup time of the application + couple of seconds
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: {{ .Values.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /ema/ui/auth/healthcheck
+            port: 3000
+            scheme: HTTPS
+          initialDelaySeconds: 5 ## equals to minimum startup time of the application
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: {{ .Values.failureThreshold }}
+        securityContext:
+          capabilities:
+            drop:
+              - ALL
+            add: []
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          privileged: false
+        env:
+        - name: MULTI_TENANT_SERVICE
+          value: "https://ema-multi-tenant-service.{{ .Release.Namespace }}"
+
+        - name: MULTI_TENANT_SERVICE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ema-secret
+              key: MULTI_TENANT_SERVICE_API_KEY
+
+        - name: JWT_ENCRYPT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ema-secret
+              key: JWT_ENCRYPT_SECRET
+
+        - name: LOG_LEVEL
+          value: {{ .Values.env.logLevel }}
+
+        - name: APP_ROLES
+          value: "equipment-advisor-admin-console,equipment-advisor-studio,equipment-advisor-sample-app"
+
+        - name: SDK_APIKEY_NAME
+          value: "equipment-advisor-studio"
+
+        - name: SDK_ENDPOINT
+          value: "https://ema-api-service"
+
+        - name: ON_ICP
+          valueFrom:
+            configMapKeyRef:
+              name: ema-config
+              key: ON_ICP
+
+        - name: APP_ROOT
+          valueFrom:
+            configMapKeyRef:
+              name: ema-config
+              key: APP_ROOT
+
+        - name: EMA_NAMESPACE
+          value: {{ .Release.Namespace }}
+
+        - name: ICP4D_NAMESPACE
+          value: {{ .Values.global.icp4dNamespace }}
+
+        # tls
+        - name: TLS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ema-tls
+              key: tls.key
+
+        - name: TLS_CERT
+          valueFrom:
+            secretKeyRef:
+              name: ema-tls
+              key: tls.crt
+
+        # trust kubernetes root ca
+        - name: NODE_EXTRA_CA_CERTS
+          value: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+      securityContext:
+        runAsUser: 1000321000
+      serviceAccount: {{ .Values.global.icp4dserviceAccount }}
+      serviceAccountName: {{ .Values.global.icp4dserviceAccountName }}
+      volumes:
+      - name: user-home
+        persistentVolumeClaim:
+          claimName: user-home-pvc
