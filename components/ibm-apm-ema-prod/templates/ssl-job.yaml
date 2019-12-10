@@ -1,0 +1,67 @@
+{{- include "sch.config.init" (list . "emaRef.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.sslJob.name }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $compName) }}-autogen-c
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      restartPolicy: Never
+      {{- include "ema.securitycontext.pod" . | indent 6 }}
+      containers:
+      - name: {{ include "sch.names.fullCompName" (list . $compName) }}
+        image: "{{ .Values.global.jksJob.image.repository }}:{{ .Values.global.jksJob.image.tag }}"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 500Mi
+          limits:
+            cpu: 500m
+            memory: 1024Mi
+        {{- include "ema.securitycontext.container" . | indent 8 }}
+        env:
+          - name: EMA_NAMESPACE
+            value: {{ .Release.Namespace }}
+          - name: ICP4D_NAMESPACE
+            value: {{ .Values.global.icp4dNamespace }}
+          - name: COUCHDB_USERNAME
+            value: {{ .Values.tenantMgmtDB.username }}
+          - name: COUCHDB_FULLNAME
+            value: {{ .Values.tenantMgmtDB.endpoint }}
+          - name: COUCHDB_PASSWORD
+            value: {{ .Values.tenantMgmtDB.password }}
+{{- if .Values.tenantMgmtDB.certificate }}
+          - name: COUCHDB_CACERT
+            value: {{ .Values.tenantMgmtDB.certificate | b64enc | quote }}
+{{- end }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          date
+{{ (tpl (.Files.Get "data/generate_cert.sh") . ) | indent 10 }}
+{{ (tpl (.Files.Get "data/generate_secret.sh") . ) | indent 10 }}

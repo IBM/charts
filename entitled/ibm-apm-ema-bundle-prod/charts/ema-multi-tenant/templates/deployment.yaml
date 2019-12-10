@@ -1,0 +1,104 @@
+{{- include "sch.config.init" (list . "emaRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.multiTenant.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+    {{- include "ema.securitycontext.pod" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ .Values.name }}
+        image: {{ .Values.global.icpDockerRepo }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 1
+            memory: 1024Mi
+        # add liveness and readiness later
+        livenessProbe:
+          httpGet:
+            path: /api/v1/multi-tenant
+            port: 3000
+            scheme: HTTPS
+          initialDelaySeconds: 60 ## equals to the maximum startup time of the application + couple of seconds
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: {{ .Values.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /api/v1/multi-tenant
+            port: 3000
+            scheme: HTTPS
+          initialDelaySeconds: 5 ## equals to minimum startup time of the application
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: {{ .Values.failureThreshold }}
+        {{- include "ema.securitycontext.container" . | indent 8 }}
+        env:
+        - name: OP_CLOUDANT_URL
+          valueFrom:
+            secretKeyRef:
+              name: ema-secret
+              key: OP_CLOUDANT_URL
+
+        - name: OP_CLOUDANT_CRT
+          valueFrom:
+            secretKeyRef:
+              name: ema-secret
+              key: OP_CLOUDANT_CRT
+
+        - name: DB_ENCRYPT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ema-secret
+              key: DB_ENCRYPT_SECRET
+
+        - name: CACHE_TIMEOUT_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: ema-config
+              key: CACHE_TIMEOUT_SECONDS
+
+        - name: LOG_LEVEL
+          value: {{ .Values.env.logLevel }}
+
+        - name: MULTI_TENANT_SERVICE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ema-secret
+              key: MULTI_TENANT_SERVICE_API_KEY
+
+        # tls
+        - name: TLS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ema-tls
+              key: tls.key
+
+        - name: TLS_CERT
+          valueFrom:
+            secretKeyRef:
+              name: ema-tls
+              key: tls.crt
+
+        # trust kubernetes root ca
+        - name: NODE_EXTRA_CA_CERTS
+          value: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
