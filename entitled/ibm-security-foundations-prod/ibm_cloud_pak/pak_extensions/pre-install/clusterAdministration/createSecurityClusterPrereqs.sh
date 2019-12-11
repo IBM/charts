@@ -42,7 +42,7 @@ editNodeConfig() {
 checkSysctlsAllow() {
   sccs=$(kubectl get scc ibm-isc-scc -o 'jsonpath={.allowedUnsafeSysctls}' 2>/dev/null)
   if [ "X$sccs" == "X" ]; then
-    echo "The isecuritycontextconstraints/ibm-isc-scc created but the allowedUnsafeSysctls is not defined"
+    echo "The securitycontextconstraints/ibm-isc-scc created but the allowedUnsafeSysctls is not defined"
     exit 1
   fi
 }
@@ -59,13 +59,27 @@ if [[ $# -ne 4 ]]; then
   exit 1
 fi
 
+n=$(kubectl get namespace $NAMESPACE -o yaml 2>/dev/null)
+if [ "X$n" == "X" ]; then
+  echo "Namespace $NAMESPACE does not exist"
+  exit 1
+fi
+
 oc project $NAMESPACE
 
+# check if MachineConfigPool exists
+mc=$(kubectl get MachineConfigPool worker -o name 2>/dev/null)
+
 scc=$(kubectl get scc ibm-isc-scc -o name 2>/dev/null)
+
 if [ "X$scc" != "X" ]; then
   checkSysctlsAllow
 else
-  kubectl create -f $dir/ibm-isc-scc.yaml
+  if [ "X$mc" == "X" ]; then
+    kubectl create -f $dir/ibm-isc-scc.yaml
+  else
+    kubectl create -f $dir/ibm-isc-scc-42.yaml
+  fi
   checkSysctlsAllow
 fi
 
@@ -76,13 +90,15 @@ oc adm policy add-scc-to-user ibm-isc-scc -z ibm-isc-application --as system:adm
 oc adm policy add-scc-to-group anyuid  system:serviceaccounts:$NAMESPACE --as system:admin
 
 # update node configuration to enable reboots
-for cm in $(kubectl get configmap -n openshift-node -o name)
-do
-  editNodeConfig $cm
-done
+if [ "X$mc" == "X" ]; then
+  for cm in $(kubectl get configmap -n openshift-node -o name)
+  do
+    editNodeConfig $cm
+  done
+fi
 
 # create a pull secret
-kubectl create secret docker-registry ibm-isc-pull-secret -n $NAMESPACE --docker-server=$repository --docker-username=$username --docker-password=$password
+kubectl create secret docker-registry ibm-isc-pull-secret -n $NAMESPACE --docker-server=$repository "--docker-username=$username" "--docker-password=$password"
 
 # create arangodb license
 kubectl create secret generic arango-license-key --from-literal=token="EVALUATION:125f16ada6047bd17eeeefa3f011070510b5fbd9d85122afdeca72c380e7ac83"

@@ -74,7 +74,6 @@ remove_crfin arangodeploymentreplications.replication.database.arangodb.com
 remove_crfin arangodeployments.database.arangodb.com
 
 kubectl delete secret -n $NAMESPACE isc-jwt
-kubectl delete secret -n $NAMESPACE isc-helm-account
 
 # deleting arangodb pods
 for type in "agnt" "crdn" "prmr"
@@ -101,6 +100,5 @@ kubectl delete configmap -n $NAMESPACE ibm-security-foundation-prod-license
 if [ "X$ALL" != "X" ]; then
   kubectl delete secret -n $NAMESPACE ibm-isc-pull-secret
   kubectl delete secret -n $NAMESPACE isc-jwt
-  kubectl delete secret -n $NAMESPACE isc-helm-account
   kubectl delete scc ibm-isc-scc
 fi
