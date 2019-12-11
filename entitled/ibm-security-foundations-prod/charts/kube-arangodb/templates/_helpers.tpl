@@ -34,3 +34,18 @@ Create the name of the Operator RBAC role
 {{- define "kube-arangodb.rbac" -}}
 {{- printf "%s-%s" (include "kube-arangodb.operatorName" .) "rbac" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+{{/*
+Sanitise and define registries
+*/}}
+{{- define "image.repository" -}}
+{{- if eq "entitled" .Values.global.repositoryType -}}
+{{- if contains "/" .Values.global.repository -}}
+{{ .Values.global.repository | trimSuffix "/" }}/foundations
+{{- else -}}
+{{ .Values.global.repository }}
+{{- end -}}
+{{- else -}}
+{{ .Values.global.repository }}
+{{- end -}}
+{{- end -}}

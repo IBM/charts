@@ -18,7 +18,7 @@ else
   echo "Guard uuid: $seq"
 fi
 
-kubectl patch iscsequence $NAME --type merge --patch '{"spec":{"labels":{"generation":"'$(uuid)'"}}}'
+kubectl patch iscsequence $NAME --type merge --patch '{"spec":{"labels":{"generation":"'$(date +%s)'"}}}'
 
 seq=$(kubectl get iscsequence $NAME -o 'jsonpath={.spec.labels.generation}' 2>/dev/null)
 echo "Updated sequence uuid: $seq"

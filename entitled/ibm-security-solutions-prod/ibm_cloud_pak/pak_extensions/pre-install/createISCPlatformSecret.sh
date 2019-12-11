@@ -21,7 +21,7 @@ if [[ $# -ne 3 ]] ; then
   exit 1
 fi
 echo "Creating ISC Platform secret"
-kubectl create secret generic -n ${NAMESPACE}  ${SECRET_NAME} --from-literal=admin=$USER --from-literal=key=$PASS
+kubectl create secret generic -n ${NAMESPACE}  ${SECRET_NAME} "--from-literal=admin=$USER" "--from-literal=key=$PASS"
 kubectl patch secret ${SECRET_NAME} --type merge --patch '{"metadata":{"labels":{"app.kubernetes.io/instance":"platform-secret-default","app.kubernetes.io/managed-by":"ibm-security-solutions-prod","app.kubernetes.io/name":"platform-secret-default"}}}'
 PLATFORM_SECRET=$(kubectl get secret | grep ${SECRET_NAME})
 echo "${PLATFORM_SECRET}"
