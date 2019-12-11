@@ -1,8 +1,8 @@
 # Breaking Changes
 None
 
-# What’s new in Chart Version 1.0
-Initial release of ibm-security-foundations-prod
+# What’s new in Chart Version 1.0.1
+Product fixes to support Cloud Pak for Security
 
 
 # Fixes
@@ -18,4 +18,5 @@ None
 # Version History
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
-| 1.0.0 | Sept 26, 2019|  >=1.11 | | None  | New product release |
+| 1.0.0| Nov 15, 2019|  >=1.11 | | None  | New product release |
+| 1.0.1| Dec 13, 2019|  >=1.11 | | None  |Product fixes to support Cloud Pak for Security|

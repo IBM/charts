@@ -28,7 +28,6 @@ The following table lists the configurable parameters of the ibm-security-founda
 
 | Parameter | Description |Default |
 |-----------|-------------|-------------|
-
 |global.kube-arangodb.operator.imagePullPolicy| Image pull policy for Operator images.| `IfNotPresent` |
 |global.kube-arangodb.operator.service.type   | Type of the Operator service.         | `ClusterIP` |
 |global.kube-arangodb.operator.annotations    | Annotations passed to the Operator Deployment definition.| `[]string` |

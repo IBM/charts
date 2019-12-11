@@ -18,20 +18,20 @@
 #
 
 checkSeq() {
-    for seq in $(kubectl get iscsequence -n $NAMESPACE -o name|sed -e 's!^.*/!!')
+    for seq in $(kubectl get iscsequence -n $NAMESPACE -o name 2>/dev/null|sed -e 's!^.*/!!')
     do 
       kubectl get iscsequence -n $NAMESPACE $seq -o yaml > /tmp/checkseq.$$.yaml
-      gen=$(grep '    generation: ' /tmp/checkseq.$$.yaml | sed -e 's/^.*: //')
-      guard=$(kubectl get -n $NAMESPACE iscguard $seq -o 'jsonpath={.spec.generation}')
+      gen=$(grep '    generation: ' /tmp/checkseq.$$.yaml | sed -e 's/^.*: //' -e 's/"//g')
+      guard=$(kubectl get -n $NAMESPACE iscguard $seq -o 'jsonpath={.spec.generation}' 2>/dev/null)
       ar="$(sed -e '1,/ ansibleResult:/d' /tmp/checkseq.$$.yaml)"
       if [ "X$ar" == "X" ]; then
-        ar = "$(sed -e '1,/ conditions:/d' /tmp/checkseq.$$.yaml)"
+        ar="$(sed -e '1,/ conditions:/d' /tmp/checkseq.$$.yaml)"
       fi
 
       res=$(( $(echo "$ar" | grep -e '  - ' | wc -l) ))
       case $res in 
         0|1|2) 
-           status=$(echo "$ar" | grep ' reason: ' /tmp/checkseq.$$.yaml | head -1 | sed -e 's/^.*: //')
+           status=$(echo "$ar" | grep ' reason: ' | head -1 | sed -e 's/^.*: //')
            time=$(echo "$ar" | grep ' lastTransitionTime: ' | head -1 | sed -e 's/^.*: //')
            message=$(echo "$ar" | sed -e '1,/ lastTransitionTime: /d' -e 's/    message: //' |\
             sed  -n '1,/    reason:/p' | sed -e '$d')
@@ -63,7 +63,7 @@ checkSeq() {
           continue
           ;;
         XSuccessful)
-          echo "ISCSequence $seq is wating to be upgraded"
+          echo "ISCSequence $seq is waiting to be upgraded"
           continue
           ;;
         *)
@@ -76,7 +76,7 @@ checkSeq() {
 
 checkCR() {
     crd="$1"
-    for cr in $(kubectl get $crd -n $NAMESPACE -o name)
+    for cr in $(kubectl get $crd -n $NAMESPACE -o name 2>/dev/null)
     do
        kubectl get -n $NAMESPACE $cr -o yaml > /tmp/checkseq.$$.yaml
        ar="$(sed -e '1,/ ansibleResult:/d' /tmp/checkseq.$$.yaml)"
@@ -137,5 +137,24 @@ for crd in couchdb redis etcd minio iscopenwhisk elastic cases
 do 
   checkCR $crd
 done
-#rm -f /tmp/checkseq.$$.yaml
+rm -f /tmp/checkseq.$$.yaml
 
+# Check if there are pods in unexpected state
+pods="$(kubectl get pod -n $NAMESPACE | tail -n +2 | grep -vE 'Running|Completed|Terminating')"
+
+if [ "X$pods" != "X" ]; then
+  echo "The following pods are in non-running state"
+  echo "$pods"
+fi
+
+pods=$(kubectl get deploy | tail -n +2 | awk '{ if ($2 != $4) print $1 ": expect " $2 " pods have uptodate " $4 }')
+if [ "X$pods" != "X" ]; then
+  echo "Problems in deployments:" 
+  echo "$pods"
+fi
+
+pods=$(kubectl get statefulset | tail -n +2 | awk '{ if ($2 != $3) print $1 ": expect " $2 " pods, but have " $3 }')
+if [ "X$pods" != "X" ]; then
+  echo "Problems in statefulsets:" 
+  echo "$pods"
+fi

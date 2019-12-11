@@ -12,27 +12,32 @@
 # You need to run this once per cluster
 #
 # Example:
-#     ./cleanup.sh $NAMESPACE --all --force
+#     ./cleanup.sh $NAMESPACE [--all] [--force] [--nowait]
 #
 
 FORCE="no"
 ALL="no"
+WAIT="yes"
 
 wait_crs() {
    sort="$1"
    operator="$2"
-   echo "Wait for $sort resources to be finalized:"
-   for iteration in 1 2 3 4 5 6 7 8 9 10
-   do
-     found=$(kubectl get -n $NAMESPACE $sort -o name) 
-     if [ "X$found" == "X" ]; then
-        echo "All resources of sort $sort were deleted"
-        return
-     fi
-     echo "Wait until some resources of sort $sort would be removed"
-     echo $found
-     sleep 15
-   done
+   if [ "X$WAIT" == "Xyes" ]; then
+     echo "Wait for $sort resources to be finalized:"
+     for iteration in 1 2 3 4 5 6 7 8 9 10
+     do
+       found=$(kubectl get -n $NAMESPACE $sort -o name 2>/dev/null) 
+       if [ "X$found" == "X" ]; then
+          echo "All resources of sort $sort were deleted"
+          return
+       fi
+       echo "Wait until some resources of sort $sort would be removed"
+       echo $found
+       sleep 15
+     done
+   else
+     found=$(kubectl get -n $NAMESPACE $sort -o name 2>/dev/null) 
+   fi
    echo "The following resources of sort $sort are not removed by some reason"
    echo $found
    if [ "X$FORCE" == "Xyes" ]; then
@@ -41,7 +46,7 @@ wait_crs() {
      do
        kubectl patch -n $NAMESPACE $cr --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
      done
-     found=$(kubectl get -n $NAMESPACE $sort -o name) 
+     found=$(kubectl get -n $NAMESPACE $sort -o name 2>/dev/null) 
      if [ "X$found" != "X" ]; then
         echo "The following resources are still not deleted"
         echo $found
@@ -56,16 +61,25 @@ wait_crs() {
    exit 1
 }
 
+usage() {
+  echo "Usage: $0 <NAMESPACE> [ --all ] [ --force ] [--nowait]"
+  exit 1
+}
+
 NAMESPACE="$1"
 case "X$NAMESPACE" in
   X|X--*)
-    echo "Usage: $0 <NAMESPACE> [ --all ] [ --force ]"
-    exit 1
+    usage
     ;;
   *)
     ;;
 esac
 shift
+
+ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null)
+if [ "X$ns" == "X" ]; then
+  usage
+fi
 
 for arg in $*
 do
@@ -75,6 +89,13 @@ do
      ;;
   --all)
      ALL="yes"
+     ;;
+  --nowait)
+     WAIT="no"
+     FORCE="yes"
+     ;;
+  *)
+     usage
      ;;
   esac
 done
