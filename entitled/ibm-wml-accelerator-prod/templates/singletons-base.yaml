@@ -1,0 +1,158 @@
+{{- if eq .Values.cluster.type "iks" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-singletons-base
+  labels:
+    {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 4 }}
+
+data:
+  Chart.yaml: |-
+    name: {{ template "ibm-wml-accelerator-prod.singletonsBaseChartName" . }}
+    version: {{ .Chart.Version }}
+    appVersion: {{ .Chart.AppVersion }}
+    description: Creates base shared kubernetes resources for WMLA releases for chart app version {{ .Chart.AppVersion }}
+    home: https://www.ibm.com/support/knowledgecenter/SSFHA8
+    keywords:
+    - deep learning
+    maintainers:
+    - name: Watson Machine Learning Accelerator Team
+
+  ClusterRole.yaml: |-
+    kind: ClusterRole
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: {{ template "ibm-wml-accelerator-prod.singletonsClusterRole" . }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.singletonsBaseLabels" . | indent 8 }}
+    rules:
+    - apiGroups: ["policy"]
+      resources: ["podsecuritypolicies"]
+      resourceNames: ["{{ template "ibm-wml-accelerator-prod.singletonsPodSecurityPolicy" . }}"]
+      verbs: ["use"]
+    - apiGroups: [""]
+      resources: ["pods/portforward"]
+      verbs: ["create"]
+    - apiGroups: [""]
+      resources: ["nodes"]
+      verbs: ["get", "list", "patch"]
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["list"]
+    - apiGroups: ["apps", "extensions"]
+      resources: ["daemonsets"]
+      verbs: ["delete", "get", "list", "update"]
+    - apiGroups: ["extensions"]
+      resources: ["deployments"]
+      verbs: ["list"]
+
+  ClusterRoleBinding.yaml: |-
+    kind: ClusterRoleBinding
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: {{ template "ibm-wml-accelerator-prod.singletonsClusterRoleBinding" . }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.singletonsBaseLabels" . | indent 8 }}
+    roleRef:
+      kind: ClusterRole
+      name: {{ template "ibm-wml-accelerator-prod.singletonsClusterRole" . }}
+      apiGroup: rbac.authorization.k8s.io
+    subjects:
+    - kind: ServiceAccount
+      name: {{ template "ibm-wml-accelerator-prod.singletonsServiceAccount" . }}
+      namespace: {{ .Values.singletons.namespace }}
+
+  Role.yaml: |-
+    kind: Role
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: {{ template "ibm-wml-accelerator-prod.singletonsRole" . }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.singletonsBaseLabels" . | indent 8 }}
+    rules:
+    - apiGroups: [""]
+      resources: ["configmaps"]
+      verbs: ["get", "patch", "update"]
+    - apiGroups: ["batch"]
+      resources: ["jobs"]
+      verbs: ["delete"]
+
+  RoleBinding.yaml: |-
+    kind: RoleBinding
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: {{ template "ibm-wml-accelerator-prod.singletonsRoleBinding" . }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.singletonsBaseLabels" . | indent 8 }}
+    roleRef:
+      kind: Role
+      name: {{ template "ibm-wml-accelerator-prod.singletonsRole" . }}
+      apiGroup: rbac.authorization.k8s.io
+    subjects:
+    - kind: ServiceAccount
+      name: {{ template "ibm-wml-accelerator-prod.singletonsServiceAccount" . }}
+      namespace: {{ .Values.singletons.namespace }}
+
+  PodSecurityPolicy.yaml: |-
+    apiVersion: extensions/v1beta1
+    kind: PodSecurityPolicy
+    metadata:
+      annotations:
+      name: {{ template "ibm-wml-accelerator-prod.singletonsPodSecurityPolicy" . }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.singletonsBaseLabels" . | indent 8 }}
+    spec:
+      allowedHostPaths:
+        - pathPrefix: "{{ .Values.singletons.condaParentHostPath }}"
+      {{- if .Values.singletons.setNodesMaxMapCount }}
+      # Allow root and privileged pods for the MaxMap singleton
+      privileged: true
+      allowPrivilegeEscalation: true
+      runAsUser:
+        rule: MustRunAs
+        ranges:
+          - min: 0
+            max: 0
+          - min: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+            max: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+      {{- else }}
+      # Still need root ability for singletons-cleanup-job until _setupHelmCLI.tpl can run rootless.
+      privileged: true
+      allowPrivilegeEscalation: true
+      runAsUser:
+        rule: MustRunAs
+        ranges:
+          - min: 0
+            max: 0
+          - min: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+            max: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+      {{- end }}
+      requiredDropCapabilities:
+        - ALL
+      allowedCapabilities:
+        - CHOWN
+        - DAC_OVERRIDE
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      fsGroup:
+        rule: RunAsAny
+      seLinux:
+        rule: RunAsAny
+      supplementalGroups:
+        rule: RunAsAny
+      volumes:
+        - configMap
+        - emptyDir
+        - hostPath
+        - secret
+
+  ServiceAccount: |-
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: {{ template "ibm-wml-accelerator-prod.singletonsServiceAccount" . }}
+      namespace: {{ .Values.singletons.namespace }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.singletonsBaseLabels" . | indent 8 }}
+{{- end }}

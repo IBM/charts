@@ -1,0 +1,312 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-wml-accelerator-prod.master-fullname" . }}
+  labels:
+    {{- include "ibm-wml-accelerator-prod.appMasterLabels" . | indent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "ibm-wml-accelerator-prod.appMasterLabelSelector" . | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ibm-wml-accelerator-prod.appMasterLabels" . | indent 8 }}
+      annotations:
+        {{- include "ibm-wml-accelerator-prod.releaseAnnotations" . | indent 8 }}
+    spec:
+      {{- if eq (include "ibm-wml-accelerator-prod.usePortworx" .) "yes" }}
+      schedulerName: stork
+      {{- end }}
+      affinity:
+      {{- include "ibm-wml-accelerator-prod.nodeaffinity" . | indent 6 }}
+      {{- include "ibm-wml-accelerator-prod.tolerations" . | indent 6 }}
+      hostname: {{ template "ibm-wml-accelerator-prod.master-fullname" . }}
+      serviceAccountName: cws-{{ .Release.Name }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+      initContainers:
+      - name: kubectlget
+        image: {{ template "ibm-wml-accelerator-prod.kubectlImage" . }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 0.5
+            memory: 256Mi
+          limits:
+            cpu: 0.5
+            memory: 256Mi
+        command:
+{{ include "ibm-wml-accelerator-prod.kubectlCopyCmd" . | indent 8 }}
+        - /kubedir/kubectl
+        volumeMounts:
+        - name: kubedir
+          mountPath: "/kubedir"
+      containers:
+        - name: master
+          image: {{ template "ibm-wml-accelerator-prod.Image" . }}
+          command: ["/tini"]
+          args: ["-g", "-s", "--", "/var/tmp/cfc/startMaster.sh"]
+          imagePullPolicy: {{.Values.master.imagePullPolicy}}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/var/tmp/cfc/preStopMaster.sh"]
+          readinessProbe:
+            exec:
+              command: ["/var/tmp/cfc/validateMaster.sh"]
+            initialDelaySeconds: 150
+            periodSeconds: 10
+            failureThreshold: 120
+            timeoutSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ template "ibm-wml-accelerator-prod.guiPort" . }}
+            initialDelaySeconds: 1200
+            periodSeconds: 10
+            failureThreshold: 2
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+                - FOWNER
+                - SETGID
+                - SETUID
+                - SYS_CHROOT
+                - SYS_ADMIN
+                - SYS_NICE
+                - SYS_RESOURCE
+                - SYS_TIME
+                - NET_BROADCAST
+                - NET_ADMIN
+                - LEASE
+          resources:
+            requests:
+              cpu: "{{.Values.master.cpu}}"
+              memory: "{{.Values.master.memory}}"
+            limits:
+              cpu: "16000m"
+              memory: "16000Mi"
+          env:
+              - name: ETCDCTL_API
+                value: "3"
+              {{- if eq .Values.cluster.type "iks" }}
+              - name: ETCD_PREFIX
+                value: {{ .Release.Namespace }}-{{ .Values.iks.clustername }}
+              {{- else }}
+              - name: ETCD_PREFIX
+                value: {{ .Release.Namespace }}
+              {{- end }}
+              - name: ETCDCTL_CMD
+                {{- if .Values.cluster.etcdExternal }}
+                value: "etcdctl --cacert=/etcd/cacert --endpoints={{.Values.cluster.etcdEndpoint}} --user=${ETCD_USERNAME}:${ETCD_PASSWORD}"
+              - name: ETCD_USERNAME
+                valueFrom:
+                  secretKeyRef:
+                    name: etcd-secret
+                    key: etcd-username
+              - name: ETCD_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: etcd-secret
+                    key: etcd-password
+                {{- else }}
+                value: 'etcdctl --endpoints={{ template "ibm-wml-accelerator-prod.etcdEndpoint" . }} --cert {{ template "ibm-wml-accelerator-prod.etcdClientCertPath" . }}  --key {{ template "ibm-wml-accelerator-prod.etcdClientKeyPath" . }} --cacert {{ template "ibm-wml-accelerator-prod.etcdCacert" . }}'
+                {{- end }}
+              - name: HELM_HOST
+                {{- if .Values.isOcpIr }}
+                value: tiller-svc.{{ .Release.Namespace }}:44134
+                {{- else }}
+                value: tiller-deploy.kube-system:44134
+                {{- end }}
+              - name: LDAP_URI
+                value: {{.Values.cluster.ldapServerURI}}
+              - name: BASE_DN
+                value: {{.Values.cluster.ldapBaseDn}}
+              - name: LDAP_BIND_DN
+                value: {{.Values.cluster.ldapBindDn}}
+              - name: LDAP_BIND_PW
+                value: {{.Values.cluster.ldapBindPw}}
+              {{- if not .Values.isOcpIr }}
+              {{- if eq .Values.cluster.type "cp4d" }}
+              - name: ADMIN_USERNAME
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ .Release.Name }}-admin-secret
+                    key: username
+              - name: ADMIN_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ .Release.Name }}-admin-secret
+                    key: password
+              {{- else }}
+              - name: ADMIN_USERNAME
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ .Release.Name }}-admin-secret
+                    key: username
+              - name: ADMIN_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ .Release.Name }}-admin-secret
+                    key: password
+              - name: APIKEY
+                valueFrom:
+                  secretKeyRef:
+                    name: {{ .Release.Name }}-admin-secret
+                    key: apikey
+              - name: LOGDNA_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: logdna-{{.Values.iks.region}}
+                    key: logdna-{{.Values.iks.region}}
+              - name: LOGDNA_DIRECTORY_LOGS
+                value: "/opt/ibm/spectrumcomputing/ascd/logs,/opt/ibm/spectrumcomputing/eservice/rs/log,/opt/ibm/spectrumcomputing/kernel/log,/opt/ibm/spectrumcomputing/kernel/rest/logs,/opt/ibm/spectrumcomputing/conductorspark/logs/,/opt/ibm/spectrumcomputing/logs/"
+              {{- end }}
+              {{- end }}
+              - name: JWT_PUBLIC_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: jwt-publickey
+                    key: jwtPublicKey
+          volumeMounts:
+              {{- if .Values.cluster.etcdExternal }}
+              - mountPath: /etcd/
+                name: etcd-vol
+              {{- end }}
+              - mountPath: /gpfs/mygpfs
+                name: mygpfs
+                subPath: mygpfs
+              - mountPath: /gpfs/myresultfs
+                name: mygpfs
+                subPath: myresultfs
+              - mountPath: /gpfs/mydatafs
+                name: mygpfs
+                subPath: mydatafs
+              - mountPath: /gpfs/dlim
+                name: mygpfs
+                subPath: dlim
+              - mountPath: /var/shareDir
+                name: persistsharedir
+              - mountPath: /var/tmp/cfc
+                name: license
+              {{- if eq .Values.cluster.type "iks" }}
+              - mountPath: /var/tmp/singletons-base
+                name: singletons-base
+              - mountPath: /var/tmp/singletons-conda
+                name: singletons-conda
+              {{- end }}
+              {{- if .Values.singletons.setNodesMaxMapCount }}
+              - mountPath: /var/tmp/singletons-max-map
+                name: singletons-max-map
+              {{- end }}
+              - name: kubedir
+                mountPath: /tmp/kubedir
+              - name: dshm
+                mountPath: /dev/shm
+              - name: helmsecret
+                mountPath: /root/.helm
+        - command:
+{{ include "ibm-wml-accelerator-prod.kubectlProxyCmd" . | indent 10 }}
+          - -p
+          - "8001"
+          image: {{ template "ibm-wml-accelerator-prod.kubectlImage" . }}
+          resources:
+            requests:
+              cpu: 0.5
+              memory: {{ template "ibm-wml-accelerator-prod.memoryReq" . }}
+            limits:
+              cpu: 0.5
+              memory: {{ template "ibm-wml-accelerator-prod.memoryReq" . }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - NET_BIND_SERVICE
+          name: kubectlproxy
+          readinessProbe:
+            exec:
+              command:
+{{ include "ibm-wml-accelerator-prod.kubectlProbeCmd" . | indent 14 }}
+            initialDelaySeconds: 30
+            periodSeconds: 100
+          livenessProbe:
+            exec:
+              command:
+{{ include "ibm-wml-accelerator-prod.kubectlProbeCmd" . | indent 14 }}
+            initialDelaySeconds: 300
+            periodSeconds: 100
+      volumes:
+        {{- if .Values.cluster.etcdExternal }}
+        - name: etcd-vol
+          secret:
+            secretName: etcd-secret
+            items:
+            - key: etcd-cacert
+              path: cacert
+        {{- end }}
+        - name: mygpfs
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-mygpfs
+        - name: persistsharedir
+          persistentVolumeClaim:
+            claimName: "{{ .Release.Name }}-cws-share"
+        - name: license
+          configMap:
+            name: "{{ .Release.Name }}-conductor-master-bootstrap"
+            # Make files mounted from the configmap executable
+            defaultMode: 0555
+        {{- if eq .Values.cluster.type "iks" }}
+        - name: singletons-base
+          configMap:
+            name: "{{ .Release.Name }}-singletons-base"
+        - name: singletons-conda
+          configMap:
+            name: "{{ .Release.Name }}-singletons-conda"
+        {{- end }}
+        {{- if .Values.singletons.setNodesMaxMapCount }}
+        - name: singletons-max-map
+          configMap:
+            name: "{{ .Release.Name }}-singletons-max-map"
+        {{- end }}
+        - name: kubedir
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: helmsecret
+          secret:
+            secretName: helm-secret
+            items:
+            - key: helm.cert.pem
+              path: cert.pem
+            - key: helm.key.pem
+              path: key.pem
+            - key: ca.cert.pem
+              path: ca.pem
+            optional: true
+      terminationGracePeriodSeconds: 60

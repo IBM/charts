@@ -1,0 +1,98 @@
+{{- if and (eq .Values.cluster.type "cp4d") (not .Values.master.existingcondaPVC) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-wml-accelerator-prod.master-fullname" . }}-conda
+  labels:
+    {{- include "ibm-wml-accelerator-prod.condaLabels" . | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ibm-wml-accelerator-prod.condaLabelsSelector" . | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ibm-wml-accelerator-prod.condaLabels" . | indent 8 }}
+      annotations:
+        {{- include "ibm-wml-accelerator-prod.releaseAnnotations" . | indent 8 }}
+    spec:
+      serviceAccountName: cws-{{ .Release.Name }}
+      affinity:
+      {{- include "ibm-wml-accelerator-prod.nodeaffinity" . | indent 6 }}
+      {{- include "ibm-wml-accelerator-prod.tolerations" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+      volumes:
+        - name: condadir
+          persistentVolumeClaim:
+            claimName: "{{ .Release.Name }}-conda"
+      initContainers:
+        - image: {{ template "ibm-wml-accelerator-prod.CondaImage" . }}
+          imagePullPolicy: Always
+          name: wmla-conda-cp
+          volumeMounts:
+          - mountPath: /opt/conda
+            name: condadir 
+          resources:
+            requests:
+              cpu: 1
+              memory: 1Gi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+            readOnlyRootFilesystem: false
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          command: ["/bin/sh"]
+          args: ["-c", "rsync -aH /opt/anaconda3/ /opt/conda;"]
+      containers:
+        - image: {{ template "ibm-wml-accelerator-prod.CondaImage" . }}
+          imagePullPolicy: Always
+          name: wmla-conda
+          volumeMounts:
+          - mountPath: /opt/conda
+            name: condadir 
+          livenessProbe:
+            exec:
+              command:
+                - ls
+                - /opt/conda
+            initialDelaySeconds: 30
+            periodSeconds: 300
+          readinessProbe:
+            exec:
+              command:
+                - ls
+                - /opt/conda/envs/dlipy36
+            initialDelaySeconds: 30
+            periodSeconds: 300      
+          resources:
+            requests:
+              cpu: 1
+              memory: 1Gi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+            readOnlyRootFilesystem: false
+            privileged: false 
+            allowPrivilegeEscalation: false 
+            capabilities:
+              drop:
+              - ALL
+          command: ["/bin/sh", "-c"]
+          args: ["-c", "while true; do rsync -aH /opt/anaconda3/ /opt/conda;sleep 10000; done"]
+{{- end }}

@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    {{- include "ibm-wml-accelerator-prod.testSharedLabels" . | indent 4 }}
+  name: {{ template "ibm-wml-accelerator-prod.master-fullname" . }}-test
+  namespace: {{ .Release.Namespace }}
+spec:
+  restartPolicy: Never
+  hostNetwork: false
+  hostPID: true
+  hostIPC: true
+  serviceAccountName: cws-{{ .Release.Name }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  affinity:
+  {{- include "ibm-wml-accelerator-prod.nodeaffinity" . | indent 6 }}
+  containers:
+  - name: {{ template "ibm-wml-accelerator-prod.master-fullname" . }}-test-on
+    image: {{ template "ibm-wml-accelerator-prod.Image" . }}
+    command: ["/bin/sh"]
+    args: ["-c", "source /opt/ibm/spectrumcomputing/profile.platform" ]
+    resources:
+      requests:
+        cpu: 0.5
+        memory: 256Mi
+      limits:
+        cpu: 0.5
+        memory: 256Mi
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+        add:
+        - NET_BIND_SERVICE
