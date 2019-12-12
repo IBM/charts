@@ -1,0 +1,58 @@
+{{- include "sch.config.init" (list . "etcd.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullName" (list .) }}-test"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "test" ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  restartPolicy: Never
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: {{ template "etcd3.serviceaccountname" . }}
+{{- include "sch.security.securityContext" (list . .sch.chart.securityContext1) | indent 2 }}
+  containers:
+    - name: "{{ include "sch.names.fullName" (list .) }}-test"
+      image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}/{{ end }}{{ .Values.image.name }}:{{ .Values.image.tag }}"
+      command: ["etcdctl", "--endpoints={{ template "etcd3.fullservicename" . }}:2379", "endpoint", "health"]
+      env:
+      - name: ETCDCTL_API
+        value: "3"
+{{- if .Values.auth.enabled }}
+      - name: USERNAME
+        valueFrom:
+          secretKeyRef:
+            name: {{ template "etcd3.rootSecret" . }}
+            key: username
+      - name: PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ template "etcd3.rootSecret" . }}
+            key: password
+      - name: ETCDCTL_USER
+        value: "$(USERNAME):$(PASSWORD)"
+{{- end }}
+{{- if include "etcd3.tls.enabled" (list .Values.tls.enabled . ) }}
+      - name: ETCD_CERT_FILE
+        value: "/var/etcd/certs/tls.crt"
+      - name: ETCD_KEY_FILE
+        value: "/var/etcd/certs/tls.key"
+      - name: ETCDCTL_CACERT
+        value: "/var/etcd/certs/tls.cacrt"
+      resources:
+{{ toYaml .Values.resources | indent 10 }}
+      volumeMounts:
+        - name: tls
+          mountPath: /var/etcd/certs/
+{{ include "sch.security.securityContext" (list . .sch.chart.securityContext2) | indent 6 }}
+  volumes:
+    - name: tls
+      secret:
+        secretName: {{ include "etcd3.tlsSecret" . | quote }}
+        defaultMode: 0644
+{{- end }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 4 }}

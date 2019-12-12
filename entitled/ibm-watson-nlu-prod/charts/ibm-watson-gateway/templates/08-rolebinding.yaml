@@ -1,0 +1,21 @@
+{{- if (not .Values.privilegedServiceAccount.name) }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "gateway") | quote }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-100"
+    "helm.sh/hook-delete-policy": "hook-failed"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "gateway") | indent 4 }}
+roleRef:
+  name: {{ include "sch.names.fullCompName" (list . "gateway") | quote }}
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "gateway.privileged-account.name" . }}
+  namespace: "{{ .Release.Namespace }}"
+{{- end }}

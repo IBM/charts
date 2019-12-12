@@ -1,0 +1,368 @@
+## Global Settings #############################################################
+global:
+  clusterDomain: "svc.cluster.local"
+  icpDockerRepo: ""
+  image:
+    repository: ""
+    pullSecret: ""
+  imagePullSecretName: ""
+  sch:
+    enabled: true
+
+  commonService:
+    port: 8085
+
+  mma:
+    database:
+      enableV1: true
+      enableV2: true
+
+  textProcessing:
+    port: 19443
+
+  modelsServer:
+    port: 8000
+
+  s3:
+    accessSecret:
+      nameTpl: "nlu.minioAccessSecretNameTemplate"
+      fixedName: ""
+      fieldAccessKey: "accesskey"
+      fieldSecretKey: "secretkey"
+    tlsSecret:
+      nameTpl: "nlu.tlsSecretNameTemplate"
+      fixedName: ""
+      fieldRootCertificate: "public.crt"
+    sslEnabled: true
+    endpointTpl: "nlu.minioEndpointTemplate"
+    endpointPort: 9000
+    endpointFixed: ""
+    bucketName: "nlu"
+    prefix: "common-service"
+
+  etcd:
+    accessSecret:
+      nameTpl: "nlu.etcdAccessSecretNameTemplate"
+      fixedName: ""
+      fieldPassword: "password"
+    tlsSecret:
+      nameTpl: "nlu.tlsSecretNameTemplate"
+      fixedName: ""
+      fieldRootCertificate: "public.crt"
+    sslEnabled: true
+    endpointTpl: "nlu.etcdEndpointTemplate"
+    endpointPort: 2379
+    endpointFixed: ""
+    authEnabled: false
+    username: "ibm_cloud_b68bbdc6_49fe_48f0_8c02_22421a6e8206"
+    # Used for the model mesh dashboard - should be consistent across services using model mesh
+    # as the root prefix. Note that our Model Mesh dashboard lives in the SIRE subchart.
+    rootPrefix: "nlu"
+
+  postgres:
+    authSecret:
+      nameTpl: "nlu.postgresAuthSecretNameTemplate"
+      suPasswordField: "pg_su_password"
+      replPasswordField: "pg_repl_password"
+      pgSuperuserName: "stolon" # DO NOT CHANGE
+    endpointPort: 5432
+    nameOverride: "postgres"
+
+  tls:
+    secret:
+      nameTpl: "nlu.tlsSecretNameTemplate"
+      fixedName: ""
+      fieldServerCertificate: public.crt # Matches gen-secrets job
+      fieldServerKey: private.key        # Matches gen-secrets job
+
+  existingServiceAccount: ""
+
+  # Global config overrides for test image (curl-style health checks)
+  tests:
+    image:
+      # this is the UBI image for curl
+      repository: opencontent-common-utils
+      tag: 1.1.4
+    # standard resources to use across all helm test pods (excluding DVTs)
+    resources:
+      limits:
+        memory: 100Mi
+        cpu: 200m
+      requests:
+        memory: 100Mi
+        cpu: 200m
+
+  ## Testing Config [DVTs] ##############################################################
+  icpTests:
+    image:
+      repository: "nlu-dvt"
+      tag: "1.0.756-gb4dbf61.19-11-18-170501.icp-master"
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 500m
+      requests:
+        memory: 1Gi
+        cpu: 500m
+
+## Common Settings #############################################################
+
+product:
+  name: "IBM Watson Natural Language Understanding for IBM Cloud Private for Data"
+  id: "ICP4D-addon-ed56eb7c5c97493d95681a24f848c050-natural-language-understanding"
+  version: "1.1.0"
+
+preInstallHookWeightAnchor: -10
+
+existingServiceAccount: ""
+
+
+## NLU Components ##############################################################
+
+nluserver:
+  image:
+    repository: nlu-server
+    tag: 1.5.659-g392a269.19-11-18-165016.icp-master
+  replicas: 1
+  resources:
+    requests:
+      memory: 250Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      cpu: 400m
+
+orchestrator:
+  image:
+    repository: orchestrator
+    tag: 1.3.1404-gcb4ffd5.19-11-22-134049.icp-master
+  replicas: 1
+  resources:
+    requests:
+      memory: 350Mi
+      cpu: 300m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+
+keywords:
+  image:
+    repository: keywords
+    tag: 1.5-226-g11eab1b.19-11-18-165051.icp-master
+  replicas: 1
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 500m
+    limits:
+      memory: 2Gi
+      cpu: 750m
+
+mma:
+  enabled: true
+  modelManagementApi:
+    image:
+      repository: model-management-api
+      tag: 1.0.1092-g7eaa8d5b.19-11-18-165113.icp-master
+
+nms:
+  enabled: true
+  image:
+    repository: nlu-models-server
+    tag: v0.1-367-g037bebd.19-11-19-133925.icp-master
+  replicas: 1
+
+commonService:
+  enabled: true
+  replicas: 6
+  modelMesh:
+    image:
+      repository: model-mesh
+      tag: master-20191108-268
+  commonService:
+    stallMinioUntilReady: true
+    minioConnectTimeout: 300
+    image:
+      repository: common-service
+      tag: d17b4e7.19-11-21-011536.icp-master
+
+  modelUploader:
+    numRetries: 100
+    stallMinioUntilReady: true
+    minioConnectTimeout: 300
+    image:
+      repository: common-service-models-uploader
+      tag: 25e6b0c.19-11-21-011802.icp-master
+
+
+## ICP4D Dependencies ############################################################
+gateway:
+  enabled: true
+  addonService:
+    image:
+      repository: watson-gateway
+      tag: 2.0.6
+  addon:
+    #version: x.x.x  # this is the "chart version" so just leave it empty
+    productImages: 1
+    serviceId: "natural-language-understanding"
+    displayName: "Watson Natural Language Understanding"
+    shortDescription: "Take your understanding of unstructured data to a new level by extracting entities, keywords, sentiment, and more."
+    longDescription: "Find the meaning in your unstructured data by extracting entities, keywords, sentiment, and more. You can use the out-of-the-box models, or you can use custom models that can identify domain-specific data.<br><br>Need help building a domain-specific model? Try the Watson Knowledge Studio add-on, which makes it easy to teach Watson the language at the heart of your business.<br><br>"
+    deployDocs: https://docs-icpdata.mybluemix.net/docs/content/SSQNUZ_current/com.ibm.icpdata.doc/watson/natural-language-understanding-install.html
+    productDocs: https://docs-icpdata.mybluemix.net/docs/content/SSQNUZ_current/com.ibm.icpdata.doc/watson/natural-language-understanding.html
+    apiReferenceDocs: https://cloud.ibm.com/apidocs/natural-language-understanding-data
+    gettingStartedDocs: https://cloud.ibm.com/docs/services/natural-language-understanding-data
+
+    #organizationId: 'ba4ab788-68a9-492b-87da-9179cb1e6541'
+    #accountId: '02a92df0-657c-43c9-94fc-2280450b1e0b'
+    planId: '8d475701-ccb9-4a82-8ba2-1927b126b883'
+    tls:
+      image:
+        repository: opencontent-common-utils
+        tag: 1.1.4
+  backendService:
+    name: ""
+    nameTemplate: "gateway.backendService.name"
+    port: 443
+  additionalServices:
+    - name: ""
+      nameTemplate: "gateway.modelsServerService.name"
+      port: 8000
+      path: "/v1/models"
+      rewriteTarget: "/v1/models"
+      secure: true
+
+
+## NLU Dependencies ############################################################
+
+sire:
+  enabled: true
+  # Model Mesh deployment overrides
+  modelMeshDeployment:
+    replicaCount: 1
+    modelRuntimeContainer:
+      image:
+        repository: "serve-runtime"
+        tag: "wdc-20181119-d930d057-58-ubi7-ubi-b8666265-67"
+      cpuLimitMillis: 4000
+      memoryLimitMB: 5000
+      modelDiskCacheSizeMB: 20000
+      predictedModelSizeMB: 1000
+    modelMeshContainer:
+      image:
+        repository: "model-mesh"
+        tag: "master-20191108-268"
+  dashboardDeployment:
+    image:
+      repository: "model-mesh-dashboard"
+      tag: "master-20191108-132"
+
+textprocessing:
+  enabled: true
+  api:
+    image: "api-ubi"
+    tag: "r20191115-1-6354fe8"
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 4Gi
+  tests:
+    image:
+      repository: "dvt-ubi"
+      tag: "r20191115-1-6354fe8"
+
+
+## Databases ###################################################################
+minio:
+  enabled: true
+  existingSecret: '{{ include "nlu.minioAccessSecretNameTemplate" . }}'
+  minio:
+    image:
+      name: "opencontent-minio"
+      tag: "1.1.0"
+  minioClient:
+    image:
+      name: "opencontent-minio-client"
+      tag: "1.0.2"
+  creds:
+    image:
+      name: "opencontent-icp-cert-gen-1"
+      tag: "1.1.1"
+  tls:
+    enabled: true
+    certSecret: '{{ include "nlu.tlsSecretNameTemplate" . }}'
+  defaultBucket:
+    enabled: false     # create a bucket automatically, at installation
+    name: nlu         # bucket name, cannot be templated right now
+    policy: none      # authentication required for bucket access
+    purge: false      # do not delete bucket if bucket (name) already exists
+  persistence:
+    enabled: true
+    storageClass: "portworx-sc"
+    size: 100Gi
+  # If changing replicas:
+  # - need to change to an even number
+  # - no less than 4 is recommended
+  #replicas: 4
+
+etcd:
+  enabled: true
+  image:
+    name: opencontent-etcd-3
+    tag: 1.1.2
+  replicaCount: 1
+  auth:
+    enabled: false
+  persistence:
+    enabled: true
+    useDynamicProvisioning: true
+  dataPVC:
+    storageClassName: "portworx-sc"
+    size: 1Gi
+  resources:
+    requests:
+      memory: 100Mi
+      cpu: 200m
+    limits:
+      memory: 100Mi
+      cpu: 200m
+  tls:
+    enabled: true
+    existingTlsSecret: '{{ include "nlu.tlsSecretNameTemplate" . }}'
+
+postgres:
+  enabled: true
+  nameOverride: "postgres"
+  postgres:
+    image:
+      name: "opencontent-postgres-stolon"
+      tag: "1.1.1"
+  creds:
+    image:
+      name: "opencontent-icp-cert-gen-1"
+      tag: "1.1.1"
+  tls:
+    enabled: true
+    tlsSecretName: '{{ include "nlu.tlsSecretNameTemplate" . }}'
+  auth:
+    # DO NOT CHANGE pgSuperuserName or everything will break!
+    pgSuperuserName: "stolon"
+    authSecretName: '{{ include "nlu.postgresAuthSecretNameTemplate" . }}'
+  persistence:
+    enabled: true
+    useDynamicProvisioning: true
+    storageClassName: "portworx-sc"
+    size: 1Gi
+  keeper:
+    serviceType: NodePort
+
+## Cred Generation #############################################################
+creds:
+  image:
+    repository: "opencontent-icp-cert-gen-1"
+    tag: "1.1.1"

@@ -1,0 +1,309 @@
+{{- include "sch.config.init" (list . "cs.sch.chart.config.values") -}}
+{{- $commonServiceCompName  :=  .sch.chart.components.cs.name -}}
+{{- $commonServiceConfigConfigMapName := .sch.configmap.commonServiceConfigConfigMap.name -}}
+
+{{- $commonServiceConfigVolumeMountName := "common-service-config" -}}
+{{- $commonServiceConfigVolumeMountPath := "/var/declared_models.json" -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $commonServiceCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $commonServiceCompName) | indent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $commonServiceCompName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $commonServiceCompName) | indent 8 }}
+      annotations:
+        # Where to pull Prometheus metrics from that will (hopefully be) retrievable from the ICP UI
+{{ include "cs.prometheusAnnotations" . | indent 8 }}
+        productName: {{ .Values.product.name | quote }}
+        productID: {{ .Values.product.id | quote }}
+        productVersion: {{ .Values.product.version | quote }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      # In CP4D, common service needs to have an init container that runs and populates the
+      # etcd_connection to be used by Model Mesh. We need this because XXXX
+      initContainers:
+      - name: init
+        image: {{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.modelMesh.image.repository }}:{{ .Values.modelMesh.image.tag }}
+      # The init container can use the same security context as the other containers. but it does need one!
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        resources:
+          limits:
+            cpu: 100m
+            memory: 50Mi
+          requests:
+            memory: 50Mi
+        command:
+        - /bin/sh
+        - -c
+        - |
+          cat << EOF > /opt/watson/mmesh/dynconfig/etcd_connection
+          {
+            "root_prefix": {{ .Values.global.etcd.rootPrefix }},
+            {{ if .Values.global.etcd.tlsSecret.fieldRootCertificate }}"certificate_file":"/etc/ssl/etcd/ca.crt",{{ end }}
+            {{- if .Values.global.etcd.authEnabled }}
+            "userid": {{ required "If .Values.global.etcd.authEnabled=true, you need to set a usermame via .Values.global.etcd.username" .Values.global.etcd.username | quote }},
+            "password": "$ETCD_PASSWORD",
+            {{- end }}
+            "endpoints":"{{ default (include .Values.global.etcd.endpointTpl .) .Values.global.etcd.endpointFixed }}"
+          }
+          EOF
+
+        {{- if .Values.global.etcd.authEnabled }}
+        env:
+        - name: ETCD_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.etcd.accessSecret.nameTpl .) .Values.global.etcd.accessSecret.fixedName }}
+              key: {{ .Values.global.etcd.accessSecret.fieldPassword }}
+        {{- end }}
+        volumeMounts:
+        - name: model-mesh-connection-config
+          mountPath: "/opt/watson/mmesh/dynconfig"
+      ########################################################################################################
+      containers:
+      # External Model Mesh Container
+      - name: mm-runtime
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        image: {{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.modelMesh.image.repository }}:{{ .Values.modelMesh.image.tag }}
+        ports:
+          - name: thrift
+            containerPort: 8080
+          - name: grpc
+            containerPort: 8033
+        env:
+          # SSL environment variable credentials are populated by pre-install hooks and mounted
+          # to /etc/ssl/serve/<item> here. See the volume named "tls-secret" for additional details.
+          # details.
+          - name: MM_SVC_GRPC_CA_CERT_PATH
+            value: /etc/ssl/serve/certificate.pem
+          - name: MM_SVC_GRPC_PRIVATE_KEY_PATH
+            value: /etc/ssl/serve/private.key.pkcs8
+
+          - name: MM_SERVICE_NAME
+            value: {{ .Values.modelMesh.serviceName }}
+          - name: MM_CONC_SCALEUP_BANDWIDTH_PCT
+            value: "25"
+          - name: INTERNAL_GRPC_PORT
+            value: "{{ .Values.global.commonService.port }}"
+          - name: MM_SVC_GRPC_PORT
+            value: "8033"
+          - name: KV_STORE
+            value: etcd:/opt/watson/mmesh/dynconfig/etcd_connection
+          - name: WKUBE_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: WKUBE_POD_IPADDR
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MM_LOCATION
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: MM_AUTO_REGISTER_MODEL_PATH
+            value: {{ $commonServiceConfigVolumeMountPath }}
+            # set this to equal terminationGracePeriodSeconds setting
+          - name: SHUTDOWN_TIMEOUT_MS
+            value: "90000"
+        volumeMounts:
+        - name: model-mesh-connection-config
+          mountPath: "/opt/watson/mmesh/dynconfig"
+        - name: common-service-config
+          subPath: declared_models.json
+          mountPath: {{ $commonServiceConfigVolumeMountPath }}
+        - name: tls-secret
+          mountPath: /etc/ssl/serve/
+        {{- if .Values.global.etcd.tlsSecret.fieldRootCertificate }}
+        - name: etcd-root-cert
+          mountPath: /etc/ssl/etcd/
+        {{- end }}
+        resources:
+          requests:
+            cpu: {{ .Values.modelMesh.resources.requests.cpu }}
+            memory: {{ .Values.modelMesh.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.modelMesh.resources.limits.cpu }}
+            memory: {{ .Values.modelMesh.resources.limits.memory }}
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8089
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 10
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 8089
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 2
+        lifecycle:
+          preStop:
+            exec:
+              command:
+                - /opt/watson/mmesh/stop.sh
+                - wait
+      # Common Service Container
+      - name: common-service
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        image: {{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.commonService.image.repository }}:{{ .Values.commonService.image.tag }}
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sleep", "59"]
+        volumeMounts:
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: s3-root-certificate-secret
+          mountPath: /etc/ssl/s3/
+        {{- end }}
+        env:
+        - name: RUNTIME_VERSION
+          value: {{ .Values.commonService.image.tag }}
+
+        # Configurations affecting model-mesh operations
+        - name: DEFAULT_MODEL_SIZE
+          value: "{{ .Values.commonService.defaultModelSize }}"
+        - name: DEFAULT_MODEL_SIZE_MULTIPLIER
+          value: "{{ .Values.commonService.defaultModelSizeMultiplier }}"
+        - name: LATENCY_BASED_AUTOSCALING_ENABLED
+          value: "{{ .Values.commonService.latencyBasedAutoscalingEnabled }}"
+        - name: MAX_MODEL_CONCURRENCY
+          value: "{{ .Values.commonService.maxModelConcurrency }}"
+        - name: MAX_LOADING_CONCURRENCY
+          value: "{{ .Values.commonService.maxLoadingConcurrency }}"
+        - name: CAPACITY
+          value: "{{ .Values.commonService.capacity }}"
+        - name: MODEL_LOADING_TIMEOUT_MS
+          value: "{{ .Values.commonService.modelLoadingTimeoutMs }}"
+        # gRPC server thread pool configuration
+        - name: SERVER_THREAD_POOL_SIZE
+          value: "{{ .Values.commonService.serverThreadPoolSize }}"
+        # Port on which we are running the Prometheus server
+        - name: METRICS_PORT
+          value: "{{ .Values.commonService.prometheusPort }}"
+
+          # Minio Credentials and Configuration
+        - name: NLP_MODELS_S3_ENDPOINT_URI
+          value: "{{ default (include .Values.global.s3.endpointTpl .) .Values.global.s3.endpointFixed }}"
+          # Minio keys are pulled from the same secrets as Sire. This secret is created by NLU on a pre-install hook
+        - name: NLP_MODELS_S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+              key: {{ .Values.global.s3.accessSecret.fieldAccessKey }}
+        - name: NLP_MODELS_S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+              key: {{ .Values.global.s3.accessSecret.fieldSecretKey }}
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: AWS_CA_BUNDLE
+          value: /etc/ssl/s3/root.pem
+        {{- end }}
+        - name: STALL_MINIO_UNTIL_READY
+          value: "{{ .Values.commonService.stallMinioUntilReady }}"
+        # Number of seconds to ping Minio with a failing connection before we give up and fail.
+        - name: MINIO_CONNECT_TIMEOUT
+          value: "{{ .Values.commonService.minioConnectTimeout }}"
+        # Where the models live that we are trying to live (within the model uploader docker image).
+        resources:
+          requests:
+            cpu: {{ .Values.commonService.resources.requests.cpu }}
+            memory: {{ .Values.commonService.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.commonService.resources.limits.cpu }}
+            memory: {{ .Values.commonService.resources.limits.memory }}
+        ports:
+        - containerPort: {{ .Values.global.commonService.port }}
+          protocol: TCP
+        livenessProbe:
+          exec:
+            command:
+              - /status_probe
+              - --client_hostname
+              - localhost:{{ .Values.global.commonService.port }}
+              - --probe_type
+              - health
+              # NOTE: This is needed to avoid inheriting the CONFIG_FILE
+              #   argument from the environment and crashing on unknown args
+              - --config_file
+              - ""
+          initialDelaySeconds: {{ .Values.commonService.minioConnectTimeout }}
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+              - /status_probe
+              - --client_hostname
+              - localhost:{{ .Values.global.commonService.port }}
+              - --probe_type
+              - readiness
+              # NOTE: This is needed to avoid inheriting the CONFIG_FILE
+              #   argument from the environment and crashing on unknown args
+              - --config_file
+              - ""
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+      terminationGracePeriodSeconds: 90
+{{ include "cs.imagePullSecretTemplate" . | indent 6}}
+      volumes:
+      ### common service config including declared_models.json
+      - name: {{ $commonServiceConfigVolumeMountName }}
+        configMap:
+          name: {{ include "sch.names.fullCompName" (list . $commonServiceConfigConfigMapName) }}
+      ### ETCD root cert
+      {{- if .Values.global.etcd.tlsSecret.fieldRootCertificate }}
+      - name: etcd-root-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.etcd.tlsSecret.nameTpl .) .Values.global.etcd.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.etcd.tlsSecret.fieldRootCertificate }}
+            path: ca.crt
+      {{- end }}
+      ### S3 root cert
+      {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+      - name: s3-root-certificate-secret
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.s3.tlsSecret.nameTpl .) .Values.global.s3.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.s3.tlsSecret.fieldRootCertificate }}
+            path: root.pem
+       {{- end }}
+      ### TLS key and cert
+      # Note If you are an NLU developer: these credentials are dynamically generated in the
+      # following location: stable/ibm-watson-nlu-prod/templates/gen-secrets/job-cred-gen.yaml
+      - name: tls-secret
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.tls.secret.nameTpl .) .Values.global.tls.secret.fixedName }}
+          items:
+          - key: {{ .Values.global.tls.secret.fieldServerCertificate }}
+            path: certificate.pem
+          - key: {{ .Values.global.tls.secret.fieldServerKey }}
+            path: key.pem
+          - key: private.key.pkcs8
+            path: private.key.pkcs8
+
+      - name: model-mesh-connection-config
+        emptyDir: {}
+
+  revisionHistoryLimit: 3

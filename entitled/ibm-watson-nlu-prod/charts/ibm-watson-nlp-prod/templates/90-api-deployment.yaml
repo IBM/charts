@@ -1,0 +1,100 @@
+{{- include "sch.config.init" (list . "nlp.sch.chart.config.values") -}}
+{{- $compName := .sch.chart.components.api.deploymentName -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+        productID: "{{ .Values.product.id }}"
+        productName: "{{ .Values.product.name }}"
+        productVersion: "{{ .Values.product.version }}"
+    spec:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1001
+{{- end }}
+      containers:
+      - name: "{{ .Values.product.name }}-text-processing-api"
+        image: "{{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.api.image }}:{{ .Values.api.tag }}"
+        ports:
+        - name: api-https
+          containerPort: 9443
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: {{ .Values.api.resources.requests.cpu }}
+            memory: {{ .Values.api.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.api.resources.limits.cpu }}
+            memory: {{ .Values.api.resources.limits.memory }}
+        env:
+        - name: CLOUD_ENVIRONMENT
+          value: "icp"
+        - name: CLOUD_APP_GROUP
+          value: "NLUVNEXT"
+        - name: CLOUD_APP
+          value: "NLUVNEXT_NLPAPP"
+        - name: TP_LOCALE
+          value: "xx"
+        - name: TP_MAX_LENGTH
+          value: "60000"
+        - name: TP_NLP_METRICS_ENABLED
+          value: "false"
+        livenessProbe:
+          httpGet:
+            path: "/natural-language-understanding/api/v1/hellonlp"
+            port: api-https
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: "/natural-language-understanding/api/v1/hellonlp"
+            port: api-https
+            scheme: HTTPS
+          initialDelaySeconds: 1
+          timeoutSeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 1001
+{{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+{{ include "nlp.imagePullSecretTemplate" . | indent 6 }}

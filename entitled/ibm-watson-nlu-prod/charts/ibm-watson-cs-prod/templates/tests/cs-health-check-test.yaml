@@ -1,0 +1,46 @@
+{{- include "sch.config.init" (list . "cs.sch.chart.config.values") -}}
+{{- $csCompName  :=  .sch.chart.components.cs.name -}}
+{{- $csTestCompName := printf "%s-health-test" $csCompName -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $csTestCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $csTestCompName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 2 }}
+  containers:
+    - name: {{ include "sch.names.fullCompName" (list . $csTestCompName) }}
+      image: "{{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.commonService.image.repository }}:{{ .Values.commonService.image.tag }}"
+      command:
+        - /status_probe
+        - --client_hostname
+        - {{ include "sch.names.fullCompName" (list . $csCompName) }}:{{ .Values.global.commonService.port }}
+        - --probe_type
+        - readiness
+        # NOTE: This is needed to avoid inheriting the CONFIG_FILE
+        #   argument from the environment and crashing on unknown args
+        - --config_file
+        - ""
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 6 }}
+      resources:
+        limits:
+          memory: 100Mi
+          cpu: 200m
+        requests:
+          memory: 100Mi
+          cpu: 200m
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+{{ include "cs.imagePullSecretTemplate" . | indent 2 }}

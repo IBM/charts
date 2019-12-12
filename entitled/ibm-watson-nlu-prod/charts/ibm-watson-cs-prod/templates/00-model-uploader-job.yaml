@@ -1,0 +1,85 @@
+{{- include "sch.config.init" (list . "cs.sch.chart.config.values") -}}
+{{- $compName := "model-uploader" -}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+spec:
+  backoffLimit: {{ .Values.modelUploader.numRetries }}
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      containers:
+      - name: common-service-models-uploader
+        image: {{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.modelUploader.image.repository }}:{{ .Values.modelUploader.image.tag }}
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 8 }}
+        volumeMounts:
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: s3-root-certificate-secret
+          mountPath: /etc/ssl/s3/
+        {{- end }}
+        ###########################################################################
+        env:
+        # Minio connection credentials
+        - name: NLP_MODELS_S3_ENDPOINT_URI
+          value: "{{ default (include .Values.global.s3.endpointTpl .) .Values.global.s3.endpointFixed }}"
+          # Note: Minio keys are pulled from the same secrets as Sire. This secret is created by NLU on a pre-install hook,
+          # so we can't run this on the pre-install hook. This is why we have a waiting/ping loop for Minio in the job.
+        - name: NLP_MODELS_S3_ACCESS_KEY
+          valueFrom:
+              secretKeyRef:
+                  name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+                  key: {{ .Values.global.s3.accessSecret.fieldAccessKey }}
+        - name: NLP_MODELS_S3_SECRET_KEY
+          valueFrom:
+              secretKeyRef:
+                  name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+                  key: {{ .Values.global.s3.accessSecret.fieldSecretKey }}
+        # The name of the bucket that we're going to be putting out models into.
+        - name: UPLOAD_BUCKET
+          value: "{{ .Values.global.s3.bucketName }}"
+        # Since this isn't on the install hook, we need to wait until Minio is ready! The below value
+        # should probably render to "true" unless this job somehow gets put onto a preinstall hook.
+        - name: STALL_MINIO_UNTIL_READY
+          value: "{{ .Values.modelUploader.stallMinioUntilReady }}"
+        # Number of seconds to ping Minio with a failing connection before we give up and fail.
+        - name: MINIO_CONNECT_TIMEOUT
+          value: "{{ .Values.modelUploader.minioConnectTimeout }}"
+        # Where the models live that we are trying to live (within the model uploader docker image).
+        - name: UPLOAD_DIR
+          value: "{{ .Values.modelUploader.uploadDir }}"
+          #######################################################################################################
+        {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+        - name: AWS_CA_BUNDLE
+          value: /etc/ssl/s3/root.pem
+        {{- end }}
+
+        resources:
+          requests:
+            memory: "{{ .Values.modelUploader.resources.requests.memory }}"
+            cpu: "{{ .Values.modelUploader.resources.requests.cpu }}"
+          limits:
+            memory: "{{ .Values.modelUploader.resources.limits.memory }}"
+            cpu: "{{ .Values.modelUploader.resources.limits.cpu }}"
+{{ include "cs.imagePullSecretTemplate" . | indent 6}}
+      volumes:
+      ### S3 root cert
+      {{- if .Values.global.s3.tlsSecret.fieldRootCertificate }}
+      - name: s3-root-certificate-secret
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.s3.tlsSecret.nameTpl .) .Values.global.s3.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.s3.tlsSecret.fieldRootCertificate }}
+            path: root.pem
+       {{- end }}

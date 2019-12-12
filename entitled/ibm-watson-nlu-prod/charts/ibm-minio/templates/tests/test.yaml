@@ -1,0 +1,91 @@
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.minioTest) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.minioTest) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  restartPolicy: Never
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName: {{ include "ibm-minio.serviceAccountName" . | quote }}
+  restartPolicy: OnFailure
+  securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.minioPodSecurityContext) | indent 4 }}
+  affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+{{- with .Values.affinity }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- if .Values.nodeSelector }}
+  nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+{{- end }}
+  volumes:
+    - name: minio-configuration
+      projected:
+        sources:
+        - configMap:
+            name: {{ include "sch.names.fullName" (list .) | quote }}
+        - secret:
+            name: {{ if (tpl (.Values.existingSecret | toString ) . ) }}{{ tpl ( .Values.existingSecret | toString ) . }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}{{ end }}
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+    - name: cert-secret-volume-mc
+      secret:
+      {{-  if (tpl (.Values.tls.certSecret | toString ) . ) }}
+        secretName: {{ tpl (.Values.tls.certSecret | toString ) . }}
+      {{-  else }}
+        secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+      {{-  end }}
+        items:
+        - key: tls.crt
+          path: public.crt
+        - key: tls.key
+          path: private.key
+        - key: tls.cacrt
+          path: CAs/public.crt
+    {{ end }}
+  containers:
+    - name: minio-mc
+      image:  {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}/{{ end }}{{ .Values.minioClient.image.name }}:{{ .Values.minioClient.image.tag }}
+      imagePullPolicy: {{ tpl ( .Values.minioClient.image.pullPolicy | toString ) . }}
+      resources:
+{{ toYaml .Values.resources | indent 10 }}
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.minioContainerSecurityContext) | indent 8 }}
+      resources:
+        requests:
+          memory: 128Mi
+          cpu: 100m
+        limits:
+          memory: 128Mi
+          cpu: 100m
+      command: ["/bin/bash","-c","export MC_HOST_ibmminio=https://$MINIO_ACCESS_KEY:$MINIO_SECRET_KEY@$MINIO_ENDPOINT:$MINIO_PORT && /workdir/bin/mc ls ibmminio" ]
+      env:
+        - name: MINIO_ENDPOINT
+          value: {{ include "sch.names.fullCompName" (list . .sch.chart.components.service) }}.{{ .Release.Namespace }}.svc.{{ tpl (.Values.clusterDomain | toString ) . }}
+        - name: MINIO_PORT
+          value: {{ .Values.service.port | quote }}
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ if (tpl (.Values.existingSecret | toString ) . ) }}{{ tpl (.Values.existingSecret | toString ) . }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+{{ end }}
+              key: accesskey
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ if (tpl (.Values.existingSecret | toString ) . ) }}{{ tpl (.Values.existingSecret | toString ) . }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+{{ end }}
+              key: secretkey
+      volumeMounts:
+        - name: minio-configuration
+          mountPath: /config
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+        - name: cert-secret-volume-mc
+          mountPath: {{ .Values.configPathmc }}certs
+        {{ end }}

@@ -1,0 +1,46 @@
+{{- include "sch.config.init" (list . "nlu.sch.chart.config.values") -}}
+{{- $compName := "creds-cleanup" -}}
+{{- if and (not .Values.global.existingServiceAccount) (not .Values.existingServiceAccount) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName) }}-rbac-delete"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-weight": {{ (mul -1 .Values.preInstallHookWeightAnchor) | quote }}
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: "{{ include "sch.names.fullCompName" (list . $compName) }}-rbac-delete"
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+    spec:
+      restartPolicy: Never
+{{- include "sch.security.securityContext" (list . .sch.chart.credsSpecSecurityContext) | indent 6 }}
+      affinity:
+{{- /* nodeaffinity for github.com charts, remove the following for PPA charts */}}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      serviceAccount: {{ include "nlu.serviceAccountName" . }}
+      containers:
+      - name: rbac-delete
+        image: "{{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.creds.image.repository }}:{{ .Values.creds.image.tag }}"
+        command:
+          - "/bin/sh"
+          - "-c"
+          - |
+            kubectl delete -n {{ .Release.Namespace }} --ignore-not-found=true rolebinding {{ template "nlu.roleBindingName" . }} && \
+            kubectl delete -n {{ .Release.Namespace }} --ignore-not-found=true role {{ template "nlu.roleName" . }} && \
+            kubectl delete -n {{ .Release.Namespace }} --ignore-not-found=true serviceaccount {{ template "nlu.serviceAccountName" . }}
+{{ include "sch.security.securityContext" (list . .sch.chart.credsContainerSecurityContext) | indent 8 }}
+        resources:
+          limits:
+            memory: 100Mi
+            cpu: 200m
+          requests:
+            memory: 100Mi
+            cpu: 200m
+{{- end -}}

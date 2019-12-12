@@ -1,0 +1,78 @@
+{{- include "sch.config.init" (list . "cs.sch.chart.config.values") -}}
+{{- $testCompName := printf "models-registration-test" -}}
+
+{{- $commonServiceConfigConfigMapName := .sch.configmap.commonServiceConfigConfigMap.name -}}
+
+{{- $commonServiceConfigVolumeMountName := "common-service-config" -}}
+{{- $commonServiceConfigVolumeMountPath := "/var/declared_models.json" -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $testCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 2 }}
+{{ include "cs.imagePullSecretTemplate" . | indent 2 }}
+  containers:
+    - name: {{ include "sch.names.fullCompName" (list . $testCompName) }}
+      image: "{{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.global.icpTests.image.repository }}:{{ .Values.global.icpTests.image.tag }}"
+      volumeMounts:
+        - name: dvt-config
+          mountPath: /app/config/dvt/config.yml
+          subPath: config.yml
+        - name: dvt-config
+          mountPath: /app/config/dvt/default_config.yml
+          subPath: default_config.yml
+        - name: common-service-config
+          subPath: declared_models.json
+          mountPath: {{ $commonServiceConfigVolumeMountPath }}
+      command: ['npm']
+      args:  ['run', 's3_test']
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 6 }}
+      resources:
+        limits:
+          memory: {{ .Values.global.icpTests.resources.limits.memory }}
+          cpu:  {{ .Values.global.icpTests.resources.limits.cpu }}
+        requests:
+          memory:  {{ .Values.global.icpTests.resources.requests.memory }}
+          cpu:  {{ .Values.global.icpTests.resources.requests.cpu }}
+      env:
+        # The place that we are going to mount the configmap that common service uses in the DVT pod
+      - name: MM_AUTO_REGISTER_MODEL_PATH
+        value: {{ $commonServiceConfigVolumeMountPath }}
+        # Minio connection credentials and endpoint location
+      - name: SECRET_KEY_ID
+        valueFrom:
+            secretKeyRef:
+                name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+                key: {{ .Values.global.s3.accessSecret.fieldAccessKey }}
+      - name: SECRET_ACCESS_KEY
+        valueFrom:
+            secretKeyRef:
+                name: {{ default (include .Values.global.s3.accessSecret.nameTpl .) .Values.global.s3.accessSecret.fixedName }}
+                key: {{ .Values.global.s3.accessSecret.fieldSecretKey }}
+      - name: S3_ENDPOINT
+        value: "{{ default (include .Values.global.s3.endpointTpl .) .Values.global.s3.endpointFixed }}"
+
+  volumes:
+    - name: dvt-config
+      configMap:
+        name: {{ .Release.Name }}-dvt-config
+    ### common service config including declared_models.json
+    - name: {{ $commonServiceConfigVolumeMountName }}
+      configMap:
+        name: {{ include "sch.names.fullCompName" (list . $commonServiceConfigConfigMapName) }}
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"

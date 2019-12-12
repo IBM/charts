@@ -1,0 +1,162 @@
+---
+global:
+  # global.icpDockerRepo - repository to pull images from.
+  #   Supports templates like '{{ .Values.global.image.repository }}'
+  icpDockerRepo: 'mycluster.icp:8500/default/'
+  imagePullSecretName: ''
+  appName: 'wcn'
+  sch:
+    enabled: true
+
+preInstallValidation: true
+
+arch: 'amd64'
+runAsUser: 1000
+schConfigName: 'gateway.sch.chart.config.values'
+serviceAccount:
+  name: ''
+privilegedServiceAccount:
+  name: ''
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 90
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 100Mi
+  limits:
+    cpu: 500m
+    memory: 150Mi
+
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+addon:
+  displayName: Watson Assistant
+  version: ''
+  shortDescription: ''
+  longDescription: ''
+  deployDocs: ''
+  productDocs: ''
+  apiReferenceDocs: ''
+  gettingStartedDocs: ''
+  productImages: 3
+  # addon.serviceId -
+  # bluemix name: assistant, discovery, natural-language-understanding, knowledge-studio, etc..
+  serviceId: 'assistant'
+  maxInstances: 20
+  # maxDeployments: set this to 1 if you only need 1 deployment (this will override the placeholder & give you 1 tile in the catalog)
+  maxDeployments: 1
+  # instanceId, the hardcoded instance id that will be used as part of the `X-Watson-UserInfo` header.
+  # Make sure that `addon.maxInstances` is set to 1
+  instanceId: ''
+  organizationId: 'ba4ab788-68a9-492b-87da-9179cb1e6541'
+  accountId: '02a92df0-657c-43c9-94fc-2280450b1e0b'
+  planId: 'cec95e99-75b8-4e2f-a176-8687f31597fd'
+  showUserManagement: true
+  showCredentials: true
+  # set to true if you want the chart to fail on helm upgrade
+  disableUpgrade: false
+
+  networkPolicy:
+    additionalLabels: {}
+    enabled: true
+
+  tls:
+    image:
+      repository: opencontent-common-utils
+      tag: 1.1.2-amd64
+
+addonService:
+  port: 5000
+
+  replicas: 1
+
+  image:
+    repository: watson-gateway
+    tag: 2.0.6
+    containerPort: 5000
+    imagePullPolicy: Always
+
+  userMgmtUrl: ''
+  zenCoreUrl: ''
+  zenCoreApiUrl: ''
+  zenNginxUrl: ''
+  # addonService.zenNamespace - The namespace where CP4D aka Zen is installed (typically zen)
+  #   supports templates, like `{{ .Values.global.zenNamespace }}`.
+  #   consider using reference to global.zenNamespace key if your umbrella chart needs to refer to zen namespace as well (e.g., oauth return url)
+  zenNamespace: 'zen'
+
+backendService:
+  # name - Name of the k8s service to which terminate the requests from ingress
+  name: 'watson-backend'
+  # nameTemplate - Specifies name of the helm template that will be rendered and its output will be used as the name. Used only if the name is empty.
+  nameTemplate: ''
+  # backendService.namespace - namespace where lives the service to which terminate the requests from ingress
+  namespace: '' # Defaults to the namespace where the chart is installed
+  # namespace - port service listens on (for optional CSB provision call)
+  port: 8443
+  # rewriteTarget - set to '/' if you want requests to have their path stripped.
+  # It needs to start and end with / e.g /api/
+  rewriteTarget: '/'
+  secure: true
+  # if set, notify the backend service of a provisioning request at the given path
+  brokerPath: ''
+  # If the service exposes an API endpoint only the public url will contain /api/ otherwise it won't
+  exposeAPI: true
+  # List of directives to use in the nginx location. For example "proxy_set_header  Host $host;"
+  # Use directive if you need to specify things like proxy timeout, body limit or connection timeout
+  nginxDirectives: []
+
+# additional paths required for certain services
+additionalServices: []
+# - name: "watson-additional-service"
+#   nameTemplate: ""
+#   namespace: ""
+#   port: 8443
+#   path: "/v1/user_data"
+#   rewriteTarget: "/v1/user_data"
+#   secure: true
+#   exposeAPI: false
+# - name: "watson-additional-service"
+#   nameTemplate: ""
+#   namespace: ""
+#   port: 8080
+#   path: "/v2/foo"
+#   rewriteTarget: "/v2/foo"
+#   secure: false
+#   nginxDirectives: []
+tooling:
+  # enabled - if true, tooling routes will be configured
+  enabled: false
+  name: 'watson-tooling'
+  nameTemplate: ''
+  namespace: '' # Defaults to the namespace where the chart is installed
+  port: 8443
+  rewriteTarget: '/tooling/'
+  secure: true
+  nginxDirectives: []
+
+additionalToolings: []
+# - name: "watson-tooling"
+#   nameTemplate: ""
+#   namespace: ""
+#   port: 8443
+#   path: "/tooling-path-foo"
+#   rewriteTarget: "/tooling-path-bar"
+# - name: "watson-tooling"
+#   nameTemplate: ""
+#   namespace: ""
+#   port: 8443
+#   path: "/tooling-path-toor"
+#   rewriteTarget: "/tooling-path-zoor"
+#   nginxDirectives: []
+
+# clusterDomain - the suffix of all the cluster DNS names like service_name.service_namespace.svc.cluster.local.
+#    Supports templated values like "{{ .Values.global.clusterDomain }}"
+clusterDomain: "cluster.local"

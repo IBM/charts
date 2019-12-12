@@ -1,0 +1,147 @@
+global:
+  icpDockerRepo: ""
+  imagePullSecretName: ""
+
+  commonService:
+    port: 8085
+
+  etcd:
+    # This should be overridden by NLU, but currently isn't used unless auth is enabled.
+    accessSecret:
+      nameTpl: "cs.etcdAccessSecretNameTemplate"
+      fixedName: "etcd-access"
+      fieldPassword: "password"
+    tlsSecret:
+      nameTpl: "cs.etcdTlsSecretNameTemplate"
+      fixedName: ""
+      fieldRootCertificate: "public.crt"
+    sslEnabled: true
+    endpointTpl: "cs.etcdEndpointTemplate"
+    endpointPort: 2379
+    endpointFixed: ""
+    authEnabled: false
+    username: root
+
+  s3:
+    accessSecret:
+      nameTpl: "cs.minioAccessSecretNameTemplate"
+      fixedName: ""
+      fieldAccessKey: "accesskey"
+      fieldSecretKey: "secretkey"
+    tlsSecret:
+      nameTpl: "cs.tlsSecretNameTemplate"
+      fixedName: ""
+      fieldRootCertificate: "public.crt"
+    sslEnabled: true
+    endpointTpl: "cs.minioEndpointTemplate"
+    endpointPort: 9000
+    endpointFixed: ""
+    bucketName: "nlu"
+
+  tls:
+    secret:
+      nameTpl: "cs.tlsSecretNameTemplate"
+      fixedName: ""
+      # The fieldServerCertifcate and the fieldServerKey NEED to be valid keys in the
+      # secret that the nameTpl or fixedName references, otherwise the init container
+      # is going to fail with mount errors! For NLU, that means it needs to match what
+      # comes out of the gen-secrets job, which are the following values.
+      fieldServerCertificate: public.crt
+      fieldServerKey: private.key
+  sch:
+    enabled: true
+
+  ## Testing Config [DVTs] ##############################################################
+  icpTests:
+    image:
+      repository: "nlu-dvt"
+      tag: "1.0.756-gb4dbf61.19-11-18-170501.icp-master"
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 500m
+      requests:
+        memory: 1Gi
+        cpu: 500m
+
+
+################################################################################
+#                     Configs for the Model Uploader Job                       #
+################################################################################
+modelUploader:
+  numRetries: 100
+  stallMinioUntilReady: true
+  minioConnectTimeout: 300
+  image:
+    repository: common-service-models-uploader
+    tag: 25e6b0c.19-11-21-011802.icp-master
+  uploadDir: /app/model_artifacts/
+  resources:
+    requests:
+      cpu: 1
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+
+replicas: 1
+################################################################################
+#                     Configs for the Model Mesh Deployment                    #
+################################################################################
+# Model Mesh Container Configs
+modelMesh:
+  image:
+    repository: model-mesh
+    tag: "master-20191108-268"
+  serviceName: common-service
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1536Mi
+    limits:
+      cpu: 1000m
+      memory: 1536Mi
+
+################################################################################
+#                     Configs for the Common Service Deployment                #
+################################################################################
+# Common Service Configs [Invalid values, like image tag are overridden by the
+# NLU Umbrella chart. Common Service's tag is one of these since it is dynamic].
+#
+# NOTE: to read more about what these values are, and what additional configuration options exist in Common Service,
+# look in: watson-nlu/common-service/blob/99d6c0aca24060350310acd7ad5b7e1e2c2b0706/README.md#configuration-parameters
+commonService:
+  # Model size/capacity in Model Mesh are generally specified in bytes!
+  defaultModelSize: "18874368"
+  # Environment variables related to S3 integration
+  stallMinioUntilReady: "true"
+  minioConnectTimeout: "300"
+  # Environment variables related to model mesh configs
+  defaultModelSizeMultiplier: "4"
+  latencyBasedAutoscalingEnabled: "true"
+  maxModelConcurrency: "2"
+  maxLoadingConcurrency: "10"
+  capacity: "18000000000"
+  modelLoadingTimeoutMs: "1800000"
+  # Environment variables related to general server performance
+  serverThreadPoolSize: "15"
+  image:
+    repository: common-service
+    tag: "d17b4e7.19-11-21-011536.icp-master"
+  resources:
+    requests:
+      cpu: 1
+      memory: 20Gi
+    limits:
+      cpu: 3
+      memory: 20Gi
+  # The port on which Common Service serves its metrics [Prometheus]
+  prometheusPort: 8086
+
+
+# For metering purposes; common across NLU. This is generally overridden by the
+# NLU Umbrella chart.
+product:
+  name: "ibm-watson"
+  id: "common-service"
+  version: "1.0"

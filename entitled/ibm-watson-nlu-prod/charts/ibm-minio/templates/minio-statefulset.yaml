@@ -1,0 +1,185 @@
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+{{ $nodeCount := include "minio.configReplicas" . | int }}
+{{- $context := . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.minioServer) | indent 4 }}
+{{- if include "ibm-minio.boolConvertor" (list .Values.keep . ) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+{{- end }}
+spec:
+  updateStrategy:
+    type: {{ .Values.updateStrategy }}
+  podManagementPolicy: "Parallel"
+  serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.headless) | quote }}
+  replicas: {{ template "minio.configReplicas" . }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.minioServer) | indent 6 }}
+  template:
+    metadata:
+      name: {{ include "sch.names.statefulSetName" (list .) | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.minioServer) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      {{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+      {{- end }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      {{- if .Values.priorityClassName }}
+      priorityClassName: "{{ .Values.priorityClassName }}"
+      {{- end }}
+      serviceAccountName: {{ include "ibm-minio.serviceAccountName" . | quote }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      affinity:
+{{- include "ibm-minio.affinityMinio" . | indent 8 }}
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.minioPodSecurityContext) | indent 8 }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}/{{ end }}{{ .Values.minio.image.name }}:{{ .Values.minio.image.tag }}
+          imagePullPolicy: {{ tpl ( .Values.minio.image.pullPolicy | toString ) . }}
+          securityContext:
+          {{ include "sch.security.securityContext" (list . .sch.chart.minioContainerSecurityContext) | indent 12 }}
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+          command: ["/bin/sh"]
+          args: [ "-ce", '/workdir/bin/docker-entrypoint.sh minio -C  {{ .Values.configPath }} server {{- range $i := until $nodeCount }} https://{{ include "sch.names.statefulSetName" (list $context $i) }}.{{ include "sch.names.fullCompName" (list $context $context.sch.chart.components.headless) }}.{{ $context.Release.Namespace }}.svc.{{ tpl ( $context.Values.clusterDomain | toString ) $context }}{{ $context.Values.mountPath }} {{- end }} ']
+       {{ else }}
+          command: ["/bin/sh"]
+          args: [ "-ce", '/workdir/bin/docker-entrypoint.sh minio -C  {{ .Values.configPath }} server {{- range $i := until $nodeCount }} http://{{ include "sch.names.statefulSetName" (list $context $i) }}.{{ include "sch.names.fullCompName" (list $context $context.sch.chart.components.headless) }}.{{ $context.Release.Namespace }}.svc.{{ tpl ( $context.Values.clusterDomain | toString ) $context }}{{ $context.Values.mountPath }} {{- end }} ']
+       {{- end }}
+          volumeMounts:
+            {{- if include "ibm-minio.boolConvertor" (list .Values.persistence.enabled . ) }}
+            - name: export
+              readOnly: false
+              mountPath: {{ .Values.mountPath }}
+              {{- if and ( include "ibm-minio.boolConvertor" (list .Values.persistence.enabled . ) ) ( tpl (.Values.persistence.subPath | toString ) . ) }}
+              subPath: {{ tpl (.Values.persistence.subPath | toString ) . | quote }}
+              {{- end }}
+            {{ end }}
+            - name: minio-config-dir
+              mountPath: {{ .Values.configPath }}
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+            - name: cert-secret-volume
+              mountPath: {{ .Values.configPath }}certs
+            {{ end }}
+          ports:
+            - name: service
+              containerPort: 9000
+          env:
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if (tpl (.Values.existingSecret | toString ) . ) }}{{ tpl (.Values.existingSecret | toString ) . }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+{{ end }}
+                  key: accesskey
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if (tpl (.Values.existingSecret | toString ) . ) }}{{ tpl (.Values.existingSecret | toString ) . }}{{ else }}{{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+{{ end }}
+                  key: secretkey
+{{- if include "ibm-minio.boolConvertor" (list .Values.sse.enabled . ) }}
+            - name: MINIO_SSE_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ibm-minio.sse.masterKeySecret" .         | quote }}
+                  key:  {{ ( tpl (.Values.sse.masterKeyName | toString) . )  | quote }}
+{{- end }}
+            {{- range $key, $val := .Values.environment }}
+            - name: {{ $key | snakecase | upper | quote }}
+              value: {{ $val | quote }}
+            {{- end}}
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: service
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+              scheme: HTTPS
+              {{ else }}
+              scheme: HTTP
+              {{- end }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+              scheme: HTTPS
+              {{- end }}
+              path: /minio/health/ready
+              port: service
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+        - name: minio-config-dir
+          emptyDir: {}
+{{- if include "ibm-minio.boolConvertor" (list .Values.tls.enabled . ) }}
+        - name: cert-secret-volume
+          secret:
+          {{-  if (tpl (.Values.tls.certSecret | toString ) .) }}
+            secretName: {{ tpl (.Values.tls.certSecret | toString ) . }}
+          {{-  else }}
+            secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+          {{-  end }}
+            items:
+            - key: tls.crt
+              path: public.crt
+            - key: tls.key
+              path: private.key
+            - key: tls.cacrt
+              path: CAs/public.crt
+        {{ end }}
+
+  {{- if include "ibm-minio.boolConvertor" (list .Values.persistence.enabled . ) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: export
+      spec:
+        accessModes: [ {{ .Values.persistence.accessMode | quote }} ]
+        resources:
+          requests:
+            storage: {{ tpl (.Values.persistence.size | toString ) . | quote }}
+      {{- if include "ibm-minio.boolConvertor" (list .Values.persistence.useDynamicProvisioning . ) }}
+        {{- if tpl (.Values.persistence.storageClass | toString ) . }}
+          {{- if eq "-" ( tpl (.Values.persistence.storageClass | toString ) . ) }}
+        storageClassName: ""
+          {{- else }}
+        storageClassName: {{ tpl (.Values.persistence.storageClass | toString ) . | quote }}
+          {{- end }}
+        {{- end }}
+      {{- else }}
+        storageClassName: {{ default "" ( tpl (.Values.persistence.storageClass | toString ) . ) | quote }}
+        {{- if tpl (.Values.persistence.selector.label | toString ) . }}
+        selector:
+          matchExpressions:
+            - {key: {{ tpl (.Values.persistence.selector.label | toString ) . }}, operator: In, values: [{{ tpl (.Values.persistence.selector.value | toString ) . }}]}
+        {{- end }}
+      {{- end }}
+  {{- else }}
+        - name: datadir
+          emptyDir: {}
+  {{- end }}

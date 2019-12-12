@@ -1,0 +1,45 @@
+{{- include "sch.config.init" (list . "sireRuntime.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.sireRuntime.deploymentName -}}
+{{- $modelRuntime := .Values.modelMeshDeployment.modelRuntimeContainer -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName "config") }}-config"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+data:
+  application_properties: |
+    # require this much byte remaining on runtime to allow for more models (1G)
+    service.serve.runtime.min-abs-remaining-capacity-bytes=1000000000
+    # mark a model as failed if it takes longer than N seconds to load, do not change
+    service.modelloader.load-timeout-seconds=600
+    # calculate the buffer size, see _helpers.tpl
+    service.modelinstance.request-buffer.size={{ template "sireRuntime.requestBufferSize" . }}
+    # how many models to load concurrently in a single model runtime, do not change
+    service.modelloader.max-concurrent-loading=1
+    # estimated model size in bytes when first trying to load a model, very conservative 3G, do not change
+    service.serve.runtime.predicted-model-size-bytes={{ mul 1000000 $modelRuntime.predictedModelSizeMB }}
+  model_cache_properties:
+    interval_seconds=300
+    max_cache_size_bytes={{ template "sireRuntime.modelDiskCacheSize" . }}
+
+  log4j_properties: |-
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Configuration status="WARN" monitorInterval="30">
+      <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{ISO8601} [%t] %-5level %logger{36} - %msg %n" />
+        </Console>
+        <Console name="JsonConsole" target="SYSTEM_OUT">
+          <JsonLayout compact="true" eventEol="true" properties="true" />
+        </Console>
+      </Appenders>
+      <Loggers>
+        <Logger name="com.ibm.watson.mnlp.serve.api.ModelServerRuntime" level="info" additivity="false">
+          <appender-ref ref="JsonConsole" />
+        </Logger>
+        <Root level={{ template "sireRuntime.rootLogLevel" . }}>
+          <AppenderRef ref="JsonConsole" />
+        </Root>
+      </Loggers>
+    </Configuration>

@@ -1,0 +1,38 @@
+{{- include "sch.config.init" (list . "nlu.sch.chart.config.values") -}}
+{{- $orchestratorCompName :=  .sch.chart.components.orchestrator.name -}}
+{{- $orchestratorTestCompName := printf "%s-health-test" $orchestratorCompName -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $orchestratorTestCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $orchestratorTestCompName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.testSpecSecurityContext) | indent 2 }}
+  containers:
+    - name: {{ include "sch.names.fullCompName" (list . $orchestratorTestCompName) }}
+      image: "{{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.global.tests.image.repository }}:{{ .Values.global.tests.image.tag }}"
+      command: ['curl']
+{{- include "sch.security.securityContext" (list . .sch.chart.testContainerSecurityContext) | indent 6 }}
+      args: ['-k', '-i', '-H Accept: application/json', 'https://{{ include "sch.names.fullCompName" (list . $orchestratorCompName) }}:8000/orchestrator/health?ready=true']
+      resources:
+        requests:
+          memory: {{ .Values.global.tests.resources.requests.memory }}
+          cpu: {{ .Values.global.tests.resources.requests.cpu }}
+        limits:
+          memory: {{ .Values.global.tests.resources.limits.memory }}
+          cpu: {{ .Values.global.tests.resources.limits.cpu }}
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+{{ include "nlu.imagePullSecretTemplate" . | indent 2 }}

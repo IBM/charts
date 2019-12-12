@@ -1,0 +1,59 @@
+{{- include "sch.config.init" (list . "mma.sch.chart.config.values") -}}
+{{- $icpModelManagementApiCompName :=  .sch.chart.components.mma.name -}}
+{{- $icpModelManagementApiTestCompName := "mma-health-test" -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $icpModelManagementApiTestCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $icpModelManagementApiTestCompName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- if tpl .Values.serviceAccount.name . }}
+  serviceAccountName: {{ tpl .Values.serviceAccount.name . }}
+{{- end }}
+{{- include "sch.security.securityContext" (list . .sch.chart.testSpecSecurityContext) | indent 2 }}
+  containers:
+    {{- if .Values.global.mma.database.enableV1 }}
+    # MMA v1 Health Check Test
+    - name: "{{ include "sch.names.fullCompName" (list . $icpModelManagementApiTestCompName) }}-v1"
+      image: "{{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.global.tests.image.repository }}:{{ .Values.global.tests.image.tag }}"
+      command: ['curl']
+      args:  ['-k', '-i', 'https://{{ include "sch.names.fullCompName" (list . $icpModelManagementApiCompName) }}:4000/natural-language-understanding/api/v1/wks/health']
+{{- include "sch.security.securityContext" (list . .sch.chart.testContainerSecurityContext) | indent 6 }}
+      resources:
+        requests:
+          memory: {{ .Values.modelManagementApi.resources.requests.memory }}
+          cpu: {{ .Values.modelManagementApi.resources.requests.cpu }}
+        limits:
+          memory: {{ .Values.modelManagementApi.resources.limits.memory }}
+          cpu: {{ .Values.modelManagementApi.resources.limits.cpu }}
+    {{- end }}
+    {{- if .Values.global.mma.database.enableV2 }}
+    # MMA v2 Health Check Test
+    - name: "{{ include "sch.names.fullCompName" (list . $icpModelManagementApiTestCompName) }}-v2"
+      image: "{{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.global.tests.image.repository }}:{{ .Values.global.tests.image.tag }}"
+      command: ['curl']
+      args:  ['-k', '-i', 'https://{{ include "sch.names.fullCompName" (list . $icpModelManagementApiCompName) }}:4001/natural-language-understanding/api/v2/health']
+{{- include "sch.security.securityContext" (list . .sch.chart.testContainerSecurityContext) | indent 6 }}
+      resources:
+        requests:
+          memory: {{ .Values.global.tests.resources.requests.memory }}
+          cpu: {{ .Values.global.tests.resources.requests.cpu }}
+        limits:
+          memory: {{ .Values.global.tests.resources.limits.memory }}
+          cpu: {{ .Values.global.tests.resources.limits.cpu }}
+    {{- end }}
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+{{ include "mma.imagePullSecretTemplate" . | indent 2 }}

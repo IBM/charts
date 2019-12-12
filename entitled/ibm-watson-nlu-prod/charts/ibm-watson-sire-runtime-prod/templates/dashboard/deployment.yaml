@@ -1,0 +1,162 @@
+{{- include "sch.config.init" (list . "sireRuntime.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.meshDashboard.deploymentName -}}
+{{- $dashboard := .Values.dashboardDeployment -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.dashboardDeployment.replicaCount }}
+  strategy:
+    rollingUpdate:
+      # Ensure that a Deployment with a single instance is never
+      # unavailable during an upgrade.  This forces each new pod to
+      # become ready before an old one is stopped.
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 6 }}
+      affinity:
+{{- /* nodeaffinity for github.com charts, remove the following for PPA charts */}}
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+
+### IMAGE PULL SECRET
+{{ include "sire.imagePullSecretTemplate" . | indent 6 }}
+
+#######################################################################################################################
+########## VOLUMES ####################################################################################################
+#######################################################################################################################
+      volumes:
+      ### ETCD root cert
+      {{- if .Values.global.etcd.tlsSecret.fieldRootCertificate }}
+      - name: etcd-root-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ default (include .Values.global.etcd.tlsSecret.nameTpl .) .Values.global.etcd.tlsSecret.fixedName }}
+          items:
+          - key: {{ .Values.global.etcd.tlsSecret.fieldRootCertificate }}
+            path: ca.crt
+      {{- end }}
+      - name: model-mesh-connection-config
+        emptyDir: {}
+
+#######################################################################################################################
+########## INIT CONTAINER #################################################################################################
+#######################################################################################################################
+      initContainers:
+################################################# MODEL RUNTIME CONTAINER #############################################
+      - name: init
+        image: {{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.dashboardDeployment.image.repository }}:{{ .Values.dashboardDeployment.image.tag }}
+        {{ include "sireRuntime.pullPolicyTemplate" . }}
+        {{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContextRuntime) | indent 8 }}
+        resources:
+          limits:
+            cpu: 100m
+            memory: 50Mi
+          requests:
+            memory: 50Mi
+        command:
+        - /bin/sh
+        - -c
+        - |
+          cat << EOF > /opt/watson/mmesh/dynconfig/etcd_connection
+          {
+            "root_prefix": {{ .Values.global.etcd.rootPrefix }},
+            {{ if .Values.global.etcd.tlsSecret.fieldRootCertificate }}"certificate_file":"/etc/ssl/etcd/ca.crt",{{ end }}
+            {{- if .Values.global.etcd.authEnabled }}
+            "userid": {{ required "If .Values.global.etcd.authEnabled=true, you need to set a user nanme via .Values.global.etcd.username" .Values.global.etcd.username | quote }},
+            "password": "$ETCD_PASSWORD",
+            {{- end }}
+            "endpoints":"{{ default (include .Values.global.etcd.endpointTpl .) .Values.global.etcd.endpointFixed }}"
+          }
+          EOF
+
+        {{- if .Values.global.etcd.authEnabled }}
+        env:
+        - name: ETCD_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include .Values.global.etcd.accessSecret.nameTpl .) .Values.global.etcd.accessSecret.fixedName }}
+              key: {{ .Values.global.etcd.accessSecret.fieldPassword }}
+        {{- end }}
+        volumeMounts:
+        - name: model-mesh-connection-config
+          mountPath: "/opt/watson/mmesh/dynconfig"
+
+#######################################################################################################################
+########## CONTAINERS #################################################################################################
+#######################################################################################################################
+      containers:
+      - name: dashboard
+        image: {{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.dashboardDeployment.image.repository }}:{{ .Values.dashboardDeployment.image.tag }}
+        {{ include "sireRuntime.pullPolicyTemplate" . }}
+        {{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContextMesh) | indent 8 }}
+        resources:
+          requests:
+            cpu: {{ $dashboard.cpuRequestsMillis }}m
+            memory: {{ $dashboard.memoryLimitMB }}Mi
+          limits:
+            cpu: {{ $dashboard.cpuLimitMillis }}m
+            memory: {{ $dashboard.memoryLimitMB }}Mi
+        ports:
+        - name: http
+          containerPort: {{ $dashboard.port }}
+
+        volumeMounts:
+        - name: model-mesh-connection-config
+          mountPath: "/opt/watson/mmesh/dynconfig"
+          readOnly: true
+        - name: etcd-root-cert
+          mountPath: /etc/ssl/etcd/
+
+        env:
+        - name: KV_STORE
+          value: "etcd:/opt/watson/mmesh/dynconfig/etcd_connection"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: WKUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: WKUBE_SERVICE_NAME
+          value: model-serve-dashboard
+
+        livenessProbe:
+          httpGet:
+            path: /rest/healthcheck
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 120
+          timeoutSeconds: 60
+        readinessProbe:
+          httpGet:
+            path: /rest/healthcheck
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 120
+          timeoutSeconds: 60
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /opt/watson/mmesh/stop.sh
+              - wait

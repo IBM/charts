@@ -1,0 +1,55 @@
+{{- include "sch.config.init" (list . "nlu.sch.chart.config.values") -}}
+{{- $nluServerCompName :=  .sch.chart.components.nluserver.name -}}
+{{- $modelsServerCompName :=  .sch.chart.components.nms.name -}}
+{{- $testCompName := printf "dvt-test" -}}
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $testCompName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $testCompName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+{{- include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | indent 2 }}
+{{ include "nlu.imagePullSecretTemplate" . | indent 2 }}
+  containers:
+    - name: {{ include "sch.names.fullCompName" (list . $testCompName) }}
+      image: "{{ if .Values.global.icpDockerRepo }}{{ trimSuffix "/" .Values.global.icpDockerRepo }}/{{ end }}{{ .Values.global.icpTests.image.repository }}:{{ .Values.global.icpTests.image.tag }}"
+      env:
+        - name: BASE_URL
+          value: "https://{{ include "sch.names.fullCompName" (list . $nluServerCompName) }}"
+        - name: MODELS_SERVER_URL
+          value: "https://{{ .Release.Name }}-ibm-watson-nms-{{ $modelsServerCompName }}:{{ .Values.global.modelsServer.port }}"
+      volumeMounts:
+        - name: dvt-config
+          mountPath: /app/config/dvt/config.yml
+          subPath: config.yml
+        - name: dvt-config
+          mountPath: /app/config/dvt/default_config.yml
+          subPath: default_config.yml
+      command: ['npm']
+      args:  ['run', 'icp_test']
+{{- include "sch.security.securityContext" (list . .sch.chart.containerSecurityContext) | indent 6 }}
+      resources:
+        limits:
+          memory: {{ .Values.global.icpTests.resources.limits.memory }}
+          cpu:  {{ .Values.global.icpTests.resources.limits.cpu }}
+        requests:
+          memory:  {{ .Values.global.icpTests.resources.requests.memory }}
+          cpu:  {{ .Values.global.icpTests.resources.requests.cpu }}
+  volumes:
+    - name: dvt-config
+      configMap:
+        name: {{ .Release.Name }}-dvt-config
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"

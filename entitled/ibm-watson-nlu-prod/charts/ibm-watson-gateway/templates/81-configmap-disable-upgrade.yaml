@@ -1,0 +1,20 @@
+{{- if .Values.addon.disableUpgrade }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $configName := "disable-upgrade-config" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+{{- if .Release.IsUpgrade }}
+  {{ fail "\nERROR: Helm upgrade is disabled, to upgrade please follow instructions available in the documentation" }}
+{{- end }}
+  name: {{ include "sch.names.fullCompName" (list . $configName ) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-upgrade"
+    "helm.sh/hook-weight": "-200"
+    "helm.sh/hook-delete-policy": "hook-failed,before-hook-creation,hook-succeeded"
+data:
+  isUpgrade: "{{ .Release.IsUpgrade }}"
+  version: "{{ include "gateway.version" . }}"
+{{- end }}

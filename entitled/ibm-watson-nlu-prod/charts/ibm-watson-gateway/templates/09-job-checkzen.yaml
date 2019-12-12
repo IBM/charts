@@ -1,0 +1,65 @@
+{{- if .Values.preInstallValidation }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "gateway-zencheck") | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "gateway-zencheck") | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . "gateway-zencheck") | quote }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "gateway-zencheck") | indent 8 }}
+    spec:
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 8000
+{{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ include "gateway.privileged-account.name" . }}
+      containers:
+      - name: checkzen
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 8000
+{{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ include "gateway.icpDockerRepo" . }}{{ .Values.addon.tls.image.repository }}:{{ .Values.addon.tls.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+            set -e
+            URL={{ printf "http://zen-core-api-svc.%s:3333/v1/monitor" (tpl (.Values.addonService.zenNamespace | toString ) . ) }}
+            curl -k --fail $URL
+            if [[ $? -ne 0 ]]; then
+              echo -e "\nError: $URL is unreachable - are you sure {{ tpl (.Values.addonService.zenNamespace | toString ) . }} is the namespace where Zen is located?"
+            fi
+{{- end }}
