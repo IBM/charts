@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "etcd.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "etcd.fullname" . }}
+    helm.sh/chart: {{ include "etcd.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "etcd.fullname" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "etcd.fullname" . }}
+        helm.sh/chart: {{ include "etcd.chart" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+      annotations:
+        {{- include "ibm-mss-prod.releaseAnnotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ include "mss.ContainerUID" . }}
+      affinity:
+      {{- include "mss.nodeaffinity" . | indent 6 }}
+      {{- include "ibm-mss-prod.tolerations" . | indent 6 }}
+      {{- include "ibm-mss-prod.serviceaccount" . | indent 6 }}
+      containers:
+        - name: {{ include "etcd.fullname" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+          {{- if .Values.authEnable }}
+            - "/usr/local/bin/etcd"
+            - "--data-dir=/var/etcd-data"
+            - "--name={{ include "etcd.fullname" . }}"
+            - "--initial-advertise-peer-urls=https://{{ include "etcd.fullname" . }}:2380"
+            - "--listen-peer-urls=https://0.0.0.0:2380"
+            - "--advertise-client-urls=https://{{ include "etcd.fullname" . }}:2379"
+            - "--listen-client-urls=https://0.0.0.0:2379"
+            - "--initial-cluster={{ include "etcd.fullname" . }}=https://{{ include "etcd.fullname" . }}:2380"
+            - "--initial-cluster-state=new"
+            - "--cert-file=/etc/etcd/tls.crt"
+            - "--key-file=/etc/etcd/tls.key"
+            - "--client-cert-auth"
+            - "--peer-auto-tls"
+            - "--trusted-ca-file=/etc/etcd/ca.crt"
+          {{- else }}
+            - "/usr/local/bin/etcd"
+            - "--data-dir=/var/etcd-data"
+            - "--name={{ include "etcd.fullname" . }}"
+            - "--initial-advertise-peer-urls=https://0.0.0.0:2380"
+            - "--listen-peer-urls=http://0.0.0.0:2380"
+            - "--advertise-client-urls=http://0.0.0.0:2379"
+            - "--listen-client-urls=http://0.0.0.0:2379"
+            - "--initial-cluster-state=new"
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: {{ include "mss.ContainerUID" . }}
+          ports:
+            - containerPort: 2379
+              protocol: TCP
+              name: client
+          readinessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 5
+            periodSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/etcd-data
+            {{- if .Values.authEnable }}
+            - name: certs
+              mountPath: /etc/etcd
+            {{- end }}
+      volumes:
+        - name: data
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.pvc.existingClaimName }}
+            claimName: {{ .Values.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ include "etcd.fullname" . }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.authEnable }}
+        - name: certs
+          secret:
+            secretName: {{ .Release.Name }}-etcd
+        {{- end }}
