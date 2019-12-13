@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "mss.fullname" . }}-test"
+  labels:
+    app.kubernetes.io/name: {{ include "mss.name" . }}
+    helm.sh/chart: {{ include "mss.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  annotations:
+    helm.sh/hook: test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: {{ include "mss.ContainerUID" . }}
+  affinity:
+  {{- include "mss.nodeaffinity" . | indent 4 }}
+  {{- include "ibm-mss-prod.tolerations" . | indent 2 }}
+  {{- include "ibm-mss-prod.serviceaccount" . | indent 2 }}
+  containers:
+    - name: wget
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      command: ["/bin/sh"]
+      args: ["-c", '  wget -O /tmp/hello {{ include "mss.fullname" . }}.{{ .Release.Namespace }}:9080/dlim/v1/job/hello' ]
+      securityContext:
+        privileged: false
+        capabilities:
+          drop:
+            - ALL
+        readOnlyRootFilesystem: false
+        runAsNonRoot: true
+        runAsUser: {{ include "mss.ContainerUID" . }}
+        allowPrivilegeEscalation: false
+      resources:
+        requests:
+          cpu: 0.2
+          memory: 128Mi
+        limits:
+          cpu: 0.2
+          memory: 256Mi
+  restartPolicy: Never

@@ -1,0 +1,244 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mss.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "mss.fullname" . }}
+    helm.sh/chart: {{ include "mss.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+spec:
+  strategy:
+    type: Recreate
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+       app.kubernetes.io/name: {{ include "mss.fullname" . }}
+       release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "mss.fullname" . }}
+        helm.sh/chart: {{ include "mss.chart" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+      annotations:
+        {{- include "ibm-mss-prod.releaseAnnotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ include "mss.ContainerUID" . }}
+      affinity:
+      {{- include "mss.nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                    - {{ include "mss.fullname" . }}
+                topologyKey: "kubernetes.io/hostname"
+      {{- include "ibm-mss-prod.tolerations" . | indent 6 }}
+      {{- include "ibm-mss-prod.serviceaccount" . | indent 6 }}
+      initContainers:
+        - name: etcd-check
+          image: "{{ .Values.etcd.image.repository }}:{{ .Values.etcd.image.tag }}"
+          command:
+            - sh
+            - -c
+            - |
+              options=""
+              if [ -f /etc/etcd/ca.crt ]; then
+                options="$options --cacert=/etc/etcd/ca.crt"
+              fi
+              if [ -f /etc/etcd/tls.crt ] && [ -f /etc/etcd/tls.key ]; then
+                options="$options --cert=/etc/etcd/tls.crt --key=/etc/etcd/tls.key"
+              fi
+              until etcdctl $options --endpoints={{ .Values.etcd.endpoint }} endpoint health; do
+                echo waiting for etcd
+                sleep 2
+              done
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ include "mss.ContainerUID" . }}
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+          env:
+          - name: ETCDCTL_API
+            value: "3"
+          {{- if .Values.etcd.authEnable }}
+          volumeMounts:
+          - name: etcd-certs
+            mountPath: /etc/etcd
+          {{- end }}
+          resources:
+            requests:
+              cpu: 0.5
+              memory: 256Mi
+            limits:
+              cpu: 0.5
+              memory: 256Mi
+        - name: infoservice-check
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command:
+            - sh
+            - -c
+            - |
+              until wget -O /tmp/history --timeout=2 {{ .Values.infoservice.endpoint }}/dlim/v1/infoservice/history; do
+                echo waiting for infoservice
+                sleep 2
+              done
+          securityContext:
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ include "mss.ContainerUID" . }}
+          resources:
+            requests:
+              cpu: 0.2
+              memory: 128Mi
+            limits:
+              cpu: 0.2
+              memory: 256Mi
+      containers:
+        - name: {{ include "mss.fullname" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: {{ include "mss.ContainerUID" . }}
+          env:
+          - name: REDHARE_INSTANCE_NAME
+            value: {{ .Release.Name }}
+          {{- if .Values.etcd.authEnable }}
+          - name: ETCD_CLIENT_CACERT
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.etcd.clientSecretName }}
+                name: {{ .Values.etcd.clientSecretName }}
+                {{- else }}
+                name: {{ .Release.Name }}-etcd
+                {{- end }}
+                key: ca.crt
+                optional: true
+          - name: ETCD_CLIENT_CERT
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.etcd.clientSecretName }}
+                name: {{ .Values.etcd.clientSecretName }}
+                {{- else }}
+                name: {{ .Release.Name }}-etcd
+                {{- end }}
+                key: tls.crt
+                optional: true
+          - name: ETCD_CLIENT_KEY
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.etcd.clientSecretName }}
+                name: {{ .Values.etcd.clientSecretName }}
+                {{- else }}
+                name: {{ .Release.Name }}-etcd
+                {{- end }}
+                key: tls.key
+                optional: true
+          - name: ETCD_USERNAME
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.etcd.clientSecretName }}
+                name: {{ .Values.etcd.clientSecretName }}
+                {{- else }}
+                name: {{ .Release.Name }}-etcd
+                {{- end }}
+                key: username
+                optional: true
+          - name: ETCD_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.etcd.clientSecretName }}
+                name: {{ .Values.etcd.clientSecretName }}
+                {{- else }}
+                name: {{ .Release.Name }}-etcd
+                {{- end }}
+                key: password
+                optional: true
+          {{- end }}
+          ## command: ['sh', '-c', 'while true; do sleep 2; done;']
+          ports:
+            - containerPort: 9080
+              protocol: TCP
+              name: rest
+            - containerPort: 10000
+              protocol: TCP
+              name: rpc
+          readinessProbe:
+            tcpSocket:
+              port: rest
+            initialDelaySeconds: 5
+            periodSeconds: 3
+          livenessProbe:
+            exec:
+              command:
+              - ls
+              - /opt/dlim
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /opt/dlim/conf
+            {{- if .Values.security.sslEnable }}
+            - name: msd-certs
+              mountPath: /opt/dlim/ssl
+            {{- end }}
+      volumes:
+        {{- if .Values.security.sslEnable }}
+        - name: msd-certs
+          secret:
+            {{- if .Values.security.secretName }}
+            secretName: {{ .Values.security.secretName }}
+            {{- else }}
+            secretName: {{ .Release.Name }}-mss-key-pair
+            {{- end }}
+        {{- end }}
+        {{- if .Values.etcd.authEnable }}
+        - name: etcd-certs
+          secret:
+            {{- if .Values.etcd.clientSecretName }}
+            secretName: {{ .Values.etcd.clientSecretName }}
+            {{- else }}
+            secretName: {{ .Release.Name }}-etcd
+            {{- end }}
+        {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "mss.fullname" . }}
+            items:
+              - key: dlim.conf
+                path: dlim.conf
+              - key: msd.conf
+                path: {{ .Release.Name }}/msd.conf
+              - key: msd_profile.json
+                path: {{ .Release.Name }}/msd_profile.json

@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "infoservice.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "infoservice.fullname" . }}
+    helm.sh/chart: {{ include "infoservice.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "infoservice.fullname" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "infoservice.fullname" . }}
+        helm.sh/chart: {{ include "infoservice.chart" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        release: {{ .Release.Name }}
+      annotations:
+        {{- include "ibm-mss-prod.releaseAnnotations" . | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ include "infoservice.ContainerUID" . }}
+      affinity:
+      {{- include "mss.nodeaffinity" . | indent 6 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                    - {{ include "infoservice.fullname" . }}
+                topologyKey: "kubernetes.io/hostname"
+      {{- include "ibm-mss-prod.tolerations" . | indent 6 }}
+      {{- include "ibm-mss-prod.serviceaccount" . | indent 6 }}
+      containers:
+        - name: {{ include "infoservice.fullname" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: REDHARE_TOP
+            value: "/opt/dlim"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: {{ include "infoservice.ContainerUID" . }}
+          ports:
+            - containerPort: 8892
+              protocol: TCP
+              name: rest
+          readinessProbe:
+            tcpSocket:
+              port: rest
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: rest
+            initialDelaySeconds: 25
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /opt/dlim/infodata
+            - name: config
+              mountPath: /opt/dlim/conf
+      volumes:
+        - name: data
+        {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+          {{- if .Values.pvc.existingClaimName }}
+            claimName: {{ .Values.pvc.existingClaimName }}
+          {{- else }}
+            claimName: {{ include "infoservice.fullname" . }}
+          {{- end }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "infoservice.fullname" . }}
+            items:
+              - key: dlim.conf
+                path: dlim.conf

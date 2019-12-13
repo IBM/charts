@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mss.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "mss.fullname" . }}
+    helm.sh/chart: {{ include "mss.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+data:
+  dlim.conf: |-
+    dlim.auth.etcd.enable = {{ .Values.etcd.authEnable }}
+    dlim.etcd.endpoint = {{ .Values.etcd.endpoint }}
+    dlim.infoservice.endpoint = {{ .Values.infoservice.endpoint }}
+  msd.conf: |-
+    dlim.msd.log.level = {{ .Values.logLevel }}
+  msd_profile.json: |-
+    {
+        "schema_version": "1.1",
+        "type": "job_scheduler",
+        "replica": {{ .Values.replicaCount }},
+        "policy": 
+        {
+            "name": {{ .Values.policy | quote }},
+            "policy_conf": 
+            {
+                "cpu_factor": 0,
+                "mem_factor": 0,
+                "gpu_factor": 4,
+                "preempt_grace_period": 200,
+                "preempt": true,
+                "resource_statistics_window": "2h",
+                "tag_tree": 
+                {
+                    "silver": 
+                    {
+                        "ratio": 5,
+                        "max": {{ .Values.maxConcurrence }}
+                    },
+                    "gold": 
+                    {
+                        "ratio": 20,
+                        "max": 4
+                    },
+                    "diamond": 
+                    {
+                        "ratio": 60,
+                        "max": 10
+                    }
+                }
+            },
+            "schedule_interval": 3,
+            "task_execution_timeout": -1
+        },
+        "kernel": 
+        {
+            "connection_timeout": {{ .Values.kernel.connectionTimeout }},
+            "working_directory": "${REDHARE_TOP}/work",
+            "log_directory": "${REDHARE_TOP}/logs",
+            "run_as": "",
+            "umask": "022"
+        },
+        "resource_allocation": 
+        {
+            "kernel": 
+            {
+                "type": "k8s",
+                "namespace": {{ default .Release.Namespace .Values.kernel.namespace | quote }},
+                "image_name": {{ .Values.kernel.defaultImage | quote }},
+                "res_node_selector": {{ .Values.kernel.resourceNodeSelector | quote }},
+                "scheduler": {{ .Values.kernel.scheduler | quote }}
+            }
+        },
+        {{- if .Values.security.sslEnable }}
+        "security":
+        {
+          "enable": true,
+          "server_crt": "/opt/dlim/ssl/tls.crt",
+          "server_key": "/opt/dlim/ssl/tls.key"
+        },
+        {{- end }}
+        "envs": []
+    }
+
