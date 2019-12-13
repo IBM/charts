@@ -1,0 +1,110 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018, 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if (include "icam.createTLSCerts" .) -}}
+{{- include "sch.config.init" (list . "ibm-cloud-appmgmt-prod.sch.chart.config.values") }}
+{{- $compName := "cacerts" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+      imagePullSecrets:
+        - name: sa-{{ .Release.Namespace }}
+      {{- if ne .Values.global.image.pullSecret "" }}
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                {{- range $arch := .Values.arch }}
+                  - {{ $arch -}}
+                {{ end }}
+      restartPolicy: OnFailure
+      containers:
+      - name: cacerts
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.global.imageNamePrefix }}{{ .Values.global.icamTestImage }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        command:
+        - "/bin/sh"
+        - "/opt/ibm/makecacerts/makecacerts.sh"
+        imagePullPolicy: Always
+        env:
+          {{- if (include "icam.isMCM" .) }}
+          - name: CN
+            value: {{ .Values.global.icammcm.ingress.domain }}
+          - name: server_secret
+            value: {{ .Values.global.icammcm.ingress.tlsSecret }}
+          - name: client_secret
+            value: {{ .Values.global.icammcm.ingress.clientSecret }}
+          {{- else }}
+          - name: CN
+            value: {{ .Values.global.ingress.domain }}
+          - name: server_secret
+            value: {{ .Values.global.ingress.tlsSecret }}
+          - name: client_secret
+            value: {{ .Values.global.ingress.clientSecret }}
+          {{- end }}
+          - name: release
+            value: {{ .Release.Name }}
+          - name: kube_ns
+            value: {{ .Release.Namespace }}
+          - name: archive
+            value: {{ .Release.Name }}-ingress-artifacts
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: config
+          readOnly: true
+          mountPath: /opt/ibm/makecacerts
+      volumes:
+      - name: config
+        configMap:
+          defaultMode: 420
+          name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+
+{{- end -}}
