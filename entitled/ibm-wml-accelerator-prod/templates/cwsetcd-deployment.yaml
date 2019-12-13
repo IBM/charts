@@ -1,0 +1,111 @@
+{{- if not .Values.cluster.etcdExternal }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-wml-accelerator-prod.master-fullname" . }}-etcd
+  labels:
+    {{- include "ibm-wml-accelerator-prod.etcdLabels" . | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ibm-wml-accelerator-prod.etcdLabelsSelector" . | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ibm-wml-accelerator-prod.etcdLabels" . | indent 8 }}
+      annotations:
+        {{- include "ibm-wml-accelerator-prod.releaseAnnotations" . | indent 8 }}
+    spec:
+      {{- if eq (include "ibm-wml-accelerator-prod.usePortworx" .) "yes" }}
+      schedulerName: stork
+      {{- end }}
+      affinity:
+      {{- include "ibm-wml-accelerator-prod.nodeaffinity" . | indent 6 }}
+      {{- include "ibm-wml-accelerator-prod.tolerations" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: cws-{{ .Release.Name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ template "ibm-wml-accelerator-prod.etcdUID" . }}
+      volumes:
+        - name: persistsharedir
+          persistentVolumeClaim:
+            claimName: "{{ .Release.Name }}-cws-share"
+      initContainers:
+      - name: etcdcertcheck
+        image: {{ template "ibm-wml-accelerator-prod.etcdImage" . }}
+        resources:
+          requests:
+            cpu: 0.1
+            memory: 32Mi
+          limits:
+            cpu: 0.1
+            memory: 32Mi
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            while ! ([ -f {{ template "ibm-wml-accelerator-prod.etcdClientCertPath" . }} ] && [ -f {{ template "ibm-wml-accelerator-prod.etcdClientKeyPath" . }} ] && [ -f {{ template "ibm-wml-accelerator-prod.etcdCacert" . }} ]); do
+                sleep 5;
+                echo "Waiting for master to create the etcd certs...";
+            done;
+        volumeMounts:
+        - mountPath: /var/shareDir
+          name: persistsharedir
+      containers:
+        - image: {{ template "ibm-wml-accelerator-prod.etcdImage" . }}
+          imagePullPolicy: Always
+          name: etcd
+          env:
+          - name: ETCD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          ports:
+            - containerPort: {{template "ibm-wml-accelerator-prod.etcdServicePort" .}}
+              name: client
+              protocol: TCP
+          volumeMounts:
+          - mountPath: /var/shareDir
+            name: persistsharedir
+          resources:
+            requests:
+              cpu: 1
+              memory: 1Gi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+              - ALL
+          livenessProbe:
+            tcpSocket:
+              port: {{ template "ibm-wml-accelerator-prod.etcdServicePort" . }}
+            initialDelaySeconds: 3
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: {{ template "ibm-wml-accelerator-prod.etcdServicePort" . }}
+            initialDelaySeconds: 3
+            periodSeconds: 30
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              ETCD_PORT={{ template "ibm-wml-accelerator-prod.etcdServicePort" . }}
+              ETCD_ENDPOINT="https://$ETCD_IP:$ETCD_PORT"
+              cd /var/shareDir/cwsetcd/
+              etcd --data-dir /var/shareDir/etcdData/ --advertise-client-urls $ETCD_ENDPOINT --listen-client-urls $ETCD_ENDPOINT --cert-file certs/cwsetcd.crt --key-file private/cwsetcd.key --ca-file certs/ca.crt --quota-backend-bytes=8589934592
+{{- end }}

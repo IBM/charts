@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ .Release.Name }}-cws-share"
+  labels:
+    env: cws-share
+    {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 4 }}
+  {{- if eq .Values.cluster.type "iks" }}
+  annotations:
+    volume.beta.kubernetes.io/storage-provisioner: {{ default "" .Values.iks.fileStorageClassType | quote }}
+  {{- end }}
+spec:
+  {{- if .Values.cluster.useDynamicProvisioning }}
+  # if present, use the storageClassName from the values.yaml, else use the
+  # default storageClass setup by kubernetes Administrator
+  # setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.master.sharedStorageClassName | quote }}
+  {{- else }}
+  # bind to an existing pv.
+  # setting storageClassName to "" disables dynamic provisioning
+  storageClassName: {{ default "" .Values.master.sharedStorageClassName | quote }}
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 15Gi

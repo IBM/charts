@@ -1,0 +1,25 @@
+{{- if and (eq .Values.cluster.type "cp4d") (not .Values.master.existingcondaPVC) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ .Release.Name }}-conda"
+  labels:
+    env: conda-share
+    {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 4 }}
+spec:
+  {{- if .Values.cluster.useDynamicProvisioning }}
+  # if present, use the storageClassName from the values.yaml, else use the
+  # default storageClass setup by kubernetes Administrator
+  # setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.master.condaStorageClassName | quote }}
+  {{- else }}
+  # bind to an existing pv.
+  # setting storageClassName to "" disables dynamic provisioning
+  storageClassName: {{ default "" .Values.master.condaStorageClassName | quote }}
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi
+{{- end }}
