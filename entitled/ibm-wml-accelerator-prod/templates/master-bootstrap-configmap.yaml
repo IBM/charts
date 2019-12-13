@@ -1,0 +1,2717 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-conductor-master-bootstrap
+  labels:
+    {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 4 }}
+
+data:
+  license.dat: |-
+      ego_base   3.8   ()   ()   ()   ()   7113e83802959870416fef3b3194472af5c5fbe3
+      conductor_spark   2.4.0   ()   ()   ()   ()   3ac6fde4b68594ac9964ae85ee11a6b2a45238e8
+      {{- if .Values.dli.enabled }}
+      conductor_deep_learning   2.1.0   ()   ()   ()   ()   0f9ee22167c38a92ab1b0f164ead292b18d0c86d
+      {{- end }}
+  {{- if not .Values.isCp4dAddon }}
+  nginx.conf: |
+    map $http_upgrade $connection_upgrade {
+        default          upgrade;
+        ''               close;
+    }
+    # Simple server for readiness & status
+    server {
+        listen       8080;
+        server_name  localhost;
+        access_log off;
+        # Support liveness/readiness probes
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+        }
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html;
+        }
+        # Support sysdig /nginx_status check
+        location /nginx_status {
+            stub_status on;
+            server_tokens off;
+        }
+    }
+    # https server for everything else
+    server {
+        server_name {{ template "ibm-wml-accelerator-prod.master-fullname" . }};
+
+        listen {{ template "ibm-wml-accelerator-prod.proxyHttpsPort" . }}   ssl http2;
+        listen [::]:{{ template "ibm-wml-accelerator-prod.proxyHttpsPort" . }}   ssl http2;
+
+        ssl_certificate     /var/share/tls.crt;
+        ssl_certificate_key /var/share/tls.key;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        client_max_body_size 1m;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $server_port;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Capture all GUI URIs - only apply subfilters etc. to GUI, and not to REST
+        location ~^/(platform|platformv5|restProxy|common_ui|ascgui|dlgui|dlguiv5|conductorgui|cwsguiv5|perfguiv5|knowledgecenter) {
+            proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.guiPort" . }};
+
+            # All 'Location' header responses need to point to the nginx server and port...this
+            # rewrites accordingly.
+            proxy_redirect ~*^(https?://[^/]+)(/.+)$ $scheme://$host:$server_port$2;
+
+            # Setup sub_filter to modify contents of response html/json to point to the right server:port.
+            sub_filter_types application/json text/plain;
+            sub_filter_last_modified on;
+            sub_filter_once off;
+
+            # Special case for getRestURL returning :443/ when proxied. Ideally this gets fixed in
+            # code, but it's an easy re-write for now.
+            sub_filter ':443/restProxy' ':$server_port/restProxy';
+
+            # The GUI apps often add href's to the rest services by name:port - so these will re-write
+            # all 'my-wmlamaster:304XX' to use the nginx host:port.
+            sub_filter '{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.ascdPort" . }}' '$host:$server_port';
+            sub_filter '{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }}' '$host:$server_port';
+            sub_filter '{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.dlRestPort" . }}' '$host:$server_port';
+        }
+
+        # Now all REST APIs.  For each REST API (in general), we will:
+        # 1)  proxypass
+        # 2)  If they specify just the root, we'll sub_filter a static page to point correctly to swagger
+        # 3)  Enable swagger on a unique path for a given URI
+        location ^~ /platform/rest/asc/ {
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.ascdPort" . }};
+        }
+        # Call out the specific URI which has a static page pointing to swagger
+        # separate from above for performance so we don't sub_filter all APIs
+        location = /platform/rest/asc/ {
+          sub_filter '/cloud/apis/explorer' '/cloud/apis/conductor/explorer/';
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.ascdPort" . }};
+        }
+        # This doesn't exist as it's under conductor..but in case somebody goes looking...
+        location ^~ /cloud/apis/asc/ {
+          rewrite /cloud/apis/asc/(.*) /cloud/apis/conductor/$1 permanent;
+        }
+        location ^~ /platform/rest/conductor/ {
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.ascdPort" . }};
+        }
+        location ^~ /cloud/apis/conductor/ {
+          # Override the default 302 behavior of swagger on /explorer
+          rewrite ^/cloud/apis/conductor/explorer$ /cloud/apis/conductor/explorer/ redirect;
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.ascdPort" . }}/cloud/apis/;
+        }
+        location ^~ /platform/rest/ego/ {
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }};
+        }
+        location = /platform/rest/ego/ {
+          sub_filter '/cloud/apis/explorer' '/cloud/apis/ego/explorer/';
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }};
+        }
+        location ^~ /cloud/apis/ego/ {
+          rewrite ^/cloud/apis/ego/explorer$ /cloud/apis/ego/explorer/ redirect;
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }}/cloud/apis/;
+        }
+        location ^~ /platform/rest/deployment/ {
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }};
+        }
+        location = /platform/rest/deployment/ {
+          sub_filter '/cloud/apis/explorer' '/cloud/apis/ego/explorer';
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }};
+        }
+        # This just redirects to apis/ego since it contains the swagger definition
+        location ^~ /cloud/apis/deployment/ {
+          rewrite /cloud/apis/deployment/(.*) /cloud/apis/ego/$1 permanent;
+        }
+        {{- if .Values.dli.enabled }}
+        location ^~ /platform/rest/deeplearning/ {
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.dlRestPort" . }};
+        }
+        location = /platform/rest/deeplearning/ {
+          sub_filter '/cloud/apis/explorer' '/cloud/apis/deeplearning/explorer/';
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.dlRestPort" . }};
+        }
+        location ^~ /cloud/apis/deeplearning/ {
+          rewrite ^/cloud/apis/deeplearning/explorer$ /cloud/apis/deeplearning/explorer/ redirect;
+          proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.dlRestPort" . }}/cloud/apis/;
+        }
+        {{- end }}
+    }
+  {{- end }}
+  generate_ssl.sh: |-
+    topdir=/opt/ibm/spectrumcomputing
+    {
+        set -x
+        CLUSTERADMIN=root
+        domain=`dnsdomainname`
+        if [ "$domain" = "" ]; then
+            domain=`hostname -f`
+        else
+            domain="*.$domain"
+        fi
+        . $topdir/jre/profile.jre
+        dnsname=`hostname -f`
+        cd $topdir/security
+        rm -f tier2and3ServerKeyStore.jks tier*
+        egojre=$topdir/jre
+        egokeytool=`find $egojre -name keytool`
+        $egokeytool -genkeypair -noprompt -alias tier2alias -dname "CN=$domain,O=IBM,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier2passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+        $egokeytool -certreq -alias tier2alias -file tier2alias.csr -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+        $egokeytool -gencert -infile tier2alias.csr -outfile tier2aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+        $egokeytool -importcert -noprompt -alias caalias -file cacert.pem -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword
+        $egokeytool -import -noprompt -alias tier2alias -file tier2aliascertcasigned.pem -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks
+        $egokeytool -genkeypair -noprompt -alias tier3alias -dname "CN=$domain,O=IBM,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier3passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+        $egokeytool -certreq -alias tier3alias -file tier3alias.csr -storepass SparkPassword -keypass tier3passwd  -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+        $egokeytool -gencert -infile tier3alias.csr -outfile tier3aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+        $egokeytool -import -noprompt -alias tier3alias -file tier3aliascertcasigned.pem -storepass SparkPassword -keypass tier3passwd -keystore tier2and3ServerKeyStore.jks
+        #Convert Tier 3 keys in Java Keystore to OpenSSL PKCS12 format
+        $egokeytool -importkeystore -srckeystore tier2and3ServerKeyStore.jks -srcalias tier3alias -srcstoretype jks -srcstorepass SparkPassword -srckeypass tier3passwd -destkeystore tier3KeyStore.p12 -deststoretype pkcs12 -deststorepass tier3passwd -destkeypass tier3passwd -noprompt
+        openssl pkcs12 -in tier3KeyStore.p12 -passin pass:tier3passwd -nocerts -out tier3opensslprivate.key -passout pass:tier3passwd
+        openssl pkcs12 -in tier3KeyStore.p12 -passin pass:tier3passwd -clcerts -nokeys -out tier3opensslpublic.pem
+        chmod 444 $topdir/security/tier2and3ServerKeyStore.jks
+        chmod 444 $topdir/security/tier3KeyStore.p12
+        chown -Rh $CLUSTERADMIN:$CLUSTERADMIN $topdir/security
+        {{- if not .Values.cluster.tlsCertificateSecretName }}
+        # We'll generate a cert once...this is for the nginx ingress pod but we do so here because we have openssl in the image.
+        if [ ! -f /var/shareDir/tls/tls.key ]; then
+          mkdir -p /var/shareDir/tls
+          openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout /var/shareDir/tls/tls.key -out /var/shareDir/tls/tls.crt -subj "/CN=$dnsname"
+          chown -R 101:101 /var/shareDir/tls/*
+        fi
+        {{- end }}
+        #=========
+        cd $topdir/wlp/usr/shared/resources/security
+        rm -f servercertcasigned.pem serverKeyStore.jks srvcertreq.csr serverTrustStore.jks
+        $egokeytool -genkeypair -noprompt -alias srvalias -dname "CN=$domain,O=IBM,C=CA" -keystore serverKeyStore.jks -storepass Liberty -keypass Liberty -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+        $egokeytool -certreq -alias srvalias -file srvcertreq.csr -storepass Liberty -keystore serverKeyStore.jks -ext "san=dns:$dnsname"
+        $egokeytool -gencert -infile srvcertreq.csr -outfile servercertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+        $egokeytool -importcert -noprompt -alias caalias -file cacert.pem -keystore serverKeyStore.jks -storepass Liberty
+        $egokeytool -import -noprompt -alias srvalias -file servercertcasigned.pem -storepass Liberty -keystore serverKeyStore.jks
+        $egokeytool -importcert -noprompt -alias srvalias -file cacert.pem -keystore serverTrustStore.jks -storepass Liberty
+        #==========
+        {{- if .Values.dli.enabled }}
+        # create certificate and key to enable https for monitor and optimizer Flask server
+        CWS_TOP=$topdir
+        #DLMAO_HOME=/opt/ibm/spectrumcomputing/dli/dlmao
+        KEYSTR=$CWS_TOP/wlp/usr/shared/resources/security/serverKeyStore.jks
+        if [ -z "$KEYSTRPASS" ]; then
+            KEYSTRPASS=Liberty
+        fi
+        #DESTKEYSTR_DIR=$DLMAO_HOME/conf
+        DESTKEYSTR_DIR=/opt/ibm/spectrumcomputing/dli/conf/dlinsights
+        DESTKEYSTR=$DESTKEYSTR_DIR/serverKeyStore.p12
+        DESTCRT=$DESTKEYSTR_DIR/srv.crt
+        DESTKEY=$DESTKEYSTR_DIR/srv.key
+        $egokeytool -importkeystore -srckeystore $KEYSTR -srcstorepass $KEYSTRPASS -destkeystore $DESTKEYSTR \
+        -deststoretype PKCS12 -srckeypass $KEYSTRPASS -destkeypass $KEYSTRPASS -deststorepass $KEYSTRPASS \
+        -noprompt -srcalias srvalias -storepass $KEYSTRPASS
+        openssl pkcs12 -in $DESTKEYSTR -nokeys -out $DESTCRT -password pass:$KEYSTRPASS
+        openssl pkcs12 -in $DESTKEYSTR -nodes -nocerts -out $DESTKEY -password pass:$KEYSTRPASS
+        #Important: secure the key
+        rm -f $DESTKEYSTR
+        chmod 400 $DESTCRT $DESTKEY
+        chown $CLUSTERADMIN:$CLUSTERADMIN $DESTCRT $DESTKEY
+        {{- end }}
+    } 2>&1 | tee -a $topdir/logs/generatessl.log
+  enableLdapLogon: |-
+    topdir=/opt/ibm/spectrumcomputing
+    set -x
+    sed -i '/EGO_SEC_PLUGIN/d' $topdir/kernel/conf/ego.conf
+    echo "EGO_SEC_PLUGIN=sec_ego_pam_default" >> $topdir/kernel/conf/ego.conf
+    if [ "x$LDAP_URI" = "x" -o "x$BASE_DN" = "x" ]; then
+      exit 0
+    fi
+    disabled=`grep @Ldap_server /etc/nslcd.conf`
+    if [ "x$disabled" != "x" ]; then
+      sed -i "s?ldap://@Ldap_server?$LDAP_URI?g" /etc/nslcd.conf
+      sed -i "s?ldap://@Ldap_server?$LDAP_URI?g" /etc/ldap.conf
+      sed -i "s/@Base_DN/$BASE_DN/g" /etc/nslcd.conf
+      sed -i "s/@Base_DN/$BASE_DN/g" /etc/ldap.conf
+      if [ "x$LDAP_BIND_DN" != "x" -o "x$LDAP_BIND_PW" != "x" ]; then
+          echo "binddn $LDAP_BIND_DN" >> /etc/ldap.conf
+          echo "binddn $LDAP_BIND_DN" >> /etc/nslcd.conf
+          echo "bindpw $LDAP_BIND_PW" >> /etc/ldap.conf
+          echo "bindpw $LDAP_BIND_PW" >> /etc/nslcd.conf
+      fi
+      echo "TLS_REQCERT never" >> /etc/ldap/ldap.conf
+      auth-client-config -t nss -p lac_ldap
+      echo "session required pam_mkhomedir.so skel=/etc/skel umask=0022" >> /etc/pam.d/common-session
+      update-rc.d nslcd enable
+      cp /etc/pam.d/common-password /etc/pam.d/common-password.bak
+      sed -i 's/use_authtok//' /etc/pam.d/common-password
+      /etc/init.d/nslcd restart
+      /etc/init.d/nscd restart
+    fi
+  enableSnmpEvents.sh: |-
+    topdir=/opt/ibm/spectrumcomputing
+    {
+        set -x
+        sed -i '/EGO_EVENT_MASK/s/^#//g' $topdir/kernel/conf/ego.conf
+        sed -i '/EGO_EVENT_PLUGIN/s/^#//g' $topdir/kernel/conf/ego.conf
+        SNMPTRAPD_SERVICE_IP=$(kubectl get svc snmptrapd -n ibm-observe -o json | jq -r .spec.clusterIP)
+        sed -i "/EGO_EVENT_PLUGIN/s/host/$SNMPTRAPD_SERVICE_IP/g" $topdir/kernel/conf/ego.conf
+        . /opt/ibm/spectrumcomputing/profile.platform
+        egosh ego restart -f
+    } 2>&1 | tee -a $topdir/logs/enableSnmpEvents.log
+  setupHelmCLI.sh: |-
+    {{- include "ibm-wml-accelerator-prod.setupHelmCLI" . | indent 4 }}
+  startPrequisiteServices: |-
+    echo "initializing helm."
+    {{- if eq .Values.cluster.type "iks" }}
+    mkdir -p /root/.helm
+    echo "$APIKEY"|base64 > /root/.helm/.credential
+    {{- end }}
+    set -x
+    source /var/tmp/cfc/setupHelmCLI.sh
+    helm init --client-only
+    {{- if eq .Values.cluster.type "iks" }}
+    start_singleton() {
+        # This function starts the specified singleton if a copy is not already running.
+        # Singletons are shared between WMLA helm releases deployed from the same version of the WMLA charts.
+        # Releases deployed from different WMLA chart versions will have their own set of singletons.
+
+        singleton_helm_release_name=$1
+        singleton_config_dir=$2
+
+        if ! helm status $singleton_helm_release_name {{ template "ibm-wml-accelerator-prod.helmFlag" . }} > /dev/null 2>&1; then
+            echo "Deploying helm release for $singleton_helm_release_name because it does not already exist"
+            mkdir -p /tmp/$singleton_config_dir/templates
+            cp /var/tmp/$singleton_config_dir/* /tmp/$singleton_config_dir/templates
+            mv /tmp/$singleton_config_dir/templates/Chart.yaml /tmp/$singleton_config_dir
+            helm install /tmp/$singleton_config_dir --name $singleton_helm_release_name --namespace {{ .Values.singletons.namespace }} {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+            if [ $? -ne 0 ]; then
+                echo "failed to create helm release $singleton_helm_release_name"
+                if helm delete --purge $singleton_helm_release_name {{ template "ibm-wml-accelerator-prod.helmFlag" . }}; then
+                    echo "Removed failed helm release $singleton_helm_release_name"
+                else
+                    echo "Failed to removed failed helm release $singleton_helm_release_name"
+                fi
+            fi
+        else
+            echo "Skipped deploying helm release for $singleton_helm_release_name because it already exists"
+        fi
+    }
+
+    # The "base" singleton must always be first as it deploys the ServiceAccount, PSP, etc shared by other singletons in the same namespace.
+    start_singleton {{ template "ibm-wml-accelerator-prod.singletonsBaseReleaseName" . }} singletons-base
+    start_singleton {{ template "ibm-wml-accelerator-prod.condaReleaseName" . }} singletons-conda
+    {{- end }}
+    {{- if .Values.singletons.setNodesMaxMapCount }}
+    start_singleton {{ template "ibm-wml-accelerator-prod.maxMapReleaseName" . }} singletons-max-map
+    {{- end }}
+
+  {{- if not .Values.cluster.etcdExternal }}
+  createEtcdCerts.sh: |-
+    #!/bin/bash
+    if ! ([ -f {{ template "ibm-wml-accelerator-prod.etcdClientCertPath" . }} ] && [ -f {{ template "ibm-wml-accelerator-prod.etcdClientKeyPath" . }} ] && [ -f {{ template "ibm-wml-accelerator-prod.etcdCacert" . }} ]); then
+        rm -rf /var/shareDir/cwsetcd/ /var/shareDir/etcdData/
+        mkdir -p /var/shareDir/cwsetcd/ /var/shareDir/etcdData/
+        cd /var/shareDir/cwsetcd/
+        mkdir -p  private certs newcerts crl
+        touch index.txt
+        touch index.txt.attr
+        echo '01' > serial
+        openssl req -config /var/tmp/cfc/openssl.cnf -new -x509 -extensions v3_ca -keyout private/ca.key -out certs/ca.crt -nodes -subj '/C=US/CN=ca.etcd.example.com/O=IBM' -batch
+        openssl req -config /var/tmp/cfc/openssl.cnf -new -nodes -keyout private/cwsetcd.key -out cwsetcd.csr -subj '/C=US/CN=localhostO=IBM' -batch
+        openssl ca -batch -config /var/tmp/cfc/openssl.cnf -extensions etcd_server -keyfile private/ca.key -cert certs/ca.crt -out certs/cwsetcd.crt -infiles cwsetcd.csr
+        openssl req -config /var/tmp/cfc/openssl.cnf -new -nodes -keyout private/etcd-client.key -out etcd-client.csr -subj '/C=US/CN=etcd-client/O=IBM' -batch
+        openssl ca -batch -config /var/tmp/cfc/openssl.cnf -extensions etcd_client -keyfile private/ca.key -cert certs/ca.crt -out certs/etcd-client.crt -infiles etcd-client.csr
+        # Give etcd user ownership of required directories
+        uid={{ template "ibm-wml-accelerator-prod.etcdUID" . }}
+        chown -R $uid:$uid /var/shareDir/etcdData/
+        chown -R $uid:$uid /var/shareDir/cwsetcd/
+    else
+        echo "Using existing etcd certs."
+    fi
+
+  openssl.cnf: |-
+    # etcd OpenSSL configuration file.
+    dir = /var/shareDir/cwsetcd
+
+    [ ca ]
+    default_ca = etcd_ca
+
+    [ etcd_ca ]
+    certs            = $dir/certs
+    certificate      = $dir/certs/etcd-ca.crt
+    crl              = $dir/crl.pem
+    crl_dir          = $dir/crl
+    crlnumber        = $dir/crlnumber
+    database         = $dir/index.txt
+    email_in_dn      = no
+    new_certs_dir    = $dir/newcerts
+    private_key      = $dir/private/etcd-ca.key
+    serial           = $dir/serial
+    RANDFILE         = $dir/private/.rand
+    name_opt         = ca_default
+    cert_opt         = ca_default
+    default_days     = 3650
+    default_crl_days = 30
+    default_md       = sha512
+    preserve         = no
+    policy           = policy_etcd
+
+    [ policy_etcd ]
+    organizationName = optional
+    commonName       = supplied
+
+    [ req ]
+    default_bits       = 4096
+    default_keyfile    = privkey.pem
+    distinguished_name = req_distinguished_name
+    attributes         = req_attributes
+    x509_extensions    = v3_ca
+    string_mask        = utf8only
+    req_extensions     = etcd_client
+
+    [ req_distinguished_name ]
+    countryName                = Country Name (2 letter code)
+    countryName_default        = US
+    countryName_min            = 2
+    countryName_max            = 2
+    commonName                 = Common Name (FQDN)
+    0.organizationName         = Organization Name (eg, company)
+    0.organizationName_default = etcd-ca
+
+    [ req_attributes ]
+
+    [ v3_ca ]
+    basicConstraints       = CA:true
+    keyUsage               = keyCertSign,cRLSign
+    subjectKeyIdentifier   = hash
+
+    [ etcd_client ]
+    basicConstraints       = CA:FALSE
+    extendedKeyUsage       = clientAuth
+    keyUsage               = digitalSignature, keyEncipherment
+
+    [ etcd_server ]
+    basicConstraints       = CA:FALSE
+    extendedKeyUsage       = clientAuth, serverAuth
+    keyUsage               = digitalSignature, keyEncipherment
+    subjectAltName = @alt_names
+
+    [alt_names]
+    DNS.1 = {{ template "ibm-wml-accelerator-prod.master-fullname" . }}-etcd
+  {{- end }}
+
+  deployMetaSessionScheduler: |-
+    # This script overrides values of MSS helm charts which is present in WMLA
+    # master image, and installs the charts.
+    mssdir=/opt/ibm/mss
+    namespace=$1
+    mkdir -p $mssdir
+    topdir=/opt/ibm/spectrumcomputing
+    egojre=$topdir/jre
+    egokeytool=`find $egojre -name keytool`
+    rootCAPath=$topdir/wlp/usr/shared/resources/security/
+    {
+        {{- if .Values.cluster.etcdExternal }}
+        msdEtcdConfig=""
+        {{- else }}
+        cp /var/tmp/cfc/etcd-secret.yaml $mssdir
+        etcdCaCert=`cat {{ template "ibm-wml-accelerator-prod.etcdCacert" . }} | base64 -w0`
+        etcdTlsKey=`cat {{ template "ibm-wml-accelerator-prod.etcdClientKeyPath" . }} | base64 -w0`
+        etcdTlsCert=`cat {{ template "ibm-wml-accelerator-prod.etcdClientCertPath" . }} | base64 -w0`
+        sed -i "s/@WMLA-ETCD-CA-CERT@/$etcdCaCert/g" $mssdir/etcd-secret.yaml
+        sed -i "s/@WMLA-ETCD-TLS-CERT@/$etcdTlsCert/g" $mssdir/etcd-secret.yaml
+        sed -i "s/@WMLA-ETCD-TLS-KEY@/$etcdTlsKey/g" $mssdir/etcd-secret.yaml
+        kubectl create -f $mssdir/etcd-secret.yaml
+        msdEtcdConfig="--set etcd.enabled=false \
+                       --set etcd.endpoint={{ template "ibm-wml-accelerator-prod.master-fullname" . }}-etcd:{{ template "ibm-wml-accelerator-prod.etcdServicePort" . }} \
+                       --set etcd.authEnable=true \
+                       --set etcd.clientSecretName={{ .Release.Name }}-etcd-secret"
+        {{- end }}
+        set -x
+        imageRepo={{.Values.global.dockerRegistryPrefix}}
+        #generate ssl key/cert and signed with ego root ca for msd
+        openssl req -out $mssdir/ca.csr -new -newkey rsa:2048 -nodes -keyout $mssdir/ca.key -subj "/CN={{ .Release.Name }}-mss"
+        $egokeytool -importkeystore -srckeystore $rootCAPath/caKeyStore.jks -srcstorepass Liberty -destkeystore $mssdir/caKeyStore.p12 -deststorepass Liberty -srcstoretype jks -deststoretype pkcs12 -noprompt
+        openssl pkcs12 -in $mssdir/caKeyStore.p12 -passin pass:Liberty  -out $mssdir/caKey.pem -passout pass:Liberty
+        openssl x509 -req -days 3600 -in $mssdir/ca.csr -CA $rootCAPath/cacert.pem -CAkey $mssdir/caKey.pem -passin pass:Liberty  -CAcreateserial -out $mssdir/ca.crt -sha256
+        kubectl create secret tls {{ .Release.Name }}-mss-server-key-pair --cert=$mssdir/ca.crt --key=$mssdir/ca.key --namespace=$namespace
+        # While passing etcd.endpoint from WMLA to MSS, Remove "http://" from etcd endpoint,
+        # as it is defined without "http://" in MSS.
+        # etcdEndpoint=$(echo {{template "ibm-wml-accelerator-prod.etcdEndpoint" .}} | sed 's/http:\/\///')
+        helm install /root/wmla-reqs/wmla-msd-charts/stable/ibm-mss-prod --name {{.Release.Name}}-mss \
+        --namespace $namespace \
+        --set image.repository=$imageRepo/{{.Values.msd.repository}} \
+        --set image.tag={{.Values.msd.tag}} \
+        --set image.pullPolicy={{.Values.mss.imagePullPolicy}} \
+        --set global.image.registry=$imageRepo \
+        --set global.serviceAccountName=cws-{{ .Release.Name }} \
+        --set global.tolerationKey={{.Values.dli.tolerationKey}} \
+        --set global.tolerationValue={{.Values.dli.tolerationValue}} \
+        --set global.tolerationEffect={{.Values.dli.tolerationEffect}} \
+        --set global.nodesLabelKey={{.Values.cluster.mgmtNodesLabelKey}} \
+        --set kernel.resourceNodeSelector={{.Values.cluster.computeNodesLabelKey}} \
+        --set infoservice.image.repository=$imageRepo/{{.Values.infoservice.repository}} \
+        --set infoservice.image.tag={{.Values.infoservice.tag}} \
+        --set infoservice.image.pullPolicy={{.Values.mss.imagePullPolicy}} \
+        --set infoservice.persistence.enabled=true \
+        --set infoservice.persistence.useDynamicProvisioning={{.Values.cluster.useDynamicProvisioning}} \
+        --set infoservice.pvc.storageClassName={{.Values.infoservice.storageClassName}} \
+        --set redis.image.repository=$imageRepo/{{.Values.redis.repository}} \
+        --set redis.image.tag={{.Values.redis.tag}} \
+        --set redis.image.pullPolicy={{.Values.mss.imagePullPolicy}} \
+        --set etcd.image.repository=$imageRepo/{{.Values.etcd.repository}} \
+        --set etcd.image.tag={{.Values.etcd.tag}} \
+        --set etcd.image.pullPolicy={{.Values.mss.imagePullPolicy}} \
+        --set security.sslEnable=true \
+        --set security.secretName={{ .Release.Name }}-mss-server-key-pair \
+        $msdEtcdConfig \
+        --set kernel.scheduler=lsf \
+        --set maxConcurrence={{.Values.cluster.maxConcurrence}} \
+        {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+        # When etcd auth enabled in MSS, remove above etcd.image.repository
+        # and etcd.image.tag; and use following etcd.endpoint
+        #--set etcd.endpoint=$etcdEndpoint \
+
+    } 2>&1 | tee -a $mssdir/mss.log
+
+  etcd-secret.yaml: |-
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: {{ .Release.Name }}-etcd-secret
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/managed-by: "Tiller"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        helm.sh/chart: "ibm-wml-accelerator-prod"
+        app.kubernetes.io/name: {{ .Release.Name }}-etcd-secret
+      spec:
+    type: Opaque
+    data:
+      ca.crt: @WMLA-ETCD-CA-CERT@
+      tls.crt: @WMLA-ETCD-TLS-CERT@
+      tls.key: @WMLA-ETCD-TLS-KEY@
+
+  wmla-ig.json: |-
+    {
+      "sparkversion": "2.3.3",
+      "conductorinstancename": "{{.Values.sig.defaultSIGName}}",
+      "monitoringttl": "14d",
+      "parameters": {
+        "sparkms_batch_rg_param": "{{.Values.sig.defaultSIGName}}_services",
+        "driver_rg_param": "{{.Values.sig.defaultSIGName}}_workloads",
+        "executor_rg_param": "{{.Values.sig.defaultSIGName}}_workloads",
+        "executor_fairshare_scheduling": "true",
+        "execution_user": "wmla",
+        "impersonate": "wmla",
+        "executor_consumer_param": "sparkexecutor",
+        "driver_consumer_param": "sparkdriver",
+        "executor_fairshare_autocreate_consumers": "true"
+      },
+      "dataconnectorparameters": {
+        "enabledcforembeddedmetastore": true
+      },
+      "notebooks": [
+      ],
+      "dependentpkgs": [
+      ],
+      "sparkparameters": {
+        "spark.driver.maxResultSize": "2g",
+        "SPARK_EGO_ENABLE_PREEMPTION": "false",
+        "SPARK_EGO_CONF_DIR_EXTRA": "/mygpfs/conf",
+        "SPARK_EGO_EXECUTOR_BLOCKHOST_DURATION": "10",
+        "SPARK_EGO_IMPERSONATION": "false",
+        "SPARK_EGO_EXECUTOR_IDLE_TIMEOUT": "6000",
+        "SPARK_EGO_EXECUTOR_BLOCKHOST_MAX_FAILURE_TIMES": "3",
+        "SPARK_EGO_ENABLE_BLOCKHOST": "true",
+        "SPARK_EGO_EXECUTOR_SLOTS_MAX": "1",
+        "spark.ssl.enabled": "true",
+        "spark.ego.driver.container.type": "normal",
+        "SPARK_EGO_AUTH_MODE": "EGO_TRUST",
+        "spark.executor.memory": "2g",
+        "spark.driver.memory": "2g",
+        "SPARK_EGO_DRIVER_BLOCKHOST_DURATION": "10",
+        "SPARK_EGO_APP_SCHEDULE_POLICY": "fifo",
+        "spark.ego.executor.container.type": "normal",
+        "SPARK_EGO_EXECUTOR_BLOCKHOST_CONF": "'[6,7,16,17,18,25,126,127];[]'",
+        "SPARK_EGO_DRIVER_BLOCKHOST_MAX_FAILURE_TIMES": "3",
+        "SPARK_EGO_DRIVER_RESREQ": "select(('X86_64' || 'LINUXPPC64LE') && ('ascd_pkg_deployed'==1))",
+        "SPARK_EGO_DRIVER_BLOCKHOST_CONF": "'[6,7,16,17,18,25,126,127];[]'",
+        "spark.shuffle.service.enabled": "true",
+        "SPARK_EGO_GPU_EXECUTOR_SLOTS_MAX": "1",
+        "SPARK_EGO_EXECUTOR_RESREQ": "select(('X86_64' || 'LINUXPPC64LE') && ('ascd_pkg_deployed'==1))"
+      },
+      "kubernetesparameters": {
+        "useExistImage":"true",
+        "gpu":"0",
+        "prebuildImage":"{{.Values.global.dockerRegistryPrefix}}/{{.Values.sig.repository}}:{{.Values.sig.tag}}",
+        "sparkHome":"/opt/spark-2.3.3-hadoop-2.7/"
+      }
+    }
+
+  createDefaultSIG.sh: |-
+        function urlencode() {
+          # urlencode <string>
+          old_lc_collate=$LC_COLLATE
+          LC_COLLATE=C
+          
+          local length="${#1}"
+          for (( i = 0; i < length; i++ )); do
+              local c="${1:i:1}"
+              case $c in
+                  [a-zA-Z0-9.~_-]) printf "$c" ;;
+                  *) printf '%%%02X' "'$c" ;;
+              esac
+          done
+          LC_COLLATE=$old_lc_collate
+        }
+        defaultSigDeployment=$(kubectl get deployment -l app.kubernetes.io/name={{.Release.Name}}-{{.Values.sig.defaultSIGName}} -n {{.Release.Namespace}})
+        if [ -z "$defaultSigDeployment" ];then
+          echo "Create default SIG"
+          tokenFile=/opt/ibm/spectrumcomputing/.token
+          if [ -f $tokenFile ]; then
+              token=`cat $tokenFile |tail -1`
+              urlencodedToken=`urlencode $token`
+              newCookie=/tmp/newCookie
+              COUNTER=0
+              MAX=30
+              ASCD_RESTURL=https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}:{{ template "ibm-wml-accelerator-prod.ascdPort" . }}/platform/rest/conductor/v1
+              while [ $COUNTER -lt $MAX ]; do
+                 csrfStr=`curl -k -c ${newCookie} -XGET -H'Accept: application/json' -H"Authorization: PlatformToken token=${urlencodedToken}" $ASCD_RESTURL/auth/logon`
+                 if [ -z "$csrfStr" ] || [[ $csrfStr != *csrftoken* ]]; then
+                   sleep 1
+                   COUNTER=$(($COUNTER + 1 ))
+                   continue
+                 else
+                   csrfArr=($(echo $csrfStr | sed "s/[{}:]/ /g"))
+                   csrfToken=`echo ${csrfArr[1]} | sed "s/\"//g"`
+                   break
+                 fi
+              done
+              if [ -z "$csrfToken" ]; then
+                  echo "Logon ego failed, could not create the default sig."
+              else
+                  curl -k -b $newCookie -H "Content-Type:application/json" -H "Accept:application/json" -X POST --data-binary @/var/tmp/cfc/wmla-ig.json $ASCD_RESTURL/instances?csrftoken=${csrfToken}
+                  rm -f $newCookie
+              fi
+          else
+              echo "Could not find token file, administrator needs to deploy the sig manually."
+          fi
+        else
+            echo "Default sig is already deployed on the cluster."
+        fi
+
+  deployHPAC: |-
+    # This script overrides values of HPAC helm charts which is present in WMLA
+    # master image, and installs the charts.
+    hpacdir=/opt/ibm/hpac
+    mkdir -p $hpacdir
+    {
+        set -x
+        imageRepo={{.Values.global.dockerRegistryPrefix}}
+        # Deploying HPAC in same namespace as WMLA, revisit this later when HPAC charts are cloud pak certified.
+        # Before deploying HPAC, check whether the deployment exists in any namespace.
+        hpacDeployment=$(kubectl get deployment -l app.kubernetes.io/name=ibm-wmla-pod-scheduler-prod --all-namespaces)
+        if [ -z "$hpacDeployment" ];then
+            helm install /root/wmla-reqs/ibm-wmla-pod-scheduler-prod \
+            --name {{ template "ibm-wml-accelerator-prod.hpacReleaseName" . }} \
+            --namespace {{.Values.hpac.namespace}} \
+            --set manager.image=$imageRepo/{{.Values.hpcmanager.repository}} \
+            --set manager.tag={{.Values.hpcmanager.tag}} \
+            --set manager.includeHostLabel={{.Values.cluster.mgmtNodesLabelKey}} \
+            --set compute.image=$imageRepo/{{.Values.hpccompute.repository}} \
+            --set compute.tag={{.Values.hpccompute.tag}} \
+            --set compute.includeHostLabel={{.Values.cluster.computeNodesLabelKey}} \
+            --set placement.tolerateName={{.Values.dli.tolerationKey}} \
+            --set placement.tolerateVal={{.Values.dli.tolerationValue}} \
+            --set placement.effect={{.Values.dli.tolerationEffect}} \
+            --set serviceaccount={{ template "ibm-wml-accelerator-prod.hpacServiceAccount" . }} \
+            --set pvc.storageClassName={{.Values.hpac.storageClassName}} \
+            {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+        else
+            echo "HPAC is already deployed on the cluster."
+        fi
+
+    } 2>&1 | tee -a $hpacdir/hpac.log
+
+  # this script will check if master is deployed properly or not. It will be used in
+  # readyness probe.
+  validateMaster.sh: |-
+    #!/bin/bash
+    . /opt/ibm/spectrumcomputing/profile.platform
+    if [ -f /opt/ibm/spectrumcomputing/.token ]; then
+    	egoTokenFile="/tmp/secegocc_0"
+        rm -f $egoTokenFile
+        cp -f /opt/ibm/spectrumcomputing/.token $egoTokenFile
+    else
+        egosh user logon -u Admin -x Admin
+    fi
+    if  [ $? -ne 0 ]
+    then
+       echo "Ego login failed"
+       exit 1
+    fi
+
+    # check status of critical services
+    serviceList="ascd mongod dlpd rest"
+    for service in $serviceList; do
+       srvStarted=$(egosh service list | grep -E -i "$service" | grep -E -i 'Started' )
+       if [ -z "$srvStarted" ]
+       then
+          echo "Service not started properly: $service"
+          exit 1
+       fi
+    done
+
+    # Cant execute code which is below as currently we are getting unrelated FAIL logs in normal
+    # scenario also. After fixing that, enable thos code.
+
+    # check FAIL logs
+    #masterFailLogs=$(cat /opt/ibm/spectrumcomputing/logs/startmaster.log | grep  -i FAIL)
+    #if [ ! -z "$masterFailLogs" ]
+    #then
+    #   echo "failures is master logs: $masterFailLogs"
+    #   exit 1
+    #fi
+    exit 0
+
+  startMaster.sh: |-
+    #!/bin/bash
+    topdir=/opt/ibm/spectrumcomputing
+    logdir=$topdir/logs
+    mkdir -p $logdir
+    {
+        set -x
+        {{- if eq .Values.cluster.type "iks" }}
+        /var/tmp/cfc/installLogDNAAgent.sh
+        {{- end }}
+        cd /bin
+        rm -rf sh
+        ln -s bash sh
+        TZ=`date +%z`
+        echo "GMT$TZ" >/etc/timezone
+        /bin/cp -f /tmp/kubedir/kubectl /usr/local/bin/
+
+        echo "export PATH=$PATH" >> /etc/profile
+        /var/tmp/cfc/startPrequisiteServices
+        helm list {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+        if [ $? -ne 0 ]; then
+            echo "helm commandline failed, conductor master will not start."
+            exit 1
+        fi
+        sh /var/tmp/cfc/enableLdapLogon
+        /var/tmp/cfc/generate_ssl.sh
+
+        {{- if not .Values.cluster.etcdExternal }}
+        /var/tmp/cfc/createEtcdCerts.sh
+        {{- end }}
+
+        # enable SNMP events to monitor conductor service availability
+        {{- if eq .Values.cluster.type "iks" }}
+        /var/tmp/cfc/enableSnmpEvents.sh
+        {{- end }}
+
+        # workaroud to help get ego linux version
+        binarytypename=`cat $topdir/kernel/conf/profile.ego |grep "BINARY_TYPE = \"fail\""|awk '{print $3}'|awk -F$ '{print $2 }'`
+        egoversion=`ls $topdir/|grep 3`
+        binarytype=`ls $topdir/$egoversion |grep linux`
+        sed -i "/BINARY_TYPE = \"fail\"/i\\$binarytypename=$binarytype" $topdir/kernel/conf/profile.ego
+        MASTER_HOST=`hostname -f`
+        CWS_VERSION=`cat $topdir/conductorspark/conf/profile.conductorspark|grep -v PATH|grep "CS_VERSION"|awk -F= '{print $2 }'`
+        if [ -z $CWS_VERSION ]; then
+            CWS_VERSION={{ template "global.conductorVersion" . }}
+        fi
+        CLUSTERDOMAIN=`cat /etc/resolv.conf | grep -v '^#' | grep search | awk '{print $4}'`
+        echo "$(hostname -i|awk '{print $1}')  {{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{.Release.Namespace}}.svc.$CLUSTERDOMAIN" >> /etc/hosts
+        if [ ! -f /var/shareDir/profile.platform ]; then
+              echo "Set up a new Cluster..."
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch_master.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_manager.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch_data.xml
+              sed -i "s/@DERBY_DB_HOST@/$MASTER_HOST/g" $topdir/eservice/esc/conf/services/derby_service.xml
+              sed -i "s/@DERBY_DB_HOST@/$MASTER_HOST/g" $topdir/perf/conf/datasource.xml
+              sed -i '/ASC_HOME/a\      <ego:EnvironmentVariable name="K8S_NAMESPACE">{{.Release.Namespace}}</ego:EnvironmentVariable>'  $topdir/eservice/esc/conf/services/ascd_service.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/kernel/conf/ego.shared
+              mv $topdir/kernel/conf/ego.cluster.iCluster_docker $topdir/kernel/conf/ego.cluster.{{ .Release.Name }}
+              #update Spark version Yaml files
+              escape()
+              {
+                repl='s/\//\\\//g'
+                rep2='s/\*/\\\*/g'
+                ret1=`echo $1 | sed $repl`
+                ret=`echo $ret1 | sed $rep2`
+              }
+              escape "http://127.0.0.1:8001"; MasterURL4SS=$ret
+              {{- if .Values.dli.enabled }}
+              DLI_SHARED_FS=/gpfs/mygpfs
+              rm -rf $DLI_SHARED_FS/*
+              cp -r ${DLI_SHARED_FS}_bak/* $DLI_SHARED_FS
+              {{- end }}
+              spark_pkg_dir=$topdir/conductorspark/conf/packages
+              spark_versions=( "Spark1.6.1" "Spark2.1.1" "Spark2.2.0" "Spark2.3.0" "Spark2.3.1" "Spark2.3.3" "Spark2.4.3" )
+              for spark_version in "${spark_versions[@]}"
+              do
+                  spark_k8s_yml=$spark_pkg_dir/${spark_version}-Conductor${CWS_VERSION}/${spark_version}.k8s.yaml
+                  sparkyaml=$spark_pkg_dir/${spark_version}-Conductor${CWS_VERSION}/${spark_version}.yaml
+                  if [ -f $spark_k8s_yml ]; then
+                      mv $spark_k8s_yml $sparkyaml
+                      sed -i "/maxrestarts/d" $sparkyaml
+                      sed -i "s/@RELNAME/{{ .Release.Name }}/" $sparkyaml
+                      sed -i "s#@K8SMASTERURL#$MasterURL4SS#" $sparkyaml
+                      sed -i "s/@SSALCUNITGPU/{{.Values.sig.gpu}}/" $sparkyaml
+                      sed -i "s/@SSALCUNIT/{{ template "ibm-wml-accelerator-prod.getmaxslots" .}}/" $sparkyaml
+                      sed -i "s/@SSALCMAXPERCYCLE/{{.Values.sig.ssAllocationUnit}}/" $sparkyaml
+                      sed -i "s/@SSALCMAX/{{ .Values.sig.maxReplicas }}/" $sparkyaml
+                      sed -i "s/@SSALCINTVAL/{{ .Values.sig.ssAllocationInterval }}/" $sparkyaml
+                      sed -i "s/@SPARKPREFIX/\"spark:\/\/\"/g" $sparkyaml
+                      sed -i "s/@PORTLINK/:/g" $sparkyaml
+                      sed -i "s/@PROTOCOLLINK/:\/\//g" $sparkyaml
+                      sed -i "s/@INGRESSPREFIX//g" $sparkyaml
+                  fi
+              done
+              sed -i '/PAM_SERVICE/d' $topdir/kernel/conf/pamauth.conf
+              echo "PAM_SERVICE=login" >> $topdir/kernel/conf/pamauth.conf
+              sed -i '/PAM_CACHEEXPIRYTIME/d' $topdir/kernel/conf/pamauth.conf
+              echo "PAM_CACHEEXPIRYTIME=10m" >> $topdir/kernel/conf/pamauth.conf
+
+              . $topdir/profile.platform
+              while [ true ]
+              do
+                egoconfig join {{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{.Release.Namespace}}.svc.$CLUSTERDOMAIN -f
+                if [ $? -eq 0 ]; then
+                  break
+                fi
+              done
+              egoconfig setentitlement /var/tmp/cfc/license.dat
+              egoconfig mghost /var/shareDir -f
+              # TODO : Remove it once this is merged in DLI code. Issue 6543.
+              if [ "$os_arch" == "x86_64" ]; then
+                rm -rf /opt/ibm/spectrumcomputing/conductorspark/conf/anaconda/distributions/*
+                rm -rf /opt/ibm/spectrumcomputing/conductorspark/conf/packages/Spark1.6.1-Conductor2.3.0
+                rm -rf /opt/ibm/spectrumcomputing/conductorspark/conf/packages/Spark2.3.1-Conductor2.3.0
+                rm -rf /opt/ibm/spectrumcomputing/conductorspark/conf/packages/Spark2.1.1-Conductor2.3.0
+                rm -rf /opt/ibm/spectrumcomputing/conductorspark/conf/notebooks/JupyterPowerPython3-5.4.0
+              fi
+              cp $topdir/profile.platform /var/shareDir/profile.platform
+              echo "EGO_DYNAMIC_HOST_TIMEOUT=10m" >> /var/shareDir/kernel/conf/ego.conf
+              echo "EGO_DYNAMIC_HOST_WAIT_TIME=1" >> /var/shareDir/kernel/conf/ego.conf
+              echo "EGO_RESOURCE_UPDATE_INTERVAL=1" >> /var/shareDir/kernel/conf/ego.conf
+              echo "EGO_ENABLE_RG_UPDATE_MEMBERSHIP=Y" >> /var/shareDir/kernel/conf/ego.conf
+              echo "EGO_RG_UPDATE_MEMBERSHIP_INTERVAL=10" >> /var/shareDir/kernel/conf/ego.conf
+              echo "EGO_ENABLE_BORROW_ONLY_CONSUMER=Y" >> /var/shareDir/kernel/conf/ego.conf
+              sed -i "s/ASC_AUTO_DEPLOY_ON_NEW_HOST=ON/ASC_AUTO_DEPLOY_ON_NEW_HOST=OFF/" /var/shareDir/ascd/conf/ascd.conf
+              echo -e "\nCONDUCTOR_K8S_ENABLED=ON" >> /var/shareDir/ascd/conf/ascd.conf
+              echo "CONDUCTOR_K8S_NAMESPACE={{.Release.Namespace}}" >> /var/shareDir/ascd/conf/ascd.conf
+              echo "CONDUCTOR_K8S_CPUREQ={{.Values.sig.cpu}}" >> /var/shareDir/ascd/conf/ascd.conf
+              echo "CONDUCTOR_K8S_MEMREQ={{.Values.sig.memory}}" >> /var/shareDir/ascd/conf/ascd.conf
+              echo "CONDUCTOR_K8S_CPUMAX={{.Values.sig.cpu}}" >> /var/shareDir/ascd/conf/ascd.conf
+              echo "CONDUCTOR_K8S_MEMMAX={{.Values.sig.memory}}" >> /var/shareDir/ascd/conf/ascd.conf
+              echo "CONDUCTOR_K8S_GPUREQ=1" >> /var/shareDir/ascd/conf/ascd.conf
+              echo "CONDUCTOR_K8S_GPUMAX=1" >> /var/shareDir/ascd/conf/ascd.conf
+              {{- if .Values.cluster.ascdDebugPort }}
+              sed -i '/^      <!-- Uncomment to enable Java debug port for ascd. -->$/{$!{N;s/^      <!-- Uncomment to enable Java debug port for ascd. -->\n      <!--$//;ty;P;D;:y}}' /var/shareDir/eservice/esc/conf/services/ascd_service.xml
+              sed -i '/^      <ego:EnvironmentVariable name="ASC_DEBUG_PORT">8000<\/ego:EnvironmentVariable>$/{$!{N;s/^      <ego:EnvironmentVariable name="ASC_DEBUG_PORT">8000<\/ego:EnvironmentVariable>\n      -->$/      <ego:EnvironmentVariable name="ASC_DEBUG_PORT">{{.Values.cluster.ascdDebugPort}}<\/ego:EnvironmentVariable>/;ty;P;D;:y}}' /var/shareDir/eservice/esc/conf/services/ascd_service.xml
+              {{- end }}
+              sed -i "s/ELK_DATA_LOCATION=\/opt\/ibm\/spectrumcomputing\/integration\/elk\/hosts/ELK_DATA_LOCATION=\/var\/shareDir\/integration\/elk\/hosts/" /var/shareDir/integration/elk/conf/elk.conf
+
+              . $topdir/profile.platform;
+
+              # The call to deployMetaSessionScheduler is added here temporarily,
+              # this is supposed to be called from dli. Deploying MSS in the same
+              # namespace as WMLA for now.
+              {{- if .Values.mss.installFlag }}
+              /var/tmp/cfc/deployMetaSessionScheduler {{.Release.Namespace}}
+              /var/tmp/cfc/deployHPAC
+              {{- end }}
+        else
+              echo "Recover a master contiainer..."
+              sharedir=/var/shareDir
+              profiles=`cat $topdir/profile.platform|awk '{print $2}'`
+              for profile in $profiles
+              do
+                p=${profile##$topdir}
+                sharedprofile=$sharedir$p
+                if [ -f $sharedprofile ]; then
+                  cp -f $sharedprofile $profile
+                fi
+              done
+              . $topdir/profile.platform
+        fi
+
+        {{- if .Values.dli.enabled }}
+        dliversion=`ls $topdir/wlp/usr/servers/gui/apps/dli/`
+        sed -i "s#//.*:#//{{template "ibm-wml-accelerator-prod.master-fullname" .}}:#g" $topdir/wlp/usr/servers/gui/apps/dli/$dliversion/dlgui/apidocs/restful/dlpd/index.html
+        DLI_SHARED_FS=/gpfs/mygpfs
+        DLI_RESULT_FS=/gpfs/myresultfs
+        SHARED_CONFDIR=/var/shareDir
+        IMAGE_HOSTNAME=900d7bfbe521
+        MASTER_HOST=`hostname -f`
+        HOSTIP=`getent ahostsv4 $MASTER_HOST | grep -Fw "$MASTER_HOST" | awk '{print $1}'`
+        HOSTNET=`ip addr show | grep inet | grep -Fw "$HOSTIP" | awk '{print $2}'`
+        FABRIC_COMMIPNETWORK=${FABRIC_COMMIPNETWORK:-$HOSTNET}
+        cp $topdir/dli/conf/dlpd/dlpd.conf $topdir/dli/conf/dlpd/dlpd.conf_bak
+        sed -i "s#\"CommIPNetwork\".*#\"CommIPNetwork\": \"$FABRIC_COMMIPNETWORK\",#g" $SHARED_CONFDIR/dli/conf/dlpd/dlpd.conf
+        sed -i "s#--commIPNetwork.*#--commIPNetwork $FABRIC_COMMIPNETWORK#g" $SHARED_CONFDIR/dli/conf/dlpd/elastic-cmd-params.conf
+        sed -i "s#\"CommIPNetwork\".*#\"CommIPNetwork\": \"$FABRIC_COMMIPNETWORK\",#g" $SHARED_CONFDIR/dli/conf/dlpd/dlpd.conf
+        sed -i "s#--commIPNetwork.*#--commIPNetwork $FABRIC_COMMIPNETWORK#g" $SHARED_CONFDIR/dli/conf/dlpd/elastic-cmd-params.conf
+        sed -i "s#${IMAGE_HOSTNAME}#${MASTER_HOST}#g" $SHARED_CONFDIR/dli/conf/dlpd/dlpd.conf
+
+        # Get JWT public key and set in dlpd.conf
+        JWT_PUBLIC_KEY_FILE=/tmp/jwtPublicKey
+        echo "$JWT_PUBLIC_KEY" > "$JWT_PUBLIC_KEY_FILE"
+        SECRET_KEY_OLD="\"DLI_JWT_SECRET_KEY\": \"\""
+        SECRET_KEY_NEW="\"DLI_JWT_SECRET_KEY\": \"${JWT_PUBLIC_KEY_FILE}\""
+        sed -i "s#${SECRET_KEY_OLD}#${SECRET_KEY_NEW}#g" $SHARED_CONFDIR/dli/conf/dlpd/dlpd.conf
+
+        sed -i \
+            -e "s#\"DLI_JWT_SINGLE_USER_MODE\".*#\"DLI_JWT_SINGLE_USER_MODE\": \"on\",#g" \
+            -e "s#\"DLI_JWT_SINGLE_USER_NAME\".*#\"DLI_JWT_SINGLE_USER_NAME\": \"Admin\",#g" \
+            $SHARED_CONFDIR/dli/conf/dlpd/dlpd.conf
+
+        sed -i -e "s#\"EMETRICS_STREAMING\".*#\"EMETRICS_STREAMING\": \"off\",#g" \
+            -e "s#\"EMETRICS_STREAMING\".*#\"EMETRICS_STREAMING\": \"on\",#g" \
+            $SHARED_CONFDIR/dli/conf/dlpd/dlpd.conf
+
+        sed -i -e "s#\"EMETRICS_STREAMING_STDOUT\".*#\"EMETRICS_STREAMING_STDOUT\": \"off\",#g" \
+            -e "s#\"EMETRICS_STREAMING_STDOUT\".*#\"EMETRICS_STREAMING_STDOUT\": \"on\",#g" \
+            $SHARED_CONFDIR/dli/conf/dlpd/dlpd.conf
+
+        sed -i "s#\/mygpfs#\/gpfs#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#@image_name@#{{.Values.global.dockerRegistryPrefix}}/{{.Values.worker.repository}}:{{.Values.worker.tag}}#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        # TODO Update for IKS with COS
+        sed -i 's/volume-hostpath-mygpfs/volume-pvc-{{ .Release.Name }}-mygpfs/g' $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        {{- if eq .Values.cluster.type "iks" }}
+        sed -i -e '/"name"\:\ "volume-conda3"\,/ {
+            N; /persistentVolumeClaim/ {
+                N; /@PVC-CONDA3@/ {
+                    s/persistentVolumeClaim/hostPath/; s/claimName/path/; s/@PVC-CONDA3@/{{ .Values.singletons.condaParentHostPath }}\/wmla-conda-{{ .Chart.AppVersion }}/
+                }
+            }
+        } $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        {{- else }}
+        {{- if not .Values.master.existingcondaPVC }}
+        sed -i 's/@PVC-CONDA3@/{{ .Release.Name }}-conda/g' $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        {{- else }}
+        sed -i 's/@PVC-CONDA3@/{{ .Values.master.existingcondaPVC }}/g' $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        {{- end }}
+        {{- end }}
+        sed -i 's/@PVC-MYGPFS@/{{ .Release.Name }}-mygpfs/g' $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i 's/@SERVICE_ACCOUNT@/cws-{{ .Release.Name }}/g' $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#\/mygpfs#\/gpfs#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        #sed -i "s#\/dlim#\/myresultfs#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#\/resultfs#\/myresultfs#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#\/datafs#\/mydatafs#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        #sed -i "s#\"dlim\"#\"myresultfs\"#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#\"datafs\"#\"mydatafs\"#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#\"resultfs\/#\"myresultfs\/#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#@imagePullPolicy@#{{ .Values.worker.imagePullPolicy }}#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i 's/@imagePullSecrets-1@//g' $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#@tolerationsValue-1@#{{ .Values.dli.tolerationValue |default "value" }}#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#@tolerationsKey-1@#{{ .Values.dli.tolerationKey |default "key" }}#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        sed -i "s#@LOGSTASH_INSTANCE_URL@#{{template "ibm-wml-accelerator-prod.master-fullname" .}}:{{ template "ibm-wml-accelerator-prod.logstashPort" . }}#g" $SHARED_CONFDIR/dli/conf/dlpd/msd_job_template.json
+        if [ -f $SHARED_CONFDIR/dli/conf/mongodb/mongod.conf ]; then
+              MONGODB_DATA_PATH=$SHARED_CONFDIR/kernel/conf/../../dli/conf/mongodb/data
+              # Create a data directory for MongoDB
+              mkdir --verbose -p ${MONGODB_DATA_PATH}
+              chmod -R o-rwx ${MONGODB_DATA_PATH}
+              sed -i "s#dbPath:.*#dbPath: ${MONGODB_DATA_PATH}#g" $SHARED_CONFDIR/dli/conf/mongodb/mongod.conf
+        fi
+        {{- end }}
+
+        sed -i '/docker_active/a\   sigName String 10 () ()' $EGO_CONFDIR/ego.shared
+        sed -i '/docker_active/a\sigName [default]' $EGO_CONFDIR/ego.cluster.{{ .Release.Name }}
+
+        egosh ego start
+
+        {{- if or .Values.dli.enabled (gt (.Values.sig.gpu|int) 0) }}
+        AscdConfFile="$EGO_CONFDIR/../../ascd/conf/ascd.conf"
+        GPUModified=$(cat $AscdConfFile | grep "ASCD_GPU_ENABLED" | grep "ON")
+        if [ "$GPUModified" = "" ]; then
+            retries=0
+            egoUser=Admin
+            egoPass=Admin
+            egosh user logon -u $egoUser -x $egoPass
+            while [ $? -ne 0 -a $retries -le 30 ]
+            do
+                sleep 10
+                retries=$((retries+1))
+                egosh user logon -u $egoUser -x $egoPass
+            done
+            egosh service stop all
+            sleep 10
+            retries=0
+            result=`$topdir/conductorspark/${CWS_VERSION}/etc/gpuconfig.sh enable --quiet -u $egoUser -x $egoPass`
+            while [ $? -ne 0 -a $retries -le 60 ]
+            do
+                echo "$result"|grep "already configured this feature"
+                if [ $? -eq 0 ]; then
+                    break
+                fi
+                sleep 10
+                retries=$((retries+1))
+                result=`$topdir/conductorspark/${CWS_VERSION}/etc/gpuconfig.sh enable --quiet -u $egoUser -x $egoPass`
+            done
+            if [ $retries -ge 60 ]; then
+                echo "Failed to enable GPU monitoring feature in EGO."
+                exit -1
+            fi
+        fi
+        {{- end }}
+        #record self IP and name to ETCD
+        eval "$ETCDCTL_CMD put $ETCD_PREFIX/hosts/$(hostname) $(hostname -i|awk '{print $1}')"
+        eval "$ETCDCTL_CMD put $ETCD_PREFIX/hosts/$(hostname).$(hostname).{{.Release.Namespace}}.svc.$CLUSTERDOMAIN $(hostname -i|awk '{print $1}')"
+        mkdir -p /var/shareDir/sig-template/templates
+        cp /var/tmp/cfc/sig-template_Chart.yaml /var/shareDir/sig-template/Chart.yaml
+        cp /var/tmp/cfc/sig-template_templates_cws-slave-deployment.yaml  /var/shareDir/sig-template/templates/cws-slave-deployment.yaml
+        mkdir -p /var/shareDir/livy-template/templates
+        cp /var/tmp/cfc/livyChart.yaml /var/shareDir/livy-template/Chart.yaml
+        cp /var/tmp/cfc/livyTemplate.yaml /var/shareDir/livy-template/templates/livy-deployment.yaml
+        {{- if .Values.sig.defaultSIGName }}
+           status=1
+           while [ $status -ne 0 ]
+           do
+               echo "waiting for dlpd to get ready"
+               sleep 60
+               /var/tmp/cfc/validateMaster.sh
+               status=$?
+           done
+           /var/tmp/cfc/createDefaultSIG.sh
+        {{- end }}
+        echo "End of initialization of WMLA master deployment"
+        sh /var/tmp/cfc/appendEtcHostfromShare.sh
+    } 2>&1 | tee -a $logdir/startmaster.log
+
+  preStopMaster.sh: |-
+    #!/bin/bash
+    # Bash script to use in the preStop hook for the master pod.  This
+    # will stop all ego services running on the local pod allowing for
+    # a clean shutdown.
+    . /opt/ibm/spectrumcomputing/profile.platform
+    if [ -f /opt/ibm/spectrumcomputing/.token ]; then
+    	egoTokenFile="/tmp/secegocc_0"
+        rm -f $egoTokenFile
+        cp -f /opt/ibm/spectrumcomputing/.token $egoTokenFile
+    else
+        egosh user logon -u Admin -x Admin
+    fi
+    egosh service stop $(egosh service list -r $HOSTNAME -ll | tail -n +2 | awk -F',' '{print $1}' | sed -e 's/^"//' -e 's/"$//')
+    # ego service stop api is asynchronous api. Before proceeding for shutdown, wait
+    # in loop so that services are stopped.
+    while :
+    do
+       sleep 1
+       srvRunning=$(egosh service list -r $HOSTNAME -ll | tail -n +2 | awk -F',' '{print $1}' | sed -e 's/^"//' -e 's/"$//')
+       if [ -z "$srvRunning" ]
+       then
+          echo "No services running"
+          break
+       fi
+
+    if helm status {{.Release.Name}} {{ template "ibm-wml-accelerator-prod.helmFlag" . }}; then
+       echo "Deployment is still running"
+       exit 0
+    fi
+
+    # helm delete of msd and hpac deployments
+    echo Attempting to purge helm release {{ .Release.Name }}-mss
+    helm del --purge {{ .Release.Name }}-mss --timeout 600 {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+    #delete etcd secret
+    {{- if not .Values.cluster.etcdExternal }}
+          kubectl delete secret {{.Release.Name}}-etcd-secret  -n {{.Release.Namespace}}
+    {{- end }}
+    #delete secret created for msd ssl
+    kubectl delete secret {{ .Release.Name }}-mss-server-key-pair -n {{.Release.Namespace}}
+    {{- if .Values.sig.defaultSIGName }}
+       defaultSigDeployment=$(kubectl get deployment -l app.kubernetes.io/name={{.Release.Name}}-{{.Values.sig.defaultSIGName}} -n {{.Release.Namespace}})
+       if [  "$defaultSigDeployment" ];then
+          echo "Delete default SIG"
+          helm del --purge {{.Release.Name}}-{{.Values.sig.defaultSIGName}} --timeout 600 {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+       fi
+    {{- end }}
+    done
+
+  installLogDNAAgent.sh: |-
+    # install logdna agent
+    echo "deb https://repo.logdna.com stable main" | tee /etc/apt/sources.list.d/logdna.list
+    wget -O- https://repo.logdna.com/logdna.gpg | apt-key add -
+    apt-get update
+    apt-get install logdna-agent < "/dev/null" # this line needed for copy/paste
+    # the environment variable LOGDNA_KEY will be coming from the secret
+    logdna-agent -k $LOGDNA_KEY # this is your unique Ingestion Key
+    logdna-agent -s LOGDNA_APIHOST="api.{{.Values.iks.region}}.logging.cloud.ibm.com" # this is your API server host
+    logdna-agent -s LOGDNA_LOGHOST="logs.{{.Values.iks.region}}.logging.cloud.ibm.com" # this is your Log server host
+    # /var/log is monitored/added by default (recursively), optionally add more dirs with:
+    # sudo logdna-agent -d /path/to/log/folders
+    logdna-agent -d $LOGDNA_DIRECTORY_LOGS
+    # You can configure the agent to tag your hosts with:
+    logdna-agent -t conductor
+    update-rc.d logdna-agent defaults
+    /etc/init.d/logdna-agent start
+
+  appendEtcHostfromShare.sh: |-
+    cp /etc/hosts /hosts.original
+    while [ true ]
+    do
+        if [ -f /hosts.tmp ]; then
+            rm -f /hosts.tmp
+        fi
+        cat /hosts.original >> /hosts.tmp
+        CLUSTERDOMAIN=`cat /etc/resolv.conf | grep -v '^#' | grep search | awk '{print $4}'`
+        eval "$ETCDCTL_CMD put $ETCD_PREFIX/hosts/$(hostname) $(hostname -i|awk '{print $1}')"
+        eval "$ETCDCTL_CMD put $ETCD_PREFIX/hosts/$(hostname).$(hostname).{{.Release.Namespace}}.svc.$CLUSTERDOMAIN $(hostname -i|awk '{print $1}')"
+        hostlist=$(eval "$ETCDCTL_CMD get $ETCD_PREFIX/hosts $ETCD_PREFIX/hosts1")
+        is_hostname=true
+        for item in $hostlist; do
+          if $is_hostname; then
+            host=$(basename $item)
+            is_hostname=false
+          else
+            ip=$item
+            echo "$ip $host" >> /hosts.tmp
+            is_hostname=true
+          fi
+        done
+        cat /hosts.tmp > /etc/hosts
+        sleep 10
+    done
+
+  updateParameters.py: |-
+        import json,sys,os
+        if len(sys.argv) <= 2:
+          print "Path of parameters json file and target file must be specified"
+          sys.exit(1)
+        with open(sys.argv[1], "r") as f:
+          obj=json.load(f)
+          for k,v in obj.items():
+             if k == "cpu":
+                os.system('sed -i "s/@CPUREQUEST/%s/g" %s' % (v, sys.argv[2]))
+             elif k == "gpu":
+                os.system('sed -i "s/@GPUREQUEST/%s/g" %s' % (v, sys.argv[2]))
+             elif k == "memory":
+                os.system('sed -i "s/@MEMREQUEST/%s/g" %s' % (v, sys.argv[2]))
+             else:
+                print "ignore value of " + k
+
+  appendVolumes.py: |-
+        import json,sys,os
+        if len(sys.argv) <= 2:
+          print "Path of volumes json file and target file must be specified"
+          sys.exit(1)
+        with open(sys.argv[1], "r") as f:
+          obj=json.load(f)
+          if "volumes" in obj:
+            os.system('echo volumes: >> %s' % (sys.argv[2]))
+            for volume in obj["volumes"]:
+              os.system('echo "  - hostpath: %s" >> %s' % (volume["hostpath"], sys.argv[2]))
+              os.system('echo "    type: %s" >> %s' % (volume["type"], sys.argv[2]))
+              os.system('echo "    containerpath: %s" >> %s' % (volume["containerpath"], sys.argv[2]))
+          if "dataimages" in obj:
+            os.system('echo dataimages: >> %s' % (sys.argv[2]))
+            for img in obj["dataimages"]:
+              os.system('echo "  - imagename: %s" >> %s' % (img["imagename"], sys.argv[2]))
+              os.system('echo "    volumes:" >> %s' % (sys.argv[2]))
+              pathmap = {}
+              for volume in img["volumes"]:
+                containerpath = volume["containerpath"]
+                if containerpath not in pathmap:
+                  pathmap[containerpath] = []
+                pathmap[containerpath].append({"type": volume["type"], "hostpath": volume["hostpath"]})
+              for k, v in pathmap.items():
+                os.system('echo "      - containerpath: %s" >> %s' % (k, sys.argv[2]))
+                os.system('echo "        hostpaths:" >> %s' % (sys.argv[2]))
+                for hp in v:
+                  os.system('echo "          - hostpath: %s" >> %s' % (hp["hostpath"], sys.argv[2]))
+                  os.system('echo "            type: %s" >> %s' % (hp["type"], sys.argv[2]))
+  createEgoResource.sh: |-
+        # create ego resource first
+        topdir=/opt/ibm/spectrumcomputing
+        exec 1<>$topdir/conductorspark/logs/createEgoResource.log
+        exec 2>&1
+        set +x
+        if [ "$1" = "storeToken" ]; then
+        	adminToken=$2
+        	adminTokenLen=${#adminToken}
+        	((adminTokenLen++))
+        	adminToken=${adminToken}ENDSTR
+        	persistentTokenFile=/opt/ibm/spectrumcomputing/.token
+        	echo $adminTokenLen > $persistentTokenFile
+        	echo $adminToken >> $persistentTokenFile
+        	sed -i 's/ENDSTR/\x0/g' $persistentTokenFile
+        	exit 0
+        fi
+        sig_name={{ .Release.Name }}-$1
+        sig_rg_name=$1
+        executor=$2
+
+        #Use the admin token to logon
+        adminToken=$3
+        adminTokenLen=${#adminToken}
+        ((adminTokenLen++))
+        adminToken=${adminToken}ENDSTR
+        egoTokenFile="/tmp/secegocc_0"
+        egoTokenFileBak=${egoTokenFile}.wmla.bak
+        rm -rf $egoTokenFileBak
+        cp $egoTokenFile $egoTokenFileBak
+        echo $adminTokenLen > $egoTokenFile
+        echo $adminToken >> $egoTokenFile
+        sed -i 's/ENDSTR/\x0/g' $egoTokenFile
+
+        if [ "x$sig_rg_name" = "x" ]; then
+          echo "Missed to specify a SIG name, exit."
+          exit -1
+        fi
+        if [ "x$executor" = "x" ]; then
+          echo "Missed to specify an executor name, exit."
+          exit -1
+        fi
+        cd /var/shareDir/
+        set +x
+        . $topdir/profile.platform
+        set -x
+        #egosh user logon -u Admin -x Admin
+        #cleanup the resource group first
+        for rs in `egosh resourcegroup list |awk '{print $1}'|grep "${sig_rg_name}_"`
+        do
+            if [ "$rs"="${sig_rg_name}_services" -o "$rs" = "${sig_rg_name}_workloads" -o "$rs" = "${sig_rg_name}_gpu" ]; then
+              egosh resourcegroup delete $rs
+            fi
+        done
+        #create resoure group for the SIG
+        sleep 1
+        retries=0
+        #create resource group for services
+        egosh resourcegroup add "$sig_rg_name"_services -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "ibm-wml-accelerator-prod.getserviceslots" .}}))
+        while [ $? -ne 0 -a $retries -le 60 ]
+        do
+           sleep 10
+           retries=$((retries+1))
+           egosh resourcegroup add "$sig_rg_name"_services -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "ibm-wml-accelerator-prod.getserviceslots" .}}))
+        done
+        if [ $retries -ge 60 ]; then
+           echo "Failed to create resource group <'$sig_rg_name'_services> in EGO."
+           exit -1
+        fi
+        #create resource group for workloads
+        egosh resourcegroup add "$sig_rg_name"_workloads -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "ibm-wml-accelerator-prod.getmaxslots" .}}))
+        while [ $? -ne 0 -a $retries -le 60 ]
+        do
+           sleep 10
+           retries=$((retries+1))
+           egosh resourcegroup add "$sig_rg_name"_workloads -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "ibm-wml-accelerator-prod.getmaxslots" .}}))
+        done
+        if [ $retries -ge 60 ]; then
+           echo "Failed to create resource group <'$sig_rg_name'_workloads> in EGO."
+           exit -1
+        fi
+        # Todo: change the following .Values.sig.gpu to the one passed from ASCD parameter
+        paras=/var/shareDir/ascd/work/k8s/$sig_rg_name/k8s_params_*.txt
+        requestGPU=false
+        gpuReq=`grep -Po 'gpu[" :]+\K[^"]+' $paras`
+        if [ ! -z "$gpuReq" -a "$gpuReq" != "0"  ]; then
+           requestGPU=true
+        fi
+        if [ "$requestGPU" == "true" ]; then
+            egosh resourcegroup add "$sig_rg_name"_gpu -t Dynamic -R "select(sigName=='$sig_rg_name')" -e ngpus
+        fi
+        exist=0
+        for consumer in `egosh consumer list|awk '{print $1}'`
+        do
+            if [ "$executor" = "$consumer"  ]; then
+               exist=1
+               break
+            fi
+        done
+        if [ $exist -eq 1 ]; then
+            if [ "$requestGPU" == "true" ]; then
+                egosh consumer addrg /$executor -g "$sig_rg_name"_gpu,"$sig_rg_name"_workloads,"$sig_rg_name"_services
+            else
+                egosh consumer addrg /$executor -g "$sig_rg_name"_workloads,"$sig_rg_name"_services
+            fi
+        else
+            if [ "$requestGPU" == "true" ]; then
+                egosh consumer add /$executor -e $executor -a Admin -g "$sig_rg_name"_gpu,"$sig_rg_name"_workloads,"$sig_rg_name"_services
+            else
+                egosh consumer add /$executor -e $executor -a Admin -g "$sig_rg_name"_workloads,"$sig_rg_name"_services
+            fi
+        fi
+        egosh user assignrole -u $executor -p /$executor -r "Consumer Admin"
+
+        mv $egoTokenFileBak $egoTokenFile
+        exit 0
+
+  createSIGContainer.sh: |-
+        # redirect output to a log file.
+        topdir=/opt/ibm/spectrumcomputing
+        exec 1<>$topdir/conductorspark/logs/createSIGContainer-$1.log
+        exec 2>&1
+        set -x
+        sig_name={{ .Release.Name }}-$1
+        sig_rg_name=$1
+        executor=$2
+        sig_ns=$3
+        paras=$4
+        volumes=$5
+        if [ "x$sig_rg_name" = "x" ]; then
+          echo "Missed to specify a SIG name, exit."
+          exit -1
+        fi
+        if [ "x$executor" = "x" ]; then
+          echo "Missed to specify an executor name, exit."
+          exit -1
+        fi
+        if [ "x$paras" = "x" ]; then
+          echo "Missed to specify file path of parameters for the SIG, exit."
+          exit -1
+        fi
+        if [ "x$volumes" = "x" ]; then
+          echo "Missed to specify file path of volumes for the SIG, exit."
+          exit -1
+        fi
+        #setup context
+        {{- if .Values.isOcpIr }}
+        export HELM_HOST=tiller-svc.{{ .Release.Namespace }}:44134
+        {{- else }}
+        export HELM_HOST=tiller-svc.kube-system:44134
+        {{- end }}
+        source /var/tmp/cfc/setupHelmCLI.sh
+        . $topdir/profile.platform
+        cd /var/shareDir/
+        useExistImage=`grep -Po 'useExistImage[" :]+\K[^"]+' $paras`
+        #install the SIG helm chart
+        if [ -d "./$sig_name" ]; then
+          echo "./$sig_name has been created. Remove it firstly."
+          helm delete --purge $sig_name {{ template "ibm-wml-accelerator-prod.helmFlag" . }} || exit -1
+          rm -rf ./$sig_name
+          if [ "$useExistImage" == "true" ]; then
+            egosh resourcegroup delete "$sig_rg_name"_services
+            egosh resourcegroup delete "$sig_rg_name"_workloads
+            egosh resourcegroup delete "$sig_rg_name"_gpu
+          fi
+          curl -X PUT {{ template "ibm-wml-accelerator-prod.etcdInstanceDeletion" .}}/{{.Values.global.dockerRegistryPrefix}}@@$sig_name -d value="latest"
+          namespace=$sig_ns
+          k8sJobs=`curl -s http://127.0.0.1:8001/apis/batch/v1/namespaces/$namespace/jobs?labelSelector=app%3D$sig_name|grep job-name|sed 's/\"\|,//g' |awk -F':' '{print $2}'`
+          if [ ! -z "$k8sJobs" ]; then
+            for job in ${k8sJobs[@]}
+            do
+               echo "deleting job $job ..."
+               curl -s -XDELETE  -H "Accept: application/json, */*" -H "Content-Type: application/json" \
+               --data "{\"kind\":\"DeleteOptions\",\"apiVersion\":\"batch/v1\",\"propagationPolicy\":\"Background\"}" \
+               http://127.0.0.1:8001/apis/batch/v1/namespaces/$namespace/jobs/$job
+            done
+          fi
+        fi
+        sig_image={{template "ibm-wml-accelerator-prod.Image" .}}
+        spark_conf_configmap=${sig_name}-conf
+        namespace=$sig_ns
+        if [ x"$sig_ns" = "x" ]; then
+          namespace={{.Release.Namespace}}
+        fi
+
+        #create the SIG deployment
+        cp -R ./sig-template ./$sig_name
+        #sed -i "s/@SIGNAME/$sig_name/g" ./$sig_name/values.yaml
+        if [ "$useExistImage" == "true" ]; then
+            prebuildImage=`grep -Po 'prebuildImage[" :]+\K[^"]+' $paras`
+            if [ ! -z $prebuildImage ]; then
+              sig_image=$prebuildImage
+            fi
+            sparkHome=`grep -Po 'sparkHome[" :]+\K[^"]+' $paras`
+            # create the configmap
+            #ret=`kubectl get configmap $spark_conf_configmap -n $namespace`
+            #if [ $? = 0 ]; then
+            #  kubectl delete configmap $spark_conf_configmap -n $namespace
+            #fi
+            #kubectl create configmap $spark_conf_configmap --from-file=/var/shareDir/ascd/work/k8s/$1/conf/ --namespace=$namespace
+            echo "spark.ego.client.context.waitTries 10000" >> /var/shareDir/ascd/work/k8s/$1/conf/spark-defaults.conf
+            spark_config_dir=/var/shareDir/ascd/work/k8s/$1/conf/
+            kubectl create configmap $spark_conf_configmap --server="https://127.0.0.1:8001" --from-file=$spark_config_dir --namespace=$namespace --dry-run=true --generator='configmap/v1' -o yaml > ./$sig_name/templates/${spark_conf_configmap}_configmap.yaml
+            echo "sparkHome: $sparkHome" >> ./$sig_name/values.yaml
+            echo "sparkconfConfigmap: $spark_conf_configmap" >> ./$sig_name/values.yaml
+        fi
+
+        sed -i "s/@SIGNAME/$sig_name/g" ./$sig_name/Chart.yaml
+        sed -i "s/@SIGNAME/$sig_name/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@EXECUTOR/$executor/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@SIG_NAME/$1/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@]/}/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@\[/{/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@new_namespace/.Values.new_namespace/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@storage_class_name/.Values.storage_class_name/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@useExistImage/$useExistImage/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s?@sparkHome?$sparkHome?g" ./$sig_name/templates/cws-slave-deployment.yaml
+        sed -i "s/@namespace/$namespace/g" ./$sig_name/templates/cws-slave-deployment.yaml
+
+        {{- if .Values.dli.enabled }}
+        sed -i "s/@need_create_pvc/.Values.need_create_pvc/g" ./$sig_name/templates/cws-slave-deployment.yaml
+        {{- end }}
+
+        #input data volumes
+        python /var/tmp/cfc/updateParameters.py $paras /var/shareDir/$sig_name/templates/cws-slave-deployment.yaml
+        python /var/tmp/cfc/appendVolumes.py $volumes /var/shareDir/$sig_name/values.yaml
+
+        storage_class_name=
+        storageClassNameKeyVal=`cat $paras| python -mjson.tool|grep storage_class_name`
+        if [ "x$storageClassNameKeyVal" != "x" ]; then
+           storage_class_name=`echo $storageClassNameKeyVal|awk -F'"' '{print $4}'`
+           echo "storage_class_name: $storage_class_name" >> ./$sig_name/values.yaml
+        fi
+        echo "sig_image: $sig_image" >> ./$sig_name/values.yaml
+        echo "useExistImage: $useExistImage" >> ./$sig_name/values.yaml
+
+        if [ $namespace != {{.Release.Namespace}} ]; then
+          echo "new_namespace: true" >> ./$sig_name/values.yaml
+          {{- if .Values.dli.enabled }}
+          pvc4mygpfs=`curl -s  http://127.0.0.1:8001/api/v1/namespaces/$namespace/persistentvolumeclaims/{{ .Release.Name }}-mygpfs|grep "NotFound"`
+          if [ -z "$pvc4mygpfs" ]; then
+              echo "need_create_pvc: false" >> ./$sig_name/values.yaml
+          else
+              echo "need_create_pvc: true" >> ./$sig_name/values.yaml
+          fi
+          {{- end }}
+        else
+          echo "new_namespace: false" >> ./$sig_name/values.yaml
+          {{- if .Values.dli.enabled }}
+          echo "need_create_pvc: false" >> ./$sig_name/values.yaml
+          {{- end }}
+        fi
+
+        helm lint $sig_name|| exit -1
+        helm install --name $sig_name $sig_name --namespace $namespace {{ template "ibm-wml-accelerator-prod.helmFlag" . }}|| exit -1
+        CWS_VERSION=`cat $topdir/conductorspark/conf/profile.conductorspark|grep -v PATH|grep "CS_VERSION"|awk -F= '{print $2 }'`
+        if [ -z $CWS_VERSION ]; then
+            CWS_VERSION={{ template "global.conductorVersion" . }}
+        fi
+        if [ "$CWS_VERSION" == "2.3.0" ]; then
+          #create resoure group for the SIG
+          sleep 1
+          retries=0
+          egosh user logon -u Admin -x Admin
+          #create resource group for services
+          egosh resourcegroup add "$sig_rg_name"_services -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "ibm-wml-accelerator-prod.getserviceslots" .}}))
+          while [ $? -ne 0 -a $retries -le 60 ]
+          do
+             sleep 10
+             retries=$((retries+1))
+             egosh resourcegroup add "$sig_rg_name"_services -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "ibm-wml-accelerator-prod.getserviceslots" .}}))
+          done
+          if [ $retries -ge 60 ]; then
+             echo "Failed to create resource group <'$sig_rg_name'_services> in EGO."
+             exit -1
+          fi
+          #create resource group for workloads
+          egosh resourcegroup add "$sig_rg_name"_workloads -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "ibm-wml-accelerator-prod.getmaxslots" .}}))
+          while [ $? -ne 0 -a $retries -le 60 ]
+          do
+             sleep 10
+             retries=$((retries+1))
+             egosh resourcegroup add "$sig_rg_name"_workloads -t Dynamic -R "select(sigName=='$sig_rg_name')" -s $(({{ template "ibm-wml-accelerator-prod.getmaxslots" .}}))
+          done
+          if [ $retries -ge 60 ]; then
+             echo "Failed to create resource group <'$sig_rg_name'_workloads> in EGO."
+             exit -1
+          fi
+          requestGPU=false
+          gpuReq=`grep -Po 'gpu[" :]+\K[^"]+' $paras`
+          if [ ! -z "$gpuReq" -a "$gpuReq" != "0"  ]; then
+              requestGPU=true
+          fi
+          if [ "$requestGPU" == "true" ]; then
+              egosh resourcegroup add "$sig_rg_name"_gpu -t Dynamic -R "select(sigName=='$sig_rg_name')" -e ngpus
+          fi
+          exist=0
+          for consumer in `egosh consumer list|awk '{print $1}'`
+          do
+              if [ "$executor" = "$consumer"  ]; then
+                 exist=1
+                 break
+              fi
+          done
+          if [ $exist -eq 1 ]; then
+              if [ "$requestGPU" == "true" ]; then
+                  egosh consumer addrg /$executor -g "$sig_rg_name"_gpu,"$sig_rg_name"_workloads,"$sig_rg_name"_services
+              else
+                  egosh consumer addrg /$executor -g "$sig_rg_name"_workloads,"$sig_rg_name"_services
+              fi
+          else
+              if [ "$requestGPU" == "true" ]; then
+                  egosh consumer add /$executor -e $executor -a Admin -g "$sig_rg_name"_gpu,"$sig_rg_name"_workloads,"$sig_rg_name"_services
+              else
+                  egosh consumer add /$executor -e $executor -a Admin -g "$sig_rg_name"_workloads,"$sig_rg_name"_services
+              fi
+          fi
+          egosh user assignrole -u $executor -p /$executor -r "Consumer Admin"
+          echo "End of initialization of createSIGContainer"
+        fi
+        exit 0
+  deleteSIGContainer.sh: |-
+        # redirect output to a log file.
+        topdir=/opt/ibm/spectrumcomputing
+        exec 1<>$topdir/conductorspark/logs/deleteSIGContainer-$1.log
+        exec 2>&1
+        set -x
+        sig_name={{ .Release.Name }}-$1
+        sig_rg_name=$1
+        executor=$2
+
+        #Use the admin token to logon
+        adminToken=$3
+        adminTokenLen=${#adminToken}
+        ((adminTokenLen++))
+        adminToken=${adminToken}ENDSTR
+        egoTokenFile="/tmp/secegocc_0"
+        egoTokenFileBak=${egoTokenFile}.wmla.bak
+        rm -rf $egoTokenFileBak
+        cp $egoTokenFile $egoTokenFileBak
+        echo $adminTokenLen > $egoTokenFile
+        echo $adminToken >> $egoTokenFile
+        sed -i 's/ENDSTR/\x0/g' $egoTokenFile
+
+        if [ "x$sig_rg_name" = "x" ]; then
+          echo "Missed to specify a SIG name, exit."
+          exit -1
+        fi
+        if [ "x$executor" = "x" ]; then
+          echo "Missed to specify an executor name, exit."
+          exit -1
+        fi
+        #setup context
+        source /var/tmp/cfc/setupHelmCLI.sh
+        cd /var/shareDir/
+        namespace={{.Release.Namespace}}
+        #uninstall the SIG helm chart
+        if [ -d "./$sig_name" ]; then
+          helm status $sig_name {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+          if [ $? -eq 0 ]; then
+            namespace=`helm status $sig_name {{ template "ibm-wml-accelerator-prod.helmFlag" . }}|grep NAMESPACE|awk -F':' '{print $2}'|sed 's/\ //g'`
+            helm delete --purge $sig_name {{ template "ibm-wml-accelerator-prod.helmFlag" . }}|| exit -1
+          fi
+          rm -rf ./$sig_name
+          rm -rf ./ha/$sig_rg_name ./kernel/work/vemkd/consumer/$sig_rg_name* ./eservice/rs/.cache/root/$sig_rg_name*
+
+          helm status $sig_name-livy {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+          if [ $? -eq 0 ]; then
+            helm delete --purge $sig_name-livy {{ template "ibm-wml-accelerator-prod.helmFlag" . }}| exit -1
+          fi
+          curl -X PUT {{ template "ibm-wml-accelerator-prod.etcdInstanceDeletion" .}}/{{.Values.global.dockerRegistryPrefix }}@@$sig_name -d value="latest"
+        fi
+        k8sJobs=`curl -s http://127.0.0.1:8001/apis/batch/v1/namespaces/$namespace/jobs?labelSelector=app%3D$sig_name|grep job-name|sed 's/\"\|,//g' |awk -F':' '{print $2}'`
+        if [ ! -z "$k8sJobs" ]; then
+           for job in ${k8sJobs[@]}
+           do
+              echo "deleting job $job ..."
+              curl -s -XDELETE  -H "Accept: application/json, */*" -H "Content-Type: application/json" \
+              --data "{\"kind\":\"DeleteOptions\",\"apiVersion\":\"batch/v1\",\"propagationPolicy\":\"Background\"}" \
+              http://127.0.0.1:8001/apis/batch/v1/namespaces/$namespace/jobs/$job
+           done
+        fi
+        set +x
+        . $topdir/profile.platform
+        set -x
+        exist=0
+        for consumer in `egosh consumer list|awk '{print $1}'`
+        do
+            if [ "$executor" = "$consumer"  ]; then
+               exist=1
+               break
+            fi
+        done
+        if [ $exist -eq 1 ]; then
+          egosh consumer removerg /$executor -g "$sig_rg_name"_gpu,"$sig_rg_name"_workloads
+          inuse=`egosh consumer view $executor|grep ResourceGroupName`
+          if [ x"$inuse" = 'x' ]; then
+              egosh user unassignrole -u $executor -p /$executor -r "Consumer User"
+              egosh consumer delete /$executor
+          fi
+
+        fi
+        for rs in `egosh resourcegroup list |awk '{print $1}'|grep "${sig_rg_name}_"`
+        do
+            if [ "$rs"="${sig_rg_name}_services" -o "$rs" = "${sig_rg_name}_workloads" -o "$rs" = "${sig_rg_name}_gpu" ]; then
+              egosh resourcegroup delete $rs
+            fi
+        done
+
+        mv $egoTokenFileBak $egoTokenFile
+        exit 0
+
+  livyChart.yaml: |-
+        name: @SIGNAME-livy
+        version: {{.Chart.Version}}
+        description: Livy server for IBM Spectrum Conductor Spark Instance Group
+        home: https://www.ibm.com/support/knowledgecenter/SSZU2E/product_welcome_conductorspark.html
+        icon: https://www.ibm.com/developerworks/community/groups/service/html/image?communityUuid=281605c9-7369-46dc-ad03-70d9ad377480&lastMod=1464891144123&showDefaultForNoPermissions=true
+        keywords:
+        - Conductor
+        - Spark Instance Group
+        appVersion: 2.3.0
+        maintainers:
+        - name: IBM Spectrum Conductor Team
+
+  livyTemplate.yaml: |-
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: @SIGNAME-livy
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLivyLabels" . | indent 12 }}
+        spec:
+          ports:
+            - name: livy-server
+              port: 8998
+              targetPort: 8998
+              protocol: TCP
+          type: NodePort
+          selector:
+              heritage: {{.Release.Service | quote }}
+              release: {{.Release.Name | quote }}
+              chart: "{{.Chart.Name}}"
+              app: @SIGNAME-livy
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: @SIGNAME-livy
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLivyLabels" . | indent 12 }}
+        spec:
+          replicas: 1
+          strategy:
+            type: RollingUpdate
+          selector:
+            matchLabels:
+              {{- include "ibm-wml-accelerator-prod.sigLivyLabels" . | indent 14 }}
+          template:
+            metadata:
+              labels:
+                {{- include "ibm-wml-accelerator-prod.sigLivyLabels" . | indent 16 }}
+              annotations:
+                {{- include "ibm-wml-accelerator-prod.releaseAnnotations" . | indent 16 }}
+            spec:
+              affinity:
+              {{- include "ibm-wml-accelerator-prod.nodeaffinity" . | indent 14 }}
+              containers:
+                - name: @SIGNAME-livy
+                  image: @LIVYIMAGE
+                  imagePullPolicy: IfNotPresent
+                  ports:
+                    - containerPort: 8998
+                  command: ["/bin/bash","-c"]
+                  args: ["$(bash /var/tmp/cfc/startLivy.sh @LIVYDIR)"]
+                  resources:
+                    requests:
+                      cpu: 1
+                      memory: 2Gi
+                    limits:
+                      cpu: 1
+                      memory: 4Gi
+                  livenessProbe:
+                    tcpSocket:
+                      port: 8998
+                    initialDelaySeconds: 1200
+                    periodSeconds: 10
+                  volumeMounts:
+                  - mountPath: /opt/sparkhome
+                    name: sparkhome
+                  - mountPath: /var/tmp/cfc
+                    name: conductor-slave-bootstrap
+                  - mountPath: /dev/shm
+                    name: dshm
+                  @[@[- if .Values.useExistImage @]@]
+                  - name: sparkconf-volume
+                    mountPath: /var/tmp/sparkconf
+                  @[@[- end @]@]
+              initContainers:
+                - name: sig-image
+                  image: @SIGIMAGE
+                  imagePullPolicy: Always
+                  resources:
+                    requests:
+                      cpu: 0.5
+                      memory: 512Mi
+                    limits:
+                      cpu: 0.5
+                      memory: 512Mi
+                  volumeMounts:
+                  - mountPath: /var/tmp/cfc
+                    name: conductor-slave-bootstrap
+                  - mountPath: /opt/sparkhome
+                    name: sparkhome
+                  args:
+                  - "cp -r @SPARKHOME /opt/sparkhome; cp /opt/ibm/spectrumcomputing/security/caKeyStore.jks /opt/sparkhome; cp /opt/ibm/spectrumcomputing/security/cacert.pem /opt/sparkhome"
+                  command:
+                  - /bin/bash
+                  - -c
+              volumes:
+                - name: sparkhome
+                  emptyDir: {}
+                - name: conductor-slave-bootstrap
+                  configMap:
+                    name: "@SIGNAME-bootstrap"
+                    # Make files mounted from the configmap executable
+                    defaultMode: 0555
+                - name: dshm
+                  emptyDir:
+                    medium: Memory
+                @[@[- if .Values.useExistImage @]@]
+                - name: sparkconf-volume
+                  configMap:
+                    name: @[@[ .Values.sparkconfConfigmap @]@]
+                @[@[- end @]@]
+              terminationGracePeriodSeconds: 30
+  postDeploy.sh: |-
+        topdir=/opt/ibm/spectrumcomputing
+        exec 1<>$topdir/conductorspark/logs/postDeploy.log
+        exec 2>&1
+        set -x
+        sig_name={{ .Release.Name }}-$1
+        spark_home=$2
+        k8sParams=$3
+        if [ "x$1" = "x" ]; then
+          echo "Missed to specify a SIG name, exit."
+          exit -1
+        fi
+        if [ "x$2" = "x" ]; then
+          echo "Missed to specify spark home directory of Spark instance group $1, exit."
+          exit -1
+        fi
+        if [ "x$3" = "x" ]; then
+          echo "Missed to specify Kubernetes parameters of Spark instance group $1, exit."
+          exit -1
+        fi
+
+        livy_top_dir=
+        livy_image=
+        namespace=
+        useExistImage=false
+        prebuildImage=
+        sparkHome=
+        OLD_IFS="$IFS"
+        IFS="*"
+        params=($k8sParams)
+        for param_pair in ${params[@]}
+        do
+          k=`echo $param_pair|cut -d "=" -f 1`
+          v=`echo $param_pair|cut -d "=" -f 2`
+          case $k in
+            livy_top_dir)
+              livy_top_dir=$v
+            ;;
+            livy_image)
+              livy_image=$v
+            ;;
+            namespace)
+              namespace=$v
+            ;;
+            useExistImage)
+              useExistImage=$v
+            ;;
+            prebuildImage)
+              prebuildImage=$v
+            ;;
+            sparkHome)
+              sparkHome=$v
+            ;;
+          esac
+        done
+        IFS="$OLD_IFS"
+
+        if [ x$namespace = x ]; then
+           echo "Invalid Kubernetes parameters of Spark instance group $1, exit."
+           exit -1
+        fi
+        if [ x$livy_top_dir = x -o x$livy_image = x ]; then
+           echo "Not enable livy server."
+           exit 0
+        fi
+
+        livy_image=${livy_image//\//\\/}
+        livy_top_dir=${livy_top_dir//\//\\/}
+        spark_home=${spark_home//\//\\/}
+        sig_image={{.Values.global.dockerRegistryPrefix}}\/$sig_name
+        if [ $useExistImage ]; then
+           spark_home=${sparkHome//\//\\/}
+           sig_image=${prebuildImage//\//\\/}
+        fi
+
+        cp -r /var/shareDir/livy-template/ /tmp/$sig_name-livy
+        sed -i "s/@LIVYIMAGE/$livy_image/g" /tmp/$sig_name-livy/templates/livy-deployment.yaml
+        sed -i "s/@LIVYDIR/$livy_top_dir/g" /tmp/$sig_name-livy/templates/livy-deployment.yaml
+        sed -i "s/@SIGNAME/$sig_name/g" /tmp/$sig_name-livy/templates/livy-deployment.yaml
+        sed -i "s/@SPARKHOME/$spark_home/g" /tmp/$sig_name-livy/templates/livy-deployment.yaml
+        sed -i "s/@SIGIMAGE/{{.Values.global.dockerRegistryPrefix}}\/$sig_name/g" /tmp/$sig_name-livy/templates/livy-deployment.yaml
+        sed -i "s/@SIGNAME/$sig_name/g" /tmp/$sig_name-livy/Chart.yaml
+        livy_deployment_file=/tmp/$sig_name-livy/templates/livy-deployment.yaml
+        sed -i "s/@]/}/g" $livy_deployment_file
+        sed -i "s/@\[/{/g" $livy_deployment_file
+        echo "useExistImage: $useExistImage" >> /tmp/$sig_name-livy/values.yaml
+        echo "sparkconfConfigmap: ${sig_name}-conf" >> /tmp/$sig_name-livy/values.yaml
+
+        source /var/tmp/cfc/setupHelmCLI.sh
+        helm install /tmp/$sig_name-livy/ --name $sig_name-livy --namespace $namespace {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+        rm -rf /tmp/$sig_name-livy
+
+  updateK8sServiceForSig.sh: |-
+        topdir=/opt/ibm/spectrumcomputing
+        exec 1<>$topdir/conductorspark/logs/updateK8sServiceForSig.log
+        exec 2>&1
+        set -x
+        sig_name={{ .Release.Name }}-$1
+        namespace=$2
+        batchmasters=$3
+        notebookmasters=$4
+        if [ "x$1" = "x" ]; then
+          echo "Missed to specify a SIG name, exit."
+          exit -1
+        fi
+        if [ "x$namespace" = "x" ]; then
+          echo "Missed to specify the namespace, exit."
+          exit -1
+        fi
+        if [ "x$batchmasters" = "x" -o "x$batchmasters" = "xnull" ]; then
+           curl -X PATCH http://127.0.0.1:8001/api/v1/namespaces/$namespace/endpoints/$sig_name -H 'content-type: application/strategic-merge-patch+json' -d '{"subsets":[]}'
+        else
+          epjson=`curl http://127.0.0.1:8001/api/v1/namespaces/$namespace/endpoints/$sig_name|sed 's/[[:space:]]//g'`
+
+          sparkhosts=`echo $batchmasters|awk -F ';' '{for(i=1;i<=NF;i++)print $i}'`
+          ipchanged=yes
+          portchanged=yes
+          for shost in $sparkhosts
+          do
+            sparkhost=`echo $shost|awk -F ':' '{print $2}'|cut -d "/" -f 3`
+            sparkport=`echo $shost|awk -F ':' '{print $3}'`
+            ip=`cat /etc/hosts|grep $sparkhost|head -n 1|awk '{print $1}'`
+            if [ x`echo $epjson|grep \"ip\":\"$ip\"` != x ]; then
+              ipchanged=no
+              if [ x`echo $epjson|grep \"port\":$sparkport` != x ]; then
+                 portchanged=no
+              fi
+              break
+            fi
+          done
+          if [ $ipchanged = yes -o $portchanged = yes ]; then
+             jsonstr=$(echo {\"subsets\":[\{\"addresses\":[\{\"ip\":\"$ip\"\}],\"ports\":[\{\"name\":\"spark-master\",\"port\":$sparkport,\"protocol\":\"TCP\"\}\]\}\]\})
+             curl -X PATCH http://127.0.0.1:8001/api/v1/namespaces/$namespace/endpoints/$sig_name -H 'content-type: application/strategic-merge-patch+json' --data $jsonstr
+             if [ $portchanged = yes ]; then
+               jstr=$(echo {\"spec\":\{\"ports\":[\{\"name\":\"spark-master\",\"port\":7077,\"protocol\":\"TCP\",\"targetPort\":$sparkport\}\]\}\})
+               curl -X PATCH http://127.0.0.1:8001/api/v1/namespaces/$namespace/services/$sig_name -H 'content-type: application/strategic-merge-patch+json' --data $jstr
+             fi
+          fi
+        fi
+
+  sig-template_Chart.yaml: |-
+        name: @SIGNAME
+        version: {{.Chart.Version}}
+        description: IBM Spectrum Conductor Spark Instance Group
+        home: https://www.ibm.com/support/knowledgecenter/SSZU2E/product_welcome_conductorspark.html
+        icon: https://www.ibm.com/developerworks/community/groups/service/html/image?communityUuid=281605c9-7369-46dc-ad03-70d9ad377480&lastMod=1464891144123&showDefaultForNoPermissions=true
+        keywords:
+        - Conductor
+        - Spark Instance Group
+        appVersion: 2.3.0
+        maintainers:
+        - name: IBM Spectrum Conductor Team
+  sig-template_templates_cws-slave-deployment.yaml: |-
+        @[@[- if @new_namespace @]@]
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: cws-@[@[ .Release.Name @]@]
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        ---
+        kind: Role
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        metadata:
+          name: cws-@[@[ .Release.Name @]@]
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        rules:
+        - apiGroups: [""]
+          resources: ["pods"]
+          verbs: ["create","delete","get","list","patch","update","watch"]
+        - apiGroups: [""]
+          resources: ["secrets"]
+          verbs: ["get"]
+        - apiGroups: ["extensions"]
+          resources: ["deployments", "deployments/scale"]
+          verbs: ["create","delete","get","list","patch","update","watch"]
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        kind: Role
+        metadata:
+          name: privileged-@[@[ .Release.Name @]@]
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        rules:
+          -
+            apiGroups:
+              - extensions
+            resourceNames:
+              - privileged-{{ .Release.Name }}
+            resources:
+              - podsecuritypolicies
+            verbs:
+              - use
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        kind: RoleBinding
+        metadata:
+          name: privileged-psp-users-@[@[ .Release.Name @]@]
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: privileged-@[@[ .Release.Name @]@]
+        subjects:
+          - kind: ServiceAccount
+            name: cws-@[@[ .Release.Name @]@]
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        kind: RoleBinding
+        metadata:
+          name: cws-@[@[ .Release.Name @]@]
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: cws-@[@[ .Release.Name @]@]
+        subjects:
+        - kind: ServiceAccount
+          name: cws-@[@[ .Release.Name @]@]
+        ---
+        {{- if .Values.dli.enabled }}
+        @[@[- if @need_create_pvc @]@]
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: {{ .Release.Name }}-mygpfs
+          labels:
+            {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 12 }}
+          {{- if eq .Values.cluster.type "iks" }}
+          annotations:
+            volume.beta.kubernetes.io/storage-provisioner: {{ default "" .Values.iks.fileStorageClassType | quote }}
+          {{- end }}
+        spec:
+          {{- if .Values.cluster.useDynamicProvisioning }}
+          storageClassName: {{ default nil .Values.dli.sharedFsStorageClassName | quote }}
+          {{- else }}
+          storageClassName: {{ default "" .Values.dli.sharedFsStorageClassName | quote }}
+          {{- end }}
+          accessModes:
+            - ReadWriteMany
+          resources:
+           requests:
+             storage: 4Gi
+        @[@[- end @]@]
+        {{- end }}
+        ---
+        @[@[- end @]@]
+        @[@[- if @storage_class_name @]@]
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: "@SIGNAME-sig-share"
+          labels:
+            env: cws-share
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        spec:
+          {{- if .Values.cluster.useDynamicProvisioning }}
+          storageClassName: "@[@[ @storage_class_name @]@]"
+          {{- else }}
+          storageClassName: "@[@[ @storage_class_name @]@]"
+          {{- end }}
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 3Gi
+        ---
+        @[@[- end @]@]
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: @SIGNAME-bootstrap
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        data:
+          cpImageToContainer.sh: |-
+              image=$1
+              @[@[- range $i, $di := .Values.dataimages @]@]
+              if [ x"$image" = x@[@[$di.imagename@]@] ]; then
+              @[@[- range $index, $volume := $di.volumes @]@]
+              @[@[- range $, $v := $volume.hostpaths @]@]
+              @[@[- if eq $v.type "File" @]@]
+              cp @[@[$v.hostpath@]@] /@[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@]
+              @[@[- else if eq $v.type "Directory" @]@]
+              cp -r @[@[trimSuffix "/" $v.hostpath@]@]/* /@[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@]
+              @[@[- end @]@]
+              @[@[- end @]@]
+              @[@[- end @]@]
+              fi
+              @[@[- end @]@]
+
+          generate_ssl.sh: |-
+              topdir=/opt/ibm/spectrumcomputing
+              exec 1<>$topdir/logs/generatessl.log
+              exec 2>&1
+              set -x
+              CLUSTERADMIN=root
+              domain=`dnsdomainname`
+              if [ "$domain" = "" ]; then
+                domain=`hostname -f`
+              else
+                domain="*.$domain"
+              fi
+              . $topdir/jre/profile.jre
+              dnsname=`hostname -f`
+              cd $topdir/security
+              rm -f tier2and3ServerKeyStore.jks tier*
+              egojre=$topdir/jre
+              egokeytool=`find $egojre -name keytool`
+              $egokeytool -genkeypair -noprompt -alias tier2alias -dname "CN=$domain,O=IBM,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier2passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+              $egokeytool -certreq -alias tier2alias -file tier2alias.csr -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+              $egokeytool -gencert -infile tier2alias.csr -outfile tier2aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+              $egokeytool -importcert -noprompt -alias caalias -file cacert.pem -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword
+              $egokeytool -import -noprompt -alias tier2alias -file tier2aliascertcasigned.pem -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks
+              $egokeytool -genkeypair -noprompt -alias tier3alias -dname "CN=$domain,O=IBM,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier3passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+              $egokeytool -certreq -alias tier3alias -file tier3alias.csr -storepass SparkPassword -keypass tier3passwd  -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+              $egokeytool -gencert -infile tier3alias.csr -outfile tier3aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+              $egokeytool -import -noprompt -alias tier3alias -file tier3aliascertcasigned.pem -storepass SparkPassword -keypass tier3passwd -keystore tier2and3ServerKeyStore.jks
+              #Convert Tier 3 keys in Java Keystore to OpenSSL PKCS12 format
+              $egokeytool -importkeystore -srckeystore tier2and3ServerKeyStore.jks -srcalias tier3alias -srcstoretype jks -srcstorepass SparkPassword -srckeypass tier3passwd -destkeystore tier3KeyStore.p12 -deststoretype pkcs12 -deststorepass tier3passwd -destkeypass tier3passwd -noprompt
+              openssl pkcs12 -in tier3KeyStore.p12 -passin pass:tier3passwd -nocerts -out tier3opensslprivate.key -passout pass:tier3passwd
+              openssl pkcs12 -in tier3KeyStore.p12 -passin pass:tier3passwd -clcerts -nokeys -out tier3opensslpublic.pem
+              chmod 444 $topdir/security/tier2and3ServerKeyStore.jks
+              chmod 444 $topdir/security/tier3KeyStore.p12
+              chown -Rh $CLUSTERADMIN:$CLUSTERADMIN $topdir/security
+              #=========
+              cd $topdir/wlp/usr/shared/resources/security
+              rm -f servercertcasigned.pem serverKeyStore.jks srvcertreq.csr serverTrustStore.jks
+              $egokeytool -genkeypair -noprompt -alias srvalias -dname "CN=$domain,O=IBM,C=CA" -keystore serverKeyStore.jks -storepass Liberty -keypass Liberty -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+              $egokeytool -certreq -alias srvalias -file srvcertreq.csr -storepass Liberty -keystore serverKeyStore.jks -ext "san=dns:$dnsname"
+              $egokeytool -gencert -infile srvcertreq.csr -outfile servercertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+              $egokeytool -importcert -noprompt -alias caalias -file cacert.pem -keystore serverKeyStore.jks -storepass Liberty
+              $egokeytool -import -noprompt -alias srvalias -file servercertcasigned.pem -storepass Liberty -keystore serverKeyStore.jks
+              $egokeytool -importcert -noprompt -alias srvalias -file cacert.pem -keystore serverTrustStore.jks -storepass Liberty
+              #==========
+              {{- if .Values.dli.enabled }}
+              # create certificate and key to enable https for monitor and optimizer Flask server
+              CWS_TOP=$topdir
+              #DLMAO_HOME=/opt/ibm/spectrumcomputing/dli/dlmao
+
+              KEYSTR=$CWS_TOP/wlp/usr/shared/resources/security/serverKeyStore.jks
+              if [ -z "$KEYSTRPASS" ]; then
+                KEYSTRPASS=Liberty
+              fi
+              #DESTKEYSTR_DIR=$DLMAO_HOME/conf
+              DESTKEYSTR_DIR=/opt/ibm/spectrumcomputing/dli/conf/dlinsights
+              DESTKEYSTR=$DESTKEYSTR_DIR/serverKeyStore.p12
+              DESTCRT=$DESTKEYSTR_DIR/srv.crt
+              DESTKEY=$DESTKEYSTR_DIR/srv.key
+              $egokeytool -importkeystore -srckeystore $KEYSTR -srcstorepass $KEYSTRPASS -destkeystore $DESTKEYSTR \
+              -deststoretype PKCS12 -srckeypass $KEYSTRPASS -destkeypass $KEYSTRPASS -deststorepass $KEYSTRPASS \
+              -noprompt -srcalias srvalias -storepass $KEYSTRPASS
+              openssl pkcs12 -in $DESTKEYSTR -nokeys -out $DESTCRT -password pass:$KEYSTRPASS
+              openssl pkcs12 -in $DESTKEYSTR -nodes -nocerts -out $DESTKEY -password pass:$KEYSTRPASS
+              #Important: secure the key
+              rm -f $DESTKEYSTR
+              chmod 400 $DESTCRT $DESTKEY
+              chown $CLUSTERADMIN:$CLUSTERADMIN $DESTCRT $DESTKEY
+              {{- end }}
+          getMasterIP.sh: |-
+              masterIP=
+              set -x
+              master_fullname={{ template "ibm-wml-accelerator-prod.master-fullname" . }}
+              while [ -z $masterIP ]
+              do
+                sleep 3
+                master=$(eval "$ETCDCTL_CMD --print-value-only=true get $ETCD_PREFIX/hosts/$master_fullname")
+                if [ x"$master" != x ];then
+                  masterIP=$master
+                fi
+              done
+              echo $masterIP
+          enableLdapLogon: |-
+            topdir=/opt/ibm/spectrumcomputing
+            set -x
+            sed -i '/EGO_SEC_PLUGIN/d' $topdir/kernel/conf/ego.conf
+            echo "EGO_SEC_PLUGIN=sec_ego_pam_default" >> $topdir/kernel/conf/ego.conf
+            if [ "x$LDAP_URI" = "x" -o "x$BASE_DN" = "x" ]; then
+              exit 0
+            fi
+            disabled=`grep @Ldap_server /etc/nslcd.conf`
+            if [ "x$disabled" != "x" ]; then
+              sed -i "s?ldap://@Ldap_server?$LDAP_URI?g" /etc/nslcd.conf
+              sed -i "s?ldap://@Ldap_server?$LDAP_URI?g" /etc/ldap.conf
+              sed -i "s/@Base_DN/$BASE_DN/g" /etc/nslcd.conf
+              sed -i "s/@Base_DN/$BASE_DN/g" /etc/ldap.conf
+              if [ "x$LDAP_BIND_DN" != "x" -o "x$LDAP_BIND_PW" != "x" ]; then
+                  echo "binddn $LDAP_BIND_DN" >> /etc/ldap.conf
+                  echo "binddn $LDAP_BIND_DN" >> /etc/nslcd.conf
+                  echo "bindpw $LDAP_BIND_PW" >> /etc/ldap.conf
+                  echo "bindpw $LDAP_BIND_PW" >> /etc/nslcd.conf
+              fi
+              echo "TLS_REQCERT never" >> /etc/ldap/ldap.conf
+              auth-client-config -t nss -p lac_ldap
+              echo "session required pam_mkhomedir.so skel=/etc/skel umask=0022" >> /etc/pam.d/common-session
+              update-rc.d nslcd enable
+              cp /etc/pam.d/common-password /etc/pam.d/common-password.bak
+              sed -i 's/use_authtok//' /etc/pam.d/common-password
+              /etc/init.d/nslcd restart
+              /etc/init.d/nscd restart
+            fi
+          elim.sig: |-
+              #!/bin/bash
+              while [ true ]
+              do
+                echo "1 sigName @SIG_NAME"
+                sleep 3600
+              done
+          startSlave.sh: |-
+              topdir=/opt/ibm/spectrumcomputing
+              logdir=$topdir/logs
+              mkdir -p $logdir
+              exec 1<>$logdir/startslave.log
+              exec 2>&1
+              set -x
+              {{- if eq .Values.cluster.type "iks" }}
+              /var/tmp/cfc/installLogDNAAgent.sh
+              {{- end }}
+              cd /bin
+              rm -rf sh
+              ln -s bash sh
+              TZ=`date +%z`
+              echo "GMT$TZ" >/etc/timezone
+
+              # workaroud to help get ego linux version
+              binarytypename=`cat $topdir/kernel/conf/profile.ego |grep "BINARY_TYPE = \"fail\""|awk '{print $3}'|awk -F$ '{print $2 }'`
+              egoversion=`ls $topdir/|grep 3`
+              binarytype=`ls $topdir/$egoversion |grep linux`
+              sed -i "/BINARY_TYPE = \"fail\"/i\\$binarytypename=$binarytype" $topdir/kernel/conf/profile.ego
+
+              echo "export PATH=$PATH" >> /etc/profile
+              sh /var/tmp/cfc/enableLdapLogon
+              ldconfig
+
+              # create the deploy home in advance
+              userInfo=`id @EXECUTOR`
+              if [ $? -ne 0 ]; then
+                  echo "executor:@EXECUTOR is not a valid user"
+                  exit -1
+              fi
+              group=`echo $userInfo| awk 'BEGIN{FS="("} {print $3}'|cut -d ")" -f1`
+              home=`getent passwd|grep "^@EXECUTOR:"|cut -d ":" -f 6`
+              #init user's home environment
+              su @EXECUTOR << EOF
+              exit
+              EOF
+              if [ ! -d $home/@SIG_NAME ]; then
+                mkdir -p $home/@SIG_NAME
+                chown -R @EXECUTOR:$group $home
+              fi
+
+              if [ ! -d /tmp/@EXECUTOR ]; then
+                mkdir -p /tmp/@EXECUTOR
+                chown @EXECUTOR:$group /tmp/@EXECUTOR
+              fi
+              tmp_ownership=`stat -c "%U:%G" /tmp/@EXECUTOR`
+              if [ "@EXECUTOR:$group" != "$tmp_ownership" ]; then
+                chown @EXECUTOR:$group /tmp/@EXECUTOR
+              fi
+
+              if [ ! -d /var/shareDir/ha ]; then
+                mkdir -p /var/shareDir/ha
+                chmod -R 777 /var/shareDir/ha
+              fi
+              useExistImage=@useExistImage
+              sparkHome="@sparkHome"
+              if [ "$useExistImage" = true ]; then
+                if [ -z $sparkHome -o ! -d $sparkHome ]; then
+                  echo "set useExistImage=true, but sparkHome is not defined or not exist, sparkHome=$sparkHome"
+                  exit -1
+                fi
+                if [ -d /var/shareDir/ascd/work/k8s/@SIG_NAME ]; then
+                  #/bin/cp -rf /var/shareDir/ascd/work/k8s/@SIG_NAME/conf/* $sparkHome/conf/
+                  for file in $(ls /var/tmp/sparkconf/*.*)
+                  do
+                      filename=$(basename $file)
+                      if [ -f $sparkHome/conf/$filename ];  then
+                          rm -f $sparkHome/conf/$filename
+                      fi
+                      ln -s $file $sparkHome/conf/$filename
+                  done
+                  SPARK_EGO_NATIVE_LIBRARY=`cat $sparkHome/conf/spark-env.sh|grep SPARK_EGO_NATIVE_LIBRARY|cut -d "=" -f2`
+                  if [ ! -z "$SPARK_EGO_NATIVE_LIBRARY" ]; then
+                      ego_lib_dir=$(dirname $SPARK_EGO_NATIVE_LIBRARY)
+                      ego_lib=$(basename $SPARK_EGO_NATIVE_LIBRARY)
+                      machine_arch=`uname -m`
+                      /bin/cp -f $ego_lib_dir/$machine_arch/$ego_lib $ego_lib_dir/
+                      rm -rf $ego_lib_dir/ppc64le
+                      rm -rf $ego_lib_dir/x86_64
+                      cp $sparkHome/conf/log4j.properties $ego_lib_dir/../ego/
+                      rm -f $sparkHome/conf/log4j.properties
+                  fi
+                fi
+                ln -s $sparkHome $home/@SIG_NAME/
+                if [ -L /var/shareDir/ascd/work/k8s/@SIG_NAME/scripts ]; then
+                  mkdir -p $home/@SIG_NAME/scripts
+                  /bin/cp -rf /var/shareDir/ascd/work/k8s/@SIG_NAME/scripts/* $home/@SIG_NAME/scripts/
+                  chmod a+x -R $home/@SIG_NAME/scripts/*
+                fi
+                chown -R @EXECUTOR:$group $sparkHome
+                chown -R @EXECUTOR:$group $home/@SIG_NAME
+              fi
+              home_ownership=`stat -c "%U:%G" $home/@SIG_NAME`
+              if [ "@EXECUTOR:$group" != "$home_ownership" ]; then
+                chown -R @EXECUTOR:$group $home/@SIG_NAME
+              fi
+
+
+              sh /var/tmp/cfc/generate_ssl.sh
+              CLUSTERDOMAIN=`cat /etc/resolv.conf | grep -v '^#' | grep search | awk '{print $4}'`
+              echo $(sh /var/tmp/cfc/getMasterIP.sh) {{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{.Release.Namespace}}.svc.$CLUSTERDOMAIN {{ template "ibm-wml-accelerator-prod.master-fullname" . }} >> /etc/hosts
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch_master.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_manager.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/eservice/esc/conf/services/elk_elasticsearch_data.xml
+              sed -i "s/iCluster_docker/{{ .Release.Name }}/g" $topdir/kernel/conf/ego.shared
+              mv $topdir/kernel/conf/ego.cluster.iCluster_docker $topdir/kernel/conf/ego.cluster.{{ .Release.Name }}
+              . $topdir/profile.platform
+              echo "EGO_DYNAMIC_HOST_WAIT_TIME=1" >> $EGO_CONFDIR/ego.conf
+              echo "EGO_RESOURCE_UPDATE_INTERVAL=1" >> $EGO_CONFDIR/ego.conf
+              egoconfig join {{ template "ibm-wml-accelerator-prod.master-fullname" . }} -f
+              cp /var/tmp/cfc/elim.sig $EGO_SERVERDIR/elim.sig
+              chmod +x $EGO_SERVERDIR/elim.sig
+              egosh ego start
+              #record self IP and name to ETCD
+              eval "$ETCDCTL_CMD put $ETCD_PREFIX/hosts/$(hostname) $(hostname -i|awk '{print $1}')"
+              eval "$ETCDCTL_CMD put $ETCD_PREFIX/hosts/$(hostname).$(hostname).{{.Release.Namespace}}.svc.$CLUSTERDOMAIN $(hostname -i|awk '{print $1}')"
+              cp /etc/hosts /hosts.original
+              sed -i '/{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{.Release.Namespace}}.svc.'"$CLUSTERDOMAIN"'/'d /hosts.original
+              mkdir -p /root/.sig
+              set +x
+              echo "$ADMIN_USERNAME:$ADMIN_PASSWORD"|base64 > /root/.sig/.credential
+              set -x
+              {{- if eq .Values.cluster.type "iks" }}
+              #TODO : Revalidate this and reduce this later
+              sparkdir=`ls /root/@SIG_NAME/ | grep '^spark-[0-9].[0-9]'`
+              echo "spark.ego.client.context.waitTries 10000" >> /root/@SIG_NAME/$sparkdir/conf/spark-defaults.conf
+              {{- end }}
+              echo "End of initialization for Spark Instance Group in startSlave"
+              while [ true ]
+              do
+                  sh /var/tmp/cfc/appendEtcHostfromShare.sh
+                  sh /var/tmp/cfc/upgradeSIG.sh
+                  sleep 10
+              done
+
+          installLogDNAAgent.sh: |-
+              # install logdna agent
+              echo "deb https://repo.logdna.com stable main" | tee /etc/apt/sources.list.d/logdna.list
+              wget -O- https://repo.logdna.com/logdna.gpg | apt-key add -
+              apt-get update
+              apt-get install logdna-agent < "/dev/null" # this line needed for copy/paste
+              # the environment variable LOGDNA_KEY will be coming from the secret
+              logdna-agent -k $LOGDNA_KEY # this is your unique Ingestion Key
+              logdna-agent -s LOGDNA_APIHOST="api.{{.Values.iks.region}}.logging.cloud.ibm.com" # this is your API server host
+              logdna-agent -s LOGDNA_LOGHOST="logs.{{.Values.iks.region}}.logging.cloud.ibm.com" # this is your Log server host
+              # /var/log is monitored/added by default (recursively), optionally add more dirs with:
+              # sudo logdna-agent -d /path/to/log/folders
+              logdna-agent -d $LOGDNA_DIRECTORY_LOGS
+              # You can configure the agent to tag your hosts with:
+              logdna-agent -t conductor_slave
+              update-rc.d logdna-agent defaults
+              /etc/init.d/logdna-agent start
+
+          appendEtcHostfromShare.sh: |-
+              #set -x
+              if [ -f /hosts.tmp ]; then
+                  rm -f /hosts.tmp
+              fi
+              cat /hosts.original >> /hosts.tmp
+              CLUSTERDOMAIN=`cat /etc/resolv.conf | grep -v '^#' | grep search | awk '{print $4}'`
+              masterIP=`cat /etc/hosts | grep {{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{.Release.Namespace}}.svc.$CLUSTERDOMAIN | awk '{print $1}'`
+              eval "$ETCDCTL_CMD put $ETCD_PREFIX/hosts/$(hostname) $(hostname -i|awk '{print $1}')"
+              eval "$ETCDCTL_CMD put $ETCD_PREFIX/hosts/$(hostname).$(hostname).{{.Release.Namespace}}.svc.$CLUSTERDOMAIN $(hostname -i|awk '{print $1}')"
+              hostlist=$(eval "$ETCDCTL_CMD get $ETCD_PREFIX/hosts $ETCD_PREFIX/hosts1")
+              is_hostname=true
+              for item in $hostlist; do
+                if $is_hostname; then
+                  host=$(basename $item)
+                  is_hostname=false
+                else
+                  ip=$item
+                  if [ ! -z "$host" ]; then
+                      ifit=$(grep "$ip  ${host}$" /hosts.tmp)
+                        if [ -z "$ifit" ]; then
+                          echo "get new host line - $line"
+                          echo "$ip  $host"  >> /hosts.tmp
+                          if [ "$host" = {{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{.Release.Namespace}}.svc.$CLUSTERDOMAIN -a x"$ip" != x"$masterIP" ]; then
+                              echo "EGO master node {{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.{{.Release.Namespace}} IP changed from $masterIP to $ip, restart ego"
+                              . /opt/ibm/spectrumcomputing/profile.platform
+                              egosh ego restart -f
+                          fi
+                      fi
+                   fi
+                  is_hostname=true
+                fi
+              done
+              cat /hosts.tmp > /etc/hosts
+
+
+          startLivy.sh: |-
+                livydir=$1
+                echo "livy.spark.deploy-mode = client" > $livydir/conf/livy.conf
+                echo "livy.repl.enable-hive-context = true" >> $livydir/conf/livy.conf
+                echo "livy.server.port = 8998" >> $livydir/conf/livy.conf
+                echo "livy.spark.master = spark://@SIGNAME.@[@[.Release.Namespace@]@]:7077" >> $livydir/conf/livy.conf
+                spark_dir=`ls /opt/sparkhome/|grep '^spark-[0-9].[0-9]'`
+                export SPARK_HOME=/opt/sparkhome/$spark_dir
+                sparkHome=$SPARK_HOME
+                useExistImage=@useExistImage
+                if [ $useExistImage ]; then
+                  for file in $(ls /var/tmp/sparkconf/*.*)
+                  do
+                      filename=$(basename $file)
+                      if [ -f $sparkHome/conf/$filename ];  then
+                          rm -f $sparkHome/conf/$filename
+                      fi
+                      cp -L $file $sparkHome/conf/$filename
+                  done
+                fi
+                oldsparkhome=`cat $SPARK_HOME/conf/spark-env.sh|grep SPARK_EGO_NATIVE_LIBRARY|cut -d "=" -f2`
+                oldsparkhome=${oldsparkhome%$spark_dir*}
+                oldsparkhome=${oldsparkhome//\//\\/}
+                sed -i "s/$oldsparkhome/\/opt\/sparkhome\//g" $SPARK_HOME/conf/spark-env.sh
+                sed -i '/JAVA_HOME/d' $SPARK_HOME/conf/spark-env.sh
+                sed -i '/SPARK_PID_DIR/d' $SPARK_HOME/conf/spark-env.sh
+                echo "SPARK_PID_DIR=/opt/sparkhome/" >> $SPARK_HOME/conf/spark-env.sh
+                if [ $useExistImage ]; then
+                  SPARK_EGO_NATIVE_LIBRARY=`cat $sparkHome/conf/spark-env.sh|grep SPARK_EGO_NATIVE_LIBRARY|cut -d "=" -f2`
+                  if [ ! -z "$SPARK_EGO_NATIVE_LIBRARY" ]; then
+                      ego_lib_dir=$(dirname $SPARK_EGO_NATIVE_LIBRARY)
+                      ego_lib=$(basename $SPARK_EGO_NATIVE_LIBRARY)
+                      machine_arch=`uname -m`
+                      /bin/cp -f $ego_lib_dir/$machine_arch/$ego_lib $ego_lib_dir/
+                      rm -rf $ego_lib_dir/ppc64le
+                      rm -rf $ego_lib_dir/x86_64
+                      cp $sparkHome/conf/log4j.properties $ego_lib_dir/../ego/
+                      rm -f $sparkHome/conf/log4j.properties
+                  fi
+                fi
+                ssl_enabled=`cat $SPARK_HOME/conf/spark-defaults.conf | grep caKeyStore.jks |cut -d " " -f1`
+                history_log=`cat $SPARK_HOME/conf/spark-defaults.conf | grep "spark.eventLog.dir" |cut -d " " -f2`
+                if [ x$history_log != x ]; then
+                    history_log=${history_log:7}
+                    mkdir -p $history_log
+                fi
+                if [ x$ssl_enabled != x ]; then
+                  sed -i "/caKeyStore.jks/d" $SPARK_HOME/conf/spark-defaults.conf
+                  echo "spark.ego.ssl.rpc.client.keyStore /opt/sparkhome/caKeyStore.jks" >> $SPARK_HOME/conf/spark-defaults.conf
+                  sed -i "s/\/opt\/ibm\/spectrumcomputing\/security/\/opt\/sparkhome/g" $SPARK_HOME/conf/spark-defaults.conf
+                  domain=`dnsdomainname`
+                  if [ "$domain" = "" ]; then
+                    domain=`hostname -f`
+                  else
+                    domain="*.$domain"
+                  fi
+                  dnsname=`hostname -f`
+                  cd /opt/sparkhome
+                  egokeytool="keytool"
+                  $egokeytool -genkeypair -noprompt -alias tier2alias -dname "CN=$domain,O=IBM,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier2passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+                  $egokeytool -certreq -alias tier2alias -file tier2alias.csr -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+                  $egokeytool -gencert -infile tier2alias.csr -outfile tier2aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+                  $egokeytool -importcert -noprompt -alias caalias -file cacert.pem -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword
+                  $egokeytool -import -noprompt -alias tier2alias -file tier2aliascertcasigned.pem -storepass SparkPassword -keypass tier2passwd -keystore tier2and3ServerKeyStore.jks
+                  $egokeytool -genkeypair -noprompt -alias tier3alias -dname "CN=$domain,O=IBM,C=CA" -keystore tier2and3ServerKeyStore.jks -storepass SparkPassword -keypass tier3passwd -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+                  $egokeytool -certreq -alias tier3alias -file tier3alias.csr -storepass SparkPassword -keypass tier3passwd  -keystore tier2and3ServerKeyStore.jks -ext "san=dns:$dnsname"
+                  $egokeytool -gencert -infile tier3alias.csr -outfile tier3aliascertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+                  $egokeytool -import -noprompt -alias tier3alias -file tier3aliascertcasigned.pem -storepass SparkPassword -keypass tier3passwd -keystore tier2and3ServerKeyStore.jks
+                  chmod 444 tier2and3ServerKeyStore.jks
+                fi
+                mkdir $livydir/logs
+                /$livydir/bin/livy-server &
+                while [ true ]
+                do
+                   eval "$ETCDCTL_CMD put $ETCD_PREFIX/hosts/$(hostname) $(hostname -i|awk '{print $1}')"
+                   sleep 10
+                done
+          commitSIG.sh: |-
+                topdir=/opt/ibm/spectrumcomputing
+                exec 1<>$topdir/conductorspark/logs/commitSIG.log
+                exec 2>&1
+                set -x
+                touch $topdir/conductorspark/work/ascd_pkg_deployed
+                echo "Commit the SIG image to a registry."
+                sig_name=@SIGNAME
+                if [ "$sig_name" = "" ]; then
+                  echo "Missed to specify a SIG name, exit."
+                  exit -1
+                fi
+                hostname=`hostname`
+                sigimage={{.Values.global.dockerRegistryPrefix}}/$sig_name
+                docker commit $(docker ps |grep $hostname | grep -v pause | grep -v kubectl | awk '{print $1}') $sigimage
+                if [ $? -ne 0 ]; then
+                    echo "docker commit failed."
+                    exit -2
+                fi
+                if [ -z "$ADMIN_USERNAME" -a -f /root/.sig/.credential ]; then
+                    decodedCred=`cat /root/.sig/.credential |base64 -d`
+                    export ADMIN_USERNAME=`echo $decodedCred|awk -F':' '{ print $1 }'`
+                    export ADMIN_PASSWORD=`echo $decodedCred|awk -F':' '{ print $2 }'`
+                else
+                    echo "Extracting credentials from secrets failed"
+                fi
+                docker login -u $ADMIN_USERNAME -p $ADMIN_PASSWORD {{.Values.global.dockerRegistryPrefix}} || exit -3
+                docker push $sigimage
+                if [ $? -ne 0 ]; then
+                    echo "docker push failed."
+                    exit -4
+                fi
+                curl -X PUT {{ template "ibm-wml-accelerator-prod.etcdInstanceCreation" .}}/{{.Values.global.dockerRegistryPrefix}}@@$sig_name -d value="latest"
+                touch $topdir/conductorspark/work/sig_committed
+                exit 0
+          upgradeSIG.sh: |-
+                topdir=/opt/ibm/spectrumcomputing
+                exec 1<>$topdir/conductorspark/logs/updateSIG.log
+                exec 2>&1
+                set -x
+                if [ -e $topdir/conductorspark/work/sig_committed ];then
+                    rm -rf $topdir/conductorspark/work/sig_committed
+                    echo "Replace the deployment image with the SIG one."
+                    sig_name=@SIGNAME
+                    sigimage={{.Values.global.dockerRegistryPrefix}}/$sig_name
+                    jstr=$(echo {\"spec\":\{\"template\":\{\"spec\":\{\"containers\":[\{\"name\":\"$sig_name\",\"image\":\"$sigimage\"\}]\}\}\}\})
+                    retries=0
+                    while [ $retries -le 5 ]
+                    do
+                        curlReturn=$(curl --write-out %{http_code} --silent --output /dev/null -X PATCH  -H 'Content-Type: application/strategic-merge-patch+json' --data $jstr "http://127.0.0.1:8001/apis/extensions/v1beta1/namespaces/@namespace/deployments/$sig_name" )
+                        if [ $curlReturn -ne 200 ]; then
+                            echo "Patching the deployment image got return code: $curlReturn"
+                            sleep 3
+                            retries=$(expr $retries + 1)
+                        else
+                            break
+                        fi
+                    done
+                    if [ $retries -ge 6  ]; then
+                        echo "Failed to replace the deployment image. Need a manually update from ICP console."
+                    fi
+                fi
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: @SIGNAME
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        spec:
+          ports:
+            - name: spark-master
+              port: 7077
+              targetPort: 7077
+              protocol: TCP
+          type: ClusterIP
+        ---
+        apiVersion: v1
+        kind: Endpoints
+        metadata:
+          name: @SIGNAME
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        subsets:
+        - notReadyAddresses:
+          - ip: 10.0.0.1
+          ports:
+          - name: spark-master
+            port: 7077
+            protocol: TCP
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: @SIGNAME
+          labels:
+            {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 12 }}
+        spec:
+          replicas: 1
+          strategy:
+            type: RollingUpdate
+          selector:
+            matchLabels:
+              {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 14 }}
+          template:
+            metadata:
+              labels:
+                {{- include "ibm-wml-accelerator-prod.sigLabels" . | indent 16 }}
+              annotations:
+                {{- include "ibm-wml-accelerator-prod.releaseAnnotations" . | indent 16 }}
+            spec:
+              @[@[- if @new_namespace @]@]
+              serviceAccountName: cws-@[@[ .Release.Name @]@]
+              @[@[- else @]@]
+              serviceAccountName: cws-{{ .Release.Name }}
+              @[@[- end @]@]
+              affinity:
+              {{- include "ibm-wml-accelerator-prod.nodeaffinity" . | indent 14 }}
+              {{- include "ibm-wml-accelerator-prod.tolerations" . | indent 14 }}
+              containers:
+                - name: @SIGNAME
+                  image: @[@[ .Values.sig_image @]@]
+                  imagePullPolicy: Always
+                  ports:
+                    - containerPort: 33333
+                  command: ["/bin/bash","-c"]
+                  args: ["$(bash /var/tmp/cfc/startSlave.sh)"]
+                  livenessProbe:
+                    tcpSocket:
+                      port: 17869
+                    {{- if eq .Values.cluster.type "cp4d" }}
+                    initialDelaySeconds: 120
+                    {{- else }}
+                    initialDelaySeconds: 3600
+                    {{- end }}
+                    periodSeconds: 10
+                  securityContext:
+                    capabilities:
+                      add:
+                        - SETGID
+                        - SETUID
+                        - SYS_CHROOT
+                        - SYS_ADMIN
+                        - SYS_NICE
+                        - SYS_RESOURCE
+                        - SYS_TIME
+                        - NET_BROADCAST
+                        - NET_ADMIN
+                        - LEASE
+                  env:
+                    - name: ETCDCTL_API
+                      value: "3"
+                    {{- if eq .Values.cluster.type "iks" }}
+                    - name: ETCD_PREFIX
+                      value: {{ .Release.Namespace }}-{{ .Values.iks.clustername }}
+                    {{- else }}
+                    - name: ETCD_PREFIX
+                      value: {{ .Release.Namespace }}
+                    {{- end }}
+                    - name: ETCDCTL_CMD
+                      {{- if .Values.cluster.etcdExternal }}
+                      value: "etcdctl --cacert=/etcd/cacert --endpoints={{.Values.cluster.etcdEndpoint}} --user=${ETCD_USERNAME}:${ETCD_PASSWORD}"
+                    - name: ETCD_USERNAME
+                      valueFrom:
+                        secretKeyRef:
+                          name: etcd-secret
+                          key: etcd-username
+                    - name: ETCD_PASSWORD
+                      valueFrom:
+                        secretKeyRef:
+                          name: etcd-secret
+                          key: etcd-password
+                      {{- else }}
+                      value: 'etcdctl --endpoints={{ template "ibm-wml-accelerator-prod.etcdEndpoint" . }} --cert {{ template "ibm-wml-accelerator-prod.etcdClientCertPath" . }}  --key {{ template "ibm-wml-accelerator-prod.etcdClientKeyPath" . }} --cacert {{ template "ibm-wml-accelerator-prod.etcdCacert" . }}'
+                      {{- end }}
+                    - name: LDAP_URI
+                      value: {{.Values.cluster.ldapServerURI}}
+                    - name: BASE_DN
+                      value: {{.Values.cluster.ldapBaseDn}}
+                    - name: LDAP_BIND_DN
+                      value: {{.Values.cluster.ldapBindDn}}
+                    - name: LDAP_BIND_PW
+                      value: {{.Values.cluster.ldapBindPw}}
+                    {{- if not .Values.isOcpIr }}
+                    - name: ADMIN_USERNAME
+                      valueFrom:
+                        secretKeyRef:
+                          name: {{ .Release.Name }}-admin-secret
+                          key: username
+                    - name: ADMIN_PASSWORD
+                      valueFrom:
+                        secretKeyRef:
+                          name: {{ .Release.Name }}-admin-secret
+                          key: password
+                    {{- if eq .Values.cluster.type "iks" }}
+                    - name: APIKEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: {{ .Release.Name }}-admin-secret
+                          key: apikey
+                    - name: LOGDNA_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: logdna-{{.Values.iks.region}}
+                          key: logdna-{{.Values.iks.region}}
+                    - name: LOGDNA_DIRECTORY_LOGS
+                      value: "/opt/ibm/spectrumcomputing/conductorspark/logs,/opt/ibm/spectrumcomputing/eservice/rs/log,/opt/ibm/spectrumcomputing/logs"
+                    {{- end }}
+                    {{- end }}
+                  ports:
+                  resources:
+                    requests:
+                      cpu: "@CPUREQUEST"
+                      memory: "@MEMREQUEST"
+                    limits:
+                      {{- if or .Values.dli.enabled (gt (.Values.sig.gpu|int) 0) }}
+                      nvidia.com/gpu: "@GPUREQUEST"
+                      {{- end }}
+                      cpu: "@CPUREQUEST"
+                      memory: "@MEMREQUEST"
+                  volumeMounts:
+                      {{- if .Values.cluster.etcdExternal }}
+                      - mountPath: /etcd/
+                        name: etcd-vol
+                      {{- end }}
+                      - mountPath: /gpfs/mygpfs
+                        name: mygpfs
+                        subPath: mygpfs
+                      - mountPath: /gpfs/myresultfs
+                        name: mygpfs
+                        subPath: myresultfs
+                      - mountPath: /gpfs/mydatafs
+                        name: mygpfs
+                        subPath: mydatafs
+                      - mountPath: /gpfs/dlim
+                        name: mygpfs
+                        subPath: dlim
+                      - mountPath: /opt/anaconda3
+                        name: wmla-conda
+                        readOnly: true
+                      @[@[- if or @storage_class_name (not @new_namespace) @]@]
+                      - mountPath: /var/shareDir
+                        name: persistsharedir
+                      @[@[- end @]@]
+                      - mountPath: /var/tmp/cfc
+                        name: conductor-slave-bootstrap
+                      @[@[- if .Values.useExistImage @]@]
+                      - name: sparkconf-volume
+                        mountPath: /var/tmp/sparkconf
+                      @[@[- end @]@]
+                      - mountPath: /dev/shm
+                        name: dshm
+                      @[@[- range $index, $v := .Values.volumes @]@]
+                      - name: host-volume-@[@[$index@]@]
+                      @[@[- if eq $v.type "File" @]@]
+                        mountPath: @[@[trimSuffix "/" $v.containerpath@]@]/@[@[ base $v.hostpath @]@]
+                      @[@[- else if eq $v.type "Directory" @]@]
+                        mountPath: @[@[$v.containerpath@]@]
+                      @[@[- end @]@]
+                      @[@[- end @]@]
+                      @[@[- range $i, $di := .Values.dataimages @]@]
+                      @[@[- range $index, $v := $di.volumes @]@]
+                      - name: @[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@]
+                        mountPath: @[@[$v.containerpath@]@]
+                      @[@[- end @]@]
+                      @[@[- end @]@]
+                - command:
+{{ include "ibm-wml-accelerator-prod.kubectlProxyCmd" . |  indent 18 }}
+                  - -p
+                  - "8001"
+                  image: {{ template "ibm-wml-accelerator-prod.kubectlImage" . }}
+                  resources:
+                    requests:
+                      cpu: 0.5
+                      memory: 256Mi
+                    limits:
+                      cpu: 0.5
+                      memory: 256Mi
+                  imagePullPolicy: IfNotPresent
+                  name: kubectlproxy
+                  lifecycle:
+                    preStop:
+                      exec:
+                         command: ["sh", "-c", "sleep 30"]
+              @[@[- if .Values.dataimages @]@]
+              initContainers:
+                @[@[- range $i, $di := .Values.dataimages @]@]
+                - name: @[@[$di.imagename | replace ":" "-"@]@]
+                  image: @[@[$di.imagename@]@]
+                  imagePullPolicy: IfNotPresent
+                  resources:
+                    requests:
+                      cpu: 0.5
+                      memory: 256Mi
+                    limits:
+                      cpu: 0.5
+                      memory: 256Mi
+                  volumeMounts:
+                  - mountPath: /var/tmp/cfc
+                    name: conductor-slave-bootstrap
+                  @[@[- range $index, $v := $di.volumes @]@]
+                  - name: @[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@]
+                    mountPath: /@[@[ $di.imagename | replace ":" "-" @]@]-@[@[$index@]@]
+                  @[@[- end @]@]
+                  command: ["/bin/sh","-c"]
+                  args: ["$(sh /var/tmp/cfc/cpImageToContainer.sh @[@[ $di.imagename@]@])"]
+                @[@[- end @]@]
+              @[@[- end @]@]
+              volumes:
+                {{- if .Values.cluster.etcdExternal }}
+                - name: etcd-vol
+                  secret:
+                    secretName: etcd-secret
+                    items:
+                    - key: etcd-cacert
+                      path: cacert
+                {{- end }}
+                - name: mygpfs
+                  persistentVolumeClaim:
+                    claimName: {{ .Release.Name }}-mygpfs
+                {{- if eq .Values.cluster.type "iks" }}
+                - name: wmla-conda
+                  hostPath:
+                    path: {{template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}
+                    type: Directory
+                {{- else }}
+                - name: wmla-conda
+                  persistentVolumeClaim:
+                    {{- if not .Values.master.existingcondaPVC }}
+                    claimName: {{ .Release.Name }}-conda
+                    {{- else }}
+                    claimName: {{ .Values.master.existingcondaPVC }}
+                    {{- end }}
+                {{- end }}
+                @[@[- if @storage_class_name @]@]
+                - name: persistsharedir
+                  persistentVolumeClaim:
+                    claimName: "@SIGNAME-sig-share"
+                @[@[- else if not @new_namespace @]@]
+                - name: persistsharedir
+                  persistentVolumeClaim:
+                    claimName: "{{ .Release.Name }}-cws-share"
+                @[@[- end @]@]
+                - name: conductor-slave-bootstrap
+                  configMap:
+                    name: "@SIGNAME-bootstrap"
+                    # Make files mounted from the configmap executable
+                    defaultMode: 0555
+                @[@[- if .Values.useExistImage @]@]
+                - name: sparkconf-volume
+                  configMap:
+                    name: @[@[ .Values.sparkconfConfigmap @]@]
+                @[@[- end @]@]
+                - name: dshm
+                  emptyDir:
+                     medium: Memory
+                @[@[- range $index, $v := .Values.volumes @]@]
+                - name: host-volume-@[@[$index@]@]
+                  hostPath:
+                     type: @[@[$v.type@]@]
+                     path: @[@[$v.hostpath@]@]
+                @[@[- end @]@]
+                @[@[- range $i, $di := .Values.dataimages @]@]
+                @[@[- range $index, $v := $di.volumes @]@]
+                - name: @[@[$di.imagename | replace ":" "-"@]@]-@[@[$index@]@]
+                  emptyDir: {}
+                @[@[- end @]@]
+                @[@[- end @]@]
+              terminationGracePeriodSeconds: 30
