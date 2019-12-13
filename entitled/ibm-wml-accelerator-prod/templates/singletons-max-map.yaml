@@ -1,0 +1,72 @@
+{{- if .Values.singletons.setNodesMaxMapCount }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-singletons-max-map
+  labels:
+    {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 4 }}
+
+data:
+  Chart.yaml: |-
+    name: {{ template "ibm-wml-accelerator-prod.maxMapChartName" . }}
+    version: {{ .Chart.Version }}
+    appVersion: {{ .Chart.AppVersion }}
+    description: Sets vm.max_map_count on nodes for Watson Machine Learning Accelerator
+    home: https://www.ibm.com/support/knowledgecenter/SSFHA8
+    keywords:
+    - deep learning
+    maintainers:
+    - name: Watson Machine Learning Accelerator Team
+
+  MaxMapDaemonSet.yaml:  |-
+    apiVersion: extensions/v1beta1
+    kind: DaemonSet
+    metadata:
+      name: wmla-max-map-daemon-{{ .Chart.AppVersion }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.maxMapLabels" . | indent 8 }}
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "ibm-wml-accelerator-prod.maxMapLabels" . | indent 12 }}
+        spec:
+          affinity:
+            {{- include "ibm-wml-accelerator-prod.nodeaffinity" . | indent 12 }}
+          serviceAccountName: {{ template "ibm-wml-accelerator-prod.singletonsServiceAccount" . }}
+          initContainers:
+            - name: init
+              image: {{ template "ibm-wml-accelerator-prod.UtilsImage" . }}
+              imagePullPolicy: Always
+              securityContext:
+                runAsNonRoot: false
+                runAsUser: 0
+                privileged: true
+                allowPrivilegeEscalation: true
+                capabilities:
+                  drop:
+                  - ALL
+              command:
+                - sh
+                - -c
+                - sysctl -w vm.max_map_count=262144;
+          containers:
+            - name: wmla-max-map-daemon
+              image: {{ template "ibm-wml-accelerator-prod.UtilsImage" . }}
+              imagePullPolicy: Always
+              command: ["/bin/sh", "-c"]
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+                privileged: false
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+              args:
+                - |
+                  echo Work done in initContainer. See it for logs. Sleeping forever...
+                  while true; do
+                    sleep 1000000
+                  done
+{{- end }}

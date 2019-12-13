@@ -1,0 +1,144 @@
+{{- if eq .Values.cluster.type "iks" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wmla-singletons-cleanup-{{ .Chart.AppVersion }}
+  namespace: {{ .Values.singletons.namespace }}
+  annotations:
+    helm.sh/hook: post-delete
+    helm.sh/hook-weight: "2"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+  labels:
+    {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 4 }}
+    {{- include "ibm-wml-accelerator-prod.singletonsSharedLabels" . | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 8 }}
+        {{- include "ibm-wml-accelerator-prod.singletonsSharedLabels" . | indent 8 }}
+    spec:
+      affinity:
+      {{- include "ibm-wml-accelerator-prod.nodeaffinity" . | indent 6 }}
+        podAffinity:
+          # Prefers (but doesn't require) nodes that already have the app-master image
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              namespaces:
+              - {{ .Values.singletons.namespace }}
+              - {{ .Release.Namespace }}
+              labelSelector:
+                matchExpressions:
+                - key: appVersion
+                  operator: In
+                  values:
+                  - {{ .Chart.AppVersion }}
+                - key: wmla-role
+                  operator: In
+                  values:
+                  - app-master
+      {{- if eq .Values.cluster.type "cp4d" }}
+      serviceAccountName: cws-{{ .Release.Name }}
+      {{- else }}
+      serviceAccountName: {{ template "ibm-wml-accelerator-prod.singletonsServiceAccount" . }}
+      {{- end }}
+      restartPolicy: Never
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      initContainers:
+      - name: kubectlget
+        image: {{ template "ibm-wml-accelerator-prod.kubectlImage" . }}
+        imagePullPolicy: Always
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+          privileged: false
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 0.5
+            memory: 256Mi
+          limits:
+            cpu: 0.5
+            memory: 256Mi
+        command:
+{{ include "ibm-wml-accelerator-prod.kubectlCopyCmd" . | indent 8 }}
+        - /kubedir/kubectl
+        volumeMounts:
+        - name: kubedir
+          mountPath: "/kubedir"
+      containers:
+      - name: cleanup-singletons
+        image: {{ template "ibm-wml-accelerator-prod.Image" . }}
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 0.5
+            memory: 256Mi
+          limits:
+            cpu: 0.5
+            memory: 256Mi
+        securityContext:
+          # Need root until cleanup configmap main.sh and _setupHelmCLI.tpl can run rootless.
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        command: ["bash"]
+        args: ["-c", "/cleanup-scripts/main.sh"]
+        env:
+        {{- if eq .Values.cluster.type "cp4d" }}
+        {{- if eq (include "ibm-wml-accelerator-prod.securedHelm" .) "true" }}
+        - name: ADMIN_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: wmla-singletons-admin-secret
+              key: username
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: wmla-singletons-admin-secret
+              key: password
+        {{- end }}
+        {{- else }}
+        - name: ADMIN_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: wmla-singletons-admin-secret
+              key: username
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: wmla-singletons-admin-secret
+              key: password
+        - name: APIKEY
+          valueFrom:
+            secretKeyRef:
+              name: wmla-singletons-admin-secret
+              key: apikey
+        {{- end }}
+        volumeMounts:
+        - mountPath: /cleanup-scripts
+          name: cleanup-scripts
+        - name: kubedir
+          mountPath: /tmp/kubedir
+      volumes:
+      - name: cleanup-scripts
+        configMap:
+          name: wmla-singletons-cleanup-{{ .Chart.AppVersion }}
+          # Make files mounted from the configmap executable
+          defaultMode: 0555
+      - name: kubedir
+        emptyDir: {}
+{{- end }}

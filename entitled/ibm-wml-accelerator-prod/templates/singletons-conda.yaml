@@ -1,0 +1,929 @@
+{{- if eq .Values.cluster.type "iks" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-singletons-conda
+  labels:
+    {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 4 }}
+
+data:
+  Chart.yaml: |-
+    name: {{ template "ibm-wml-accelerator-prod.condaChartName" . }}
+    version: {{ .Chart.Version }}
+    appVersion: {{ .Chart.AppVersion }}
+    description: Creates conda environments on nodes for use by Watson Machine Learning Accelerator
+    home: https://www.ibm.com/support/knowledgecenter/SSFHA8
+    keywords:
+    - deep learning
+    maintainers:
+    - name: Watson Machine Learning Accelerator Team
+
+  CondaDaemonSet.yaml: |-
+    apiVersion: extensions/v1beta1
+    kind: DaemonSet
+    metadata:
+      name: wmla-conda-daemon-{{ .Chart.AppVersion }}
+      namespace: {{ .Values.singletons.namespace }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.condaDaemonLabels" . | indent 8 }}
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "ibm-wml-accelerator-prod.condaDaemonLabels" . | indent 12 }}
+        spec:
+          affinity:
+            {{- include "ibm-wml-accelerator-prod.condaNodeAffinity" . | indent 12 }}
+          {{- if eq .Values.cluster.type "cp4d" }}
+          serviceAccountName: cws-{{ .Release.Name }}
+          {{- else }}
+          serviceAccountName: {{ template "ibm-wml-accelerator-prod.singletonsServiceAccount" . }}
+          {{- end }}
+          initContainers:
+          # The hostpath DirectoryOrCreate creates the directory with root as the owner.
+          # This container changes that to match our WMLA pod user
+          - name: init
+            image: {{ template "ibm-wml-accelerator-prod.UtilsImage" . }}
+            imagePullPolicy: Always
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+              privileged: false
+              allowPrivilegeEscalation: true
+              capabilities:
+                drop:
+                - ALL
+                add:
+                - CHOWN
+                # Need DAC so we can chown files we normally wouldn't have write access to.
+                - DAC_OVERRIDE
+            # Note: To use the enhanced capability binaries in a shell, allowPrivilegeEscalation would need to be true
+            command: ["{{ template "ibm-wml-accelerator-prod.UtilsCapBinPath" . }}/wmla_chown"]
+            args: ["-Rc", "{{ template "ibm-wml-accelerator-prod.ContainerUID" . }}", "{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}"]
+            volumeMounts:
+            - mountPath: "{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}"
+              name: host-wmla-conda
+          containers:
+          - name: wmla-conda-daemon
+            image: {{ template "ibm-wml-accelerator-prod.CondaImage" . }}
+            imagePullPolicy: Always
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+              privileged: false
+              allowPrivilegeEscalation: true
+              capabilities:
+                drop:
+                - ALL
+            command: ["/configmap-conda-sh/conda.sh"]
+            env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            volumeMounts:
+            - mountPath: "{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}/"
+              name: host-wmla-conda
+            - mountPath: /configmap-env-yamls
+              name: configmap-env-yamls
+            - mountPath: /configmap-conda-sh
+              name: configmap-conda-sh
+          volumes:
+          - name: host-wmla-conda
+            hostPath:
+              path: "{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}/"
+              type: DirectoryOrCreate
+          - name: configmap-env-yamls
+            configMap:
+              name: {{ template "ibm-wml-accelerator-prod.condaConfigMapName" . }}
+          - name: configmap-conda-sh
+            configMap:
+              name: wmla-conda-script-{{ .Chart.AppVersion }}
+              # Needed so we can execute conda.sh directly from the ConfigMap
+              defaultMode: 0555
+
+  conda_script.yaml: |-
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: wmla-conda-script-{{ .Chart.AppVersion }}
+      namespace: {{ .Values.singletons.namespace }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.condaDaemonLabels" . | indent 8 }}
+    data:
+      conda.daemon_settings: |-
+        #################################################################
+        # Licensed Materials - Property of IBM
+        # (C) Copyright IBM Corp. 2019.  All Rights Reserved.
+        #
+        # US Government Users Restricted Rights - Use, duplication or
+        # disclosure restricted by GSA ADP Schedule Contract with
+        # IBM Corp.
+        #################################################################
+
+        # Sets environment variables for the running conda daemon pods.
+        # Values from this configmap affect all nodes unless overridden on specific nodes.
+        # To override the configmap value for a node set the corresponding label: wmla-conda-<setting>-{{.Chart.AppVersion}}=<value>
+        # For example: kubectl label node <node_name> wmla-conda-run_loop_mode-{{.Chart.AppVersion}}=never
+
+        # Possible values: [automatic, always, never] Default: automatic
+        run_loop_mode=automatic
+
+        # Possible values: [always, never] Default: never
+        remove_envs_missing_yaml_mode=never
+
+      conda.sh: |-
+        #!/bin/bash
+        #################################################################
+        # Licensed Materials - Property of IBM
+        # (C) Copyright IBM Corp. 2019.  All Rights Reserved.
+        #
+        # US Government Users Restricted Rights - Use, duplication or
+        # disclosure restricted by GSA ADP Schedule Contract with
+        # IBM Corp.
+        #################################################################
+
+        #############################
+        #      Constants            #
+        #############################
+
+        # Note: The following env variables are defined in the daemonset pod yaml:
+        # K8S_NODE_NAME
+
+        # Constants for paths
+        DAEMON_CONDA_PREFIX=/opt/anaconda3
+        NODE_CONDA_PREFIX={{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}
+        CONDA_SYNCED_FLAG=wmla_conda_sync_complete
+        DAEMON_CONDA_SYNCED_FLAG=$DAEMON_CONDA_PREFIX/$CONDA_SYNCED_FLAG
+        NODE_CONDA_SYNCED_FLAG=$NODE_CONDA_PREFIX/$CONDA_SYNCED_FLAG
+        YAML_DIR=/configmap-env-yamls
+        YAML_TMP_DIR=/tmp/conda
+
+        # Constants for node conda environment label states
+        LABEL_PREFIX={{ template "ibm-wml-accelerator-prod.condaEnvNodeLabelPrefix" . }}
+        ENV_STATE_BUILDING=Building
+        ENV_STATE_BUILT=Built
+        ENV_STATE_READY=Ready
+        ENV_STATE_FAILED=Failed
+        ENV_STATE_OOSync=Out-of-sync
+        ENV_STATE_MISSING_YAML=Missing-yaml
+
+
+        #############################
+        #      Helper methods       #
+        #############################
+
+        label_node() {
+            local label_key=$1
+            local label_value=$2
+            kubectl label node $K8S_NODE_NAME --overwrite $label_key=$label_value 1>/dev/null
+        }
+
+        remove_node_label() {
+            local label_key=$1
+            kubectl label node $K8S_NODE_NAME --overwrite $label_key- 1>/dev/null
+        }
+
+        # Uses flag file to determine if a node's conda folder has ever successfully synced.
+        # If flag isn't found, rsync the pod's conda to the node. If it is found (ie pod was restarted)
+        # copy the data from the node back to the pod.
+        perform_initial_sync() {
+            # We only care if the flag is on the node itself.
+            if [ ! -f $NODE_CONDA_SYNCED_FLAG ]; then
+                echo Performing initial sync on node $K8S_NODE_NAME
+                if ! rsync_pod_to_node; then
+                    echo ERROR: Exiting because of failure to copy base WMLA conda environments to node at daemon start. >&2
+                    exit 1
+                fi
+            else
+                echo Daemon pod restart detected on node $K8S_NODE_NAME
+                if ! rsync_node_to_pod; then
+                    echo ERROR: Exiting because of failure to copy existing environments from node back to pod at daemon start. >&2
+                    exit 1
+                fi
+            fi
+
+            while [ ! "$(ls -A $YAML_DIR/..data)" ]; do
+                echo Waiting for the prebuilt conda environment yamls to be setup in the configmap.
+                sleep 5;
+            done
+        }
+
+        # Returns 0 if yaml describes the conda environment or 1 if not.
+        # A yaml is considered to describe an environment if its name and all its
+        # dependencies (and their specified versions) match what is in the environment.
+        # Note: Package build numbers of the environment are ignored. Only the version numbers are compared.
+        # Note: An environment may have additional packages and would still be considered as matching the yaml.
+        yaml_describes_env() {
+            local yaml_env_name=$1
+            local yaml_path=$2
+            local env_path=$3
+
+            local ret_val=0
+
+            # The conda env export call is expensive so only make it once
+            local env_export_yaml=$($DAEMON_CONDA_PREFIX/bin/conda env export -p $env_path)
+            local dep_test=$(/usr/local/bin/yq -cr '.dependencies' <<< $env_export_yaml)
+
+            # Return early if the environment is invalid
+            if [ $dep_test == "null" ]; then
+                /bin/echo $env_path does not appear to be a valid environment as it has no dependencies
+                return 1
+            fi
+
+            # Compare list of base dependencies (ie non-pip dependencies)
+            # We only care about the package version, not the specific build so it is `cut` from the environment export.
+            local env_base_dependencies=$(/usr/local/bin/yq -r '.dependencies[] | select(.==tostring)' <<< $env_export_yaml | /usr/bin/cut -f1,2 -d'=')
+            for yaml_base_dependency in $(/usr/local/bin/yq -cr '.dependencies[] | select(.==tostring)' $yaml_path); do
+                if ! /bin/grep -q ^$yaml_base_dependency <<< $env_base_dependencies; then
+                    /bin/echo -e "Failed to find base dependency $yaml_base_dependency required by $yaml_path for the environment at $env_path"
+                    ret_val=1
+                fi
+            done
+
+            # Compare list of pip dependencies
+            local env_pip_dependencies=$(/usr/local/bin/yq -r '.dependencies[] | select(.!=tostring).pip[]' <<< $env_export_yaml)
+            for yaml_pip_dependency in $(/usr/local/bin/yq -cr '.dependencies[] | select(.!=tostring).pip[]' $yaml_path); do
+                if ! /bin/grep -q ^$yaml_pip_dependency <<< $env_pip_dependencies; then
+                    /bin/echo -e "Failed to find pip dependency $yaml_pip_dependency required by $yaml_path for the environment at $env_path"
+                    ret_val=1
+                fi
+            done
+
+            # If there was a dependency miss, print what the environment currently had.
+            if [ $ret_val != 0 ]; then
+                /bin/echo The environment $env_path reported it has following base dependencies installed:
+                for dep in $env_base_dependencies; do
+                    /bin/echo -e "\t$dep"
+                done
+                /bin/echo The environment $env_path reported it has following pip dependencies installed:
+                for dep in $env_pip_dependencies; do
+                    /bin/echo -e "\t$dep"
+                done
+            fi
+
+            return $ret_val
+        }
+
+        # Adds a label to the kubernetes node for any extra environments found in the
+        # node's conda path that does not have a matching yaml.
+        label_missing_yaml_envs() {
+            for node_env in $(ls $NODE_CONDA_PREFIX/envs); do
+                local found=false
+                for yaml_env in ${yaml_envs[@]}; do
+                    if [ $node_env == $yaml_env ]; then
+                        found=true
+                        break
+                    fi
+                done
+
+                if [ $found == "false" ]; then
+                    local label_key=$LABEL_PREFIX$node_env
+                    /bin/echo "Setting $label_key as $ENV_STATE_MISSING_YAML because a matching yaml was not found for the environment at $NODE_CONDA_PREFIX/envs/$node_env"
+                    label_node $label_key $ENV_STATE_MISSING_YAML
+                fi
+
+            done
+        }
+
+        # Remove environments if there are no matching yaml for them in the configmap.
+        remove_envs_missing_yaml() {
+            for daemon_env in $(ls $DAEMON_CONDA_PREFIX/envs); do
+                local found=false
+                for yaml_env in ${yaml_envs[@]}; do
+                    if [ $daemon_env == $yaml_env ]; then
+                        found=true
+                        break
+                    fi
+                done
+
+                if [ $found == false ]; then
+                    echo Removing daemon pod\'s conda environment $daemon_env because no matching yaml was found
+                    if conda env remove --name $daemon_env -y 1>/dev/null && rsync_pod_to_node; then
+                        # Immediately remove the label if successful. If not, let the end of loop env checks update the label.
+                        remove_node_label $LABEL_PREFIX$daemon_env
+                    fi
+                fi
+            done
+        }
+
+        # Removes label from the node if there is no corresponding environment or yaml.
+        remove_dead_labels(){
+            set_current_labels_from_node
+            local node_envs=$(/bin/ls $NODE_CONDA_PREFIX/envs)
+            for node_label in $wmla_env_labels; do
+                # Strip off value from kubectl result
+                local node_label=$(sed "s/=.*//" <<< $node_label)
+                local found_yaml=false
+                # Search for any yaml that matches the label
+                for yaml_label in ${yaml_labels[@]}; do
+                    if [ $node_label == $yaml_label ]; then
+                        found_yaml=true
+                        break
+                    fi
+                done
+
+                # Strips off the label prefix to get just the environment name.
+                local node_env_from_label=$(sed "s/^$LABEL_PREFIX\(.*\).*/\1/" <<<$node_label)
+
+                # Search for an environment that matches the label
+                local found_env=false
+                if /bin/grep -q ^$node_env_from_label$ <<< $node_envs; then
+                    found_env=true
+                fi
+
+                # Remove the label if there's no yaml and no environment for it.
+                if [ $found_yaml == "false" ] && [ $found_env == "false" ]; then
+                    /bin/echo "Removing node label $node_label because no matching yaml or environment was found"
+                    remove_node_label $node_label
+                fi
+
+            done
+        }
+
+        label_ready_oosync_envs(){
+            local node_envs=$(/bin/ls $NODE_CONDA_PREFIX/envs)
+            for i in ${!yaml_envs[@]}; do
+                local yaml_env_name=${yaml_envs[$i]}
+                local yaml_file_path=${yaml_file_paths[$i]}
+                local node_env_path=${node_env_paths[$i]}
+                local yaml_label=${yaml_labels[$i]}
+
+                # Compare if what is on the node matches the yaml definition
+                if /bin/grep -q ^$yaml_env_name$ <<< $node_envs; then
+                    if yaml_describes_env $yaml_env_name $yaml_file_path $node_env_path; then
+                        label_node $yaml_label $ENV_STATE_READY
+                    else
+                        /bin/echo "Setting $yaml_label as $ENV_STATE_OOSync because the environment at $node_env_path does not match $yaml_file_path"
+                        label_node $yaml_label $ENV_STATE_OOSync
+                    fi
+                else
+                    /bin/echo "Setting $yaml_label as $ENV_STATE_FAILED because the $yaml_env_name environment was not found on the node"
+                    label_node $yaml_label $ENV_STATE_FAILED
+                fi
+            done
+        }
+
+        # Rsyncs from source to destination path. If items exist in the destination that
+        # are not in the source, those items are deleted from the destination. Files that
+        # are hard linked in source are also hard linked to the relevant inodes on destination.
+        #
+        # Note on hard links and updating:
+        # Do not directly update environments via "conda env update" and "rsync". Instead delete
+        # the existing environment and recreate with desired changes. An interaction between the
+        # pod's overlayfs, conda update, and rsync changes unexpected hard links. Existing
+        # (and unchanged) environments can get relinked to newer build files from the updated
+        # environment. This can be seen by adding --progress to the rsync command,
+        # updating a prebuilt environment and restarting the pod. The post-restart, node to pod rsync
+        # output will show many "file1 => file2" lines (=> means hard link change). Comparing
+        # "find / -samefile <file>" from both before and after the update/restart will show
+        # unexpected existing environments now hard linked to files for newer package build versions
+        # from the updated environment.
+        rsync_conda_paths() {
+            local source_path=$1
+            local dest_path=$2
+            # For rsync to copy the contents of a source folder directly to a
+            # destination folder (versus a subfolder in destination) the
+            # source needs to have a trailing "/" and destination must not.
+            if rsync -aH --delete $source_path/ $dest_path; then
+                echo Sync finished successfully
+                return 0
+            else
+                echo WARNING: Sync failed
+                return 1
+            fi
+        }
+
+        # Rsyncs conda folder from pod to node. Also sets the flag file.
+        rsync_pod_to_node() {
+            echo Syncing pod\'s $DAEMON_CONDA_PREFIX to node\'s $NODE_CONDA_PREFIX for node $K8S_NODE_NAME
+            rsync_conda_paths $DAEMON_CONDA_PREFIX $NODE_CONDA_PREFIX
+            sync_result=$?
+            if [ $sync_result == 0 ]; then
+                # Only create and rsync the flag after the "real" rsync was successful
+                # Note: This file (and it's contents) will go into conda folder and
+                # will be visible to IG workers. Don't echo things like the K8S_NODE_NAME.
+                echo $(date) > $DAEMON_CONDA_SYNCED_FLAG
+                rsync -aH $DAEMON_CONDA_SYNCED_FLAG $NODE_CONDA_SYNCED_FLAG
+            fi
+            return $sync_result
+        }
+
+        # Rsyncs conda folder from node to pod.
+        rsync_node_to_pod() {
+            echo Syncing node\'s $NODE_CONDA_PREFIX to pod\'s $DAEMON_CONDA_PREFIX for node $K8S_NODE_NAME
+            rsync_conda_paths $NODE_CONDA_PREFIX $DAEMON_CONDA_PREFIX
+            return $?
+        }
+
+        # Sets global run_loop variable. Setting can be controlled
+        # cluster wide via the sourced configmap or on specific nodes via a label.
+        set_run_loop(){
+            # Initial value should come from sourced configmap. Set a default should that be missing.
+            local default_mode=automatic
+            if [ -z $run_loop_mode ]; then
+                echo WARNING: No value found for run_loop_mode in the configmap. Defaulting to \"$default_mode\"
+                run_loop_mode=$default_mode
+            fi
+
+            # Use node label if present.
+            local run_loop_mode_label=$(grep -oP '(?<=wmla-conda-run_loop_mode-{{.Chart.AppVersion}}=).*' <<< "$node_labels")
+            if [ $run_loop_mode_label ]; then
+                echo For run_loop_mode, using node label value \"$run_loop_mode_label\" over of configmap value \"$run_loop_mode\".
+                run_loop_mode=$run_loop_mode_label
+            fi
+
+            # Confirm the setting is valid.
+            # Note: Remember to update the sourced configmap and wildcard case if options are changed.
+            case $run_loop_mode in
+                automatic)
+                    local true_msg_preamble="Checking WMLA conda environments on node $K8S_NODE_NAME because"
+                    if [ -z $last_loop_configmap ];then
+                        run_loop=true
+                        echo $true_msg_preamble previous loop record was not found.
+                    elif [ "$last_loop_configmap" != $(readlink -f $YAML_DIR/..data) ]; then
+                        run_loop=true
+                        echo $true_msg_preamble the configmap\'s yamls differ since the last loop.
+                    elif unready_wmla_conda_labels; then
+                        run_loop=true
+                        echo $true_msg_preamble a non-Ready label was found.
+                    elif (( $(/bin/date +%s) - last_loop_completed > 3600 )); then
+                        run_loop=true
+                        echo $true_msg_preamble it has been $(( $(/bin/date +%s) - last_loop_completed )) seconds since last loop.
+                    else
+                        run_loop=false
+                    fi
+                    ;;
+                always)
+                    run_loop=true
+                    echo $true_msg_preamble run_loop_mode was set to \"always\".
+                    ;;
+                never)
+                    run_loop=false
+                    echo Skipping all checks of WMLA conda environments on node $K8S_NODE_NAME because run_loop_mode was set to \"never\".
+                    ;;
+                *)
+                    echo WARNING: For run_loop_mode, \"$run_loop_mode\" is not one of [\"always\", \"never\", \"automatic\"]. Ignoring label and using \"$default_mode\".;;
+            esac
+        }
+
+        # Sets global remove_envs_missing_yaml variable. Setting can be controlled
+        # cluster wide via the sourced configmap or on specific nodes via a label.
+        set_remove_envs_missing_yaml() {
+            remove_envs_missing_yaml=false
+            local default_mode=never
+            # Initial value should come from sourced configmap file which affects all nodes. Set a default should that be missing.
+            if [ -z $remove_envs_missing_yaml_mode ]; then
+                echo WARNING: No value found for remove_envs_missing_yaml_mode in the configmap. Defaulting to \"$default_mode\"
+                remove_envs_missing_yaml_mode=$default_mode
+            fi
+
+            # use node label value if present
+            local remove_envs_missing_yaml_mode_label=$(grep -oP '(?<=wmla-conda-remove_envs_missing_yaml_mode-{{.Chart.AppVersion}}=).*' <<< "$node_labels")
+            if [ $remove_envs_missing_yaml_mode_label ]; then
+                echo For remove_envs_missing_yaml_mode, using node label value \"$remove_envs_missing_yaml_mode_label\" over of configmap value \"$remove_envs_missing_yaml_mode\".
+                remove_envs_missing_yaml_mode=$remove_envs_missing_yaml_mode_label
+            fi
+
+            # Confirm the setting is valid.
+            # Note: Also update the configmap and wildcard case if options are changed.
+            case $remove_envs_missing_yaml_mode in
+                always)
+                    remove_envs_missing_yaml=true
+                    ;;
+                # # TODO: Find the right label to check for this once the IG workers change is delivered.
+                # # Ideally it should identify worker pods related to this WMLA version and not just any workers
+                # if_no_jobs)
+                #     num_jobs=$(kubectl get pods --all-namespaces -l wmla-role=IG-worker,wmla-appVersion={{.Chart.AppVersion}} --field-selector spec.nodeName==$K8S_NODE_NAME -o name | wc -l)
+                #     if [ $num_jobs == 0 ]; then
+                #         remove_envs_missing_yaml=true
+                #     else
+                #         echo There are currently $num_jobs IG worker pods running on $K8S_NODE_NAME so environments without yamls in the configmap will not be removed.
+                #     fi
+                #     ;;
+                never)
+                    echo Environments without yamls in the configmap will not be removed because remove_envs_missing_yaml_mode is \"never\".
+                    ;;
+                *)
+                    echo WARNING: For remove_envs_missing_yaml_mode, \"$remove_envs_missing_yaml_mode\" is not one of [\"always\", \"never\"]. Ignoring mode and environments without yamls in the configmap will not be removed.;;
+            esac
+        }
+
+        # Setup the global yaml_arrays so that the elements at each index match the same yaml/env.
+        set_yaml_arrays() {
+            yaml_envs=()
+            yaml_file_paths=()
+            yaml_labels=()
+            node_env_paths=()
+
+            # Add the new environment to the arrays if it's valid.
+            local raw_file_paths=($YAML_DIR/*)
+            local arr_index=0
+            for raw_index in ${!raw_file_paths[@]}; do
+                local raw_path=${raw_file_paths[$raw_index]}
+                local yaml_env_name=$(/usr/local/bin/yq -r .name $raw_path)
+
+                # Check if file has an environment name
+                if [ -z $yaml_env_name ]; then
+                    echo WARNING: Could not find a valid environment name in $raw_path. Skipping file.
+                else
+                    # Check environment name is not too long.
+                    local yaml_label=$LABEL_PREFIX$yaml_env_name
+                    k8s_max_label_char=63
+                    if [ ${#yaml_label} -gt $k8s_max_label_char ]; then
+                        echo WARNING: The label for environment $yaml_env_name would be $yaml_label which is ${#yaml_label} characters. Kubernetes only allows $k8s_max_label_char. Please use a shorter environment name. Skipping $raw_path.
+                    else
+                        # Check if envirnoment name is unique.
+                        local unique_name=true
+                        for i in ${!yaml_envs[@]}; do
+                            if [ $yaml_env_name == ${yaml_envs[$i]} ]; then
+                                unique_name=false
+                                break
+                            fi
+                        done
+                        # Only add yaml if environment name is unique.
+                        if [ $unique_name != true ]; then
+                            echo WARNING: Environment name $yaml_env_name already used in ${yaml_file_paths[$i]}. Skipping $raw_path.
+                        # All the checks passed, add the environment to the list.
+                        else
+                            yaml_envs[$arr_index]=$yaml_env_name
+                            yaml_file_paths[$arr_index]=$raw_path
+                            yaml_labels[$arr_index]=$yaml_label
+                            node_env_paths[$arr_index]=$NODE_CONDA_PREFIX/envs/$yaml_env_name
+                            # Only increments the final array index if we added values to the arrays.
+                            ((arr_index++))
+                        fi
+                    fi
+                fi
+            done
+        }
+
+        create_new_envs () {
+            curr_conda_envs_str=$(conda env list | awk '{print $1}')
+            for i in ${!yaml_envs[@]}; do
+                local yaml_env_name=${yaml_envs[$i]}
+                local yaml_file_path=${yaml_file_paths[$i]}
+                local yaml_label=${yaml_labels[$i]}
+                local node_env_path=${node_env_paths[$i]}
+
+                # If the environment does not already exist then create it
+                if ! /bin/grep -q ^$yaml_env_name$ <<< $curr_conda_envs_str; then
+                    # Copy yaml from readonly ConfigMap directory or `conda env create` will fail
+                    filename=$(basename $yaml_file_path)
+                    cp $yaml_file_path $YAML_TMP_DIR/
+                    rw_yaml_file_path=$YAML_TMP_DIR/$filename
+
+                    # Update label to show we started building the environment
+                    label_node $yaml_label $ENV_STATE_BUILDING
+                    echo Attempting to build new environment $yaml_env_name from yaml copied from $yaml_file_path
+
+                    # NOTE: The conda builds need to happen in this pod's anaconda directory so the
+                    # paths it uses will match the paths when used in the IG pods.
+                    if conda env create -f $rw_yaml_file_path 1>/dev/null && rsync_pod_to_node; then
+                        label_node $yaml_env_name $ENV_STATE_READY
+                        echo Successfully built $yaml_env_name.
+                    else
+                        conda env remove --name $yaml_env_name -y 1>/dev/null
+                        rsync_pod_to_node
+                        label_node $yaml_env_name $ENV_STATE_FAILED
+                        echo Failed to build $yaml_env_name. Cleaned up failed environment.
+                    fi
+
+                    # Remove the rw copy of the yaml
+                    rm -rf $rw_yaml_file_path
+                    # Update the list of environments to match changes.
+                    curr_conda_envs_str=$(conda env list | awk '{print $1}')
+                fi
+            done
+        }
+
+        # Throttle loop so it doesn't run constantly. Throttle varies based on if there
+        # are non-Ready environments at the end of the loop.
+        throttle_loop() {
+            # Use a short throttle if all environments are Ready as those loops will
+            # generally be inexpensive. This allows us to detect configmap updates faster.
+            local loop_throttle=10
+            if unready_wmla_conda_labels; then
+                # Set a high throttle time if there are non-Ready labels since this will
+                # run full, expensive loops even if nothing changes.
+                loop_throttle=120
+            fi
+
+            now=$(/bin/date +%s)
+            sleep_sec=$(($loop_throttle-$now+$loop_start));
+            if (( sleep_sec < 0 )); then
+                sleep_sec=0
+            elif (( sleep_sec > loop_throttle )); then
+                sleep_sec=$loop_throttle;
+            fi;
+            sleep $sleep_sec;
+        }
+
+        # Sets the global node_labels and wmla_env_labels variables based on the node's current labels.
+        set_current_labels_from_node() {
+            # NOTE: Wrap multiple label variables in quotes when reading them to prevent newlines from getting lost.
+            node_labels=$(kubectl label node $K8S_NODE_NAME --list)
+            wmla_env_labels=$(grep ^$LABEL_PREFIX.*=.* <<< "$node_labels")
+        }
+
+        # Returns 0 ("true" return code) if there are any WMLA conda environments not labeled as Ready.
+        unready_wmla_conda_labels(){
+            set_current_labels_from_node
+            grep -vqP ".*=$ENV_STATE_READY" <<< "$wmla_env_labels"
+            return $?
+        }
+
+
+        #############################
+        # Start of script main body #
+        #############################
+
+        for sig in SIGHUP SIGINT SIGQUIT SIGABRT SIGALRM SIGTERM; do
+            trap "echo WMLA conda daemon caught signal $sig. Exiting immediately...; exit" $sig
+        done
+
+        perform_initial_sync
+        /bin/mkdir -p $YAML_TMP_DIR
+
+        echo Started WMLA conda daemon loop
+        while true; do
+            loop_start=$(/bin/date +%s);
+            source /configmap-conda-sh/conda.daemon_settings
+            set_current_labels_from_node
+            set_run_loop
+            if [ $run_loop != true ]; then
+                # If there's nothing to do this loop, 'continue' to next
+                throttle_loop
+                continue
+            fi
+            # Set last_loop_configmap immediate if running a loop so if it changes while
+            # the loop is running, we'll just do another loop afterward.
+            last_loop_configmap=$(readlink -f $YAML_DIR/..data)
+            set_remove_envs_missing_yaml
+            set_yaml_arrays
+            source $DAEMON_CONDA_PREFIX/etc/profile.d/conda.sh
+
+            # These run on the daemon pod's envs so the paths work out when used in the IG pods
+            create_new_envs
+            if [ $remove_envs_missing_yaml == true ]; then
+                remove_envs_missing_yaml
+            fi
+
+            # Check the envs currently on the node and updates the node labels
+            label_ready_oosync_envs
+            label_missing_yaml_envs
+            remove_dead_labels
+
+            # End of loop
+            last_loop_completed=$(/bin/date +%s)
+            echo Loop iteration on node $K8S_NODE_NAME completed at $(date) and took $(($last_loop_completed-$loop_start)) seconds
+            throttle_loop
+        done
+
+  CleanupDaemonSet.yaml: |-
+    apiVersion: extensions/v1beta1
+    kind: DaemonSet
+    metadata:
+      # NOTE: If you edit this name, also update remove_cleanup_daemonset() in the container args
+      name: wmla-conda-cleanup-daemon-{{.Chart.AppVersion}}
+      namespace: {{ .Values.singletons.namespace }}
+      annotations:
+        helm.sh/hook: post-delete
+        helm.sh/hook-delete-policy: before-hook-creation
+      labels:
+        {{- include "ibm-wml-accelerator-prod.condaCleanupLabels" . | indent 8 }}
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "ibm-wml-accelerator-prod.condaCleanupLabels" . | indent 12 }}
+        spec:
+          affinity:
+            {{- include "ibm-wml-accelerator-prod.condaNodeAffinity" . | indent 12 }}
+          {{- if eq .Values.cluster.type "cp4d" }}
+          serviceAccountName: cws-{{ .Release.Name }}
+          {{- else }}
+          serviceAccountName: {{ template "ibm-wml-accelerator-prod.singletonsServiceAccount" . }}
+          {{- end }}
+          initContainers:
+          # If an admin added files directly on the node they'd be owned by root.
+          # Make sure our user owns all the files in the WMLA conda directory so we can clean them up.
+          - name: init
+            image: {{ template "ibm-wml-accelerator-prod.UtilsImage" . }}
+            imagePullPolicy: Always
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+              privileged: false
+              allowPrivilegeEscalation: true
+              capabilities:
+                drop:
+                - ALL
+                add:
+                - CHOWN
+                # Need DAC so we can chown files we normally wouldn't have write access to.
+                - DAC_OVERRIDE
+            # Note: To use the enhanced capability binaries in a shell, allowPrivilegeEscalation would need to be true
+            command: ["{{ template "ibm-wml-accelerator-prod.UtilsCapBinPath" . }}/wmla_chown"]
+            args: ["-Rc", "{{ template "ibm-wml-accelerator-prod.ContainerUID" . }}", "{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}"]
+            volumeMounts:
+            - mountPath: "{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}"
+              name: host-wmla-conda
+          containers:
+          - name: wmla-conda-cleanup-daemon
+            image: {{ template "ibm-wml-accelerator-prod.kubectlImage" . }}
+            imagePullPolicy: Always
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+              privileged: false
+              allowPrivilegeEscalation: true
+              capabilities:
+                drop:
+                - ALL
+            env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            command: ["/bin/bash", "-c"]
+            args:
+              - |
+                cp /bin/hyperkube /bin/kubectl
+                remove_wmla_conda_labels() {
+                    # Find existing labels, strip off the "=" and everything after it.
+                    # Append "-" which tells kubernetes to remove the label in the next call.
+                    labels=$(kubectl label node $K8S_NODE_NAME --list | grep $LABEL_GREP | awk -F "=" '{print  $1 "-"}')
+
+                    if [ -z "$labels" ]; then
+                        echo No $LABEL_GREP labels to remove from node
+                    else
+                        echo Removing labels \"$labels\" from node $K8S_NODE_NAME
+                        if ! kubectl label node $K8S_NODE_NAME $labels; then
+                            echo ERROR: Exiting because of failure attempting to remove node labels
+                            exit 1
+                        fi
+                    fi
+                }
+
+                remove_cleanup_daemonset() {
+                    while true; do
+                        # Wait for WMLA conda labels to be removed from node and then delete this daemonset.
+                        all_nodes=$(kubectl get nodes -o jsonpath="{.items[*].metadata.name}")
+                        # Note: Wrap all_labels_all_nodes in quotes when reading results or output newlines will be ignored.
+                        all_labels_all_nodes=$(kubectl label node $all_nodes --list 2>&1)
+                        if [ $? == 0 ]; then
+                            # Calling 'kubectl label' with a list of nodes indents the returned labels.
+                            # Strip out leading/trailing whitespace so LABEL_GREP works.
+                            all_labels_all_nodes=$(awk '{$1=$1;print}' <<< "$all_labels_all_nodes")
+
+                            if grep -q $LABEL_GREP <<< "$all_labels_all_nodes"; then
+                                echo Waiting on conda environments to be cleaned from all nodes. Found:
+                                grep "$LABEL_GREP\|^Listing labels" <<< "$all_labels_all_nodes"
+                                echo ""
+                            else
+                                echo Watson Machine Learning Accelerator conda environments cleanup complete on all nodes. Terminating the cleanup DaemonSet...
+                                kubectl delete daemonset wmla-conda-cleanup-daemon-{{.Chart.AppVersion}} --ignore-not-found
+                                exit
+                            fi
+                        else
+                            echo ERROR: kubectl command failed: "$all_labels_all_nodes"
+                        fi
+                    sleep 10
+                    done
+                }
+
+                echo Starting cleanup of conda environments from \"{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}\" from node $K8S_NODE_NAME...
+
+                echo Waiting on conda daemon pods to finish terminating...
+                # Post-delete starts after the DaemonSet has been deleted but
+                # the pods may still be "Terminating". Wait until they are gone.
+                # Note: Need to add -o jsonpath so this call returns non-zero when no matching pods are found.
+                while kubectl get pods --all-namespaces -l wmla-role=conda-daemon,wmla-appVersion={{ .Chart.AppVersion }} -o jsonpath="{.items[].metadata.name}" > /dev/null 2>&1; do
+                    sleep 10
+                done
+
+                LABEL_PREFIX={{ template "ibm-wml-accelerator-prod.condaEnvNodeLabelPrefix" . }}
+                if [ -z "$LABEL_PREFIX" ]; then
+                    echo ERROR: Exiting because LABEL_PREFIX was not set or is empty and would cause ALL labels to be removed from the node
+                    exit 1
+                fi
+                LABEL_GREP=^$LABEL_PREFIX.*=.*
+
+                echo Deleting \"{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}\" from node $K8S_NODE_NAME
+                # The parent directory is owned by root so we can't delete the conda folder itself. Instead delete all the contents.
+                # Use find -delete instead of rm to delete .hidden files while avoiding . or ..
+                if ! find "{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}" -mindepth 1 -delete; then
+                    echo WARNING: Failed to delete some files. Contents of \"{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}\" will need to be deleted manually from node $K8S_NODE_NAME.
+                fi
+
+                remove_wmla_conda_labels
+                remove_cleanup_daemonset
+            volumeMounts:
+            - mountPath: "{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}/"
+              name: host-wmla-conda
+          volumes:
+          - name: host-wmla-conda
+            hostPath:
+              path: "{{ template "ibm-wml-accelerator-prod.condaReleaseHostPath" . }}/"
+              type: DirectoryOrCreate
+
+  EnvYamls.yaml: |-
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: {{ template "ibm-wml-accelerator-prod.condaConfigMapName" . }}
+      namespace: {{ .Values.singletons.namespace }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.condaPrebuiltEnvLabels" . | indent 8 }}
+    data:
+      # Prebuilt environment yamls will be filled when the conda daemon pods start
+
+  GeneratePrebuiltYamlsJob.yaml: |-
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ template "ibm-wml-accelerator-prod.condaInitEnvSetupJobName" . }}
+      labels:
+        {{- include "ibm-wml-accelerator-prod.condaPrebuiltEnvLabels" . | indent 8 }}
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "ibm-wml-accelerator-prod.condaPrebuiltEnvLabels" . | indent 12 }}
+        spec:
+          affinity:
+            {{- include "ibm-wml-accelerator-prod.condaNodeAffinity" . | indent 12 }}
+          {{- if eq .Values.cluster.type "cp4d" }}
+          serviceAccountName: cws-{{ .Release.Name }}
+          {{- else }}
+          serviceAccountName: {{ template "ibm-wml-accelerator-prod.singletonsServiceAccount" . }}
+          {{- end }}
+          restartPolicy: OnFailure
+          containers:
+          - name: conda-prebuilt-env-configmap-setup
+            image: {{ template "ibm-wml-accelerator-prod.CondaImage" . }}
+            imagePullPolicy: Always
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: {{ template "ibm-wml-accelerator-prod.ContainerUID" . }}
+              privileged: false
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            command: ["bash", "-c"]
+            args:
+              - |
+                YAML_DIR=/configmap-env-yamls
+                YAML_TMP_DIR=/tmp/conda
+                DAEMON_CONDA_PREFIX=/opt/anaconda3
+
+                # Add prebuilt yamls to the configmap if they don't already exist
+                if [ ! "$(ls -A $YAML_DIR/..data)" ]; then
+                    env_configmap={{ template "ibm-wml-accelerator-prod.condaConfigMapName" . }}
+                    echo Generating yamls for prebuilt environments...
+                    /bin/mkdir -p $YAML_TMP_DIR
+                    source $DAEMON_CONDA_PREFIX/etc/profile.d/conda.sh
+                    for daemon_env_path in $DAEMON_CONDA_PREFIX/envs/*/; do
+                        daemon_env=$(basename $daemon_env_path)
+                        echo Exporting prebuilt conda environment $daemon_env from $daemon_env_path
+                        # Note: Don't use export -p <prefix_path> as it nulls the name field.
+                        conda env export -n $daemon_env --no-builds | grep -v "^prefix:" > $YAML_TMP_DIR/$daemon_env.yaml
+                    done
+
+                    # Put prebuilt environment yamls in the configmap
+                    org_configmap_labels=$(kubectl label configmap $env_configmap --list)
+                    if ! kubectl create configmap $env_configmap --from-file=$YAML_TMP_DIR/ -o yaml --dry-run | kubectl replace -f -; then
+                        echo ERROR: Exiting because of failure to add prebuilt environment yamls to $env_configmap configmap. >&2
+                        exit 1
+                    fi
+                    if ! kubectl label configmap --overwrite $env_configmap $org_configmap_labels; then
+                        echo ERROR: Exiting because of failure to copy labels from original $env_configmap configmap to replacement configmap. >&2
+                        echo The original labels were: >&2
+                        echo "$org_configmap_labels" >&2
+                        exit 1
+                    fi
+                    echo Successfully added prebuilt environment yamls to $env_configmap configmap.
+                else
+                    echo WARNING: Unexpectedly found files in the $env_configmap configmap. Skipping job...
+                fi
+                # Wait a couple of minutes before deleting the completed job should user want to inspect the logs.
+                # When TTL k8s feature gets out of alpha and is available in ICP, we could use spec.ttlSecondsAfterFinished instead.
+                # https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/#ttl-mechanism-for-finished-jobs
+                sleep 120
+                echo Cleaning up successfully completed {{ template "ibm-wml-accelerator-prod.condaInitEnvSetupJobName" . }} job.
+                kubectl delete job {{ template "ibm-wml-accelerator-prod.condaInitEnvSetupJobName" . }}
+            env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            volumeMounts:
+            - mountPath: /configmap-env-yamls
+              name: configmap-env-yamls
+          volumes:
+          - name: configmap-env-yamls
+            configMap:
+              name: {{ template "ibm-wml-accelerator-prod.condaConfigMapName" . }}
+{{- end }}
