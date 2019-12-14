@@ -1,0 +1,156 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+{{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" }}
+apiVersion: networking.k8s.io/v1beta1
+{{- else }}
+apiVersion: extensions/v1beta1
+{{- end }}
+kind: Ingress
+metadata:
+  name: {{ template "mfp.ingress.fullname" . }}
+  labels:
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app.kubernetes.io/name: {{ template "mfp.ingress.fullname" . }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}" 
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+  annotations:
+    ingress.kubernetes.io/client-max-body-size: "200m"
+    nginx.ingress.kubernetes.io/client-max-body-size: "200m"
+    ingress.kubernetes.io/proxy-read-timeout: "300s"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300s"
+    ingress.kubernetes.io/proxy-connect-timeout: "300s"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300s"
+    ingress.bluemix.net/client-max-body-size: "200m"
+    ingress.bluemix.net/proxy-read-timeout: "300s"
+    ingress.bluemix.net/proxy-connect-timeout: "300s"
+    ingress.kubernetes.io/proxy-body-size: "200m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"
+{{- if .Values.global.ingress.sslPassThrough }}
+    ingress.kubernetes.io/ssl-passthrough: "true"
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+{{- end }}
+{{- if .Values.global.https }}
+    ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+{{- end }}
+spec:
+{{- if .Values.global.ingress.secret }}
+  tls:
+  - hosts:
+    - {{ .Values.global.ingress.hostname }}
+    secretName: {{ .Values.global.ingress.secret }}
+{{- end }}
+  rules:
+{{- if .Values.global.ingress.hostname }}
+  - host: {{ .Values.global.ingress.hostname }}
+    http:
+{{- else }}
+  - http:
+{{- end }}
+      paths:
+{{- if .Values.mfpserver.enabled }} 
+      - path: /mfpconsole
+        backend:
+          serviceName: {{ template "mfp.server.fullname" . }}
+{{- if  .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /mfp
+        backend:
+          serviceName: {{ template "mfp.server.fullname" . }}
+{{- if .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /mfp-dev-artifacts
+        backend:
+          serviceName: {{ template "mfp.server.fullname" . }}
+{{- if .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+{{ if .Values.mfppush.enabled }}
+      - path: /imfpush
+        backend:
+          serviceName: {{ template "mfp.push.fullname" . }}
+{{- if  .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+{{- end }}
+      - path: /mfpadmin
+        backend:
+          serviceName: {{ template "mfp.server.fullname" . }}
+{{- if  .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /mfpadminconfig
+        backend:
+          serviceName: {{ template "mfp.server.fullname" . }}
+{{- if  .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /doc
+        backend:
+          serviceName: {{ template "mfp.server.fullname" . }}
+{{- if  .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+{{- end }}
+{{- if .Values.mfpanalytics.enabled }}
+      - path: /analytics
+        backend:
+          serviceName: {{ template "mfp.analytics.fullname" . }}
+{{- if  .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /analytics-service
+        backend:
+          serviceName: {{ template "mfp.analytics.fullname" . }}
+{{- if  .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+{{- end }}
+{{- if .Values.mfpappcenter.enabled }}
+      - path: /appcenterconsole
+        backend:
+          serviceName: {{ template "mfp.appcenter.fullname" . }}
+{{- if  .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /applicationcenter
+        backend:
+          serviceName: {{ template "mfp.appcenter.fullname" . }}
+{{- if  .Values.global.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+{{- end }}

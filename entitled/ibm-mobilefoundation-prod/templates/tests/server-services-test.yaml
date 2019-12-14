@@ -1,0 +1,84 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+{{ if .Values.mfpserver.enabled -}}
+{{- $helmTest := default "disabled" .Values.mfpserver.helmTestOverride }}
+{{- if ne $helmTest "disabled" }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ template "fullname" . }}-services-test
+  labels:
+    app.kubernetes.io/name: {{ template "mfp.server.fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  imagePullSecrets:
+    - name: {{ .Values.global.image.pullSecret }}
+  affinity:
+    {{- include "nodeAffinity" . | indent 6 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+  containers:
+  - name: {{ template "fullname" . }}-admindb-test
+    image: "radial/busyboxplus:curl"
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1001
+      capabilities:
+        drop:
+        - ALL
+    env:
+    - name: DIAGNOSTIC_API
+      value: "curl -X GET http://{{ .Values.mfpserver.mobileFirstOperationsConsole.user }}:{{ .Values.mfpserver.mobileFirstOperationsConsole.password }}@{{ template "mfp.server.fullname" . }}:9080/mfpadmin/management-apis/2.0/diagnostic"
+    - name: ADMINDB
+      value: "\"adminDB\":{\"status\":\"available\"}"
+    command: ["/bin/sh"]
+    args: ["-c", "$(DIAGNOSTIC_API) | grep '\"adminDB\":{\"status\":\"available\"}'"]  
+  - name: {{ template "fullname" . }}-config-test
+    image: "radial/busyboxplus:curl"
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1001
+      capabilities:
+        drop:
+        - ALL
+    env:
+    - name: MFPF_ADMIN_USER
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.mfpserver.consoleSecret }}
+          key: login.user
+    - name: MFPF_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.mfpserver.consoleSecret }}
+          key: login.password
+    - name: DIAGNOSTIC_API
+      value: "curl -X GET http://$MFPF_ADMIN_USER:$MFPF_ADMIN_PASSWORD@{{ template "mfp.server.fullname" . }}:9080/mfpadmin/management-apis/2.0/diagnostic"
+    command: ["/bin/sh"]
+    args: ["-c", "$(DIAGNOSTIC_API)"]
+    resources:
+{{ toYaml .Values.mfpserver.resources | indent 10 }}
+{{- end }}
+{{- end }}

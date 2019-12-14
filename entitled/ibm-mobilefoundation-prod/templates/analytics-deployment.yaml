@@ -1,0 +1,194 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+{{ if .Values.mfpanalytics.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "mfp.analytics.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ template "mfp.analytics.fullname" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    run: {{ template "mfp.analytics.fullname" . }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}" 
+spec:
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      run: {{ template "mfp.analytics.fullname" . }}
+  {{- if not .Values.mfpanalytics.autoscaling.enabled }}
+  replicas: {{ .Values.mfpanalytics.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+     maxUnavailable: 25%
+     maxSurge: 25%
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/analytics-configmap.yaml") . | sha256sum }}
+        productName: {{ template "ibm-mobilefoundation.productName" . }}
+        productID: {{ template "ibm-mobilefoundation.productID" . }}
+        productVersion: {{ template "ibm-mobilefoundation.productVersion" . }}
+      labels:
+        run: {{ template "mfp.analytics.fullname" . }}
+        app.kubernetes.io/name: {{ template "mfp.analytics.fullname" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}" 
+    spec:
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      affinity:
+        {{- include "nodeAffinity" . | indent 6 }}
+      {{/* Prefer horizontal scaling */}}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - {{ template "mfp.analytics.fullname" . }}
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name | quote }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: "{{ template "mfp.analytics.fullname" . }}-{{ .Values.mfpanalytics.persistence.volumeName }}"
+          persistentVolumeClaim:
+        {{- if .Values.mfpanalytics.persistence.claimName }}
+            claimName: {{ .Values.mfpanalytics.persistence.claimName }}
+        {{- else if .Values.mfpanalytics.persistence.volumeName  }}
+            claimName: {{ template "mfp.analytics.fullname" . }}-{{ .Values.mfpanalytics.persistence.volumeName }}
+        {{- else }}
+          emptyDir: {}
+        {{- end }}
+{{- if .Values.mfpanalytics.customConfiguration }}
+        - name: mfpanalytics-customconfig
+          configMap:
+            name: {{ .Values.mfpanalytics.customConfiguration }}
+{{- end }}
+{{- if .Values.mfpanalytics.keystoreSecret }}
+        - name: mfpf-certs
+          secret:
+            secretName: {{ .Values.mfpanalytics.keystoreSecret }}
+{{- end }}
+      containers:
+      - name: {{ template "mfp.analytics.fullname" . }}
+        readinessProbe:
+          tcpSocket:
+            port: 9080
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
+        livenessProbe:
+          tcpSocket:
+            port: 9080
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
+        image: "{{ .Values.mfpanalytics.repository }}:{{ .Values.mfpanalytics.tag }}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        env:
+          - name: WLP_LOGGING_CONSOLE_FORMAT
+            value: "basic"
+          - name: WLP_LOGGING_CONSOLE_LOGLEVEL
+            value: "info"
+          - name : WLP_LOGGING_CONSOLE_SOURCE
+            value: "message,trace,accessLog,ffdc"
+          - name: MFPF_ANALYTICS_SVC_NAME
+            value: {{ template "mfp.analytics.fullname" . }}
+{{- if .Values.global.https }}
+          - name: MFPF_ANALYTICS_PROTOCOL
+            value: "https"
+          - name: MFPF_ANALYTICS_PORT
+            value: "9443"
+{{- else }}
+          - name: MFPF_ANALYTICS_PROTOCOL
+            value: "http"
+          - name: MFPF_ANALYTICS_PORT
+            value: "9080"
+{{- end }}
+{{- if .Values.mfpanalytics.keystoreSecret }}
+          - name: KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.mfpanalytics.keystoreSecret }}
+                key: KEYSTORE_PASSWORD
+          - name: TRUSTSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.mfpanalytics.keystoreSecret }}
+                key: TRUSTSTORE_PASSWORD
+{{- end }}
+        envFrom:
+        - configMapRef:
+            name: {{ template "mfp.analytics-configmap.fullname" . }}
+{{- if .Values.mfpanalytics.consoleSecret }}
+        - secretRef:
+            name: {{ .Values.mfpanalytics.consoleSecret }}
+{{- else}}
+        - secretRef:
+            name: {{ .Release.Name }}-mfpanalyticsconsolesecret
+{{- end }}
+        ports:
+          - containerPort: 9080
+          - containerPort: 9443
+          - containerPort: 9600
+        volumeMounts:
+{{- if .Values.mfpanalytics.customConfiguration }}
+          - name: mfpanalytics-customconfig
+            readOnly: true
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-analytics/configDropins/overrides
+{{- end }}
+{{- if .Values.mfpanalytics.keystoreSecret }}
+          - name: mfpf-certs
+            readOnly: true
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-analytics/resources/security/keystore.jks
+            subPath: keystore.jks
+          - name: mfpf-certs
+            readOnly: true
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-analytics/resources/security/truststore.jks
+            subPath: truststore.jks
+{{- end }}
+          - name: "{{ template "mfp.analytics.fullname" . }}-{{ .Values.mfpanalytics.persistence.volumeName }}"
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-analytics/analyticsData	  	        
+        resources:
+{{ toYaml .Values.mfpanalytics.resources | indent 10 }}
+{{- end }}
