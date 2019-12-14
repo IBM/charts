@@ -1,0 +1,40 @@
+##############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2017. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{ if .Values.mfpanalytics.enabled -}}
+{{ if and .Values.mfpanalytics.persistence.enabled (not .Values.mfpanalytics.persistence.claimName) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "mfp.analytics.fullname" . }}-{{ .Values.mfpanalytics.persistence.volumeName }}
+  labels:
+    app.kubernetes.io/name: {{ template "mfp.analytics.fullname" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    run: {{ template "mfp.analytics.fullname" . }}
+spec:
+  {{- if .Values.mfpanalytics.persistence.useDynamicProvisioning }}
+  ## if present, use the storageClassName from the values.yaml, else use the
+  ## default storageClass setup by kube Administrator
+  ##
+  ## setting storageClassName to nil means use the default storage class
+  storageClassName: {{ default nil .Values.mfpanalytics.persistence.storageClassName | quote }}
+  {{- else }}
+  storageClassName: {{ default "" .Values.mfpanalytics.persistence.storageClassName | quote }}
+  {{- end }}
+
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: {{ .Values.mfpanalytics.persistence.size | quote }}
+{{- end }}
+{{- end }}

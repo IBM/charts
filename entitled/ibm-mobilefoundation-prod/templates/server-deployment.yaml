@@ -1,0 +1,248 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+# IBM Corporation - initial API and implementation
+###############################################################################
+{{ if .Values.mfpserver.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "mfp.server.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ template "mfp.server.fullname" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    run: {{ template "mfp.server.fullname" . }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}" 
+spec:
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      run: {{ template "mfp.server.fullname" . }}
+  {{- if not .Values.mfpserver.autoscaling.enabled }}
+  replicas: {{ .Values.mfpserver.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+     maxUnavailable: 25%
+     maxSurge: 25%
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/server-configmap.yaml") . | sha256sum }}
+        productName: {{ template "ibm-mobilefoundation.productName" . }}
+        productID: {{ template "ibm-mobilefoundation.productID" . }}
+        productVersion: {{ template "ibm-mobilefoundation.productVersion" . }}   
+      labels:
+        run: {{ template "mfp.server.fullname" . }}
+        app.kubernetes.io/name: {{ template "mfp.server.fullname" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}" 
+    spec:
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      affinity:
+        {{- include "nodeAffinity" . | indent 6 }}
+      {{/* Prefer horizontal scaling */}}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - {{ template "mfp.server.fullname" . }}
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name | quote }}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+{{- if .Values.mfpserver.customConfiguration }}
+        - name: mfpserver-customconfig
+          configMap:
+            name: {{ .Values.mfpserver.customConfiguration }}
+{{- end }}
+{{- if .Values.mfpserver.keystoreSecret }}
+        - name: mfpf-certs
+          secret:
+            secretName: {{ .Values.mfpserver.keystoreSecret }}
+{{- end }}
+{{- if not (empty .Values.mfpserver.db.driverPvc) }}
+        - name: mfpserver-db-driverpvc
+          persistentVolumeClaim:
+            claimName: {{ .Values.mfpserver.db.driverPvc }}
+{{- end }}
+      containers:
+      - name: {{ template "mfp.server.fullname" . }}
+        readinessProbe:
+          httpGet:
+            path: /mfpadmin/management-apis/2.0/diagnostic/healthCheck
+            port: 9080
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
+        livenessProbe:
+          tcpSocket:
+            port: 9080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 10
+        image: "{{ .Values.mfpserver.repository }}:{{ .Values.mfpserver.tag }}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        env:
+          - name: WLP_LOGGING_CONSOLE_FORMAT
+            value: "basic"
+          - name: WLP_LOGGING_CONSOLE_LOGLEVEL
+            value: "info"
+          - name: WLP_LOGGING_CONSOLE_SOURCE
+            value: "message,trace,accessLog,ffdc"
+          - name: MFPF_RUNTIME_SVC_NAME
+            value: {{ template "mfp.server.fullname" . }}
+{{- if .Values.global.https }}
+          - name: MFPF_SERVER_PROTOCOL
+            value: "https"
+          - name: MFPF_SERVER_PORT
+            value: "9443"
+{{- else }}
+          - name: MFPF_SERVER_PROTOCOL
+            value: "http"
+          - name: MFPF_SERVER_PORT
+            value: "9080"
+{{- end }}
+{{- if .Values.mfpanalytics.enabled }}
+          - name: MFPF_ANALYTICS_SVC_NAME
+            value: {{ template "mfp.analytics.fullname" . }}
+{{- if .Values.global.ingress.hostname }}
+          - name: MFPF_ANALYTICS_EXTERNAL_HOSTNAME
+            value: {{ .Values.global.ingress.hostname }}
+{{- end }}
+{{- if .Values.global.https }}
+          - name: MFPF_ANALYTICS_PROTOCOL
+            value: "https"
+          - name: MFPF_ANALYTICS_PORT
+            value: "9443"
+{{- else }}
+          - name: MFPF_ANALYTICS_PROTOCOL
+            value: "http"
+          - name: MFPF_ANALYTICS_PORT
+            value: "9080"
+{{- end }}
+{{- end }}
+{{- if .Values.mfppush.enabled }}
+          - name: MFPF_PUSH_SVC_NAME
+            value: {{ template "mfp.push.fullname" . }}
+          - name: MFPF_PUSH_PROTOCOL
+            value: "http"
+          - name: MFPF_PUSH_PORT
+            value: "9080"
+{{- end }}
+{{- if .Values.mfpserver.keystoreSecret }}
+          - name: KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.mfpserver.keystoreSecret }}
+                key: KEYSTORE_PASSWORD
+          - name: TRUSTSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.mfpserver.keystoreSecret }}
+                key: TRUSTSTORE_PASSWORD
+{{- end }}
+        envFrom:
+        - configMapRef:
+            name: {{ template "mfp.server-configmap.fullname" . }}
+{{- if .Values.mfpserver.consoleSecret }}
+        - secretRef:
+            name: {{ .Values.mfpserver.consoleSecret }}
+{{- else}}
+        - secretRef:
+            name: {{ .Release.Name }}-mfpserverconsolesecret
+{{- end }}
+{{- if .Values.mfpanalytics.enabled }}
+{{- if .Values.mfpanalytics.consoleSecret }}
+        - secretRef:
+            name: {{ .Values.mfpanalytics.consoleSecret }}
+{{- else}}
+        - secretRef:
+            name: {{ .Release.Name }}-mfpanalyticsconsolesecret
+{{- end }}
+{{- end }}
+        - secretRef:
+            name: {{ .Values.mfpserver.db.secret }}
+{{- if .Values.mfpserver.db.adminCredentialsSecret }}
+        - secretRef:
+            name: {{ .Values.mfpserver.db.adminCredentialsSecret }}
+{{- end }}
+{{- if .Values.mfpserver.adminClientSecret }}
+        - secretRef:
+            name: {{ .Values.mfpserver.adminClientSecret }}
+{{- else}}
+        - secretRef:
+            name: {{ .Release.Name }}-mfpserveradminclientsecret
+{{- end }}
+{{- if .Values.mfpserver.pushClientSecret }}
+        - secretRef:
+            name: {{ .Values.mfpserver.pushClientSecret }}
+{{- else}}
+        - secretRef:
+            name: {{ .Release.Name }}-mfppushclientsecret
+{{- end }}
+        ports:
+          - containerPort: 9080
+          - containerPort: 9443
+        volumeMounts:
+{{- if .Values.mfpserver.customConfiguration }}
+          - name: mfpserver-customconfig
+            readOnly: true
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-server/configDropins/overrides
+{{- end }}
+{{- if .Values.mfpserver.keystoreSecret }}
+          - name: mfpf-certs
+            readOnly: true
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-server/resources/security/keystore.jks
+            subPath: keystore.jks
+          - name: mfpf-certs
+            readOnly: true
+            mountPath: /opt/ibm/wlp/usr/servers/mfpf-server/resources/security/truststore.jks
+            subPath: truststore.jks
+{{- end }}
+{{- if not (empty .Values.mfpserver.db.driverPvc) }}
+          - name: mfpserver-db-driverpvc
+            readOnly: true
+            mountPath: /opt/ibm/MobileFirst/dbdrivers 
+{{- end }}
+        resources:
+{{ toYaml .Values.mfpserver.resources | indent 10 }}
+{{- end }}

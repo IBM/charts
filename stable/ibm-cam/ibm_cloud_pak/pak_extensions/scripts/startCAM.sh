@@ -82,14 +82,15 @@ for statefulset in $statefulsets; do
 done
 
 # Wait for all pods to start
-echo "Waiting for pods to be in Running state"
+echo "Waiting for pods to be READY"
 sleep 15
 
-pods=$(kubectl -n $NAMESPACE get -l release=$camRelease pods --no-headers | grep Running -v)
+pods=$(kubectl -n $NAMESPACE get -l release=$camRelease pods --no-headers | grep -F "1/1" -v | grep -F "2/2" -v)
 while [ "${pods}" ]; do
-  echo "Waiting for pods to be in Running state"
+  sleep 15
+  echo "Waiting for pods to be READY"
   kubectl -n $NAMESPACE get -l release=$camRelease pod
-  sleep 5
-  pods=$(kubectl -n $NAMESPACE get -l release=$camRelease pods --no-headers | grep Running -v)
+  pods=$(kubectl -n $NAMESPACE get -l release=$camRelease pods --no-headers | grep -F "1/1" -v | grep -F "2/2" -v)
 done
-echo "All pods Running"
+echo "All pods Running and Ready"
+exit 0

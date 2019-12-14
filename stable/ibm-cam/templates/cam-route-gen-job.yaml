@@ -1,0 +1,121 @@
+{{- if .Capabilities.APIVersions.Has "security.openshift.io/v1" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: router-gen-job
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": "post-install"
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+  labels:
+    name: router-gen-job
+    "app.kubernetes.io/name": {{ template "fullname" . }}
+    "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    "app.kubernetes.io/instance": "{{ .Release.Name }}"
+    "app.kubernetes.io/managed-by": "{{ .Release.Service }}"
+spec:
+  backoffLimit: 5 
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      name: router-gen-job
+      namespace: {{ .Release.Namespace }}
+      labels:
+        name: router-gen-job
+        "app.kubernetes.io/name": {{ template "fullname" . }}
+        "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        release: "{{ .Release.Name }}"
+        "app.kubernetes.io/instance": "{{ .Release.Name }}"
+        "app.kubernetes.io/managed-by": "{{ .Release.Service }}"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        supplementalGroups:
+          - 1000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      {{- if .Values.global.image.secretName }}
+      {{- if ne .Values.global.image.secretName "default"}}
+      imagePullSecrets:
+       - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      {{- end }}
+      containers:
+      - name: route-gen
+        image: "{{ .Values.image.repository }}icam-tenant-api:{{ .Values.image.tag }}{{ template "platform" . }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - MKNOD
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          routeName=$(kubectl -n kube-system get route icp-console -o jsonpath='{.status.ingress[0].routerCanonicalHostname}')
+          if [ $routeName="" ] 
+          then
+            routeName=$(kubectl -n kube-system get route icp-console -o jsonpath='{.status.ingress[0].host}')
+            routeName=${routeName:12} # takes out the icp-console.
+          fi
+          cat <<EOF | kubectl apply -f -
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: cam
+            namespace: {{ .Release.Namespace }}
+            labels: 
+              "app.kubernetes.io/name": {{ template "fullname" . }}
+              "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
+              release: "{{ .Release.Name }}"
+              "app.kubernetes.io/instance": "{{ .Release.Name }}"
+              "app.kubernetes.io/managed-by": "{{ .Release.Service }}"
+          spec:
+            {{- if and (eq .Values.managementConsole.hostname "") (eq .Release.Namespace "services") }}
+            host: cam.$routeName
+            {{- end }}
+            {{- if and (eq .Values.managementConsole.hostname "") (ne .Release.Namespace "services") }}
+            host: {{ .Release.Name }}.$routeName
+            {{- end }}
+            {{- if .Values.managementConsole.hostname }}
+            host: {{ .Values.managementConsole.hostname }}.$routeName
+            {{- end }}
+            port:
+              targetPort: cam-proxy-https
+            tls:
+              insecureEdgeTerminationPolicy: Redirect
+              termination: passthrough
+            to:
+              kind: Service
+              name: cam-proxy
+              weight: 100
+            wildcardPolicy: None
+          status:
+            ingress: []
+          EOF
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+      restartPolicy: Never
+{{- end}}
