@@ -1,0 +1,98 @@
+{{- if .Values.mfpappcenter.enabled }}
+{{ if .Values.global.dbinit.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "mfp.dbinit.fullname" . }}-appcenter
+  labels:
+    app.kubernetes.io/name: {{ template "mfp.dbinit.fullname" . }}-appcenter
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    run: {{ template "mfp.dbinit.fullname" . }}-appcenter
+    jobgroup: mfpdbinitjob
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "1"
+    "helm.sh/resource-policy": delete-job-if-succeed
+spec:
+  template:
+    metadata:
+      name: {{ template "mfp.dbinit.fullname" . }}-appcenter
+      labels:
+        jobgroup: mfpdbinitjob
+        app.kubernetes.io/name: {{ template "mfp.dbinit.fullname" . }}-appcenter
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        run: {{ template "mfp.dbinit.fullname" . }}-appcenter
+    spec:
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      affinity:
+        {{- include "nodeAffinity" . | indent 6 }}
+      {{/* Prefer horizontal scaling */}}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - {{ template "mfp.dbinit.fullname" . }}-appcenter
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name | quote }}
+              topologyKey: kubernetes.io/hostname
+      restartPolicy: Never
+      volumes:
+
+{{- if not (empty .Values.mfpappcenter.db.driverPvc) }}
+      - name: mfpappcenter-db-driverpvc
+        persistentVolumeClaim:
+          claimName: {{ .Values.mfpappcenter.db.driverPvc }}
+{{- end }}
+      containers:
+      - name: {{ template "mfp.dbinit.fullname" . }}-appcenter
+        image: "{{ .Values.global.dbinit.repository }}:{{ .Values.global.dbinit.tag }}"
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        command: [ "/bin/bash" ]
+        args: [ "-c", "./create-appcenter-database.sh" ]
+        envFrom:
+        - configMapRef:
+            name: {{ template "mfp.appcenter-configmap.fullname" . }}
+        - secretRef:
+            name: {{ .Values.mfpappcenter.db.secret }}
+        volumeMounts:
+{{- if not (empty .Values.mfpappcenter.db.driverPvc) }}
+          - name: mfpappcenter-db-driverpvc
+            readOnly: true
+            mountPath: /opt/ibm/MobileFirst/dbdrivers
+{{- end }}
+        resources:
+{{ toYaml .Values.global.dbinit.resources | indent 10 }}
+{{- end }}
+{{- end }}

@@ -21,6 +21,7 @@ metadata:
     "app.kubernetes.io/managed-by": "{{ .Release.Service }}"
   namespace: {{ .Release.Namespace }}
 spec:
+  progressDeadlineSeconds: 1800
   replicas: {{ .Values.camUI.replicaCount }}
   selector:
     matchLabels:
@@ -275,18 +276,19 @@ spec:
           value: /templates
 {{- if .Values.global.audit }}
       - name: cam-ui-basic-audit
-{{- if or .Values.global.legacyAudit }}
-        image: "{{ .Values.auditService.image.repository }}icp-audit-service:{{ .Values.auditService.image.tag }}"
-{{- else }}
+{{- if .Values.global.ICP32}}
         image: "{{ .Values.auditService.image.repository }}icp-audit-service-nr:{{ .Values.auditService.image.tag }}"
+{{- else }}
+        image: "{{ .Values.auditService.image.repository }}icp-audit-service:{{ .Values.auditService.image.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.auditService.image.pullPolicy }}
-{{- if .Values.global.legacyAudit }}
         securityContext:
+          seLinuxOptions:
+            type: spc_t
+{{- if .Values.global.legacyAudit }}
           runAsNonRoot: false
           runAsUser: 0
 {{- else }}
-        securityContext:
           fsGroup: 1000
           runAsUser: 1000
 {{- end }}

@@ -21,6 +21,7 @@ metadata:
     "app.kubernetes.io/managed-by": "{{ .Release.Service }}"
   namespace: {{ .Release.Namespace }}
 spec:
+  progressDeadlineSeconds: 1800
   replicas: {{ .Values.camAPI.replicaCount }}
   selector:
     matchLabels:
@@ -238,6 +239,8 @@ spec:
           value: https://cam-provider-bpm:7030/api
         - name: PLUGIN_ENDPOINTURL_plugin_broker
           value: https://cam-provider-broker:7050/api
+        - name: PLUGIN_ENDPOINTURL_plugin_ansible
+          value: https://cam-provider-ansible:7060/api
         - name: STORE_PROXY_URL
           value: https://cam-provider-broker:7050/api/connector    
         - name: POD_NAME
@@ -269,6 +272,13 @@ spec:
           value: "true"
         {{- else }}
         - name: ACTIVATE_BROKER
+          value: "false"
+        {{- end }} 
+        {{- if .Values.camAnsibleProvider.replicaCount }}
+        - name: ACTIVATE_ANSIBLE
+          value: "true"
+        {{- else }}
+        - name: ACTIVATE_ANSIBLE
           value: "false"
         {{- end }} 
         - name: ICP_PROXY_IP
@@ -352,18 +362,19 @@ spec:
           value: "{{ .Values.global.offline }}"
 {{- if .Values.global.audit }}
       - name: cam-iaas-audit
-{{- if .Values.global.legacyAudit }}
-        image: "{{ .Values.auditService.image.repository }}icp-audit-service:{{ .Values.auditService.image.tag }}"
-{{- else }}
+{{- if .Values.global.ICP32}}
         image: "{{ .Values.auditService.image.repository }}icp-audit-service-nr:{{ .Values.auditService.image.tag }}"
+{{- else }}
+        image: "{{ .Values.auditService.image.repository }}icp-audit-service:{{ .Values.auditService.image.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.auditService.image.pullPolicy }}
-{{- if .Values.global.legacyAudit }}
         securityContext:
+          seLinuxOptions:        
+            type: spc_t
+{{- if .Values.global.legacyAudit }}
           runAsNonRoot: false
           runAsUser: 0
 {{- else }}
-        securityContext:
           fsGroup: 1000
           runAsUser: 1000
 {{- end }}
