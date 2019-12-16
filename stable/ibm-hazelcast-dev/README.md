@@ -1,6 +1,10 @@
 # Hazelcast
 * [Hazelcast](https://www.hazelcast.org) is an open source in-memory data grid
 
+## Deprecated
+
+The ibm-hazecast-dev chart is deprecated. As an alternative, use the [hazelcast-enterprise](https://github.com/IBM/charts/tree/master/community/hazelcast-enterprise) chart in the IBM community charts repository.  
+
 ## Introduction
 This chart installs Hazelcast, and in-memory data grid cache.  
 This chart installs the [hazelcast/hazelcast](https://hub.docker.com/r/hazelcast/hazelcast/) Docker image.  
