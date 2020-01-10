@@ -131,9 +131,6 @@ or
   {{- end -}}
   {{- $_ := merge $root $schChartConfig -}}
   {{- $_ := merge $root $schConfig -}}
-  {{- $valuesMetadata := dict "valuesMetadata" (fromYaml ($root.Files.Get "values-metadata.yaml")) -}}
-  {{- include "sch.validate.valuesMetadata" (list $valuesMetadata "") -}}
-  {{- $_ := merge $root $valuesMetadata -}}
   {{- /* appName and shortName are in $root by default and need to be forcefully overwritten if they exist */ -}}
   {{- if hasKey $schChartConfig.sch "chart" }}
     {{- if hasKey $schChartConfig.sch.chart "appName" }}
@@ -143,19 +140,4 @@ or
       {{- $_ := set $root.sch.chart "shortName" $schChartConfig.sch.chart.shortName }}
     {{- end }}
   {{- end }}
-{{- end -}}
-
-{{- define "sch.validate.valuesMetadata" -}}
-{{- $valuesMetadata := (index . 0) -}}
-{{- $prefix := (index . 1) -}}
-{{- range $key, $value := $valuesMetadata -}}
-  {{- $fullkey:= (list $prefix $key | join "." ) | replace ".valuesMetadata." "" -}}
-   {{- if (hasPrefix "map[string]" (typeOf $value)) -}}
-     {{- include "sch.validate.valuesMetadata" (list $value $fullkey) -}}
-   {{- else -}}
-     {{- if eq (typeOf $value) "<nil>" -}}
-       {{- fail (cat "Unable to process values-metadata.yaml as the key" $fullkey "has a value of <nil>") -}}
-     {{- end -}}
-   {{- end -}}
-{{- end -}}
 {{- end -}}

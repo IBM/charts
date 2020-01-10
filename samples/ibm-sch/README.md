@@ -22,28 +22,67 @@ The goal of the Shared Configurable Helpers chart is to provide a set of Helm te
 
 There are two ways to include ibm-sch with your chart:
 
-1. Include ibm-sch in your chart's requirements.yaml and use helm to download it
+1. Include ibm-sch in your chart's requirements.yaml and use helm to download it:
 
-   Format of entry in requirements.yaml:
+  ```
+  dependencies:
+  - name: ibm-sch
+    repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
+    version: "^1.2.15"
+    alias: sch
+  ```
+  
+    Explanation of parameters:
+    - Set the alias to `sch` to guarantee that all functions will work successfully.
+    - Set the version to `^1.2.15` to download the latest `1.x.x` version of ibm-sch.
 
-   ```
-   dependencies:
-   - name: ibm-sch
-     repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-     version: "^1.2.14"
-     alias: sch
-     condition: global.sch.enabled
-   ```
-
-   Explanation of parameters:
-   - Set the alias to `sch` to guarantee that all functions will work successfully.
-   - Set the version to `^1.2.14` to download the latest `1.x.x` version of ibm-sch.
-   - Use a condition parameter to only install ibm-sch when intended. For example, if your chart is able to be installed standalone and as a subchart, then you want ibm-sch to be enabled when your chart is installed standalone, but you want to use the parent chart's ibm-sch when it is installed as a subchart. To achieve this, you would set `global.sch.enabled` to true in the subchart and false in the parent chart.
-
-1. Download the source and copy it into your charts directory
+2. Download the source and copy it into your charts directory
 
    - You will want to delete the unit-tests and ibm_cloud_pak directories from ibm-sch or add them to the parent .helmignore file to avoid the 1 MB chart size limit from Helm.
    - The entry in requirements.yaml will still need to be created in this scenario for everything to function correctly.
+
+### Note on including subcharts that use ibm-sch
+
+ibm-sch is written as Helm definitions, which are global. If your chart includes subcharts that also include ibm-sch, then there may be conflicting defintions between different versions of ibm-sch. To avoid this conflict and provide a consistent experience, the parent chart's ibm-sch must be enabled while disabling the subchart's ibm-sch. The subcharts will continue to use their sch config parameters, but will use the parent chart's definitions.
+
+This is done using Helm's requirements.yaml and the condition parameter. The following example shows how to set this such that a subchart can be installed standalone or included in a separate chart as a subchart. When the chart is installed standalone, `global.sch.enabled` will be set to true and the chart will use its own copy of ibm-sch. When the chart is installed as a subchart, `global.sch.enabled` will be overridden by the parent chart and set to false. Both the parent chart and subchart will use the parent chart's ibm-sch.
+
+Entry in subchart requirements.yaml:
+
+```
+dependencies:
+- name: ibm-sch
+  repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
+  version: "^1.2.15"
+  alias: sch
+  condition: global.sch.enabled
+```
+
+Entry in subchart values.yaml:
+
+```
+global:
+  sch:
+    enabled: true
+```
+
+Entry in parent chart's requirements.yaml:
+
+```
+dependencies:
+- name: ibm-sch
+  repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
+  version: "^1.2.15"
+  alias: sch
+```
+
+Entry in parent chart's values.yaml:
+
+```
+global:
+  sch:
+    enabled: false
+```
 
 ### Configuration
 
