@@ -1,0 +1,40 @@
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") -}}
+{{- include "statefulNames.globals" . }}
+{{- $compName :=  .sch.chart.components.imdg.name -}}
+{{- $testCompName :=  printf "%s-%s" $compName "test" -}}
+{{- $fullTestCompName := include "sch.names.fullCompName" (list . $testCompName) }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $fullTestCompName }}"
+  annotations:
+    "helm.sh/hook": test-success
+  labels:
+    app: {{ include "sch.names.appName" (list .) }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    component: {{ $testCompName }}
+spec:
+  affinity:
+  {{- include "nodeaffinity" . | indent 2 }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+  containers:
+  - name: "{{ $fullTestCompName }}"
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+    image: alpine:3.8
+    command: ['wget']
+    args:  ["-O/dev/null", "-q", "{{ .statefulNames.globals.statefulSetName }}:{{ .Values.service.externalPort }}/hazelcast/health"]
+  restartPolicy: Never 
