@@ -185,6 +185,14 @@ To get the symlink that the system assigns to a device, complete these steps:
      ```
 
   5. Make a note of the symlink and its link path. For each device that you are using for GlusterFS configuration, you need to add the `<link path>/<symlink>`.
+  
+     Example:
+     ```bash
+       - k8sNodeName: "gke-c4-pool-1-35434-aaaa"
+         k8sNodeIp: "10.132.0.118"
+         devices:
+           - "/dev/disk/by-path/pci-0000:00:04.0-scsi-0:0:1:0"
+     ```
 
 ### Use manually created symlinks
 
