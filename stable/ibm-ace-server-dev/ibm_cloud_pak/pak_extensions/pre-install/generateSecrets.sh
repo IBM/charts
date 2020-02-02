@@ -63,7 +63,7 @@ if [ -s ./truststorePassword.txt ]; then
   SECRET_ARGS="${SECRET_ARGS} --from-file=truststorePassword=./truststorePassword.txt"
 fi
 
-for certfile in `ls ./truststore-*.crt`; do
+for certfile in `ls ./truststoreCert-*.crt`; do
   if [ -s "${certfile}" ]; then
     if [ ! -s ./truststorePassword.txt ]; then
       echo "No truststore password defined"
@@ -71,7 +71,7 @@ for certfile in `ls ./truststore-*.crt`; do
     fi
 
     filename=$(basename ${certfile})
-    alias=$(echo ${filename} | sed -r 's/truststore-(.*)\.crt$/\1/')
+    alias=$(echo ${filename} | sed -r 's/truststoreCert-(.*)\.crt$/\1/')
 
     SECRET_ARGS="${SECRET_ARGS} --from-file=truststoreCert-${alias}=${certfile}"
   fi
