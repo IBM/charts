@@ -116,14 +116,18 @@ The helm repository from which to fetch the charts depends on whether you are in
 
 Check that `helm` has the entitled repository:
 ```
-helm repo list entitled
+helm repo list
+```
+
+Check that the output contains the line:
+```
+entitled  https://raw.githubusercontent.com/IBM/charts/master/repo/entitled/
 ```
 
 If it does not, run the following command to add the entitled repository:
 ```
 helm repo add entitled https://raw.githubusercontent.com/IBM/charts/master/repo/entitled/
 ```
-
 You can now fetch and extract the chart:
 ```
 helm fetch entitled/ibm-security-solutions-prod
@@ -161,46 +165,27 @@ ibm-security-solutions-prod/ibm_cloud_pak/pak_extensions/pre-install/createTLSSe
 ```
 
 ### Labelling Nodes for OpenWhisk
-In order to schedule OpenWhisk pods in your cluster, nodes need to be labelled as OpenWhisk Invokers. You may choose to label all of your compute nodes using the following command:
+In order to schedule OpenWhisk pods to be balanced across the cluster, the compute/worker nodes need to be labelled as OpenWhisk Invokers. 
+
+To understand if the nodes have a ROLE of  `worker` or `compute` execute 
+
+`kubectl get nodes` 
+
+
+
+If the ROLE is labelled `compute`, you can label all of your compute/worker nodes  as follows:
 ```
 kubectl label nodes --selector='node-role.kubernetes.io/compute' openwhisk-role=invoker
 ```
-This is recommended as it allows the workload of OpenWhisk to be balanced across the cluster.
-
-You must specify the number of OpenWhisk invoker nodes you have enabled in the [configuration variable](#configuration) `global.invokerReplicaCount` when installing the chart. This will ensure that an invoker pod is scheduled on each labelled node.
-
-
-Alternatively if you would like to selectively label your nodes, you may discover your workers by running `kubectl get nodes`, for example:
+If the ROLE is labelled `worker`, you can label all of your compute/worker nodes  as follows:
 ```
-kubectl get nodes
-NAME                STATUS   ROLES                                              AGE   VERSION
-master-node         Ready    icp-management,icp-master,icp-proxy,infra,master   1d    v1.11.0+d4cacc0
-worker-node-1       Ready    compute                                            1d    v1.11.0+d4cacc0
-worker-node-2       Ready    compute                                            1d    v1.11.0+d4cacc0
-worker-node-3       Ready    compute                                            1d    v1.11.0+d4cacc0
+kubectl label nodes --selector='node-role.kubernetes.io/worker' openwhisk-role=invoker
 ```
 
-And then individually label nodes:
-```
-kubectl label node worker-node-1 openwhisk-role=invoker
-kubectl label node worker-node-2 openwhisk-role=invoker
-kubectl label node worker-node-3 openwhisk-role=invoker
-```
 
-To verify, you can get a list of nodes which have the labels applied by running:
-```
-kubectl get nodes --selector='openwhisk-role=invoker'
-```
+Then you must specify the number of OpenWhisk invoker nodes you have enabled in the [configuration variable](#configuration) `global.invokerReplicaCount` when installing the chart. This will ensure that an invoker pod is scheduled on each labelled node.
 
-To remove the OpenWhisk Invoker label from a single node you can run:
-```
-kubectl label node worker-node-1 openwhisk-role-
-```
 
-And to remove the OpenWhisk Invoker label from all nodes you can run:
-```
-kubectl label nodes --all openwhisk-role-
-```
 
 
 ### Set up service account for ElasticSearch
@@ -268,12 +253,12 @@ After installing the ibm-security-solutions-prod chart, optionally install the [
 
 To install the adapter, run the command:
 ```
-helm upgrade <RELEASE_NAME> --tls --set global.ibm-isc-csaadapter-prod.enabled=true
+helm upgrade <RELEASE_NAME> --namespace=<NAMESPACE> ./ibm-security-solutions-prod  --tls --set global.ibm-isc-csaadapter-prod.enabled=true
 ```
 
 Alternatively edit the values.yaml file and run the command:
 ```
-helm upgrade <RELEASE_NAME> --tls --values <PATH_TO_VALUES_YAML>
+helm upgrade <RELEASE_NAME> --namespace=<NAMESPACE> ./ibm-security-solutions-prod --tls --values <PATH_TO_VALUES_YAML>
 ```
 
 #### Verify the IBM Cloud Security Advisor Adapter
@@ -340,8 +325,8 @@ The following table lists the configurable parameters of the ibm-security-soluti
 |global.affinity|Enables the distribution of pods across nodes | hard |
 |global.arangodb.agentConfiguration.storageClassName| Default storage class for arangodb agent| [Required] |
 |global.arangodb.dbserverConfiguration.storageClassName| Default storage class for arangodb server| [Required] |
-|global.cluster.hostname| Cluster Hostname | [Required] |
-|global.domain.default.domain| Default ingress domain for the application |  [Required] |
+|global.cluster.hostname| Fully Qualified Domain Name(FQDN) of cluster master node | [Required] |
+|global.domain.default.domain| Fully Qualified Domain Name(FQDN) for the Cloud Pak for Security application domain |  [Required] |
 |global.ibm-isc-car-prod.enabled | Optional Deployment of CAR  |true|
 |global.ibm-isc-cases-prod.enabled | Optional Deployment of Cases  |true|
 |global.ibm-isc-csaadapter-prod.enabled   | Optional Deployment of CSA adapter |true|
