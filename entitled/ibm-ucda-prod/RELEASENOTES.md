@@ -1,9 +1,10 @@
-# What's new in Chart Version 2.1.7
+# What's new in Chart Version 2.1.8
 * IBM certified container
 
 ## Breaking Changes
 
-# Fixes
+# Fixes/Updates
+UrbanCode Deploy agent 7.0.5.1 image was updated to include the OKD versions of kubectl and oc CLI, as well as the git CLI.
 
 # Prerequisites
 * See README for prerequisites
@@ -15,6 +16,7 @@
 
 | Chart | Date | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------------ | ---------------- | ------- | 
+| 2.1.8 | February 11th, 2020 | ucda: 7.0.5.1.1044461 | None | Version 7.0.5.1 added oc and git CLI utilities |
 | 2.1.7 | January 14th, 2020 | ucda: 7.0.5.0.1041488 | None | Version 7.0.5.0  |
 | 2.1.6 | December 4th, 2019| ucda: 7.0.4.2.1038002 | None | Version 7.0.4.2  |
 | 2.1.5 | November 5th, 2019| ucda: 7.0.4.1.1036185 | None | Support for latest UCD Server Release  |
