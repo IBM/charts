@@ -28,18 +28,10 @@ checkSeq() {
         ar="$(sed -e '1,/ conditions:/d' /tmp/checkseq.$$.yaml)"
       fi
 
-      res=$(( $(echo "$ar" | grep -e '  - ' | wc -l) ))
-      case $res in 
-        0|1|2) 
-           status=$(echo "$ar" | grep ' reason: ' | head -1 | sed -e 's/^.*: //')
-           time=$(echo "$ar" | grep ' lastTransitionTime: ' | head -1 | sed -e 's/^.*: //')
-           message=$(echo "$ar" | sed -e '1,/ lastTransitionTime: /d' -e 's/    message: //' |\
-            sed  -n '1,/    reason:/p' | sed -e '$d')
-           ;;
-        *) echo "Failed to parse iscsequence $seq"
-           continue
-           ;;
-      esac
+      status=$(echo "$ar" | grep ' reason: ' | head -1 | sed -e 's/^.*: //')
+      time=$(echo "$ar" | grep ' lastTransitionTime: ' | head -1 | sed -e 's/^.*: //')
+      message=$(echo "$ar" | sed -e '1,/ lastTransitionTime: /d' -e 's/    message: //' |\
+            sed  -n '1,/    reason:/p' | sed -e '$d' | head -10)
 
       if [ "X$gen" == "X$guard" ]; then
         if [ $ALL -eq 1 ]; then
@@ -67,7 +59,7 @@ checkSeq() {
           continue
           ;;
         *)
-          echo "ISCSequence $seq has $status at $time: $message"
+          echo "ISCSequence $seq has status $status at $time: $message"
           continue
           ;;
       esac
@@ -83,20 +75,10 @@ checkCR() {
        if [ "X$ar" == "X" ]; then
          ar="$(sed -e '1,/ conditions:/d' /tmp/checkseq.$$.yaml)"
        fi
-       res=$(( $(echo "$ar" | grep -e '  - ' | wc -l) ))
-
-       case $res in 
-        0|1|2) 
-           status=$(echo "$ar" | grep ' reason: ' | head -1 | sed -e 's/^.*: //')
-           time=$(echo "$ar" | grep ' lastTransitionTime: '  | head -1 | sed -e 's/^.*: //')
-           message=$(echo "$ar" | sed -e '1,/ lastTransitionTime: /d' -e 's/    message: //' |\
-            sed  -n '1,/    reason:/p' | sed -e '$d')
-           ;;
-        *) echo "Failed to parse iscsequence $seq"
-           exit 1
-           continue
-           ;;
-      esac
+       status=$(echo "$ar" | grep ' reason: ' | head -1 | sed -e 's/^.*: //')
+       time=$(echo "$ar" | grep ' lastTransitionTime: '  | head -1 | sed -e 's/^.*: //')
+       message=$(echo "$ar" | sed -e '1,/ lastTransitionTime: /d' -e 's/    message: //' |\
+            sed  -n '1,/    reason:/p' | sed -e '$d' | head -10)
 
       case "X$status" in
         X)
@@ -114,7 +96,7 @@ checkCR() {
           continue
           ;;
         *)
-          echo "$cr has $status at $time: $message"
+          echo "$cr has status $status at $time: $message"
           continue
           ;;
       esac
@@ -147,14 +129,21 @@ if [ "X$pods" != "X" ]; then
   echo "$pods"
 fi
 
-pods=$(kubectl get deploy | tail -n +2 | awk '{ if ($2 != $4) print $1 ": expect " $2 " pods have uptodate " $4 }')
+pods=$(kubectl get deploy -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.status.replicas} {.status.readyReplicas}{"\n"}'| awk '{ if ($2 != $3) print $1 ": expect " $2 " pods have uptodate " $3 }')
 if [ "X$pods" != "X" ]; then
   echo "Problems in deployments:" 
   echo "$pods"
 fi
 
-pods=$(kubectl get statefulset | tail -n +2 | awk '{ if ($2 != $3) print $1 ": expect " $2 " pods, but have " $3 }')
+pods=$(kubectl get statefulset -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.status.replicas} {.status.readyReplicas}{"\n"}' | awk '{ if ($2 != $3) print $1 ": expect " $2 " pods, but have " $3 }')
 if [ "X$pods" != "X" ]; then
   echo "Problems in statefulsets:" 
   echo "$pods"
 fi
+
+pvc=$(kubectl get pvc -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.status.phase}{"\n"}' | awk '{ if ($2 != "Bound") print $1, $2 }')
+if [ "X$pvc" != "X" ]; then
+  echo "Problems in PVC:"
+  echo "$pvc"
+fi
+    

@@ -56,7 +56,7 @@ By default, `ibm-security-foundations` has the following resource request requir
 | Ambassador|    256Mi    | 100m        |
 | Sequences |    256Mi    | 250m        |
 | Middleware|    256Mi    | 250m        |
-| Kube-arangodb|   256Mi    | 250m   |
+| Kube-arangodb|   1024Mi    | 250m   |
 
 See the [configuration](#configuration) section for how to configure these values.
 
@@ -138,6 +138,7 @@ REPOSITORY=cp.icr.io
 REPO_USERNAME=cp
 REPO_PASSWORD=<YOUR_ENTITLEMENT_KEY>
 ```
+Alternatively, using Passport Advantage see the guidance in [IBM Cloud Pak for Security Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.1.0/docs/security-pak/ppa_download.html).
 
 Before running the script, log in to the cluster.
 
@@ -165,6 +166,7 @@ Important user-specified values are:
 | Parameter | Note | 
 | --- | --- |
 | `global.helmUser` | Required |
+| `global.repository` | Required if installing [using IBM Passport Advantage](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.1.0/docs/security-pak/ppa_download.html), you must specify a docker registry host (and path if relevant). Note that the repository you specify here must match the repository specified in [Run the pre-install script](#run-the-pre-install-script) above. |
 | `global.repositoryType` | If installing from Passport Advantage archives, change to `local` |
 | `global.cloudType` | Required if installing to a cloud platform such as IBM Cloud or AWS rather than a Red Hat OpenShift Container Platform |
 
@@ -186,7 +188,7 @@ To install the chart run the following command:
 ```
 helm install --name <RELEASE_NAME> --namespace=<NAMESPACE>  ./ibm-security-foundations-prod --tls [--values or --set options]
 ```
-
+                     
 ### Verifying the chart
 
 For chart verification after the helm installation completes, follow the instructions in the NOTES.txt which is packaged with the chart. For the chart installed using the <RELEASE_NAME> specified, the following commands can be used for viewing the status of the installation.
@@ -242,7 +244,7 @@ The following table lists the configurable parameters of the ibm-security-founda
 |global.helmUser| Cluster administrator username which will be used to provision charts | [Required] |
 |global.imagePullPolicy| Image pull policy for operator images.| `IfNotPresent` |
 |global.kubearangodb.operator.resources.requests.cpu | CPU requests for kubearangodb operator | 250m |
-|global.kubearangodb.operator.resources.requests.memory | Memory requests for kubearangodb operator | 256Mi |
+|global.kubearangodb.operator.resources.requests.memory | Memory requests for kubearangodb operator | 1024Mi |
 |global.operator.ambassador.resources.requests.cpu | CPU requests for ambassador | 250m |
 |global.operator.ambassador.resources.requests.memory | Memory requests for ambassador | 256Mi |
 |global.operator.middleware.resources.requests.cpu | CPU requests for middleware operator | 250m |
@@ -251,8 +253,8 @@ The following table lists the configurable parameters of the ibm-security-founda
 |global.operator.sequence.resources.requests.memory | Memory requests for sequence operator | 256Mi |
 |global.poddisruptionbudget.enabled| Enables application availability during a cluster node maintenance. Administrator role or higher required to enable PDB. | false |
 |global.poddisruptionbudget.minAvailable| Pod disruption minimum budget available| 1 |
-|global.repository| Docker image registry | cp.icr.io/cp/cp4s |
-|global.repositoryType| Repository Type from which the Images will pulled from. Options available are: entitled, local. Use `entitled` for Entitled Registry or `local`for all other repository types  | `entitled` |
+|global.repository| Docker image registry from which images will be pulled. Use `cp.icr.io/cp/cp4s` for Entitled Registry or provide local registry host (and path if relevant) if installing using IBM Passport Advantage | cp.icr.io/cp/cp4s |
+|global.repositoryType| Repository Type from which the images will be pulled. Options available are: entitled, local. Use `entitled` for Entitled Registry or `local`for all other repository types  | `entitled` |
 
 
 ## Limitations

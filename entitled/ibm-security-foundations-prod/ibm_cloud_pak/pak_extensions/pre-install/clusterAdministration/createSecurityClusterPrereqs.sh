@@ -84,9 +84,13 @@ else
 fi
 
 # allow execution as user 1001 and 8888
-oc adm policy add-scc-to-user ibm-isc-scc -z ambassador --as system:admin
+for acc in ambassador ibm-isc-operators ibm-isc-application \
+  isc-openwhisk-openwhisk-core isc-openwhisk-openwhisk-invoker
+do
+  oc adm policy add-scc-to-user ibm-isc-scc -z $acc --as system:admin
+done
+
 oc adm policy add-scc-to-user nonroot -z ibm-isc-operators --as system:admin
-oc adm policy add-scc-to-user ibm-isc-scc -z ibm-isc-application --as system:admin
 oc adm policy add-scc-to-group anyuid  system:serviceaccounts:$NAMESPACE --as system:admin
 
 # update node configuration to enable reboots
