@@ -28,3 +28,13 @@ if [ "X$n" == "X" ]; then
 fi
 
 kubectl delete job -n $NAMESPACE uds-deploy-functions 2>/dev/null
+
+dir=$(dirname $0)
+dir="$dir/../pre-install/clusterAdministration"
+mc=$(kubectl get MachineConfigPool worker -o name 2>/dev/null)
+if [ "X$mc" == "X" ]; then
+  kubectl apply -f $dir/ibm-isc-scc.yaml
+else
+  kubectl apply -f $dir/ibm-isc-scc-42.yaml
+fi
+exit 0
