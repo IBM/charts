@@ -1,0 +1,99 @@
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.proxy) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+    component: "stolon-proxy"
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.keep . ) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 6 }}
+      component: "stolon-proxy"
+  {{- if ( .Values.global.databaseHA ) and eq .Values.global.databaseHA true }}
+  replicas: 2
+  {{- else }}
+  replicas: 1
+  {{- end }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 8 }}
+        component: "stolon-proxy"
+        stolon-cluster: {{ template "stolon.clusterName" . }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "stolon.serviceAccountName" . | quote }}
+      affinity:
+{{- include "ibm-postgresql.affinity" (list . .Values.proxy.affinity) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresPodSecurityContext) | indent 8 }}
+{{- if .Values.proxy.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.proxy.nodeSelector | indent 8 }}
+{{- end }}
+
+{{- if .Values.proxy.tolerations }}
+      tolerations:
+{{ toYaml .Values.proxy.tolerations | indent 8 }}
+{{- end }}
+{{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{- end }}
+      containers:
+      - name: proxy
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.postgres.image.name }}:{{ .Values.postgres.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresContainerSecurityContext) | indent 10 }}
+        command:
+          - "/bin/bash"
+          - "-ec"
+          - |
+            sh -x /home/stolon/update_user_entry.sh
+            echo $(whoami)
+            exec stolon-proxy
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: STPROXY_CLUSTER_NAME
+            value: {{ template "stolon.clusterName" . }}
+          - name: STPROXY_STORE_BACKEND
+            value: {{ .Values.store.backend | quote }}
+          {{- if eq .Values.store.backend "kubernetes" }}
+          - name: STPROXY_KUBE_RESOURCE_KIND
+            value: {{ default "configmap" .Values.store.kubeResourceKind  | quote }}
+          {{- else }}
+          - name: STPROXY_STORE_ENDPOINTS
+            value: {{ .Values.store.endpoints | quote }}
+          {{- end }}
+          - name: STPROXY_LISTEN_ADDRESS
+            value: {{ default "0.0.0.0" .Values.proxy.listenAddress | quote }}
+          - name: STPROXY_DEBUG
+            value: {{ .Values.debug | quote }}
+        ports:
+          - containerPort: {{ .Values.ports.internalPort }}
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.ports.internalPort }}
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.ports.internalPort }}
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        resources:
+{{ toYaml .Values.proxy.resources | indent 10 }}

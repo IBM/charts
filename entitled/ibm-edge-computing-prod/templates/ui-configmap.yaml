@@ -1,0 +1,77 @@
+{{- if .Values.ui.uiMenu.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations:
+    prometheus.io/scrape: 'true'
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+  name: {{ .Release.Name }}-ui
+  labels:
+    app: {{ .Release.Name }}-ui
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+data:
+  registration-setup.sh: |
+    #!/bin/sh
+    echo "Running script to register client and redirect url"
+
+    function jsonval {
+        temp=`echo $1 | sed 's/\\\\\//\//g' | sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed 's/\]//' | sed 's/[\,]/ /g' | sed 's/\"//g' | grep -w $2`
+        echo ${temp##*|}
+    }
+
+    REGISTRATION_OUTPUT="$(curl -kvv -X POST -u oauthadmin:$OAUTH2_CLIENT_REGISTRATION_SECRET -H "Content-Type: application/json" -d "{}" https://$CLUSTER_EXTERNAL_IP:8443/idauth/oidc/endpoint/OP/registration)"
+    CLIENT_ID=$(jsonval $REGISTRATION_OUTPUT client_id)
+    CLIENT_SECRET=$(jsonval $REGISTRATION_OUTPUT client_secret)
+    REGISTRATION_JSON="{
+        \"token_endpoint_auth_method\":\"client_secret_basic\",
+        \"client_id\":\"${CLIENT_ID}\",
+        \"client_secret\":\"${CLIENT_SECRET}\",
+        \"scope\":\"openid profile email\",
+        \"grant_types\":[
+            \"authorization_code\",
+            \"client_credentials\",
+            \"password\",
+            \"implicit\",
+            \"refresh_token\",
+            \"urn:ietf:params:oauth:grant-type:jwt-bearer\"
+        ],
+        \"response_types\":[
+            \"code\",
+            \"token\",
+            \"id_token token\"
+        ],
+        \"application_type\":\"web\",
+        \"subject_type\":\"public\",
+        \"post_logout_redirect_uris\":[
+            \"https://${CLUSTER_INTERNAL_IP}:8443/console/logout\",
+            \"https://${CLUSTER_EXTERNAL_IP}:8443/console/logout\",
+            \"https://${CLUSTER_EXTERNAL_IP}/console/logout\"
+        ],
+        \"preauthorized_scope\":\"openid profile email general\",
+        \"introspect_tokens\":true,
+        \"trusted_uri_prefixes\":[
+            \"https://${CLUSTER_INTERNAL_IP}:8443\",
+            \"https://${CLUSTER_EXTERNAL_IP}:8443\",
+            \"https://${CLUSTER_EXTERNAL_IP}\"
+        ],
+        \"redirect_uris\":[
+            \"https://${CLUSTER_INTERNAL_IP}:8443/auth/liberty/callback\",
+            \"https://${CLUSTER_EXTERNAL_IP}:8443/auth/liberty/callback\",
+            \"https://${CLUSTER_EXTERNAL_IP}/edge/authentication/callback\",
+            \"https://localhost:${PORT}/edge/authentication/callback\"
+        ]
+    }"
+    
+    curl -kvv -X PUT -u oauthadmin:$OAUTH2_CLIENT_REGISTRATION_SECRET -H "Content-Type: application/json" -d "$REGISTRATION_JSON" https://$CLUSTER_EXTERNAL_IP:9443/oidc/endpoint/OP/registration/$CLIENT_ID
+
+    ACCESS_TOKEN_OUTPUT="$(curl -kvv -H "Content-Type: application/x-www-form-urlencoded;charset=UTF-8" -d "grant_type=password&client_id=$CLIENT_ID&client_secret=$CLIENT_SECRET&username=admin&password=admin&scope=openid" https://$CLUSTER_EXTERNAL_IP:8443/idprovider/v1/auth/identitytoken)"
+    ACCESS_TOKEN=$(jsonval $ACCESS_TOKEN_OUTPUT access_token)
+
+    ID_TOKEN_OUTPUT="$(curl -kvv -H "Content-Type: application/x-www-form-urlencoded;charset=UTF-8" -H "Authorization: bearer $ACCESS_TOKEN" -d "access_token=$ACCESS_TOKEN" https://${CLUSTER_EXTERNAL_IP}:8443/idprovider/v1/auth/exchangetoken)"
+    ID_TOKEN=$(jsonval $ID_TOKEN_OUTPUT id_token)
+
+    echo "DONE"
+{{ end }}

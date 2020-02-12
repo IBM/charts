@@ -1,0 +1,212 @@
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list . .sch.chart.components.keeper) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+    component: "stolon-keeper"
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.keep . ) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 6 }}
+      component: "stolon-keeper"
+  serviceName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.keeperService) | quote }}
+  {{- if ( .Values.global.databaseHA ) and eq .Values.global.databaseHA true }}
+  replicas: 3
+  {{- else }}
+  replicas: 1
+  {{- end }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 8 }}
+        component: "stolon-keeper"
+        stolon-cluster: {{ template "stolon.clusterName" . }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:  
+      initContainers:
+      - name: pgsql-data-permission-fix
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.postgres.image.name }}:{{ .Values.postgres.image.tag }}
+        command: ['sh', '-c', 'mkdir -p /data/postgres; chmod 0700 /data/postgres']
+        volumeMounts:
+        - name: {{ .Values.dataPVC.name | quote }}
+          mountPath: /data
+        resources: 
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi 
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL    
+      serviceAccountName:  {{ include "stolon.serviceAccountName" . | quote }}
+      terminationGracePeriodSeconds: 10
+      affinity:
+{{- include "ibm-postgresql.affinity" (list . .Values.keeper.affinity) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresPodSecurityContext) | indent 8 }}
+{{- if .Values.keeper.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.keeper.nodeSelector | indent 8 }}
+{{- end }}
+
+{{- if .Values.keeper.tolerations }}
+      tolerations:
+{{ toYaml .Values.keeper.tolerations | indent 8 }}
+{{- end }}
+{{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{- end }}
+      containers:
+      - name: keeper
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.postgres.image.name }}:{{ .Values.postgres.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresContainerSecurityContext) | indent 10 }}
+        command:
+          - "/bin/bash"
+          - "-ec"
+          - |
+            sh -x /home/stolon/update_user_entry.sh
+            echo $(whoami)
+            # Generate our keeper uid using the pod index
+            IFS='-' read -ra ADDR <<< "$(hostname)"
+            export STKEEPER_UID="keeper${ADDR[-1]}"
+            export POD_IP=$(hostname -i)
+            export STKEEPER_PG_LISTEN_ADDRESS=$POD_IP
+            export STOLON_DATA=/stolon-data
+          {{- if include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . ) }}
+            cp /etc/secrets/ssl/* /etc/secrets/ssl_copy/
+            chmod 0600 /etc/secrets/ssl_copy/*
+          {{- end }}
+            ps
+            exec stolon-keeper --data-dir $STOLON_DATA
+            ps
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: STKEEPER_CLUSTER_NAME
+            value: {{ template "stolon.clusterName" . }}
+          - name: STKEEPER_STORE_BACKEND
+            value: {{ .Values.store.backend  | quote }}
+          {{- if eq .Values.store.backend "kubernetes" }}
+          - name: STKEEPER_KUBE_RESOURCE_KIND
+            value: {{ default "configmap" .Values.store.kubeResourceKind  | quote }}
+          {{- else }}
+          - name: STKEEPER_STORE_ENDPOINTS
+            value: {{ .Values.store.endpoints | quote }}
+          {{- end }}
+          - name: STKEEPER_PG_REPL_USERNAME
+            value: {{ tpl .Values.auth.pgReplUsername . | quote }}
+          - name: STKEEPER_PG_REPL_PASSWORDFILE
+            value: "/etc/secrets/stolon/pg_repl_password"
+          - name: STKEEPER_PG_SU_USERNAME
+            value: {{ tpl .Values.auth.pgSuperuserName . | quote }}
+          - name: STKEEPER_PG_SU_PASSWORDFILE
+            value: "/etc/secrets/stolon/pg_su_password"
+          - name: STKEEPER_DEBUG
+            value: {{ .Values.debug | quote }}
+        ports:
+          - containerPort: {{ .Values.ports.internalPort }}
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - exec pg_isready -h localhost -p {{ .Values.ports.internalPort }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - exec pg_isready -h localhost -p {{ .Values.ports.internalPort }}
+              #- psql -lqt | cut -d \| -f 1 | grep -qw postgres ; echo $? ;
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+        volumeMounts:
+        - name: {{ .Values.dataPVC.name | quote }}
+          mountPath: /stolon-data
+        - name: stolon-secrets
+          mountPath: /etc/secrets/stolon
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . ) }}
+        - mountPath: /etc/secrets/ssl
+          name: certs
+          readOnly: false
+{{- end }}
+        resources:
+{{ toYaml .Values.keeper.resources | indent 10 }}
+      volumes:
+        - name: stolon-secrets
+          secret:
+{{- if not (tpl .Values.auth.authSecretName . ) }}
+            secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.authSecret) | quote }}
+{{- else }}
+            secretName: {{ tpl .Values.auth.authSecretName . }}
+{{- end }}
+{{- if include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . ) }}
+        - name: certs
+          secret:
+  {{- if not (tpl .Values.tls.tlsSecretName . ) }}
+            secretName: {{ include "sch.names.fullCompName" (list . .sch.chart.components.tlsSecret) | quote }}
+  {{- else }}
+            secretName: {{ tpl .Values.tls.tlsSecretName . }}
+  {{- end }}
+#            defaultMode: 0600
+{{- end }}
+{{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Values.dataPVC.name | quote }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- if .Values.persistence.useDynamicProvisioning }}
+        # if present, use the storageClassName from the values.yaml, else use the default storageClass setup by kube Administrator
+        # setting storageClassName to nil means use the default storage class
+        storageClassName: {{ default nil .Values.persistence.storageClassName | quote }}
+  {{- else }}
+        # bind to an existing pv.
+        # setting storageClassName to "" disables dynamic provisioning
+        storageClassName: {{ default "" .Values.persistence.storageClassName | quote }}
+    {{- if .Values.dataPVC.selector.label }}
+        # use selectors in the binding process
+        selector:
+          matchExpressions:
+            - {key: {{ .Values.dataPVC.selector.label }}, operator: In, values: [{{ .Values.dataPVC.selector.value }}]}
+    {{- end }}
+  {{- end }}
+{{- else }}
+        - name: {{ .Values.dataPVC.name | quote }}
+          emptyDir: {}
+{{- end }}

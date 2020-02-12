@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    prometheus.io/scrape: 'true'
+  name: {{ .Release.Name }}-ui
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Release.Name }}-ui
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: {{ .Release.Name }}-ui
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  replicas: {{ .Values.ui.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-ui
+      release: "{{ .Release.Name }}"
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.common.maxSurge }}
+      maxUnavailable: {{ .Values.ui.maxUnavailable }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-ui
+        chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ .Release.Name }}-ui
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+      annotations:
+        productID: 103bfba4a040493b8cb94bd489373ba3
+        productName: "IBM Edge Device Edition"
+        productVersion: 3.2.1
+        timestamp: '{{ date "20060102150405" .Release.Time }}'
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}-ui
+      containers:
+      - name: {{ .Release.Name }}-ui
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.ui.image }}:{{ .Values.ui.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+          - name: HTTP_PORT
+            value: "{{ .Values.common.httpPort }}"
+          - name: CLUSTER_URL
+            value: "{{ .Values.common.clusterUrl }}"
+          - name: PLATFORM_IDENTITY_PROVIDER_URL
+            value: "{{ .Values.common.clusterUrl }}"
+          - name: hznApiUrl
+            value: "http://{{ .Release.Name }}-exchange/v1/"
+          - name: WLP_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: platform-oidc-credentials
+                key: WLP_CLIENT_ID
+          - name: WLP_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: platform-oidc-credentials
+                key: WLP_CLIENT_SECRET
+        ports:
+        - containerPort: {{ .Values.common.httpPort }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+{{ toYaml .Values.ui.resources | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+              - ALL

@@ -1,0 +1,59 @@
+{{- include "sch.config.init" (list . "ibmPostgres.sch.chart.config.values") -}}
+{{ if .Release.IsInstall }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.createCluster) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.createCluster) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.createCluster) | indent 8 }}
+    spec:
+      serviceAccountName: {{ include "stolon.serviceAccountName" . | quote }}
+      restartPolicy: Never
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list . .sch.chart.nodeAffinity) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresPodSecurityContext) | indent 8 }}
+{{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullSecret }}
+{{- end }}
+      containers:
+      - name: create-cluster
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.postgres.image.name }}:{{ .Values.postgres.image.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.postgresContainerSecurityContext) | indent 10 }}
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 50m
+        command: ["/usr/local/bin/stolonctl"]
+        args:
+          - init
+          - --cluster-name={{ template "stolon.clusterName" . }}
+          - --store-backend={{ .Values.store.backend }}
+    {{- if eq .Values.store.backend "kubernetes" }}
+          - --kube-resource-kind={{ default "configmap" .Values.store.kubeResourceKind }}
+    {{- else }}
+          - --store-endpoints={{ .Values.store.endpoints }}
+    {{- end }}
+          - --yes
+    {{- if include "ibm-postgresql.boolConvertor" (list .Values.tls.enabled . ) }}
+          - '{  "initMode": "new", "pgParameters": { "max_connections" :  "{{ .Values.maxConnections }}", "ssl": "on", "ssl_cert_file": "/etc/secrets/ssl_copy/tls.crt", "ssl_key_file": "/etc/secrets/ssl_copy/tls.key"{{ if .Values.slowQueries.enabled }}, "log_min_duration_statement" :  "{{ .Values.slowQueries.minDuration }}" {{ end }} } }'
+    {{- else if .Values.slowQueries.enabled }}
+          - '{  "initMode": "new", "pgParameters": { "max_connections" :  "{{ .Values.maxConnections }}", "log_min_duration_statement" :  {{ .Values.slowQueries.minDuration }} } }'
+    {{- else }}
+          - '{  "initMode": "new", "pgParameters": { "max_connections" :  "{{ .Values.maxConnections }}" } }'
+    {{- end }}
+{{ end }}

@@ -1,0 +1,183 @@
+arch: amd64
+
+global:
+  image:
+    pullPolicy: IfNotPresent
+    repository:
+    pullSecret:
+  databaseHA: false
+
+common:
+  servicePort: 80
+  httpPort: 8080
+  clusterUrl: https://icp-management-ingress.kube-system:8443
+  maxSurge: 2
+
+# Use local databases
+# DISABLED for this initial release
+localDBs:
+  enabled: true
+# Remote database controls
+remoteDBs:
+  enableAgbotTLS: true
+  enableCssTLS: true
+  enableExchangeTLS: true
+
+# Services
+agbot:
+  replicaCount: 2
+  maxUnavailable: 0
+  image: amd64_agbot
+  tag: 2.23.30-v3.2.1
+  loglevel: 3
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 10m
+    limits:
+      memory: 2Gi
+      cpu: 2
+agbotdb:
+  name: agbotdb
+  keeper:
+    resources:
+      limits:
+        memory: 2Gi
+        cpu: 2
+  sentinel:
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 1
+  proxy:
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 1
+  persistence:
+    enabled: true
+    storageClassName: agbot-storage
+  auth:
+    authSecretName: edge-computing-agbotdb-postgresql-auth-secret
+    pgSuperuserName: admin
+  dataPVC: 
+    name: agbot-db-claim
+exchange:
+  replicaCount: 2
+  maxUnavailable: 0
+  image: amd64_exchange-api
+  tag: 1.116.1
+  path: /ec-exchange/
+  loglevel: INFO
+  dbPool: 45
+  cache:
+    idsMaxSize: 3500
+    resourcesMaxSize: 300
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 10m
+    limits:
+      memory: 2Gi
+      cpu: 4
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    cpu: 1750
+    memory: 300  
+exchangedb:
+  keeper:
+    resources:
+      limits:
+        memory: 2Gi
+        cpu: 2
+  sentinel:
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 1
+  proxy:
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 1
+  name: exchangedb
+  persistence:
+    enabled: true
+    storageClassName: exchange-storage
+  auth:
+    authSecretName: edge-computing-exchangedb-postgresql-auth-secret
+    pgSuperuserName: admin
+  maxConnections: 100
+  dataPVC: 
+    name: exchange-db-claim
+css:
+  replicaCount: 2
+  maxUnavailable: 0
+  image: amd64_cloud-sync-service
+  tag: 1.0.15
+  path: /ec-css/
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 10m
+    limits:
+      memory: 2Gi
+      cpu: 2
+cssdb:
+  resources:
+    limits:
+      cpu: 2
+      memory: 2Gi
+  persistentVolume:
+    enabled: true
+    storageClass: css-storage
+  auth:
+    authSecretName: edge-computing-css-db-ibm-mongodb-auth-secret
+  tls:
+    enabled: false
+  configmap: >
+    {
+      "storage": {
+        "dbPath": "/data/db"
+      },
+      "net": {
+        "port": 27017,
+        "ssl": {
+          "mode": "disabled"
+        }
+      },
+      "replication": {
+        "replSetName": "rs0"
+      },
+      "security": {
+        "keyFile": "/data/configdb/key.txt"
+      }
+    }
+ui:
+  replicaCount: 2
+  maxUnavailable: 0
+  image: edge-ui-amd64
+  tag: 1.0.2
+  path: /ec-ui
+  pathEdge: /edge
+  uiMenu:
+    enabled: false
+    name: Edge Computing
+    id: add-ons
+    roles: ClusterAdministrator,Administrator,Operator,Viewer
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 10m
+    limits:
+      memory: 2Gi
+      cpu: 2
+kubectl:
+  image: opencontent-icp-cert-gen-1
+  tag: 1.1.1
+
+## Enable custom grafana dashboard load on install
+dashboard:
+  enabled: true
