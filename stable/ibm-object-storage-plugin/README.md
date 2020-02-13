@@ -18,7 +18,7 @@ When you install the IBM Cloud Object Storage plug-in Helm chart, the following 
   - Create or use an existing standard Kubernetes cluster that you [provisioned with IBM Cloud Kubernetes Service](https://cloud.ibm.com/docs/containers?topic=containers-clusters#clusters_cli).
   - [Install the IBM Cloud CLI, the IBM Cloud Kubernetes Service plug-in, the Kubernetes CLI](https://cloud.ibm.com/docs/containers?topic=containers-cs_cli_install#cs_cli_install).
   - [Log in to your IBM Cloud account. Target the appropriate region and, if applicable, resource group. Set the context for your cluster](https://cloud.ibm.com/docs/containers?topic=containers-cs_cli_install#cs_cli_configure).
-  - Follow the [instructions](https://cloud.ibm.com/docs/containers?topic=containers-integrations#helm) to install the Helm client on your local machine, and install the Helm server (tiller) in your cluster.
+  - Follow the [instructions](https://cloud.ibm.com/docs/containers?topic=containers-helm#install_v3) to install the Helm client v3 on your local machine. If helm v2 is installed on your local machine or on your cluster, then it is strongly recommended to [migrate from helm v2 to v3](https://cloud.ibm.com/docs/containers?topic=containers-helm#migrate_v3).
 
 - **IBM Cloud Private (ICP)**:
   - Create or use an existing [IBM Cloud Private cluster](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.1.1/installing/install.html).
@@ -186,13 +186,14 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
 
 **_IBM Cloud Kubernetes Service:_**
 
-1. Verify that you set up a service account for tiller.
+1. Verify that `helm v3` is installed on your local machine.
 
    ```
-   kubectl get serviceaccount -n kube-system | grep tiller
+   helm version --short
+   v3.0.2+g19e47ee
    ```
 
-   **Tip:** If no service account is shown in your CLI output, run `kubectl apply -f https://raw.githubusercontent.com/IBM-Cloud/kube-samples/master/rbac/serviceaccount-tiller.yaml` to create the service account. Then, run `helm init --service-account tiller` to initialize Helm.  
+   **Tip:** If helm v2 is installed on your local machine or on your cluster, then it is strongly recommended to [migrate from helm v2 to v3](https://cloud.ibm.com/docs/containers?topic=containers-helm#migrate_v3).  
 
 2. Add the IBM Cloud Helm repository `ibm-charts` to your cluster.
 
@@ -235,13 +236,13 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
     Example: Install chart from helm registry, without any limitation to access specific Kubernetes secrets:
 
     ```
-     helm ibmc install ibm-charts/ibm-object-storage-plugin --name ibm-object-storage-plugin
+     helm ibmc install ibm-object-storage-plugin ibm-charts/ibm-object-storage-plugin
     ```
 
     Example: Install chart from local path, with a limitation to access the Cloud Object Storage's secrets only, as described in the `Optional: Limit secret access` section at the bottom:
 
     ```
-    helm ibmc install ./ --name ibm-object-storage-plugin
+    helm ibmc install ibm-object-storage-plugin ./
     ```
 
 **_IBM Cloud Private:_**
@@ -256,7 +257,7 @@ Install the IBM Cloud Object Storage plug-in with a Helm chart to set up pre-def
    cloudctl login -a https://<Master Node IP>:8443 --skip-ssl-validation
    ```
 
-2. Add the internal IBM Cloud Private Helm repository called mgmt-charts.
+2. Add the internal IBM Cloud Private Helm repository called `mgmt-charts`.
 
    ```
    helm repo add mgmt-charts https://<Master Node IP>:8443/mgmt-repo/charts --ca-file $HELM_HOME/ca.pem --cert-file $HELM_HOME/cert.pem --key-file $HELM_HOME/key.pem
@@ -335,7 +336,7 @@ Limit the IBM Cloud Object Storage plug-in to access only the Kubernetes secrets
    ```
    The installation is successful when you see one `ibmcloud-object-storage-plugin` pod and one or more `ibmcloud-object-storage-driver` pods. The number of `ibmcloud-object-storage-driver` pods equals the number of worker nodes in your cluster. All pods must be in a `Running` state for the plug-in to function properly. If the pods fail, run `kubectl describe pod -n <namespace> <pod_name>` to find the root cause for the failure.
 
-2. Verify that the storage classes are created successfully. Note that this output varies depending on the type of Cloud Object Storage you use.
+2. Verify that the storage classes are created successfully. Note that this output varies depending on the type of cluster you use.
    ```
    kubectl get storageclass | grep 'ibmc-s3fs'
    ```
@@ -378,13 +379,13 @@ If one or more pod is returned, remove the pods or deployment before removing th
 1. Find the installation name of your Helm chart.
 
      ```
-     helm ls | grep ibm-object-storage-plugin
+     helm ls --all --all-namespaces | grep ibm-object-storage-plugin
      ```
 
-2. Delete the IBM Cloud Object Storage plug-in by removing the Helm chart.
+2. Delete the IBM Cloud Object Storage plug-in by removing the Helm chart. Here, `<helm_chart_namespace>` is the namespace where your chart is deployed.
 
      ```
-     helm delete --purge <helm_chart_name>
+     helm delete <helm_chart_name> -n <helm_chart_namespace>
      ```
 
 3. Remove the `ibmc` Helm plug-in.
@@ -392,7 +393,7 @@ If one or more pod is returned, remove the pods or deployment before removing th
    1. Remove the plug-in.
 
       ```
-      rm -rf ~/.helm/plugins/helm-ibmc
+      helm plugin remove ibmc
       ```
    2. Verify that the `ibmc` plug-in is removed.
 
@@ -411,7 +412,7 @@ If one or more pod is returned, remove the pods or deployment before removing th
 1. Find the installation name of your Helm chart.
 
      ```
-     helm ls --tls | grep ibm-object-storage-plugin
+     helm ls --all --tls | grep ibm-object-storage-plugin
      ```
 
 2.   Delete the IBM Cloud Object Storage plug-in by removing the Helm chart.

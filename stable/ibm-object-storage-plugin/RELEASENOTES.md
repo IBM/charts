@@ -1,20 +1,20 @@
 # Breaking Changes
 None
 
-# What’s new in Chart Version 1.1.2
+# What’s new in Chart Version 1.1.3
 
-With ibm-object-storage-plugin chart version 1.1.2, the following new
+With ibm-object-storage-plugin chart version 1.1.3, the following new
 features are available:
-* Non-root user access broken for K8S >= 1.15.4
+* Updated `ibmc` helm plugin to support object-storage plugin installation/upgradation with `helm v2` and `helm v3`.
 
 # Fixes
-
-* Non-root user access broken for K8S >= 1.15.4
+* Updated helm chart to auto-recreate plugin pods when upgrading plugin.
+* Resolved security issues CVE-2019-13734 and CVE-2019-18408
 
 # Prerequisites
-Install tiller with service-account due to some RBAC issue (helm version: >=2.9.1). Follow instructions [here](https://cloud.ibm.com/docs/containers/cs_integrations.html#helm).
+Install [Helm client v3](https://cloud.ibm.com/docs/containers?topic=containers-helm#install_v3) on your local machine.
 
-**Note:** To install Tiller with the service account and cluster role binding in the `kube-system` namespace, you must have the [cluster-admin role](https://cloud.ibm.com/docs/containers/cs_users.html#access_policies).
+**NOTE:** For IBM Cloud Kubernetes Service(IKS), it is strongly recommended to [migrate from helm v2 to v3](https://cloud.ibm.com/docs/containers?topic=containers-helm#migrate_v3). For IBM Cloud Private(ICP), no need to update the helm client.
 
 # Documentation
 For install/upgrade, follow instructions [here](https://cloud.ibm.com/docs/containers?topic=containers-object_storage#object_storage).
@@ -23,6 +23,7 @@ For install/upgrade, follow instructions [here](https://cloud.ibm.com/docs/conta
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.1.3 | Feb 13, 2020| >=1.10.1 | 1.8.12 | None | Resolved security issues CVE-2019-13734 and CVE-2019-18408, Updated `ibmc` helm plugin to support object-storage plugin installation/upgradation with `helm v2` and `helm v3`, Updated helm chart to auto-recreate plugin pods when upgrading plugin, GoLang: v1.13.4 |
 | 1.1.2 | Dec 09, 2019| >=1.10.1 | 1.8.11 | None | Non-root user access broken for K8S >= 1.15.4, GoLang: v1.13.4 |
 | 1.1.1 | Nov 22, 2019| >=1.10.1 | 1.8.10 | None | Golang update to version 1.13.4, Gosec enabled in plugin code; GoLang: v1.13.4, PSIRT image vulnerability fix |
 | 1.1.0 | Oct 25, 2019| >=1.10.1 | 1.8.9 | None | Updated helm chart to support plugin deployment on `VPC` clusters, Updated `ibmc` helm plugin to detect VPC cluster and deploy plugin accordingly, Disabled mounting of `/` directory inside object-storage-plugin driver pods; GoLang: v1.12.9 |
