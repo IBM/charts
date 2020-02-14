@@ -1,10 +1,10 @@
-# IBM Maximo APM - Equipment Maintenance Assistant
-IBM Maximo APM - Equipment Maintenance Assistant combines asset data and AI to provide insights for problem diagnosis and resolution to help technicians identify the right repair the first time.
+# IBM Maximo Equipment Maintenance Assistant On-Premises
+IBM Maximo Equipment Maintenance Assistant On-Premises combines asset data and AI to provide insights for problem diagnosis and resolution to help technicians identify the right repair the first time.
 ## Introduction
 IBM Maximo Equipment Maintenance Assistant On-Premises augments your asset maintenance program with machine learning techniques and AI tools. This powerful combination provides asset-intensive industries with capabilities to optimize asset repairs based on prescriptive guidance. AI methods using IBM Watson technology are applied to structured and unstructured data associated with repairs, maintenance, procedures and techniques. This offers enhanced insights and recommend optimum repair methods and procedures. It enables equipment manufacturers to detect failure patterns, ensure optimal first-time fixes, and extend the life of critical assets.
 
 ## Chart Details
-A chart deploys IBM Maximo APM - Equipment Maintenance Assistant instance for production.
+A chart deploys IBM Maximo Equipment Maintenance Assistant On-Premises instance for production.
 
 It includes the following endpoints:
  - landing page endpoint accessible on `/ema/ui/{instance_id}`
@@ -26,7 +26,7 @@ It includes the following endpoints:
 2. Kubernetes 1.11 or later is installed.
 3. Helm 2.9.1 or later is installed.
 4. Cluster Admin privilege is only required for preinstall of cluster security policies creation and post delete clean up.
-5. The default Docker images for IBM Maximo APM - Equipment Maintenance Assistant are loaded to an appropriate Docker Image Repository.
+5. The default Docker images for IBM Maximo Equipment Maintenance Assistant On-Premises are loaded to an appropriate Docker Image Repository.
 Note: If the archive download from IBM Passport Advantage is loaded to Red Hat OpenShift, the Docker image is automatically loaded to the default Docker registry for Red Hat OpenShift in the namespace which you login.
   
    Docker Images  | Tag | Description |
@@ -44,7 +44,7 @@ Note: If the archive download from IBM Passport Advantage is loaded to Red Hat O
    ema-multi-tenant|1.1.0|ema multi tenant|
    ema-monitor|1.1.0|ema monitor|
    opencontent-common-utils|1.1.2|User problem template management |
-Before installing IBM Maximo APM - Equipment Maintenance Assistant, you must install and configure helm and kubectl.
+Before installing IBM Maximo Equipment Maintenance Assistant On-Premises, you must install and configure helm and kubectl.
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
 
@@ -407,5 +407,39 @@ You also can add the prometheus to your grafana as a datasource and import the p
 
 
 ### Logging
-IBM Maximo Equipment Maintenance Assistant On-Premises sends its logs to the standard output, and thus cluster administrators can deploy the cluster logging to see the IBM Maximo Equipment Maintenance Assistant On-Premises logs. You can import the IBM Maximo Equipment Maintenance Assistant predefined kibana dashboard data/ema-kibana-dashboard.json. 
+IBM Maximo Equipment Maintenance Assistant On-Premises sends its logs to the standard output, and thus cluster administrators can deploy the cluster logging to see the IBM Maximo Equipment Maintenance Assistant On-Premises logs. You can import the IBM Maximo Equipment Maintenance Assistant predefined kibana dashboard data/ema-kibana-dashboard.json.
+
+### Hot fix
+## Description
+Bug fixed:
+Fix listing data issue caused by couchdb query return limit to 25 records by default.
+API query performance improvement. 
+Fix monitor issue related to external api availability prom metric.
+Update related helm charts for deployment.
+Add error handler in crawler when get tenant failed.
+Fix nodejs express default timeout(2min) issue, increase to 10min, configurable
+
+## Instruction
+To apply the hotfix for IBM Maximo Equipment Maintenance Assistant On-Premises, you can follow the same steps described in the previous part.
+
+The updated images of hotfix for IBM Maximo Equipment Maintenance Assistant On-Premises are as below.
+
+Docker Images  | Tag | Description |
+   --------  | -----|-----|
+   ema-api | 1.1.0-hotfix.1 | ema service|
+   ema-crawler | 1.1.0-hotfix.1 | ema crawler|
+   ema-diagnosis | 1.1.0-hotfix.1 |ema diagnosis service|
+   ema-service-provider | 1.1.0-hotfix.1 |ema service provider|
+   ema-monitor| 1.1.0-hotfix.1 |ema monitor|
+   ema-admin-console| 1.1.0-hotfix.1 | ema admin console |
+   ema-diagnosis-dataloader | 1.1.0-hotfix.1 |ema diagnosis dataloader service|
+   ema-landing-page|1.1.0-hotfix.1|ema landing page|
+   ema-auth|1.1.0-hotfix.1|ema auth|
+   ema-maximo-integration|1.1.0-hotfix.1|ema maximo integration|
+   ema-sample-app|1.1.0-hotfix.1|ema sample app|
+   ema-studio|1.1.0-hotfix.1|ema studio|
+   ema-multi-tenant|1.1.0-hotfix.1|ema multi tenant|
+
+
+
 
