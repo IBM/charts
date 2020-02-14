@@ -60,7 +60,7 @@ body=$(get_config)
 
 echo $body
 
-status=$(curl -k -m 10 -o /dev/null -w %{http_code} -X POST \
+status=$(curl -k -m 100 -o /dev/null -w %{http_code} -X POST \
     $server/provision/ \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json' \
