@@ -38,10 +38,10 @@ function buildtable()
 	local indexout=$1.digest
 	local digest=""
 	local image=""
-
+set -x
 	rm $indexout 2> /dev/null|| true
 	[[ ! -f "$1" ]] && { touch $indexout ; return ; }
-	set `cat $1 | egrep "https.*tgz|digest" | tr -d ' '`
+	set `cat $1 | egrep "\-\-help.*tgz|https.*tgz|digest" | tr -d ' '`
 	while test $# -gt 0
 	do
 		digest=`cut -f2 -d: <<< $1`; shift
