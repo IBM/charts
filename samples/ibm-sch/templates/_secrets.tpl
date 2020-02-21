@@ -213,7 +213,7 @@ metadata:
   labels:
 {{  include "sch.metadata.labels.standard" (list $secretGenRoot $suffix $extraLabels) | indent 4 }}
   annotations:
-    "helm.sh/hook": "pre-install"
+    "helm.sh/hook": {{ $root.sch.chart.secretGen.createJobHookOverride | default "pre-install" | quote }}
     "helm.sh/hook-weight": {{ $secretGenRoot.Values.jobPreinstallWeight | quote }}
     "helm.sh/hook-delete-policy": {{ $secretGenRoot.Values.jobPreinstallDeletePolicy }}
 spec:
@@ -351,7 +351,7 @@ metadata:
   labels:
 {{  include "sch.metadata.labels.standard" (list $secretGenRoot $suffix $extraLabels) | indent 4 }}
   annotations:
-    "helm.sh/hook": "post-delete"
+    "helm.sh/hook": {{ $root.sch.chart.secretGen.deleteJobHookOverride | default "post-delete" | quote }}
     "helm.sh/hook-weight": {{ $secretGenRoot.Values.jobPostDeleteWeight | quote }}
     "helm.sh/hook-delete-policy": {{ $secretGenRoot.Values.jobPostdeleteDeletePolicy }}
 spec:
