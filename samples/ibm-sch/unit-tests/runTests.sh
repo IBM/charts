@@ -32,9 +32,13 @@ do
   cp -R $TESTDIR/../../values.yaml $TESTDIR/chart/charts/ibm-sch/values.yaml
   helm template $TESTDIR/chart -f $TESTDIR/chart/values.yaml | sed '/---/d' | sed '/^$/d' | sed '/# Source/d' | sed 's/"release-name"/"RELEASE-NAME"/g' > $TESTDIR/output.yaml
   if [ $ISHELM3 == 1 ]; then
-    sed 's/"Tiller"/"Helm"/g' $TESTDIR/expected.yaml > $TESTDIR/expected_helm3.yaml
-    $SCRIPTDIR/compareyaml -expected=$TESTDIR/expected_helm3.yaml -actual=$TESTDIR/output.yaml
-    rm $TESTDIR/expected_helm3.yaml
+    if [ ! -f $TESTDIR/expected_helm3.yaml ]; then
+      sed 's/"Tiller"/"Helm"/g' $TESTDIR/expected.yaml > $TESTDIR/expected_helm3.yaml
+      $SCRIPTDIR/compareyaml -expected=$TESTDIR/expected_helm3.yaml -actual=$TESTDIR/output.yaml
+      rm $TESTDIR/expected_helm3.yaml
+    else
+      $SCRIPTDIR/compareyaml -expected=$TESTDIR/expected_helm3.yaml -actual=$TESTDIR/output.yaml
+    fi
   else
     $SCRIPTDIR/compareyaml -expected=$TESTDIR/expected.yaml -actual=$TESTDIR/output.yaml
   fi
