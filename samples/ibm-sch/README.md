@@ -28,13 +28,13 @@ There are two ways to include ibm-sch with your chart:
   dependencies:
   - name: ibm-sch
     repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-    version: "^1.2.15"
+    version: "^1.2.16"
     alias: sch
   ```
   
     Explanation of parameters:
     - Set the alias to `sch` to guarantee that all functions will work successfully.
-    - Set the version to `^1.2.15` to download the latest `1.x.x` version of ibm-sch.
+    - Set the version to `^1.2.16` to download the latest `1.x.x` version of ibm-sch.
 
 2. Download the source and copy it into your charts directory
 
@@ -53,7 +53,7 @@ Entry in subchart requirements.yaml:
 dependencies:
 - name: ibm-sch
   repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-  version: "^1.2.15"
+  version: "^1.2.16"
   alias: sch
   condition: global.sch.enabled
 ```
@@ -72,7 +72,7 @@ Entry in parent chart's requirements.yaml:
 dependencies:
 - name: ibm-sch
   repository: "@sch" ## where sch is based on [NAME] from the cmd: helm repo add [flags] [NAME] [URL]
-  version: "^1.2.15"
+  version: "^1.2.16"
   alias: sch
 ```
 
@@ -373,6 +373,8 @@ Note: Kubernetes has updated their standard label names. They are now app.kubern
 
 Note: To avoid upgrade issues related to Kubernetes selectors, only use the new labels if this is a new major version of your chart.
 
+Note: The value being used from Helm for the heritage or app.kubernetes.io/managed-by parameter is different between Helm 2 and Helm 3. If you use this standard labels function in `spec.selector.matchLabels`, this will prevent your chart from upgrading. The recommended workaround is to specify the old value as a parameter in the dictionary and the function will override it in the chart. The value passed in the parameter should be able to be toggled by the end user via values.yaml.
+
 __Config Values Used:__
 - `.sch.chart.appName`
 - `.sch.utils.getItem`
@@ -404,6 +406,9 @@ or
 or
   labels:
 {{ include "sch.metadata.labels.standard" (list . $compName (dict "labelA" "Avalue" "labelB" "Bvalue")) | indent 4 }} # with component label and additional labels
+or
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "heritage" .Values.heritage )) | indent 4 }} # override heritage label with user-defined value (see note above)
 ```
 
 #### Metering Annotations
