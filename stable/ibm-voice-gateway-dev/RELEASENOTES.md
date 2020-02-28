@@ -2,10 +2,10 @@
 
 - None
 
-# What's new in 3.0.1
+# What's new in 3.1.0
 
-- Minor Updates
-- Updated voice gateway images to 1.0.4.0
+- Bug fixes
+- Updated voice gateway images to 1.0.5.0
 - [What's new](https://www.ibm.com/support/knowledgecenter/SS4U29/whatsnew.html)
 
 # Fixes
@@ -44,6 +44,7 @@ None
 
 | Chart | Date         | Kubernetes Required | Image(s) Supported                                                    | Details                                                                                                                                |
 | ----- | ------------ | ------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.1.0 | Feb 28, 2020 | >= 1.11             | ibmcom/voice-gateway-so:1.0.5.0, ibmcom/voice-gateway-mr:1.0.5.0, ibmcom/voice-gateway-codec-g729:1.0.5.0, ibmcom/voice-gateway-sms:1.0.5.0   | Bug fixes, Updated voice gateway images to 1.0.5.0                                                                |
 | 3.0.1 | Nov 22, 2019 | >= 1.11             | ibmcom/voice-gateway-so:1.0.4.0, ibmcom/voice-gateway-mr:1.0.4.0, ibmcom/voice-gateway-codec-g729:1.0.4.0, ibmcom/voice-gateway-sms:1.0.4.0   | Minor updates, Updated voice gateway images to 1.0.4.0                                                                |
 | 3.0.0 | Sep 27, 2019 | >= 1.11             | ibmcom/voice-gateway-so:1.0.3.0, ibmcom/voice-gateway-mr:1.0.3.0, ibmcom/voice-gateway-codec-g729:1.0.3.0, ibmcom/voice-gateway-sms:1.0.3.0   | Added SMS Gateway microservice, added G729AB microservice, added support for Cloud Pak for Data with OpenShift platform, enhancements to the helm chart, updated voice gateway images to 1.0.3.0                                                                |
 | 2.2.1 | Jun 28, 2019 | >= 1.11             | ibmcom/voice-gateway-so:1.0.2.0 and ibmcom/voice-gateway-mr:1.0.2.0   | Updated images to version 1.0.2.0, added support for monitoring metrics                                                                |
