@@ -113,3 +113,46 @@ Create the name of the cluster role binding to use for hooks
     {{ default "default" .Values.serviceAccount.hook.name }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Populate the ports based on deployemnt environment
+*/}}
+{{- define "px.pxAPIPort" -}}
+{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+    {{- printf "17001" -}}
+{{- else -}}
+    {{- printf "9001" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.pxHealthPort" -}}
+{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+    {{- printf "17015" -}}
+{{- else -}}
+    {{- printf "9015" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.pxKVDBPort" -}}
+{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+    {{- printf "17019" -}}
+{{- else -}}
+    {{- printf "9019" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.pxSDKPort" -}}
+{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+    {{- printf "17020" -}}
+{{- else -}}
+    {{- printf "9020" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.pxGatewayPort" -}}
+{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+    {{- printf "17021" -}}
+{{- else -}}
+    {{- printf "9021" -}}
+{{- end -}}
+{{- end -}}

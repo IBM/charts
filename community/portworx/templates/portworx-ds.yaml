@@ -1,5 +1,7 @@
 {{/* Setting defaults if they are omitted. */}}
 {{- $deployEnvironmentIKS := .Capabilities.KubeVersion.GitVersion | regexMatch "IKS" }}
+{{- $deployEnvironmentOCP := .Capabilities.APIVersions.Has "apps.openshift.io/v1"}}
+
 {{- $usefileSystemDrive := .Values.storage.usefileSystemDrive | default false }}
 {{- $drives := .Values.storage.drives | default "none" }}
 {{- $usedrivesAndPartitions := .Values.storage.usedrivesAndPartitions | default false }}
@@ -13,7 +15,7 @@
 {{- $managementInterface := .Values.network.managementInterface | default "none" }}
 
 {{- $envVars := .Values.envVars | default "none" }}
-{{- $advOpts := .Values.advOpts | default "none" }}
+{{- $advOpts := .Values.advOpts | replace "+" "," |default "none" }}
 
 {{- $internalKVDB := .Values.internalKVDB | default false }}
 {{- $csi := .Values.csi | default false }}
@@ -135,6 +137,10 @@ spec:
               "-ca", "/etc/pwx/etcdcerts/ca.pem",
               {{- end -}}
 
+              {{- if $deployEnvironmentOCP -}}
+              "-r" , "17001" ,
+              {{- end -}}
+
               "-x", "kubernetes",
               {{- if ne $metadataSize 0 }}
               "-metadata" "{{ printf "size=%d" (int64 $metadataSize) }}",
@@ -196,13 +202,13 @@ spec:
             httpGet:
               host: 127.0.0.1
               path: /status
-              port: 9001
+              port: {{ template "px.pxAPIPort" . }}
           readinessProbe:
             periodSeconds: 10
             httpGet:
               host: 127.0.0.1
               path: /health
-              port: 9015
+              port: {{ template "px.pxHealthPort" . }}
           securityContext:
             privileged: true
             allowPrivilegeEscalation: true

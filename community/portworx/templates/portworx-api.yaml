@@ -1,0 +1,82 @@
+{{/* Setting defaults if they are omitted. */}}
+kind: Service
+apiVersion: v1
+metadata:
+  name: portworx-api
+  namespace: kube-system
+  labels:
+    name: portworx-api
+{{- include "px.labels" . | nindent 4 }}
+spec:
+  selector:
+    name: portworx-api
+  type: ClusterIP
+  ports:
+    - name: px-api
+      protocol: TCP
+      port: 9001
+      targetPort: {{ template "px.pxAPIPort" . }}
+    - name: px-sdk
+      protocol: TCP
+      port: 9020
+      targetPort: {{ template "px.pxSDKPort" . }}
+    - name: px-rest-gateway
+      protocol: TCP
+      port: 9021
+      targetPort: {{ template "px.pxGatewayPort" . }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: portworx-api
+  namespace: kube-system
+  labels:
+    name: portworx-api
+{{- include "px.labels" . | nindent 4 }}
+  annotations:
+    portworx.com/install-source: helm/{{.Release.Service}}-r{{.Release.Revision}}
+    portworx.com/helm-vars: chart="{{.Chart.Name}}-{{.Chart.Version}}"{{range $k, $v := .Values }}{{if $v}},{{ $k }}="{{ $v }}"{{end}}{{end}}
+spec:
+  selector:
+    matchLabels:
+      name: portworx-api
+  minReadySeconds: 0
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 100%
+  template:
+    metadata:
+      annotations:
+{{- include "px.metering.annotations" . | nindent 8 }}            
+      labels:
+        name: portworx-api
+{{- include "px.labels" . | nindent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+                {{- if not (.Capabilities.APIVersions.Has "apps.openshift.io/v1") }}
+              - key: node-role.kubernetes.io/master
+                operator: DoesNotExist
+                {{- end }}
+      hostNetwork: true
+      hostPID: false
+      containers:
+        - name: portworx-api
+          image: k8s.gcr.io/pause:3.1
+          imagePullPolicy: Always
+          readinessProbe:
+            periodSeconds: 10
+            httpGet:
+              host: 127.0.0.1
+              path: /status
+              port: {{ template "px.pxAPIPort" . }}
+      restartPolicy: Always
+      serviceAccountName: px-account
