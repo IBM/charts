@@ -12,8 +12,6 @@
 ###############################################################################
 # Kafka network access policy
 # Ingress : Proxy, REST on ports defined in advertised listeners, except the INTERNAL one
-# Egress : zookeeper:2181
-#
 # Kafka brokers can connect to each other on 9092
 ###############################################################################
 {{ if eq .Values.license "accept" -}}
@@ -49,7 +47,6 @@ spec:
       component: {{ $compName | quote }}
       release: {{ .Release.Name }}
   policyTypes:
-  - Egress
   - Ingress
   ingress:
   # connections from the proxy/rest/replicator to the broker
@@ -111,60 +108,4 @@ spec:
       - protocol: TCP
         port: {{ $ports.kafka.jmx }}
   {{- end }}
-  egress:
-  # connections to zookeeper
-  - to:
-    - podSelector:
-        matchLabels:
-          component: {{ $compNameZookeeper | quote }}
-    ports:
-      - protocol: TCP
-        port: {{ $ports.zookeeper.client }}
-  # kafka internal communication with other brokers
-  - to:
-    - podSelector:
-        matchLabels:
-          component: {{ $compName | quote }}
-    ports:
-      - protocol: TCP
-        port: {{ $ports.kafka.internalKafkaIntercept }}
-    {{- if eq .Values.global.security.tlsInternal "disabled" }}
-      - protocol: TCP
-        port: {{ $ports.kafka.internalKafka }}
-    {{- end }}
-  # metrics proxy logging results with the index manager
-  - to:
-    - podSelector:
-        matchLabels:
-          component: {{ $compNameIndexMgr | quote }}
-    ports:
-      - protocol: TCP
-        port: {{ $ports.indexmgr.metrics }}
-  # to icp iam endpoint
-  - to:
-    ports:
-      - protocol: TCP
-        port: {{ $ports.security.icpSSL }}
-      - protocol: TCP
-        port: {{ .Values.global.security.managementIngressPort }}
-  # to access-controller
-  {{- if ne $ports.security.accessController $ports.security.icpSSL }}
-  # This is only required if access controller is not using the same
-  # port as ICP security (8443).
-  - to:
-    - podSelector:
-        matchLabels:
-          component: {{ $compNameSecurity | quote }}
-    ports:
-      - protocol: TCP
-        port: {{ $ports.security.accessController }}
-  {{- end }}
-  # to collector
-  - to:
-    - podSelector:
-        matchLabels:
-          component: {{ $compNameCollector | quote }}
-    ports:
-      - protocol: TCP
-        port: {{ $ports.collector.api }}
 {{ end -}}
