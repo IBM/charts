@@ -1,5 +1,5 @@
 ## What's new...
-DataPower 2018.4.1.9
+DataPower 2018.4.1.10
 
 ## Fixes
 
@@ -15,6 +15,7 @@ See README.md
 
 | Chart   |   Date  | Kubernetes Required |    Image(s) Supported    | Breaking Changes | Details |
 | ------- | ------------ | -------- | ------------------------------------ | ---- | -------------------------------------------------------------- |
+| 3.0.5   | Mar 06, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.10.318002  | None | Change default pattern to "none" |
 | 3.0.4   | Jan 03, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.9.315826   | None | 2018.4.1.9 refresh |
 | 3.0.3+r | Nov 22, 2019 | >=1.13.0 | ibmcom/datapower:2018.4.1.8r.315390r | None | 2018.4.1.8 refresh |
 | 3.0.2   | Aug 23, 2019 | >=1.9.3  | ibmcom/datapower:2018.4.1.7.312001   | None | snmpState |

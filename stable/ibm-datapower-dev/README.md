@@ -11,7 +11,7 @@ IBM DataPower Gateway Virtual Edition for Developers
 [//]: # (Chart Name End)
 
 ## Introduction
-This chart deploys a single IBM DataPower Gateway node with a default pattern into a Kubernetes environment. The default pattern,  the `restProxy` pattern, configures the DataPower node to act as a reverse proxy, directing client requests to the appropriate backend server.
+This chart deploys an IBM DataPower Gateway cluster of replicas into a Kubernetes environment. Users should build their applications into the firmware image provided with this chart. This chart contains the concept of patterns. Users with access to the chart can add their own custom patterns. The provided example pattern, the restProxy pattern, configures the DataPower node to act as a reverse proxy, directing client requests to the appropriate backend server.
 
 ## Chart Details
 Deploys IBM DataPower Gateway Virtual Edition for Developers.
@@ -55,7 +55,7 @@ The predefined PodSecurityPolicy name: ibm-anyuid-psp has been verified for this
 
 This chart also defines a custom PodSecurityPolicy which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom PodSecurityPolicy using the ICP user interface or the supplied instructions/scripts in the pak_extension pre-install directory.
 
-- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
+- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy. NOTE: In Kubernetes 1.16+, apiVersion has changed to `policy/v1beta1`
 
   - Custom PodSecurityPolicy definition:
     ```
@@ -144,7 +144,7 @@ The helm chart has the following Values that can be overriden using the install 
 |---------------------------------------|-----------------------------------------------|---------------------|
 | `datapower.replicaCount`              | The replicaCount for the deployment           | 1                   |
 | `datapower.image.repository`          | The image to use for this deployment          | ibmcom/datapower    |
-| `datapower.image.tag`                 | The image tag to use for this deployment      | latest              |
+| `datapower.image.tag`                 | The image tag to use for this deployment      | 2018.4.1.10.318002  |
 | `datapower.image.pullPolicy`          | Determines when the image should be pulled    | IfNotPresent        |
 | `datapower.image.pullSecret`          | Secret used for pulling images                | N/A                 |
 | `datapower.env.workerThreads`         | Number of DataPower worker threads            | 4                   |
@@ -164,7 +164,7 @@ The helm chart has the following Values that can be overriden using the install 
 | `datapower.snmpPort`                  | SNMP interface port                           | 1161                |
 | `datapower.flexpointBundle`           | ILMT Flexpoint Bundle type                    | N/A                 |
 | `service.name`                        | Name to add to service                        | datapower           |
-| `patternName`                         | The name of the datapower pattern to load     | restProxy           |
+| `patternName`                         | The name of the datapower pattern to load     | none                |
 | `restProxy.backendURL`                | The backend URL datapower will proxy          | https://www.ibm.com |
 | `restProxy.containerPort`             | The backend URL datapower will proxy          | 8443                |
 | `crypto.frontsideSecret`              | Secret containing key and cert data           | N/A                 |
