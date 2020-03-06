@@ -102,7 +102,6 @@ spec:
           value: {{ .Values.datapower.env.workerThreads | quote }}
 {{- end }}
 {{- end }}
-{{- if ne .Values.patternName "none"}}
         livenessProbe:
           exec:
             command:
@@ -120,10 +119,12 @@ spec:
           timeoutSeconds: 5
           periodSeconds: 10
         ports:
-        - name: service
-          containerPort: {{ $values.containerPort }}
         - name: health
           containerPort: 7878
+{{- if ne .Values.patternName "none" }}
+        - name: service
+          containerPort: {{ $values.containerPort }}
+{{- end }}
         volumeMounts:
             - mountPath: "/opt/ibm/datapower/init/config"
               name: {{ template "ibm-datapower-dev.fullname" . }}-init-config-volume
@@ -131,16 +132,18 @@ spec:
               name: {{ template "ibm-datapower-dev.fullname" . }}-config-volume
             - mountPath: "/drouter/local/health"
               name: {{ template "ibm-datapower-dev.fullname" . }}-health
-{{- if .Values.crypto.frontsideSecret }}
-            - mountPath: "/drouter/secure/usrcerts/{{ .Values.patternName }}"
-              name: {{ template "ibm-datapower-dev.fullname" . }}-secret-volume
-{{- end }}
 {{- if .Values.datapower.adminUserSecret }}
             - name: init-admin-user
               mountPath: /opt/ibm/datapower/init/admin-user
             - name: init-admin-user-secret
               mountPath: /opt/ibm/datapower/init/admin-user-secret
 {{- end }}
+{{- if ne .Values.patternName "none" }}
+{{- if .Values.crypto.frontsideSecret }}
+            - mountPath: "/drouter/secure/usrcerts/{{ .Values.patternName }}"
+              name: {{ template "ibm-datapower-dev.fullname" . }}-secret-volume
+{{- end }}
+{{- end }} # ne patternName "none"
       volumes:
         - name: {{ template "ibm-datapower-dev.fullname" . }}-config-volume
           emptyDir: {}
@@ -148,23 +151,26 @@ spec:
           configMap:
             name: {{ template "ibm-datapower-dev.fullname" . }}-config
             items:
-            - key: {{ .Values.patternName }}.cfg
-              path: "{{ .Values.patternName }}/{{ .Values.patternName }}.cfg"
             - key: auto-user.cfg
               path: "auto-user.cfg"
             - key: auto-startup.cfg
               path: "auto-startup.cfg"
             - key: health-check.cfg
               path: "health-check.cfg"
+            {{- if ne .Values.patternName "none" }}
+            - key: {{ .Values.patternName }}.cfg
+              path: "{{ .Values.patternName }}/{{ .Values.patternName }}.cfg"
+            {{- end }}
         - name: {{ template "ibm-datapower-dev.fullname" . }}-health
           configMap:
             name: {{ template "ibm-datapower-dev.fullname" . }}-static-health
-
+{{- if ne .Values.patternName "none" }}
 {{- if .Values.crypto.frontsideSecret }}
         - name: {{ template "ibm-datapower-dev.fullname" . }}-secret-volume
           secret:
             secretName: {{ .Values.crypto.frontsideSecret }}
 {{- end }}
+{{- end }} # ne patternName "none"
 {{- if .Values.datapower.adminUserSecret }}
         - name: init-admin-user
           configMap:
@@ -173,7 +179,6 @@ spec:
           secret:
             secretName: {{ .Values.datapower.adminUserSecret }}
 {{- end }}
-
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -182,4 +187,3 @@ spec:
                 - key: "beta.kubernetes.io/arch"
                   operator: In
                   values: ["amd64"]
-{{- end }}
