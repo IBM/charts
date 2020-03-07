@@ -55,6 +55,10 @@ spec:
         fsGroup: 1000
         supplementalGroups:
           - 1000
+{{- if .Values.global.audit }}
+        seLinuxOptions:
+            type: spc_t
+{{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -242,7 +246,7 @@ spec:
         - name: PLUGIN_ENDPOINTURL_plugin_ansible
           value: https://cam-provider-ansible:7060/api
         - name: STORE_PROXY_URL
-          value: https://cam-provider-broker:7050/api/connector    
+          value: https://cam-provider-broker:7050/api/connector
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -273,14 +277,14 @@ spec:
         {{- else }}
         - name: ACTIVATE_BROKER
           value: "false"
-        {{- end }} 
+        {{- end }}
         {{- if .Values.camAnsibleProvider.replicaCount }}
         - name: ACTIVATE_ANSIBLE
           value: "true"
         {{- else }}
         - name: ACTIVATE_ANSIBLE
           value: "false"
-        {{- end }} 
+        {{- end }}
         - name: ICP_PROXY_IP
           valueFrom:
             configMapKeyRef:
@@ -300,6 +304,8 @@ spec:
           value: "{{ .Values.global.audit }}"
         - name: AUDIT_LOG_PATH
           value: /var/audit/cam-iaas-audit.log
+        - name: SLM_TAG_PATH
+          value: /var/camlog/slm.xml
         - name: SERVICE_NAME
           value: cam-iaas
 {{- if .Values.proxy.useProxy }}
@@ -369,8 +375,6 @@ spec:
 {{- end }}
         imagePullPolicy: {{ .Values.auditService.image.pullPolicy }}
         securityContext:
-          seLinuxOptions:        
-            type: spc_t
 {{- if .Values.global.legacyAudit }}
           runAsNonRoot: false
           runAsUser: 0
@@ -405,7 +409,7 @@ spec:
             command:
             - sh
             - -c
-{{- if .Values.global.legacyAudit }}            
+{{- if .Values.global.legacyAudit }}
             - "service cron status"
 {{- else }}
             - "ps -ef | grep python"
@@ -417,7 +421,7 @@ spec:
             command:
             - sh
             - -c
-{{- if .Values.global.legacyAudit }}            
+{{- if .Values.global.legacyAudit }}
             - "service cron status"
 {{- else }}
             - "ps -ef | grep python"

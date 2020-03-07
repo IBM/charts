@@ -17,7 +17,7 @@ metadata:
     "app.kubernetes.io/managed-by": "{{ .Release.Service }}"
 spec:
   backoffLimit: 5 
-  activeDeadlineSeconds: 300
+  activeDeadlineSeconds: 900
   template:
     metadata:
       name: {{ .Values.camAPI.camSecret.secretName }}-gen-job
@@ -99,6 +99,47 @@ spec:
             ROUTER_HOSTNAME: {{ .Values.managementConsole.hostname }}.$routeName
             {{- end }}
           EOF
+          routeName=$(kubectl -n kube-system get route icp-console -o jsonpath='{.status.ingress[0].routerCanonicalHostname}')
+          if [ $routeName="" ] 
+          then
+            routeName=$(kubectl -n kube-system get route icp-console -o jsonpath='{.status.ingress[0].host}')
+            routeName=${routeName:12} # takes out the icp-console.
+          fi
+          cat <<EOF | kubectl apply -f -
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: cam
+            namespace: {{ .Release.Namespace }}
+            labels: 
+              "app.kubernetes.io/name": {{ template "fullname" . }}
+              "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
+              release: "{{ .Release.Name }}"
+              "app.kubernetes.io/instance": "{{ .Release.Name }}"
+              "app.kubernetes.io/managed-by": "{{ .Release.Service }}"
+          spec:
+            {{- if and (eq .Values.managementConsole.hostname "") (eq .Release.Namespace "services") }}
+            host: cam.$routeName
+            {{- end }}
+            {{- if and (eq .Values.managementConsole.hostname "") (ne .Release.Namespace "services") }}
+            host: {{ .Release.Name }}.$routeName
+            {{- end }}
+            {{- if .Values.managementConsole.hostname }}
+            host: {{ .Values.managementConsole.hostname }}.$routeName
+            {{- end }}
+            port:
+              targetPort: cam-proxy-https
+            tls:
+              insecureEdgeTerminationPolicy: Redirect
+              termination: passthrough
+            to:
+              kind: Service
+              name: cam-proxy
+              weight: 100
+            wildcardPolicy: None
+          status:
+            ingress: []
+          EOF
 {{- end}}
           cat <<EOF | kubectl apply -f -
           apiVersion: v1
@@ -119,9 +160,9 @@ spec:
           EOF
         resources:
           requests:
-            memory: 128Mi
+            memory: 256Mi
             cpu: 10m
           limits:
-            memory: 128Mi
+            memory: 256Mi
             cpu: 50m
       restartPolicy: Never
