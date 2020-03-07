@@ -1,8 +1,8 @@
-[//]: # (Licensed Materials - Property of IBM)
+[//]:   Licensed Materials - Property of IBM
 [//]: # (5737-E67)
-[//]: # (\(C\) Copyright IBM Corporation 2016-2019 All Rights Reserved.)
-[//]: # (US Government Users Restricted Rights - Use, duplication or)
-[//]: # (disclosure restricted by GSA ADP Schedule Contract with IBM Corp.)
+[//]:   (C) Copyright IBM Corporation 2016-2020 All Rights Reserved.
+[//]:   US Government Users Restricted Rights - Use, duplication or
+[//]:   disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 
 # Cloud Automation Manager Helm Chart
 
@@ -36,7 +36,7 @@ During installation of the chart, the chart itself will install the following Po
 
 - Custom PodSecurityPolicy definition:
 ```
-apiVersion: extensions/v1beta1
+apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
   labels:
@@ -179,19 +179,19 @@ priority: 0
 ## Resources Required
 
 * The minimum hardware requirements for IBM Cloud Automation Manager is a single worker node with at least 12 vCPU and 30GB of memory.
-For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.0/cam_requirements.html
+For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_requirements.html
 
-* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.0/cam_create_pv.html
+* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_create_pv.html
 
-* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.0/cam_requirements.html
+* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_requirements.html
 
 ## Installing the Chart
 
-This chart is normally deployed to the `services` namespace but can be deployed to multiple namespaces and supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.0/cam_planning.html
+This chart is normally deployed to the `services` namespace but can be deployed to multiple namespaces and supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_planning.html
 
 ## Configuration
 
-For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.0/cam_installation_parameters.html
+For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_installation_parameters.html
 
 ## Limitations
 
