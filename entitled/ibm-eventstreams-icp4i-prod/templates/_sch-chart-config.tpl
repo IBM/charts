@@ -115,7 +115,7 @@ sch:
       kafka:
         # component label for all the Kafka-related resources
         compName: "kafka"
-        kafkaVersion: "2.3.1"
+        kafkaVersion: "2.3.0"
         kafkaInternalVersion: "2.3"
         networkPolicy: "kafka-access"
         # all of the resources deployed by the Kafka charts
@@ -350,8 +350,6 @@ sch:
           name: "ui-route"
         service:
           name: "ui-svc"
-        openshiftSecureServiceCert:
-          name: "ui-service-cert"
         deployment:
           name: "ui-deploy"
         role:

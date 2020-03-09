@@ -1,6 +1,6 @@
 # IBM Event Streams
 
-Built on Apache Kafka®, [IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, event streaming platform that helps you build intelligent, responsive, event-driven applications. Event Streams release 2019.4.2 uses the [Kafka](https://kafka.apache.org/) 2.3.1 release and supports the use of all Kafka interfaces.
+Built on Apache Kafka®, [IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, event streaming platform that helps you build intelligent, responsive, event-driven applications. Event Streams release 2019.4.1 uses the [Kafka](https://kafka.apache.org/) 2.3.0 release and supports the use of all Kafka interfaces.
 
 ## Introduction
 
@@ -37,7 +37,48 @@ The installation environment has the following prerequisites:
 - Kubernetes 1.11.0 or later
 - A namespace dedicated for use by IBM Event Streams (see "Create a Namespace" below)
 - PersistentVolume support in the underlying infrastructure if `persistence.enabled=true` (See "Create Persistent Volumes" below)
-- The following IBM Cloud Platform Common Services services: `auth-idp`, `logging`, `monitoring`.
+- The following IBM Cloud Private services: `auth-idp`, `logging`, `monitoring`.
+- You must ensure that you have access to **get secrets** permissions in the `kube-public` namespace. A **cluster administrator** should create the following `Role` and `RoleBinding`:
+```
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ibmcloud-cluster-ca-cert-fix
+  namespace: kube-public
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+```
+
+```
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ibmcloud-cluster-ca-cert-fix
+  namespace: kube-public
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ibmcloud-cluster-ca-cert-fix
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:unauthenticated
+```
+
+### Installing as Team Administrator
+
+You can install the Event Streams chart as a Cluster Administrator or a Team Administrator. If you want to install as Team Administrator,  prepare the cluster role before installation by running the `node-cluster-role` script.
+The script sets a Cluster role with the right permissions on nodes bound to a Service Account within the release namespace. This is required by the chart to install.
+
+You can create the required `ClusterRole` and `ClusterRoleBinding` resources using the supplied [setup script](#Node-Cluster-Role-Script).
 
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
@@ -90,9 +131,11 @@ volumes:
 ## Prereq scripts - How to locate
 
 ### Security Context Constraint Script
-Prepare the Red Hat OpenShift Container Platform by running the following setup script.
+On Red Hat OpenShift Container Platform only, prepare the platform by running the following setup script.
 
-Alternatively, if you downloaded the PPA archive from IBM Passport Advantage, you can extract the script from the archive. The script is in the `/pak_extensions/pre-install` folder of the Event Streams archive.
+You can find the script on [GitHub](https://github.com/IBM/charts/tree/master/stable/ibm-eventstreams-dev/ibm_cloud_pak/pak_extensions/pre-install).
+
+Alternatively, if you downloaded the PPA archive from IBM Passport Advantage, you can extract the script from the archive. The script is in  `/ibm_cloud_pak/pak_extensions/pre-install`.
 
 Run the script as follows:
 
@@ -102,6 +145,19 @@ Run the script as follows:
 
 Where `<namespace>` is the namespace you created for your Event Streams installation.
 
+### Node Cluster Role Script
+If you want to install as Team Administrator, prepare the platform by running the following setup script.
+
+You can find the script on [GitHub](https://github.com/IBM/charts/tree/master/stable/ibm-eventstreams-dev/ibm_cloud_pak/pak_extensions/pre-install).
+
+Alternatively, if you downloaded the PPA archive from IBM Passport Advantage, you can extract the script from the archive. The script is in  `/ibm_cloud_pak/pak_extensions/pre-install`.
+
+Run the script as follows:
+```
+./node-cluster-role.sh <namespace> <release_name>
+```
+Where `<namespace>` is the namespace you created for your Event Streams installation, and `<release_name>` is the release name you will use for your Event Streams instance.
+
 ## Resources Required
 
 For information about the resource requirements of the IBM Event Streams Helm chart, including total values and the requirements for each pod and their containers, see the [Event Streams product documentation](https://ibm.github.io/event-streams/installing/prerequisites/#helm-resource-requirements).
@@ -110,6 +166,15 @@ Before deployment, consider the number of Kafka replicas and geo-replicator node
 
 Geo-replication is an optional component which is disabled by default. You can enable geo-replication by setting the  `replicator.replicas` parameter to `2` or more.
 Persistence is not enabled by default and no persistent volumes are required. If you are going to enable persistence, you can find more information about storage requirements below.
+
+If you enable message indexing (which is enabled by default), then you must have the `vm.max_map_count` property set to at least `262144` on all IBM Cloud Private nodes in your cluster (not only the master node). Please note this property may have already been updated by other workloads to be higher than the minimum required. Run the following commands on each node:
+```
+sudo sysctl -w vm.max_map_count=262144
+```
+```
+echo "vm.max_map_count=262144" | tee -a /etc/sysctl.conf
+```
+
 
 ## Installing the Chart
 
@@ -124,9 +189,7 @@ There are four steps to install IBM Event Streams in your environment:
 
 You must use a [namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/) dedicated for use by IBM Event Streams to ensure that the network access policies created by the chart are only applied to the Event Streams installation. Installation to the default namespace is not supported.
 
-When you create a project in the Red Hat OpenShift Container Platform, a namespace with the same name is also created.
-
-To create a namespace, you must have the Cluster Administrator role. 
+To create a namespace, you must have the Cluster Administrator role. Ensure that the namespace has the correct [PodSecurityPolicy set](#podsecuritypolicy-requirements) unless running on Red Hat OpenShift Container Platform.
 
 Choose a name for your namespace and run this command using your chosen name:
 
@@ -173,6 +236,8 @@ helm upgrade --reuse-values --set kafka.configMapName=<configmap_name> <release_
 ### Install IBM Event Streams
 
 To install the chart, your user ID must have the Team Administrator or Cluster Administrator role.
+
+Add the IBM Cloud Private internal Helm repository called `local-charts` to the Helm CLI as an external repository, as described in the [IBM Cloud Private documentation](https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.2.0/app_center/add_int_helm_repo_to_cli.html).
 
 Install the chart, specifying the release name and namespace with the following command:
 
@@ -227,11 +292,14 @@ The following tables list the configurable parameters of the `ibm-eventstreams-i
 | `global.security.managementIngressPort`         | Secure cluster port for management services                                                   | `443`  |
 | `global.security.externalCertificateLabel`      | Label for external certificates                                                               | `external-cert-initial-id`  |
 | `global.security.internalCertificateLabel`      | Label for Event Streams internal certificates                                                 | `internal-cert-initial-id`  |
+| `global.security.uiCertificateLabel`            | Label for UI certificates                                                                     | `ui-cert-initial-id`  |
 | `global.k8s.clusterName`                        | Kubernetes internal DNS domain name                                                           | `cluster.local`  |
 | `global.k8s.apiPort`                            | Kubernetes api port                                                                           | `2040`  |
 | `global.generateClusterRoles`                   | Generate cluster roles when installing, must be cleared for installation as a Team Administrator.       | `false`  |
 | `global.production`                       | Whether or not this installation is to be used in a production environment                          | `false`                         |
 | `global.supportingProgram`                | Whether or not this installation is to be used as a supporting program                              | `false`                         |
+| `global.generateCertificate`              | Generate a new certificate for the UI                                                                                                                                                     | `false`     |
+| `global.certificateSecretName`            | If `global.generateCertificate` is `true` it is the name of secret where the generated certificate is stored, otherwise it is the name of a secret which contains a suitable certificate  | `nil`       |
 | `global.icp4i.icp4iPlatformNamespace`    |  The namespace that the ICP4I Platform Navigator has been installed into               | `nil`       |
 | `global.zones.count`                    | The number of zones for this deployment                                                 | `1`                                      |
 | `global.zones.labels`                   | Array containing the labels for each zone, e.g. `["es-zone-0","es-zone-1","es-zone-2"]` | `["my-zone-label"]`                      |
@@ -244,7 +312,7 @@ The following tables list the configurable parameters of the `ibm-eventstreams-i
 | Parameter           | Description                                                                             | Default |
 | ------------------- | --------------------------------------------------------------------------------------- | ------- |
 | `telemetry.enabled` | Allow IBM to use in-application code to transmit product usage analytics                | `false` |
-| `dashboard.enabled` | Export default Event Streams dashboard data to the IBM Cloud Platform Common Services monitoring service | `true`  |
+| `dashboard.enabled` | Export default Event Streams dashboard data to the IBM Cloud Private monitoring service | `true`  |
 
 ### Kafka broker settings
 
@@ -256,7 +324,7 @@ The following tables list the configurable parameters of the `ibm-eventstreams-i
 | `kafka.resources.limits.memory`   | Memory limit for Kafka brokers                                                                     | `2Gi`   |
 | `kafka.brokers`                   | Number of brokers in the Kafka cluster, minimum 3                                                  | `3`     |
 | `kafka.configMapName`             | Optional ConfigMap used to apply static configuration to brokers in the cluster                    | `nil`   |
-| `kafka.openJMX`                   | Open each Kafka broker’s JMX port for secure connections from inside the cluster | `false` |
+| `kafka.openJMX`                   | Open each Kafka broker's JMX port for secure connections from inside the IBM Cloud Private cluster | `false` |
 
 ### Kafka persistent storage settings
 
@@ -327,16 +395,6 @@ The following tables list the configurable parameters of the `ibm-eventstreams-i
 | `schema-registry.dataPVC.storageClassName`           | Storage class of the persistent volume claims created for Schema Registry servers | `nil`     |
 | `schema-registry.dataPVC.size`                       | Size of the persistent volume claims created for Schema Registry servers          | `100Mi`   |
 
-### REST Producer API settings
-
-| Parameter                      | Description                                                               | Default |
-| ------------------------------ | ------------------------------------------------------------------------- | ------- |
-| `rest-producer.maxKeySize`     | Set maximum event key size the REST producer API will accept in bytes     | `4096`  |
-| `rest-producer.maxMessageSize` | Set maximum event message size the REST producer API will accept in bytes | `65536` |
-
-**Note:**
-Sending larger requests to the REST producer will result in some increase in latency, since it will take the REST producer longer to process the requests. Do not set the message size limit to higher than the broker max message size, otherwise Kafka will reject the messages. The default for Kafka is 1000012 bytes.
-
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
 Alternatively, you can use a YAML file to specify the values for the parameters.
@@ -358,6 +416,8 @@ More information about persistent volumes and the system administration steps re
 - The chart must be loaded into the catalog by a Team Administrator or Cluster Administrator.
 - The chart must be deployed into a namespace dedicated for use by IBM Event Streams.
 - The chart can only be deployed by a Team Administrator or Cluster Administrator.
+- Linux on Power (ppc64le) is not supported.
+- Mixed worker node architecture deployments are not supported.
 
 ## Documentation
 

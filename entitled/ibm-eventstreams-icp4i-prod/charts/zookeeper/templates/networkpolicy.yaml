@@ -12,6 +12,7 @@
 ###############################################################################
 # Zookeeper network access policy
 # Ingress : kafka pods on port 2181
+# Egress : not allowed
 ###############################################################################
 {{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
 {{ $compName := .sch.chart.components.zookeeper.compName -}}
@@ -34,6 +35,7 @@ spec:
       component: {{ $compName | quote }}
       release: {{ .Release.Name }}
   policyTypes:
+  - Egress
   - Ingress
   ingress:
   # connections from kafka brokers and admin service
@@ -60,5 +62,16 @@ spec:
         matchLabels:
           component: {{ $compName | quote }}
     ports:
+      - protocol: TCP
+        port: {{ $ports.zookeeper.election }}
+  egress:
+  # connections to other zookeepers
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compName | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.zookeeper.server }}
       - protocol: TCP
         port: {{ $ports.zookeeper.election }}
