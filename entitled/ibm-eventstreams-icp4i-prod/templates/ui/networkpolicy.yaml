@@ -12,6 +12,7 @@
 ###############################################################################
 # UI network access policy
 # Ingress : allow from any on port
+# Egress : admin service, index manager:
 ###############################################################################
 {{- include "sch.config.init" (list . "sch.chart.config.values") | trim -}}
 {{ $compName := .sch.chart.components.ui.compName -}}
@@ -35,7 +36,41 @@ spec:
       component: {{ $compName | quote }}
       release: {{ .Release.Name }}
   policyTypes:
+  - Egress
   - Ingress
   ingress:
   # allow connections from anywhere
   - {}
+  egress:
+  # access to the admin service
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameRestProxy | quote }}
+    ports:
+    - protocol: TCP
+      port: {{ $ports.restproxy.internal }}
+  # ICp security endpoint
+  - to:
+    ports:
+    - port: {{ $ports.security.icpSSL }}
+      protocol: TCP
+    - port: {{ .Values.global.security.managementIngressPort }}
+      protocol: TCP
+    # connections to accessController
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameAccessController | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.accessController }}
+    # connections to ICP provider URL
+  - to:
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.platformIdentityProvider }}
+  - to:
+    ports:
+    - port: {{ $ports.icp4iplatformservices.server }}
+      protocol: TCP

@@ -12,6 +12,7 @@
 ###############################################################################
 # Schema Registry service network access policy
 # Ingress : allow from API proxy
+# Egress : forbidden
 ###############################################################################
 {{ include "sch.config.init" (list . "sch.chart.config.values") -}}
 {{ $compName := .sch.chart.components.schemaregistry.compName -}}
@@ -41,6 +42,7 @@ spec:
       release: {{ .Release.Name }}
   policyTypes:
   - Ingress
+  - Egress
   # allow connections from restproxy and rest
   ingress:
   - from:
@@ -53,3 +55,13 @@ spec:
     ports:
       - protocol: TCP
         port: {{ $ports.schemaregistry.server }}
+  # forbid outgoing connections
+  egress:
+  # connections to accessController
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameAccessController | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.accessController }}

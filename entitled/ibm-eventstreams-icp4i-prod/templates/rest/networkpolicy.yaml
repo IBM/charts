@@ -12,6 +12,8 @@
 ###############################################################################
 # Admin REST service network access policy
 # Ingress : allow from any on port
+# Egress : kafka brokers on advertised listener ports, index manager, and
+#            admin REST deployments in other Event Streams instances
 ###############################################################################
 {{- include "sch.config.init" (list . "sch.chart.config.values") | trim -}}
 {{ $compName := .sch.chart.components.rest.compName -}}
@@ -43,6 +45,7 @@ spec:
       component: {{ $compName | quote }}
       release: {{ .Release.Name }}
   policyTypes:
+  - Egress
   - Ingress
   ingress:
   # allow connections from anywhere as we don't know the ports they are connecting from
@@ -53,3 +56,72 @@ spec:
     ports:
       - protocol: TCP
         port: {{ $ports.rest.server }}
+  egress:
+  # connections to kafka brokers and healthcheck
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameKafka | quote }}
+    ports:
+    - port: {{ $ports.kafka.internalEventStreamsSecureIntercept }}
+      protocol: TCP
+    - port: {{ $ports.kafka.healthcheck }}
+      protocol: TCP
+  # connection to index manager
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameIndexMgr | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.indexmgr.api }}
+  {{- if $replicatorEnabled }}
+  # connections to the replicator
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameReplicator | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.replicator.api }}
+  {{- end }}
+  # connections to the schema registry
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameSchemaRegistry | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.schemaregistry.server }}
+  # connections to zookeeper
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameZookeeper | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.zookeeper.client }}
+  {{- if ne $ports.security.accessController $ports.security.icpSSL}}
+  # connections to accessController. This is only required if
+  # access controller is not using the same port as ICP security.
+  - to:
+    - podSelector:
+        matchLabels:
+          component: {{ $compNameSecurity | quote }}
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.accessController }}
+  {{- end }}
+  # security port mapping
+  - to:
+    ports:
+      - protocol: TCP
+        port: {{ $ports.security.icpSSL }}
+      - protocol: TCP
+        port: {{ .Values.global.security.managementIngressPort }}
+  # allow communication to admin REST in other ES instances
+  - to:
+    ports:
+      - protocol: TCP
+      - protocol: UDP
+        port: {{ $ports.wellknown.dns }}
