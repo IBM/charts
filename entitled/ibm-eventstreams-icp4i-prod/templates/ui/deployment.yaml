@@ -30,9 +30,6 @@
 # Oauth secret name which is used by the UI
 {{ $uiOauthSecretName := .sch.chart.components.ui.oauthSecret.name -}}
 {{ $oauthSecretName := include "sch.names.fullCompName" (list . $uiOauthSecretName) -}}
-# Use the certificate created by OpenShift for the UI
-{{- $openshiftUISecretPostfix := .sch.chart.components.ui.openshiftSecureServiceCert.name -}}
-{{- $openshiftUISecret := include "sch.names.fullCompName" (list . $openshiftUISecretPostfix) }}
 # Service Account to grant Kubernetes access
 {{ $serviceAccount := .sch.chart.components.ui.serviceAccount.name -}}
 {{ $serviceAccountName := include "sch.names.fullCompName" (list . $serviceAccount ) -}}
@@ -68,8 +65,8 @@ metadata:
   name: {{ $name | quote }}
   labels:
 {{ $labels | indent 4 }}
-    {{- $truncUniqueParms := dict "text" .Values.proxy.externalEndpoint "length" 62 }}
-    externalHost: {{ include "sch.utils.truncUnique" $truncUniqueParms | quote }}
+    uiCertificate: {{ .Values.global.security.uiCertificateLabel | quote }}
+    externalHost: {{ .Values.proxy.externalEndpoint | quote }}
   annotations:
     icp4i.ibm.com/product: "eventstreams"
     icp4i.ibm.com/release: {{ .Release.Name | quote }}
@@ -84,8 +81,8 @@ spec:
       namespace: {{ include "restrict.namespace" (list . .Release.Namespace) }}
       labels:
 {{ $labels | indent 8 }}
-        {{- $truncUniqueParms := dict "text" .Values.proxy.externalEndpoint "length" 62 }}
-        externalHost: {{ include "sch.utils.truncUnique" $truncUniqueParms | quote }}
+        uiCertificate: {{ .Values.global.security.uiCertificateLabel | quote }}
+        externalHost: {{ .Values.proxy.externalEndpoint | quote }}
       annotations:
 {{ include "ibm-eventstreams.metering" (list . ) | indent 8 }}
     spec:
@@ -161,13 +158,13 @@ spec:
             - name: TLS_CERT
               valueFrom:
                 secretKeyRef:
-                  name: {{ $openshiftUISecret }}
-                  key: "tls.crt"
+                  name: {{ $secretName }}
+                  key: "https.cert"
             - name: TLS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ $openshiftUISecret }}
-                  key: "tls.key"
+                  name: {{ $secretName }}
+                  key: "https.key"
             - name: TLS_ENABLED
               value: "true"
             - name: ID
