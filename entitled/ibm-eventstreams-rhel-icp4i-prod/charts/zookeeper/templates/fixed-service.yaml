@@ -1,0 +1,52 @@
+###############################################################################
+#
+# Licensed Materials - Property of IBM
+#
+# 5737-H33
+#
+# (C) Copyright IBM Corp. 2018, 2019  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+# Defines the Kubernetes Services used to expose ZooKeeper nodes within the K8S
+#  cluster.
+# One of these will be created for each of the three ZooKeeper nodes.
+###############################################################################
+{{- include "sch.config.init" (list . "ports.sch.chart.config.values") | trim -}}
+# The common prefix for names given to each of the services created
+{{ $namePrefix := .sch.chart.components.zookeeper.fixed.name -}}
+{{ $name := include "sch.names.fullCompName" (list . $namePrefix ) -}}
+# Component is 'zookeeper' as this makes up part of implementing the ZooKeeper cluster
+{{ $compName := .sch.chart.components.zookeeper.compName -}}
+{{ $labels := include "sch.metadata.labels.standard" (list . $compName) -}}
+# import port definitions
+{{ $ports := .sch.config.ports }}
+# number of ZooKeeper nodes in the cluster
+{{ $rep := int .sch.config.zookeeper.replicas -}}
+{{ range $index, $_ := until $rep -}}
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  name: "{{ $name }}-{{ $index }}"
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  publishNotReadyAddresses: true
+  ports:
+    - port: {{ $ports.zookeeper.client }}
+      name: client
+    - port: {{ $ports.zookeeper.server }}
+      name: server
+    - port: {{ $ports.zookeeper.election }}
+      name: leader-election
+  selector:
+    release: {{ $.Release.Name | quote }}
+    zookeeper: "{{ $index }}"
+{{- if lt $index (sub $rep 1) }}
+---
+{{ end -}}
+{{ end -}}
