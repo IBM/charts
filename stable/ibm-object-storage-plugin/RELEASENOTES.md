@@ -1,15 +1,15 @@
 # Breaking Changes
 None
 
-# What’s new in Chart Version 1.1.3
+# What’s new in Chart Version 1.1.4
 
-With ibm-object-storage-plugin chart version 1.1.3, the following new
+With ibm-object-storage-plugin chart version 1.1.4, the following new
 features are available:
-* Updated `ibmc` helm plugin to support object-storage plugin installation/upgradation with `helm v2` and `helm v3`.
+* Enabled support for `auto_cache` option from pvc spec.
 
 # Fixes
-* Updated helm chart to auto-recreate plugin pods when upgrading plugin.
-* Resolved security issues CVE-2019-13734 and CVE-2019-18408
+* Upgraded s3fs-fuse version to commit d34475d.
+* Resolved security issue CVE-2020-1712.
 
 # Prerequisites
 Install [Helm client v3](https://cloud.ibm.com/docs/containers?topic=containers-helm#install_v3) on your local machine.
@@ -23,6 +23,7 @@ For install/upgrade, follow instructions [here](https://cloud.ibm.com/docs/conta
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 1.1.4 | Mar 10, 2020| >=1.10.1 | 1.8.13 | None | Resolved security issue CVE-2020-1712, Updated s3fs-fuse to use latest commit, Enabled support for 'auto_cache' option from pvc spec, GoLang: v1.13.4 |
 | 1.1.3 | Feb 13, 2020| >=1.10.1 | 1.8.12 | None | Resolved security issues CVE-2019-13734 and CVE-2019-18408, Updated `ibmc` helm plugin to support object-storage plugin installation/upgradation with `helm v2` and `helm v3`, Updated helm chart to auto-recreate plugin pods when upgrading plugin, GoLang: v1.13.4 |
 | 1.1.2 | Dec 09, 2019| >=1.10.1 | 1.8.11 | None | Non-root user access broken for K8S >= 1.15.4, GoLang: v1.13.4 |
 | 1.1.1 | Nov 22, 2019| >=1.10.1 | 1.8.10 | None | Golang update to version 1.13.4, Gosec enabled in plugin code; GoLang: v1.13.4, PSIRT image vulnerability fix |
