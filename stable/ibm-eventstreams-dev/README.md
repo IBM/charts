@@ -1,5 +1,7 @@
 # IBM Event Streams Community Edition
 
+*THIS CHART IS NOW DEPRECATED.* Here’s what you need to know: On March 13th, 2020 the helm chart for IBM Event Streams Community Edition will no longer be supported and, eventually, it will be removed from IBM's public helm repository on github.com on April 21th 2020.
+
 Built on Apache Kafka®, [IBM Event Streams](https://ibm.github.io/event-streams/) is a high-throughput, fault-tolerant, event streaming platform that helps you build intelligent, responsive, event-driven applications. Event Streams release 2019.4.1 uses the [Kafka](https://kafka.apache.org/) 2.3.0 release and supports the use of all Kafka interfaces.
 
 ## Introduction
