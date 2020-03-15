@@ -1,4 +1,5 @@
 # MongoDB
+THIS CHART IS NOW DEPRECATED. Here’s what you need to know: On April 10th, 2020 the helm chart for MongoDB Dev will no longer be supported and will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart.
 
 [MongoDB](https://www.mongodb.com/) is a cross-platform document-oriented database. Classified as a NoSQL database, MongoDB eschews the traditional table-based relational database structure in favor of JSON-like documents with dynamic schemas, making the integration of data in certain types of applications easier and faster.
 

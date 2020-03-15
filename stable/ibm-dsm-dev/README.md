@@ -1,5 +1,5 @@
 # IBM DSM Developer-C Helm Chart
-
+THIS CHART IS NOW DEPRECATED. Here’s what you need to know: On April 10th, 2020 the helm chart for IBM DSM Developer-C Edition will no longer be supported and will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart. 
 
 [IBM Data Server Manager](https://www.ibm.com/developerworks/cn/downloads/im/dsm/index.html) enables you to manage database applications in a non-production environment. 
 
