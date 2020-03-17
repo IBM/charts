@@ -1,0 +1,73 @@
+# Licensed Materials - Property of IBM
+# IBM Sterling Configure Price Quote Software (5725-D11)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if eq .Values.global.install.runtime.enabled true }}
+{{- if and (.Values.cpqdatasetup.loadFactoryData) (eq .Values.cpqdatasetup.loadFactoryData "install") }}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+{{- $dbType := .Values.cpqdatasetup.dbType }}
+{{- $createDB := .Values.cpqdatasetup.createDB }}
+{{- $loadDB := .Values.cpqdatasetup.loadDB }}
+{{- $skipCreateWAR := .Values.cpqdatasetup.skipCreateWAR }}
+{{- $generateImage := .Values.cpqdatasetup.generateImage }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "om-chart.fullname" . }}-cpqdatasetup
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      affinity:
+{{- include "om-chart.nodeaffinity.onlyArch" . | indent 8 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName | default "default" }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: {{ .Values.global.persistence.securityContext.fsGroup | default 0 }}
+        supplementalGroups: [{{ .Values.global.persistence.securityContext.supplementalGroup | default 0 }}]
+      restartPolicy: "Never"
+      {{- if .Values.global.image.pullsecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullsecret }}
+      {{- end }}
+      containers:
+        - name: {{ template "om-chart.fullname" . }}-cpqdatasetup
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.global.image.repository "${1}cp/" }}/{{ .Values.runtime.image.name }}:{{ .Values.runtime.image.tag }}"
+          imagePullPolicy: {{ .Values.runtime.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            runAsUser: 1001
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          command: ["/bin/bash", "-c"]
+          args:
+          - "/opt/VMSDK/executeAll.sh --DBTYPE={{ $dbType }} --createDB={{ $createDB }} --loadDB={{ $loadDB }} --skipCreateWAR={{ $skipCreateWAR }} --generateImage={{ $generateImage }}"
+          envFrom:
+          - secretRef:
+              name: {{ .Values.global.appSecret }}
+          volumeMounts:
+            - name: cpqdatasetuplog
+              mountPath: /omscommonfile/configrepo
+      volumes:
+        - name: secret
+          secret:
+            secretName: {{ .Values.global.appSecret }}    
+        - name: cpqdatasetuplog
+          persistentVolumeClaim:
+            claimName: {{ .Values.global.persistence.claims.name  | lower }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,178 @@
+# Licensed Materials - Property of IBM
+# IBM Sterling Configure Price Quote Software (5725-D11)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{ if eq .Values.global.install.visualmodeler.enabled true -}}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+{{- $httpPort := .Values.vmappserver.service.http.port | default 9080 }}
+{{- $httpsPort := .Values.vmappserver.service.https.port | default 9443 }}
+{{- $readyProbePeriod := .Values.vmappserver.readyProbePeriod | default 30 }}
+{{- $libertyStartupWrapper := .Values.vmappserver.config.libertyStartupWrapper }}
+{{- $liveProbeBeginDelay := .Values.vmappserver.livenessCheckBeginAfterSeconds | default 900 }}
+{{- $readyProbeBeginDelay := .Values.vmappserver.readyProbeBeginDelay | default 240 }}
+{{- $liveProbePeriod := .Values.vmappserver.liveProbePeriod | default 60 }}
+{{- $livenessProbeTimeoutSeconds := .Values.vmappserver.livenessProbeTimeoutSeconds | default 10 }}
+{{- $readinessProbeTimeoutSeconds := .Values.vmappserver.readinessProbeTimeoutSeconds | default 10 }}
+{{- $liveFailRestartSeconds := (mul .Values.vmappserver.livenessFailRestartAfterMinutes 60) | default 600 }}
+{{- $liveFailThreshold := div $liveFailRestartSeconds $liveProbePeriod }}
+{{- $jvmOptionsPath := "/config/jvm.options" }}
+{{- $sysOverridesPath := "/config/dropins/smcfs.ear/properties.jar/system_overrides.properties" }}
+{{- $sysOverridesInitPath := "/opt/ssfs/system_overrides.properties.init" }}
+{{- $stdPodLabel := "role" }}
+{{- $stdPodLabelVal := "vmappserver" }}
+{{- $custLabels := .Values.vmappserver.podLabels | default (dict) }}
+{{- $dbType := .Values.cpqdatasetup.dbType }}
+{{- $varSslEnabled := .Values.ocappserver.ingress.ssl.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "om-chart.fullname" . }}-vmappserver
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  progressDeadlineSeconds: 600
+  replicas: {{ .Values.vmappserver.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "" (set $custLabels $stdPodLabel $stdPodLabelVal)) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "" (set $custLabels $stdPodLabel $stdPodLabelVal)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+{{- with .Values.vmappserver.tolerations }}
+      tolerations:
+{{ toYaml . | indent 6 }}
+{{- end }}
+      affinity:
+{{- include "om-chart.nodeAffinity" (list . .Values.vmappserver.nodeAffinity) | indent 8 }}
+{{- include "om-chart.podAffinity" (list . .Values.vmappserver.podAffinity) | indent 8 }}
+{{- include "om-chart.podAntiAffinity" (list . .Values.vmappserver.podAntiAffinity $stdPodLabel $stdPodLabelVal) | indent 8 }}
+      serviceAccountName: {{ .Values.global.serviceAccountName | default "default" }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: {{ .Values.global.persistence.securityContext.fsGroup | default 0 }}
+        supplementalGroups: [{{ .Values.global.persistence.securityContext.supplementalGroup | default 0 }}]
+      {{- if .Values.global.image.pullsecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullsecret }}
+      {{- end }}
+      containers:
+      - name: {{ template "om-chart.fullname" . }}-vmappserver
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.global.image.repository "${1}cp/" }}/{{ .Values.vmappserver.image.name }}:{{ .Values.vmappserver.image.tag }}"
+        imagePullPolicy: {{ .Values.vmappserver.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          runAsUser: 1001
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/bash", "-c"]
+        args: 
+        - "/vmprocesscerts.sh && /deployables/copyDeployables.sh --DBTYPE={{ $dbType }} && /vmupdateconfigs.sh && 
+        {{ $libertyStartupWrapper }} /opt/ibm/wlp/bin/server run defaultServer"
+        resources:
+{{ toYaml .Values.vmappserver.resources | indent 10 }}
+        envFrom:
+        - configMapRef:
+            name: {{ template "om-chart.fullname" . }}-vm-config
+        - secretRef:
+            name: {{ .Values.global.appSecret }}
+        ports:
+        - name: https
+          containerPort: {{ $httpsPort }}
+          protocol: TCP
+        - name: http
+          containerPort: {{ $httpPort }}
+          protocol: TCP
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - ([ $(ls -1 /omscommonfile/configrepo | wc -l) -gt 0 ] && echo yes)
+          {{- /* give some buffer time to the appserver startup */}}
+          initialDelaySeconds: {{ $liveProbeBeginDelay }}
+          {{- /* check for liveness every minute */}}
+          periodSeconds: {{ $liveProbePeriod }}
+          {{- /* A successful http probe must return in less than 1 seconds */}}
+          timeoutSeconds: {{ $livenessProbeTimeoutSeconds }}
+          {{- /* once probing begins keep trying. e.g with 1 min period and 10 tries, restart pod after 10 minutes */}}
+          failureThreshold: {{ $liveFailThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /VisualModeler/en/US/enterpriseMgr/admin
+            port: {{ $httpPort }}
+            scheme: HTTP
+          {{- /* wait for some time (4 mins) before beginning to probe readiness */}}
+          initialDelaySeconds: {{ $readyProbeBeginDelay }}
+          {{- /* check for readiness every n seconds */}}
+          periodSeconds: {{ $readyProbePeriod }}
+          {{- /* A successful http probe must return in less than 1 seconds */}}
+          timeoutSeconds: {{ $readinessProbeTimeoutSeconds }}
+          {{- /* keeping max attempts in sync with liveness probe. E.g. if liveness probe starts after 10 minutes
+               and takes another 10 minutes to restart pod. keep trying till approx 20 minutes */}}
+          failureThreshold: {{ div (add $liveProbeBeginDelay $liveFailRestartSeconds ) ($readyProbePeriod) }}       
+        volumeMounts:
+        - name: config
+          mountPath: "{{ $jvmOptionsPath }}.init"
+          subPath: jvm.options
+        - name: config
+          mountPath: "/vmupdateconfigs.sh"
+          subPath: vmupdateconfigs.sh
+        - name: config
+          mountPath: "/home/default/server1.xml"
+          subPath: server_vm.xml
+        - name: {{ .Values.global.persistence.claims.name }}-common
+          mountPath: /omscommonfile/configrepo
+        - name: config
+          mountPath: "/vmprocesscerts.sh"
+          subPath: vmprocesscerts.sh
+          {{- if and $varSslEnabled .Values.ocappserver.ingress.host }}
+        - name: occerts
+          mountPath: "/config/security"
+          readOnly: true
+          {{- end}}
+          {{- if .Values.vmappserver.importcert.secretname }}
+        - name: importcert
+          mountPath: "/config/security/importedcert"
+          readOnly: true
+          {{- end}}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ template "om-chart.fullname" . }}-vm-config
+          items:
+          - key: jvm.options
+            path: jvm.options
+          - key: vmupdateconfigs.sh
+            path: vmupdateconfigs.sh
+            mode: 0754
+          - key: server_vm.xml
+            path: server_vm.xml
+            mode: 0777
+          - key: vmprocesscerts.sh
+            path: vmprocesscerts.sh
+            mode: 0754
+      - name: {{ .Values.global.persistence.claims.name }}-common
+        persistentVolumeClaim:
+          claimName: {{ .Values.global.persistence.claims.name  | lower }}
+          {{- if and $varSslEnabled .Values.ocappserver.ingress.host }}
+      - name: occerts
+        secret:
+          secretName: {{ .Values.ocappserver.ingress.ssl.secretname }}
+          {{- end }}
+          {{- if .Values.vmappserver.importcert.secretname }}
+      - name: importcert
+        secret:
+          secretName: {{ .Values.vmappserver.importcert.secretname }}
+          {{- end }}
+{{ end -}}
