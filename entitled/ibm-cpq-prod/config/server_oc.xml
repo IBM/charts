@@ -1,0 +1,71 @@
+<!--
+ Licensed Materials - Property of IBM
+ IBM Sterling Configure Price Quote Software (5725-D11)
+ (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+ US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp. 
+-->
+{{- $varSslEnabled := .Values.ocappserver.ingress.ssl.enabled }}
+<server description="OC server">
+{{- if and $varSslEnabled .Values.ocappserver.ingress.host }}
+    <!-- Enable features -->
+    <featureManager>
+        <feature>webProfile-7.0</feature>
+        <feature>adminCenter-1.0</feature>
+        <feature>jdbc-4.1</feature>
+        <feature>jndi-1.0</feature>
+        <feature>jsp-2.3</feature>
+        <feature>servlet-3.1</feature>
+        <feature>ssl-1.0</feature>
+        <feature>monitor-1.0</feature>
+        <feature>localConnector-1.0</feature>
+        <feature>transportSecurity-1.0</feature>
+    </featureManager>
+
+    <httpSession useContextRootAsCookiePath="true" cookiePath="/Sterling"/>
+    <httpDispatcher enableWelcomePage="false" />
+    <httpSession invalidateOnUnauthorizedSessionRequestException="true" />
+    <webContainer trustHostHeaderPort="true" extractHostHeaderPort="true"/>
+    <webContainer disableXPoweredBy="true"/>
+    <httpOptions removeServerHeader="true"/>
+   
+    <!-- Define an Administrator and non-Administrator -->
+    <basicRegistry id="basic">
+      <user name="admin" password="admin" />
+      <user name="nonadmin" password="nonadminpwd" />
+    </basicRegistry>
+
+    <!-- Assign 'admin' to Administrator --> 
+    <administrator-role>
+      <user>admin</user>
+    </administrator-role>
+
+    <executor name="Default Executor" coreThreads="10" maxThreads="50"/>
+    <applicationMonitor updateTrigger="disabled"/>
+    <sslDefault sslRef="defaultSSLSettings" />
+    <ssl id="defaultSSLSettings" sslProtocol="TLSv1.2" keyStoreRef="defaultKeyStore" trustStoreRef="defaultTrustStore" clientAuthenticationSupported="false" />
+    <keyStore id="defaultKeyStore" type="JKS" password="password" />
+    <keyStore id="defaultTrustStore" type="JKS" password="password" />
+
+{{- else }}
+    <featureManager>
+        <feature>webProfile-7.0</feature>
+    </featureManager>
+{{- end }}    <!-- To access this server from a remote client add a host attribute to the following element, e.g. host="*" -->
+
+    <httpEndpoint id="defaultHttpEndpoint" host="*" httpPort={{ .Values.ocappserver.service.http.port | default 9080 | quote }} httpsPort={{ .Values.ocappserver.service.https.port | default 9443 | quote }} />
+
+    <application context-root="configurator" type="war" id="configurator"
+                location="/configurator/configurator.war" name="configurator">
+    </application>
+
+    <application context-root="ConfiguratorUI" type="war" id="ConfiguratorUI"
+                location="/configurator/ConfiguratorUI.war" name="ConfiguratorUI">
+    </application>
+
+    <!-- Automatically expand WAR files and EAR files -->
+
+    <applicationManager autoExpand="true"/>
+
+    <logging logDirectory="/omscommonfile/configrepo/logs/Configurator" messageFileName="@POD_HOSTNAME@_messages.log"/>
+
+</server>
