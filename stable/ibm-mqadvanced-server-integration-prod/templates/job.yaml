@@ -1,0 +1,76 @@
+# © Copyright IBM Corporation 2018, 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- include "sch.config.init" (list . "ibm-mq.sch.chart.config.values") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "registration") }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "registration") | indent 4 }}
+{{- include "ibm-mq.sch.chart.config.metadata.labels" . | indent 4 }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "registration") | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+              - key: beta.kubernetes.io/os
+                operator: In
+                values:
+                - "linux"
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      serviceAccountName: {{ include "sch.names.fullName" (list .) }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      restartPolicy: Never
+      containers:
+        - name: ibm-mq-registration
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.sso.registrationImage.repository "${1}cp/icp4i/mq/" }}:{{ .Values.sso.registrationImage.tag }}-amd64"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            privileged: false
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            limits:
+{{ toYaml .Values.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.resources.requests | indent 14 }}
+          env:
+            - name: LICENSE
+              value: {{ .Values.license }}
+            - name: DEPLOYMENT_NAME
+              value: {{ .Release.Name | quote }}
+            - name: MQ_SERVICE_NAME
+              value: {{ include "sch.names.fullName" (list .) }}

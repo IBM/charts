@@ -1,0 +1,133 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.prometheusEndpoint.compName ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.prometheusEndpoint.compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.prometheusEndpoint.replicas }}
+  selector:
+    matchLabels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.prometheusEndpoint.compName ) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/prometheus-configmap: {{ include (print $.Template.BasePath "/prometheus-endpoint/prometheus-endpoint-configmap.yaml") . |  sha256sum | trunc 63 }}
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.prometheusEndpoint.compName ) | indent 8 }}
+        service: {{ include "sch.names.fullCompName" (list . .sch.chart.components.prometheusEndpoint.compName ) | quote }}
+    spec:
+      serviceAccountName: {{ .Values.rbac.serviceAccountName }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: service
+                  operator: In
+                  values:
+                  - {{ include "sch.names.fullCompName" (list . .sch.chart.components.prometheusEndpoint.compName ) | quote }}
+              topologyKey: "kubernetes.io/hostname"
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 8000
+      initContainers:
+{{ include "hsts.spec.init.probe.stats" . | indent 6 }}
+      containers:
+      - name: election
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 200Mi
+            cpu: '.01'
+          limits:
+            memory: 400Mi
+            cpu: '.1'
+        image: {{ include "hsts.image.election" . }}
+        imagePullPolicy: {{ .Values.election.image.pullPolicy }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.prometheusEndpoint.compName ) | quote }}
+        env:
+        - name: LEADER_ELECTION_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: LEADER_ELECTION_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: HELM_RELEASE
+          value: {{ .Release.Name | quote }}
+        ports:
+        - name: api
+          containerPort: 9000
+        readinessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: api
+        livenessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: api
+      - name: prometheus-endpoint
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.prometheusEndpoint" . }}
+        imagePullPolicy: {{ .Values.prometheusEndpoint.image.pullPolicy }}
+        resources:
+          requests:
+            memory: 10Mi
+            cpu: '.001'
+          limits:
+            memory: 100Mi
+            cpu: '.01'
+        ports:
+        - name: prometheus-port
+          containerPort: 2112
+        readinessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: prometheus-port
+        livenessProbe:
+          initialDelaySeconds: 20
+          tcpSocket:
+            port: prometheus-port
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.prometheusEndpoint.compName ) | quote }}
+      volumes:
+      - name: dependency-to-lock
+        configMap:
+          name: {{ include "hsts.locks.prometheusEndpoint" . }}

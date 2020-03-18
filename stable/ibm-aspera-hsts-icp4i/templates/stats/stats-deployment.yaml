@@ -1,0 +1,161 @@
+{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.stats.compName ) | quote }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.stats.compName) | indent 4 }}
+spec:
+  replicas: {{ .Values.stats.replicas }}
+  selector:
+    matchLabels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.stats.compName ) | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/stats-configmap: {{ include (print $.Template.BasePath "/stats/stats-configmap.yaml") . |  sha256sum | trunc 63 }}
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.stats.compName ) | indent 8 }}
+        service: {{ include "sch.names.fullCompName" (list . .sch.chart.components.stats.compName ) | quote }}
+    spec:
+      serviceAccountName: {{ .Values.rbac.serviceAccountName }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: service
+                  operator: In
+                  values:
+                  - {{ include "sch.names.fullCompName" (list . .sch.chart.components.stats.compName ) | quote }}
+              topologyKey: "kubernetes.io/hostname"
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      initContainers:
+{{ include "hsts.spec.init.probe.kafka" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 8000
+      containers:
+      - name: election
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 200Mi
+            cpu: '.01'
+          limits:
+            memory: 400Mi
+            cpu: '.1'
+        image: {{ include "hsts.image.election" . }}
+        imagePullPolicy: {{ .Values.election.image.pullPolicy }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.stats.compName ) | quote }}
+        env:
+        - name: LEADER_ELECTION_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: LEADER_ELECTION_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: HELM_RELEASE
+          value: {{ .Release.Name | quote }}
+        ports:
+        - name: api
+          containerPort: 9000
+        readinessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: api
+        livenessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: api
+      - name: stats
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 8000
+          capabilities:
+            drop:
+            - ALL
+        image: {{ include "hsts.image.stats" . }}
+        imagePullPolicy: {{ .Values.stats.image.pullPolicy }}
+        resources:
+          requests:
+            memory: 20Mi
+            cpu: '.002'
+          limits:
+            memory: 200Mi
+            cpu: '.01'
+        ports:
+        - name: stats-port
+          containerPort: 8000
+        readinessProbe:
+          initialDelaySeconds: 2
+          tcpSocket:
+            port: stats-port
+        livenessProbe:
+          initialDelaySeconds: 20
+          tcpSocket:
+            port: stats-port
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.stats.compName ) | quote }}
+        env:
+        - name: STATS_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      {{- if (.Values.aej.kafkaAuthSecret) }}
+        - name: STATS_KAFKA_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.aej.kafkaAuthSecret }}
+              key: KAFKA_USER
+        - name: STATS_KAFKA_PASS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.aej.kafkaAuthSecret }}
+              key: KAFKA_PASS
+      {{ end }}
+      {{- if .Values.aej.kafkaCertSecret }}
+        volumeMounts:
+        - name: kafka-cert
+          mountPath: /opt/aspera/var/kafka.pem
+          subPath: KAFKA_CERT
+      {{- end }}
+      volumes:
+      {{- if .Values.aej.kafkaCertSecret }}
+      - name: kafka-cert
+        secret:
+          secretName: {{ .Values.aej.kafkaCertSecret }}
+      {{- end }}
+      - name: dependency-to-lock
+        configMap:
+          name: {{ include "hsts.locks.stats" . }}

@@ -1,0 +1,631 @@
+# © Copyright IBM Corporation 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+{{- if ne .Values.imageType "acemqserver" }}
+{{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
+{{- $fullName := include "sch.names.fullName" (list .) }}
+{{- $deploymentName := include "sch.names.fullName" (list . ) }}
+{{- $designerFlowsName := include "sch.names.fullCompName" (list . "designer-flows") }}
+{{- $connectorsName := include "sch.names.fullCompName" (list . "connectors") }}
+{{- $tracingAgentName := include "sch.names.fullCompName" (list . "od-tracing-agent") }}
+{{- $tracingCollectorName := include "sch.names.fullCompName" (list . "od-tracing-collector") }}
+{{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
+{{- $secretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $deploymentName "configuration") }}
+{{- $serverName := .Values.integrationServer.name | default .Release.Name | replace "-" "" }}
+{{- $httpRouteName := (print .Release.Name "-http") }}
+{{- $httpsRouteName := (print .Release.Name "-https") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . ) | indent 4 }}
+  annotations:
+    appconnectenterprise: 'icp4i'
+{{- if .Values.contentServerURL }}
+    appconnectenterpriseContentUrl: {{ index (splitList "?" (trim .Values.contentServerURL)) 0 | quote }}
+{{- end }}
+    serverName: {{ print $serverName | quote }}
+spec:
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  replicas: {{ .Values.aceonly.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      name: {{ $deploymentName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . ) | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      serviceAccountName: {{ $saName }}
+      imagePullSecrets:
+      {{- if .Values.image.pullSecret }}
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+        - name: ibm-entitlement-key
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000
+        runAsNonRoot: true
+        fsGroup: {{ default 1001 .Values.integrationServer.fsGroupGid }}
+      containers:
+        - name: {{ $deploymentName }}
+          {{- if eq .Values.imageType "ace"}}
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.aceonly "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+          {{- else }}
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.acemqclient "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+          - containerPort: {{ .Values.service.webuiPort }}
+            name: webui
+          - containerPort: {{ .Values.service.serverlistenerPort }}
+            name: ace-http
+          - containerPort: {{ .Values.service.serverlistenerTLSPort }}
+            name: ace-https
+          env:
+            - name: LICENSE
+              value: {{ .Values.license | quote }}
+            - name: USE_QMGR
+              value: "false"
+            - name: DEV_QMGR
+              value: "false"
+            - name: ACE_SERVER_NAME
+              value: {{ print $serverName | quote }}
+            - name: SERVICE_NAME
+              value: {{ include "sch.names.fullName" (list .) }}
+            {{- if .Values.customContentServer }}   
+            - name: CONTENT_SERVER_CA
+              value: /home/aceuser/initial-config/ssl/ca.crt.pem
+            - name: CONTENT_SERVER_CERT
+              value: /home/aceuser/initial-config/ssl/tls.crt.pem
+            - name: CONTENT_SERVER_KEY
+              value: /home/aceuser/initial-config/ssl/tls.key.pem
+            # ACE_CONTENT_SERVER_URL gets over-ridden by value below is value is specified.
+            - name: ACE_CONTENT_SERVER_URL
+              value: "https://{{ $fullName }}-runtime/v1/flowdeploymentsbar?userid={{ .Values.global.userID }}"
+            - name: ACE_CONTENT_SERVER_NAME
+              value: {{ $deploymentName }}
+            - name: DEFAULT_CONTENT_SERVER
+              value: "false" 
+            {{- else }}
+            - name: DEFAULT_CONTENT_SERVER
+              value: "true"  
+            {{- end }}
+            {{- if .Values.contentServerURL }}
+            - name: ACE_CONTENT_SERVER_URL
+              value: {{ index (splitList "?" (trim .Values.contentServerURL)) 0 | quote }}
+            - name: ACE_CONTENT_SERVER_NAME
+              value: {{ index (splitList ":" (index (splitList "/" (trim .Values.contentServerURL)) 2)) 0 | quote }}
+            - name: ACE_CONTENT_SERVER_TOKEN
+              value: {{ index (splitList "?" (trim .Values.contentServerURL)) 1 | quote }}
+            {{- end }}
+            - name: LOG_FORMAT
+              value: {{ .Values.log.format | default "json" | quote }}
+            - name: ACE_ENABLE_METRICS
+              value: {{ .Values.metrics.enabled | default true | quote }}
+            - name: ACE_ENABLE_OPEN_TRACING
+              value: {{ .Values.odTracingConfig.enabled | default false | quote }}
+            - name: ACE_HTTP_ROUTE_NAME
+              value: {{ $httpRouteName }}
+            - name: ACE_HTTPS_ROUTE_NAME
+              value: {{ $httpsRouteName }}
+            - name: ACE_ENDPOINT_TYPE
+              value: {{ .Values.service.endpointType }}
+            - name: "ACE_KEYSTORE_PASSWORD"
+              valueFrom:
+                 secretKeyRef:
+                   name: {{ $secretName }}
+                   optional: true
+                   key: keystorePassword
+            - name: "ACE_TRUSTSTORE_PASSWORD"
+              valueFrom:
+                 secretKeyRef:
+                   name: {{ $secretName }}
+                   optional: true
+                   key: truststorePassword
+            - name: ACE_DEFAULT_APPLICATION_NAME
+              value: {{ .Values.integrationServer.defaultAppName | quote }}
+            {{- if .Values.adminServerSecure }}
+            - name: ACE_ADMIN_SERVER_CA
+              value: /home/aceuser/initial-config/ssl/ca.crt.pem
+            - name: ACE_ADMIN_SERVER_CERT
+              value: /home/aceuser/initial-config/ssl/tls.crt.pem
+            - name: ACE_ADMIN_SERVER_KEY
+              value: /home/aceuser/initial-config/ssl/tls.key.pem
+            - name: ACE_ADMIN_SERVER_NAME
+              value: {{$deploymentName}}
+            - name: ACE_ADMIN_SERVER_SECURITY
+              value: "true"
+            {{- else }}
+            - name: ACE_ADMIN_SERVER_SECURITY
+              value: "false"
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.contentServerURL }}
+            - name: webusers
+              mountPath: "/home/aceuser/initial-config/webusers"
+            {{- end }}
+            {{- if .Values.integrationServer.keystoreKeyNames }}
+            - name: keystore
+              mountPath: "/home/aceuser/initial-config/keystore"
+            {{- end }}
+            {{- if .Values.integrationServer.truststoreCertNames }}
+            - name: truststore
+              mountPath: "/home/aceuser/initial-config/truststore"
+            {{- end }}
+            - name: odbcini
+              mountPath: "/home/aceuser/initial-config/odbcini"
+            - name: policy
+              mountPath: "/home/aceuser/initial-config/policy"
+            - name: serverconf
+              mountPath: "/home/aceuser/initial-config/serverconf"
+            - name: setdbparms
+              mountPath: "/home/aceuser/initial-config/setdbparms"
+            - name: extensions
+              mountPath: "/home/aceuser/initial-config/extensions"
+            - name: agent
+              mountPath: "/home/aceuser/initial-config/agent"
+            - name: ssl
+              mountPath: "/home/aceuser/initial-config/ssl"
+            {{- if .Values.contentServerURL }}
+            - name: contentservertls
+              mountPath: "/home/aceuser/ssl"
+            {{- end }}
+            {{- if ne .Values.designerFlowsOperationMode "disabled" }}
+            - name: tmp
+              mountPath: "/tmp"
+            - name: workdir
+              mountPath: "/home/aceuser/ace-server"
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              add:
+                - SETPCAP
+                - AUDIT_WRITE
+                - CHOWN
+                - NET_RAW
+                - DAC_OVERRIDE
+                - FOWNER
+                - FSETID
+                - KILL
+                - SETUID
+                - SETGID
+                - NET_BIND_SERVICE
+                - SYS_CHROOT
+                - SETFCAP
+              drop:
+                - ALL
+          # Set liveness probe to determine if the Integration Server is running
+          livenessProbe:
+            exec:
+              command:
+              - chkacehealthy
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the Integration Server admin endpoint is running
+          readinessProbe:
+            exec:
+              command:
+              - chkaceready
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+            limits:
+{{ toYaml .Values.aceonly.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.aceonly.resources.requests | indent 14 }}
+        {{- if ne .Values.designerFlowsOperationMode "disabled" }}
+        - name: "{{ $designerFlowsName }}"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.designerflows "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ACE_VERSION
+              value: {{ .Values.image.tag }}
+            - name: bunyan__logfile__filename
+              value: "/opt/ibm/app/ace-server/log/integration_server.{{ $serverName }}.designer_flows.txt"
+            - name: DESIGNER_FLOWS_OPERATION_MODE
+              value: {{ .Values.designerFlowsOperationMode }}
+          volumeMounts:
+            - name: tmp
+              mountPath: "/tmp"
+            - name: workdir
+              mountPath: "/opt/ibm/app/ace-server"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          # Set liveness probe to determine if the designer flow sidecar is running
+          livenessProbe:
+            exec:
+              command:
+                - "/readiness/ready.sh"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the designer flow sidecar is running
+          readinessProbe:
+            exec:
+              command:
+                - "/readiness/ready.sh"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+            limits:
+{{ toYaml .Values.designerflows.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.designerflows.resources.requests | indent 14 }}
+        - name: "{{ $connectorsName }}"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.connectors "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ACE_VERSION
+              value: {{ .Values.image.tag }}
+            - name: CONNECTOR_CREDENTIAL
+              value: "/opt/ibm/app/credentials"
+            - name: bunyan__logfile__filename
+              value: "/opt/ibm/app/ace-server/log/integration_server.{{ $serverName }}.connectors.txt"
+          volumeMounts:
+            - name: credentials
+              mountPath: "/opt/ibm/app/credentials"
+            - name: tmp
+              mountPath: "/tmp"
+            - name: workdir
+              mountPath: "/opt/ibm/app/ace-server"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          # Set liveness probe to determine if the designer flow sidecar is running
+          livenessProbe:
+            exec:
+              command:
+                - "/readiness/readyLCP.sh"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the designer flow sidecar is running
+          readinessProbe:
+            exec:
+              command:
+                - "/readiness/readyLCP.sh"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+            limits:
+{{ toYaml .Values.connectors.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.connectors.resources.requests | indent 14 }}
+        {{- end }}
+        {{- if .Values.odTracingConfig.enabled }}
+        # OD Agent
+        - name: "{{ $tracingAgentName }}"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.odTracingConfig.odAgentImageRepository "${1}cp/icp4i/ace/" }}:{{ .Values.odTracingConfig.odAgentImageTag }}-{{ .Values.arch }}"
+          volumeMounts:
+            - name: icp4i-od-ca-certificate
+              mountPath: "/usr/share/jaeger/ca/certs"
+          command: ["/go/bin/agent-linux"]
+          args: 
+            - "--jaeger.tags=sourceNamespace={{ .Release.Namespace }}"
+          ports:
+            - containerPort: 5775
+              protocol: UDP
+            - containerPort: 6831
+              protocol: UDP
+            - containerPort: 6832
+              protocol: UDP
+            - containerPort: 5778
+              protocol: TCP            
+          env:
+            - name: COLLECTOR_HOST_PORT
+              value : {{ template "odTracing.collector.host-port" . }}
+            - name: REPORTER_TYPE
+              value : "grpc"
+            - name: REPORTER_GRPC_HOST_PORT
+              value : {{ template "odTracing.collector.grpc-host-port" . }}              
+            - name: REPORTER_GRPC_TLS
+              value : "false"
+            - name: OD_SOURCE_NAMESPACE  
+              value : {{ .Release.Namespace }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 256m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /?service=health
+              port: 5778
+            initialDelaySeconds: {{ .Values.odTracingConfig.odAgentReadinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odAgentReadinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odAgentReadinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odAgentReadinessProbe.failureThreshold }}
+          livenessProbe:
+            tcpSocket:
+              port: 5778
+            initialDelaySeconds: {{ .Values.odTracingConfig.odAgentLivenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odAgentLivenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odAgentLivenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odAgentLivenessProbe.failureThreshold }}
+        # OD Collector
+        - name: "{{ $tracingCollectorName }}"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.odTracingConfig.odCollectorImageRepository "${1}cp/icp4i/ace/" }}:{{ .Values.odTracingConfig.odCollectorImageTag }}-{{ .Values.arch }}"
+          volumeMounts:
+            - name: icp4i-od-ca-certificate
+              mountPath: "/usr/share/jaeger/ca/certs" 
+          ports:            
+            - containerPort: 14250
+              name: grpc
+              protocol: TCP
+            - containerPort: 14267
+              name: tchannel
+              protocol: TCP
+            - containerPort: 14268
+              name: http
+              protocol: TCP
+            - containerPort: 14269
+              name: healthcheck
+              protocol: TCP
+            - containerPort: 9411
+              name: zipkin
+              protocol: TCP
+            - containerPort: 14987
+              name: liveliness
+              protocol: TCP
+          env:            
+            - name: SPAN_STORAGE_TYPE
+              value: elasticsearch            
+            - name: ES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "odTracing.collector.elasticsearch-secret-name" . }}
+                  key: password
+            - name: ES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "odTracing.collector.elasticsearch-secret-name" . }}
+                  key: username
+            - name: ES_SERVER_URLS
+              value: {{ template "odTracing.collector.elasticsearch-url" . }} 
+            - name: ES_TLS_CA     
+              value: '/usr/share/jaeger/ca/certs/icp4i-od-cacert.pem'          
+            - name: COLLECTOR_PORT
+              value: "14267"
+            - name: COLLECTOR_HTTP_PORT
+              value: "14268"
+            - name: COLLECTOR_ZIPKIN_HTTP_PORT
+              value: "9411"
+            - name: COLLECTOR_GRPC_TLS
+              value: "false"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            privileged: false
+            capabilities:
+              drop:
+                - ALL  
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 256m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              port: 14269
+            initialDelaySeconds: {{ .Values.odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odCollectorReadinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odCollectorReadinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odCollectorReadinessProbe.failureThreshold }}
+          livenessProbe:
+            tcpSocket:
+              port: 14987
+            initialDelaySeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odCollectorLivenessProbe.failureThreshold }}
+        {{- end }} 
+      volumes:
+        {{- if .Values.contentServerURL }}
+        - name: webusers
+          secret:
+            secretName: {{ include "sch.names.fullName" (list .) }}
+            optional: true
+            items:
+            - key: adminusers
+              path: admin-users.txt
+            - key: operatorusers
+              path: operator-users.txt
+            - key: viewerusers
+              path: viewer-users.txt
+            - key: editorusers
+              path: editor-users.txt
+            - key: auditusers
+              path: audit-users.txt
+        {{- end }}
+        {{- if .Values.integrationServer.keystoreKeyNames }}
+        # Marked as optional as the passphrase is not required and may not be provided
+        - name: keystore
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            {{- range $key := splitList "," .Values.integrationServer.keystoreKeyNames }}
+            - key: keystoreKey-{{ nospace $key }}
+              path: {{ nospace $key }}.key
+            - key: keystoreCert-{{ nospace $key }}
+              path: {{ nospace $key }}.crt
+            - key: keystorePass-{{ nospace $key }}
+              path: {{ nospace $key }}.pass
+            {{- end }}
+        {{- end }}
+        {{- if .Values.integrationServer.truststoreCertNames }}
+        # Not marked as optional as the user has specified this certificate should exist in the secret
+        - name: truststore
+          secret:
+            secretName: {{ $secretName }}
+            items:
+            {{- range $cert := splitList "," .Values.integrationServer.truststoreCertNames }}
+            - key: truststoreCert-{{ nospace $cert }}
+              path: {{ nospace $cert }}.crt
+            {{- end }}
+        {{- end }}
+        - name: odbcini
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: odbcini
+              path: odbc.ini
+        - name: extensions
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: extensions
+              path: extensions.zip
+        - name: agent
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: agentc
+              path: agentc.json
+            - key: agentp
+              path: agentp.json
+            - key: agentx
+              path: agentx.json
+            - key: switch
+              path: switch.json
+        - name: policy
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: policy
+              path: default.policyxml
+            - key: policyDescriptor
+              path: policy.descriptor
+        - name: serverconf
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: serverconf
+              path: server.conf.yaml
+        - name: setdbparms
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: setdbparms
+              path: setdbparms.txt
+        - name: ssl
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: ca.crt
+              path: ca.crt.pem
+            - key: tls.key
+              path: tls.key.pem
+            - key: tls.crt
+              path: tls.crt.pem
+        {{- if .Values.contentServerURL }}
+        - name: contentservertls
+          secret:
+            secretName: {{ index (splitList ":" (index (splitList "/" (trim .Values.contentServerURL)) 2)) 0 | quote }}
+            items:
+            - key: contentServerCACert
+              path: cacert.pem
+        {{- end }}
+        {{- if ne .Values.designerFlowsOperationMode "disabled" }}
+        - name: credentials
+          secret:
+            secretName: {{ $secretName }}
+            optional: true
+            items:
+            - key: credentials
+              path: credentials.yaml
+        - name: tmp
+          emptyDir: {}
+        - name: workdir
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.odTracingConfig.enabled }}
+        - name: icp4i-od-ca-certificate
+          secret:
+            secretName: icp4i-od-store-cred
+            optional: true
+        {{ end }}
+{{- end }}

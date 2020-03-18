@@ -1,0 +1,320 @@
+# Whether the application is running production workloads
+productionDeployment: true
+
+image:
+  repository: "cp.icr.io/cp/icp4i/aspera"
+  pullSecret: "ibm-entitlement-key"
+
+rbac:
+  serviceAccountName: ibm-aspera-hsts-icp4i
+
+arch:
+  amd64: "3 - Most preferred"
+
+deployRedis: true
+# If not deploying redis, specify the host and port of an existing redis host
+redisHost: ""
+redisPort: 6379
+
+# Values for redis subchart.
+# Used when deployRedis is true
+redis:
+  serviceAccount:
+    create: false
+    name: ibm-aspera-hsts-icp4i
+  persistence:
+    enabled: false
+    useDynamicProvisioning: false
+    existingClaimName: ""
+    accessMode: ReadWriteMany
+    storageClassName: ""
+  image:
+    repository: ""
+    name: aspera-redis
+    tag: 4.0.12-rhel-amd64
+    pullPolicy: IfNotPresent
+    pullSecret: ""
+  rbac:
+    create: false
+  serviceAccount:
+    create: false
+    name: ibm-aspera-hsts-icp4i
+  resources:
+    server:
+      requests:
+        memory: 100Mi
+        cpu: ".01"
+      limits:
+        memory: 5Gi
+        cpu: ".2"
+    sentinel:
+      requests:
+        memory: 5Mi
+        cpu: ".005"
+      limits:
+        memory: 100Mi
+        cpu: '.02'
+
+tls:
+  issuer: ""
+
+ingress:
+  hostname: null
+  tlsSecret: ""
+
+# asconfigurator commands to be run on each aspera.conf
+asperaconfig: []
+
+# Optional secret containing server sshd public/private keys
+# Secret keys used:
+# - ssh_host_rsa_key
+# - ssh_host_rsa_key.pub
+sshdKeysSecret: ""
+
+# If desired, set different storage configuration for Aspera transfer storage
+# Otherwise, will default to values under global.persistence
+persistence:
+  useDynamicProvisioning: true
+  storageClassName: null
+  size: 10Gi
+  existingClaimName: ''
+  mountPath: /asperanode
+  fsGroup: 1001
+
+asperanode:
+  clusterId: ""
+  httpsPort: 9092
+  nodeCount: 3
+  serverSecret: null
+  nodeAdminSecret: null
+  accessKeySecret: null
+
+  # See: http://download.asperasoft.com/download/docs/entsrv/3.9.1/es_admin_linux/webhelp/index.html#dita/access_key_auth.html
+  # This corresponds to the "configuration" section of the access key json
+  # By default only target_rate_kbps is set
+  accessKeyConfig: {}
+
+  image:
+    repository: ""
+    name: aspera-hsts-asperanode
+    tag: 3.9.1-rhel-amd64
+    pullPolicy: IfNotPresent
+
+  autoscale:
+    api:
+      enabled: false
+      minReplicas: 3
+      maxReplicas: 5
+      cpuAverageUtilization: 50
+  resources:
+    requests:
+      memory: 100Mi
+      cpu: '.02'
+    limits:
+      memory: 700Mi
+      cpu: '0.6'
+
+dashboard:
+  enabled: true
+
+aej:
+  kafkaHost: ""
+  kafkaPort: 9092
+  kafkaProtocol: PLAINTEXT
+  kafkaSaslMechanism: PLAIN
+  kafkaAuthSecret: ""
+  kafkaCertSecret: ""
+  replicas: 3
+  image:
+    repository: ""
+    name: aspera-hsts-aej
+    tag: 3.9.1-rhel-amd64
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+
+prometheusEndpoint:
+  replicas: 3
+  image:
+    repository: ""
+    name: aspera-hsts-prometheus-endpoint
+    tag: 1.2.2-rhel-amd64
+    pullPolicy: IfNotPresent
+
+  service:
+    api:
+      type: ClusterIP
+      port: 2112
+  config:
+    listenAddr: ":2112"
+
+stats:
+  replicas: 3
+  image:
+    repository: ""
+    name: aspera-hsts-stats
+    tag: 1.2.2-rhel-amd64
+    pullPolicy: IfNotPresent
+
+  service:
+    api:
+      type: ClusterIP
+      port: 80
+
+ascpLoadbalancer:
+  replicas: 3
+  strategy: MIN_SESSIONS
+  service:
+    type: ClusterIP
+    port: 80
+
+utils:
+  image:
+    repository: ""
+    name: aspera-hsts-utils
+    tag: 1.2.2-rhel-amd64
+    pullPolicy: IfNotPresent
+
+
+ascpSwarm:
+  replicas: 3
+  service:
+    type: ClusterIP
+    port: 80
+  config:
+    hostPortMin: 34001
+    hostPortMax: 34101
+    minAvailable: 1
+    maxRunning: 2
+    member:
+      name:
+        prefix: ""
+    nodeLabels: {}
+
+loadbalancer:
+  image:
+      repository: ""
+      name: aspera-hsts-loadbalancer
+      tag: 1.2.2-rhel-amd64
+      pullPolicy: IfNotPresent
+
+
+nodedLoadbalancer:
+  replicas: 3
+  strategy: MIN_SESSIONS
+  service:
+    type: ClusterIP
+    port: 80
+
+swarm:
+  image:
+    repository: ""
+    name: aspera-hsts-swarm
+    tag: 1.2.2-rhel-amd64
+    pullPolicy: IfNotPresent
+
+
+nodedSwarm:
+  replicas: 3
+  service:
+    type: ClusterIP
+    port: 80
+  config:
+    minAvailable: 1
+    maxRunning: 2
+    member:
+      name:
+        prefix: ""
+    nodeLabels: {}
+
+firstboot:
+  image:
+    repository: ""
+    name: aspera-hsts-firstboot
+    tag: 3.9.1-rhel-amd64
+    pullPolicy: IfNotPresent
+
+nodedSwarmMember:
+  image:
+    repository: ""
+    name: aspera-hsts-noded-swarm-member
+    tag: 3.9.1-rhel-amd64
+    pullPolicy: IfNotPresent
+
+receiver:
+  authorizedKeys: []
+  vlinks: []
+  swarm:
+    image:
+      repository: ""
+      name: aspera-hsts-receiver-swarm-member
+      tag: 3.9.1-rhel-amd64
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: 50Mi
+        cpu: '.01'
+      limits:
+        memory: 700Mi
+        cpu: '0.5'
+
+httpProxy:
+  replicas: 3
+  image:
+    repository: ""
+    name: aspera-hsts-http-proxy
+    tag: 1.2.2-rhel-amd64
+    pullPolicy: IfNotPresent
+
+  listenAddr: ":8000"
+  service:
+    api:
+      type: ClusterIP
+      port: 9092
+
+tcpProxy:
+  replicas: 3
+  image:
+    repository: ""
+    name: aspera-hsts-tcp-proxy
+    tag: 1.2.2-rhel-amd64
+    pullPolicy: IfNotPresent
+
+  listenAddr: ":8022"
+  service:
+    type: LoadBalancer
+    port: 33001
+
+probe:
+  image:
+    repository: ""
+    name: aspera-hsts-probe
+    tag: 1.2.2-rhel-amd64
+    pullPolicy: IfNotPresent
+
+election:
+  image:
+    repository: ""
+    name: aspera-hsts-election
+    tag: 1.2.2-rhel-amd64
+    pullPolicy: IfNotPresent
+
+rproxy:
+  address: ""
+
+# Not intended to be changed
+# Ensures that ibm-sch secret generation works when using an appName override
+nameOverride: aspera-hsts
+
+sch:
+  rbac:
+    serviceAccountName: ibm-sch-secret-gen
+  global:
+    image:
+      repository: ""
+  image:
+    name: aspera-hsts-utils
+    tag: 1.2.2-rhel-amd64
+    pullPolicy: IfNotPresent
+    pullSecret: ""

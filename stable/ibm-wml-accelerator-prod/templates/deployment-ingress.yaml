@@ -1,0 +1,130 @@
+{{- if not .Values.isCp4dAddon }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-wml-accelerator-prod.master-fullname" . }}-ingress
+  labels:
+    {{- include "ibm-wml-accelerator-prod.appMasterIngressLabels" . | indent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "ibm-wml-accelerator-prod.appMasterIngressLabelsSelector" . | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ibm-wml-accelerator-prod.appMasterIngressLabels" . | indent 8 }}
+      annotations:
+        {{- include "ibm-wml-accelerator-prod.releaseAnnotations" . | indent 8 }}
+    spec:
+      {{- if eq (include "ibm-wml-accelerator-prod.usePortworx" .) "yes" }}
+      schedulerName: stork
+      {{- end }}
+      affinity:
+      {{- include "ibm-wml-accelerator-prod.nodeaffinity" . | indent 6 }}
+      {{- include "ibm-wml-accelerator-prod.tolerations" . | indent 6 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName: cws-{{ .Release.Name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+      {{- if not .Values.cluster.tlsCertificateSecretName }}
+      initContainers:
+      - name: tlskeycheck
+        image: {{ template "ibm-wml-accelerator-prod.ingressImage" . }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 0.1
+            memory: 32Mi
+          limits:
+            cpu: 0.1
+            memory: 32Mi
+        command: ["/bin/bash"]
+        args:
+        - "-c"
+        - "while [ ! -f /var/share/tls.key ]; do sleep 5; echo \"Waiting for master to create the TLS key...\"; done;"
+        volumeMounts:
+        - mountPath: /var/share
+          name: persistsharedir
+          subPath: tls
+      {{- end }}
+      containers:
+        - image: {{ template "ibm-wml-accelerator-prod.ingressImage" . }}
+          name: ingress
+          ports:
+           - containerPort: {{ template "ibm-wml-accelerator-prod.proxyHttpsPort" . }}
+          resources:
+            requests:
+              cpu: 1
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 512Mi
+          volumeMounts:
+          - mountPath: /etc/nginx/conf.d
+            name: nginx-conf
+          {{- if .Values.cluster.tlsCertificateSecretName }}
+          - mountPath: /var/share
+            name: tlssecret
+            readOnly: true
+          {{- else }}
+          - mountPath: /var/share
+            name: persistsharedir
+            subPath: tls
+          {{- end }}
+          - mountPath: /var/cache/nginx
+            name: varcache
+          - mountPath: /var/run
+            name: varrun
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+              - ALL
+          readinessProbe:
+            httpGet:
+              path: /index.html
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: /index.html
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 30
+      volumes:
+        {{- if .Values.cluster.tlsCertificateSecretName }}
+        - name: tlssecret
+          secret:
+            secretName: "{{ .Values.cluster.tlsCertificateSecretName }}"
+        {{- else }}
+        - name: persistsharedir
+          persistentVolumeClaim:
+            claimName: "{{ .Release.Name }}-cws-share"
+        {{- end }}
+        - name: nginx-conf
+          configMap:
+            name: "{{ .Release.Name }}-conductor-master-bootstrap"
+            items:
+            - key: nginx.conf
+              path: wmla.conf
+        - name: varcache
+          emptyDir: {}
+        - name: varrun
+          emptyDir: {}
+      terminationGracePeriodSeconds: 60
+{{- end }}      

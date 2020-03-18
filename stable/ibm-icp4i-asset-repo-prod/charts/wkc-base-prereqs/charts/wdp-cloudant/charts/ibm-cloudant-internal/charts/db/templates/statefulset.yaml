@@ -1,0 +1,166 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{ $namePrefix := .sch.chart.components.cloudant.statefulSet.name -}}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list . $namePrefix) -}}
+{{ $shortPvcName := include "sch.names.volumeClaimTemplateName" (list . .Values.pvcName $statefulSetName) -}}
+kind: StatefulSet
+apiVersion: "apps/v1"
+metadata:
+  name: {{ template "cloudant.releasename" $ }}-db
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 6 }}
+  serviceName: {{ template "cloudant.releasename" $ }}-db
+  podManagementPolicy: "Parallel"
+  replicas: {{ template "db.dbcore.replicas" $ }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      affinity:
+      {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+{{- if .Values.global.antiAffinity.required }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 16 }}
+            topologyKey: {{ required ".Values.global.antiAffinity.topologyKey is required" .Values.global.antiAffinity.topologyKey | quote }}
+{{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 18 }}
+              topologyKey: {{ required ".Values.global.antiAffinity.topologyKey is required" .Values.global.antiAffinity.topologyKey | quote }}
+{{- end }}
+      containers:
+      - name: db
+        image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.cloudant.db }}
+        imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
+        securityContext:
+            runAsUser: 0
+            capabilities:
+              add:
+              - ALL
+        ports:
+        - name: in-tcp-port
+          containerPort: {{ .Values.global.ports.in }}
+        - name: epmd-port
+          containerPort: 4369 # not configurable
+        - name: erlang-port
+          containerPort: {{ .Values.global.ports.erlang }}
+        - name: admin-port
+          containerPort: 5986 # not configurable
+        resources:
+          limits:
+            cpu: {{ .Values.dbpods.resources.limits.cpu }}
+            memory: {{ .Values.dbpods.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.dbpods.resources.requests.cpu }}
+            memory: {{ .Values.dbpods.resources.requests.memory }}
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+              key: username
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+              key: password
+        volumeMounts:
+          - name: {{ template "cloudant.releasename" $ }}-config
+            mountPath: /beacon
+          - name: {{ $shortPvcName }}
+            mountPath: /srv
+        readinessProbe:
+          httpGet:
+            path: /_up
+            port: {{ .Values.global.ports.in }}
+          initialDelaySeconds: 20
+          timeoutSeconds: 5
+
+      - name: search
+        image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.cloudant.clouseau }}
+        resources:
+          limits:
+            cpu: {{ .Values.dbpods.resources.limits.cpu }}
+            memory: {{ .Values.dbpods.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.dbpods.resources.requests.cpu }}
+            memory: {{ .Values.dbpods.resources.requests.memory }}
+        imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
+        securityContext:
+            runAsUser: 0
+            capabilities:
+              add:
+              - ALL
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+              key: username
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+              key: password
+        volumeMounts:
+          - name: {{ template "cloudant.releasename" $ }}-clouseau-config
+            mountPath: /beacon
+          - name: {{ $shortPvcName }}
+            mountPath: /srv/search_index
+            subPath: search_index
+      terminationGracePeriodSeconds: 0
+{{- if .Values.global.images.pullSecret }}
+      imagePullSecrets:
+         - name: {{ .Values.global.images.pullSecret }}
+{{- end }}
+      volumes:
+      - name: {{ template "cloudant.releasename" $ }}-config
+        configMap:
+          name: {{ template "cloudant.releasename" $ }}-config
+      - name: {{ template "cloudant.releasename" $ }}-clouseau-config
+        configMap:
+          name: {{ template "cloudant.releasename" $ }}-clouseau-config
+{{- if .Values.global.inMemoryOnly }}
+      - name: {{ $shortPvcName }}
+        emptyDir:
+          medium: Memory
+{{- else }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ $shortPvcName }}
+      annotations: {{ range $key, $value := .Values.storage.db.annotations }}
+        {{ $key }}: {{ $value  | quote }}{{ end }}
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+      storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{ else }}
+      storageClassName: {{.Values.storage.db.storage_class}}
+{{- end }}
+      resources:
+        requests: {{ range $key, $value := .Values.storage.db.requests }}
+          {{ $key }}: {{ $value  | quote }}{{ end }}
+{{- end }}

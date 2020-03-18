@@ -1,0 +1,350 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "catalog-api-config") }}
+  labels:
+    app: {{ .Release.Name }}-{{ .Values.microservice.appname }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+data:
+  data-lake.properties: |
+    # indicate if ICP4D authentication mechanism should be used
+    feature.enable_icp4d_auth=false
+
+    # base url to ICP4D usermgmt service
+    icp4d_usermgmt_url={{ .Values.properties.usermgmtUrl }}
+
+    cams.user.info.converter.impl=com.ibm.catalog.unified.auth.lookup.IcpIamUserInfoConverter
+
+    # key protect TBD
+    # encryption key
+    key={{ .Values.properties.key }}
+
+    # enable running without Key Protect
+    feature.allow_local_protected_keys=true
+
+    # url to asset file service
+    file_service_url=https://{{ .Release.Name }}-asset-files-api:443/v2/asset_files
+
+    # Back-end Database - Cloudant
+    #cloudant_url must NOT include any DB Name Prefix
+    cloudant_url=https://{{ .Release.Name }}-clt:443
+    cloudant.private.account=
+    cloudant.private.cloudant_admin_password=
+    cloudant.private.user=
+    cloudant.private.password=
+    cloudant_db_env_prefix=v2_
+    cloudant_authenticate_ssl=false
+    cloudant.private=true
+
+    # set default shards for private catalogs
+    private_catalog_shards=2
+
+    # Database Replication
+    replication_configuration_count=0
+    #replication_configurations.0.credentialsEncrypted=true
+    #replication_configurations.0.username=
+    #replication_configurations.0.password=
+    #replication_configurations.0.dbNameIncludes=call_log
+    #replication_configurations.0.mode=PULL
+    #replication_configurations.0.publicCatalogsOnly=true
+    #replication_configurations.0.activeCatalogsOnly=true
+    #replication_configurations.0.workerBatchSize=1000
+    #replication_configurations.0.excludeDoubleWrittenCallLogEntries=true
+    #only_create_one_time_replications=true
+    #database_event_processing_threads=10
+    #enable_replication_upgrade=false
+
+    # double write call log
+    call_log_target_count=0
+
+    # NA for ICP4d
+    # Bluemix COS
+    s3TokenDuration=dRGm2C0eJ/3LrX66IQCNag==
+
+    # Project Management Services
+    project_api_url={{ .Values.properties.baseUrl }}/v2/projects
+
+    #Connection services
+    connection_api_url={{ .Values.properties.baseUrl }}/v2
+    feature.disable_private_catalog_connection=true
+
+    # Disable creation of connections
+    # feature.mandatory_connection_create=false
+
+    # Check account entitlement for certain actions, e.g. create catalog and asset
+    feature.check_entitlement=false
+    entitlement_api_url={{ .Values.properties.baseUrl }}/v2/entitlements
+
+    # IAM Access Admin (COS), likely need to be removed
+    iampap_scopes_url=
+
+    # BSS service
+    #account_management_url=
+
+    # Identity Sources (SAML)
+    #identity_sources_url=
+
+    # Resource key (COS)
+    #resource_key_url=
+
+    # DataWorks - Service Identities
+    #aps_gov_user=
+
+    # RabbitMQ
+    rabbitmq_uri={{ .Values.properties.rabbitmqUrl }}
+    #rabbitmq_uri_direct_1={{ .Values.properties.rabbitmqUrl }}
+    #rabbitmq_ca_certs_base64=
+    rabbitmq.private=true
+
+    #set this feature true to ENABLE RabbitMQ publishing GET Asset events
+    feature.enable_rabbitmq_publish_get_events=false
+
+    #set this feature true to DISABLE RabbitMQ publishing
+    feature.disable_rabbitmq_publishing=true
+
+    #set this feature true to DISABLE RabbitMQ OMRS consumers connection
+    feature.disable_rabbitmq_omrs_consumers=true
+
+    iam_keys_path=/iam-token/oidc/keys
+    iam_token_path=/iam-token/oidc/token
+    iam_introspect_path=/idprovider/v1/auth/introspect
+    feature.enable_icp_iam_auth=true
+    feature.icip_mode=true
+    # ServiceId
+    # (Git Issue #4326)
+    # accredited_service_metering_01={{ .Values.properties.serviceId }}
+
+
+    # Editors
+    # Used by sampling (Git issue #1895)
+    # accredited_service_editors_01={{ .Values.properties.serviceId }}
+
+
+    #list of discovery serviceId, notebook serviceId and figure eight integration (portal main) serviceId (Git issue #9222) to skip member check during update asset owner
+    # skip_new_owner_check={{ .Values.properties.serviceId }}
+
+    # Viewers
+    # Used by dps (Git issue #1902)
+    # accredited_service_viewers_01={{ .Values.properties.serviceId }}
+
+    # Used by cams (Git issue #9234)
+    # Ids of services that are allowed to create global asset types
+    # global_type_creator_service_id_01={{ .Values.properties.serviceId }}
+
+    # This id is used by cams for any internally created global asset types
+    # This is must also be included in the global_type_creator_service_id's listed in this file.
+    # global_asset_type_server_creator_id={{ .Values.properties.serviceId }}
+
+    # Enable this property, set to true, to enable the legacy, auto-created, catalog asset types for data_asset, folder_asset, and policy_transform
+    global_type_legacy_create=false
+
+    # List of global asset types for cams
+    # Each entry allows a corresponding global asset type whose json body is saved in
+    # this path must match out volume mount 'asset_types'
+    global_asset_types_directory=/opt/ibm/wlp/usr/servers/defaultServer/asset-types
+
+    global_asset_types_01=openapi
+    global_asset_types_02=json_schema
+    global_asset_types_03=document
+    global_asset_types_04=remote_repo
+
+    # Ids of services that are allowed to perform CAMS adminstration operations
+    # cams_administration_editors_01={{ .Values.properties.serviceId }}
+    # cams_administration_viewers_01={{ .Values.properties.serviceId }}
+
+    # Ids of services that are allowed to perform CAMS operator operations
+    # cams_operators_01={{ .Values.properties.serviceId }}
+
+    #Ids of services that are allowed to use the /v2/internals/suspended_accounts endpoints
+    #CAMS service id 1
+    # wkc_account_managers_01={{ .Values.properties.serviceId }}
+
+
+    # DPS Governance Policy enforcement
+    dps_url={{ .Values.properties.baseUrl }}/v2
+    # dps_skipped_services={{ .Values.properties.serviceId }}
+    feature.policy_enforcement_enabled=false
+    #Call new DPS api for evaluate
+    feature.enable_dps_evaluate_api=true
+
+    # CAMS apikey
+    # not needed
+    #cams_api_key={{ .Values.properties.serviceId }}
+
+    #GDPR
+    feature.gdpr=true
+
+
+    # Href in response
+    url_override={{ .Values.properties.baseUrl }}/v2
+
+    # Tenant Id requirement
+    feature.mandatory_account_id=true
+
+
+
+    # Kafka service used to publish the statistics used by WDP Data Warehouse
+    #statistics_kafka_brokers=
+    #statistics_kafka_userid=
+    #statistics_kafka_password=
+    #statistics_kafka_topic=json.v1.catalog.overview
+
+    # Etc-D credentials.  Etc-D is used as a semaphore system.
+    etcd_environment_name=ugi
+
+    # indicate if ETCD v2 or v3 should be used
+    feature.use_etcd_v3=true
+
+    # etcd v2
+    #etcd_uri=
+    #etcd_uri_direct_1=
+    #etcd_ca_certs_base64=
+
+    # etcd v3
+    #etcd_uri_v3=
+    #etcd_uri_direct_1_v3=
+    #etcd_deployment_name_v3=
+
+    # enter true or false to specify whether synchronization will run.
+    # enter the hour of the day in 24 hour clock at which the scheduled synchronization will run.
+    feature.statistics_synchronization=false
+    #statistics.runtime=05:00
+
+    # specify the default SSL strategy
+    # The options are: "use_default", "trust_all"
+    # "use_default" is the setting for all environments except ICP4D platform, which uses "trust_all"
+    default_ssl_strategy=trust_all
+
+    #RESTUtils
+    connection_pool_default_max_total=600
+    connection_pool_default_max_per_route=100
+
+    #Entitlement Account Cache
+    #entitlement_account_cache_size = 0
+    #entitlement_account_cache_expire_time = 60
+
+    # Allow enabling or disabling of two versions of design documents
+    feature.allow_two_versions=true
+
+
+
+    #Set max_retries to 8
+    max_retries=8
+
+    # w3 profile service
+    #w3.profile.client.id=
+    #w3.profile.client.secret=
+    #w3.profile.url=
+    #w3.profile.client.use.admin.api=true
+    #cams.user.info.converter.impl=com.ibm.catalog.unified.auth.lookup.CompositeUserInfoConverter
+    #dsx_url=
+    #profilemgmt_keystore_password=
+
+    #Lineage
+    feature.disable_lineage_publishing=true
+    lineage_url={{ .Values.properties.baseUrl }}/v2/lineage_events
+    feature.enable_lineage_rest=false
+    feature.enable_lineage_kafka=false
+
+    # application uri for the application, used in Host header validation
+    application.uri=
+
+    #Activity Tracker
+    feature.enable_activity_tracker_publishing=false
+    #activity_tracker_region=
+    #activity_tracker_url=
+    #broker_url=
+    # Common account where all Activity Tracker values will be stored for all KC services
+    #activity_tracker_service_space_guid=
+    #activity_tracker_service_crn=
+    #activity_tracker_service_name=
+    #activity_tracker_token=
+    #dc_broker_entitlement_url=https://dc-broker-ypprod.ng.bluemix.net/v2/datacatalog/broker/api/get_org_space_id
+
+    feature.per_catalog_call_logs=false
+
+    #WKC role check url
+    #wkc_role_check_url=https://dataplatform.cloud.ibm.com/catalog/api/roles
+
+    #wkc check
+    feature.wkc_check_enabled=false
+
+    # To create bucket-less catalogs
+    feature.allow_bucketless_catalogs=true
+
+    #Propagate account management events to yp-qa
+    #wkc_account_mgmt_mirrors=
+
+    # Key Protect properties
+    #kms_url=
+    #kms_service_id=
+    #kms_instance_id=
+    #kms_environment=
+
+    #kms_root_key_id=
+    #kms_api_key=
+
+    # BSS account management service v2
+    #account_management.uaa.client_id=
+    #account_management.uaa.client_secret=
+    #account_management.uaa.mccp_base_url=
+    #account_management.v2.base_url=
+
+    #expiration_super_users=
+
+    #expiration_users=
+
+    #expire_catalog_users=
+
+    #set number of days before expiring accounts
+    #bss_account_attrition_grace_period_days=30
+    #user_attrition_api_key=
+
+    #disable COS connection cache for now
+    # can be remove later
+    cos_connection_cache_soft_expire_time_sec=0
+    cos_connection_cache_hard_expire_time_sec=0
+
+    # the endpoint of the Minio COS server
+    {{- if .Values.properties.minioUrl }}
+    minio_endpoint_url={{ .Values.properties.minioUrl }}:31311
+    {{- else }}
+    minio_endpoint_url={{ .Values.properties.baseUrl }}:31311
+    {{- end }}
+
+    allow_in_place_design_document_updates=true
+
+    #Ids of services that are allowed to create/update OMRS assets
+    # cams_omrs_asset_administrator={{ .Values.properties.serviceId }}
+
+    #set this feature true to enable OMRS feature
+    feature.enable_omrs=false
+
+    #Uncomment these properties when REDIS is configured
+    redis.private=true
+    redis_url={{ .Values.properties.redisUrl }}
+    redis_max_connection_pool_size=5
+    redis_min_connection_pool_size=1
+    redis_max_subscription_connection_pool_size=5
+    redis_min_subscription_connection_pool_size=1
+    synchronization_provider_impl=com.ibm.catalog.unified.utils.cache.redis.RedisSynchronizationProvider
+    lock_cache_service_factory_impl=com.ibm.catalog.unified.utils.cache.redis.OptimisticLockingRedisCacheServiceFactory
+    cache_service_factory_impl=com.ibm.catalog.unified.utils.cache.redis.NonLockingRedisCacheServiceFactory
+
+    #Enables cross catalog search for the environment
+    feature.enable_cross_catalog_search=true
+
+    ## omrs igc connection credentials ###
+    omrs.connection.encryption.key=NotUsed
+
+    feature.relationships=true
+
+    internal_rabbitmq_publishing=false
+
+    ##ensure catalog databases are deleted with their catalogs
+    feature.expire_catalog_on_delete=true
+
+

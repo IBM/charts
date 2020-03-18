@@ -1,0 +1,86 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+###############################################################################
+# Runs a container that creates a cert for internal TLS
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $jobName := include "sch.names.fullCompName" (list . "int-tls-job") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "int-tls")) }}
+{{- $saName := include "sch.names.fullCompName" (list . "handle-secret-serviceaccount") }}
+{{- $scriptsName := include "sch.names.fullCompName" (list . "int-tls-scripts") }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $jobName }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    # This needs to happen after the roles are created
+    "helm.sh/hook-weight": "3"
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 4 }}
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      restartPolicy: Never
+      {{- if .Values.global.images.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.images.pullSecret }}
+      {{- end }}
+      serviceAccountName: {{ $saName }}
+      containers:
+        - name: int-tls
+          image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.configurator }}
+          imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 250m
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          workingDir: /scripts
+          command: ["/bin/sh", "./generate-internal-tls.sh"]
+          volumeMounts:
+            - name: {{ $scriptsName }}
+              mountPath: /scripts
+              readOnly: true
+
+      volumes:
+        - name: {{ $scriptsName }}
+          configMap:
+            name: {{ $scriptsName }}
+            defaultMode: 0555

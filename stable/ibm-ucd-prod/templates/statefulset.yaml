@@ -1,0 +1,242 @@
+{{- include "sch.config.init" (list . "ibm-ucd-prod.sch.chart.config.values") -}}
+{{- $fullName := include "sch.names.fullName" (list .) -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "srv") | indent 4 }}
+spec:
+  serviceName: {{ $fullName }}-hl
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "srv") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "srv") | indent 8 }}
+        ucdcomp: {{ .Release.Name }}-server
+      annotations:
+        productName: "UrbanCode Deploy"
+        productID: "CC1C5ML"
+        productVersion: "7.0.5.1"
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      affinity:
+      {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: ucdcomp
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}-server
+              topologyKey: "kubernetes.io/hostname"
+      initContainers:
+      - name: init
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        command: ["/usr/local/bin/init.sh"]
+        env:
+          - name: DB_NAME
+            value: {{ .Values.database.name }}
+          - name: DB_USER
+            value: {{ .Values.database.username }}
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secret.name }}
+                name: {{ .Values.secret.name }}
+                {{- else }}
+                name: {{ .Release.Name }}-secrets
+                {{- end }}
+                key: dbpassword
+          - name: DB_TCP_PORT
+            value: {{ .Values.database.port | quote }}
+          - name: DB_TCP_URL
+            value: {{ .Values.database.hostname}}
+          - name: DB_TYPE
+            value: {{ .Values.database.type}}
+          - name: DB_JDBC_CONN_URL
+            value: {{ .Values.database.jdbcConnUrl}}
+          - name: UCD_INIT_PASSWD
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secret.name }}
+                name: {{ .Values.secret.name }}
+                {{- else }}
+                name: {{ .Release.Name }}-secrets
+                {{- end }}
+                key: initpassword
+          - name: UCD_STS
+            value: {{ .Release.Name }}
+          - name: LICENSE_SERVER_URL
+            value: {{ .Values.ucdLicense.serverUrl }}
+        volumeMounts:
+          {{- if ne .Values.database.type "derby"}}
+          - name: "{{ $fullName }}-{{ .Values.extLibVolume.name }}"
+            mountPath: "/opt/ibm-ucd/server/ext_lib"
+          {{- end}}
+          - name: "{{ $fullName }}-{{ .Values.appDataVolume.name }}"
+            mountPath: "/opt/ibm-ucd/server/appdata"
+          {{- if .Values.extLibVolume.configMapName }}
+          - name: user-script
+            mountPath: "/tmp/user-script"
+          {{- end }}
+        resources:
+          {{- if .Values.resources.constraints.enabled}}
+          limits:
+{{ toYaml .Values.resources.limits | indent 12 }}
+          requests:
+{{ toYaml .Values.resources.requests | indent 12 }}
+          {{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        {{- if .Values.secureConnections.required }}
+        - containerPort: 8443
+        {{- else }}
+        - containerPort: 8080
+        {{- end }}
+        - containerPort: 7918
+        - containerPort: 7919
+        readinessProbe:
+          httpGet:
+            path: /connTest.txt
+            {{- if .Values.secureConnections.required }}
+            port: 8443
+            scheme: HTTPS
+            {{- else }}
+            port: 8080
+            scheme: HTTP
+            {{- end }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        livenessProbe:
+          httpGet:
+            path: /connTest.txt
+            {{- if .Values.secureConnections.required }}
+            port: 8443
+            scheme: HTTPS
+            {{- else }}
+            port: 8080
+            scheme: HTTP
+            {{- end }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        env:
+          - name: DB_NAME
+            value: {{ .Values.database.name }}
+          - name: DB_USER
+            value: {{ .Values.database.username }}
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                {{- if .Values.secret.name }}
+                name: {{ .Values.secret.name }}
+                {{- else }}
+                name: {{ .Release.Name }}-secrets
+                {{- end }}
+                key: dbpassword
+          - name: DB_TCP_PORT
+            value: {{ .Values.database.port | quote }}
+          - name: DB_TCP_URL
+            value: {{ .Values.database.hostname}}
+          - name: DB_TYPE
+            value: {{ .Values.database.type}}
+          - name: DB_JDBC_CONN_URL
+            value: {{ .Values.database.jdbcConnUrl}}
+          - name: SECURE
+            {{- if .Values.secureConnections.required }}
+            value: "Y"
+            {{- else }}
+            value: "N"
+            {{- end }}
+          - name: UCD_STS
+            value: {{ .Release.Name }}
+        volumeMounts:
+          {{- if ne .Values.database.type "derby"}}
+          - name: "{{ $fullName }}-{{ .Values.extLibVolume.name }}"
+            mountPath: "/opt/ibm-ucd/server/ext_lib"
+          {{- end}}
+          - name: "{{ $fullName }}-{{ .Values.appDataVolume.name }}"
+            mountPath: "/opt/ibm-ucd/server/appdata"
+          {{- if .Values.extLibVolume.configMapName }}
+          - name: user-script
+            mountPath: "/tmp/user-script"
+          {{- end }}
+        resources:
+          {{- if .Values.resources.constraints.enabled}}
+          limits:
+{{ toYaml .Values.resources.limits | indent 12 }}
+          requests:
+{{ toYaml .Values.resources.requests | indent 12 }}
+          {{- end }}
+      {{- if .Values.image.secret }}
+      imagePullSecrets:
+      - name: {{ .Values.image.secret }}
+      {{- end }}
+      volumes:
+      {{- if ne .Values.database.type "derby"}}
+      - name: "{{ $fullName }}-{{ .Values.extLibVolume.name }}"
+        {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          {{- if .Values.extLibVolume.existingClaimName }}
+          claimName: {{ .Values.extLibVolume.existingClaimName }}
+          {{- else }}
+          claimName: {{ $fullName }}-{{ .Values.extLibVolume.name }}
+          {{- end }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- end }}
+      - name: "{{ $fullName }}-{{ .Values.appDataVolume.name }}"
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.appDataVolume.existingClaimName }}
+          claimName: {{ .Values.appDataVolume.existingClaimName }}
+        {{- else }}
+          claimName: {{ $fullName }}-{{ .Values.appDataVolume.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      {{- if .Values.extLibVolume.configMapName }}
+      - name: user-script
+        configMap:
+          name: {{ .Values.extLibVolume.configMapName }}
+          defaultMode: 0744
+{{- end }}
+

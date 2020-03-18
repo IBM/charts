@@ -1,0 +1,73 @@
+# © Copyright IBM Corporation 2018, 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This test tries to open port 9157 every second.  It keeps trying until it works,
+# or `livenessProbe.initialDelaySeconds` have passed.
+{{- $helmTest := default "disabled" .Values.helmTestOverride }}
+{{- if and (ne $helmTest "disabled") (.Values.metrics.enabled) }}
+{{- include "sch.config.init" (list . "ibm-mq.sch.chart.config.values") }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "sch.names.fullName" (list .) }}-metrics-test"
+  labels:
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ include "sch.names.fullName" (list .) }}-metrics-test
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - "amd64"
+          - key: beta.kubernetes.io/os
+            operator: In
+            values:
+            - "linux"
+  serviceAccountName: {{ include "sch.names.fullName" (list .) }}
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+    - name: {{ include "sch.names.fullName" (list .) }}-metrics-test
+      # Use Alpine Linux, because it includes netcat (`nc`) by default
+      image: alpine:3.8
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 1001
+        privileged: false
+        capabilities:
+          drop:
+          - ALL
+      resources:
+        limits:
+{{ toYaml .Values.resources.limits | indent 10 }}
+        requests:
+{{ toYaml .Values.resources.requests | indent 10 }}
+      command:
+        - "sh"
+      args:
+        - "-c"
+        - "timeout -t {{ .Values.livenessProbe.initialDelaySeconds }} /bin/sh -c \"until nc -v -w1 -z {{ include "sch.names.fullName" (list .) }}-metrics 9157; do sleep 1; done\""
+  restartPolicy: Never
+{{- end }}

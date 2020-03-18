@@ -1,0 +1,318 @@
+{{- if .Values.isCp4dAddon }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "ibm-wml-accelerator-prod.master-fullname" . }}-routes
+  labels:
+    {{- include "ibm-wml-accelerator-prod.condaLabels" . | indent 4 }}
+    icpdata_addon: "true"
+data:
+  nginx.conf: |
+    set_by_lua $nsdomain 'return os.getenv("NS_DOMAIN")';
+    # Capture all GUI URIs - only apply subfilters etc. to GUI, and not to REST
+    location ~^/(platform|platformv5|restProxy|common_ui|ascgui|dlgui|dlguiv5|conductorgui|cwsguiv5|perfguiv5|knowledgecenter) {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.guiPort" . }};
+      # All 'Location' header responses need to point to the nginx server and port...this
+      # rewrites accordingly.
+      proxy_redirect ~*^(https?://[^/]+)(/.+)$ $scheme://$host:$server_port$2;
+      # Setup sub_filter to modify contents of response html/json to point to the right server:port.
+      sub_filter_types application/json text/plain;
+      sub_filter_last_modified on;
+      sub_filter_once off;
+      # Special case for getRestURL returning :443/ when proxied. Ideally this gets fixed in
+      # code, but it's an easy re-write for now.
+      sub_filter ':443/restProxy' ':$server_port/restProxy';
+      # The GUI apps often add href's to the rest services by name:port - so these will re-write
+      # all 'my-wmlamaster:304XX' to use the nginx host:port.
+      sub_filter '{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.ascdPort" . }}' '$host:$server_port';
+      sub_filter '{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }}' '$host:$server_port';
+      sub_filter '{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.dlRestPort" . }}' '$host:$server_port';
+
+    }
+    # Now all REST APIs.  For each REST API (in general), we will:
+    # 1)  proxypass
+    # 2)  If they specify just the root, we'll sub_filter a static page to point correctly to swagger
+    # 3)  Enable swagger on a unique path for a given URI
+    location ^~ /platform/rest/asc/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.ascdPort" . }};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    # Call out the specific URI which has a static page pointing to swagger
+    # separate from above for performance so we don't sub_filter all APIs
+    location = /platform/rest/asc/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      sub_filter '/cloud/apis/explorer' '/cloud/apis/conductor/explorer/';
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.ascdPort" . }};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    # This doesn't exist as it's under conductor..but in case somebody goes looking...
+    location ^~ /cloud/apis/asc/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      rewrite /cloud/apis/asc/(.*) /cloud/apis/conductor/$1 permanent;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location ^~ /platform/rest/conductor/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.ascdPort" . }};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+
+    }
+    location ^~ /cloud/apis/conductor/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      # Override the default 302 behavior of swagger on /explorer
+      rewrite ^/cloud/apis/conductor/explorer$ /cloud/apis/conductor/explorer/ redirect;
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.ascdPort" . }}/cloud/apis/;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location ^~ /platform/rest/ego/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /platform/rest/ego/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      sub_filter '/cloud/apis/explorer' '/cloud/apis/ego/explorer/';
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location ^~ /cloud/apis/ego/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      rewrite ^/cloud/apis/ego/explorer$ /cloud/apis/ego/explorer/ redirect;
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }}/cloud/apis/;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location ^~ /platform/rest/deployment/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /platform/rest/deployment/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      sub_filter '/cloud/apis/explorer' '/cloud/apis/ego/explorer';
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.egoRestPort" . }};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    # This just redirects to apis/ego since it contains the swagger definition
+    location ^~ /cloud/apis/deployment/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      rewrite /cloud/apis/deployment/(.*) /cloud/apis/ego/$1 permanent;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location ^~ /platform/rest/deeplearning/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.dlRestPort" . }};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /platform/rest/deeplearning/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      sub_filter '/cloud/apis/explorer' '/cloud/apis/deeplearning/explorer/';
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.dlRestPort" . }};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location ^~ /cloud/apis/deeplearning/ {
+      error_log /dev/stderr debug;
+      rewrite_log on;
+      rewrite ^/cloud/apis/deeplearning/explorer$ /cloud/apis/deeplearning/explorer/ redirect;
+      proxy_pass https://{{ template "ibm-wml-accelerator-prod.master-fullname" . }}.$nsdomain:{{ template "ibm-wml-accelerator-prod.dlRestPort" . }}/cloud/apis/;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_connect_timeout 60s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      client_max_body_size 1m;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $server_port;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+
+{{- end }}

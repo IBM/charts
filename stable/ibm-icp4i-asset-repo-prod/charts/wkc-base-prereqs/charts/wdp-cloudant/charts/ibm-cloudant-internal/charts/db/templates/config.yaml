@@ -1,0 +1,264 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ template "cloudant.releasename" $ }}-config
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }} 
+data:
+  ulimit.sh: |
+    ulimit -c {{ .Values.dbpods.ulimit.core_file_size | int64 }}
+    ulimit -s {{ .Values.dbpods.ulimit.stack_size | int64 }}
+    ulimit -u {{ .Values.dbpods.ulimit.max_processes | int64 }}
+    ulimit -n {{ .Values.dbpods.ulimit.max_open_files | int64 }}
+    export ERL_MAX_PORTS={{ .Values.dbpods.erlang.max_ports | int64 }}
+
+  vm.args: |
+    # Each node in the system must have a unique name.
+    -name dbcore@NODE
+
+    # All nodes must share the same magic cookie for distributed Erlang to work.
+    -setcookie {{ .Values.dbpods.erlang.cookie }}
+
+    # Maybe tell kernel and SASL not to log anything
+    -kernel error_logger silent
+    -sasl sasl_error_logger false
+
+    # Limit the allowable port range for distributed Erlang
+    -kernel inet_dist_listen_min {{ .Values.global.ports.erlang }}
+    -kernel inet_dist_listen_max {{ .Values.global.ports.erlang }}
+
+    # prevent EPEP (IAM) and bacon applications from starting
+    -kernel permissions "[{epep, false}, {bacon, false}, {cassim, false}]"
+
+    # Set the maximum number of concurrent processes
+    +P{{ .Values.dbpods.erlang.processLimit | int64 }}
+
+    # Set the maximum number of ets tables
+    +e{{ .Values.dbpods.erlang.etsLimit }}
+
+    # Use kernel poll functionality if supported by emulator
+    +K true
+
+    # Start a pool of asynchronous IO threads
+    +A{{ .Values.dbpods.erlang.asyncThreads }}
+
+    +zdbbl32768
+
+    # Comment this line out to enable the interactive Erlang shell on startup
+    +Bd -noinput
+
+    # Application specific configurations
+    -showroom send_snmptrap true
+    -ioq stats_db \\"{{ template "cloudant.releasename" $ }}/stats\\"
+    -tally meta_db \\"tally\\"
+
+    -bacon dbname \\"{{ template "cloudant.releasename" $ }}/bacon\\"
+
+    -global_changes dbname <<\\"global_changes\\">>
+
+    -ssl session_lifetime 300
+
+  local.ini: |
+    # adm-CLUSTER and PASSWORD are replaced by secrets
+    # when the db container starts
+    [admins]
+    adm-CLUSTER = PASSWORD
+
+  default.ini: |
+    [couchdb]
+    uuid = {{ .Release.Namespace }}-{{ template "cloudant.releasename" $ }}
+    database_dir = /srv/db
+    view_index_dir = /srv/view_index
+    geo_index_dir = /srv/geo_index
+    schema_dir = /srv/schema_index
+    max_document_size = {{ .Values.dbpods.couchdb.maxDocumentSize | int64 }}
+    os_process_timeout = {{ .Values.dbpods.couchdb.OSProcessTimeout | int64 }}
+    max_dbs_open = {{ .Values.dbpods.couchdb.maxDbsOpen }}
+    max_view_index_lag = 9999999999
+    delayed_commits = false
+    idle_group_timeout = {{ .Values.dbpods.couchdb.idleGroupTimeout | int64 }}
+    delete_after_rename = {{ .Values.dbpods.couchdb.deleteAfterRename }}
+    enable_database_recovery = {{ .Values.dbpods.couchdb.enableDatabaseRecovery }}
+
+    ; Set db idle timeout in milliseconds. 'infinity' disables timing out.
+    idle_check_timeout = {{ .Values.dbpods.couchdb.idleCheckTimeout }}
+
+    ; Limit maximum document ID length. This option is applied during document ID
+    ; validation step in db core when documents are updated or created. It affects
+    ; both single document requests like PUT as well as _bulk_docs. Be careful
+    ; lowering this value on already existing clusters were users already created
+    ; documents with ID length exceeding the threshold. They would not be able to
+    ; update those documents anymore.
+    ; There is a related setting in the replicator: max_document_id_length,  which
+    ; prevents long document IDs to be replicated to the target and skips over
+    ; them. Consider setting that option in tandem with this one.
+    max_document_id_length = {{ .Values.dbpods.couchdb.maxDocumentIdLength }}
+
+    ; The file_compression setting controls the compression used for on disk
+    ; serialization. In dbcore this was traditionally deflate_6. During the dbnext
+    ; aka Couch 2.0 work we inadvertantly swapped to snappy. deflate_6 has much
+    ; better post-compression size while snappy is easier on CPU.
+    ; Cloudant is typically more constrained on disk space.
+    file_compression = {{ .Values.dbpods.couchdb.fileCompression }}
+
+    ; Limit maximum attachment size. If this value is reduced and there are
+    ; documents with attachments which are larger than the limit, users will
+    ; have to update the attachment next time they update the document. Internal
+    ; replication and compaction should not be affected. Replicating to a target
+    ; which rejects attachments based on size, will result in the document being
+    ; rejected and doc_write_failures replication count incremented. The unit is in
+    ; bytes, infinity is an acceptable value indicating there is no attachment
+    ; size limit, which is also the default and the effective behavior before
+    ; this limit was implemented.
+    max_attachment_size = {{ .Values.dbpods.couchdb.maxAttachmentSize }}
+
+    ; Update the least recently used DB cache on reads/writes -- CouchDB defaults
+    ; this setting to false, i.e. LRU updates only on writes, while Cloudant has
+    ; set this to true by default.
+    update_lru_on_read = {{ .Values.dbpods.couchdb.updateLRUOnRead }}
+
+
+    [cluster]
+    q={{ .Values.dbpods.dbcore.cluster.q }}
+    r={{ template "db.dbcore.cluster.r" $ }}
+    w={{ template "db.dbcore.cluster.w" $ }}
+    n={{ template "db.dbcore.cluster.n" $ }}
+    q_disabled = {{ .Values.dbpods.dbcore.cluster.q_disabled }}
+    n_disabled = {{ .Values.dbpods.dbcore.cluster.n_disabled }}
+    seedlist = dbcore@{{ template "cloudant.releasename" $ }}-db-0.{{ template "cloudant.releasename" $ }}-db.{{ .Release.Namespace }}.svc.{{ .Values.global.dns.clusterDomainSuffix }}
+
+    [chttpd]
+    port = {{ .Values.global.ports.in }}
+    backlog = 512
+    docroot = /opt/dbcore/share/www
+    server_options = [{max, 262144}]
+    domain = {{ template "cloudant.releasename" $ }}.{{ .Release.Namespace }}.svc.{{ .Values.global.dns.clusterDomainSuffix }}
+
+    [chttpd_auth]
+    authentication_db = {{ template "cloudant.releasename" $ }}/users
+
+    [rexi]
+    server_per_node = true
+
+    [httpd]
+    port = 5986
+    bind_address = 0.0.0.0
+    authentication_handlers = {couch_httpd_auth, cookie_authentication_handler}, {couch_httpd_auth, default_authentication_handler}
+    WWW-Authenticate = Basic realm="Cloudant Private Database"
+    backlog = 512
+    secure_rewrites = false
+    allow_jsonp = true
+    enable_cors = true
+    max_http_request_size = {{ .Values.dbpods.couchdb.maxHttpRequestSize | int64}}
+
+    [log]
+    file = /dev/null
+    level = {{ .Values.logging.level }}
+    writer = stderr
+    syslog_host = 127.0.0.1
+    syslog_appid = {{ template "cloudant.releasename" $ }}
+
+    [syslog]
+    tag = {{ template "cloudant.releasename" $ }}
+    host = 127.0.0.1
+
+    [audit]
+    syslog_host = 127.0.0.1
+    syslog_appid = {{ template "cloudant.releasename" $ }}
+
+    [metrics]
+    db = metrics_specs
+
+    [couch_httpd_auth]
+    authentication_redirect = /_utils/session.html
+    authentication_db = _users
+    password_scheme = simple
+    upgrade_password_on_auth = false
+    secret = xxunBXPzjzenGxyKLsGHyoMVgDEUiyfuIIBGMhSRyoDdJ
+    require_valid_user = false
+    timeout = 86400 ; number of seconds before automatic logout
+    auth_cache_size = 50 ; size is number of cache entries
+    allow_persistent_cookies = true ; set to true to allow persistent cookies
+    iterations = 10 ; iterations for password hashing
+    ; min_iterations = 1
+    ; max_iterations = 1000000000
+
+    [query_server_config]
+    reduce_limit = false
+    os_process_limit = {{ .Values.dbpods.dbcore.queryServer.OSProcessLimit }}
+    os_process_soft_limit = {{ .Values.dbpods.dbcore.queryServer.OSProcessSoftLimit }}
+
+    [uuids]
+    algorithm = sequential
+
+    [stats]
+    ; rate is in milliseconds
+    rate = 1000
+    ; sample intervals are in seconds
+    samples = [0, 60, 300, 900]
+
+    [attachments]
+    compression_level = 8 ; from 1 (lowest, fastest) to 9 (highest, slowest), 0 to disable compression
+    compressible_types = text/*, application/javascript, application/json, application/xml
+
+    [replicator]
+    max_http_sessions = 10
+    max_http_pipeline_size = 10
+
+    ; Scheduling interval in milliseconds. During each reschedule cycle scheduler
+    ; might start or stop up to "max_churn" number of jobs.
+    interval = {{ .Values.dbpods.dbcore.replicator.interval }}
+
+    max_jobs = {{ .Values.dbpods.dbcore.replicator.maxJobs }}
+    max_churn = {{ .Values.dbpods.dbcore.replicator.maxChurn }}
+    max_history = {{ .Values.dbpods.dbcore.replicator.maxHistory }}
+    cluster_quiet_period = {{ .Values.dbpods.dbcore.replicator.clusterQuietPeriod }}
+    cluster_start_period = {{ .Values.dbpods.dbcore.replicator.clusterStartPeriod }}
+    connection_close_interval = 90000
+    update_docs = {{ .Values.dbpods.dbcore.replicator.updateDocs }}
+    max_document_id_length = {{ .Values.dbpods.dbcore.replicator.maxDocumentIdLength }}
+    retries_per_request = 5
+
+    [mem3]
+    nodes_db = nodes
+    shards_db = dbs
+
+    [fabric]
+    request_timeout = {{ .Values.dbpods.dbcore.fabric.requestTimeout }}
+
+    [smoosh.ratio_dbs]
+    min_priority = {{ .Values.dbpods.dbcore.smoosh.ratioDbsMinPriority }}
+
+    [smoosh.ratio_views]
+    min_priority = {{ .Values.dbpods.dbcore.smoosh.ratioViewsMinPriority }}
+
+    [hastings]
+    enabled = true
+
+    [global_changes]
+    allowed_owner = {cloudant_util, verify_and_maybe_replace_user, []}
+
+    [csrf]
+    secret = 4EXIk7F7zzfEdinWI1FuL62usjxIwnUIRRs2pao
+    ; next line intentionally should not match any mime type
+    mime_types = NOTHANKS
+
+    [indexers]
+    couch_mrview = true
+
+    [mango]
+    default_limit = 10000000000
+
+    [view_compaction]
+    enabled_recompaction = false
+
+    [ken]
+    batch_channels = {{ .Values.dbpods.dbcore.ken.batchChannels }}
+    incremental_channels = {{ .Values.dbpods.dbcore.ken.incrementalChannels }}
+
+    [cassim]
+    enable = false
+
+    [ioq]
+    concurrency = {{ .Values.dbpods.dbcore.ioq.concurrency }}

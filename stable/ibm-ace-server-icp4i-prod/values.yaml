@@ -1,0 +1,222 @@
+# © Copyright IBM Corporation 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# license must be set to "accept" in order to accept the terms of the IBM license
+license: "not accepted"
+
+# The URL to pull content from before initialising the Integration Server
+# Of the form https://releasename/path/to/dir?token
+contentServerURL:
+# Whether the application is running production workloads
+productionDeployment: true
+
+# The image type to run
+imageType: ace
+
+arch: amd64
+
+# Whether to start an image with a designer flows sidecars container enabled
+designerFlowsOperationMode: 'disabled'
+
+customContentServer: false
+
+image:
+  aceonly: cp.icr.io/ibm-ace-server-prod:11.0.0.6.1
+  acemqclient: cp.icr.io/ibm-ace-mqclient-server-prod:11.0.0.6.1
+  acemq: cp.icr.io/ibm-ace-mq-server-prod:11.0.0.6.1
+  configurator: cp.icr.io/ibm-ace-icp-configurator-prod:11.0.0.6.1
+  designerflows: cp.icr.io/ibm-ace-designer-flows-prod:11.0.0.6.1
+  connectors: cp.icr.io/ibm-ace-lcp-prod:11.0.0.6.1
+  pullPolicy: IfNotPresent
+  pullSecret:
+
+service:
+  type: ClusterIP
+  endpointType: http
+  webuiPort: 7600
+  serverlistenerPort: 7800
+  serverlistenerTLSPort: 7843
+  # Port used by the switch for agentC calls, normally 9010
+  switchAgentCPort:
+  # Port used by the switch for agentP calls, normally 9011
+  switchAgentPPort:
+  # Port used by the switch for admin calls, normally 9012
+  switchAdminPort:
+
+# integrationServer section specifies settings for the ACE Integration Server
+integrationServer:
+  # name allows you to specify the name to use for the Integration Server.  Defaults to the Helm release name.
+  name:
+  # keystoreKeyNames allows you to specify a comma separated list of key alias names to mount from the pre-installed secret
+  keystoreKeyNames:
+  # truststoreCertNames allows you to specify a comma separated list of certificate alias names to mount from the pre-installed secret
+  truststoreCertNames:
+  # defaultAppName allows you to specifiy a name for the default application for the deployment of independent resources
+  defaultAppName:
+  # The secret containing server configuration
+  configurationSecret:
+  # gid for the secondary group the containers should run in so that they can access NFS storage.
+  fsGroupGid:
+
+###########################################################
+# ibm-ace-server-icp4i-prod (ACE only) specific settings
+###########################################################
+aceonly:
+  # resource limits to apply to the ibm-ace-server-icp4i-prod containers
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      cpu: "200m"
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1024Mi
+  # The number of pod replicas to have - note that this is only used if the MQ queue manager is NOT enabled.
+  replicaCount: 3
+
+###########################################################
+# ibm-ace-mq-server-icp4i-prod (ACE w/ MQ) specific settings
+###########################################################
+acemq:
+  # resource limits to apply to the ibm-ace-mq-server-icp4i-prod containers
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      cpu: "500m"
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2048Mi
+  # pki is used to supply certificates, that are stored in Kubernetes secrets, for use with the webconsole and queue manager.
+  # Must be supplied as an array of yaml objects in the following format:
+  # - name: <label to give certificate> (only for pki.keys)
+  #   secret:
+  #     secretName: <name of Kubernetes secret>
+  #     items:
+  #       - <certificate files to import> (for example: tls.key, tls.crt, ca.crt)
+  pki:
+    keys: []
+    trust: []
+  # name allows you to specify the name to use for the queue manager.  Defaults to the Helm release name.
+  qmname:
+  # initVolumeAsRoot specifies whether or not storage provider requires root permissions to initialize
+  initVolumeAsRoot: true 
+
+###########################################################
+# Designer Flow specific settings
+###########################################################
+designerflows:
+  # resource limits to apply to the Designer Flow sidecar containers
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      cpu: "50m"
+      memory: 32Mi
+    limits:
+      cpu: "1"
+      memory: 256Mi
+
+
+###########################################################
+# Connectors specific settings
+###########################################################
+connectors:
+  # resource limits to apply to the Designer Flow sidecar containers
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      cpu: "150m"
+      memory: 200Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
+
+# persistence section specifies persistence settings which apply to the whole chart
+persistence:
+  # enabled is whether to use Persistent Volumes or not
+  enabled: true
+  # useDynamicProvisioning is whether or not to use Storage Classes to dynamically create Persistent Volumes
+  useDynamicProvisioning: true
+
+# dataPVC section specifies settings for the main Persistent Volume Claim, which is used for data in /var/mqm
+dataPVC:
+  # name sets part of the name for this Persistent Volume Claim
+  name: "data"
+  ## storageClassName is the name of the Storage Class to use, or an empty string for no Storage Class
+  storageClassName: ""
+  ## size is the minimum size of the Persistent Volume
+  size: 2Gi
+
+# log section specifies settings for MQ error logs and Integration Server console logs
+log:
+  format: basic
+  mqDebug: false
+
+# metrics section specifies settings for generating queue manager and Integration Server metrics
+metrics:
+  enabled: true
+
+# livenessProbe section specifies setting for the ACE liveness probe, which checks for the Integration Server admin endpoint and a healthy Queue Manager
+livenessProbe:
+  # initialDelaySeconds should be raised if your system cannot start the Queue Manager and Integration Server in 120 seconds
+  initialDelaySeconds: 360
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 1
+
+# readinessProbe section specifies setting for the ACE readiness probe, which checks for the Integration Server admin endpoint and a running Queue Manager
+readinessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 1
+
+# Grafana dashboard deployment
+dashboardEnabled: true
+
+# Resource Statistics connection for Grafana
+adminServerSecure: false
+
+# Operations dashboard configuration
+odTracingConfig:
+  enabled: false
+
+  odAgentImageRepository: cp.icr.io/icp4i-od-agent
+  odAgentImageTag: 1.0.1
+  odAgentLivenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  odAgentReadinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+  odCollectorImageRepository: cp.icr.io/icp4i-od-collector
+  odCollectorImageTag: 1.0.1
+  odCollectorLivenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  odCollectorReadinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+  # odTracingNamespace used to generate the odTracingRegistrationHostname and odTracingDataHostname as icp4i-od.<namespace>.svc and od-store-od.<namespace>.svc
+  odTracingNamespace:

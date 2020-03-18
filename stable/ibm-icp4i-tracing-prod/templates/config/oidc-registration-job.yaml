@@ -1,0 +1,66 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+############################################################################################
+# Runs a container that registers the IBM ICP4I Operations Dashboard UI as an OAuth endpoint
+#  to allow log-ins to the Operations Dashboard UI
+############################################################################################
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: icp4i-od-oauth-reg-job
+  labels:
+    app.kubernetes.io/component: icp4i-od-manager
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    "helm.sh/hook-weight": "3" 
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: icp4i-od-manager   
+    spec:      
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      restartPolicy: Never      
+      serviceAccountName: od-sec-{{ .Release.Namespace }}
+      containers:
+        - name: icp4i-od-oauth-reg
+          image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdOidcConfigurator }}"
+          imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          resources:
+{{ toYaml .Values.resources.jobs | indent 12 }}                            
+          env:
+            - name: "RELEASE_NAME"
+              value: {{ .Release.Name | quote }}
+            - name: "NAMESPACE"
+              value: {{ .Release.Namespace | quote }}
+            - name: "OIDC_CLIENT_NAME"
+              value: icp4i-od-client
+            - name: "OIDC_SECRET_NAME"
+              value: icp4i-od-oidc-client-secret
+            - name: "INTERNAL_SECRET_NAME"
+              value: icp4i-od-oidc-secret
+            - name: "INGRESS_PATH"
+              value: {{ .Values.ingress.odURI }}
+            - name: "ICP4I_OD_HOSTNAME"
+              value: {{ .Values.ingress.odUiHost }}
+              

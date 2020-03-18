@@ -1,0 +1,157 @@
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ template "uname" . }}
+  labels:
+    heritage: {{ .Release.Service | quote }}
+    release: {{ .Release.Name | quote }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: "{{ template "uname" . }}"
+    app.kubernetes.io/component: icp4i-od-manager
+spec:
+  serviceName: {{ template "uname" . }}-headless
+  selector:
+    matchLabels:
+      app: "{{ template "uname" . }}"     
+  replicas: {{ default .Values.replicas }}
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  updateStrategy:
+    type: {{ .Values.updateStrategy }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ template "uname" . }}
+    spec:
+{{ toYaml .Values.volumeClaimTemplate | indent 6 }}
+  template:
+    metadata:
+      name: "{{ template "uname" . }}"
+      annotations:
+      labels:
+        heritage: {{ .Release.Service | quote }}
+        release: {{ .Release.Name | quote }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        app: "{{ template "uname" . }}"
+        tuned.openshift.io/elasticsearch: "true"
+    spec:
+      securityContext:
+        fsGroup: {{ .Values.fsGroup }}
+      {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 6 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- if eq .Values.antiAffinity "hard" }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - "{{ template "uname" .}}"
+            topologyKey: {{ .Values.antiAffinityTopologyKey }}
+      {{- else if eq .Values.antiAffinity "soft" }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: {{ .Values.antiAffinityTopologyKey }}
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - "{{ template "uname" . }}"
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriod }}
+      {{- if .Values.secretMounts }}
+      volumes:
+        {{- range .Values.secretMounts }}
+        - name: {{ .name }}
+          secret:
+            secretName: {{ .name }}
+        {{- end }}
+      {{- end }}
+      imagePullSecrets:
+        - name: sa-{{ .Release.Namespace }}
+        - name: ibm-entitlement-key
+      {{- if .Values.global.images.pullSecret }}
+        - name: {{ .Values.global.images.pullSecret }}
+      {{- end }}
+      containers: 
+      - name: "{{ template "name" . }}"
+        image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdElasticsearch }}"
+        imagePullPolicy: "{{ .Values.global.images.pullPolicy }}"
+        livenessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 4
+          exec:
+            command:
+              - sh
+              - -c
+              - |
+                #!/usr/bin/env bash -e
+                curl --insecure --fail --silent --output /dev/null --cert ${OD_ES_ADMIN_CERT} --key ${OD_ES_ADMIN_KEY} https://localhost:9200
+        readinessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 1
+          exec:
+            command:
+              - sh
+              - -c
+              - |
+                #!/usr/bin/env bash -e
+                curl --insecure --fail --silent --output /dev/null --cert ${OD_ES_ADMIN_CERT} --key ${OD_ES_ADMIN_KEY} https://localhost:9200
+        ports:
+        - name: http
+          containerPort: {{ .Values.httpPort }}
+        - name: transport
+          containerPort: {{ .Values.transportPort }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        env:
+          - name: node.name
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: discovery.zen.ping.unicast.hosts
+            value: "{{ .Values.masterService }}-headless"
+          - name: cluster.name
+            value: "{{ .Values.clusterName }}"
+          - name: discovery.zen.minimum_master_nodes 
+            value: "{{ .Values.minimumMasterNodes }}"
+          - name: network.host
+            value: "{{ .Values.networkHost }}"
+          - name: ES_JAVA_OPTS
+            value: "-Xms{{ .Values.heapSize }} -Xmx{{ .Values.heapSize }}"   
+          - name: node.master
+            value: "{{ .Values.roles.master }}"
+          - name: node.data
+            value: "{{ .Values.roles.data }}"
+          - name: node.ingest
+            value: "{{ .Values.roles.ingest }}"
+          - name: opendistro_security.authcz.admin_dn
+            value: "CN=icp4i-od.es-admin.{{ .Release.Namespace }}"
+{{- if .Values.extraEnvs }}
+{{ toYaml .Values.extraEnvs | indent 10 }}
+{{- end }}
+        volumeMounts:
+          - name: "{{ template "uname" . }}"
+            mountPath: /app/elasticsearch/data
+          {{- range .Values.secretMounts }}
+          - name: {{ .name }}
+            mountPath: {{ .path }}
+            {{- if .subPath }}
+            subPath: {{ .subPath }}
+            {{- end }}
+          {{- end }}

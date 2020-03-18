@@ -1,0 +1,57 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2018 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+###############################################################################
+
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "icpti-test") }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-dashboard-test"
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - 'amd64'
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 405
+  containers:
+  - name: "{{ .Release.Name }}-test"
+    image: "{{  regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.configurator "${1}cp/icp4i/"  }}:{{ .Values.image.tag }}"
+    env:
+      - name: UI
+        value: {{ include "sch.names.fullName" (list .) }}
+      - name: TIMEOUT
+        value: "10"
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 405
+      capabilities:
+        drop:
+        - ALL
+    command: ["sh"]
+    args: ["-xc", "nc -v -z -w $TIMEOUT $UI 5055"]
+    resources:
+{{ toYaml .Values.resources.jobs | indent 6 }}
+  restartPolicy: Never

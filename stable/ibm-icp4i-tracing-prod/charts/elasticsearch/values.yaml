@@ -1,0 +1,174 @@
+
+clusterName: "od-store"
+nodeGroup: "od"
+
+# The service that non master groups will try to connect to when joining the cluster
+# This should be set to clusterName + "-" + nodeGroup for your master group
+masterService: "od-store"
+
+# Elasticsearch roles that will be applied to this nodeGroup
+# These will be set as environment variables. E.g. node.master=true
+roles:
+  master: "true"
+  ingest: "true"
+  data: "true"
+
+replicas: 1
+minimumMasterNodes: 1
+
+# Extra environment variables to append to this nodeGroup
+# This will be appended to the current 'env:' key. You can use any of the kubernetes env
+# syntax here
+extraEnvs:
+    - name: 'action.auto_create_index'
+      value: 'false'
+    - name: 'node.attr.msc_node_id'
+      value: 'N001'
+    - name: 'opendistro_security.ssl.transport.enabled'
+      value: 'true'
+    - name: 'opendistro_security.ssl.transport.keystore_type'
+      value: 'PKCS12'
+    - name: 'opendistro_security.ssl.transport.keystore_filepath'
+      value: '/app/elasticsearch/config/certs/odkeystore/icp4i_od_es_keystore.p12'
+    - name: 'opendistro_security.ssl.transport.keystore_password'
+      valueFrom:
+        secretKeyRef:
+          name: icp4i-od-es-keystore-pass
+          key: password 
+    - name: 'opendistro_security.ssl.transport.truststore_type'
+      value: 'PKCS12'
+    - name: 'opendistro_security.ssl.transport.truststore_filepath'
+      value: '/app/elasticsearch/config/certs/odkeystore/icp4i_od_es_keystore.p12'
+    - name: 'opendistro_security.ssl.transport.truststore_password'
+      valueFrom:
+        secretKeyRef:
+          name: icp4i-od-es-keystore-pass
+          key: password 
+    - name: 'opendistro_security.ssl.http.enabled'
+      value: 'true'
+    - name: 'opendistro_security.ssl.http.keystore_type'
+      value: 'PKCS12'
+    - name: 'opendistro_security.ssl.http.keystore_filepath'
+      value: '/app/elasticsearch/config/certs/odkeystore/icp4i_od_es_keystore.p12'
+    - name: 'opendistro_security.ssl.http.keystore_password'
+      valueFrom:
+        secretKeyRef:
+          name: icp4i-od-es-keystore-pass
+          key: password 
+    - name: 'opendistro_security.ssl.http.truststore_type'
+      value: 'PKCS12'
+    - name: 'opendistro_security.ssl.http.truststore_filepath'
+      value: '/app/elasticsearch/config/certs/odkeystore/icp4i_od_es_keystore.p12'
+    - name: 'opendistro_security.ssl.http.truststore_password'
+      valueFrom:
+        secretKeyRef:
+          name: icp4i-od-es-keystore-pass
+          key: password 
+    - name: 'opendistro_security.allow_default_init_securityindex'
+      value: 'true'
+    - name: 'opendistro_security.restapi.roles_enabled'
+      value: 'all_access_role,security_rest_api_access_role'
+    - name: 'opendistro_security.audit.type'
+      value: 'debug'
+    - name: 'OD_ES_ADMIN_CERT'
+      value: '/app/elasticsearch/config/certs/odadmincert/certificate'
+    - name: 'OD_ES_ADMIN_KEY'
+      value: '/app/elasticsearch/config/certs/odadminkey/key'
+    - name: 'OD_CA'
+      value: '/app/elasticsearch/config/certs/odca/certificate'
+
+secretMounts:
+    - name: icp4i-od-ca-certificate
+      secretKeyRef:
+          name: icp4i-od-ca-certificate
+          key: file
+      path: /app/elasticsearch/config/certs/odca
+    - name: icp4i-od-es-keystore
+      secretKeyRef:
+          name: icp4i-od-es-keystore
+          key: file
+      path: /app/elasticsearch/config/certs/odkeystore
+    - name: icp4i-od-es-admin-certificate
+      secretKeyRef:
+          name: icp4i-od-es-admin-certificate
+          key: file
+      path: /app/elasticsearch/config/certs/odadmincert
+    - name: icp4i-od-es-admin-key
+      secretKeyRef:
+          name: icp4i-od-es-admin-key
+          key: file
+      path: /app/elasticsearch/config/certs/odadminkey
+
+image: 
+imageTag: 
+imagePullPolicy: "IfNotPresent"
+
+#esJavaOpts: "-Xmx8g -Xms8g"
+heapSize:
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "9Gi"
+  limits:
+    cpu: "4000m"
+    memory: "16Gi"
+
+networkHost: "0.0.0.0"
+
+volumeClaimTemplate:
+  accessModes: [ "ReadWriteOnce" ]
+  storageClassName: ""
+  resources:
+    requests:
+      storage: 15Gi
+
+# By default this will make sure two pods don't end up on the same node
+# Changing this to a region would allow you to spread pods across regions
+antiAffinityTopologyKey: "kubernetes.io/hostname" 
+
+# Hard means that by default pods will only be scheduled if there are enough nodes for them
+# and that they will never end up on the same node. Setting this to soft will do this "best effort"
+antiAffinity: "soft"
+
+# The default is to deploy all pods serially. By setting this to parallel all pods are started at
+# the same time when bootstrapping the cluster
+podManagementPolicy: "Parallel"
+
+protocol: http
+httpPort: 9200
+transportPort: 9300
+
+updateStrategy: RollingUpdate
+
+# This is the max unavailable setting for the pod disruption budget
+# The default value of 1 will make sure that kubernetes won't allow more than 1
+# of your pods to be unavailable during maintenance
+maxUnavailable: 1
+
+ # GroupID for the elasticsearch user. The official elastic docker images always have the id of 1000
+fsGroup: 1000
+
+# How long to wait for elasticsearch to stop gracefully
+terminationGracePeriod: 120
+
+sysctlVmMaxMapCount: 262144
+
+imagePullSecrets: []
+nodeSelector: {}
+tolerations: []
+
+# Enabling this will publically expose your Elasticsearch instance.
+# Only enable this if you have security enabled on your cluster
+ingress:
+  enabled: false
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  path: /
+  hosts:
+    - chart-example.local
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local

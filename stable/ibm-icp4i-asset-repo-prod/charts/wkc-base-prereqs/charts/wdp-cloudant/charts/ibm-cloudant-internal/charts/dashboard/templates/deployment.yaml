@@ -1,0 +1,55 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{ if .Values.global.enableDashboard }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "dashboard.name" . }}
+  labels:
+{{ include "dashboard.labels" . | indent 4 }}
+spec:
+  replicas: {{ template "dashboard.replicas" $ }}
+  selector:
+    matchLabels:
+{{ include "dashboard.selector.labels" . | indent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+      labels:
+{{ include "dashboard.selector.labels" . | indent 8 }}
+    spec:
+      containers:
+      - name: {{ template "dashboard.name" . }}
+        image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.cloudant.dashboard }}
+        imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
+        ports:
+        - containerPort: {{ .Values.global.ports.dashboardnginx }}
+          name: dashboard-port
+        readinessProbe:
+          httpGet:
+            path: /dashboard.html
+            port: {{ .Values.global.ports.dashboardnginx }}
+          initialDelaySeconds: 20
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /dashboard.html
+            port: {{ .Values.global.ports.dashboardnginx }}
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+{{- if .Values.global.images.pullSecret }}
+      imagePullSecrets:
+         - name: {{ .Values.global.images.pullSecret }}
+{{- end }}
+{{ end }}

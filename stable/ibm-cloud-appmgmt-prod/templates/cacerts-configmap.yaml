@@ -1,0 +1,279 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018, 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if (include "icam.createTLSCerts" .) -}}
+{{- include "sch.config.init" (list . "ibm-cloud-appmgmt-prod.sch.chart.config.values") }}
+{{- $compName := "cacerts" }}
+kind: ConfigMap
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,pre-rollback
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+apiVersion: v1
+data:
+  makecacerts.sh: |-
+    #!/bin/bash
+    ###############################################################################
+    # Licensed Materials - Property of IBM.
+    # Copyright IBM Corporation 2018, 2019. All Rights Reserved.
+    # U.S. Government Users Restricted Rights - Use, duplication or disclosure
+    # restricted by GSA ADP Schedule Contract with IBM Corp.
+    #
+    # Contributors:
+    #  IBM Corporation - initial API and implementation
+    ###############################################################################
+    PATH=/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/bin; export PATH
+
+    set -e
+    #set -x
+
+    trap '/bin/rm -f ext.cfg' EXIT
+
+
+    if [ -z "$SHA" ]; then
+      if [ -z "$RSA" ]; then
+        SHA=384
+        EC=secp"$SHA"r1
+      else
+        SHA=256
+      fi
+    fi
+
+    USAGE()
+    {
+      echo ''
+      echo "$0"
+      echo ''
+      echo 'This comand creates a Kubernetes secret containing a chain of certificates used to identify both the IBM Cloud App Management server and agents.'
+      echo ''
+      echo 'Find more information at: http://ibm.biz/app-mgmt-kc'
+      echo ''
+      echo "Usage: $0 <hostname> [release] [namespace]"
+      echo ''
+      echo '      hostname: The host name of the IBM Cloud App Management server.'
+      echo '       release: The helm release name used to install the IBM Cloud App Management server. (default: ibmcloudappmgmt)'
+      echo '     namespace: The kubernetes namespace for the IBM Cloud App Management server. (default: default)'
+      echo ' server_secret: The kubernetes secret for the IBM Cloud App Management server (default: <release>-ingress-server).'
+      echo ' client_secret: The kubernetes secret for the IBM Cloud App Management agents and data collectors (default: <release>-ingress-client).'
+      echo '       archive: The kubernetes secret for archiving all generated IBM Cloud App Management certificates (default: <release>-ingress-archive).'
+      echo ''
+    }
+
+    GENERATE_SECRET() {
+        echo `cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1`
+    }
+
+    cd /tmp
+    rm -rf ibmsecrets
+    mkdir ibmsecrets
+    cd ibmsecrets
+    export RANDFILE=/tmp/ibmsecrets/.rnd
+    touch $RANDFILE
+
+    DN='/C=US/ST=New York/L=Armonk/O=International Business Machines Corporation/OU=IBM Cloud App Management/CN='
+    days=825
+    pfx=integration
+
+
+    #Root CA
+    subject="$pfx"ca
+    if [ -z "$RSA" ]; then
+      openssl ecparam -name $EC -genkey -noout -out "$subject".key
+    else
+      openssl genrsa $RSA >"$subject".key
+    fi
+    cat > ext.cfg <<EOF
+    subjectKeyIdentifier=hash
+    authorityKeyIdentifier=keyid:always, issuer
+    basicConstraints = critical, CA:true
+    keyUsage = digitalSignature, keyCertSign, cRLSign
+    EOF
+
+    openssl req -new -x509 -sha$SHA -days $days -key "$subject".key -out "$subject".crt -subj "$DN""Root CA"
+
+
+    #Signer CA
+    issuer=$subject
+    subject="$pfx"signer
+
+    if [ -z "$RSA" ]; then
+      openssl ecparam -name $EC -genkey -noout -out "$subject".key
+    else
+      openssl genrsa $RSA >"$subject".key
+    fi
+
+    cat > ext.cfg <<EOF
+    subjectKeyIdentifier=hash
+    authorityKeyIdentifier=keyid:always, issuer
+    basicConstraints = critical, CA:true, pathlen:0
+    keyUsage = digitalSignature, keyCertSign, cRLSign
+    EOF
+
+    openssl req -sha$SHA -new -key "$subject".key -subj "$DN""Signer CA" -out "$subject".csr
+    sn=0x`head -c 8 /dev/urandom | od -A n -v -t x1 | tr -d '\015\012\040'`
+    
+    openssl x509 -req -days $days -sha$SHA -in "$subject".csr -CA "$issuer".crt -CAkey "$issuer".key -set_serial $sn -extfile ext.cfg -out "$subject".crt
+
+
+    #Server certificate
+    issuer=$subject
+    subject="$pfx"server
+
+    if [ -z "$RSA" ]; then
+      openssl ecparam -name $EC -genkey -noout -out "$subject".key
+    else
+      openssl genrsa $RSA >"$subject".key
+    fi
+
+    cat > ext.cfg <<EOF
+    subjectKeyIdentifier=hash
+    authorityKeyIdentifier=keyid:always, issuer
+    basicConstraints = critical, CA:false
+    keyUsage = digitalSignature, keyEncipherment
+    extendedKeyUsage=serverAuth,clientAuth
+    subjectAltName = DNS:$CN
+    EOF
+
+    openssl req -sha$SHA -new -key "$subject".key -subj "$DN""$CN" -out "$subject".csr
+    sn=0x`head -c 8 /dev/urandom | od -A n -v -t x1 | tr -d '\015\012\040'`
+
+    openssl x509 -req -days $days -sha$SHA -in "$subject".csr -CA "$issuer".crt -CAkey "$issuer".key -set_serial $sn -extfile ext.cfg -out "$subject".crt
+
+
+    #Client Certificate
+    subject="$pfx"client
+
+    if [ -z "$RSA" ]; then
+      openssl ecparam -name $EC -genkey -noout -out "$subject".key
+    else
+      openssl genrsa $RSA >"$subject".key
+    fi
+
+    cat > ext.cfg <<EOF
+    subjectKeyIdentifier=hash
+    authorityKeyIdentifier=keyid:always, issuer
+    basicConstraints = critical, CA:false
+    keyUsage = digitalSignature, keyEncipherment
+    extendedKeyUsage=clientAuth
+    EOF
+
+    openssl req -sha$SHA -new -key "$subject".key -subj "$DN""Integration Client" -out "$subject".csr
+    sn=0x`head -c 8 /dev/urandom | od -A n -v -t x1 | tr -d '\015\012\040'`
+
+    openssl x509 -req -days $days -sha$SHA -in "$subject".csr -CA "$issuer".crt -CAkey "$issuer".key -set_serial $sn -extfile ext.cfg -out "$subject".crt
+
+    #Create PEMs
+    openssl x509 -in "$pfx"signer.crt -subject -issuer >  "$pfx"cas.pem
+    openssl x509 -in "$pfx"ca.crt     -subject -issuer >> "$pfx"cas.pem
+
+    echo "$(GENERATE_SECRET)" > "$pfx"client.password
+
+    ls -l /tmp/ibmsecrets
+    cascrt=`cat integrationcas.pem | base64 -w 0`
+    cacrt=`cat integrationca.crt | base64 -w 0`
+    cakey=`cat integrationca.key | base64 -w 0`
+    signercrt=`cat integrationsigner.crt | base64 -w 0`
+    signerkey=`cat integrationsigner.key | base64 -w 0`
+    servercrt=`cat integrationserver.crt | base64 -w 0`
+    serverkey=`cat integrationserver.key | base64 -w 0`
+    clientcrt=`cat integrationclient.crt | base64 -w 0`
+    clientkey=`cat integrationclient.key | base64 -w 0`
+    clientpassword=`cat integrationclient.password | base64 -w 0`
+    cat > ingress-tls.json <<EOF
+    {
+        "apiVersion": "v1",
+        "data": {
+            "tls.crt": "${servercrt}",
+            "tls.key": "${serverkey}",
+            "ca.crt": "${cascrt}"
+        },
+        "kind": "Secret",
+        "metadata": {
+            "labels": {
+                "release": "${release}"
+            },
+            "name": "${server_secret}",
+            "namespace": "${kube_ns}"
+        },
+        "type": "Opaque"
+    }
+    EOF
+
+    cat > ingress-client.json <<EOF
+    {
+        "apiVersion": "v1",
+        "data": {
+            "ca.crt": "${cascrt}",
+            "client.crt": "${clientcrt}",
+            "client.key": "${clientkey}",
+            "client.password": "${clientpassword}"
+        },
+        "kind": "Secret",
+        "metadata": {
+            "labels": {
+                "release": "${release}"
+            },
+            "name": "${client_secret}",
+            "namespace": "${kube_ns}"
+        },
+        "type": "Opaque"
+    }
+    EOF
+
+
+    cat > ingress-artifacts.json <<EOF
+    {
+        "apiVersion": "v1",
+        "data": {
+            "ca.crt": "${cacrt}",
+            "ca.key": "${cakey}",
+            "client.crt": "${clientcrt}",
+            "client.key": "${clientkey}",
+            "client.password": "${clientpassword}",
+            "server.crt": "${servercrt}",
+            "server.key": "${serverkey}",
+            "signer.crt": "${signercrt}",
+            "signer.key": "${signerkey}"
+        },
+        "kind": "Secret",
+        "metadata": {
+            "labels": {
+                "release": "${release}"
+            },
+            "name": "${archive}",
+            "namespace": "${kube_ns}"
+        },
+        "type": "Opaque"
+    }
+    EOF
+
+    token=`cat /var/run/secrets/kubernetes.io/serviceaccount/token`
+    cacrtPath="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    secretsDir="/tmp/ibmsecrets/"
+    for file in ${secretsDir}*.json
+    do
+       fileNamePreRelease=`echo $file | sed 's,'"${secretsDir}"',,' | sed 's,.json,,'`
+       fileName="${release}-${fileNamePreRelease}"
+       httpCode=`curl -o /dev/null -w "%{http_code}" --cacert "$cacrtPath" -X GET -H "Authorization: Bearer $token" \
+            https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_PORT_443_TCP_PORT/api/v1/namespaces/${kube_ns}/secrets/${fileName}`
+       if [ "$httpCode" -ne 200 ]; then
+           echo "$fileName secret does not exist, creating it"
+           curl --cacert "$cacrtPath" -X POST -d "@$file" -H "Authorization: Bearer $token" \
+               -H 'Accept: application/json' -H 'Content-Type: application/json' \
+               https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_PORT_443_TCP_PORT/api/v1/namespaces/${kube_ns}/secrets
+       else
+           echo "$fileName secret already exists"
+       fi
+    done
+
+{{- end -}}

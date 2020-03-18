@@ -1,0 +1,50 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "") }}
+{{- $name := include "sch.names.fullCompName" (list . "tuned") }}
+{{- if eq .Values.nodeTuning.mechanism "tuning-operator" }}
+apiVersion: tuned.openshift.io/v1
+kind: Tuned
+metadata:
+  name: {{ .Release.Name }}-icp4i-max-map-count
+  namespace: openshift-cluster-node-tuning-operator
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  profile:
+    - data: |
+        [main]
+        include={{ .Values.nodeTuning.tuned.masterInfraProfile.inheritProfile }}
+        [sysctl]
+        vm.max_map_count=1048576
+      name: icp4i-max-map-count-master-infra
+    - data: |
+        [main]
+        include={{ .Values.nodeTuning.tuned.computeProfile.inheritProfile }}
+        [sysctl]
+        vm.max_map_count=1048576
+      name: icp4i-max-map-count-compute
+  recommend:
+    - match:
+        - label: icp4i.ibm.com/high-max-map-count
+          match:
+            - label: node-role.kubernetes.io/master
+            - label: node-role.kubernetes.io/infra
+          type: pod
+          value: 'true'
+      priority: {{ .Values.nodeTuning.tuned.masterInfraProfile.priority }}
+      profile: icp4i-max-map-count-master-infra
+    - match:
+        - label: icp4i.ibm.com/high-max-map-count
+          type: pod
+          value: 'true'
+      priority: {{ .Values.nodeTuning.tuned.computeProfile.priority }}
+      profile: icp4i-max-map-count-compute
+{{- end }}

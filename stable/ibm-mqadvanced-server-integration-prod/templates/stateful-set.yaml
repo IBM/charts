@@ -1,0 +1,503 @@
+# © Copyright IBM Corporation 2017, 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- include "sch.config.init" (list . "ibm-mq.sch.chart.config.values") }}
+{{ $validate := include "ibm-mq.chart.config.validate-multi-instance-persistence" . | required "Persistence must be enabled for multi-instance queue managers" }}
+{{ $dataPVCName := .Values.dataPVC.name }}
+{{ $logPVCName := .Values.logPVC.name }}
+{{ $qmPVCName := .Values.qmPVC.name }}
+{{ $statefulSetName := include "sch.names.statefulSetName" (list .) }}
+{{ $dataVolumeClaimName := include "sch.names.volumeClaimTemplateName" (list . $dataPVCName $statefulSetName) }}
+{{ $logVolumeClaimName := include "sch.names.persistentVolumeClaimName" (list . $logPVCName) }}
+{{ $qmVolumeClaimName := include "sch.names.persistentVolumeClaimName" (list . $qmPVCName) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $statefulSetName }}
+  annotations:
+    "icp4i.ibm.com/product": mq
+    "icp4i.ibm.com/release": {{ .Release.Name }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "server") | indent 4 }}
+{{- include "ibm-mq.sch.chart.config.metadata.labels" . | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . "server") | indent 6 }}
+  serviceName: qm
+  {{- if .Values.queueManager.multiInstance }}
+  replicas: 2
+  {{- else }}
+  replicas: 1
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.productionDeployment }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
+        {{- else }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
+        {{- end }}
+      labels:
+        statefulSetName: {{ $statefulSetName | quote }}
+{{ include "sch.metadata.labels.standard" (list . "server") | indent 8 }}
+{{- include "ibm-mq.sch.chart.config.metadata.labels" . | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+              - key: beta.kubernetes.io/os
+                operator: In
+                values:
+                - "linux"
+        {{- if .Values.queueManager.multiInstance }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: statefulSetName
+                operator: In
+                values:
+                - "{{ $statefulSetName }}"
+            topologyKey: "kubernetes.io/hostname"
+        {{- end }}
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      serviceAccountName: {{ include "sch.names.fullName" (list .) }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        fsGroup: {{ .Values.security.context.fsGroup }}
+        supplementalGroups:
+        {{- range $group := .Values.security.context.supplementalGroups }}
+          - {{ $group -}}
+        {{ end }}
+      volumes:
+      - name: oidc-configmap
+        configMap:
+          name: {{ .Release.Name }}-oidc-configmap
+          items:
+          - key: OIDC_CERTIFICATE
+            path: OIDC_CERTIFICATE.crt
+      {{- if and (not .Values.tls.generate) .Values.tls.secret }}
+      - name: tls-secret
+        secret:
+          secretName: {{ .Values.tls.secret }}
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+      {{- end }}
+      {{- range $index, $source := .Values.pki.trust }}
+      {{- if $source.secret }}
+      - name: trust{{- $index }}
+        secret:
+          secretName: {{ $source.secret.secretName }}
+          defaultMode: 0440
+          items:
+          {{- range $source.secret.items }}
+            - key: {{ . }}
+              path: {{ . }}
+          {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- $optional := .Values.tls.generate }}
+      {{- range $index, $source := .Values.pki.keys }}
+      {{- if $source.secret }}
+      - name: {{ $source.name }}
+        secret:
+          secretName: {{ $source.secret.secretName }}
+          defaultMode: 0440
+          items:
+          {{- range $source.secret.items }}
+            - key: {{ . }}
+              path: {{ . }}
+          {{- end }}
+          {{- if $optional }}
+          optional: true
+          {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- if and .Values.persistence.enabled (or .Values.logPVC.enabled .Values.qmPVC.enabled .Values.queueManager.multiInstance) }}
+      {{- if or .Values.logPVC.enabled .Values.queueManager.multiInstance }}
+      - name: {{ $logVolumeClaimName }}
+        persistentVolumeClaim:
+          claimName: {{ $logVolumeClaimName }}
+      {{- end }}
+      {{- if or .Values.qmPVC.enabled .Values.queueManager.multiInstance }}
+      - name: {{ $qmVolumeClaimName }}
+        persistentVolumeClaim:
+          claimName: {{ $qmVolumeClaimName }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.odTracingConfig.enabled }}
+      - name: icp4i-od-ca-certificate
+        secret:
+          secretName: icp4i-od-store-cred
+          optional: true
+      {{ end }}
+      containers:
+        {{- if .Values.odTracingConfig.enabled }}
+          # sidecar - od agent
+        - name: ibm-mq-od-tracing-agent
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.odTracingConfig.odAgentImageRepository "${1}cp/icp4i/mq/" }}:{{ .Values.odTracingConfig.odAgentImageTag }}-amd64"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: icp4i-od-ca-certificate
+              mountPath: "/usr/share/jaeger/ca/certs"
+          command: ["/go/bin/agent-linux"]
+          args:
+            - "--jaeger.tags=sourceNamespace={{ .Release.Namespace }}"
+          ports:
+            - containerPort: 5775
+              protocol: UDP
+            - containerPort: 6831
+              protocol: UDP
+            - containerPort: 6832
+              protocol: UDP
+            - containerPort: 5778
+              protocol: TCP
+          env:
+            - name: COLLECTOR_HOST_PORT
+              value : {{ template "odTracing.collector.host-port" . }}
+            - name: REPORTER_TYPE
+              value : "grpc"
+            - name: REPORTER_GRPC_HOST_PORT
+              value : {{ template "odTracing.collector.grpc-host-port" . }}
+            - name: REPORTER_GRPC_TLS
+              value : "false"
+            - name: OD_SOURCE_NAMESPACE
+              value : {{ .Release.Namespace }}
+            - name: ES_TLS_CA
+              value: '/usr/share/jaeger/ca/certs/icp4i-od-cacert.pem'
+          securityContext:
+            seLinuxOptions:
+              type: spc_t
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 888
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 256m
+              memory: 128Mi
+          # Set liveness probe to determine agent is running
+          readinessProbe:
+            httpGet:
+              path: /?service=health
+              port: 5778
+            initialDelaySeconds: {{ .Values.odTracingConfig.odAgentReadinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odAgentReadinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odAgentReadinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odAgentReadinessProbe.failureThreshold }}
+          livenessProbe:
+            tcpSocket:
+              port: 5778
+            initialDelaySeconds: {{ .Values.odTracingConfig.odAgentLivenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odAgentLivenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odAgentLivenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odAgentLivenessProbe.failureThreshold }}
+          # sidecar - od collector
+        - name: ibm-mq-od-tracing-collector
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.odTracingConfig.odCollectorImageRepository "${1}cp/icp4i/mq/" }}:{{ .Values.odTracingConfig.odCollectorImageTag }}-amd64"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: icp4i-od-ca-certificate
+              mountPath: "/usr/share/jaeger/ca/certs"
+          ports:
+            - containerPort: 14250
+              name: grpc
+              protocol: TCP
+            - containerPort: 14267
+              name: tchannel
+              protocol: TCP
+            - containerPort: 14268
+              name: http
+              protocol: TCP
+            - containerPort: 14269
+              name: healthcheck
+              protocol: TCP
+            - containerPort: 9411
+              name: zipkin
+              protocol: TCP
+            - containerPort: 14987
+              name: liveliness
+              protocol: TCP
+          env:
+            - name: SPAN_STORAGE_TYPE
+              value: elasticsearch
+            - name: ES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "odTracing.collector.elasticsearch-secret-name" . }}
+                  key: password
+            - name: ES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "odTracing.collector.elasticsearch-secret-name" . }}
+                  key: username
+            - name: ES_SERVER_URLS
+              value: {{ template "odTracing.collector.elasticsearch-url" . }}
+            - name: ES_TLS_CA
+              value: '/usr/share/jaeger/ca/certs/icp4i-od-cacert.pem'
+            - name: COLLECTOR_PORT
+              value: "14267"
+            - name: COLLECTOR_HTTP_PORT
+              value: "14268"
+            - name: COLLECTOR_ZIPKIN_HTTP_PORT
+              value: "9411"
+            - name: COLLECTOR_GRPC_TLS
+              value: "false"
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 256m
+              memory: 128Mi
+          securityContext:
+            seLinuxOptions:
+              type: spc_t
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 888
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          # Set liveness probe to determine collector is running
+          readinessProbe:
+            httpGet:
+              port: 14269
+            initialDelaySeconds: {{ .Values.odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odCollectorReadinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odCollectorReadinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odCollectorReadinessProbe.failureThreshold }}
+          livenessProbe:
+            tcpSocket:
+              port: 14987
+            initialDelaySeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.odTracingConfig.odCollectorLivenessProbe.failureThreshold }}
+        {{- end }}
+        - name: qmgr
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/icp4i/mq/" }}:{{ .Values.image.tag }}-amd64"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          terminationMessagePath: "/run/termination-log"
+          ports:
+          - containerPort: 1414
+          - containerPort: 9443
+          - containerPort: 9157
+          envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-oidc-configmap
+          env:
+          - name: LICENSE
+            value: {{ .Values.license }}
+          - name: MQ_QMGR_NAME
+            value: {{ .Values.queueManager.name | default .Release.Name | replace "-" "" }}
+          - name: MQ_MULTI_INSTANCE
+            value: "{{ .Values.queueManager.multiInstance | default false }}"
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "basic" }}
+          - name: MQ_ENABLE_METRICS
+            value: "{{ .Values.metrics.enabled | default false }}"
+          - name: DEBUG
+            value: "{{ .Values.log.debug | default false }}"
+          - name: MQ_EPHEMERAL_PREFIX
+            value: "/run/mqm"
+          - name: MQ_ENABLE_EMBEDDED_WEB_SERVER
+            value: "true"
+          - name: MQ_ICP4I_NAMESPACE
+            value: {{ .Values.icp4i.namespace | quote }}
+          - name: MQ_BETA_ENABLE_SSO
+            value: "true"
+          - name: MQ_WEB_ADMIN_USERS
+            value: {{ .Values.sso.webAdminUsers | quote }}
+          - name: MQ_OIDC_UNIQUE_USER_IDENTIFIER
+            value: {{ .Values.sso.uniqueUserIdentifier | quote }}
+          - name: MQ_ENABLE_OPEN_TRACING
+            value: "{{ .Values.odTracingConfig.enabled | default false }}"
+          {{- if .Values.tls.generate }}
+          - name: MQ_GENERATE_CERTIFICATE_HOSTNAME
+            value: {{ .Values.tls.hostname | quote }}
+          {{- end }}
+          - name: MQ_OIDC_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-oidc-reg-secret
+                key: CLIENT_ID
+          - name: MQ_OIDC_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-oidc-reg-secret
+                key: CLIENT_SECRET
+          volumeMounts:
+          - mountPath: "/etc/mqm/pki/trust/default"
+            name: oidc-configmap
+          {{- if and (not .Values.tls.generate) .Values.tls.secret }}
+          - mountPath: "/etc/mqm/pki/keys/default"
+            name: tls-secret
+          {{- end }}
+          {{- range $index, $source := .Values.pki.trust }}
+          - name: trust{{- $index }}
+            mountPath: "/etc/mqm/pki/trust/{{- $index }}"
+            readOnly: true
+          {{- end }}
+          {{- range $index, $source := .Values.pki.keys }}
+          - name: {{ $source.name }}
+            mountPath: "/etc/mqm/pki/keys/{{- $source.name }}"
+            readOnly: true
+          {{- end }}
+          {{- if .Values.persistence.enabled }}
+          - mountPath: "/mnt/mqm"
+            name: {{ $dataVolumeClaimName }}
+          {{- if or .Values.logPVC.enabled .Values.queueManager.multiInstance }}
+          - mountPath: "/mnt/mqm-log"
+            name: {{ $logVolumeClaimName }}
+          {{- end }}
+          {{- if or .Values.qmPVC.enabled .Values.queueManager.multiInstance }}
+          - mountPath: "/mnt/mqm-data"
+            name: {{ $qmVolumeClaimName }}
+          {{- end }}
+          {{- end }}
+          securityContext:
+            seLinuxOptions:
+              type: spc_t
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 888
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          # Set liveness probe to determine if the queue manager is running
+          livenessProbe:
+            exec:
+              command:
+              - chkmqhealthy
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          # Set readiness probe to determine if the MQ listener is running
+          readinessProbe:
+            exec:
+              command:
+              - chkmqready
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+            limits:
+{{ toYaml .Values.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.resources.requests | indent 14 }}
+      {{- if .Values.security.initVolumeAsRoot }}
+      initContainers:
+        - name: qmgr-init
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/icp4i/mq/" }}:{{ .Values.image.tag }}-amd64"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          terminationMessagePath: "/run/termination-log"
+          command: ["runmqserver"]
+          args: ["-i"]
+          env:
+          - name: LICENSE
+            value: {{ .Values.license }}
+          - name: MQ_QMGR_NAME
+            value: {{ .Values.queueManager.name | default .Release.Name | replace "-" "" }}
+          - name: MQ_MULTI_INSTANCE
+            value: "{{ .Values.queueManager.multiInstance | default false }}"
+          - name: LOG_FORMAT
+            value: {{ .Values.log.format | default "basic" }}
+          - name: DEBUG
+            value: "{{ .Values.log.debug | default false }}"
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+          - mountPath: "/mnt/mqm"
+            name: {{ $dataVolumeClaimName }}
+          {{- if or .Values.logPVC.enabled .Values.queueManager.multiInstance }}
+          - mountPath: "/mnt/mqm-log"
+            name: {{ $logVolumeClaimName }}
+          {{- end }}
+          {{- if or .Values.qmPVC.enabled .Values.queueManager.multiInstance }}
+          - mountPath: "/mnt/mqm-data"
+            name: {{ $qmVolumeClaimName }}
+          {{- end }}
+          {{- end }}
+          securityContext:
+            seLinuxOptions:
+              type: spc_t
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            privileged: false
+            capabilities:
+              add:
+                - CHOWN
+                - FOWNER
+                - DAC_OVERRIDE
+              drop:
+                - ALL
+          resources:
+            limits:
+{{ toYaml .Values.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.resources.requests | indent 14 }}
+      {{- end }}
+  volumeClaimTemplates:
+  {{- if .Values.persistence.enabled }}
+  - metadata:
+      name: {{ $dataVolumeClaimName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . "server") | indent 8 }}
+{{- include "ibm-mq.sch.chart.config.metadata.labels" . | indent 8 }}
+    spec:
+      {{- if .Values.persistence.useDynamicProvisioning }}
+      ## If present, use the storageClassName from the values.yaml, else use the
+      ## default storageClass setup by Kubernetes Administrator
+      ##
+      ## Setting storageClassName to nil means use the default storage class
+      storageClassName: {{ default nil .Values.dataPVC.storageClassName | quote }}
+      {{- else }}
+      ## Disable dynamic provisioning
+      storageClassName: ""
+      {{- end }}
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.dataPVC.size | quote }}
+  {{- end }}

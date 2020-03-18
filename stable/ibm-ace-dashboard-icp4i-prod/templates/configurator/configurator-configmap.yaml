@@ -1,0 +1,331 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+#  Script run by create secrets job
+#
+###############################################################################
+
+{{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
+{{- $cfgMapName := include "sch.names.fullCompName" (list . "create-configurator-config") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "config") }}
+{{- $fullName := include "sch.names.fullName" (list .) }}
+{{- $secretName := include "sch.names.fullCompName" (list . "is-secret")}}
+{{- $configMapName := include "sch.names.fullCompName" (list . "env")}}
+{{- $baseURL := include "sch.names.fullCompName" (list . "baseurl") }}
+{{- $isServiceName := include "sch.names.fullCompName" (list . "is")  }}
+{{- $oidcName := include "sch.names.fullCompName" (list . "oidc") }}
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $cfgMapName }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+data:
+  generateConfig.sh: |
+    #!/bin/bash -e
+
+    SECRET_ARGS=
+    CONFIG_ARGS=
+
+    ######################################################
+    # Set up configuration files
+    ######################################################
+
+
+    cat <<EOT >> ./dashboardcert.cnf
+    [req]
+    distinguished_name = req_distinguished_name
+    prompt             = no
+
+    [req_distinguished_name]
+    CN                 = {{ $fullName }}
+    EOT
+
+    cat <<EOT >> ./rootcert.cnf
+    [req]
+    distinguished_name = req_distinguished_name
+    prompt             = no
+
+    [req_distinguished_name]
+    CN                 = ace-control-ca
+    EOT
+
+
+    ######################################################
+    # Generate rootcert.crt
+    ######################################################
+
+    echo "Generating CA"
+    # Generate public/private keypair to form basis of the Root CA
+    openssl genpkey -algorithm RSA -out rootkey.key -pkeyopt rsa_keygen_bits:2048
+    # Create a certificate signing request (CSR)
+    openssl req -new -key rootkey.key -out rootreq.csr -config rootcert.cnf
+    # Sign the CSR with the private key
+    openssl x509 -req -days 7305 -in rootreq.csr -signkey rootkey.key -out rootcert.crt
+
+    ######################################################
+    # Generate contentServer certificate and private key
+    ######################################################
+
+    echo "Generating private key and cert for content server"
+    # Generate public/private keypair
+    openssl genpkey -algorithm RSA -out content.key -pkeyopt rsa_keygen_bits:2048
+    # Create a certificate signing request (CSR)
+    openssl req -new -key content.key -out content.csr -config dashboardcert.cnf
+    # Sign the CSR using the rootcert.crt and rootkey.key to genereate a certificate
+    openssl x509 -req -days 7305 -in content.csr -CA rootcert.crt -CAkey rootkey.key -CAserial rootcert.srl -CAcreateserial -out content.crt
+
+    SECRET_ARGS="${SECRET_ARGS} --from-file=contentServerCACert=./rootcert.crt"
+    SECRET_ARGS="${SECRET_ARGS} --from-file=contentServerPrivateKey=./content.key "
+    SECRET_ARGS="${SECRET_ARGS} --from-file=contentServerCert=./content.crt "
+
+    ######################################################
+    # Generate ui certificate and private key
+    ######################################################
+
+    echo "Generating private key and cert for dashboard ui"
+    # Generate public/private keypair
+    openssl genpkey -algorithm RSA -out ui.key -pkeyopt rsa_keygen_bits:2048
+    # Create a certificate signing request (CSR)
+    openssl req -new -key ui.key -out ui.csr -config dashboardcert.cnf
+    # Sign the CSR using the rootcert.crt and rootkey.key to genereate a certificate
+    openssl x509 -req -days 7305 -in ui.csr -CA rootcert.crt -CAkey rootkey.key -CAserial rootcert.srl -CAcreateserial -out ui.crt
+
+    SECRET_ARGS="${SECRET_ARGS} --from-file=controlUICACert=./rootcert.crt"
+    SECRET_ARGS="${SECRET_ARGS} --from-file=controlUIPrivateKey=./ui.key"
+    SECRET_ARGS="${SECRET_ARGS} --from-file=controlUICert=./ui.crt"
+
+    ######################################################
+    # Generate uuid v4 apikey
+    ######################################################
+
+    SECRET_ARGS="${SECRET_ARGS}  --from-literal=ibmAceControlApiKey=$(uuid -v4)"
+
+    ######################################################
+    # Cluster information
+    ######################################################
+
+    IDENTITY_URL=`kubectl get cm ibmcloud-cluster-info -n kube-public -o jsonpath="https://{.data.cluster_address}:{.data.cluster_router_https_port}"`
+    MASTER_IP=`kubectl get cm ibmcloud-cluster-info -n kube-public -o=jsonpath="{.data.cluster_address}" `
+    CLUSTER_NAME=`kubectl get cm ibmcloud-cluster-info -n kube-public -o jsonpath="{.data.cluster_name}"`
+
+    echo "IDENTITY_URL = ${IDENTITY_URL}"
+    echo "MASTER_IP = ${MASTER_IP}"
+    echo "CLUSTER_NAME = ${CLUSTER_NAME}"
+
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=CLUSTER_EXTERNAL_URL=$IDENTITY_URL"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=CLUSTER_EXTERNAL_IP=$MASTER_IP"
+
+
+    ######################################################
+    # CRN information
+    ######################################################
+
+    ACE_DASHBOARD_CRN="crn:v1:icp:private:ace:$CLUSTER_NAME:n/{{ .Release.Namespace }}:r/{{ .Release.Name }}::"
+    ACE_DASHBOARD_NAMESPACE_CRN="crn:v1:icp:private:k8:$CLUSTER_NAME:n/{{ .Release.Namespace }}:::"
+
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=ACE_DASHBOARD_CRN=${ACE_DASHBOARD_CRN}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=ACE_DASHBOARD_NAMESPACE_CRN=${ACE_DASHBOARD_NAMESPACE_CRN}"
+
+    ######################################################
+    # Hostname
+    ######################################################  
+    {{- if .Values.tls.hostname }}
+    export ACE_INGRESS_HOSTNAME="{{ .Values.tls.hostname }}"
+    {{ else }}
+    export ACE_INGRESS_HOSTNAME=$(kubectl get configmap -n kube-public ibmcloud-cluster-info  -o jsonpath="{.data.proxy_address}")
+    {{ end}}
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=ACE_INGRESS_HOSTNAME=${ACE_INGRESS_HOSTNAME}"
+
+    ######################################################
+    # Create the Kubernetes secret resource
+    ######################################################
+
+    echo "Creating secret"
+    # Create secret
+    /usr/local/bin/kubectl create secret generic {{ $fullName }} ${SECRET_ARGS} 
+    # Set secret label
+    /usr/local/bin/kubectl label secret {{ $fullName }} release={{ .Release.Name }} --overwrite
+
+    echo "Creating configmap"
+    # Create secret
+    /usr/local/bin/kubectl create configmap {{ $configMapName }} ${CONFIG_ARGS} 
+    # Set secret label
+    /usr/local/bin/kubectl label configmap {{ $configMapName }} release={{ .Release.Name }} --overwrite
+
+    ######################################################
+    # Create oidc job
+    ######################################################  
+    {{- if .Values.ssoEnabled }}
+    cat <<EOT >> ./oidc.yaml
+    apiVersion: oidc.security.ibm.com/v1
+    kind: Client
+    metadata:
+      name: {{ $oidcName }}
+      namespace: {{ .Release.Namespace }}
+      labels:
+    {{ $labels | indent 4 }}
+    spec:
+      secret: {{ $oidcName }}
+      oidcLibertyClient:
+        redirect_uris:
+        - https://$ACE_INGRESS_HOSTNAME/{{ .Release.Namespace }}-{{ .Release.Name }}/oauth/callback
+        trusted_uri_prefixes:
+        - https://$ACE_INGRESS_HOSTNAME
+        post_logout_redirect_uris:
+        - https://$ACE_INGRESS_HOSTNAME/{{ .Release.Namespace }}-{{ .Release.Name }}
+    EOT
+    echo oidc.yaml
+    cat ./oidc.yaml
+    echo Applying
+    /usr/local/bin/kubectl  apply -f ./oidc.yaml
+    {{- end }}
+    ######################################################
+    # Create ingress redirect
+    ######################################################     
+    {{- if .Values.hostnameIngressEnabled }}
+    cat <<EOT >> ./ingress-redirect.yaml
+    {{- $nameIPBased := include "sch.names.fullCompName" (list . "ip") }}
+    apiVersion: extensions/v1beta1
+    kind: Ingress
+    metadata:
+      name: {{ $nameIPBased }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+        kubernetes.io/ingress.class: nginx
+        ingress.kubernetes.io/backend-protocol: "HTTPS"
+        nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+        ingress.kubernetes.io/force-ssl-redirect: "true"
+        nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+        ingress.kubernetes.io/secure-backends: "true"
+        nginx.ingress.kubernetes.io/secure-backends: "true"
+        ingress.kubernetes.io/add-base-url: "true"
+        nginx.ingress.kubernetes.io/add-base-url: "true"
+        ingress.kubernetes.io/permanent-redirect: "https://$ACE_INGRESS_HOSTNAME/{{ .Release.Namespace }}-{{ .Release.Name }}"
+        nginx.ingress.kubernetes.io/permanent-redirect: "https://$ACE_INGRESS_HOSTNAME/{{ .Release.Namespace }}-{{ .Release.Name }}"
+    spec:
+      rules:
+      - http:
+          paths:
+          - path: /{{ .Release.Namespace }}-{{ .Release.Name }}
+            backend:
+              serviceName: {{ include "sch.names.fullName" (list .) }}
+              servicePort: 8300
+    EOT
+    echo ./ingress-redirect.yaml
+    cat ./ingress-redirect.yaml
+    echo Applying
+    /usr/local/bin/kubectl  apply -f ./ingress-redirect.yaml
+    {{- end }}
+
+    ######################################################
+    # Create ingress
+    ###################################################### 
+
+    {{- $nameHostBased := include "sch.names.fullCompName" (list . "hostname") }}
+
+    {{- if .Values.hostnameIngressEnabled }}
+    cat <<EOT >> ./ingress.yaml
+    ###############################################################################
+    # Define the ingress for a hostname-based URL to be routed to the dashboard
+    ###############################################################################
+    apiVersion: extensions/v1beta1
+    kind: Ingress
+    metadata:
+      name: {{ $nameHostBased }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+        kubernetes.io/ingress.class: nginx
+        ingress.kubernetes.io/rewrite-target: "/\$2"
+        ingress.kubernetes.io/backend-protocol: "HTTPS"
+        nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+        nginx.ingress.kubernetes.io/rewrite-target: "/\$2"
+        ingress.kubernetes.io/force-ssl-redirect: "true"
+        nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+        ingress.kubernetes.io/secure-backends: "true"
+        nginx.ingress.kubernetes.io/secure-backends: "true"
+        nginx.ingress.kubernetes.io/affinity: cookie
+        nginx.ingress.kubernetes.io/session-cookie-name: ace-dashboard-affinity-cookie
+        nginx.ingress.kubernetes.io/session-cookie-hash: sha1
+        nginx.ingress.kubernetes.io/session-cookie-path: /{{ .Release.Namespace }}-{{ .Release.Name }}
+        ingress.kubernetes.io/session-cookie-path: /{{ .Release.Namespace }}-{{ .Release.Name }}
+        ingress.kubernetes.io/affinity: cookie
+        ingress.kubernetes.io/session-cookie-name: ace-dashboard-affinity-cookie
+        ingress.kubernetes.io/session-cookie-hash: sha1
+        ingress.kubernetes.io/proxy-body-size: "0"
+        ingress.kubernetes.io/use-regex: "true"
+        nginx.ingress.kubernetes.io/use-regex: "true"
+        nginx.ingress.kubernetes.io/proxy-body-size: "0"
+        "icp4i.ibm.com/release": {{ .Release.Name }}
+        "icp4i.ibm.com/host": $ACE_INGRESS_HOSTNAME
+        "icp4i.ibm.com/path": /{{ .Release.Namespace }}-{{ .Release.Name }}
+        "icp4i.ibm.com/native-header": "true"
+    spec:
+      tls:
+      - hosts:
+        - $ACE_INGRESS_HOSTNAME
+        {{- if .Values.tls.secret }}
+        secretName: {{ .Values.tls.secret }}
+        {{- end }} 
+      rules:
+      - host: $ACE_INGRESS_HOSTNAME
+        http:
+          paths:
+          - path: "/{{ .Release.Namespace }}-{{ .Release.Name }}(/|$)(.*)"
+            backend:
+              serviceName: {{ include "sch.names.fullName" (list .) }}
+              servicePort: 8300
+    EOT
+    {{- else }}
+    ###############################################################################
+    # Define the ingress for an IP address-based URL
+    ###############################################################################
+    cat <<EOT >> ./ingress.yaml
+    apiVersion: extensions/v1beta1
+    kind: Ingress
+    metadata:
+      name: {{ $fullName }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+        kubernetes.io/ingress.class: nginx
+        ingress.kubernetes.io/rewrite-target: "/\$2"
+        nginx.ingress.kubernetes.io/rewrite-target: "/\$2"
+        ingress.kubernetes.io/backend-protocol: "HTTPS"
+        nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+        ingress.kubernetes.io/force-ssl-redirect: "true"
+        nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+        ingress.kubernetes.io/secure-backends: "true"
+        nginx.ingress.kubernetes.io/secure-backends: "true"
+        nginx.ingress.kubernetes.io/affinity: cookie
+        nginx.ingress.kubernetes.io/session-cookie-name: ace-dashboard-affinity-cookie
+        nginx.ingress.kubernetes.io/session-cookie-hash: sha1
+        ingress.kubernetes.io/affinity: cookie
+        ingress.kubernetes.io/session-cookie-name: ace-dashboard-affinity-cookie
+        ingress.kubernetes.io/session-cookie-hash: sha1
+    spec:
+      rules:
+      - http:
+          paths:
+          - path: "/{{ .Release.Namespace }}-{{ .Release.Name }}(/|$)(.*)"
+            backend:
+              serviceName: {{ include "sch.names.fullName" (list .) }}
+              servicePort: 8300
+    EOT
+    {{- end }}
+    echo ingress.yaml
+    cat ./ingress.yaml
+    echo Applying
+    /usr/local/bin/kubectl  apply -f ./ingress.yaml

@@ -1,0 +1,78 @@
+{{- if eq .Values.cluster.type "iks" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wmla-singletons-cleanup-{{ .Chart.AppVersion }}
+  namespace: {{ .Values.singletons.namespace }}
+  annotations:
+    helm.sh/hook: post-delete
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+  labels:
+    {{- include "ibm-wml-accelerator-prod.appSharedLabels" . | indent 4 }}
+    {{- include "ibm-wml-accelerator-prod.singletonsSharedLabels" . | indent 4 }}
+data:
+  main.sh: |-
+    # This cp and setupHelmCLI.sh will need adjustments before cleanup job can run rootless.
+    cp -f /tmp/kubedir/kubectl /usr/local/bin/
+    /cleanup-scripts/setupHelmCLI.sh
+    # Rootless ready
+    /cleanup-scripts/cleanup.sh
+
+  setupHelmCLI.sh: |-
+    {{- include "ibm-wml-accelerator-prod.setupHelmCLI" . | indent 4 }}
+
+  cleanup.sh: |-
+    chart_appversion={{ .Chart.AppVersion }}
+    echo Entered WMLA $chart_appversion singltons cleanup script.
+    # Test that we have access to list kubectl resources.
+    for resource in daemonsets deployments; do
+        # This will only be non-zero if kubectl has an access issue.
+        # It will still be 0 if there's none of the resource.
+        if ! kubectl get $resource --all-namespaces -o name > /dev/null; then
+            echo An unexpected error was returned from kubectl. Exiting cleanup as error...
+            exit 1
+        fi
+    done
+
+    echo Checking for WMLA $chart_appversion deployments...
+    # Note: Need to add -o jsonpath so this call returns non-zero when no matching deployments are found.
+    if kubectl get deployments --all-namespaces -l wmla-role=app-master,appVersion=$chart_appversion -o jsonpath="{.items[].metadata.name}" > /dev/null 2>&1; then
+        echo Skipping WMLA singleton cleanup because there are still other WMLA $chart_appversion deployments.
+        exit 0
+    fi
+    echo No WMLA $chart_appversion deployments found.
+
+    # Test that we have helm access.
+    if ! helm list {{ template "ibm-wml-accelerator-prod.helmFlag" . }} > /dev/null; then
+        echo An unexpected error was returned from helm. Exiting cleanup as error...
+        exit 1
+    fi
+
+    # Note: Don't delete the base singleton here as it contains the ClusterRoles and
+    # ServiceAccounts used by cleanup scripts.
+    singletons="{{ template "ibm-wml-accelerator-prod.maxMapReleaseName" . }} {{ template "ibm-wml-accelerator-prod.condaReleaseName" . }}"
+    for singleton in $singletons; do
+        echo Attempting to purge helm release $singleton...
+        helm delete --purge $singleton --timeout 600 {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+    done
+
+    # Wait for conda singleton's helm post-delete daemonset to clean up the hostpaths
+    echo Waiting on WMLA conda host path cleanup daemon to complete...
+    while kubectl get daemonsets --all-namespaces -l wmla-role=conda-cleanup,wmla-appVersion=$chart_appversion -o jsonpath="{.items[].metadata.name}" > /dev/null 2>&1; do
+        sleep 10
+    done
+
+    # Delete the base singleton
+    echo Attempting to purge helm release $singleton...
+    helm delete --purge {{ template "ibm-wml-accelerator-prod.singletonsBaseReleaseName" . }} {{ template "ibm-wml-accelerator-prod.helmFlag" . }}
+
+    # Confirm all the singletons have been cleaned up. Exit non-zero if any remain.
+    for singleton in $singletons; do
+        if helm status $singleton {{ template "ibm-wml-accelerator-prod.helmFlag" . }} > /dev/null 2>&1; then
+            echo Expected helm release for $singleton to be deleted but still found status. Exiting cleanup as error...
+            exit 1
+        fi
+    done
+    echo WMLA $chart_appversion singletons cleanup completed successfully.
+{{- end -}}

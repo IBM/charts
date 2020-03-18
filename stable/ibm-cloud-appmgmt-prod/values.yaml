@@ -1,0 +1,434 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018, 2019. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+# Global section
+global:
+  monitoring:
+    # To be used when entitled to base services only for limiting deployment of services
+    #advanced: false
+
+    # Enable services required for resource monitoring; disable for eventing only
+    resources: true
+
+    # Enable services required for event management
+    eventing: true
+
+    # Enable services required for resource monitoring analytics; requires resource monitoring to be enabled
+    analytics: false
+
+# Accepting the license is required to deploy this chart; must type accept within the double quotes
+  license: ""
+
+  ingress:
+
+    # Fully qualified domain name (FQDN) of your MCM console. Can be determined via: kubectl get configmap ibmcloud-cluster-info -n kube-public -o=jsonpath='{.data.cluster_address}'
+    domain: ""
+
+    # The ingress port used to access the MCM console. Can be determined via: kubectl get configmap ibmcloud-cluster-info -n kube-public -o=jsonpath='{.data.cluster_router_https_port}'
+    port:
+
+    # Secret name containing client authorization data for ingress (eg ibmcloudappmgmt-ingress-client). Leave this blank if installing in Cloud Pak for Multicloud Manager mode.
+    clientSecret: ""
+
+    # Secret name containing https tls authorization data (eg ibmcloudappmgmt-ingress-tls). Leave this blank if installing in Cloud Pak for Multicloud Manager mode.
+    tlsSecret: ""
+
+# Values Applying to ICAM-MCM Integrated Deployment
+  icammcm:
+    ingress:
+
+      # Fully qualified domain name (FQDN) of your MCM proxy. Can be determined via: kubectl get configmap ibmcloud-cluster-info -n kube-public -o=jsonpath='{.data.proxy_address}'
+      domain: ""
+
+      # Secret name containing client authorization data for Proxy Ingress (eg ibmcloudappmgmt-ingress-client).
+      clientSecret: "icam-ingress-client"
+
+      # Secret name containing https tls authorization data for Proxy Ingress (eg ibmcloudappmgmt-ingress-tls).
+      tlsSecret: "icam-ingress-tls"
+
+  #Fully qualified domain name (FQDN) of your MCM console. Can be determined via: kubectl get configmap ibmcloud-cluster-info -n kube-public -o=jsonpath='{.data.cluster_address}'
+  masterIP: ""
+
+  # The port used to communicate with the MCM console. Can be determined via: kubectl get configmap ibmcloud-cluster-info -n kube-public -o=jsonpath='{.data.cluster_router_https_port}'
+  masterPort:
+
+  # If you have provided your own certificate for the MCM
+  # management ingress you must create a ConfigMap containing the
+  # certificate authority's certificate in PEM format (e.g kubectl create
+  # configmap master-ca --from-file=./ca.pem) and set this value to the name of
+  # this ConfigMap. If you have not provided your own certificate leave this
+  # value empty.
+  masterCA: ""
+
+  # The IP address of the MCM proxy from the cloud environment. Can be determined via: kubectl get no -l proxy=true -o=jsonpath='{ $.items[*].status.addresses[?(@.type=="InternalIP")].address }'
+  proxyIP: ""
+
+# Determine the size of the resources used by each container.
+# size0(_amd64) is the minimum, best for small demos and test. It is sized for amd64 clusters
+# size0_ppc64le is the minimum, best for small demos and test. It is sized for ppc64le clusters
+# size1(_amd64) is the default configuration for initial production sizing. It is sized for amd64 clusters
+# size1_ppc64le is the default configuration for initial production sizing. It is sized for ppc64le clusters
+# Larger sizes will be added as found appropriate.
+  environmentSize: "size0"
+
+
+
+  image:
+    # Docker registry to pull images from
+    repository: "cp.icr.io/cp/app-mgmt"
+
+    # Optional: The name of the image pull secret containing credentials for accessing a private docker registry. On OpenShift environments, it is required even when using the internal registry.
+    pullSecret: ""
+
+  # Prefix for docker images; applies after the image repository value and before the image names
+  imageNamePrefix: ""
+
+  # The default pull policy is IfNotPresent which causes the Kubelet to skip pulling an image if it already exists. Options are:
+  # Always
+  # IfNotPresent
+  # Never
+  imagePullPolicy: IfNotPresent
+
+  # Image used by containers created via 'helm test'
+  icamTestImage: "ubi-base:8.0.0-201911071625"
+
+  # Number of Cassandra nodes to deploy
+  cassandraNodeReplicas: 1
+
+  # Setup Cassandra superuser, which also sets Cassandra system_auth keyspace
+  # replication equal to cassandraNodeReplicas
+  cassandra:
+    superuserRole: true
+
+  # Metric service configuration
+  metric:
+    # The number of days to keep raw metric data.
+    # This affects new metric data points only.
+    # If this value is changed after product install,
+    # a helm upgrade must be performed in order for the
+    # updated value to take effect.
+    retention:
+      rawMaxDays: 8
+
+    # Indicates whether or not metrics should be summarized.
+    summary:
+      enabled: false
+
+  # Kafka global section
+  kafka:
+
+    # The number of Kafka replicas to be deployed
+    clusterSize: 1
+
+    # Port used for internal http communication with Kafka
+    insecurePort: 9092
+
+    # Kafka secure port for internal communication
+    #securePort: "9093"
+
+    # Port used for internal http communication with Kafka REST
+    kafkaRestInsecurePort: 8080
+
+    # Kafkarest secure port for internal communication
+    #kafkaRestSecurePort: "443"
+
+    # The number of partitions for the 'metric.json' Kafka topic
+    partitions:
+      metricJSON: 12
+
+    # The replication factor for the 'metric.json' and 'metric.protobuf' Kafka topics
+    # By default, topics have a replication factor equal to the Kafka clustersize,
+    # up to a maximum of 3.  This variable allows the metric topics to be customized
+    # to a specific replication factor, since metrics is significantly larger than
+    # other topics and a smaller replication factor (2) may be desired.
+    replication:
+      metrics: 1
+
+    # The Kafka client user secret name
+    clientUserSecret: kafka-client-secret
+
+  # Zookeeper global section
+  zookeeper:
+
+    # The number of Zookeeper replicas to be deployed
+    clusterSize: 1
+
+  # Peristent volume configuration for statefulsets
+  persistence:
+
+    # Optionally disable peristence for statefulsets
+    # by setting this to false. Disabling persistence
+    # is not recommended or supported.
+    enabled: true
+
+    # Default storage class for the product. If the other storageClassOption values
+    # (e.g. cassandradata) are set to 'default', they will use
+    # the value provided here. If 'storageClassName' is left empty,
+    # it will be automatically populated with the environment's default storageclass.
+    storageClassName: ""
+
+    # Individual claims for persistence can be of different types if desired.
+    # The storageClassOption determines the type of persistence to be used for each
+    # stateful service.
+    # "default" will use the value defined at `global.persistence.storageClassName`
+    # "none" will disable the use of the volume
+    storageClassOption:
+      cassandradata: "default"
+      cassandrabak: "none"
+      couchdbdata: "default"
+      datalayerjobs: "default"
+      elasticdata: "default"
+      kafkadata: "default"
+      zookeeperdata: "default"
+    # The claim sizes for the various statefulsets may be controlled using
+    # their storageSize value.
+    storageSize:
+      cassandradata: "50Gi"
+      cassandrabak: "50Gi"
+      couchdbdata: "5Gi"
+      datalayerjobs: "5Gi"
+      elasticdata: "5Gi"
+      kafkadata: "5Gi"
+      zookeeperdata: "1Gi"
+
+  # ASM global section
+  asm:
+    # Internal cluster communication for ASM services is either HTTPS or HTTP
+    disableHTTPS: true
+
+    # Internal cluster communication for ASM services can require credenitals or not
+    authentication: false
+
+  # The number of Elasticsearch replicas to be deployed
+  elasticsearch:
+    replicaCount: 1
+
+  # Cassandra replication factor for metric keyspace.  Supports full string with exact Cassandra replication strategy
+  metricC8Rep: "{'class':'SimpleStrategy','replication_factor':1}"
+  # Cassandra replication factor for OpenTT Jaeger keyspace.  Supports integer value.
+  openttC8Rep: 1
+
+  # Horizontal Pod Autoscalers
+  # Minimum number of replicas HPAs will make available
+  minReplicasHPAs: 1
+
+  # Maximum number of replicas HPAs will make available
+  maxReplicasHPAs: 3
+
+  # You can override the preceding minimums and maximums the HPAs will use
+  # on a per component basis by uncommenting the following:
+#agentbootstrap:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#agentmgmt:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#alarmeventsrc:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#amui:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#applicationmgmt:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#event-evaluator:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#event-observer:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#metric:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#metricprovider:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#synthetic:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#temacomm:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#temaconfig:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#temasda:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+#threshold:
+#  minReplicasHPAs: 3
+#  maxReplicasHPAs: 5
+
+
+
+#######################
+# ASM FEATURE TOGGLES #
+#######################
+# These are used to disable subcharts from ASM not applicable to the ICAM product
+# Also disables the duplicated component definitions of Cassandra, Kafka and
+# Zookeeper.
+asm:
+  cassandra:
+    enabled: false
+  elasticsearch:
+    enabled: true
+  kafka:
+    enabled: false
+  kubernetesObserver:
+    enabled: false
+  layout:
+    enabled: true
+  merge:
+    enabled: false
+  noi:
+    enabled: false
+  search:
+    enabled: true
+  uiApi:
+    enabled: true
+  zookeeper:
+    enabled: false
+
+# CEM configuration section
+ibm-cem:
+
+  # CEM license accept
+  license: "accept"
+
+  # Disable the creation of the OCP SCC resource by the CEM subchart
+  createOCPSCC: false
+
+  # This value signals to the CEM containers the current product name
+  # CEM configuration and deployment will vary depending on base or advanced
+  # product entitlement.
+
+  # Signals to the CEM services what the product name is to determine deployment type
+  # Options:
+  # IBM Cloud App Management for Multicloud Manager
+  # Event Management for IBM Multicloud Manager
+  # IBM Cloud App Management Advanced
+  # IBM Cloud App Management
+  productName: "IBM Cloud App Management for Multicloud Manager"
+
+  # Cassandra Settings
+  cassandra:
+    # Disable duplicated component definition for Cassandra
+    enabled: false
+
+  # CouchDB Settings
+  couchdb:
+    # The number of CouchDB replicas to be deployed
+    clusterSize: 1
+
+  # Datalayer Settings
+  datalayer:
+    # The number of Datalayer replicas to be deployed
+    clusterSize: 1
+
+  # Kafka Settings
+  kafka:
+  # Disable duplicated component definition for Kafka
+    enabled: false
+
+  # Redis Settings
+  ibmRedis:
+    enabled: false
+
+  # Zookeeper Settings
+  zookeeper:
+    # Disable duplicated component definition for Zookeeper
+    enabled: false
+
+  # Email settings
+  email:
+    # Set this property to the Email address that should be shown as the sender (From) of the message.
+    mail: noreply-your-company-notification@your-company.com
+
+    # Set to "smtp" to use a mail relay server. This requires setting the other smtp-prefixed properties as well.
+    # Set to "direct" (default) to send directly to the recipient's server.
+    # Use "api" if the "sendgrid" service is available. This requires the "apikey" property also to be set.
+    #
+    type: direct
+
+    # When "type" is set to "smtp", set this to the host name of your smtp server used for mail relay.
+    smtphost: ''
+
+    # When "type" is set to "smtp", set this to the port number used by the smtp server specified by the "smtphost" value.
+    smtpport: ''
+
+    # User authentication required for SMTP connection. Set this to true if the SMTP server requires authentication.
+    smtpauth: true
+
+    # Reject unauthorized tls connections for SMTP connection. Set this to false if the SMTP server requires a self-signed certificate.
+    smtprejectunauthorized: true
+
+  # Nexmo settings
+  nexmo:
+
+    # true to use Nexmo, false disables
+    enabled: false
+
+    # Default Nexmo number from which to send SMS messages
+    sms: ''
+
+    # Default Nexmo number from which to send voice messages
+    voice: ''
+
+    # Override numbers used for selected countries
+    # Property names are country codes, values are objects with "voice" and "sms" properties
+    # Enter as a JSON object in quotes
+    numbers: '{}'
+
+    # Numbers from countries to which messages must not be sent
+    # Enter as a comma separated list of strings
+    countryblacklist: '[]'
+
+  # ICP Broker settings
+  icpbroker:
+    # The name of the cluster administrator user.  This is the name that
+    # will be added to subscriptions (required for MCM).
+    adminusername: ''
+
+# Redis Configuration
+ibmRedis:
+  auth:
+    # The secret name that ibm-redis will use instead of generating one itself
+    authSecretName: "{{ .Release.Name }}-cem-ibm-redis-cred-secret"
+
+  # Enable/disable persistence for ibm-redis subchart only
+  persistence:
+    enabled: false
+
+  # Number of redis server replica to deploy. Defaults to 1
+  replicas:
+    # Number of redis server replicas to deploy.
+    servers: 1
+    # Number of redis sentinel replicas to deploy. A minimum number of 3 is required for high availability.
+    sentinels: 3
+
+# Create the AlertTarget CRD required for Multi-cloud Integrations
+createCRD: true
+
+# Create the resources used to automatically create self-signed tls certificates for ingress authentication; if this is set to false, you must use the script at icamChartDir/ibm_cloud_pak/pak_extensions/lib/make-ca-cert-icam.sh to create the secrets prior to installing the chart
+createTLSCerts: false
+
+ibm-cloud-appmgmt-prod:
+  streamingservice:
+    enabled: false
+
+# Tags for controlling deployment options
+# 'advanced' should only be enabled when entitled to the advanced product.
+tags:
+  advanced: true
+
+# PPA arch value
+arch:
+  - amd64
+  - ppc64le
