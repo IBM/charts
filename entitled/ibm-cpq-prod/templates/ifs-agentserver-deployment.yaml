@@ -1,0 +1,227 @@
+# Licensed Materials - Property of IBM
+# IBM Sterling Configure Price Quote Software (5725-D11)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{- if eq .Values.global.install.ifs.enabled true }}
+{{- if eq (.Values.ifs.license | lower) "accept" }}
+{{ $ifs := . }}
+{{- $sysOverridesInitPath := "/opt/ssfs/system_overrides.properties.init" }}
+{{ $sysOverridesPath := "/opt/ssfs/runtime/properties/system_overrides.properties" }}
+{{ if .Values.ifsagentserver -}}
+{{ range .Values.ifsagentserver.servers -}}
+{{ $inter := . }}
+{{ range $inter.name -}}
+{{ if . -}}
+{{- include "sch.config.init" (list $ifs "om-chart.sch.chart.config.values") -}}
+{{- $serverNameUnQuote := . -}}
+{{- $serverName := . | quote -}}
+{{- $serverNameLow := . | lower -}}
+{{- $varServerStateDir := "/opt/ssfs/runtime/serverstate" }}
+{{- $varServerStateJvmArg := (printf "%s=%s" "-Dserver.state.dir" $varServerStateDir) }}
+{{- $readyProbePeriod := 15 }}
+{{- $readinessFailRestartAfterMinutes := $ifs.Values.ifsagentserver.common.readinessFailRestartAfterMinutes | default 10 }}
+{{- $varReadinessFailRestartAfterMinutes := $inter.readinessFailRestartAfterMinutes | default $readinessFailRestartAfterMinutes }}
+{{- $readyFailRestartSeconds := (mul $varReadinessFailRestartAfterMinutes 60) | default 600 }}
+{{- /* for agent liveness check is not appplicable hence hardcoding livenessProbeDelay */}}
+{{- $liveProbeBeginDelaySecs := 60 }}
+{{- $liveFailThreshold := add (div (sub $readyFailRestartSeconds $liveProbeBeginDelaySecs) $readyProbePeriod) 1 }}
+{{- $readyFailThreshold := div $readyFailRestartSeconds $readyProbePeriod }}
+{{- $varJvmArgs := $inter.jvmArgs | default $ifs.Values.ifsagentserver.common.jvmArgs -}}
+{{- $varReplicaCount := $inter.replicaCount | default $ifs.Values.ifsagentserver.common.replicaCount -}}
+{{- $varResources := $inter.resources | default $ifs.Values.ifsagentserver.common.resources -}}
+{{- $varNodeAffinity := $inter.nodeAffinity | default $ifs.Values.ifsagentserver.common.nodeAffinity -}}
+{{- $varPodAffinity := $inter.podAffinity | default $ifs.Values.ifsagentserver.common.podAffinity -}}
+{{- $varPodAntiAffinity := $inter.podAntiAffinity | default $ifs.Values.ifsagentserver.common.podAntiAffinity -}}
+{{- $varTolerations := $inter.tolerations | default $ifs.Values.ifsagentserver.common.tolerations }}
+{{- $varCustLabels := $inter.podLabels | default $ifs.Values.ifsagentserver.common.podLabels }}
+{{- $custLabels := $varCustLabels | default (dict) }}
+{{- $stdPodLabel := "serverName" }}
+{{- $stdPodLabelVal := $serverNameLow }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "om-chart.fullname" $ifs }}-{{ $serverNameLow }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list $ifs "" (dict $stdPodLabel $stdPodLabelVal)) | indent 4 }}
+spec:
+  replicas: {{ $varReplicaCount | default 1 }}
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list $ifs "" (set $custLabels $stdPodLabel $stdPodLabelVal)) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list $ifs "" (set $custLabels $stdPodLabel $stdPodLabelVal)) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list $ifs $ifs.sch.chart.metering) | indent 8 }}
+    spec:
+{{- with $varTolerations }}
+      tolerations:
+{{ toYaml . | indent 6 }}
+{{- end }}
+      affinity:
+{{- include "om-chart.nodeAffinity" (list $ifs $varNodeAffinity) | indent 8 }}
+{{- include "om-chart.podAffinity" (list $ifs $varPodAffinity) | indent 8 }}
+{{- include "om-chart.podAntiAffinity" (list $ifs $varPodAntiAffinity $stdPodLabel $stdPodLabelVal) | indent 8 }}
+      serviceAccountName: {{ $ifs.Values.ifs.serviceAccountName | default "default" }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: {{ $ifs.Values.ifs.persistence.securityContext.fsGroup | default 0 }}
+        supplementalGroups: [{{ $ifs.Values.ifs.persistence.securityContext.supplementalGroup | default 0 }}]
+      {{- if and ($ifs.Values.ifsdatasetup.loadFactoryData) (eq $ifs.Values.ifsdatasetup.loadFactoryData "install") }}
+      initContainers:
+      - name: {{ template "om-chart.fullname" $ifs }}-{{ $serverNameLow }}-init
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.global.image.repository "${1}cp/" }}/{{ .Values.ifsagentserver.image.name }}:{{ .Values.ifsagentserver.image.tag }}"
+        securityContext:
+          privileged: false
+          runAsUser: 1000
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command: ['/bin/bash', '-c']
+        args:
+        - 'touch /opt/ssfs/runtime/initfile && while [ -z $(find /shared -maxdepth 1 -newer /opt/ssfs/runtime/initfile -name datasetup.complete) ]; do echo "datasetup not complete $(date +%Y-%m-%d.%H.%M.%S)"; sleep 30; done; echo "datasetup found complete $(date +%Y-%m-%d.%H.%M.%S)"'
+        volumeMounts:
+        - name: {{ $ifs.Values.ifs.persistence.claims.name }}
+          mountPath: "/shared"
+      {{- end }}
+      {{- if .Values.global.image.pullsecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.pullsecret }}
+      {{- end }}
+      containers:
+      - name: {{ template "om-chart.fullname" $ifs }}-{{ $serverNameLow }}
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.global.image.repository "${1}cp/" }}/{{ .Values.ifsagentserver.image.name }}:{{ .Values.ifsagentserver.image.tag }}"
+        imagePullPolicy: {{ $ifs.Values.ifsagentserver.image.pullPolicy }}
+        env:
+        - name: OM_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OM_RELEASE
+          value: {{ $ifs.Release.Name }}
+        - name: dbpassword
+          valueFrom:
+            secretKeyRef:
+              name: {{ $ifs.Values.ifs.appSecret }}
+              key: dbpassword
+        - name: LOG_FORMAT
+          value: {{ $ifs.Values.ifs.log.format | default "json" }}
+{{- with $ifs.Values.ifs.envs }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+        resources:
+{{ toYaml $varResources | indent 10 }}
+        securityContext:
+          privileged: false
+          runAsUser: 1000
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/bash", "-c"]
+        {{- $commonArg := printf "%s %s %s %s" "/opt/ssfs/evaluateEnvs.sh" $sysOverridesInitPath $sysOverridesPath "&& "}}
+        {{- if $varJvmArgs }}
+        args:
+        - '{{ $commonArg }} 
+        /opt/ssfs/runtime/bin/agentserver.sh -jvmargs {{ printf "%s %s" $varJvmArgs $varServerStateJvmArg | quote }} {{ $serverName }}'
+	      {{- else }}
+        args:
+        - '{{ $commonArg }} 
+        /opt/ssfs/runtime/bin/agentserver.sh -jvmargs {{ printf "%s" $varServerStateJvmArg | quote }} {{ $serverName }}'
+        {{- end }}
+        workingDir: "/opt/ssfs/runtime/"
+        volumeMounts:
+        - name: {{ $ifs.Values.ifs.persistence.claims.name }}
+          mountPath: "/shared/"
+        {{- if $ifs.Values.ifs.mq.bindingConfigName }}
+        - name: binding-config
+          mountPath: {{ $ifs.Values.ifs.mq.bindingMountPath | quote }}
+          subPath: .bindings
+        {{- end }}
+        - name: config
+          mountPath: "/opt/ssfs/evaluateEnvs.sh"
+          subPath: evaluateEnvs.sh
+        - name: config
+          mountPath: "/opt/ssfs/agentStartupTest.sh"
+          subPath: agentStartupTest.sh
+        - name: config
+          mountPath: "{{ $sysOverridesInitPath }}"
+          subPath: system_overrides.properties
+        {{- if $ifs.Values.ifs.customerOverrides }}
+        - name: config
+          mountPath: "/opt/ssfs/runtime/properties/customer_overrides.properties"
+          subPath: customer_overrides.properties
+        {{- end }}
+        # - name: host-timezone
+        #   mountPath: /etc/localtime
+        livenessProbe:
+          exec:
+            command:
+            - '/bin/bash'
+            - '-c'
+            - '/opt/ssfs/agentStartupTest.sh {{ $varServerStateDir }} {{ printf "%s--%s_*" $serverNameUnQuote $serverNameUnQuote | quote }} {{ div $readyFailRestartSeconds 60 }}'
+          initialDelaySeconds: {{ $liveProbeBeginDelaySecs }}
+          {{- /* check for liveness every n seconds */}}
+          periodSeconds: {{ $readyProbePeriod }}
+          {{- /* A successful probe must return in less than 1 seconds */}}
+          timeoutSeconds: 1
+          failureThreshold: {{ $liveFailThreshold }}
+        readinessProbe:
+          exec:
+            command:
+            - '/bin/bash'
+            - '-c'
+            - '/opt/ssfs/agentStartupTest.sh {{ $varServerStateDir }} {{ printf "%s--%s_*" $serverNameUnQuote $serverNameUnQuote | quote }} {{ div $readyFailRestartSeconds 60 }}'
+          initialDelaySeconds: 1
+          {{- /* check for readiness every n seconds */}}
+          periodSeconds: {{ $readyProbePeriod }}
+          {{- /* A successful probe must return in less than 1 seconds */}}
+          timeoutSeconds: 1
+          failureThreshold: {{ $readyFailThreshold }}
+      volumes:
+      - name: {{ $ifs.Values.ifs.persistence.claims.name }}
+        persistentVolumeClaim:
+          claimName: {{ template "om-chart.fullname" $ifs }}-{{ $ifs.Values.ifs.persistence.claims.name | lower }}
+      - name: config
+        configMap:
+          name: {{ template "om-chart.fullname" $ifs }}-ifsconfig
+          items:
+          - key: evaluateEnvs.sh
+            path: evaluateEnvs.sh
+            mode: 0754
+          - key: agentStartupTest.sh
+            path: agentStartupTest.sh
+            mode: 0754
+        {{- if $ifs.Values.ifs.customerOverrides }}
+          - key: customer_overrides.properties
+            path: customer_overrides.properties
+        {{- end }}
+          - key: system_overrides.properties
+            path: system_overrides.properties
+      - name: secret
+        secret:
+          secretName: {{ $ifs.Values.ifs.appSecret }}
+      {{- if $ifs.Values.ifs.mq.bindingConfigName }}
+      - name: binding-config
+        configMap:
+          name: {{ $ifs.Values.ifs.mq.bindingConfigName }}
+      {{- end }}
+      # - name: host-timezone
+      #   hostPath:
+      #     path: /etc/localtime
+---
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+

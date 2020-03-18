@@ -1,0 +1,38 @@
+# Licensed Materials - Property of IBM
+# IBM Sterling Configure Price Quote Software (5725-D11)
+# (C) Copyright IBM Corp. 2018, 2019 All Rights Reserved.
+# US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+{{ if eq .Values.global.install.configurator.enabled true -}}
+{{- if gt .Values.ocappserver.replicaCount 0.0 }}
+{{- include "sch.config.init" (list . "om-chart.sch.chart.config.values") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "om-chart.fullname" . }}-ocappserver
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+spec:
+  {{- if eq .Values.ocappserver.ingress.enabled false }}
+  type: {{ .Values.ocappserver.service.type }}
+  {{- else }}
+  type: ClusterIP
+  {{- end }}
+  ports:
+    - port: {{ .Values.ocappserver.service.http.port | default 9081 }}
+      targetPort: http
+      protocol: TCP
+      name: http
+      {{- if eq .Values.ocappserver.ingress.enabled false }}
+      nodePort: {{ .Values.ocappserver.service.http.nodePort }}
+      {{- end }}
+    - port: {{ .Values.ocappserver.service.https.port | default 9444 }}
+      targetPort: https
+      protocol: TCP
+      name: https
+      {{- if eq .Values.ocappserver.ingress.enabled false }}
+      nodePort: {{ .Values.ocappserver.service.https.nodePort }}
+      {{- end }}
+  selector:
+{{ include "sch.metadata.labels.standard" (list . "" (dict "role" "ocappserver")) | indent 4 }}
+{{- end }}
+{{ end -}}
