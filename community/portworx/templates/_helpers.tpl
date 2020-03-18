@@ -118,7 +118,7 @@ Create the name of the cluster role binding to use for hooks
 Populate the ports based on deployemnt environment
 */}}
 {{- define "px.pxAPIPort" -}}
-{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+{{- if ( eq true .Values.changePortRange) -}}
     {{- printf "17001" -}}
 {{- else -}}
     {{- printf "9001" -}}
@@ -126,7 +126,7 @@ Populate the ports based on deployemnt environment
 {{- end -}}
 
 {{- define "px.pxHealthPort" -}}
-{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+{{- if ( eq true .Values.changePortRange) -}}
     {{- printf "17015" -}}
 {{- else -}}
     {{- printf "9015" -}}
@@ -134,7 +134,7 @@ Populate the ports based on deployemnt environment
 {{- end -}}
 
 {{- define "px.pxKVDBPort" -}}
-{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+{{- if ( eq true .Values.changePortRange) -}}
     {{- printf "17019" -}}
 {{- else -}}
     {{- printf "9019" -}}
@@ -142,7 +142,7 @@ Populate the ports based on deployemnt environment
 {{- end -}}
 
 {{- define "px.pxSDKPort" -}}
-{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+{{- if ( eq true .Values.changePortRange) -}}
     {{- printf "17020" -}}
 {{- else -}}
     {{- printf "9020" -}}
@@ -150,7 +150,7 @@ Populate the ports based on deployemnt environment
 {{- end -}}
 
 {{- define "px.pxGatewayPort" -}}
-{{- if .Capabilities.APIVersions.Has "apps.openshift.io/v1" -}}
+{{- if ( eq true .Values.changePortRange) -}}
     {{- printf "17021" -}}
 {{- else -}}
     {{- printf "9021" -}}
