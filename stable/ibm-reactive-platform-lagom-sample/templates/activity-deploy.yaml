@@ -25,13 +25,30 @@ spec:
       annotations:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
     spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 2
       affinity:
       {{/* nodeaffinity for github.com charts, remove the following for PPA charts*/}}
       {{- include "nodeaffinity" . | indent 6 }}
       restartPolicy: Always
       containers:
         - name: {{ $name }}-{{ .Release.Name }}
-          image: {{ .Values.image.repository }}/reactive-sample-activity-stream-impl:{{ .Values.image.imageTags.activity }}
+          image: {{ tpl .Values.activityImplImage . }}:{{ .Values.image.imageTags.activity }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 2
+            capabilities:
+              drop:
+              - ALL
+              add:
+              - DAC_OVERRIDE
           imagePullPolicy: {{.Values.image.pullPolicy }}
           env:
             - name: "RP_SECRET"
@@ -98,8 +115,9 @@ spec:
               name: http
           volumeMounts: []
           command:
-            - "/rp-start"
+            - "/bin/bash"
           args:
+            - "/rp-start"
             - "bin/activity-stream-impl"
           readinessProbe:
             tcpSocket:
