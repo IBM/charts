@@ -2,6 +2,8 @@
 
 ![Lagom logo](https://raw.githubusercontent.com/IBM/charts/master/logo/lagom-logo.png)
 
+THIS CHART IS NOW DEPRECATED. On June 19th the helm chart for the Reactive Platfrom Lagon Sample will be removed from IBM's public helm repository on github.com
+
 The Reactive Platform Lagom Sample showcases the Lagom Framework within the Reactive Platform using a simple microblogging application.
 
 ## Introduction
@@ -27,9 +29,58 @@ As well as deploying the Chirper microservices, the Helm chart:
 * Kubernetes 1.11 or later
 * A dedicated "Kubernetes" namespace
 
-## PodSecurityPolicy Requirements
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator setup a custom PodSecurityPolicy for you based on the predefined policy below:
-* Predefined PodSecurityPolicy name: [ibm-anyuid-psp](https://github.com/IBM/cloud-pak/blob/master/spec/security/psp/README.md)
+
+### PodSecurityPolicy Requirements
+
+This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+
+The predefined PodSecurityPolicy name: [`ibm-anyuid-psp`](https://ibm.biz/cpkspec-psp) has been verified for this chart, if your target namespace is bound to this PodSecurityPolicy you can proceed to install the chart.
+
+You can also define a custom PodSecurityPolicy for use with this chart, which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable a custom PodSecurityPolicy using the ICP user interface. From the user interface, you can copy and paste the following snippets to enable a custom PodSecurityPolicy:
+
+  - Custom PodSecurityPolicy definition:
+    ```
+    apiVersion: extensions/v1beta1
+    kind: PodSecurityPolicy
+    metadata:
+      name: ibm-chart-dev-psp
+    spec:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      allowedCapabilities:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+      seLinux:
+        rule: RunAsAny
+      supplementalGroups:
+        rule: RunAsAny
+      runAsUser:
+        rule: RunAsAny
+      fsGroup:
+        rule: RunAsAny
+      volumes:
+      - configMap
+      - secret
+    ```
+  - Custom ClusterRole for the custom PodSecurityPolicy:
+    ```
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: ibm-chart-dev-clusterrole
+    rules:
+    - apiGroups:
+      - extensions
+      resourceNames:
+      - ibm-chart-dev-psp
+      resources:
+      - podsecuritypolicies
+      verbs:
+      - use
+    ```
 
 
 ## Resources Required

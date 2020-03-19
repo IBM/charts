@@ -1,4 +1,5 @@
 # ibm-csi-nfs
+THIS CHART IS NOW DEPRECATED. Here’s what you need to know: On April 18th, 2020 the helm chart for ibm-csi-nfs will no longer be supported and will be removed from IBM's public helm repository on github.com. This will result in the chart no longer being displayed in the catalog. This will not impact existing deployments of the helm chart. Refer to [CSI Drivers](https://kubernetes-csi.github.io/docs/drivers.html) to get latest sample drivers.
 
 ## Introduction
 This is a sample nfs driver based on CSI 0.2.0.
