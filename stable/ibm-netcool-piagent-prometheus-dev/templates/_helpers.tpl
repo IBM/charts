@@ -2,7 +2,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "name" -}}
+{{- define "ibm-netcool-piagent-prometheus-dev.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
@@ -10,7 +10,7 @@ Expand the name of the chart.
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 */}}
-{{- define "fullname" -}}
+{{- define "ibm-netcool-piagent-prometheus-dev.fullname" -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -18,7 +18,7 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{/*
 Define a service name for the chart
 */}}
-{{- define "servicename" -}}
+{{- define "ibm-netcool-piagent-prometheus-dev.servicename" -}}
 {{- printf "%s-%s" .Release.Name "piagent-prometheus" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
@@ -27,7 +27,7 @@ Helper functions which can be used for used for .Values.arch in PPA Charts
 Check if tag contains specific platform suffix and if not set based on kube platform
 uncomment this section for PPA charts, can be removed in github.com charts
 
-{{- define "platform" -}}
+{{- define "ibm-netcool-piagent-prometheus-dev.platform" -}}
 {{- if not .Values.arch }}
   {{- if (eq "linux/amd64" .Capabilities.KubeVersion.Platform) }}
     {{- printf "-%s" "x86_64" }}
@@ -44,7 +44,7 @@ uncomment this section for PPA charts, can be removed in github.com charts
 {{- end -}}
 {{- end -}}
 
-{{- define "arch" -}}
+{{- define "ibm-netcool-piagent-prometheus-dev.arch" -}}
   {{- if (eq "linux/amd64" .Capabilities.KubeVersion.Platform) }}
     {{- printf "%s" "amd64" }}
   {{- end -}}

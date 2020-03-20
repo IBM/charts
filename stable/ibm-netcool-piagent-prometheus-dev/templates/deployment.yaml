@@ -1,18 +1,22 @@
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ template "fullname" . }}
+  name: {{ template "ibm-netcool-piagent-prometheus-dev.fullname" . }}
   labels:
-    app: {{ template "name" . }}
+    app.kubernetes.io/name: {{ template "ibm-netcool-piagent-prometheus-dev.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    helm.sh/chart: {{ .Release.Name }}-{{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    release: {{ .Release.Service }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    component: {{ .Release.Name }}-{{ .Chart.Name }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
 spec:
   selector:
     matchLabels:
-      release: {{ .Release.Name }}
-      component: {{ .Release.Name }}-{{ .Chart.Name }}
+      app.kubernetes.io/name: {{ template "ibm-netcool-piagent-prometheus-dev.name" . }}
+      helm.sh/chart: {{ .Release.Name }}-{{ .Chart.Name }}
+      app.kubernetes.io/managed-by: {{ .Release.Service }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      release: {{ .Release.Service }}
   replicas: {{ .Values.replicaCount }}
   template:
     metadata:
@@ -21,12 +25,18 @@ spec:
         productID: IBMNetcoolPIAgent_010_LA_0000
         productVersion: 0.1.0
       labels:
-        app: {{ template "name" . }}
-        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        component: {{ .Release.Name }}-{{ .Chart.Name }}
-        release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ template "ibm-netcool-piagent-prometheus-dev.name" . }}
+        helm.sh/chart: {{ .Release.Name }}-{{ .Chart.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        release: {{ .Release.Service }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -66,7 +76,7 @@ spec:
       volumes:
         - name: client-secrets-volume
           secret: 
-            secretName: {{ $.Release.Name }}-{{ $.Chart.Name }}-secrets
+            secretName: ibm-netcool-piagent-prometheus-dev-secrets
             defaultMode: 256
             items:
             - key: caCrt
@@ -116,6 +126,15 @@ spec:
 
       containers:
         - name: {{ .Chart.Name }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
           env:
           - name: LICENSE
             value: {{ .Values.license | default "not accepted" }}
