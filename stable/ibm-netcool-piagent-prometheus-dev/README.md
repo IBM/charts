@@ -1,4 +1,7 @@
-# IBM Operations Analytics - Predictive Insights Mediation Pack for Prometheus - Beta
+# IBM Operations Analytics - Predictive Insights Mediation Pack for Prometheus - Beta - This chart has been deprecated
+
+THIS CHART IS NOW DEPRECATED. Here’s what you need to know: On March 20th, 2020 the helm chart for IBM Operations Analytics - Predictive Insights Mediation Pack for Prometheus will no longer be supported and will be removed from IBM's public helm repository on github.com on April 20, 2020. This will result in the chart no longer being displayed in the catalog. 
+
 This helm package contains the Docker image for the IBM Operations Analytics - Predictive Insights Mediation Pack for Prometheus. Use it to convert Prometheus metric data received from nodes in a Kubernetes environment, and to send that data to IBM Operations Analytics - Predictive Insights for monitoring and anomaly prediction.
 
 ## Introduction
@@ -57,6 +60,24 @@ kubectl get secrets/monitoring-client-certs -n kube-system -o yaml
 ```
 This command retrieves 2 files, tls.crt and tls.key. Copy the content of these files and save it as you need it when you configure the Helm chart.
 
+### Secret Creation
+
+You will need to generate a secret for security certificates as part of the installation to do this run the following command, replacing the "VALUE" as explained below
+
+```
+kubectl create secret generic ibm-netcool-piagent-prometheus-dev-secrets --from-literal=tlsKey=VALUE --from-literal=tlsCrt=VALUE --from-literal=caCrt=VALUE
+```
+
+To get the approptiate values:.
+- tlsKey - Prometheus TLS Key: Copy the content of the TLS key that Prometheus uses from your Kubernetes environment. This file is the tls.key file that you noted in step 4 in the Prerequisites section.
+- tlsCrt - Prometheus TLS Certificate: Copy the content of the TLS certificate that Prometheus uses from your Kubernetes environment. This file is the tls.crt file that you noted in step 4 in the Prerequisites section
+- caCrt - Prometheus CA Certificate: Copy the content of the CA certificate that Prometheus uses from your Kubernetes environment. This file is the CA Certificate file that you noted in step 5 in the Prerequisites section.
+
+### PodSecurityPolicy Requirements 
+
+  - N/A
+  - Custom PodSecurityPolicy definition:
+  ```N/A```
 
 ## Installing the Chart
 
@@ -75,13 +96,9 @@ To read this documentation on Knowledge Center, see [Configuring integration](ht
 - PI Endpoint: Enter the IP address and port that you want to use to connect to your Predictive Insights installation.
 - Tenant ID: Enter the Tenant ID that Predictive Insights uses to identify the data. Note the ID as you need when you create a topic in Predictive Insights.
 
-3. To configure the security certificates, complete the following fields:
-- Prometheus TLS Certificate: Copy the content of the TLS certificate that Prometheus uses from your Kubernetes environment. This file is the tls.crt file that you noted in step 4 in the Prerequisites section.
-- Prometheus TLS Key: Copy the content of the TLS key that Prometheus uses from your Kubernetes environment. This file is the tls.key file that you noted in step 4 in the Prerequisites section.
-- Prometheus CA Certificate: Copy the content of the CA certificate that Prometheus uses from your Kubernetes environment. This file is the CA Certificate file that you noted in step 5 in the Prerequisites section.
-4. When you are finished, click Install.
+3. When you are finished, click Install.
 
-5. To validate the install you can verify from the UI or from the command line.
+4. To validate the install you can verify from the UI or from the command line.
    In the UI , go to Helm releases . Search for the agent the you installed. Click on the agent name. In the Deployment section, click on the deployment name. Click on Logs. 
    You should see log entries for Executing command service_memory_metrics & Executing command prometheus_cpu. If there is no error message associated with this, your install was successful
    INFO   [14:54:11.359] [pool-5-thread-1] c.i.c.w.r.c.d.ChainedCommand -  Executing command service_memory_metrics

@@ -1,5 +1,5 @@
 {/* agent configuration for predictiveinsights */}}
-{{- define "agentConfig" }}
+{{- define "ibm-netcool-piagent-prometheus-dev.agentConfig" }}
 RestCommand_service_cpu_metrics.json: |
  {
    "name" : "service_cpu_metrics",
