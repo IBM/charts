@@ -5,14 +5,42 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
   labels:
-    app: {{ template "fullname" . }}-test
+    app.kubernetes.io/name: {{ template "ibm-netcool-piagent-prometheus-dev.fullname" . }}-test
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+    helm.sh/chart: {{ .Release.Name }}-{{ .Chart.Name }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    release: {{ .Release.Service }}
 spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:      
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: beta.kubernetes.io/arch
+            operator: In
+            values:
+            - amd64        
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
   containers:
   - name: {{ .Release.Name }}-get-test
-    image: "alpine"
-    command: ['wget']
-    args: ["--header","content-type: application/json","--header","Authorization: Basic dXNlcjpwYXNzd29yZA==","http://{{ template "servicename" . }}:11000/healthcheck/usage"]
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: true
+      runAsNonRoot: true
+      runAsUser: 1001
+      capabilities:
+        drop:
+        - ALL
+    image: "alpine:3.11.3"
+    command: ['echo']
+    args: ["nothing"]
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
   restartPolicy: Never
