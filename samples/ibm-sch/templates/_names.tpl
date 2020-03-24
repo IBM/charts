@@ -404,3 +404,38 @@ Usage:
   {{- end -}}
 {{/*   */}}
 {{- end -}}
+
+{{/*
+"sch.names.entitledRegistryImage" is a shared helper to aid with path 
+manipulation when installing from Entitled Registry vs local docker registry
+to ensure done consistently across all images and change changed in one place
+when restriction for hierarchy in image path is removed.
+
+Image paths starting with "cp.icr.io" or "cp.stg.icr.io" passed to the function
+will be updated to add a "cp/" folder between the entitled registry path and
+the image name. For example,
+
+cp.icr.io/mq:1.0.0 would be updated to cp.icr.io/cp/mq:1.0.0  or
+cp.stg.icr.io/mq:1.0.0 would be updated to cp.stg.icr.io/cp/mq:1.0.0
+
+Usage:
+
+spec:
+  template:
+    spec:
+      containers:
+        - name: {{ include "sch.names.fullCompName" (list . "content-server") }}
+          image: {{ include "sch.names.entitledRegistryImage" (list . $.Values.image.repository) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+*/}}
+{{- define "sch.names.entitledRegistryImage" -}}
+  {{- $params := . -}}
+  {{- $root := first $params -}}
+  {{- $imagePath := (include "sch.utils.getItem" (list $params 1 "")) -}}
+  {{- if not ( or (hasPrefix "cp.icr.io/cp/" $imagePath ) (hasPrefix "cp.stg.icr.io/cp/" $imagePath)) }}
+{{- cat $imagePath | replace "cp.icr.io/" "cp.icr.io/cp/" | replace "cp.stg.icr.io/" "cp.stg.icr.io/cp/" -}}
+  {{- else }}
+{{- $imagePath }}
+  {{- end -}}
+{{- end -}}
