@@ -15,7 +15,7 @@
 # Flag --solutions to be used to check ibm-security-solutions prereq
 #
 # Example:
-#     ./checkprereq.sh cp4s [--solutions]
+#     ./checkprereq.sh [ -n namespace ] [--solutions]
 #
 
 isPresent() {
@@ -28,18 +28,40 @@ isPresent() {
   fi
 }
 
-SOLUTIONS="$2"
-NAMESPACE="$1"
-if [ "X$NAMESPACE" == "X" ]; then
-   echo "Usage: $0 <Namespace>"
-   exit 1
-fi
+set_namespace()
+{
+  NAMESPACE="$1"
+  ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null) 
+  if [ "X$ns" == "X" ]; then
+    echo "ERROR: Invalid namespace $NAMESPACE"
+    exit 1
+  fi
+}
 
-ns=$(kubectl get namespace $NAMESPACE -o name)
-if [ "X$ns" == "X" ]; then
-  echo "Invalid namespace $NAMESPACE"
-  exit 1
-fi
+NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
+SOLUTIONS=""
+
+while true
+do
+  arg="$1"
+  shift
+  if [ "X$arg" == "X" ]; then
+    break
+  fi
+  case $arg in
+  -n)
+    set_namespace "$1"
+    shift
+    ;;
+  --solutions)
+     SOLUTIONS="yes"
+     ;;
+  *)
+     echo "ERROR: invalid argument $arg"
+     usage
+     ;;
+  esac
+done
 
 nodes=$(kubectl get node -o name -lnode-role.kubernetes.io/compute=true)
 if [ "X$nodes" == "X" ]; then
@@ -85,14 +107,9 @@ if [ "X$SOLUTIONS" == "X" ]; then
   exit 0
 fi
 
-isPresent deployment postgres-operator
 isPresent secret isc-ingress-default-secret
 isPresent serviceaccount ibm-dba-ek-isc-cases-elastic-bai-psp-sa
-ps=$(kubectl get pod -lname=postgres-operator -o jsonpath='{.items[*].status.phase}' 2>/dev/null)
-if [ "X$ps" != "XRunning" ]; then
-  echo "ERROR: Postgres operator not running"
-  exit 1
-fi
+
 idp=$(kubectl get pod -lapp=auth-idp -n kube-system -o jsonpath='{.items[0].status.phase}')
 if [ "X$idp" != "XRunning" ]; then
   echo "ERROR: auth-idp-provider is not running"

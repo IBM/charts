@@ -93,6 +93,10 @@ done
 oc adm policy add-scc-to-user nonroot -z ibm-isc-operators --as system:admin
 oc adm policy add-scc-to-group anyuid  system:serviceaccounts:$NAMESPACE --as system:admin
 
+# Create the Service Account for Cases Elastic
+oc create serviceaccount ibm-dba-ek-isc-cases-elastic-bai-psp-sa
+oc adm policy add-scc-to-user ibm-privileged-scc -z ibm-dba-ek-isc-cases-elastic-bai-psp-sa
+
 # update node configuration to enable reboots
 if [ "X$mc" == "X" ]; then
   for cm in $(kubectl get configmap -n openshift-node -o name)
@@ -104,9 +108,20 @@ fi
 # create a pull secret
 kubectl create secret docker-registry ibm-isc-pull-secret -n $NAMESPACE --docker-server=$repository "--docker-username=$username" "--docker-password=$password"
 
-# create arangodb license
-kubectl create secret generic arango-license-key --from-literal=token="EVALUATION:125f16ada6047bd17eeeefa3f011070510b5fbd9d85122afdeca72c380e7ac83"
-
 # add annotations for the secrets
 kubectl patch secret ibm-isc-pull-secret --type merge --patch '{"metadata":{"labels":{"app.kubernetes.io/instance":"isc-security-foundation","app.kubernetes.io/managed-by":"isc-security-foundation","app.kubernetes.io/name":"ibm-isc-pull-secret"}}}'
-kubectl patch secret arango-license-key --type merge --patch '{"metadata":{"labels":{"app.kubernetes.io/instance":"isc-security-foundation","app.kubernetes.io/managed-by":"isc-security-foundation","app.kubernetes.io/name":"arango-license-key"}}}'
+
+# Label the compute/worker nodes for Openwhisk
+# Check if nodes are labels as 'compute' or 'worker' under ROLE
+compute=$(kubectl get nodes | awk '{print $3}' | grep compute)
+worker=$(kubectl get nodes | awk '{print $3}' | grep worker)
+if [ "X$compute" != "X" ]; then
+     #compute label found on nodes
+     kubectl label nodes --selector='node-role.kubernetes.io/compute' openwhisk-role=invoker
+elif [ "X$worker" != "X" ]; then
+     #worker label found on nodes
+     kubectl label nodes --selector='node-role.kubernetes.io/worker' openwhisk-role=invoker
+else
+    echo "Error : Neither worker not compute label found on nodes, unable to label openwhisk invoker"
+    exit 1
+fi
