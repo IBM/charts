@@ -12,7 +12,7 @@
 # You need to run this once per cluster
 #
 # Example:
-#     ./cleanup.sh $NAMESPACE [--all] [--force] [--nowait]
+#     ./cleanup.sh [ -n $NAMESPACE ] [--all] [--force] [--nowait]
 #
 
 FORCE="no"
@@ -62,7 +62,7 @@ wait_crs() {
 }
 
 usage() {
-  echo "Usage: $0 <NAMESPACE> [ --all ] [ --force ] [--nowait]"
+  echo "Usage: $0 [-n <NAMESPACE>] [ --all ] [ --force ] [--nowait]"
   exit 1
 }
 
@@ -94,25 +94,34 @@ kubedelc() {
   echo $res
 }
 
+set_namespace()
+{
+  NAMESPACE="$1"
+  ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null) 
+  if [ "X$ns" == "X" ]; then
+    echo "ERROR: Invalid namespace $NAMESPACE"
+    exit 1
+  fi
+}
 
-NAMESPACE="$1"
-case "X$NAMESPACE" in
-  X|X--*)
-    usage
-    ;;
-  *)
-    ;;
-esac
-shift
-
-ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null)
-if [ "X$ns" == "X" ]; then
-  usage
+if [ "X$WATCH_NAMESPACE" == "X" ]; then
+  NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
+else
+  NAMESPACE="$WATCH_NAMESPACE"
 fi
 
-for arg in $*
+while true
 do
+  arg="$1"
+  shift
+  if [ "X$arg" == "X" ]; then
+    break
+  fi
   case $arg in
+  -n)
+    set_namespace "$1"
+    shift
+    ;;
   --force)
      FORCE="yes"
      ;;
@@ -124,6 +133,7 @@ do
      FORCE="yes"
      ;;
   *)
+     echo "ERROR: invalid argument $arg"
      usage
      ;;
   esac
@@ -156,8 +166,6 @@ echo "Removing elastic resources"
 kubedel elastic --all --wait=false
 echo "Removing openwhisk resources"
 kubedel iscopenwhisk --all --wait=false
-echo "Removing arango deployment"
-kubedel arangodeployment --all --wait=false
 
 wait_crs 'redis' 'middleware'
 wait_crs 'couchdb' 'middleware'
@@ -166,7 +174,6 @@ wait_crs 'minio' 'middleware'
 wait_crs 'iscopenwhisk' 'middleware'
 wait_crs 'elastic' 'middleware'
 wait_crs 'oidcclient' 'middleware'
-wait_crs 'arangodeployment' 'none'
 
 # check that 
 echo "Deleting ibm-redis helm charts"
@@ -221,10 +228,10 @@ do
 done
 
 dchart=$(helm ls --tls -a --namespace $NAMESPACE |\
-    awk '{print $1}' | grep '^ibm-dba-ek$')
+    awk '{print $1}' | grep 'ibm-dba-ek-isc-cases-elastic')
 if [ "X$dchart" != "X" ]; then
   echo "Deleting elastic chart as its not removed"
-  helm delete --tls --purge ibm-dba-ek
+  helm delete --tls --purge ibm-dba-ek-isc-cases-elastic
 fi
 
 echo "Delete deployments:"
@@ -239,22 +246,16 @@ echo "Delete pvc:"
 kubedel pvc -lplatform=isc
 
 kubedel deploy isc-cases-operator
+kubedel deploy cp4s-pgoperator
+kubedel deploy postgres-operator
+kubedel deploy isc-cases-postgres
+kubedel deploy isc-cases-activemq
+kubedel deploy isc-cases-application
 kubedel job isc-cases-operator-create-cr-1
 kubedel job isc-cases-operator-delete-cr-1
+kubedel job cp4s-pgoperator-create-cr-1
+kubedel job cp4s-pgoperator-delete-cr-1
 kubedel job uds-deploy-functions
-
-# deleting arangodb pods
-for type in "agnt" "crdn" "prmr"
-do
-   for pod in $(kubectl get pod -n $NAMESPACE -o name | grep "^pod/arangodb-${type}-")
-   do
-       kubectl patch -n $NAMESPACE $pod --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
-       kubedel $pod --wait=false
-   done
-done
-
-# deleting arango services
-kubedel svc -larango_deployment=arangodb
 
 ### Delete PVC for etcd
 echo "Deleting pvc for ibm-etcd:"
@@ -282,7 +283,7 @@ do
   kubedel --wait=false $pvc
 done
 
-for pvc in $(kubectl get -n $NAMESPACE pvc -o name|grep 'persistentvolumeclaim/arangodb-')
+for pvc in $(kubectl get -n $NAMESPACE pvc -o name|grep 'persistentvolumeclaim/isc-cases-postgres')
 do
   kubedel --wait=false $pvc
 done
@@ -293,22 +294,44 @@ kubedelc clusterrolebinding isc-cases-operator
 kubedel serviceaccount isc-cases-operator
 kubedel serviceaccount ibm-isc-aitk-orchestrator
 kubedelc clusterrolebinding ibm-isc-aitk-orchestrator
+kubedelc clusterrolebinding cp4s-pgoperator-pgo-clusterrolebinding
+kubedelc clusterrole cp4s-pgoperator-pgo-clusterrole
+kubedelc role cp4s-pgoperator-pgo-role
+kubedelc role cp4s-pgoperator
+kubedelc rolebinding cp4s-pgoperator-pgo-rolebinding
+kubedelc rolebinding cp4s-pgoperator
 
 kubedel --wait=false clients.oidc.security.ibm.com ibm-isc-oidc-credentials
 
-kubedel cases.isc.ibm.com --all
+kubedel cases.isc.ibm.com --all --wait=false
+kubedel postgresqloperators.isc.ibm.com --all --wait=false
 wait_crs 'cases.isc.ibm.com' 'none'
+wait_crs 'postgresqloperators.isc.ibm.com' 'none'
 kubedelc crd cases.isc.ibm.com
+kubedelc crd postgresqloperators.isc.ibm.com
+kubedelc crd pgbackups.crunchydata.com pgclusters.crunchydata.com pgpolicies.crunchydata.com pgreplicas.crunchydata.com \
+  pgtasks.crunchydata.com
+kubedel configmap isc-cases-pgcluster-configmap isc-cases-postgres-ca-cert pgo-config
+kubedel secret ibmcp4s-image-pull-secret isc-cases-postgres-testuser-secret isc-cases-postgres-primaryuser-secret \
+  isc-cases-postgres-postgres-secret isc-cases-postgres-backrest-repo-config pgo-user pgo.tls pgo-backrest-repo-config
+kubedel role pgo-backrest-role pgo-role
+kubedel rolebinding pgo-backrest-role-binding pgo-role-binding
+kubedel serviceaccount postgres-operator pgo-backrest cp4s-pgoperator
+kubedel secret "${NAMESPACE}clusterrole" "${NAMESPACE}clusterrolecrd"
+kubedel clusterrole "${NAMESPACE}clusterrolesecret" "${NAMESPACE}clusterrole" "${NAMESPACE}clusterrolecrd"
+kubedel clusterrolebinding "${NAMESPACE}clusterbinding" "${NAMESPACE}clusterbindingcrd" "${NAMESPACE}clusterbindingsecret"
+kubedel service postgres-operator
 
 kubedel monitoringdashboards.monitoringcontroller.cloud.ibm.com ibm-security-solutions-prod-ibm-security-solutions-inventory
 
 kubedel route isc-route-default
 
 # Remove license
-kubedel configmap ibm-security-solutions-prod-license
+for cm in ibm-security-solutions-prod-license ibm-security-solutions-prod isc-cases-activemq-keystore isc-cases-application-keystore
+do
+  kubedel configmap $cm
+done
 
-# Remove openwhisk labels
-kubectl label nodes --all openwhisk-role-
 
 if [ "X$ALL" == "Xyes" ]; then
   echo "Delete platform secret:"
