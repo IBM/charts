@@ -11,30 +11,57 @@
 #
 # You need to run this script once prior of the chart upgrade
 #
-# Example: preUpgrage.sh <NAMESPACE>
+# Example: preUpgrage.sh [ -n <NAMESPACE> ]
 
-NAMESPACE="$1"
+dir="$(dirname $0)"
+dir="$dir/../pre-install/clusterAdministration"
+NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
 
-#Check if all parameters are added else exit
-if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 <namespace>"
-  exit 1
-fi
+set_namespace()
+{
+  NAMESPACE="$1"
+  ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null)
+  if [ "X$ns" == "X" ]; then
+    echo "ERROR: Invalid namespace $NAMESPACE"
+    exit 1
+  fi
+  oc project $NAMESPACE
+}
 
-n=$(kubectl get namespace $NAMESPACE -o yaml 2>/dev/null)
-if [ "X$n" == "X" ]; then
-  echo "Namespace $NAMESPACE does not exist"
-  exit 1
-fi
+while true
+do
+  arg="$1"
+  if [ "X$arg" == "X" ]; then
+    break
+  fi
+  shift
+  case $arg in
+    -n)
+      set_namespace "$1"
+      shift
+      ;;
+    *)
+      echo "ERROR: invalid argument $arg"
+      echo "Usage: $0 <namespace>"
+      exit 1
+      ;;
+  esac
+done
 
 kubectl delete job -n $NAMESPACE uds-deploy-functions 2>/dev/null
 
-dir=$(dirname $0)
-dir="$dir/../pre-install/clusterAdministration"
+kubectl delete scc ibm-isc-scc
 mc=$(kubectl get MachineConfigPool worker -o name 2>/dev/null)
 if [ "X$mc" == "X" ]; then
-  kubectl apply -f $dir/ibm-isc-scc.yaml
+  kubectl create -f $dir/ibm-isc-scc.yaml
 else
-  kubectl apply -f $dir/ibm-isc-scc-42.yaml
+  kubectl create -f $dir/ibm-isc-scc-42.yaml
 fi
+echo "INFO: assocating accounts with scc"
+for acc in ambassador ibm-isc-operators ibm-isc-application \
+    isc-openwhisk-openwhisk-core isc-openwhisk-openwhisk-invoker
+do
+    oc adm policy add-scc-to-user ibm-isc-scc -z $acc --as system:admin
+done
+
 exit 0

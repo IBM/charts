@@ -1,4 +1,10 @@
-## Introduction
+# Name
+
+IBM&reg; Cloud Pak for Security
+
+# Introduction
+
+## Summary
 
 IBM® Cloud Pak for Security provides a platform to quickly integrate your existing security tools to generate deeper insights into threats across hybrid, multicloud environments.
 
@@ -13,20 +19,16 @@ The ibm-security-foundations-prod chart installs foundation elements of IBM Clou
 
 - **Middleware Operator**. Manages the install of data and platform assets used by IBM Cloud Pak for Security, including: CouchDB, ElasticSearch, Etcd, MinIO, Redis, OpenWhisk.
 - **Sequences Operator**. Orchestrates the install of IBM Cloud Pak for Security components.
-- **Arango Operator**. Manages the install of ArangoDB for IBM Cloud Pak for Security.
 - **Ambassador**. Creates and manages the Envoy gateway service of IBM Cloud Pak for Security.
 - **Custom Resource Definitions**. To enable management of these elements by IBM Cloud Pak for Security.
 
+The Middleware and Sequence operator deployed as part of this chart are Namespace-scoped. They watch and manage resources within the namespace that IBM Cloud Pak for Security is installed.
 
 ## Prerequisites
 
-- Red Hat OpenShift Container Platform 3.11
-  - Kubernetes 1.11.0
-- IBM Cloud Private 3.2.1
-  - Common Services 3.2.1
-  - Tiller 2.12.3 or later
-  - Helm 2.12.3
-- Cluster Admin privileges
+- Red Hat OpenShift Container Platform 4.2 (or 3.11 on IBM Cloud)
+- IBM Cloud Platform Common Services 3.2.4
+- Cluster admin privileges
 
 
 ## PodDisruptionBudget
@@ -40,9 +42,59 @@ This chart requires a SecurityContextConstraints to be bound to the target names
 
 The predefined SecurityContextConstraints name: [`ibm-privileged-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart.
 
+This chart also defines a custom SecurityContextConstraints object which is used to finely control the permissions/capabilities needed to deploy this chart, the definition of this SCC is shown below : 
+
+ 
+ ```
+ allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: false
+allowedCapabilities: []
+allowedUnsafeSysctls:
+  - net.core.somaxconn
+apiVersion: v1
+defaultAddCapabilities: []
+fsGroup:
+  ranges:
+  - max: 5000
+    min: 1000
+  type: MustRunAs
+groups: []
+kind: SecurityContextConstraints
+metadata:
+  annotations:
+    kubernetes.io/description: ibm-isc-scc is a copy of nonroot scc which allows somaxconn changes
+  name: ibm-isc-scc
+priority: 10
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- KILL
+- MKNOD
+- SETUID
+- SETGID
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  ranges:
+  - max: 5000
+    min: 1000
+  type: MustRunAs
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+```
 The following script 
 ```
-ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/pre-install/clusterAdministration/createSecurityClusterPrereqs.sh 
+ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/pre-install/preInstall.sh 
 ```
 is run at install time to set the SecurityContextConstraints required by the chart.
 
@@ -56,103 +108,53 @@ By default, `ibm-security-foundations` has the following resource request requir
 | Ambassador|    256Mi    | 100m        |
 | Sequences |    256Mi    | 250m        |
 | Middleware|    256Mi    | 250m        |
-| Kube-arangodb|   1024Mi    | 250m   |
 
 See the [configuration](#configuration) section for how to configure these values.
 
 
 ## Installing the chart
 
-
-### Kubernetes namespace
-
-Select or create a custom namespace in which you will deploy the Cloud Pak for Security charts. 
-
-The namespace name must be less than 10 characters in length.
-
-To create a namespace you must first log in to the cluster.
-
-```
-cloudctl login
-kubectl create namespace <NAMESPACE>
-```
-
-
-### Log in to the cluster and set the namespace
-
-You must set the namespace when running commands such as `helm`, `oc` or `kubectl`. For example:
-
-- Set the namespace on log in:
-  ```
-  cloudctl login -n <NAMESPACE>
-  ```
-- Set the namespace after log in:
-  ```
-  oc project <NAMESPACE>
-  ```
-- Specify the namespace in a command:
-  ```
-  kubectl -n namespace [command]
-  ```
-
-
-### Fetch and extract the chart
-
-To perform a command line installation, first fetch and extract the chart.
-
-The helm repository from which to fetch the charts depends on whether you are installing using IBM Entitled Registry or IBM Passport Advantage. See the [IBM Cloud Pak for Security Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.1.0/docs/security-pak/installation.html) for more details. The steps below assume you are installing using IBM Entitled Registry.
-
-Check that `helm` has the entitled repository:
-```
-helm repo list
-```
-
-Check that the output contains the line:
-```
-entitled  https://raw.githubusercontent.com/IBM/charts/master/repo/entitled/
-```
-
-If it does not, run the following command to add the entitled repository:
-```
-helm repo add entitled https://raw.githubusercontent.com/IBM/charts/master/repo/entitled/
-```
-
-You can now fetch and extract the chart:
-```
-helm fetch entitled/ibm-security-foundations-prod
-tar xzf ibm-security-foundations-prod-<RELEASE>.tgz
-```
-
-Commands below starting with the relative path `ibm-security-foundations-prod/` must be run in the directory where you extracted the chart.
-
-
 ### Run the pre-install script
 
-The script `createSecurityClusterPrereqs.sh`:
+The script `preInstall.sh`:
 -  Enables the pods to execute with the correct security privileges
 -  Creates an image pull secret to pull images from a repository
-
-Using the IBM Entitled Registry repository, the parameters are:
-```
-REPOSITORY=cp.icr.io
-REPO_USERNAME=cp
-REPO_PASSWORD=<YOUR_ENTITLEMENT_KEY>
-```
-Alternatively, using Passport Advantage see the guidance in [IBM Cloud Pak for Security Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.1.0/docs/security-pak/ppa_download.html).
 
 Before running the script, log in to the cluster.
 
 Run the script as follows:
 ```
-ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/pre-install/clusterAdministration/createSecurityClusterPrereqs.sh <NAMESPACE> <REPOSITORY> <REPO_USERNAME> <REPO_PASSWORD>
+ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/pre-install/preInstall.sh [ arguments ] 
 ```
 
-If you need to change the image pull secret, delete the secret before re-running the script. To delete the secret:
+where arguments may be
 
-```
-kubectl delete secret ibm-isc-pull-secret -n <NAMESPACE>
-```
 
+| Argument| Description
+|---------|-------------
+| -n NAMESPACE | Change namespace from current
+| -force | Force update of the existing cluster configuration
+| -repo REPOSITORY REPO_USERNAME REPO_PASSWORD | Set the image repository and repository credentials as documented per install type (Entitled Registry or PPA)
+| -sysctl | Enable net.core.somaxconn sysctl change
+  
+### Check prerequistes	
+
+A script is provided which should be run to validate pre-requisites before beginning the install of `ibm-security-foundations-prod`. 	
+
+
+This script is run with the following command : 	
+
+```	
+ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/pre-install/checkprereq.sh -n <NAMESPACE> 	
+```	
+
+Output will display the default storage class and when successfull will indicate : 	
+
+```	
+INFO: ibm-security-foundations prerequisites are OK	
+```	
+
+Any errors should be resolved before continuing.
 
 ### Install the chart
 
@@ -166,7 +168,7 @@ Important user-specified values are:
 | Parameter | Note | 
 | --- | --- |
 | `global.helmUser` | Required |
-| `global.repository` | Required if installing [using IBM Passport Advantage](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.1.0/docs/security-pak/ppa_download.html), you must specify a docker registry host (and path if relevant). Note that the repository you specify here must match the repository specified in [Run the pre-install script](#run-the-pre-install-script) above. |
+| `global.repository` | Required if installing [using IBM Passport Advantage](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.2.0/docs/security-pak/ppa_download.html), you must specify a docker registry host (and path if relevant). Note that the repository you specify here must match the repository specified in [Run the pre-install script](#run-the-pre-install-script) above. |
 | `global.repositoryType` | If installing from Passport Advantage archives, change to `local` |
 | `global.cloudType` | Required if installing to a cloud platform such as IBM Cloud or AWS rather than a Red Hat OpenShift Container Platform |
 
@@ -176,7 +178,7 @@ To specify values for a command line installation, either edit the values file o
 
 To edit the values file
 - Edit the `ibm-security-foundations-prod/values.yaml` file (or optionally copy the file to another directory)
-- Run the helm command with the additional option `--values <PATH_TO_VALUES_YAML>`
+- Run the helm command with the additional option `--values <PATH>/values.yaml`
 
 To pass the values on the command line
 - Run the helm command with an additional `--set <VARNAME>=<VALUE>` option for each value
@@ -186,7 +188,7 @@ Before running the helm install, log in to the cluster and set the namespace.
 
 To install the chart run the following command:
 ```
-helm install --name <RELEASE_NAME> --namespace=<NAMESPACE>  ./ibm-security-foundations-prod --tls [--values or --set options]
+helm install --name <RELEASE_NAME> --namespace=<NAMESPACE>  ./ibm-security-foundations-prod --tls --values <PATH>/values.yaml [--set options]
 ```
                      
 ### Verifying the chart
@@ -203,15 +205,15 @@ If you have previously installed Cloud Pak for Security, you can upgrade to a la
 
 To upgrade the installation, first run the command:
 ```
-ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/pre-upgrade/preUpgrade.sh <NAMESPACE>
+ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/pre-upgrade/preUpgrade.sh [ -n <NAMESPACE> ]
 ```
 
 Then run the command:
 ```
-helm upgrade [OPTIONS]
+helm upgrade <RELEASE_NAME> --namespace=<NAMESPACE>  ./ibm-security-foundations-prod --tls --values <PATH>/values.yaml [--set options]
 ```
 
-where OPTIONS are as described in [Install the chart](#install-the-chart) above.
+where passing `--values <PATH>/values.yaml` and `[--set options]` are as described in [Install the chart](#install-the-chart) above.
 
 
 ### Uninstalling the chart
@@ -226,7 +228,7 @@ helm delete <RELEASE_NAME> --purge --tls
 
 Then the post-delete script must be run as follows:
 ```
-ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/post-delete/Cleanup.sh <NAMESPACE> --all --force
+ibm-security-foundations-prod/ibm_cloud_pak/pak_extensions/post-delete/Cleanup.sh -n <NAMESPACE> --all --force
 ```
 
 Any errors in the output of this script (other than a Usage error) can be safely ignored.
@@ -241,10 +243,8 @@ The following table lists the configurable parameters of the ibm-security-founda
 |global.affinity| Pod affinity| hard |
 |global.ambassador.replicaCount| Number of replicas for ambassador operator| 2 |
 |global.cloudType| Cloud provider type. Options available are: ocp, ibmcloud, aws. Defaults to `ocp` for Red Hat OpenShift Container Platform  | `ocp` |
-|global.helmUser| Cluster administrator username which will be used to provision charts | [Required] |
+|global.helmUser| Cluster (ICP ADMIN) administrator username which will be used to provision charts | [Required] |
 |global.imagePullPolicy| Image pull policy for operator images.| `IfNotPresent` |
-|global.kubearangodb.operator.resources.requests.cpu | CPU requests for kubearangodb operator | 250m |
-|global.kubearangodb.operator.resources.requests.memory | Memory requests for kubearangodb operator | 1024Mi |
 |global.operator.ambassador.resources.requests.cpu | CPU requests for ambassador | 250m |
 |global.operator.ambassador.resources.requests.memory | Memory requests for ambassador | 256Mi |
 |global.operator.middleware.resources.requests.cpu | CPU requests for middleware operator | 250m |
@@ -262,4 +262,5 @@ The following table lists the configurable parameters of the ibm-security-founda
 This chart can only run on amd64 architecture type. 
 
 ## Documentation
-Further guidance can be found in the [Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.1.0)
+Further guidance can be found in the [Knowledge Center](https://www.ibm.com/support/knowledgecenter/SSTDPP_1.2.0)
+
