@@ -1,6 +1,6 @@
 
-# What’s new in Chart Version 1.0.4
-Final version of fix pack 2 for Cloud Pak for Security
+# What’s new in Chart Version 1.0.5
+Threat Intelligence Service and Threat Intelligence Insights for Cloud Pak for Security
 
 
 # Fixes
@@ -19,4 +19,5 @@ Product fixes to support Cloud Pak for Security
 | 1.0.0 | Sept 26, 2019|  >=1.11 | | None  | New product release |
 | 1.0.1| Dec 13, 2019|  >=1.11 | | None  |Product fixes to support Cloud Pak for Security|
 | 1.0.4| Feb 11, 2020|  >=1.11 | | None  |Product fixes to support Cloud Pak for Security|
+| 1.0.5| Mar 26th, 2020|  >=1.11 | | None  |Threat Intelligence Service and Threat Intelligence Insights for Cloud Pak for Security and Cases subchart added to provide Postgresql Operator service|
 
