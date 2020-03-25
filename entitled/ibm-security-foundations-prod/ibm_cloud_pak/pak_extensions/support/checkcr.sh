@@ -14,7 +14,7 @@
 # This script takes one argument; namespace
 #
 # Example:
-#     ./checkcr.sh cp4s [-all]
+#     ./checkcr.sh [-n cp4s] [-all]
 #
 
 checkSeq() {
@@ -64,6 +64,7 @@ checkSeq() {
           ;;
       esac
     done 
+    return
 }
 
 checkCR() {
@@ -101,18 +102,44 @@ checkCR() {
           ;;
       esac
     done
+    return
 }
 
-NAMESPACE="$1"
-if [ "X$NAMESPACE" == "X" ]; then
-   echo "Usage: $0 <Namespace> [--all]"
-   exit 1
-fi
+set_namespace() {
+  NAMESPACE="$1"
+  ns=$(kubectl get namespace $NAMESPACE -o name 2>/dev/null)
+  if [ "X$ns" == "X" ]; then
+    echo "ERROR: Invalid namespace $NAMESPACE"
+    exit 1
+  fi
+  oc project $NAMESPACE
+}
 
+NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
 ALL=0
-if [ "X$2" == "X--all" ]; then
-  ALL=1
-fi
+
+while true
+do
+  arg="$1"
+  if [ "X$arg" == "X" ]; then
+    break
+  fi
+  shift
+  case "$arg" in
+  -n)
+    set_namespace "$1"
+    shift
+    ;;
+  --all)
+    ALL=1
+    ;;
+  *)
+    echo "ERROR: Invalid argument $arg"
+    echo "Usage: $0 [ -n <Namespace> ] [--all]"
+    exit 1
+    ;;
+esac
+done
 
 checkSeq
 for crd in couchdb redis etcd minio iscopenwhisk elastic cases
@@ -146,4 +173,3 @@ if [ "X$pvc" != "X" ]; then
   echo "Problems in PVC:"
   echo "$pvc"
 fi
-    

@@ -23,6 +23,9 @@ if [ "X$NAME" == "X" ]; then
   exit 1
 fi
 
+# Strip type prefix if set
+NAME=$(echo $NAME | sed -e 's!^.*/!!')
+
 guard=$(kubectl get iscguard $NAME -o 'jsonpath={.spec.generation}' 2>/dev/null)
 seq=$(kubectl get iscsequence $NAME -o 'jsonpath={.spec.labels.generation}' 2>/dev/null)
 
