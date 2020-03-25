@@ -212,7 +212,7 @@ Kubernetes 1.9
 To install the chart into the namespace 'default', with the release name `my-ucdagent`, and reading all remaining installation values from a file named my-agent-values.yaml:
 
 ```bash
-$ helm install ibm-ucda-prod-2.1.8.tgz --namespace default --name my-ucdagent -f my-agent-values.yaml --tls
+$ helm install ibm-ucda-prod-2.1.9.tgz --namespace default --name my-ucdagent -f my-agent-values.yaml --tls
 ```
 
 The [configuration](#Configuration) section lists the parameters that can be set during installation.

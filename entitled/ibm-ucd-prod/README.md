@@ -2,44 +2,47 @@
 
 ## Introduction
 
-[IBM UrbanCode Deploy](https://developer.ibm.com/urbancode/products/urbancode-deploy/) is a tool for automating application deployments through your environments. It is designed to facilitate rapid feedback and continuous delivery in agile development while providing the audit trails, versioning and approvals needed in production.
+[UrbanCode Deploy](https://www.urbancode.com/product/deploy/) is a tool for automating application deployments through your environments. It is designed to facilitate rapid feedback and continuous delivery in agile development while providing the audit trails, versioning and approvals needed in production.
 
 ## Chart Details
 
 * This chart deploys a single server instance of IBM UrbanCode Deploy that may be scaled to multiple instances.
-* Includes a StatefulSet workload object
-* A Service
+* Includes two statefulSet workload objects, one for server instances and one for distributed front end instances, and corresponding services for them.
 
 ## Prerequisites
 
-1. Kubernetes 1.9; Tiller 2.9.1
+1. Kubernetes 1.11.0+; kubectl and oc CLI; Helm/Tiller 2.9.1; 
+* [Install and setup oc/kubectl CLI](https://docs.okd.io/latest/cli_reference/get_started_cli.html#installing-the-cli)
+* [Install and setup the Helm CLI](https://blog.openshift.com/getting-started-helm-openshift/).  Be sure to set HELM_VERSION=v2.9.1
 
-2. Database - UrbanCode Deploy requires a database.  The database may be running in your cluster or outside of your cluster.  This database  must be configured as described in [Installing the server database](https://www.ibm.com/support/knowledgecenter/SS4GSP_7.0.0/com.ibm.udeploy.install.doc/topics/DBinstall.html) before installing this Helm chart.  The database parameters used to connect to the database are required properties of this Helm chart.  The Apache Derby database type is not supported when running the UrbanCode Deploy server in a Kubernetes cluster.
+2. Image and Helm Chart - The UCD server image and helm chart can be accessed either via the Entitled Registry and public Helm repository, or by downloading a Passport Advantage archive (PPA) and loading the image and helm chart into your own image registry and helm repository.
+* Entitled Registry
+    * The public Helm chart repository can be accessed at https://github.com/IBM/charts/tree/master/entitled and directions for accessing the UrbanCode Deploy server chart will be discussed later in this README.
+    * Get a key to the entitled registry
+        * Log in to [MyIBM Container Software Library](https://myibm.ibm.com/products-services/containerlibrary) with the IBMid and password that are associated with the entitled software.
+        * In the Entitlement keys section, select Copy key to copy the entitlement key to the clipboard.
+        * An imagePullSecret must be created to be able to authenticate and pull images from the Entitled Registry.  Once this secret has been created you will specify the secret name as the value for the image.secret parameter in the values.yaml you provide to 'helm install ...'  Note: Secrets are namespace scoped, so they must be created in every namespace you plan to install UCD into.  Example Docker registry secret to access Entitled Registry with an Entitlement key. 
 
-3. Secret - A Kubernetes Secret object must be created to store the initial UCD administrator password and the password used to access the database mentioned above.  These passwords are retrieved during Helm chart installation.  The secret must be named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart or you can create a secret with any name and pass the name as a Helm Chart parameter value.
+```
+oc create secret docker-registry entitledregistry-secret --docker-username=cp --docker-password=<EntitlementKey> --docker-server=cp.icr.io
+```
 
-The secret can be created either by using the Cluster Console or using the kubectl CLI.
+* Passport Advantage archive
+    * Download the PPA archive for your operating system from the [IBM Passport Advantage website](https://www.ibm.com/software/passportadvantage/pao_customer.html).
+    * Load the image and helm chart into your cluster using [cloudctl catalog load-archive](https://www.ibm.com/support/knowledgecenter/SSBS6K_3.2.0/manage_cluster/cli_catalog_commands.html#load-archive). 
 
-* Through the Cluster Console, create Secret objects in the target namespace.
-    * Click on Configuration->Secrets in the left navigation view
-    * Click the New Secret button
-    * On the General tab:
-        * Enter the name of the secret object.  For example:  MyRelease-secrets
-        * Choose the namespace where the chart is to be installed.
-    * On the Data tab:
-        * Enter 'dbpassword' in the Name field.
-        * Use your favorite base64 encoding tool to encode the database password and paste it into the Value field.
-        * Click the 'Add data' button and repeat for Name 'initpassword'
-    * Click the Create button.
+3. Database - UrbanCode Deploy requires a database.  The database may be running in your cluster or outside of your cluster.  This database  must be configured as described in [Installing the server database](https://www.ibm.com/support/knowledgecenter/SS4GSP_7.0.5/com.ibm.udeploy.install.doc/topics/DBinstall.html) before installing this Helm chart.  The database parameters used to connect to the database are required properties of this Helm chart.  The Apache Derby database type is not supported when running the UrbanCode Deploy server in a Kubernetes cluster.
 
-* Through the kubectl CLI, create a Secret object in the target namespace.
+4. Secret - A Kubernetes Secret object must be created to store the initial UCD administrator password and the password used to access the database mentioned above.  These passwords are retrieved during Helm chart installation.  The secret can be named 'HelmReleaseName-secrets' where 'HelmReleaseName' is the release name you give when installing this Helm chart or you can create a secret with any name and pass the name as the Helm Chart parameter value 'secret.name'.
+
+* Through the oc/kubectl CLI, create a Secret object in the target namespace.
     Generate the base64 encoded values for the initial UCD admin password and database passwords.
 
 ```
 echo -n 'admin' | base64
 YWRtaW4=
-echo -n '1f2d1e2e67df' | base64
-MWYyZDFlMmU2N2Rm
+echo -n 'MyDbpassword' | base64
+TXlEYnBhc3N3b3Jk
 ```
 
 Create a file named secret.yaml with the following contents, using your Helm Relese name and base64 encoded values.
@@ -52,18 +55,18 @@ metadata:
 type: Opaque
 data:
   initpassword: YWRtaW4=
-  dbpassword: MWYyZDFlMmU2N2Rm
+  dbpassword: TXlEYnBhc3N3b3Jk
 ```
 
-Create the Secret using kubectl apply
+Create the Secret using oc apply
 
 ```
-kubectl apply -f ./secret.yaml
+oc apply -f ./secret.yaml
 ```
 
 Delete or shred the secret.yaml file.
 
-4. JDBC drivers - A PersistentVolume (PV) that contains the JDBC driver(s) required to connect to the database configured above must be created.  You must either:
+5. JDBC drivers - A PersistentVolume (PV) that contains the JDBC driver(s) required to connect to the database configured above must be created.  You must either:
 
   * Create Persistence Storage Volume - Create a PV, copy the JDBC drivers to the PV, and create a PersistentVolumeClaim (PVC) that is bound to the PV. For more information on Persistent Volumes and Persistent Volume Claims, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes). Sample YAML to create the PV and PVC are provided below.
 
@@ -98,7 +101,7 @@ spec:
     matchLabels:
       volume: ucd-ext-lib-vol
 ```
-  * Dynamic Volume Provisioning - If your cluster supports [dynamic volume provisioning](https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/), you may use it to create the PV and PVC. However, the JDBC drivers will still need to be copied to the PV. To copy the JDBC drivers to your PV during the chart installation process, first write a bash script that copies the JDBC drivers from a location accessible from your cluster to `${UCD_HOME}/ext_lib/`. Next, store the script, named `script.sh`, in a yaml file describing a [ConfigMap](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/).  Finally, create the ConfigMap in your cluster by running a command such as `kubectl create configmap <map-name> <data-source>`.  Below is an example ConfigMap yaml file that copies a MySQL .jar file from a web server using wget.
+  * Dynamic Volume Provisioning - If your cluster supports [dynamic volume provisioning](https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/), you may use it to create the PV and PVC. However, the JDBC drivers will still need to be copied to the PV. To copy the JDBC drivers to your PV during the chart installation process, first write a bash script that copies the JDBC drivers from a location accessible from your cluster to `${UCD_HOME}/ext_lib/`. Next, store the script, named `script.sh`, in a yaml file describing a [ConfigMap](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/).  Finally, create the ConfigMap in your cluster by running a command such as `oc create configmap <map-name> <data-source>`.  Below is an example ConfigMap yaml file that copies a MySQL .jar file from a web server using wget.
 
 ```
 kind: ConfigMap
@@ -124,7 +127,7 @@ Additionally, you may manually create a PersistentVolume/PersistentVolumeClaim a
 
 Example setup scripts to create the Persistent Volume, Persistent Volume Claim and configMap are included in the Helm chart under pak_extensions/pre-install/persistentStorageAdministration directory.
 
-5. A PersistentVolume that will hold the appdata directory for the UrbanCode Deploy server is required.  If your cluster supports dynamic volume provisioning you will not need to create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioing, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
+6. A PersistentVolume that will hold the appdata directory for the UrbanCode Deploy server is required.  If your cluster supports dynamic volume provisioning you will not need to create a PersistentVolume (PV) or PersistentVolumeClaim (PVC) before installing this chart.  If your cluster does not support dynamic volume provisioing, you will need to either ensure a PV is available or you will need to create one before installing this chart.  You can optionally create the PVC to bind it to a specific PV, or you can let the chart create a PVC and bind to any available PV that meets the required size and storage class.  Sample YAML to create the PV and PVC are provided below.
 
 ```
 apiVersion: v1
@@ -137,7 +140,7 @@ spec:
   capacity:
     storage: 20Gi
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   nfs:
     server: 192.168.1.17
     path: /volume1/k8/ucd-appdata
@@ -149,7 +152,7 @@ metadata:
 spec:
   storageClassName: ""
   accessModes:
-    - "ReadWriteOnce"
+    - "ReadWriteMany"
   resources:
     requests:
       storage: 20Gi
@@ -160,7 +163,11 @@ spec:
 
 Example setup scripts to create the Persistent Volume and Persistent Volume Claim are included in the Helm chart under pak_extensions/pre-install/persistentStorageAdministration directory.
 
+7.  If ingress controller is used to access the wss port from an UrbanCode Deploy Agent or the jms port from an UrbanCode Deploy Agent Relay, then port 443 should be specified along with the configured host name to access the proper service port defined for the UrbanCode Deploy Server.
+
 ### PodSecurityPolicy Requirements
+
+If you are running on OpenShift, skip this section and continue to the [SecurityContextConstraints Requirements](#red-hat-openshift-securitycontextconstraints-requirements) section below.
 
 This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you.
 
@@ -252,7 +259,13 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
 
-If running in a Red Hat OpenShift cluster, this chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+The UCD server image runs as user 1001, which will require you to allow the anyuid SCC for the namespace you are running in.  You can configure this using the following command
+
+```bash
+$ oc adm policy add-scc-to-group anyuid system:serviceaccounts:${YOUR_NAMESPACE}
+```
+
+This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
 
 The predefined `SecurityContextConstraints` name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this `SecurityContextConstraints` resource you can proceed to install the chart.
 
@@ -323,20 +336,29 @@ This chart defines a custom `SecurityContextConstraints` which can be used to fi
 
 ## Installing the Chart
 
-To install the chart with the release name `my-ucd-release` and connect to the specified database:
+Add the Entitled Registry helm chart repository to the local client.
+```bash
+$ helm repo add entitled https://raw.githubusercontent.com/IBM/charts/master/repo/entitled/
+```
+
+Get a copy of the values.yaml file from the helm chart so you can update it with values used by the install.
+```bash
+$ helm inspect values entitled/ibm-ucd-prod > myvalues.yaml
+```
+
+Edit the file myvalues.yaml to specify the parameter values to use when installing the UCD server instance.  The [configuration](#Configuration) section lists the parameter values that can be set.
+
+To install the chart into namespace 'ucdtest' with the release name `my-ucd-release` and use the values from myvalues.yaml:
 
 ```bash
-$ helm install --name my-ucd-release --set database.type=<Database Type> --set database.name=<Database name> --set database.hostname=<Database hostname or IP> --set database.port=<Database port> --set database.username=<Database user> ibm-ucd-prod --tls
+$ helm install --namespace ucdtest --name my-ucd-release --values myvalues.yaml entitled/ibm-ucd-prod --tls
 ```
-The above command sets database parameters. Other parameters may also be required. If parameters aren't specifed with the `--set` flag, their values will default to the values specified in the values.yaml file.
 
-The [configuration](#Configuration) section lists the parameters that can be set during installation.
-
-> **Tip**: List all releases using `helm list --tls`
+> **Tip**: List all releases using `helm list --tls`.  The --tls argument is not required in all cases.
 
 ## Verifying the Chart
 
-See the instruction (from NOTES.txt within chart) after the helm installation completes for chart verification. The instruction can also be viewed by running the command: helm status my-release --tls.
+See the instructions (from NOTES.txt within chart) after the helm installation completes for chart verification. The instruction can also be viewed by running the command: helm status my-ucd-release --tls.
 
 ## Upgrading the Chart
 
@@ -344,7 +366,7 @@ Check [here](https://developer.ibm.com/urbancode/docs/running-urbancode-deploy-c
 
 ## Uninstalling the Chart
 
-To uninstall/delete the `my-ucd-release` deployment:
+To uninstall/delete the `my-ucd-release` release:
 
 ```bash
 $ helm delete --purge my-ucd-release --tls
@@ -375,8 +397,8 @@ The Helm chart has the following values that can be overriden using the --set pa
 |          | username | The user to access the database with | |
 |          | jdbcConnUrl | The JDBC Connection URL used to connect to the database used by the UCD server. This value is normally constructed using the database type and other database field values, but must be specified here when using Oracle RAC/ORAAS or SQL Server with Integrated Security. | |
 | secureConnections  | required | Specify whether UCD server connections are required to be secure | Default value is "true" |
-| secret | name | Kubernetes secret which defines required UCD passwords. | You may leave this blank to use default name of <HelmReleaseName>'-secrets' where HelmReleaseName is the name of your Helm Release. |
-| license | serverURL | Information required to connect to the UCD license server. | Empty (default) to begin a 60-day evaluation license period.|
+| secret | name | Kubernetes secret which defines required UCD passwords. | You may leave this blank to use default name of 'HelmReleaseName-secrets' where HelmReleaseName is the name of your Helm Release. |
+| ucdLicense | serverURL | Information required to connect to the UCD license server. | Empty (default) to begin a 60-day evaluation license period.|
 | extLibVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the extlib directory is created by the chart. | Default value is "ext-lib" |
 |              | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
 |              | size | Size of the volume used to hold the JDBC driver .jar files |  |
@@ -384,10 +406,15 @@ The Helm chart has the following values that can be overriden using the --set pa
 |              | configMapName | Name of an existing ConfigMap which contains a script named script.sh. This script is run before UrbanCode Deploy server installation and is useful for copying database driver .jars to a Persistent Volume. |  |
 | persistence | enabled | Determines if persistent storage will be used to hold the UCD server appdata directory contents. This should always be true to preserve server data on container restarts. | Default value "true" |
 |             | useDynamicProvisioning | Set to "true" if the cluster supports dynamic storage provisoning | Default value "false" |
+|             | fsGroup | fsGroup value to use for gid when accessing persistent storage | Default value is "0" |
 | appDataVolume | name | The base name used when the Persistent Volume and/or Persistent Volume Claim for the UCD server appdata directory is created by the chart. | Default value is "appdata" |
 |               | existingClaimName | The name of an existing Persistent Volume Claim that references the Persistent Volume that will be used to hold the UCD server appdata directory. |  |
 |               | storageClassName | The name of the storage class to use when persistence.useDynamicProvisioning is set to "true". |  |
 |               | size | Size of the volume to hold the UCD server appdata directory |  |
+| ingress | enabled | Specifies whether to use Ingress | false (default) or true|
+|         | hosts | Hostname array used to access UrbanCode Deploy Server admin via Ingress (e.g. application.<proxy node address>.nip.io). | |
+|         | wsshosts | Hostname array used to access UrbanCode Deploy Server wss port via Ingress (e.g. application.<proxy node address>.nip.io:443). See chart readme documentation for more details | |
+|          | jmshosts | Hostname array used to access UrbanCode Deploy Server jms port via Ingress (e.g. application.<proxy node address>.nip.io:443). See chart readme documentation for more details | |
 | resources | constraints.enabled | Specifies whether the resource constraints specified in this helm chart are enabled.   | false (default) or true  |
 |           | limits.cpu  | Describes the maximum amount of CPU allowed | Default is 2000m. See Kubernetes - [meaning of CPU](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu)  |
 |           | limits.memory | Describes the maximum amount of memory allowed | Default is 2Gi. See Kubernetes - [meaning of Memory](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) |
