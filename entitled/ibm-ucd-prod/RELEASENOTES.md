@@ -1,6 +1,7 @@
-# What's new in Chart Version 6.0.7
+# What's new in Chart Version 6.0.8
 
-* Support for UCD 7.0.5.1
+* Support for UCD 7.0.5.2
+* Support for installing UCD Server as an Operator
 
 ## Breaking Changes
 * Rollback to previous versions of UCD server is not supported without manual intervention because database schema changes are present.  Manual steps can be found [here](https://developer.ibm.com/urbancode/docs/running-urbancode-deploy-container-kubernetes/#upgrading-ucd-chart).
@@ -14,7 +15,8 @@
 
 | Chart | Date | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------------ | ---------------- | ------- |
-| 6.0.7 | February 11th, 2020 | ucds: 7.0.5.1.1044461 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.5.1 |
+| 6.0.8 | March 24th, 2020 | ucds: 7.0.5.2.1050384 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.5.2 |
+| 6.0.7 | February 11th, 2020 | ucds: 7.0.5.1.1044461 | Rollback of previous versions of UCD server not supported | Support for UCD Server 7.0.5.1 |
 | 6.0.6 | January 14th, 2020 | ucds: 7.0.5.0.1041488 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.5.0 |
 | 6.0.5 | December 4th, 2019 | ucds: 7.0.4.2.1038002 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.4.2 |
 | 6.0.4 | November 5th, 2019 | ucds: 7.0.4.1.1036185 | Rollback to previous versions of UCD server not supported | Support for UCD Server 7.0.4.1 |
