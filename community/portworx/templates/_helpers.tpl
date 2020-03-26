@@ -113,3 +113,46 @@ Create the name of the cluster role binding to use for hooks
     {{ default "default" .Values.serviceAccount.hook.name }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Populate the ports based on deployemnt environment
+*/}}
+{{- define "px.pxAPIPort" -}}
+{{- if ( eq true .Values.changePortRange) -}}
+    {{- printf "17001" -}}
+{{- else -}}
+    {{- printf "9001" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.pxHealthPort" -}}
+{{- if ( eq true .Values.changePortRange) -}}
+    {{- printf "17015" -}}
+{{- else -}}
+    {{- printf "9015" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.pxKVDBPort" -}}
+{{- if ( eq true .Values.changePortRange) -}}
+    {{- printf "17019" -}}
+{{- else -}}
+    {{- printf "9019" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.pxSDKPort" -}}
+{{- if ( eq true .Values.changePortRange) -}}
+    {{- printf "17020" -}}
+{{- else -}}
+    {{- printf "9020" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "px.pxGatewayPort" -}}
+{{- if ( eq true .Values.changePortRange) -}}
+    {{- printf "17021" -}}
+{{- else -}}
+    {{- printf "9021" -}}
+{{- end -}}
+{{- end -}}
