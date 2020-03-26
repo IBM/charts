@@ -1,25 +1,17 @@
 The deployment may take a few minutes to complete.
 Please wait for a few minutes and launch the Mobile Foundation Operations Console by opening the following URL in your browser
-{{- if .Values.ingress.hostname }}
-## IBM Mobile Foundation Server Operations Console ##
-https://{{ .Values.ingress.hostname }}/mfpconsole
-## IBM Mobile Foundation Push ##
-https://{{ .Values.ingress.hostname }}/imfpush
-## IBM Mobile Foundation Operational Analytics Console ##
-https://{{ .Values.ingress.hostname }}/analytics/console
-{{- else }}
 
-HOST_IP=$(kubectl get nodes -l proxy=true -o json | jq -r '.items[0].status.addresses[] | select(.type == "ExternalIP") | .address')
+export NODE_IP=$(kubectl get nodes --selector=kubernetes.io/role!=master -o jsonpath={.items[*].status.addresses[?\(@.type==\"ExternalIP\"\)].address})
+export HTTP_NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }})
+export HTTPS_NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[1].nodePort}" services {{ template "fullname" . }})
 
-if [ -z "${HOST_IP}" ]; then
-   # Get Ingress IP from Nodes using InternalIP
-   HOST_IP=$(kubectl get nodes -l proxy=true -o json | jq -r '.items[0].status.addresses[] | select(.type == "InternalIP") | .address')
-fi
 Get the Server URL by running these commands:
+
 Launch Mobile Foundation Server Administration Console URL by running these commands:
-  echo https://$HOST_IP/mfpconsole
+  echo http://$NODE_IP:$HTTP_NODE_PORT/mfpconsole
 Mobile Foundation Push Endpoint
-  echo https://$HOST_IP/imfpush
+  echo http://$NODE_IP:$HTTP_NODE_PORT/imfpush
 Launch Analytics URL by running these commands:
-  echo https://$HOST_IP/analytics/console
-{{- end }}
+  echo http://$NODE_IP:$HTTP_NODE_PORT/analytics/console
+Launch Application Center Console URL by running these commands:
+  echo http://$NODE_IP:$HTTP_NODE_PORT/appcenterconsole
