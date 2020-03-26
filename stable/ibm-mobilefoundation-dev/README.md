@@ -11,6 +11,15 @@ For more information:
 - [Mobile Foundation Documentation](https://www.ibm.com/support/knowledgecenter/en/SSNJXP/welcome.html)
 - [Mobile Foundation on IBM Cloud Private Documentation](http://mobilefirstplatform.ibmcloud.com/tutorials/en/foundation/8.0/ibmcloud/mobilefirst-server-on-icp/)
 
+## Features
+
+* Mobile Foundation Server
+* Mobile Foundation Push
+* Mobile Foundation Liveupdate
+* Mobile Foundation Analytics
+* Mobile Foundation Analytics Receiver
+* Mobile Foundation Application Center
+
 ## Chart Details
 
 - Deploys Mobile Foundation Server with Analytics included onto Kubernetes.
@@ -103,6 +112,80 @@ In ICP 3.1, you also need to create the RoleBinding:
 
 - `kubectl create rolebinding ibm-mobilefoundation-dev-psp-rolebinding --clusterrole=ibm-mobilefoundation-dev-psp-clusterrole --serviceaccount=<namespace>:default --namespace=<namespace>`
 
+## Red Hat OpenShift SecurityContextConstraints Requirements
+This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+
+The predefined `SecurityContextConstraints` name: [`restricted`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this `SecurityContextConstraints` resource you can proceed to install the chart.
+
+This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied instructions.
+
+- From the user interface, you can copy and paste the following snippets to enable the custom SecurityContextConstraints
+  - Custom SecurityContextConstraints definition:
+    ```
+    apiVersion: security.openshift.io/v1
+    kind: SecurityContextConstraints
+    metadata:
+    annotations:
+        kubernetes.io/description: "This policy is requiring pods to run with a non-root UID, and allow host path access."
+    name: ibm-mobilefoundation-scc-{{ .Release.Namespace }}
+    allowHostDirVolumePlugin: true
+    allowHostIPC: false
+    allowHostNetwork: false
+    allowHostPID: false
+    allowHostPorts: false
+    allowPrivilegedContainer: false
+    allowPrivilegeEscalation: true
+    allowedCapabilities:
+    - SETPCAP
+    - AUDIT_WRITE
+    - CHOWN
+    - NET_RAW
+    - DAC_OVERRIDE
+    - FOWNER
+    - FSETID
+    - KILL
+    - SETUID
+    - SETGID
+    - NET_BIND_SERVICE
+    - SYS_CHROOT
+    - SETFCAP
+    allowedFlexVolumes: []
+    allowedUnsafeSysctls: []
+    defaultAddCapabilities: []
+    defaultPrivilegeEscalation: true
+    forbiddenSysctls:
+    - "*"
+    fsGroup:
+    type: MustRunAs
+    ranges:
+    - max: 1111
+        min: 999
+    readOnlyRootFilesystem: false
+    requiredDropCapabilities:
+    - MKNOD
+    runAsUser:
+    type: MustRunAsNonRoot
+    seccompProfiles:
+    - docker/default
+    seLinuxContext:
+    type: RunAsAny
+    supplementalGroups:
+    type: MustRunAs
+    ranges:
+    - max: 1111
+        min: 999
+    volumes:
+    - configMap
+    - downwardAPI
+    - emptyDir
+    - persistentVolumeClaim
+    - projected
+    - secret
+    - nfs
+    groups:
+    - system:serviceaccounts:{{ .Release.Namespace }}
+    priority: 0
+    ```
 ## Resources Required
 
 This chart uses the following resources by default:
