@@ -7,15 +7,21 @@
 # Contributors:
 # IBM Corporation - initial API and implementation
 ###############################################################################
+{{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" }}
+apiVersion: networking.k8s.io/v1beta1
+{{- else }}
+apiVersion: extensions/v1beta1
+{{- end }}
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: {{ template "fullname" . }}
   labels:
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
-    app: {{ template "fullname" . }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app.kubernetes.io/name: {{ template "fullname" . }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
     release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}" 
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}" 
   annotations:
     ingress.kubernetes.io/client-max-body-size: "200m"
     nginx.ingress.kubernetes.io/client-max-body-size: "200m"
@@ -46,7 +52,7 @@ spec:
     secretName: {{ .Values.ingress.secret }}
 {{- end }}
   rules:
-{{- if .Values.ingress.secret }}
+{{- if .Values.ingress.hostname }}
   - host: {{ .Values.ingress.hostname }}
     http:
 {{- else }}
@@ -110,6 +116,30 @@ spec:
           servicePort: 9080
 {{- end }}
       - path: /analytics-service
+        backend:
+          serviceName: {{ template "fullname" . }}
+{{- if  .Values.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /analytics-receiver
+        backend:
+          serviceName: {{ template "fullname" . }}
+{{- if  .Values.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /mfpliveupdate
+        backend:
+          serviceName: {{ template "fullname" . }}
+{{- if  .Values.https }}
+          servicePort: 9443
+{{- else }}
+          servicePort: 9080
+{{- end }}
+      - path: /appcenterconsole
         backend:
           serviceName: {{ template "fullname" . }}
 {{- if  .Values.https }}
