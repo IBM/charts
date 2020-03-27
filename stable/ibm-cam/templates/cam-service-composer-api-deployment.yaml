@@ -70,6 +70,8 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-service-composer-api
       volumes:
+      - name: tmp-empty
+        emptyDir: {}
       - name: cam-cert
         secret:
           secretName: {{ .Values.camAPI.certificate.certName }}
@@ -130,7 +132,7 @@ spec:
       - name: cam-service-composer-api
         securityContext:
           privileged: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
@@ -157,6 +159,8 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: tmp-empty
+            mountPath: /tmp
           - name: cam-cert
             mountPath: /usr/src/app/certs
             readOnly: true
@@ -217,7 +221,7 @@ spec:
               {{- else }}
               name: cam-secure-values-secret
               {{- end }}
-              key: httpsProxy          
+              key: httpsProxy
         - name: https_proxy
           valueFrom:
             secretKeyRef:
@@ -226,7 +230,7 @@ spec:
               {{- else }}
               name: cam-secure-values-secret
               {{- end }}
-              key: httpsProxy  
+              key: httpsProxy
         - name: HTTP_PROXY
           valueFrom:
             secretKeyRef:
@@ -235,7 +239,7 @@ spec:
               {{- else }}
               name: cam-secure-values-secret
               {{- end }}
-              key: httpProxy  
+              key: httpProxy
         - name: http_proxy
           valueFrom:
             secretKeyRef:
@@ -244,7 +248,7 @@ spec:
               {{- else }}
               name: cam-secure-values-secret
               {{- end }}
-              key: httpProxy  
+              key: httpProxy
         - name: NO_PROXY
           valueFrom:
             secretKeyRef:
@@ -253,7 +257,7 @@ spec:
               {{- else }}
               name: cam-secure-values-secret
               {{- end }}
-              key: noProxy  
+              key: noProxy
         - name: no_proxy
           valueFrom:
             secretKeyRef:
@@ -262,7 +266,7 @@ spec:
               {{- else }}
               name: cam-secure-values-secret
               {{- end }}
-              key: noProxy  
+              key: noProxy
 {{- end }}
         - name: ICP_ENDPOINT
           value: https://$(ICP_MASTER_IP):$(ICP_PORT)
@@ -287,16 +291,18 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: SCL_MIGRATION_REQUIRED 
+        - name: SCL_MIGRATION_REQUIRED
           value: "true"
-        - name: SI_MIGRATION_REQUIRED 
+        - name: SI_MIGRATION_REQUIRED
           value: "true"
-        - name: SCL_Service_MIGRATION_REQUIRED 
+        - name: SCL_Service_MIGRATION_REQUIRED
           value: "true"
-        - name: COMPATIBILITY_MODE 
+        - name: COMPATIBILITY_MODE
           value: "false"
-        - name: FEATURE_APPROVAL_FOR_EDIT 
-          value: "false"  
+        - name: FEATURE_APPROVAL_FOR_EDIT
+          value: "false"
+        - name: FEATURE_APPROVAL_FOR_UPGRADE_DOWNGRADE
+          value: "false"
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -309,6 +315,8 @@ spec:
           value: "{{ .Values.global.audit }}"
         - name: AUDIT_LOG_PATH
           value: /var/audit/cam-service-composer-api-audit.log
+        - name: AUDIT_INITIATOR_HOST_ADDRESS_HEADER
+          value: X-Forwarded-For
 {{- if .Values.global.audit }}
       - name: cam-service-composer-api-audit
 {{- if .Values.global.ICP32}}
@@ -345,14 +353,14 @@ spec:
             mountPath: "/etc/logrotate.d/audit"
             subPath: audit
           - name: logrotate-conf
-            mountPath: "/etc/logrotate.conf"            
+            mountPath: "/etc/logrotate.conf"
             subPath: logrotate.conf
         livenessProbe:
           exec:
             command:
             - sh
             - -c
-{{- if .Values.global.legacyAudit }}            
+{{- if .Values.global.legacyAudit }}
             - "service cron status"
 {{- else }}
             - "ps -ef | grep python"
@@ -364,12 +372,12 @@ spec:
             command:
             - sh
             - -c
-{{- if .Values.global.legacyAudit }}            
+{{- if .Values.global.legacyAudit }}
             - "service cron status"
 {{- else }}
             - "ps -ef | grep python"
 {{- end }}
           initialDelaySeconds: 5
-          timeoutSeconds: 1 
+          timeoutSeconds: 1
           value: "true"
 {{- end }}

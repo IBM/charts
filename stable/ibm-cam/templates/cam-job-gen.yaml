@@ -54,13 +54,19 @@ spec:
        - name: {{ .Values.global.image.secretName }}
       {{- end }}
       {{- end }}
+      volumes:
+      - name: tmp-empty 
+        emptyDir: {}
       containers:
       - name: cred-gen
+        volumeMounts:
+          - name: tmp-empty
+            mountPath: /tmp
         image: "{{ .Values.image.repository }}icam-tenant-api:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           privileged: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
@@ -139,6 +145,28 @@ spec:
             wildcardPolicy: None
           status:
             ingress: []
+          EOF
+{{- end}}
+{{- if .Capabilities.APIVersions.Has "foundation.ibm.com/v1" }}
+          navconfig=$(kubectl get navconfigurations -n kube-system --no-headers | grep "nav" |  awk '{print $1}')
+          if [ $navconfig="" ]
+          then
+            navconfig=$(echo "DNE_backup")
+          fi
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: navconfig
+            namespace: {{ .Release.Namespace }}
+            labels: 
+              "app.kubernetes.io/name": {{ template "fullname" . }}
+              "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
+              release: "{{ .Release.Name }}"
+              "app.kubernetes.io/instance": "{{ .Release.Name }}"
+              "app.kubernetes.io/managed-by": "{{ .Release.Service }}"
+          data:
+            NAV_CONFIG_NAME: $navconfig
           EOF
 {{- end}}
           cat <<EOF | kubectl apply -f -
