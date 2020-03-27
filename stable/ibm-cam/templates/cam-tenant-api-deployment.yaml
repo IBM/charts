@@ -66,6 +66,8 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-tenant-api
       volumes:
+      - name: tmp-empty 
+        emptyDir: {}
       - name: cam-cert
         secret:
           secretName: {{ .Values.camAPI.certificate.certName }}
@@ -95,7 +97,7 @@ spec:
       - name: cam-tenant-api
         securityContext:
           privileged: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
@@ -122,6 +124,8 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: tmp-empty
+            mountPath: /tmp
           - name: cam-cert
             mountPath: /usr/src/app/certs
             readOnly: true
@@ -229,3 +233,27 @@ spec:
             secretKeyRef:
               name: oauth-client-secret
               key: WLP_CLIENT_REGISTRATION_SECRET
+        {{- if eq .Values.platform "mcmp" }}
+        - name: MCMP_SYSTEM_USER_ID
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mcmpSystemUserId
+        - name: MCMP_SYSTEM_USER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mcmpSystemUserAPIKey
+        - name: CAM_HOSTNAME
+          value: "{{ .Values.mcmp.camHostName }}"
+        - name: CAM_PORT
+          value: "{{ .Values.mcmp.camPort }}"
+        {{- end }}

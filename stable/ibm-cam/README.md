@@ -68,7 +68,7 @@ spec:
   - SETFCAP
   requiredDropCapabilities:
   - MKNOD
-  readOnlyRootFilesystem: false
+  readOnlyRootFilesystem: true
 {{- if .Values.global.audit }}
   allowedHostPaths:
     - pathPrefix: {{ .Values.auditService.config.journalPath }}
@@ -150,7 +150,7 @@ fsGroup:
   ranges:
   - max: 1111
     min: 999
-readOnlyRootFilesystem: false
+readOnlyRootFilesystem: true
 requiredDropCapabilities:
 - MKNOD
 runAsUser:
@@ -179,19 +179,19 @@ priority: 0
 ## Resources Required
 
 * The minimum hardware requirements for IBM Cloud Automation Manager is a single worker node with at least 12 vCPU and 30GB of memory.
-For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_requirements.html
+For a full list of hardware requirements see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.2.0.0/cam_requirements.html
 
-* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_create_pv.html
+* Persistent Volumes are required to be pre-created. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.2.0.0/cam_create_pv.html
 
-* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_requirements.html
+* This chart requires elevated privileges to run. For details see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.2.0.0/cam_requirements.html
 
 ## Installing the Chart
 
-This chart is normally deployed to the `services` namespace but can be deployed to multiple namespaces and supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_planning.html
+This chart is normally deployed to the `services` namespace but can be deployed to multiple namespaces and supports various installation options. For complete details please see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.2.0.0/cam_planning.html
 
 ## Configuration
 
-For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.1.0.1/cam_installation_parameters.html
+For the full list of configuration options supported by this chart see: https://www.ibm.com/support/knowledgecenter/SS2L37_4.2.0.0/cam_installation_parameters.html
 
 ## Limitations
 

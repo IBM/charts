@@ -70,6 +70,8 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-iaas
       volumes:
+      - name: tmp-empty
+        emptyDir: {}
       - name: cam-cert
         secret:
           secretName: {{ .Values.camAPI.certificate.certName }}
@@ -126,7 +128,7 @@ spec:
       - name: cam-iaas
         securityContext:
           privileged: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
@@ -153,6 +155,8 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: tmp-empty
+            mountPath: /tmp
           - name: cam-cert
             mountPath: /usr/src/app/certs
             readOnly: true
@@ -304,8 +308,10 @@ spec:
           value: "{{ .Values.global.audit }}"
         - name: AUDIT_LOG_PATH
           value: /var/audit/cam-iaas-audit.log
+        - name: AUDIT_INITIATOR_HOST_ADDRESS_HEADER
+          value: X-Forwarded-For
         - name: SLM_TAG_PATH
-          value: /var/camlog/slm.xml
+          value: /var/camlog/cam.slmtag
         - name: SERVICE_NAME
           value: cam-iaas
 {{- if .Values.proxy.useProxy }}

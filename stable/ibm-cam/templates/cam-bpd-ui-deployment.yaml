@@ -69,7 +69,7 @@ spec:
       - name: cam-bpd-ui
         securityContext:
           privileged: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
@@ -151,6 +151,12 @@ spec:
           - name: DB_SECURE
             value: "true"
         {{- end }}
+        {{- if ne .Values.platform "mcmp" }}
+        {{- if .Capabilities.APIVersions.Has "foundation.ibm.com/v1" }}
+          - name: BRANDING
+            value: "cp4mcm"
+        {{- end }}
+        {{- end }}
           - name: LICENSE
             value: "accept"
           - name: WEB_SERVER_HOSTNAME
@@ -223,7 +229,7 @@ spec:
                 key: PLATFORM
           {{- if eq .Values.platform "mcmp" }}
           - name: MCMP_AUTHENTICATION_URL
-            value: {{ .Values.mcmp.authenticationUrl }}
+            value: {{ .Values.mcmp.gatewayUrl }}
           {{- end }}
 {{- if .Values.proxy.useProxy }}
           - name: HTTPS_PROXY
@@ -282,6 +288,16 @@ spec:
                 key: noProxy  
 {{- end }}
         volumeMounts:
+          - name: java-config
+            mountPath: /opt/ibm-ucd-patterns/java/jre/lib/security
+          - name: tmp-empty 
+            mountPath: /tmp
+          - name: config-setup 
+            mountPath: /opt/ibm-ucd-patterns/conf/server
+          - name: tomcat-setup 
+            mountPath: /opt/ibm-ucd-patterns/opt/tomcat
+          - name: supervisord-setup
+            mountPath: /etc/supervisor/conf.d
           - name: cam-cert
             mountPath: /usr/src/app/certs
             readOnly: true
@@ -306,6 +322,16 @@ spec:
       {{- end }}
       {{- end }}
       volumes:
+      - name: java-config
+        emptyDir: {}
+      - name: tmp-empty
+        emptyDir: {}
+      - name: tomcat-setup
+        emptyDir: {}
+      - name: config-setup
+        emptyDir: {}
+      - name: supervisord-setup 
+        emptyDir: {}
       - name: cam-cert
         secret:
           secretName: {{ .Values.camAPI.certificate.certName }}
