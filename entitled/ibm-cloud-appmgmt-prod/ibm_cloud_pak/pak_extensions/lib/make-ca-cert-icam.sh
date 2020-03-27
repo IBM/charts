@@ -16,11 +16,30 @@
 
 PATH=/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/bin; export PATH
 
-set -e
-#set -x
 
 trap '/bin/rm -f ext.cfg' EXIT
 
+echo "Checking if oc is installed"
+which oc
+result=$?
+if [[ $result -ne 0 ]]; then
+    echo "oc isn't installed; checking if kubectl is installed as fallback"
+    which kubectl
+    result=$?
+    if [[ $result -ne 0 ]]; then
+	echo "neither oc nor kubectl is available in your PATH; the script needs at least one of them installed to function properly" >&2
+	exit 1
+    else
+	echo "found kubectl in the PATH; using it instead of oc"
+	ocOrKubectl="kubectl"
+    fi
+else
+    echo "found oc in the PATH"
+    ocOrKubectl="oc"
+fi
+
+set -e
+#set -x
 
 if [ -z "$SHA" ]; then
   if [ -z "$RSA" ]; then
@@ -190,16 +209,16 @@ openssl x509 -in "$pfx"ca.crt     -subject -issuer >> "$pfx"cas.pem
 echo "$(GENERATE_SECRET)" > "$pfx"client.password
 
 #Create secret artifacts required by kube-ingress
-kubectl create secret generic "${server_secret}" --namespace="${kube_ns}" \
+$ocOrKubectl create secret generic "${server_secret}" --namespace="${kube_ns}" \
   --from-file=tls.crt="${pfx}server.crt" --from-file=tls.key="${pfx}server.key" \
   --from-file=ca.crt="${pfx}cas.pem"
 
-kubectl create secret generic "${client_secret}" --namespace="${kube_ns}" \
+$ocOrKubectl create secret generic "${client_secret}" --namespace="${kube_ns}" \
   --from-file=client.crt="${pfx}client.crt" --from-file=client.key="${pfx}client.key" \
   --from-file=client.password="${pfx}client.password"  --from-file=ca.crt="${pfx}cas.pem"
 
 #Save all certificates and keys
-kubectl create secret generic "${archive}" \
+$ocOrKubectl create secret generic "${archive}" \
   --namespace="${kube_ns}" \
   --from-file=ca.crt="${pfx}ca.crt" --from-file=ca.key="${pfx}ca.key" \
   --from-file=signer.crt="${pfx}signer.crt" --from-file=signer.key="${pfx}signer.key" \
@@ -209,9 +228,9 @@ kubectl create secret generic "${archive}" \
 
 patch_str='{"metadata":{"labels":{"release":"'${release}'"}}}'
 
-kubectl patch secret "${server_secret}" --namespace="${kube_ns}"  -p "${patch_str}"
-kubectl patch secret "${client_secret}" --namespace="${kube_ns}"  -p "${patch_str}"
-kubectl patch secret "${archive}"       --namespace="${kube_ns}"  -p "${patch_str}"
+$ocOrKubectl patch secret "${server_secret}" --namespace="${kube_ns}"  -p "${patch_str}"
+$ocOrKubectl patch secret "${client_secret}" --namespace="${kube_ns}"  -p "${patch_str}"
+$ocOrKubectl patch secret "${archive}"       --namespace="${kube_ns}"  -p "${patch_str}"
 
 #Cleanup - don't leave potentially sensitive files laying around
 rm -f ${pfx}server.pem ${pfx}cas.pem

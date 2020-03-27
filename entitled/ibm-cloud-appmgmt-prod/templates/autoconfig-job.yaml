@@ -1,0 +1,58 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{ if (include "icam.isMCM" .)  }}
+## create map for my data
+{{- $rootData := fromYaml (include "root.data" .) }}
+## get root metering data
+{{- $rootMetering := $rootData.metering -}}
+{{- include "sch.config.init" (list . "ibm-cloud-appmgmt-prod.sch.chart.config.values") }}
+{{- $compName := "autoconfig" }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 4 }}
+  name: {{ include "sch.names.fullCompName" (list . $compName) | trunc 52 | trimSuffix "-" | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  schedule: "*/5 * * * *"
+  startingDeadlineSeconds: 120
+  concurrencyPolicy: "Forbid"
+  successfulJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          annotations:
+{{- include "sch.metadata.annotations.metering" (list . $rootMetering) | indent 12 }}
+          labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 12 }}
+        spec:
+          restartPolicy: Never
+          containers:
+          - command: 
+              - /opt/ibm/app/auto.configurator-prod
+            image: "{{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.global.imageNamePrefix }}auto_configurator:{{ .Values.autoconfig.imageTag }}"
+            imagePullPolicy: {{ .Values.global.imagePullPolicy }} 
+            env:
+              - name: SYNTHETIC_SERVER
+                value: "{{ .Release.Name }}-synthetic:9081" 
+              - name: ENABLE_TESTS
+                value: "{{ .Values.autoconfig.testActive }}"                
+              - name: DISABLE_ALERTS
+                value: "{{ .Values.autoconfig.disableAlerts }}"
+              - name: TEST_INTERVAL
+                value: "{{ .Values.autoconfig.testInterval }}"
+            name: autoconfig
+{{ include "autoConfigurator.securityContext" . | indent 12 }}
+            resources:
+{{ include "autoConfigurator.comp.size.data" (list . "autoConfiguratorGo" "resources") | indent 16 }}
+{{ end }}
