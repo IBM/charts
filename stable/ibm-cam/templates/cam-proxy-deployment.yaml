@@ -66,6 +66,12 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-proxy
       volumes:
+      - name: nginx-empty
+        emptyDir: {}
+      - name: logrotate-setup
+        emptyDir: {}
+      - name: tmp-empty 
+        emptyDir: {}
       - name: cam-cert
         secret:
           secretName: {{ .Values.camAPI.certificate.certName }}
@@ -90,7 +96,7 @@ spec:
       - name: cam-proxy
         securityContext:
           privileged: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
@@ -122,6 +128,12 @@ spec:
             readOnly: true
           - name:  {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
+          - name: tmp-empty
+            mountPath: /usr/src/nginx
+          - name: logrotate-setup
+            mountPath: /usr/src/logrotate
+          - name: nginx-empty
+            mountPath: /var/lib/nginx
         envFrom:
         - configMapRef:
             name: common-config
@@ -175,3 +187,10 @@ spec:
               fieldPath: metadata.name
         - name: LOG_LEVEL
           value: {{ .Values.camLoggingPolicies.logLevel }}
+{{- if .Capabilities.APIVersions.Has "foundation.ibm.com/v1" }}
+        - name: NAV_CONFIG_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: navconfig
+              key: NAV_CONFIG_NAME
+{{- end}}
