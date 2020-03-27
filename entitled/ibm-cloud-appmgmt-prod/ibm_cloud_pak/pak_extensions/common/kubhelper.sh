@@ -44,6 +44,6 @@ supports_scc() {
 }
 
 supports_psp() {
-  resource_version_exists podsecuritypolicies.extensions extensions/v1beta1
+  resource_version_exists podsecuritypolicies.policy policy/v1beta1
   return $?
 }

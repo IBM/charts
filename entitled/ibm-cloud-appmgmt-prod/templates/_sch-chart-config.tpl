@@ -23,12 +23,11 @@ sch:
 ## define data for this chart
 ##############################
 
-
 {{- define "ibm-cloud-appmgmt-prod.data" -}}
 metering:
   productName: "IBM Cloud App Management Advanced"
   productID: "7edfd8e411794d70af341cfa86fe5fc8"
-  productVersion: "2019.4.0"
+  productVersion: "2020.1.0"
 {{- end -}}
 
 ##############################

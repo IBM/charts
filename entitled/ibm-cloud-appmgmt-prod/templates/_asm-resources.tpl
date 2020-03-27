@@ -240,13 +240,13 @@ search:
 topology:
   size0:
     enableHPA: false
-    jvmArgs: "-Xms128M -Xmx512M"
+    jvmArgs: "-Xms128M -Xmx768M"
     resources:
       requests:
-        memory: "600Mi"
+        memory: "900Mi"
         cpu: "0.5"
       limits:
-        memory: "900Mi"
+        memory: "1100Mi"
         cpu: "1.0"
   size1:
     enableHPA: true
@@ -260,13 +260,13 @@ topology:
         cpu: "2.0"
   size0_amd64:
     enableHPA: false
-    jvmArgs: "-Xms128M -Xmx512M"
+    jvmArgs: "-Xms128M -Xmx768M"
     resources:
       requests:
-        memory: "600Mi"
+        memory: "900Mi"
         cpu: "0.5"
       limits:
-        memory: "900Mi"
+        memory: "1100Mi"
         cpu: "1.0"
   size1_amd64:
     enableHPA: true
@@ -280,13 +280,13 @@ topology:
         cpu: "2.0"
   size0_ppc64le:
     enableHPA: false
-    jvmArgs: "-Xms128M -Xmx512M"
+    jvmArgs: "-Xms128M -Xmx768M"
     resources:
       requests:
-        memory: "600Mi"
+        memory: "900Mi"
         cpu: "0.25"
       limits:
-        memory: "900Mi"
+        memory: "1100Mi"
         cpu: "0.5"
   size1_ppc64le:
     enableHPA: true

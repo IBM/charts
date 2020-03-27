@@ -10,9 +10,6 @@
 # Global section
 global:
   monitoring:
-    # To be used when entitled to base services only for limiting deployment of services
-    #advanced: false
-
     # Enable services required for resource monitoring; disable for eventing only
     resources: true
 
@@ -39,6 +36,9 @@ global:
     # Secret name containing https tls authorization data (eg ibmcloudappmgmt-ingress-tls). Leave this blank if installing in Cloud Pak for Multicloud Manager mode.
     tlsSecret: ""
 
+    # Secret name containing all TLS data for agents to consume (eg ibmcloudappmgmt-ingress-artifacts).
+    artifactsSecret: ""
+
 # Values Applying to ICAM-MCM Integrated Deployment
   icammcm:
     ingress:
@@ -51,6 +51,9 @@ global:
 
       # Secret name containing https tls authorization data for Proxy Ingress (eg ibmcloudappmgmt-ingress-tls).
       tlsSecret: "icam-ingress-tls"
+
+      # Secret name containing all TLS data for agents to consume for Proxy Ingress (eg ibmcloudappmgmt-ingress-artifacts).
+      artifactsSecret: "icam-ingress-artifacts"
 
   #Fully qualified domain name (FQDN) of your MCM console. Can be determined via: kubectl get configmap ibmcloud-cluster-info -n kube-public -o=jsonpath='{.data.cluster_address}'
   masterIP: ""
@@ -96,7 +99,7 @@ global:
   imagePullPolicy: IfNotPresent
 
   # Image used by containers created via 'helm test'
-  icamTestImage: "ubi-base:8.0.0-201911071625"
+  icamTestImage: "ubi-base:8.0.0-202003041858"
 
   # Number of Cassandra nodes to deploy
   cassandraNodeReplicas: 1
@@ -306,15 +309,13 @@ ibm-cem:
   createOCPSCC: false
 
   # This value signals to the CEM containers the current product name
-  # CEM configuration and deployment will vary depending on base or advanced
-  # product entitlement.
+  # CEM configuration and deployment will vary depending on eventing or
+  # full monitoring and product entitlement.
 
   # Signals to the CEM services what the product name is to determine deployment type
   # Options:
   # IBM Cloud App Management for Multicloud Manager
   # Event Management for IBM Multicloud Manager
-  # IBM Cloud App Management Advanced
-  # IBM Cloud App Management
   productName: "IBM Cloud App Management for Multicloud Manager"
 
   # Cassandra Settings
@@ -390,12 +391,6 @@ ibm-cem:
     # Enter as a comma separated list of strings
     countryblacklist: '[]'
 
-  # ICP Broker settings
-  icpbroker:
-    # The name of the cluster administrator user.  This is the name that
-    # will be added to subscriptions (required for MCM).
-    adminusername: ''
-
 # Redis Configuration
 ibmRedis:
   auth:
@@ -412,21 +407,28 @@ ibmRedis:
     servers: 1
     # Number of redis sentinel replicas to deploy. A minimum number of 3 is required for high availability.
     sentinels: 3
+  # this will be going away once ICAM moves to ibm-redis@2.x, but until then
+  # cem needs to connect to both ibm-redis@1.x and ibm-redis@2.x
+  # This property enables that
+  connectViaSentinels: false
+
+# Auto-Configurator Job Configuration
+autoconfig:
+  imageTag: "APM_202003041623"
+  # Toggle Auto-Configured Synthetic Tests To Active/Inactive Execution
+  testActive: "true"
+
+  # Default Synthetic Test Schedule Interval
+  testInterval: "5"
+
+  # Disable Synthetic Test Threshold Alerting
+  disableAlerts: "true"
 
 # Create the AlertTarget CRD required for Multi-cloud Integrations
 createCRD: true
 
 # Create the resources used to automatically create self-signed tls certificates for ingress authentication; if this is set to false, you must use the script at icamChartDir/ibm_cloud_pak/pak_extensions/lib/make-ca-cert-icam.sh to create the secrets prior to installing the chart
-createTLSCerts: false
-
-ibm-cloud-appmgmt-prod:
-  streamingservice:
-    enabled: false
-
-# Tags for controlling deployment options
-# 'advanced' should only be enabled when entitled to the advanced product.
-tags:
-  advanced: true
+createTLSCerts: true
 
 # PPA arch value
 arch:
