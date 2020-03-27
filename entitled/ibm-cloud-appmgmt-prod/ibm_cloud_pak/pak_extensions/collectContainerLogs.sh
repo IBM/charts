@@ -149,6 +149,14 @@ collectDiagnosticsData() {
       echo "GET Kubernetes Pods in $ns namespace"
       echo "**********************************************************"
       kubectl get pods --namespace=$ns
+      echo -e "\n"
+      
+      echo "**********************************************************"
+      echo "GET Kubernetes Pods in $ns namespace sorted by node"
+      echo "**********************************************************"
+      kubectl get pods -o wide --namespace=$ns  --sort-by=".status.hostIP"
+      echo -e "\n"
+
 
       getPodsResult=$(kubectl get pods --namespace=$ns --output=name | cut -d'/' -f2-)
 

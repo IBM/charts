@@ -9,8 +9,6 @@
 # IBM Corp.
 #################################################################
 #
-# You need to run this script for each namespace.
-#
 # This script takes one argument; the namespace where the chart will be installed.
 #
 # Example:
@@ -22,34 +20,45 @@
 
 if [ "$#" -lt 1 ]; then
 	echo "Usage: createSecurityNamespacePrereqs.sh NAMESPACE"
-  exit 1
+	exit 1
 fi
 
 namespace=$1
 
 kubectl get namespace $namespace &> /dev/null
 if [ $? -ne 0 ]; then
-  echo "ERROR: Namespace $namespace does not exist."
-  exit 1
+	echo "ERROR: Namespace $namespace does not exist."
+	exit 1
 fi
 
 if supports_scc; then
-  echo "Adding all namespace users to SCC..."
-  if command -v oc >/dev/null 2>&1 ; then
-    oc adm policy add-scc-to-group ibm-cloud-appmgmt-prod-scc system:serviceaccounts:$namespace
-  else
-    echo "ERROR:  The OpenShift CLI is not available..."
-  fi
+	echo "Creating ibm-cloud-appmgmt-prod SecurityContextConstraints"
+	kubectl apply -f ibm-cloud-appmgmt-prod-scc.yaml --validate=false
+
+	echo "Creating Role to use ibm-cloud-appmgmt-prod SecurityContextConstraints"
+	kubectl apply -f use-ibm-cloud-appmgmt-prod-scc-role.yaml -n $namespace
+
+	echo "Creating RoleBinding for serviceaccounts in namespace $namespace to use ibm-cloud-appmgmt-prod SecurityContextConstraints"
+	# Create temporary file for target namespace
+	sed 's/{{ NAMESPACE }}/'$namespace'/g' use-ibm-cloud-appmgmt-prod-scc-rb.yaml > $namespace-use-ibm-cloud-appmgmt-prod-scc-rb.yaml
+	kubectl apply -f $namespace-use-ibm-cloud-appmgmt-prod-scc-rb.yaml -n $namespace
+
+	# Cleanup - delete temporary file for target namespace
+	rm $namespace-use-ibm-cloud-appmgmt-prod-scc-rb.yaml
 fi
 
 if supports_psp; then
-  # Replace the NAMESPACE tag with the namespace specified in a temporary yaml file.
-  sed 's/{{ NAMESPACE }}/'$namespace'/g' ibm-cloud-appmgmt-prod-rb.yaml > $namespace-ibm-cloud-appmgmt-prod-rb.yaml
+	echo "Creating ibm-cloud-appmgmt-prod PodSecurityPolicy"
+	kubectl apply -f ibm-cloud-appmgmt-prod-psp.yaml
 
-  echo "Adding a RoleBinding for all namespace users to the PSP..."
-  # Create the role binding for all service accounts in the current namespace
-  kubectl create -f $namespace-ibm-cloud-appmgmt-prod-rb.yaml -n $namespace
+	echo "Creating Role to use ibm-cloud-appmgmt-prod PodSecurityPolicy"
+	kubectl apply -f use-ibm-cloud-appmgmt-prod-psp-role.yaml -n $namespace
 
-  # Clean up - delete the temporary yaml file.
-  rm $namespace-ibm-cloud-appmgmt-prod-rb.yaml
+	echo "Creating RoleBinding for serviceaccounts in namespace $namespace to use ibm-cloud-appmgmt-prod PodSecurityPolicy"
+	# Create temporary file for target namespace
+	sed 's/{{ NAMESPACE }}/'$namespace'/g' use-ibm-cloud-appmgmt-prod-psp-rb.yaml > $namespace-use-ibm-cloud-appmgmt-prod-psp-rb.yaml
+	kubectl apply -f $namespace-use-ibm-cloud-appmgmt-prod-scc-rb.yaml -n $namespace
+
+	# Cleanup - delete temporary file for target namespace
+	rm $namespace-use-ibm-cloud-appmgmt-prod-scc-rb.yaml
 fi;

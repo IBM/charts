@@ -58,3 +58,15 @@ true
 true
 {{- end -}}
 {{- end -}}
+
+{{- define "autoConfigurator.securityContext" -}}
+securityContext:
+  privileged: false
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+{{- end -}}
