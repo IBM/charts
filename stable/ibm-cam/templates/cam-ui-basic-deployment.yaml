@@ -70,6 +70,8 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-ui-basic
       volumes:
+      - name: tmp-empty
+        emptyDir: {}
       - name: cam-cert
         secret:
           secretName: {{ .Values.camAPI.certificate.certName }}
@@ -130,7 +132,7 @@ spec:
       - name: cam-ui-basic
         securityContext:
           privileged: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
@@ -157,6 +159,8 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: tmp-empty
+            mountPath: /tmp
           - name: cam-cert
             mountPath: /usr/src/app/certs
             readOnly: true
@@ -232,7 +236,7 @@ spec:
           value: $(ORPHEUS_IDENTITY_URL)
         {{- if eq .Values.platform "mcmp" }}
         - name: MCMP_AUTHENTICATION_URL
-          value: {{ .Values.mcmp.authenticationUrl }}
+          value: {{ .Values.mcmp.gatewayUrl }}
         - name: MCMP_STORE_CATALOG_URL
           value: {{ .Values.mcmp.storeCatalogUrl }}
         {{- end }}
@@ -275,6 +279,8 @@ spec:
           value: "{{ .Values.global.audit }}"
         - name: AUDIT_LOG_PATH
           value: /var/audit/cam-ui-basic-audit.log
+        - name: AUDIT_INITIATOR_HOST_ADDRESS_HEADER
+          value: X-Forwarded-For
         - name: APP_CONTEXT_BASIC
           value: /ui
         - name: APP_CONTEXT_CONNECTIONS
@@ -319,14 +325,14 @@ spec:
             mountPath: "/etc/logrotate.d/audit"
             subPath: audit
           - name: logrotate-conf
-            mountPath: "/etc/logrotate.conf"            
+            mountPath: "/etc/logrotate.conf"
             subPath: logrotate.conf
         livenessProbe:
           exec:
             command:
             - sh
             - -c
-{{- if .Values.global.legacyAudit }}            
+{{- if .Values.global.legacyAudit }}
             - "service cron status"
 {{- else }}
             - "ps -ef | grep python"
@@ -338,7 +344,7 @@ spec:
             command:
             - sh
             - -c
-{{- if .Values.global.legacyAudit }}            
+{{- if .Values.global.legacyAudit }}
             - "service cron status"
 {{- else }}
             - "ps -ef | grep python"

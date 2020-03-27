@@ -70,6 +70,8 @@ spec:
                 - {{ .Values.arch }}
       hostname: cam-provider-broker
       volumes:
+      - name: tmp-empty 
+        emptyDir: {}
       - name: cam-cert
         secret:
           secretName: {{ .Values.camAPI.certificate.certName }}
@@ -94,7 +96,7 @@ spec:
       - name: cam-provider-broker
         securityContext:
           privileged: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
@@ -121,6 +123,8 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
+          - name: tmp-empty 
+            mountPath: /tmp
           - name: cam-cert
             mountPath: /usr/src/app/certs
             readOnly: true
@@ -191,7 +195,35 @@ spec:
               fieldPath: metadata.name
         - name: LOG_LEVEL
           value: {{ .Values.camLoggingPolicies.logLevel }}
-        - name: BROKER_ENDPOINT
-          value: http://cb-icam-prov-adapter.{{ .Values.camBrokerProvider.storeNamespace }}:7001/  
         - name: CAM_PROVIDER_BROKER_NOTIFICATION_API
-          value: https://cam-provider-broker:7050/api/connector/serviceNotification/     
+          value: https://cam-provider-broker:7050/api/connector/serviceNotification/
+        {{- if eq .Values.platform "mcmp" }}
+        - name: MULTI_CLUSTER_SUPPORT
+        {{- if eq .Values.mcmp.multiClusterSupport "enabled" }}
+          value: "true"
+        {{- end }}
+        - name: BROKER_ENDPOINT
+        {{- if eq .Values.mcmp.multiClusterSupport "enabled" }}
+          value: {{ .Values.mcmp.gatewayUrl }}
+        {{- else }}
+          value: http://cb-icam-prov-adapter.{{ .Values.camBrokerProvider.storeNamespace }}:7001/ 
+        {{- end }}
+        - name: MCMP_SYSTEM_USER_ID
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mcmpSystemUserId
+        - name: MCMP_SYSTEM_USER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: mcmpSystemUserAPIKey
+        {{- end }}  
