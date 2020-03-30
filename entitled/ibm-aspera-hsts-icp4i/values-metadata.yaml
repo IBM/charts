@@ -7,36 +7,96 @@ productionDeployment:
     required: false
     hidden: false
     immutable: false
-image:
+global:
   __metadata:
-    label: Default Image
-    description: Default image confiuration for Aspera HSTS images
-  repository:
+    label: Global Parameters
+    description: Global chart object
+  replicas:
     __metadata:
-      label: Image Repository
-      description: Docker registry to pull Aspera HSTS images from
-      type: string
-      required: true
-      hidden: false
-      immutable: false
-  pullSecret:
-    __metadata:
-      label: Image Pull Secret
-      description: Secret containing credentials to pull from image repository, if
-        required
-      type: string
+      label: Global Replicas
+      description: Number of global replicas to be created
+      type: number
       required: false
       hidden: false
       immutable: false
+  resources:
+    all:
+      __metadata:
+        label: Global Resource Size
+        description: The default resource sizing is medium
+        options:
+        - label: tiny
+          value: tiny
+        - label: small
+          value: small
+        - label: medium
+          value: medium
+        - label: large
+          value: large
+        - label: xlarge
+          value: xlarge
+    ascp:
+      __metadata:
+        label: Ascp Server Resource Size
+        description: Overrides "Global" if a resource size is selected
+        options:
+        - label: ""
+          value: ""
+        - label: tiny
+          value: tiny
+        - label: small
+          value: small
+        - label: medium
+          value: medium
+        - label: large
+          value: large
+        - label: xlarge
+          value: xlarge
+    asperanode:
+      __metadata:
+        label: Aspera Node Resource Size
+        description: Overrides "Global" if a resource size is selected
+        options:
+        - label: ""
+          value: ""
+        - label: tiny
+          value: tiny
+        - label: small
+          value: small
+        - label: medium
+          value: medium
+        - label: large
+          value: large
+        - label: xlarge
+          value: xlarge
+  image:
+    repository:
+      __metadata:
+        label: Image Repository
+        description: Docker registry to pull Aspera HSTS images from
+        type: string
+        required: true
+        hidden: false
+        immutable: false
+    pullSecret:
+      __metadata:
+        label: Image Pull Secret
+        description: Secret containing credentials to pull from image repository, if
+          required
+        type: string
+        required: false
+        hidden: false
+        immutable: false
 rbac:
   __metadata:
     label: Rbac
-    description: Config for rbac
+    description: Config for RBAC
+    hidden: true
   serviceAccountName:
     __metadata:
       label: Service Account Name
       description: Service account created as part of the install prerequisites
-      type: string
+      type:  string
       required: true
       hidden: false
       immutable: true
@@ -44,6 +104,7 @@ arch:
   __metadata:
     label: Architecture scheduling preferences
     description: Targets a specific OS to use for the worker node.
+    hidden: true
   amd64:
     __metadata:
       label: Architecture preference for target worker node
@@ -57,34 +118,34 @@ arch:
       hidden: false
       immutable: true
       name: amd64
-deployRedis:
-  __metadata:
-    label: Deploy Redis
-    description: Deploy Redis as part of this chart install
-    type: boolean
-    required: false
-    hidden: false
-    immutable: false
-redisHost:
-  __metadata:
-    label: Redis Host
-    description: Host running the redis database
-    type: string
-    required: false
-    hidden: false
-    immutable: false
-redisPort:
-  __metadata:
-    label: Redis Port
-    description: Port on which the provided redis host is listening
-    type: number
-    required: false
-    hidden: false
-    immutable: false
 redis:
   __metadata:
     label: Redis
     description: When redis is deployed with HSTS, configure here.
+  deploy:
+    __metadata:
+      label: Deploy Redis
+      description: Deploy Redis as part of this chart install
+      type: boolean
+      required: false
+      hidden: false
+      immutable: false
+  host:
+    __metadata:
+      label: Redis Host
+      description: Host running the provided Redis database if 'Deploy Redis' is not selected
+      type: string
+      required: false
+      hidden: false
+      immutable: false
+  port:
+    __metadata:
+      label: Redis Port
+      description: Port on which the provided Redis host is listening if 'Deploy Redis' is not selected
+      type: number
+      required: false
+      hidden: false
+      immutable: false
   serviceAccount:
     create:
       __metadata:
@@ -119,7 +180,7 @@ redis:
     existingClaimName:
       __metadata:
         label: Existing Claim Name
-        description: If not using dyanmic storage for redis persistence. Specify the
+        description: If not using dynamic storage for redis persistence. Specify the
           Persistent Volume Claim to be used for redis storage
         type: string
         required: false
@@ -148,14 +209,6 @@ redis:
         hidden: false
         immutable: false
   image:
-    repository:
-      __metadata:
-        label: Image Repository
-        description: Docker registry to pull redis image from.
-        type: string
-        required: false
-        hidden: false
-        immutable: false
     name:
       __metadata:
         label: Image Name
@@ -163,16 +216,16 @@ redis:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image tag
         description: A tag is a label applied to a image in a repository. Tags are
           how various images in a repository are distinguished from each other.
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     pullPolicy:
       __metadata:
         label: Image pull policy
@@ -185,15 +238,6 @@ redis:
           value: Never
         - label: IfNotPresent
           value: IfNotPresent
-    pullSecret:
-      __metadata:
-        label: Image Pull Secret
-        description: Secret containing credentials to pull from image repository,
-          if required
-        type: string
-        required: false
-        hidden: false
-        immutable: false
   rbac:
     create:
       __metadata:
@@ -290,8 +334,8 @@ redis:
             immutable: false
 tls:
   __metadata:
-    label: Tls
-    description: Config for tls
+    label: TLS
+    description: Config for TLS
   issuer:
     __metadata:
       label: Cluster Certificate Issuer
@@ -315,7 +359,7 @@ ingress:
       immutable: false
   tlsSecret:
     __metadata:
-      label: Tls Secret
+      label: TLS Secret
       description: Secret containing server certificates
       type: string
       required: false
@@ -334,72 +378,28 @@ sshdKeysSecret:
   __metadata:
     label: SSHD Fingerprint Secret
     description: Optional secret containing the RSA private and public key to be used
-      by the receiver container's SSHD
+      by the ascp container's SSHD
     type: string
     required: false
     hidden: false
     immutable: false
-
 dashboard:
   __metadata:
     label: Grafana Dashboard
     description: Config for Grafana Dashboard
+    hidden: true
   enabled:
     __metadata:
       label: Enabled
       description: Install a Grafana Dashboard to monitor HSTS transfer metrics
       type: boolean
       required: false
-      hidden: false
-      immutable: false
-
-persistence:
-  __metadata:
-    label: Persistence
-    description: Define the transfer storage for HSTS
-  useDynamicProvisioning:
-    __metadata:
-      label: Use dynamic provisioning
-      description: Select this checkbox to allow the cluster to automatically provision
-        new storage resource and create PersistentVolume objects.
-      type: boolean
-      required: false
-      hidden: false
-      immutable: false
-  storageClassName:
-    __metadata:
-      label: Storage Class Name
-      description: Dynamic storage only. Storage class to use for Aspera HSTS transfer
-        storage.
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-  size:
-    __metadata:
-      label: Size
-      description: Dynamic storage only. Size of storage to be requested.
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-  existingClaimName:
-    __metadata:
-      label: Persistent Volume Claim
-      description: If not using dyanmic storage. Specify the Persistent Volume Claim
-        to be used for transfer storage
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-  mountPath:
-    __metadata:
-      label: Mount Path
-      description: Mount path for transfer storage
-      type: string
-      required: false
       hidden: true
       immutable: false
+securityContext:
+  __metadata:
+    label: Security Context
+    description: Config for Security Context
   fsGroup:
     __metadata:
       label: Group ID
@@ -409,10 +409,19 @@ persistence:
       required: false
       hidden: false
       immutable: false
+persistence:
+  __metadata:
+    label: Persistence
+    description: List of transfer storages for HSTS.
+    type: string ### do to backwards-compat bug, type must be string
+    required: true
+    hidden: false
+    immutable: false
+    multiline: true
 asperanode:
   __metadata:
     label: Aspera Node
-    description: Config for asperanode
+    description: Config for Aspera Node
   clusterId:
     __metadata:
       label: Cluster Id
@@ -430,43 +439,35 @@ asperanode:
       required: false
       hidden: true
       immutable: false
-  nodeCount:
+  replicas:
     __metadata:
       label: Node API Replicas
       description: Number of asperanode API pods to be created initially. If using
         autoscaling, this will change based on usage.
       type: number
       required: false
-      hidden: false
+      hidden: true
       immutable: false
-  serverSecret:
+  asperaLicense:
     __metadata:
-      label: Server Secret
-      description: Secret containing Aspera license and token encryption key
+      label: Aspera License Secret
+      description: Secret containing Aspera license
       type: string
       required: true
+      hidden: false
+      immutable: false
+  tokenEncryptionKeySecret:
+    __metadata:
+      label: Token Encryption Key Secret
+      description: Secret containing TOKEN_ENCRYPTION_KEY
+      type: string
+      required: false
       hidden: false
       immutable: false
   nodeAdminSecret:
     __metadata:
       label: Node Admin Secret
       description: Secret containing NODE_USER and NODE_PASS
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-  accessKeySecret:
-    __metadata:
-      label: Access Key Secret
-      description: Secret containing ACCESS_KEY_ID and ACCESS_KEY_SECRET
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-  accessKeyConfig:
-    __metadata:
-      label: Access Key Config
-      description: Configuration to be used for the access key created during install. Expected to be YAML.
       type: string
       required: false
       hidden: false
@@ -487,15 +488,15 @@ asperanode:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image Tag
         description: Asperanode image tag
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
     pullPolicy:
       __metadata:
@@ -511,7 +512,7 @@ asperanode:
           value: IfNotPresent
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
   autoscale:
     api:
@@ -547,124 +548,18 @@ asperanode:
           required: false
           hidden: false
           immutable: false
-  resources:
-    requests:
-      memory:
-        __metadata:
-          label: Memory request
-          description: 'The minimum memory in bytes. Specify integers with one of
-            these suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi,
-            Ti, Gi, Mi, Ki.'
-          type: string
-          required: false
-          hidden: false
-          immutable: false
-      cpu:
-        __metadata:
-          label: CPU request
-          description: The minimum required CPU core. Specify integers, fractions
-            (e.g. 0.5), or millicore values(e.g. 100m, where 100m is equivalent to
-            .1 core).
-          type: string
-          required: false
-          hidden: false
-          immutable: false
-    limits:
-      memory:
-        __metadata:
-          label: Memory limit
-          description: 'The memory upper limit in bytes. Specify integers with suffixes:
-            E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki.'
-          type: string
-          required: false
-          hidden: false
-          immutable: false
-      cpu:
-        __metadata:
-          label: CPU limit
-          description: The upper limit of CPU core. Specify integers, fractions (e.g.
-            0.5), or millicores values(e.g. 100m, where 100m is equivalent to .1 core).
-          type: string
-          required: false
-          hidden: false
-          immutable: false
 aej:
   __metadata:
     label: Aspera Event Journal
     description: Config for Aspera Event Journal
-  kafkaHost:
-    __metadata:
-      label: Kafka Host
-      description: The host where Kafka will be accessed
-      type: string
-      required: true
-      hidden: false
-      immutable: false
-  kafkaPort:
-    __metadata:
-      label: Kafka Port
-      description: The port the provided Kafka host is listening on.
-      type: number
-      required: true
-      hidden: false
-      immutable: false
-  kafkaProtocol:
-    __metadata:
-      label: Kafka Protocol
-      description: Security protocol being used by Kafka
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-      options:
-      - label: PLAINTEXT
-        value: PLAINTEXT
-      - label: SSL
-        value: SSL
-      - label: SASL_PLAINTEXT
-        value: SASL_PLAINTEXT
-      - label: SASL_SSL
-        value: SASL_SSL
-  kafkaSaslMechanism:
-    __metadata:
-      label: Kafka Sasl Mechanism
-      description: SASL configuration being used by Kafka brokers
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-      options:
-      - label: PLAIN
-        value: PLAIN
-      - label: GSSAPI
-        value: GSSAPI
-      - label: SCRAM-SHA-256
-        value: SCRAM-SHA-256
-      - label: SCRAM-SHA-512
-        value: SCRAM-SHA-512
-  kafkaAuthSecret:
-    __metadata:
-      label: Kafka Auth Secret
-      description: Secret containing credentials to access Kafka, if required.
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-  kafkaCertSecret:
-    __metadata:
-      label: Kafka Cert Secret
-      description: Secret containing the certificate for Kafka host, if required.
-      type: string
-      required: false
-      hidden: false
-      immutable: false
+    hidden: true
   replicas:
     __metadata:
       label: Replicas
       description: Number of AEJ Pods to be created
       type: number
       required: false
-      hidden: false
+      hidden: true
       immutable: false
   image:
     repository:
@@ -682,15 +577,15 @@ aej:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image Tag
         description: Aspera event journal image tag
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
     pullPolicy:
       __metadata:
@@ -706,7 +601,7 @@ aej:
           value: IfNotPresent
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
   service:
     type:
@@ -727,17 +622,158 @@ aej:
         required: false
         hidden: true
         immutable: false
+  config:
+    queueCapacity:
+      __metadata:
+        label: Queue Capacity
+        description: AEJD queue capacity. If capacity is exceeded, incoming AEJs
+          will be rejected and lost.
+        type: number
+        required: false
+        hidden: true
+        immutable: false
+ascp:
+  __metadata:
+    label: Ascp Server
+    description: Config for ascp server
+    hidden: true
+  image:
+    repository:
+      __metadata:
+        label: Ascp Image Repository
+        description: Docker repository where the image is hosted
+        type: string
+        required: false
+        hidden: true
+        immutable: false
+    name:
+      __metadata:
+        label: Ascp Image Name
+        description: Stored instance of a container that holds a set of software
+          needed to run an application.
+        type: string
+        required: false
+        hidden: true
+        immutable: false
+    tag:
+      __metadata:
+        label: Ascp Image Tag
+        description: Docker image tag for ascp
+        type: string
+        required: false
+        hidden: true
+        immutable: false
+    pullPolicy:
+      __metadata:
+        label: Ascp Image Pull Policy
+        description: The default pull policy is IfNotPresent which causes the Kubelet
+          to skip pulling an image if it already exists.
+        options:
+        - label: Always
+          value: Always
+        - label: Never
+          value: Never
+        - label: IfNotPresent
+          value: IfNotPresent
+        type: string
+        required: false
+        hidden: true
+        immutable: false
+lifecycle:
+  __metadata:
+    label: Lifecycle
+    description: Config for lifecycle
+    hidden: true
+  replicas:
+    __metadata:
+      label: Replicas
+      description: Number of Lifecycle Pods to be created
+      type: number
+      required: false
+      hidden: true
+      immutable: false
+  image:
+    repository:
+      __metadata:
+        label: Lifecycle Image Repository
+        description: Docker repository where the image is hosted
+        type: string
+        required: false
+        hidden: true
+        immutable: false
+    name:
+      __metadata:
+        label: Lifecycle Image Name
+        description: Stored instance of a container that holds a set of software
+          needed to run an application.
+        type: string
+        required: false
+        hidden: true
+        immutable: false
+    tag:
+      __metadata:
+        label: Lifecycle Image Tag
+        description: Docker image tag for lifecycle
+        type: string
+        required: false
+        hidden: true
+        immutable: false
+    pullPolicy:
+      __metadata:
+        label: Lifecycle Image Pull Policy
+        description: The default pull policy is IfNotPresent which causes the Kubelet
+          to skip pulling an image if it already exists.
+        options:
+        - label: Always
+          value: Always
+        - label: Never
+          value: Never
+        - label: IfNotPresent
+          value: IfNotPresent
+        type: string
+        required: false
+        hidden: true
+        immutable: false
+  service:
+    api:
+      type:
+        __metadata:
+          label: Service Type
+          description: An API object that describes how to access applications, such
+            as a set of Pods, and can describe ports and load-balancers.
+          options:
+          - label: ClusterIP
+            value: ClusterIP
+          - label: NodePort
+            value: NodePort
+          - label: LoadBalancer
+            value: LoadBalancer
+          - label: ExternalName
+            value: ExternalName
+          type: string
+          required: false
+          hidden: true
+          immutable: false
+      port:
+        __metadata:
+          label: Service Port
+          description: Description for port
+          type: number
+          required: false
+          hidden: true
+          immutable: false
 prometheusEndpoint:
   __metadata:
     label: Prometheus Endpoint
     description: Config for prometheusEndpoint
+    hidden: true
   replicas:
     __metadata:
       label: Replicas
       description: Number of Prometheus Endpoint Pods to be created
       type: number
       required: false
-      hidden: false
+      hidden: true
       immutable: false
   image:
     repository:
@@ -747,7 +783,7 @@ prometheusEndpoint:
         type: string
         required: false
         hidden: true
-        immutable: true
+        immutable: false
     name:
       __metadata:
         label: Image Name
@@ -755,8 +791,8 @@ prometheusEndpoint:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image Tag
@@ -822,10 +858,11 @@ stats:
   __metadata:
     label: Stats
     description: Config for stats
+    hidden: true
   replicas:
     __metadata:
       label: Replicas
-      description: Number of stats Pods to be created
+      description: Number of Stats Pods to be created
       type: number
       required: false
       hidden: true
@@ -846,15 +883,15 @@ stats:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image Tag
         description: Docker image tag for the stats image
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
     pullPolicy:
       __metadata:
@@ -870,7 +907,7 @@ stats:
           value: IfNotPresent
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
   service:
     api:
@@ -904,14 +941,12 @@ ascpLoadbalancer:
   __metadata:
     label: Ascp Loadbalancer
     description: Config for ascpLoadbalancer
+    hidden: true
   strategy:
     __metadata:
       label: Strategy
       description: Ascp Loadbalancer algorithm.
       type: string
-      required: false
-      hidden: true
-      immutable: false
       options:
       - label: MIN_SESSIONS
         value: MIN_SESSIONS
@@ -919,13 +954,16 @@ ascpLoadbalancer:
         value: MIN_ACTUAL_RATE
       - label: MIN_CALCULATED_RATE
         value: MIN_CALCULATED_RATE
+      required: false
+      hidden: true
+      immutable: false
   replicas:
     __metadata:
       label: Replicas
       description: Number of Ascp Loadbalancer Pods to be created
       type: number
       required: false
-      hidden: false
+      hidden: true
       immutable: false
   service:
     type:
@@ -958,11 +996,13 @@ utils:
   __metadata:
     label: Swarm Delete
     description: Config for Job that will clean up swarm pods during uninstall
+    hidden: true
   image:
     repository:
       __metadata:
         label: Image Repository
         description: Docker registry to pull image from
+        required: false
         hidden: true
         immutable: false
     name:
@@ -972,13 +1012,16 @@ utils:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image tag
         description: A tag is a label applied to a image in a repository. Tags are
           how various images in a repository are distinguished from each other.
+        required: false
+        hidden: true
+        immutable: false
     pullPolicy:
       __metadata:
         label: Image pull policy
@@ -991,17 +1034,20 @@ utils:
           value: Never
         - label: IfNotPresent
           value: IfNotPresent
+        required: false
+        hidden: true
+        immutable: false
 ascpSwarm:
   __metadata:
     label: Ascp Swarm
-    description: Config for ascpSwarm
+    description: Config for Ascp Swarm
   replicas:
     __metadata:
       label: Replicas
       description: Number of Ascp Swarm Pods to be created
       type: number
       required: false
-      hidden: false
+      hidden: true
       immutable: false
   service:
     type:
@@ -1049,7 +1095,7 @@ ascpSwarm:
         immutable: false
     minAvailable:
       __metadata:
-        label: Min Available
+        label: Min Pods Available
         description: Minimum number of swarm member pods that will be available on
           each eligible host node.
         type: number
@@ -1058,7 +1104,7 @@ ascpSwarm:
         immutable: false
     maxRunning:
       __metadata:
-        label: Max Running
+        label: Max Pods Running
         description: Max number of swarm member pods that will be running on each
           eligible host node.
         type: number
@@ -1087,11 +1133,15 @@ loadbalancer:
   __metadata:
     label: Loadbalancer
     description: Config for loadbalancer
+    hidden: true
   image:
     repository:
       __metadata:
         label: Image Repository
         description: Docker registry to pull image from
+        required: false
+        hidden: true
+        immutable: false
     name:
       __metadata:
         label: Image Name
@@ -1099,13 +1149,16 @@ loadbalancer:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image tag
         description: A tag is a label applied to a image in a repository. Tags are
           how various images in a repository are distinguished from each other.
+        required: false
+        hidden: true
+        immutable: false
     pullPolicy:
       __metadata:
         label: Image pull policy
@@ -1118,10 +1171,14 @@ loadbalancer:
           value: Never
         - label: IfNotPresent
           value: IfNotPresent
+        required: false
+        hidden: true
+        immutable: false
 nodedLoadbalancer:
   __metadata:
     label: Noded Loadbalancer
     description: Config for nodedLoadbalancer
+    hidden: true
   strategy:
     __metadata:
       label: Strategy
@@ -1143,7 +1200,7 @@ nodedLoadbalancer:
       description: Number of Aspera Node Loadbalancer Pods to be created
       type: number
       required: false
-      hidden: false
+      hidden: true
       immutable: false
   service:
     type:
@@ -1162,8 +1219,8 @@ nodedLoadbalancer:
           value: ExternalName
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     port:
       __metadata:
         label: Port
@@ -1176,11 +1233,15 @@ swarm:
   __metadata:
     label: Swarm
     description: Common configurations for Ascp and Noded swarm
+    hidden: true
   image:
     repository:
       __metadata:
         label: Image Repository
         description: Docker registry to pull image from
+        required: false
+        hidden: true
+        immutable: false
     name:
       __metadata:
         label: Image Name
@@ -1188,13 +1249,16 @@ swarm:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image tag
         description: A tag is a label applied to a image in a repository. Tags are
           how various images in a repository are distinguished from each other.
+        required: false
+        hidden: true
+        immutable: false
     pullPolicy:
       __metadata:
         label: Image pull policy
@@ -1207,17 +1271,20 @@ swarm:
           value: Never
         - label: IfNotPresent
           value: IfNotPresent
+        required: false
+        hidden: true
+        immutable: false
 nodedSwarm:
   __metadata:
     label: Noded Swarm
-    description: Config for nodedSwarm
+    description: Config for Noded Swarm
   replicas:
     __metadata:
       label: Replicas
       description: Number of Noded Swarm Pods to be created
       type: number
       required: false
-      hidden: false
+      hidden: true
       immutable: false
   service:
     type:
@@ -1249,7 +1316,7 @@ nodedSwarm:
   config:
     minAvailable:
       __metadata:
-        label: Min Available
+        label: Min Pods Available
         description: Minimum number of swarm member pods that will be available on
           each eligible host node.
         type: number
@@ -1258,7 +1325,7 @@ nodedSwarm:
         immutable: false
     maxRunning:
       __metadata:
-        label: Max Running
+        label: Max Pods Running
         description: Max number of swarm member pods that will be running on each
           eligible host node.
         type: number
@@ -1287,6 +1354,7 @@ firstboot:
   __metadata:
     label: Swarm Firstboot
     description: Configuration for swarm firstboot image
+    hidden: true
   image:
     repository:
       __metadata:
@@ -1303,15 +1371,15 @@ firstboot:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Firstboot Image Tag
-        description: Receiver firstboot image tag
+        description: firstboot image tag
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
     pullPolicy:
       __metadata:
@@ -1327,170 +1395,20 @@ firstboot:
           value: IfNotPresent
         type: string
         required: false
-        hidden: false
-        immutable: false
-nodedSwarmMember:
-  __metadata:
-    label: Noded Swarm Member
-    description: Config for nodedSwarmMember
-  image:
-    repository:
-      __metadata:
-        label: Image Repository
-        description: Docker repository where the image is hosted
-        type: string
-        required: false
         hidden: true
         immutable: false
-    name:
-      __metadata:
-        label: Image Name
-        description: Stored instance of a container that holds a set of software needed
-          to run an application.
-        type: string
-        required: false
-        hidden: false
-        immutable: true
-    tag:
-      __metadata:
-        label: Image Tag
-        description: Node swarm member image tag
-        type: string
-        required: false
-        hidden: false
-        immutable: false
-    pullPolicy:
-      __metadata:
-        label: Pull Policy
-        description: Image Pull Policy
-        options:
-        - label: Always
-          value: Always
-        - label: Never
-          value: Never
-        - label: IfNotPresent
-          value: IfNotPresent
-        type: string
-        required: false
-        hidden: false
-        immutable: false
-receiver:
-  __metadata:
-    label: Ascp Swarm Member
-    description: Configuration for pods that receive incoming transfer requests
-  authorizedKeys:
-    __metadata:
-      label: Authorized Keys
-      description: List of public keys to be added to the ascp pod's authorized_keys
-        file
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-  vlinks:
-    __metadata:
-      label: Vlink
-      description: List of vlink rules to be applied
-      type: string
-      required: false
-      hidden: false
-      immutable: false
-  swarm:
-    image:
-      repository:
-        __metadata:
-          label: Ascp Swarm Image Repository
-          description: Docker repository where the image is hosted
-          type: string
-          required: false
-          hidden: true
-          immutable: false
-      name:
-        __metadata:
-          label: Ascp Swarm Image Name
-          description: Stored instance of a container that holds a set of software
-            needed to run an application.
-          type: string
-          required: false
-          hidden: false
-          immutable: true
-      tag:
-        __metadata:
-          label: Ascp Swarm Image Tag
-          description: Docker image tag for ascp swarm
-          type: string
-          required: false
-          hidden: false
-          immutable: false
-      pullPolicy:
-        __metadata:
-          label: Ascp Swarm Image Pull Policy
-          description: The default pull policy is IfNotPresent which causes the Kubelet
-            to skip pulling an image if it already exists.
-          options:
-          - label: Always
-            value: Always
-          - label: Never
-            value: Never
-          - label: IfNotPresent
-            value: IfNotPresent
-          type: string
-          required: false
-          hidden: false
-          immutable: false
-    resources:
-      requests:
-        memory:
-          __metadata:
-            label: Memory request
-            description: 'The minimum memory in bytes. Specify integers with one of
-              these suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi,
-              Ti, Gi, Mi, Ki.'
-            type: string
-            required: false
-            hidden: false
-            immutable: false
-        cpu:
-          __metadata:
-            label: CPU request
-            description: The minimum required CPU core. Specify integers, fractions
-              (e.g. 0.5), or millicore values(e.g. 100m, where 100m is equivalent
-              to .1 core).
-            type: string
-            required: false
-            hidden: false
-            immutable: false
-      limits:
-        memory:
-          __metadata:
-            label: Memory limit
-            description: 'The memory upper limit in bytes. Specify integers with suffixes:
-              E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki.'
-            type: string
-            required: false
-            hidden: false
-            immutable: false
-        cpu:
-          __metadata:
-            label: CPU limit
-            description: The upper limit of CPU core. Specify integers, fractions
-              (e.g. 0.5), or millicores values(e.g. 100m, where 100m is equivalent
-              to .1 core).
-            type: string
-            required: false
-            hidden: false
-            immutable: false
 httpProxy:
   __metadata:
     label: Http Proxy
-    description: Configuration for the http proxy
+    description: Configuration for the Http Proxy
+    hidden: true
   replicas:
     __metadata:
       label: HTTP Proxy Replicas
       description: Number of HTTP Proxy pods to be created
       type: number
       required: false
-      hidden: false
+      hidden: true
       immutable: false
   image:
     repository:
@@ -1508,15 +1426,15 @@ httpProxy:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image Tag
         description: HTTP proxy image tag
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
     pullPolicy:
       __metadata:
@@ -1531,7 +1449,7 @@ httpProxy:
           value: IfNotPresent
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
   listenAddr:
     __metadata:
@@ -1559,27 +1477,28 @@ httpProxy:
             value: ExternalName
           type: string
           required: false
-          hidden: true
-          immutable: false
+          hidden: false
+          immutable: true
       port:
         __metadata:
           label: Port
           description: HTTP Proxy port
           type: number
           required: false
-          hidden: true
-          immutable: false
+          hidden: false
+          immutable: true
 tcpProxy:
   __metadata:
     label: TCP Proxy
-    description: Config for tcpProxy
+    description: Config for TCP Proxy
+    hidden: true
   replicas:
     __metadata:
       label: Replicas
       description: Number of TCP Proxy Pods to be created
       type: number
       required: false
-      hidden: false
+      hidden: true
       immutable: false
   image:
     repository:
@@ -1597,15 +1516,15 @@ tcpProxy:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image Tag
         description: TCP Proxy image tag
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
     pullPolicy:
       __metadata:
@@ -1621,7 +1540,7 @@ tcpProxy:
           value: IfNotPresent
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
   listenAddr:
     __metadata:
@@ -1656,12 +1575,13 @@ tcpProxy:
         description: Description for port
         type: number
         required: false
-        hidden: true
-        immutable: false
+        hidden: false
+        immutable: true
 probe:
   __metadata:
     label: Probe
     description: Config for probe
+    hidden: true
   image:
     repository:
       __metadata:
@@ -1678,15 +1598,15 @@ probe:
           to run an application.
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image Tag
         description: Probe image tag
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
     pullPolicy:
       __metadata:
@@ -1701,16 +1621,16 @@ probe:
           value: IfNotPresent
         type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
 rproxy:
   __metadata:
-    label: Aspera Rproxy
-    description: Configuration for Aspera Rproxy
+    label: Aspera RProxy
+    description: Configuration for Aspera RProxy
   address:
     __metadata:
       label: Address
-      description: FQDN or ip address where the Aspera Rproxy, configured as part
+      description: FQDN or ip address where the Aspera RProxy, configured as part
         of the prerequisites, can be reached.
       type: string
       required: true
@@ -1727,7 +1647,8 @@ nameOverride:
 sch:
   __metadata:
     label: Sch
-    description: Config for sch
+    description: Config for Shared Config Helpers
+    hidden: true
   rbac:
     serviceAccountName:
       __metadata:
@@ -1737,31 +1658,22 @@ sch:
         required: false
         hidden: false
         immutable: true
-  global:
-    image:
-      repository:
-        __metadata:
-          label: Utils image Repository
-          description: Docker registry to pull utils image from
-          required: false
-          hidden: false
-          immutable: false
   image:
     name:
       __metadata:
-        label: Name
+        label: Image Name
         description: Utils image name
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image tag
         description: A tag is a label applied to a image in a repository. Tags are
           how various images in a repository are distinguished from each other.
         required: false
-        hidden: false
+        hidden: true
         immutable: false
     pullPolicy:
       __metadata:
@@ -1775,37 +1687,50 @@ sch:
           value: Never
         - label: IfNotPresent
           value: IfNotPresent
-    pullSecret:
-      __metadata:
-        label: Image Pull Secret
-        description: Secret containing credentials to pull from image repository,
-          if required
-        type: string
         required: false
-        hidden: false
+        hidden: true
         immutable: false
+  global:
+    image:
+      repository:
+        __metadata:
+          required: false
+          hidden: true
+          immutable: true
+      pullSecret:
+        __metadata:
+          required: false
+          hidden: true
+          immutable: true
 election:
   __metadata:
     label: Election
     description: Config for service leader election container
+    hidden: true
   image:
     repository:
       __metadata:
         label: "Election image Repository"
         description: Docker registry to pull Election image from
+        required: false
+        hidden: true
+        immutable: false
     name:
       __metadata:
         label: Name
         description: Election Image Name
         type: string
         required: false
-        hidden: false
-        immutable: true
+        hidden: true
+        immutable: false
     tag:
       __metadata:
         label: Image tag
         description: A tag is a label applied to a image in a repository. Tags are
           how various images in a repository are distinguished from each other.
+        required: false
+        hidden: true
+        immutable: false
     pullPolicy:
       __metadata:
         label: Image pull policy
@@ -1818,3 +1743,23 @@ election:
           value: Never
         - label: IfNotPresent
           value: IfNotPresent
+        required: false
+        hidden: true
+        immutable: false
+authorizedKeys:
+  __metadata:
+    label: Authorized Keys
+    description: List of public keys to be added to the ascp pod's authorized_keys
+      file
+    type: string
+    required: false
+    hidden: false
+    immutable: false
+vlinks:
+  __metadata:
+    label: Vlink
+    description: List of vlink rules to be applied
+    type: string
+    required: false
+    hidden: false
+    immutable: false

@@ -1,35 +1,19 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: "{{ template "ibm-apiconnect-cip.fullname" . }}-register-oidc-{{ .Release.Revision }}"
+  name: "{{ template "ibm-apiconnect-cip.register-oidc.fullname" . }}-{{ .Release.Revision}}"
   labels:
-    app: {{ template "ibm-apiconnect-cip.name" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
-    component: {{ template "ibm-apiconnect-cip.name" . }}-register-oidc
+{{ include "ibm-apiconnect-cip.labels" . | indent 4 }}
+    component: apic-register-oidc
 spec:
-  backoffLimit: 1
+  backoffLimit: 5
   template:
     metadata:
       labels:
-        app: {{ template "ibm-apiconnect-cip.name" . }}
-        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
-        component: {{ template "ibm-apiconnect-cip.name" . }}-register-oidc
+{{ include "ibm-apiconnect-cip.labels" . | indent 8 }}
+        component: apic-register-oidc
       annotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productName: {{ template "ibm-apiconnect-cip.productName" . }}
-        productID: {{ template "ibm-apiconnect-cip.productID" . }}
-        productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
-        productMetric: {{ template "ibm-apiconnect-cip.productMetric" . }}
-        productChargedContainers: ""
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.annotations" . | indent 8 }}
     spec:
       serviceAccountName: {{ template "ibm-apiconnect-cip.serviceAccountName" . }}
       affinity:
@@ -55,7 +39,7 @@ spec:
           image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
 {{- end }}
           imagePullPolicy: {{ .Values.operator.pullPolicy }}
-          command: [ "bash", "-c", "sleep 600" ]
+          command: [ "bash", "-c", "sleep 180" ]
           resources:
 {{ include "ibm-apiconnect-cip.resources" . | indent 12 }}
           securityContext:
@@ -98,7 +82,7 @@ spec:
         projected:
           sources:
           - configMap:
-              name: {{ template "ibm-apiconnect-cip.fullname" . }}-cr-files
+              name: {{ template "ibm-apiconnect-cip.init-files.fullname" . }}
               items:
                 - key: register-oidc
                   path: register-oidc.sh

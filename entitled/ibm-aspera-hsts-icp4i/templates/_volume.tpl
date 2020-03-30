@@ -1,9 +1,11 @@
-{{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
-
 {{ define "hsts.transfer.pvc" -}}
-  {{- if .Values.persistence.existingClaimName -}}
-    {{ .Values.persistence.existingClaimName }}
+  {{- $params := . -}}
+  {{- $outer := index $params 0 -}}
+  {{- $p := index $params 1 -}}
+  {{- $ordinal := index $params 2 -}}
+  {{- if $p.claimName -}}
+    {{ $p.claimName }}
   {{- else -}}
-    {{ include "sch.names.persistentVolumeClaimName" (list . .sch.chart.volumes.transfer) }}
+    {{ printf "%s-%d" (include "sch.names.persistentVolumeClaimName" (list $outer $outer.sch.chart.volumes.transfer)) $ordinal }}
   {{- end -}}
 {{- end }}

@@ -2,35 +2,19 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ template "ibm-apiconnect-cip.fullname" . }}-delete-$SUBSYS_RELEASE
+  name: {{ printf "%s" .Release.Name | trunc 44 | trimSuffix "-" }}-delete-$SUBSYS_RELEASE
   labels:
-    app: {{ template "ibm-apiconnect-cip.name" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
-    component: {{ template "ibm-apiconnect-cip.name" . }}-delete-$SUBSYS_RELEASE
+{{ include "ibm-apiconnect-cip.labels" . | indent 4 }}
+    component: apic-subsys-delete
 spec:
   backoffLimit: 1
   template:
     metadata:
       labels:
-        app: {{ template "ibm-apiconnect-cip.name" . }}
-        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
-        component: {{ template "ibm-apiconnect-cip.name" . }}-delete-$SUBSYS_RELEASE
+{{ include "ibm-apiconnect-cip.labels" . | indent 8 }}
+        component: apic-subsys-delete
       annotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productName: {{ template "ibm-apiconnect-cip.productName" . }}
-        productID: {{ template "ibm-apiconnect-cip.productID" . }}
-        productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
-        productMetric: {{ template "ibm-apiconnect-cip.productMetric" . }}
-        productChargedContainers: ""
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.annotations" . | indent 8 }}
     spec:
       serviceAccountName: {{ template "ibm-apiconnect-cip.serviceAccountName" . }}
       affinity:
@@ -87,7 +71,7 @@ spec:
       volumes:
       - name: cr-files
         configMap:
-          name: {{ template "ibm-apiconnect-cip.fullname" . }}-cr-files
+          name: {{ template "ibm-apiconnect-cip.init-files.fullname" . }}
           defaultMode: 0755
           items:
             - key: delete-subsys
@@ -109,7 +93,7 @@ spec:
         projected:
           sources:
           - configMap:
-              name: {{ template "ibm-apiconnect-cip.fullname" . }}-cr-files
+              name: {{ template "ibm-apiconnect-cip.init-files.fullname" . }}
               items:
                 - key: init
                   path: init.sh

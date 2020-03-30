@@ -1,26 +1,16 @@
+{{- $releaseName := .Release.Name -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "ibm-apiconnect-cip.fullname" . }}-extra-values
+  name: {{ template "ibm-apiconnect-cip.extra-vals.fullname" . }}
   annotations:
-    icp4i.ibm.com/product: apiconnect
-    icp4i.ibm.com/release: {{ .Release.Name }}
-    productName: {{ template "ibm-apiconnect-cip.productName" . }}
-    productID: {{ template "ibm-apiconnect-cip.productID" . }}
-    productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
+{{ include "ibm-apiconnect-cip.annotations" . | indent 4 }}
   labels:
-    app: {{ template "ibm-apiconnect-cip.name" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{ include "ibm-apiconnect-cip.labels" . | indent 4 }}
 data:
-  management: |-
+  {{ .Values.management.name }}: |-
     global:
-      productName: {{ template "ibm-apiconnect-cip.productName" . }}
-      productID: {{ template "ibm-apiconnect-cip.productID" . }}
-      productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
-      productMetric: {{ template "ibm-apiconnect-cip.productMetric" . }}
-      productChargedContainers: {{ template "ibm-apiconnect-cip.productChargedContainers" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 6 }}
       ingress:
 {{- if eq .Values.management.apiManagerUiEndpoint .Values.management.cloudAdminUiEndpoint }}
         apim:
@@ -46,36 +36,32 @@ data:
             icp4i.ibm.com/host: "{{ .Values.management.cloudAdminUiEndpoint }}"
             icp4i.ibm.com/path: "admin"
 {{- end }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 4 }}
     podLabels:
       parentRelease: {{ .Release.Name }}
+      apic.ibm.com/high-max-map-count: true
       icp4i.ibm.com/high-max-map-count: true
     podAnnotations:
-      icp4i.ibm.com/product: apiconnect
-      icp4i.ibm.com/release: {{ .Release.Name }}
-      productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-      cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-      cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-      cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 6 }}
     serviceLabels:
       parentRelease: {{ .Release.Name }}
     analytics-proxy:
       imagePullSecrets:
 {{- if .Values.global.registrySecret }}
-        - "{{ .Values.global.registrySecret }}"
+      - "{{ .Values.global.registrySecret }}"
 {{- else }}
-        - ibm-entitlement-key
+      - ibm-entitlement-key
 {{- end }}
       podLabels:
         parentRelease: {{ .Release.Name }}
-      podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
       serviceLabels:
         parentRelease: {{ .Release.Name }}
+      podAnnotations:
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 8 }}
+      hostSettings:
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 8 }}
+      securityContext:
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 8 }}
       apimWaiter:
         securityContext:
           privileged: false
@@ -84,200 +70,51 @@ data:
           capabilities:
             drop:
             - ALL
-      hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
-      securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
-    apim:
+{{- range tuple "apim" "client-downloads-server" "juhu" "ldap" "lur" }}
+    {{ . }}:
       podLabels:
-        parentRelease: {{ .Release.Name }}
+        parentRelease: {{ $releaseName }}
       serviceLabels:
-        parentRelease: {{ .Release.Name }}
+        parentRelease: {{ $releaseName }}
       podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" $ | indent 8 }}
       hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" $ | indent 8 }}
       securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
-    client-downloads-server:
-      podLabels:
-        parentRelease: {{ .Release.Name }}
-      serviceLabels:
-        parentRelease: {{ .Release.Name }}
-      podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
-      hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
-      securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
-    juhu:
-      podLabels:
-        parentRelease: {{ .Release.Name }}
-      serviceLabels:
-        parentRelease: {{ .Release.Name }}
-      podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
-      hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
-      securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
-    ldap:
-      podLabels:
-        parentRelease: {{ .Release.Name }}
-      serviceLabels:
-        parentRelease: {{ .Release.Name }}
-      podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
-      hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
-      securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
-    lur:
-      podLabels:
-        parentRelease: {{ .Release.Name }}
-      serviceLabels:
-        parentRelease: {{ .Release.Name }}
-      podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
-      hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
-      securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
+{{ include "ibm-apiconnect-cip.commonSecurityContext" $ | indent 8 }}
+{{- end }}
     ui:
       podLabels:
         parentRelease: {{ .Release.Name }}
       serviceLabels:
         parentRelease: {{ .Release.Name }}
       podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 8 }}
       hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 8 }}
       securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
-{{- if .Values.cloudIntegrationPlatformEndpoint }}
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 8 }}
       modes:
         standard:
           env:
-            ALLOWED_FRAME_ANCESTORS: "{{ .Values.cloudIntegrationPlatformEndpoint }}"
             CIP_SERVICE_ADDRESS: "icp4i-services-{{ .Values.cloudIntegrationPlatformNamespace }}.{{ .Values.cloudIntegrationPlatformNamespace }}.svc.{{ .Values.clusterDomainSuffix }}:3000"
         demo:
           env:
-            ALLOWED_FRAME_ANCESTORS: "{{ .Values.cloudIntegrationPlatformEndpoint }}"
             CIP_SERVICE_ADDRESS: "icp4i-services-{{ .Values.cloudIntegrationPlatformNamespace }}.{{ .Values.cloudIntegrationPlatformNamespace }}.svc.{{ .Values.clusterDomainSuffix }}:3000"
-{{- end }}
-  analytics: |-
+  {{ .Values.analytics.name }}: |-
     global:
-      productName: {{ template "ibm-apiconnect-cip.productName" . }}
-      productID: {{ template "ibm-apiconnect-cip.productID" . }}
-      productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
-      productMetric: {{ template "ibm-apiconnect-cip.productMetric" . }}
-      productChargedContainers: {{ template "ibm-apiconnect-cip.productChargedContainers" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 6 }}
     podLabels:
       parentRelease: {{ .Release.Name }}
       tuned.openshift.io/elasticsearch: true
     serviceLabels:
       parentRelease: {{ .Release.Name }}
     podAnnotations:
-      icp4i.ibm.com/product: apiconnect
-      icp4i.ibm.com/release: {{ .Release.Name }}
-      productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-      cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-      cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-      cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 6 }}
     hostSettings:
-      hostNetwork: false
-      hostPID: false
-      hostIPC: false
-    hostSettings:
-      hostNetwork: false
-      hostPID: false
-      hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 6 }}
     securityContext:
-      privileged: false
-      readOnlyRootFilesystem: false
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-        - ALL
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 6 }}
     apic-analytics-client:
       podLabels:
         parentRelease: {{ .Release.Name }}
@@ -285,23 +122,11 @@ data:
       serviceLabels:
         parentRelease: {{ .Release.Name }}
       podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 8 }}
       hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 8 }}
       securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 8 }}
     apic-analytics-ingestion:
       podLabels:
         parentRelease: {{ .Release.Name }}
@@ -309,23 +134,11 @@ data:
       serviceLabels:
         parentRelease: {{ .Release.Name }}
       podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 8 }}
       hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 8 }}
       securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 8 }}
       kafkaWaiter:
         securityContext:
           allowPrivilegeEscalation: false
@@ -342,23 +155,11 @@ data:
         serviceLabels:
           parentRelease: {{ .Release.Name }}
         podAnnotations:
-          icp4i.ibm.com/product: apiconnect
-          icp4i.ibm.com/release: {{ .Release.Name }}
-          productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-          cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-          cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-          cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 10 }}
         hostSettings:
-          hostNetwork: false
-          hostPID: false
-          hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 10 }}
         securityContext:
-          privileged: false
-          readOnlyRootFilesystem: false
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 10 }}
         zkWaiter:
           securityContext:
             allowPrivilegeEscalation: false
@@ -374,23 +175,11 @@ data:
         serviceLabels:
           parentRelease: {{ .Release.Name }}
         podAnnotations:
-          icp4i.ibm.com/product: apiconnect
-          icp4i.ibm.com/release: {{ .Release.Name }}
-          productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-          cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-          cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-          cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 10 }}
         hostSettings:
-          hostNetwork: false
-          hostPID: false
-          hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 10 }}
         securityContext:
-          privileged: false
-          readOnlyRootFilesystem: false
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 10 }}
     apic-analytics-operator:
       podLabels:
         parentRelease: {{ .Release.Name }}
@@ -398,23 +187,11 @@ data:
       serviceLabels:
         parentRelease: {{ .Release.Name }}
       podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 8 }}
       hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 8 }}
       securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 8 }}
     apic-analytics-storage:
       podLabels:
         parentRelease: {{ .Release.Name }}
@@ -422,23 +199,11 @@ data:
       serviceLabels:
         parentRelease: {{ .Release.Name }}
       podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 8 }}
       hostSettings:
-        hostNetwork: false
-        hostPID: false
-        hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 8 }}
       securityContext:
-        privileged: false
-        readOnlyRootFilesystem: false
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 8 }}
       apic-analytics-cronjobs:
         podLabels:
           parentRelease: {{ .Release.Name }}
@@ -446,65 +211,32 @@ data:
         serviceLabels:
           parentRelease: {{ .Release.Name }}
         podAnnotations:
-          icp4i.ibm.com/product: apiconnect
-          icp4i.ibm.com/release: {{ .Release.Name }}
-          productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-          cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-          cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-          cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 10 }}
         hostSettings:
-          hostNetwork: false
-          hostPID: false
-          hostIPC: false
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 10 }}
         securityContext:
-          privileged: false
-          readOnlyRootFilesystem: false
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-      storageWaiter:
-        hostSettings:
-          hostNetwork: false
-          hostPID: false
-          hostIPC: false
-        securityContext:
-          privileged: false
-          readOnlyRootFilesystem: false
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-  portal: |-
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 10 }}
+        storageWaiter:
+          hostSettings:
+{{ include "ibm-apiconnect-cip.hostSettings" . | indent 12 }}
+          securityContext:
+{{ include "ibm-apiconnect-cip.commonSecurityContext" . | indent 12 }}
+  {{ .Values.portal.name }}: |-
     global:
-      productName: {{ template "ibm-apiconnect-cip.productName" . }}
-      productID: {{ template "ibm-apiconnect-cip.productID" . }}
-      productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
-      productMetric: {{ template "ibm-apiconnect-cip.productMetric" . }}
-      productChargedContainers: {{ template "ibm-apiconnect-cip.productChargedContainers" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 6 }}
     podLabels:
       parentRelease: {{ .Release.Name }}
     serviceLabels:
       parentRelease: {{ .Release.Name }}
     podAnnotations:
-      icp4i.ibm.com/product: apiconnect
-      icp4i.ibm.com/release: {{ .Release.Name }}
-      productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-      cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-      cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-      cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 6 }}
     apic-portal-db:
       podLabels:
         parentRelease: {{ .Release.Name }}
       serviceLabels:
         parentRelease: {{ .Release.Name }}
       podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 8 }}
       hostSettings:
         hostNetwork: false
         hostPID: false
@@ -515,12 +247,7 @@ data:
       serviceLabels:
         parentRelease: {{ .Release.Name }}
       podAnnotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.subsysAnnotations" . | indent 8 }}
       hostSettings:
         hostNetwork: false
         hostPID: false
@@ -530,7 +257,14 @@ data:
           hostNetwork: false
           hostPID: false
           hostIPC: false
-  gateway: |-
+  {{ .Values.gateway.name }}: |-
+    ingress:
+      gateway:
+        annotations:
+          haproxy.router.openshift.io/balance: "roundrobin"
+      gwd:
+        annotations:
+          haproxy.router.openshift.io/balance: "roundrobin"
     cip: true
     datapower:
       image:
@@ -560,3 +294,40 @@ data:
       odTracingDataHostname: "od-store-od.{{ .Values.gateway.odTracing.odManagerNamespace }}.svc"
       imageAgent: "{{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.gateway.odTracing.odAgentImage }}:{{ .Values.gateway.odTracing.odAgentImageTag }}"
       imageCollector: "{{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.gateway.odTracing.odCollectorImage }}:{{ .Values.gateway.odTracing.odCollectorImageTag }}"
+  {{ .Values.gateway2.name }}: |-
+    ingress:
+      gateway:
+        annotations:
+          haproxy.router.openshift.io/balance: "roundrobin"
+      gwd:
+        annotations:
+          haproxy.router.openshift.io/balance: "roundrobin"
+    cip: true
+    datapower:
+      image:
+        pullSecrets:
+{{- if .Values.global.registrySecret }}
+        - name: "{{ .Values.global.registrySecret }}"
+{{- else }}
+        - name: ibm-entitlement-key
+{{- end }}
+      imagePullSecrets:
+{{- if .Values.global.registrySecret }}
+      - name: "{{ .Values.global.registrySecret }}"
+{{- else }}
+      - name: ibm-entitlement-key
+{{- end }}
+      busybox:
+        repository: "{{ regexReplaceAll "/$" .Values.global.registry "" }}/busybox"
+{{- if .Values.productionDeployment }}
+      licenseVersion: Production
+{{- else }}
+      licenseVersion: Nonproduction
+{{- end }}
+    odTracing:
+      enabled: {{ .Values.gateway2.odTracing.enabled  | quote }}
+      pullPolicy: {{ .Values.gateway2.imagePullPolicy }}
+      odTracingRegistrationHostname: "icp4i-od.{{ .Values.gateway2.odTracing.odManagerNamespace }}.svc"
+      odTracingDataHostname: "od-store-od.{{ .Values.gateway2.odTracing.odManagerNamespace }}.svc"
+      imageAgent: "{{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.gateway2.odTracing.odAgentImage }}:{{ .Values.gateway2.odTracing.odAgentImageTag }}"
+      imageCollector: "{{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.gateway2.odTracing.odCollectorImage }}:{{ .Values.gateway2.odTracing.odCollectorImageTag }}"
