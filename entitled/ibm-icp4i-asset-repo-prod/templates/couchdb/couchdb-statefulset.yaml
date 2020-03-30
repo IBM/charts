@@ -1,0 +1,158 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "couchdb") }}
+{{- $couchdbTlsSecretName := include "sch.names.fullCompName" (list . "couchdb-tls-secret") }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . "couchdb") }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  replicas: {{ .Values.couchdb.replicas }}
+  serviceName: {{ include "sch.names.fullCompName" (list . "couchdb-headless") }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+{{ $labels | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+      {{- if .Values.couchdb.schedulerName }}
+      schedulerName: "{{ .Values.couchdb.schedulerName }}"
+      {{- end }}
+      {{- if .Values.global.images.pullSecret }}
+      imagePullSecrets:
+      - name: {{ .Values.global.images.pullSecret }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      initContainers:
+        - name: init-copy
+          image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.configurator }}"
+          imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+          command: ['sh','-c','cp /tmp/chart.ini /default.d; cp /tmp/seedlist.ini /default.d; ls -lrt /default.d;']
+          volumeMounts:
+          - name: config
+            mountPath: /tmp/
+          - name: config-storage
+            mountPath: /default.d
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1024Mi
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            privileged: false
+      containers:
+        - name: couchdb
+          image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.couchdb }}
+          imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            privileged: false
+          ports:
+            - name: couchdb
+              containerPort: 5984
+            - name: epmd
+              containerPort: 4369
+            - containerPort: 9100
+          env:
+            - name: COUCHDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+                  key: username
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+                  key: password
+            - name: ERL_FLAGS
+              value: " -name couchdb  -setcookie monster "
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5984
+          readinessProbe:
+            httpGet:
+              path: /_up
+              port: 5984
+          resources:
+{{ toYaml .Values.couchdb.resources | indent 12 }}
+          volumeMounts:
+          - name: config-storage
+            mountPath: /opt/couchdb/etc/default.d
+          - name: dbdata
+            mountPath: /opt/couchdb/data
+          - name: certificates-keys
+            mountPath: /ssl/certs/
+{{- if .Values.couchdb.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.couchdb.nodeSelector | indent 8 }}
+{{- end }}
+      volumes:
+        - name: certificates-keys
+          secret:
+            secretName: {{ $couchdbTlsSecretName }}
+            items:
+            - key: tls.key
+              path: server.key
+              mode: 384
+            - key: tls.crt
+              path: server.crt
+              mode: 384
+        - name: config-storage
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: {{ include "sch.names.fullCompName" (list . "couchdb-configmap") }}
+            items:
+              - key: inifile
+                path: chart.ini
+              - key: seedlistinifile
+                path: seedlist.ini
+  volumeClaimTemplates:
+    - metadata:
+        name: dbdata
+        labels:
+{{ $labels | indent 10 }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.couchdb.persistentVolume.size | quote }}
+      {{- if .Values.couchdb.persistentVolume.storageClass }}
+      {{- if (eq "-" .Values.couchdb.persistentVolume.storageClass) }}
+        storageClassName: ""
+      {{- else }}
+        storageClassName: "{{ .Values.couchdb.persistentVolume.storageClass }}"
+      {{- end }}
+      {{- end }}

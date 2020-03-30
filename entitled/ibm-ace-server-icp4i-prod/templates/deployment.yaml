@@ -15,6 +15,8 @@
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
 {{- $fullName := include "sch.names.fullName" (list .) }}
 {{- $deploymentName := include "sch.names.fullName" (list . ) }}
+{{- $initName := include "sch.names.fullCompName" (list . "init") }}
+{{- $jobName := include "sch.names.fullCompName" (list . "config-gen") }}
 {{- $designerFlowsName := include "sch.names.fullCompName" (list . "designer-flows") }}
 {{- $connectorsName := include "sch.names.fullCompName" (list . "connectors") }}
 {{- $tracingAgentName := include "sch.names.fullCompName" (list . "od-tracing-agent") }}
@@ -67,11 +69,6 @@ spec:
                 values:
                 - {{ .Values.arch }}
       serviceAccountName: {{ $saName }}
-      imagePullSecrets:
-      {{- if .Values.image.pullSecret }}
-        - name: {{ .Values.image.pullSecret }}
-      {{- end }}
-        - name: ibm-entitlement-key
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -79,6 +76,30 @@ spec:
         runAsUser: 1000
         runAsNonRoot: true
         fsGroup: {{ default 1001 .Values.integrationServer.fsGroupGid }}
+      {{- if .Values.contentServerURL }}
+      initContainers:
+      - name: {{ $initName }}
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.configurator "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        command: ["sh"]
+        args: ["-c", 'until [ $(/usr/local/bin/kubectl get job {{ $jobName }} -o jsonpath="{.status.succeeded}") = 1 ]; do sleep 1; done && echo "WebUsers Created"']
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "1028Mi"
+      {{- end }}
       containers:
         - name: {{ $deploymentName }}
           {{- if eq .Values.imageType "ace"}}
@@ -105,7 +126,7 @@ spec:
               value: {{ print $serverName | quote }}
             - name: SERVICE_NAME
               value: {{ include "sch.names.fullName" (list .) }}
-            {{- if .Values.customContentServer }}   
+            {{- if .Values.customContentServer }}
             - name: CONTENT_SERVER_CA
               value: /home/aceuser/initial-config/ssl/ca.crt.pem
             - name: CONTENT_SERVER_CERT
@@ -118,10 +139,10 @@ spec:
             - name: ACE_CONTENT_SERVER_NAME
               value: {{ $deploymentName }}
             - name: DEFAULT_CONTENT_SERVER
-              value: "false" 
+              value: "false"
             {{- else }}
             - name: DEFAULT_CONTENT_SERVER
-              value: "true"  
+              value: "true"
             {{- end }}
             {{- if .Values.contentServerURL }}
             - name: ACE_CONTENT_SERVER_URL
@@ -203,7 +224,7 @@ spec:
             - name: contentservertls
               mountPath: "/home/aceuser/ssl"
             {{- end }}
-            {{- if ne .Values.designerFlowsOperationMode "disabled" }}
+            {{- if ( ne .Values.designerFlowsOperationMode "disabled" ) }}
             - name: tmp
               mountPath: "/tmp"
             - name: workdir
@@ -217,19 +238,9 @@ spec:
             privileged: false
             capabilities:
               add:
-                - SETPCAP
-                - AUDIT_WRITE
                 - CHOWN
-                - NET_RAW
-                - DAC_OVERRIDE
                 - FOWNER
-                - FSETID
-                - KILL
-                - SETUID
-                - SETGID
-                - NET_BIND_SERVICE
-                - SYS_CHROOT
-                - SETFCAP
+                - DAC_OVERRIDE
               drop:
                 - ALL
           # Set liveness probe to determine if the Integration Server is running
@@ -255,7 +266,7 @@ spec:
 {{ toYaml .Values.aceonly.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.aceonly.resources.requests | indent 14 }}
-        {{- if ne .Values.designerFlowsOperationMode "disabled" }}
+        {{- if ( ne .Values.designerFlowsOperationMode "disabled" ) }}
         - name: "{{ $designerFlowsName }}"
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.designerflows "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -265,7 +276,11 @@ spec:
             - name: bunyan__logfile__filename
               value: "/opt/ibm/app/ace-server/log/integration_server.{{ $serverName }}.designer_flows.txt"
             - name: DESIGNER_FLOWS_OPERATION_MODE
+            {{- if ( hasKey .Values "global" ) and ( .Values.global.designerFlowsOperationMode ) }}
+              value: {{ .Values.global.designerFlowsOperationMode }}
+            {{- else }}
               value: {{ .Values.designerFlowsOperationMode }}
+            {{- end }}
           volumeMounts:
             - name: tmp
               mountPath: "/tmp"
@@ -311,11 +326,15 @@ spec:
               value: {{ .Values.image.tag }}
             - name: CONNECTOR_CREDENTIAL
               value: "/opt/ibm/app/credentials"
+            - name: AGENTX_FILE_PATH
+              value: "/opt/ibm/app/agentx"
             - name: bunyan__logfile__filename
               value: "/opt/ibm/app/ace-server/log/integration_server.{{ $serverName }}.connectors.txt"
           volumeMounts:
             - name: credentials
               mountPath: "/opt/ibm/app/credentials"
+            - name: agent
+              mountPath: "/opt/ibm/app/agentx"
             - name: tmp
               mountPath: "/tmp"
             - name: workdir
@@ -361,7 +380,7 @@ spec:
             - name: icp4i-od-ca-certificate
               mountPath: "/usr/share/jaeger/ca/certs"
           command: ["/go/bin/agent-linux"]
-          args: 
+          args:
             - "--jaeger.tags=sourceNamespace={{ .Release.Namespace }}"
           ports:
             - containerPort: 5775
@@ -371,17 +390,17 @@ spec:
             - containerPort: 6832
               protocol: UDP
             - containerPort: 5778
-              protocol: TCP            
+              protocol: TCP
           env:
             - name: COLLECTOR_HOST_PORT
               value : {{ template "odTracing.collector.host-port" . }}
             - name: REPORTER_TYPE
               value : "grpc"
             - name: REPORTER_GRPC_HOST_PORT
-              value : {{ template "odTracing.collector.grpc-host-port" . }}              
+              value : {{ template "odTracing.collector.grpc-host-port" . }}
             - name: REPORTER_GRPC_TLS
               value : "false"
-            - name: OD_SOURCE_NAMESPACE  
+            - name: OD_SOURCE_NAMESPACE
               value : {{ .Release.Namespace }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -419,8 +438,8 @@ spec:
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.odTracingConfig.odCollectorImageRepository "${1}cp/icp4i/ace/" }}:{{ .Values.odTracingConfig.odCollectorImageTag }}-{{ .Values.arch }}"
           volumeMounts:
             - name: icp4i-od-ca-certificate
-              mountPath: "/usr/share/jaeger/ca/certs" 
-          ports:            
+              mountPath: "/usr/share/jaeger/ca/certs"
+          ports:
             - containerPort: 14250
               name: grpc
               protocol: TCP
@@ -439,9 +458,9 @@ spec:
             - containerPort: 14987
               name: liveliness
               protocol: TCP
-          env:            
+          env:
             - name: SPAN_STORAGE_TYPE
-              value: elasticsearch            
+              value: elasticsearch
             - name: ES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -453,9 +472,9 @@ spec:
                   name: {{ template "odTracing.collector.elasticsearch-secret-name" . }}
                   key: username
             - name: ES_SERVER_URLS
-              value: {{ template "odTracing.collector.elasticsearch-url" . }} 
-            - name: ES_TLS_CA     
-              value: '/usr/share/jaeger/ca/certs/icp4i-od-cacert.pem'          
+              value: {{ template "odTracing.collector.elasticsearch-url" . }}
+            - name: ES_TLS_CA
+              value: '/usr/share/jaeger/ca/certs/icp4i-od-cacert.pem'
             - name: COLLECTOR_PORT
               value: "14267"
             - name: COLLECTOR_HTTP_PORT
@@ -472,7 +491,7 @@ spec:
             privileged: false
             capabilities:
               drop:
-                - ALL  
+                - ALL
           resources:
             limits:
               cpu: 500m
@@ -494,7 +513,7 @@ spec:
             periodSeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.odTracingConfig.odCollectorLivenessProbe.failureThreshold }}
-        {{- end }} 
+        {{- end }}
       volumes:
         {{- if .Values.contentServerURL }}
         - name: webusers
@@ -609,7 +628,7 @@ spec:
             - key: contentServerCACert
               path: cacert.pem
         {{- end }}
-        {{- if ne .Values.designerFlowsOperationMode "disabled" }}
+        {{- if ( ne .Values.designerFlowsOperationMode "disabled" ) }}
         - name: credentials
           secret:
             secretName: {{ $secretName }}

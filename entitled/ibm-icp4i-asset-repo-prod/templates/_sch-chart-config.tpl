@@ -52,4 +52,8 @@ sch:
   names:
     volumeClaimTemplateName:
       maxLength: 45
+      possiblePrefix: "glusterfs-dynamic-"
+    persistentVolumeClaimName:
+      maxLength: 45
+      possiblePrefix: "glusterfs-dynamic-"
 {{- end -}}

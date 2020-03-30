@@ -163,19 +163,9 @@ spec:
   requiredDropCapabilities:
   - MKNOD
   allowedCapabilities:
-  - SETPCAP
-  - AUDIT_WRITE
   - CHOWN
-  - NET_RAW
-  - DAC_OVERRIDE
   - FOWNER
-  - FSETID
-  - KILL
-  - SETUID
-  - SETGID
-  - NET_BIND_SERVICE
-  - SYS_CHROOT
-  - SETFCAP
+  - DAC_OVERRIDE
   volumes:
   - configMap
   - emptyDir
@@ -254,12 +244,12 @@ The following table lists the configurable parameters of the `ibm-ace-server-icp
 | `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
 | `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
 | `designerFlowsOperationMode`     | Choose whether to deploy sidecar containers into the pod for running flows authored in App Connect Designer. Options `disabled`, `all` (Enabled for cloud-managed and local connectors) or `local` (Enabled for local connectors only) | `disabled` |
-| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-server-prod:11.0.0.6.1` |
-| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-mqclient-server-prod:11.0.0.6.1`         |
-| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `cp.icr.io/cp/icp4i/ace/ibm-ace-mq-server-prod:11.0.0.6.1`               |
-| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-icp-configurator-prod:11.0.0.6.1` |
-| `image.designerflows`            | Image repository and tag for the App Connect Enterprise designer flows image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-designer-flows-prod:11.0.0.6.1` |
-| `image.connectors`               | Image repository and tag for the App Connect Enterprise loopback connector image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-lcp-prod:11.0.0.6.1` |
+| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-server-prod:11.0.0.7-r3` |
+| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-mqclient-server-prod:11.0.0.7-r3`         |
+| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `cp.icr.io/cp/icp4i/ace/ibm-ace-mq-server-prod:11.0.0.7-r3`               |
+| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `cp.icr.io/cp/icp4i/ace/ibm-acecc-configurator-prod:11.0.0.7-r3` |
+| `image.designerflows`            | Image repository and tag for the App Connect Enterprise designer flows image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-designer-flows-prod:11.0.0.7-r3` |
+| `image.connectors`               | Image repository and tag for the App Connect Enterprise loopback connector image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-lcp-prod:11.0.0.7-r3` |
 | `image.pullPolicy`               | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`               | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                           | Architecture scheduling preference for worker node (only amd64 supported) - read only. | `amd64`              |
@@ -268,7 +258,7 @@ The following table lists the configurable parameters of the `ibm-ace-server-icp
 | `dataPVC.name`                   | Suffix for the Persistent Volume Claim name.     | `data`                                                     |
 | `dataPVC.storageClassName`       | Storage class of volume for main MQ data (under /var/mqm). | `nil`                                            |
 | `dataPVC.size`                   | Size of volume for main MQ data (under /var/mqm). | `2Gi`                                                     |
-| `service.type`                   | Kubernetes service type exposing ports.          | `NodePort`                                                 |
+| `service.type`                   | Kubernetes service type exposing ports.          | `ClusterIP`                                                 |
 | `service.webuiPort`              | Web UI port number - read only.                   | `7600`                                                    |
 | `service.serverlistenerPort`     | HTTP server listener port number - read only.     | `7800`                                                    |
 | `service.serverlistenerTLSPort`  | HTTPS server listener port number - read only.    | `7843`                                                    |
@@ -288,7 +278,8 @@ The following table lists the configurable parameters of the `ibm-ace-server-icp
 | `acemq.pki.keys`                      | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates with private keys. See section titled "Supplying certificates to be used for TLS" for more details.  | `[]` |
 | `acemq.pki.trust`                     | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates. See section titled "Supplying certificates to be used for TLS" for more details.  | `[]` |
 | `acemq.qmname`              | MQ queue manager name.                           | Helm release name.                                          |
-| `acemq.initVolumeAsRoot`              | Whether or not the storage class (such as NFS) requires root permissions to initialize.                           | Initialize MQ volume using root.                                          | `true` | `nameOverride`                  | Set to partially override the resource names used in this chart. | `ibm-mq`                                   |
+| `acemq.initVolumeAsRoot`              | Whether or not the storage class (such as NFS) requires root permissions to initialize.                           | Initialize MQ volume using root.                                          | `true` 
+| `nameOverride`                  | Set to partially override the resource names used in this chart. | `ibm-mq`                                   |
 | `designerflows.resources.limits.cpu`        | Kubernetes CPU limit for the sidecar container for running flows authored in App Connect Designer.      | `1`                      |
 | `designerflows.resources.limits.memory`     | Kubernetes memory limit for the sidecar container for running flows authored in App Connect Designer.   | `256Mi`                 |
 | `designerflows.resources.requests.cpu`      | Kubernetes CPU request for the sidecar container for running flows authored in App Connect Designer.    | `50m`                      |
@@ -308,11 +299,11 @@ The following table lists the configurable parameters of the `ibm-ace-server-icp
 | `readinessProbe.initialDelaySeconds` | The initial delay before starting the readiness probe. |	`10` |
 | `odTracingConfig.enabled`                                        | Whether or not to enable the OD for this release      | `false`               |
 | `odTracingConfig.odAgentImageRepository`                         | Repository where the OD agent image is located        | `cp.icr.io/cp/icp4i/ace/icp4i-od-agent`      |
-| `odTracingConfig.odAgentImageTag`                                | The tag for the Docker image for the OD agent         | `1.0.1`               |
+| `odTracingConfig.odAgentImageTag`                                | The tag for the Docker image for the OD agent         | `1.0.2`               |
 | `odTracingConfig.odAgentLivenessProbe.initialDelaySeconds`       | How long to wait before starting the probe            | `60`                  |
 | `odTracingConfig.odAgentReadinessProbe.initialDelaySeconds`      | How long to wait before the probe is ready            | `10`                  |
 | `odTracingConfig.odCollectorImageRepository`                     | Repository where the OD collector image is located    | `cp.icr.io/cp/icp4i/ace/icp4i-od-collector`  |
-| `odTracingConfig.odCollectorImageTag`                            | The tag for the Docker image for the OD collector     | `1.0.1`               |
+| `odTracingConfig.odCollectorImageTag`                            | The tag for the Docker image for the OD collector     | `1.0.2`               |
 | `odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds`   | How long to wait before starting the probe            | `60`                  |
 | `odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds`  | How long to wait before the probe is ready            | `10`                  |
 | `odTracingConfig.odTracingNamespace`                             | Namespace where the Operation Dashboard was released  | `nil`                 |

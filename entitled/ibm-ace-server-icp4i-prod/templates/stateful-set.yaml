@@ -16,6 +16,8 @@
 {{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{- $pvcName := .Values.dataPVC.name }}
 {{- $fullName := include "sch.names.fullName" (list .) }}
+{{- $initName := include "sch.names.fullCompName" (list . "init") }}
+{{- $jobName := include "sch.names.fullCompName" (list . "config-gen") }}
 {{- $statefulSetName := include "sch.names.statefulSetName" (list . ) }}
 {{- $designerFlowsName := include "sch.names.fullCompName" (list . "designer-flows") }}
 {{- $tracingAgentName := include "sch.names.fullCompName" (list . "od-tracing-agent") }}
@@ -66,11 +68,6 @@ spec:
                 values:
                 - {{ .Values.arch }}
       serviceAccountName: {{ $saName }}
-      imagePullSecrets:
-      {{- if .Values.image.pullSecret }}
-        - name: {{ .Values.image.pullSecret }}
-      {{- end }}
-        - name: ibm-entitlement-key
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -213,8 +210,6 @@ spec:
               mountPath: "/home/aceuser/ace-server"
             {{- end }}
           securityContext:
-            seLinuxOptions:
-              type: spc_t
             allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false
             runAsNonRoot: true
@@ -222,19 +217,9 @@ spec:
             privileged: false
             capabilities:
               add:
-              - SETPCAP
-              - AUDIT_WRITE
-              - CHOWN
-              - NET_RAW
-              - DAC_OVERRIDE
-              - FOWNER
-              - FSETID
-              - KILL
-              - SETUID
-              - SETGID
-              - NET_BIND_SERVICE
-              - SYS_CHROOT
-              - SETFCAP
+                - CHOWN
+                - FOWNER
+                - DAC_OVERRIDE
               drop:
               - ALL
           # Set liveness probe to determine if the Integration Server is running
@@ -451,8 +436,33 @@ spec:
             timeoutSeconds: {{ .Values.odTracingConfig.odCollectorLivenessProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.odTracingConfig.odCollectorLivenessProbe.failureThreshold }}
         {{- end }} 
-      {{- if .Values.acemq.initVolumeAsRoot }}
+      {{- if or .Values.contentServerURL .Values.acemq.initVolumeAsRoot }}
       initContainers:
+      {{- end }}
+      {{- if .Values.contentServerURL }}
+        - name: {{ $initName }}
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.configurator "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          command: ["sh"]
+          args: ["-c", 'until [ $(/usr/local/bin/kubectl get job {{ $jobName }} -o jsonpath="{.status.succeeded}") = 1 ]; do sleep 1; done && echo "WebUsers Created"']
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "1028Mi"
+      {{- end }} 
+      {{- if .Values.acemq.initVolumeAsRoot }}
         - name: qmgr-init
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.acemq "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -474,8 +484,6 @@ spec:
             name: {{ $volumeClaimTemplateName }}
           {{- end }}
           securityContext:
-            seLinuxOptions:
-              type: spc_t
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             runAsNonRoot: false

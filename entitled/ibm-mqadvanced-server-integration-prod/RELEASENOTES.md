@@ -1,11 +1,15 @@
 # Breaking Changes
 
-- If you have existing MQ connections via the NodePort service, they need to be changed to use an OpenShift Route.  A default Route will be created for the web console only.
+- Authorization for the MQ Web Console is now controlled by IAM roles; configuring access via `sso.webAdminUsers` is no longer supported.  To access the MQ Web Console you must now either have the `administrator` role for the namespace where MQ is deployed or have the cluster-administrator role.
+- The deprecated `tls.secret` configuration option has now been removed.  If you are upgrading from a previous release, and have this value set, then you must now set `pki.keys` instead.
 
-# What’s new in the MQ Advanced for Cloud Pak for Integration Chart, Version 5.0.x
+# What’s new in the MQ Advanced for Cloud Pak for Integration Chart, Version 6.0.x
 
-- Added OpenShift Routes for the web console & queue manager
-- `log.format` now defaults to `basic`
+- Updated to IBM MQ 9.1.4
+- Added IAM based authorization for single sign-on to the MQ Web Console
+- Added an option to enable MQ trace on the startup of the queue manager
+- Added an option to modify the termination grace period
+- Updated to use UBI 8 base image
 
 # Fixes
 
@@ -13,7 +17,7 @@
 
 # Prerequisites
 
-- OpenShift Container Platform v4.2 (Kubernetes 1.14)
+- OpenShift Container Platform v4.2 and v4.3 (Kubernetes 1.14 & 1.16)
 - The following IBM Platform Core Services are required: `tiller` & `auth-idp`
 
 # Documentation
@@ -25,6 +29,7 @@
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 6.0.0 | March 2020 | >= 1.14.0 | = MQ 9.1.4.0 | Authorization for the MQ Web Console; Removed `tls.secret` | Updated to IBM MQ 9.1.4; IAM based authorization for MQ Web Console; Added optional MQ trace on startup of queue manager; Added optional termination grace period setting; Updated to use UBI 8 base image |
 | 5.0.0 | November 2019 | >= 1.14.0 | = MQ 9.1.3.0 | Use OpenShift Routes instead of NodePorts | Added OpenShift Routes for the web console & queue manager; `log.format` now defaults to `basic` |
 | 4.1.0 | October 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Operations Dashboard |
 | 4.0.2 | October 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | SSO fix for ICP 3.2.1 IAM change; README updates |

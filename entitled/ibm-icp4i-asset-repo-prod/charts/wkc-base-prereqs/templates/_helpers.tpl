@@ -41,11 +41,3 @@ Create rabbitmqUrl with pw for secret
 {{- printf .Values.env.rabbitmqUrl (index .Values "wdp-rabbitmq" "rabbitmqUsername") $rmqpw | b64enc | quote -}}
 {{- end -}}
 {{- end -}}
-
-{{/*
-Create cloudantUrl with pw for secret
-*/}}
-{{- define "wkc-base-prereqs.cloudantUrl" -}}
-{{- printf .Values.env.cloudantUrl .Values.global.cloudant.username .Values.global.cloudant.password .Release.Namespace | b64enc | quote -}}
-{{- end -}}
-
