@@ -262,15 +262,15 @@ checkAccessControllerLogs() {
     testName="Access Controller logs"
     testPassed=true
     for acpod in $accessControllerPods; do
-        podoutput=`kubectl logs $acpod -c access-controller -n$NAMESPACE | grep '"error":' | wc -l`
-
-        if [ $? == 0 ]
+        podoutput=`kubectl logs $acpod -c access-controller -n$NAMESPACE | grep '"error":' | grep -v 'hyperion' | wc -l`
+        
+        if [ $podoutput != 0 ]
         then
-        echo "!!-- $podoutput Errors found in $acpod log, see tmpLogs/$acpod/access-controller.log"
-        testPassed=false
-    else
-        echo "....No errors found in $acpod log."
-    fi
+            echo "!!-- $podoutput Errors found in $acpod log, see tmpLogs/$acpod/access-controller.log"
+            testPassed=false
+        else
+            echo "....No errors found in $acpod log."
+        fi
   done
 
   if $testPassed
