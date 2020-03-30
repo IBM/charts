@@ -1,0 +1,278 @@
+# © Copyright IBM Corporation 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+{{- include "sch.config.init" (list . "ibm-ac.sch.chart.config.values") }}
+{{- $deploymentName := include "sch.names.fullCompName" (list . "ui") }}
+{{- $uicertname := include "sch.names.fullCompName" (list . "ui-cert") }}
+{{- $jobName := include "sch.names.fullCompName" (list . "couch-finish-setup") }}
+{{- $clientName := include "sch.names.fullCompName" (list . "oidc") }}
+{{- $saName := include "sch.names.fullCompName" (list . "designer-serviceaccount") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "ui")) }}
+{{- $serverChartName := .sch.chart.serverChartName }}
+{{- $fullName := include "sch.names.fullName" (list .) }}
+{{- $secretName := include "sch.names.fullCompName" (list . "is") }}
+{{- $envConfigMapName := include "sch.names.fullCompName" (list . "env")}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deploymentName }}
+  annotations:
+    icp4i.ibm.com/product: appconnect-designer
+    icp4i.ibm.com/release: {{ .Release.Name }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  replicas: {{ .Values.global.replicaCount }}
+  selector:
+    matchLabels:
+{{ $labels | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+      name: {{ $deploymentName }}
+      labels:
+{{ $labels | indent 8 }}
+        type: fireflyMicroservice
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      serviceAccountName: {{ $saName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1200
+        fsGroup: 1200
+      initContainers:
+      - name: {{ include "sch.names.fullCompName" (list . "ui-init") }}
+        image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.configurator "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        command: ["sh"]
+        # args: ["-c", "kubectl wait --for=condition=complete job/{{ $jobName }}"]
+        args: ["-c", 'until [ $(/usr/local/bin/kubectl get job {{ $jobName }} -o jsonpath="{.status.succeeded}") = 1 ]; do sleep 1; done && echo "CouchDB Started & Initialised"']
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "1028Mi"
+      containers:
+        # This is the configuration for the firefly-ui
+        - name: {{ include "sch.names.fullCompName" (list . "firefly-ui") }}
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.fireflyUi "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+          - bash
+          - -c
+          - |
+            export CDB_URL=https://$COUCHDB_USER:$COUCHDB_PASSWORD@{{ include "sch.names.fullCompName" (list . "svc-couchdb") }} ;
+            npx bytenode server.jsc
+          env:
+          - name: APPLICATION_NAME
+            value: "firefly-ui"
+          {{- if .Values.featureTogglesOverride }}
+          - name: FEATURE_TOGGLES_OVERRIDE
+            value: {{ .Values.featureTogglesOverride }}
+          {{- end }}
+          - name: ICP4I
+            value: "true"
+          - name: CIP_SERVICES_ENDPOINT
+            value: https://icp4i-services-{{ .Values.icp4iNamespace }}.{{ .Values.icp4iNamespace }}.svc:3000
+          {{- if .Values.ssoEnabled }}
+          - name: IAM_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ $clientName }}
+                key: CLIENT_ID
+          - name: IAM_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ $clientName }}
+                key: CLIENT_SECRET
+         {{- end }}
+          - name: IAM_TOKEN_ENC_KEY
+            value: {{ randNumeric 64 | quote }}
+          - name: MUTUAL_AUTH
+            value: {{ .Release.Name }}
+          - name: port
+            value: "3000"
+          - name: FLINT_MAX_ACTION_INTERFACES
+            value: "200"
+          - name: FLINT_MAX_BATCHES
+            value: "20"
+          # Temp value until we fix redis
+          - name: REDIS_RECONNECT_INTERVAL_MIN
+            value: "99999999999"
+          - name: CMS_URL
+            value: "https://developer.ibm.com"
+          - name: bunyan
+            value: "{\"loglevel\" : \"info\", \"logsrc\" : true, \"logfile\" : { \"filename\": \"/opt/ibm/app/logs/firefly-ui.txt\", \"rotate\": \"true\", \"rotatecount\":12, \"rotateperiod\":\"1h\" }}"
+          - name: "COUCHDB_USER"
+            valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-couchdb
+                  key: adminUsername
+          - name: "COUCHDB_PASSWORD"
+            valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-couchdb
+                  key: adminPassword
+          {{- if eq .Values.global.designerFlowsOperationMode "all" }}
+          - name: "FIREFLY_API_APIKEY"
+            valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.appConnectSecret }}
+                  key: apikey
+          {{- end }}
+          - name: "FIREFLY_AUTH_JWT_PUB_KEY"
+            valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: jwt.pub
+          - name: "FIREFLY_AUTH_JWT_PRI_KEY"
+            valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: jwt.pri
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1200
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          # Set liveness probe to determine if firefly-ui is running
+          livenessProbe:
+            exec:
+              command:
+              - /readiness/ready-http.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          # Set readiness probe to determine if firefly-ui is running
+          readinessProbe:
+            exec:
+              command:
+              - /readiness/ready-http.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          resources:
+            limits:
+{{ toYaml .Values.fireflyUi.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.fireflyUi.resources.requests | indent 14 }}
+          envFrom:
+            - configMapRef:
+                name: {{ $envConfigMapName }}
+          volumeMounts:
+            - name: is-certificate-keys
+              mountPath: /opt/ibm/app/ssl
+        # This is the configuration for the Stunnel proxy
+        - name: {{ include "sch.names.fullCompName" (list . "proxy") }}
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.proxy "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/stunnel"]
+          args: ["/etc/stunnel/stunnel-ui.conf"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1200
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          lifecycle:
+            preStop:
+              exec:
+                command: ["kill `cat /var/run/stunnel4/haproxy.pid`"]
+          livenessProbe:
+            exec:
+              command:
+              - /readiness/ready.sh
+            initialDelaySeconds: 60
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          readinessProbe:
+            exec:
+              command:
+              - /readiness/ready.sh
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          ports:
+          - name: https-port
+            containerPort: 3001
+          resources:
+            limits:
+{{ toYaml .Values.proxy.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.proxy.resources.requests | indent 14 }}
+          volumeMounts:
+            - name: ui-certificate-keys
+              mountPath: /etc/stunnel/secrets
+      volumes:
+        - name: is-certificate-keys
+          secret:
+            secretName: {{ $secretName }}
+            items:
+            - key: tls.key
+              path: stunnel.key.pem
+              mode: 384
+            - key: tls.crt
+              path: stunnel.cert.pem
+              mode: 384
+            - key: ca.crt
+              path: stunnel.ca.pem
+              mode: 384
+        - name: ui-certificate-keys
+          secret:
+            secretName: {{ $uicertname }}
+            items:
+              - key: tls.key
+                path: stunnel.key.pem
+                mode: 384
+              - key: tls.crt
+                path: stunnel.cert.pem
+                mode: 384
