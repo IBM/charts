@@ -81,8 +81,8 @@ if [ -s ./policyDescriptor.xml ]; then
   SECRET_ARGS="${SECRET_ARGS} --from-file=policyDescriptor=./policyDescriptor.xml "
 fi
 
-if [ -s ./serverconf.yaml ]; then
-  SECRET_ARGS="${SECRET_ARGS} --from-file=serverconf=./serverconf.yaml "
+if [ -s ./server.conf.yaml ]; then
+  SECRET_ARGS="${SECRET_ARGS} --from-file=serverconf=./server.conf.yaml "
 fi
 
 if [ -s ./setdbparms.txt ]; then
@@ -119,4 +119,4 @@ fi
 
 echo "Creating secret"
 echo "kubectl create secret generic ${TARGET_SECRET_NAME}${SECRET_ARGS}"
-kubectl create secret generic ${TARGET_SECRET_NAME}${SECRET_ARGS}
+kubectl create secret generic ${TARGET_SECRET_NAME}${SECRET_ARGS} --dry-run -o yaml | kubectl apply -f -

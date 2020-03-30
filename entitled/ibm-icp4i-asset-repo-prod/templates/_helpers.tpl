@@ -1,16 +1,15 @@
 {{/* vim: set filetype=mustache: */}}
-{{/*
-Expand the name of the chart.
-*/}}
-{{- define "icip-asset-repo.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
 
 {{/*
-Create a default fully qualified app name.
-We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+Generates a comma delimited list of nodes in the cluster
 */}}
-{{- define "icip-asset-repo.fullname" -}}
-{{- $name := default "cip-asset-repo" .Values.nameOverride -}}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- define "couchdb.seedlist" -}}
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $podName := include "sch.names.fullCompName" (list . "couchdb") }}
+{{- $headlessServiceName := include "sch.names.fullCompName" (list . "couchdb-headless") }}
+{{- $nodeCount :=  min 5 .Values.couchdb.replicas | int }}
+  {{- range $index0 := until $nodeCount -}}
+    {{- $index1 := $index0 | add1 -}}
+    couchdb@{{ $podName }}-{{ $index0 }}.{{ $headlessServiceName }}.{{ $.Release.Namespace }}.svc.{{ $.Values.couchdb.dns.clusterDomainSuffix }}{{ if ne $index1 $nodeCount }},{{ end }}
+  {{- end -}}
 {{- end -}}

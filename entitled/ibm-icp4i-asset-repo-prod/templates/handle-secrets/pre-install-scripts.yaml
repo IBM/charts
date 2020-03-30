@@ -1,0 +1,125 @@
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $scriptsName := include "sch.names.fullCompName" (list . "pre-install-scripts") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "") }}
+{{- $routeName := .Release.Name }}
+{{- $serviceName := include "sch.names.fullCompName" (list .) }}
+{{- $oidcClientName := include "sch.names.fullCompName" (list . "oidc-client") }}
+{{- $oidcSecretName := include "sch.names.fullCompName" (list . "oidc-secret") }}
+{{- $icp4iConfigmapName := include "sch.names.fullCompName" (list . "configmap") }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $scriptsName }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+data:
+  oauth.sh: |
+    #!/bin/sh
+ 
+    set -o xtrace
+    set -o errexit
+
+    echo "========================"
+    echo "CLUSTER CONFIG DISCOVERY"
+    echo "========================"
+
+    CLUSTER_ADDRESS=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.cluster_address}" -n kube-public`
+    CLUSTER_PORT=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.cluster_router_https_port}" -n kube-public`
+    CLUSTER_NAME=`kubectl get configmap ibmcloud-cluster-info -o jsonpath="{.data.cluster_name}" -n kube-public`
+
+    # Calculate the CRN
+    # https://www.ibm.com/support/knowledgecenter/en/SSBS6K_3.2.0/user_management/iam_platform.html
+    CRN="crn:v1:icp:private:k8:$CLUSTER_NAME:n/{{ .Release.Namespace }}:r/{{ .Release.Name }}::"
+
+    echo "=============="
+    echo "Route creation"
+    echo "=============="
+
+    ROUTE="route.yaml"
+
+    kubectl apply -f "$ROUTE" --validate=false
+
+    if [[ $? -ne 0 ]]; then
+      echo "Could not create route"
+      exit 1
+    fi
+
+    ASSET_REPO_HOST="$(kubectl get route "{{ $routeName }}" -o jsonpath="{.spec.host}")"
+
+    echo "=================="
+    echo "CONFIGMAP CREATION"
+    echo "=================="
+
+    CONFIGMAP_TEMPLATE="configmap.yaml.template"
+    CONFIGMAP_INSTANCE="/tmp/configmap.yaml"
+
+    sed -e "s|ASSET_REPO_HOST|$ASSET_REPO_HOST|g" \
+        -e "s|CLUSTER_ADDRESS|$CLUSTER_ADDRESS|g" \
+        -e "s|CLUSTER_PORT|$CLUSTER_PORT|g" \
+        -e "s|CRN|$CRN|g" "$CONFIGMAP_TEMPLATE" > "$CONFIGMAP_INSTANCE"
+
+    cat $CONFIGMAP_INSTANCE
+
+    kubectl apply -f "$CONFIGMAP_INSTANCE"
+
+    echo "===================="
+    echo "OIDC CLIENT CREATION"
+    echo "===================="
+
+    OIDC_CLIENT_TEMPLATE="oidc-client.yaml.template"
+    OIDC_CLIENT_INSTANCE="/tmp/oidc-client.yaml"
+
+    sed -e "s|ASSET_REPO_HOST|$ASSET_REPO_HOST|g" "$OIDC_CLIENT_TEMPLATE" > "$OIDC_CLIENT_INSTANCE"
+
+    kubectl apply -f "$OIDC_CLIENT_INSTANCE"
+
+  route.yaml: |
+    apiVersion: route.openshift.io/v1
+    kind: Route
+    metadata:
+      name: {{ $routeName }}
+      labels:
+{{ $labels | indent 8 }}
+      annotations:
+        icp4i.ibm.com/release: {{ .Release.Name }}
+        icp4i.ibm.com/native-header: "true"
+    spec:
+      tls:
+        insecureEdgeTerminationPolicy: Redirect
+        termination: reencrypt
+      to:
+        kind: Service
+        name: {{ .Release.Name }}-asset-ui
+        weight: 100
+
+  oidc-client.yaml.template: |
+    apiVersion: oidc.security.ibm.com/v1
+    kind: Client
+    metadata:
+      name: {{ $oidcClientName }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      secret: {{ $oidcSecretName }}
+      oidcLibertyClient:
+        post_logout_redirect_uris: ["https://ASSET_REPO_HOST/auth/logout"]
+        trusted_uri_prefixes: ["https://ASSET_REPO_HOST"]
+        redirect_uris: ["https://ASSET_REPO_HOST/auth/callback"]
+
+  configmap.yaml.template: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+      name: {{ $icp4iConfigmapName }}
+    data:
+      assetRepoHost: "ASSET_REPO_HOST"
+      clusterExternalHost: "CLUSTER_ADDRESS"
+      clusterExternalPort: "CLUSTER_PORT"
+      crn: "CRN"
+      proxy_ingress_https_port: "443"
+      iamUrl: "https://CLUSTER_ADDRESS:CLUSTER_PORT"

@@ -1,0 +1,118 @@
+# © Copyright IBM Corporation 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+###############################################################################
+# Runs a container that generates certificates and keys for communication
+# between internal components.
+###############################################################################
+{{- include "sch.config.init" (list . "sch.chart.config.values") }}
+{{- $jobName := include "sch.names.fullCompName" (list . "couch-finish-setup") }}
+{{- $fullName := include "sch.names.fullName" (list .) }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "couch-finish-setup")) }}
+{{- $saName := include "sch.names.fullCompName" (list . "couchdb-setup-serviceaccount") }}
+{{- $couchdbTlsSecretName := include "sch.names.fullCompName" (list . "couchdb-tls-secret") }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $jobName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ $labels | indent 4 }}
+spec:
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      serviceAccountName: {{ $saName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      restartPolicy: Never
+      initContainers:
+      - name: {{ include "sch.names.fullCompName" (list . "couchdb-init") }}
+        image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.configurator }}
+        imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        command: ["sh"]
+        args: ["-c", 'until [ $(/usr/local/bin/kubectl get statefulset {{ include "sch.names.fullCompName" (list . "couchdb") }} -o=jsonpath="{.status.readyReplicas}") = {{ .Values.couchdb.replicas }} ]; do sleep 1; done && echo "CouchDB Started"']
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "1028Mi"
+      containers:
+        - name: {{ include "sch.names.fullCompName" (list . "couch-finish-setup") }}
+          image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.configurator }}
+          imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          env:
+          - name: "SERVICE_NAME"
+            value: {{ include "sch.names.fullCompName" (list . "couchdb") }}
+          - name: "NAMESPACE"
+            value: {{ .Release.Namespace | quote }}
+          - name: COUCHDB_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+                key: username
+          - name: COUCHDB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "sch.names.fullCompName" (list . "cloudant-creds") }}
+                key: password
+          command:
+            - sh
+            - -c
+            - "echo \"Finalising couchdb setup\" && set -x && curl --cacert /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt -vs \"https://$COUCHDB_USER:$COUCHDB_PASSWORD@${SERVICE_NAME}.${NAMESPACE}.svc:443/_cluster_setup\" -X POST -H \"Content-Type: application/json\"  -d '{\"action\": \"finish_cluster\"}'"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "1028Mi"

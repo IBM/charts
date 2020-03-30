@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This chart deploys a single IBM® MQ version 9.1.3 Advanced server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
+This chart deploys a single IBM® MQ version 9.1.4 Advanced server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
 
 ## Chart Details
 
@@ -10,18 +10,18 @@ This chart will do the following:
 
 * Create a single MQ server (Queue Manager) using a [Stateful Set](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with one or two replicas depending on whether multi-instance queue managers are enabled.  Kubernetes will ensure that if it fails for some reason, it will be restarted, possibly on a different worker node.
 * Create a [Service](https://kubernetes.io/docs/concepts/services-networking/service/).  This is used to ensure that MQ client applications have a consistent IP address to connect to, regardless of where the Queue Manager is actually running.
-* Create a [Job](https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/) to register the Queue Manager with the IBM Identity and Access Manager, for single sign-on
+* Create a [Job](https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/) to register the Queue Manager with the IBM Identity and Access Manager, for single sign-on.
 * Create a [Service Account](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/), [Role and Role Binding](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) to secure what permissions the running container has.
-* Create a pre-upgrade and a post-delete Job, Role and Role Binding
-* Create an [OpenShift Route](https://docs.openshift.com/container-platform/3.9/architecture/networking/routes.html) for the web console
-* Create an [OpenShift Route](https://docs.openshift.com/container-platform/3.9/architecture/networking/routes.html) for the queue manager
+* Create a pre-upgrade and a post-delete Job, Role and Role Binding.
+* Create an [OpenShift Route](https://docs.openshift.com/container-platform/3.11/architecture/networking/routes.html) for the web console.
+* Create an [OpenShift Route](https://docs.openshift.com/container-platform/3.11/architecture/networking/routes.html) for the queue manager.
 * [Optional] Create additional [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) for use with a multi-instance Queue Manager.
 * [Optional] Create a metrics [Service](https://kubernetes.io/docs/concepts/services-networking/service/) for accessing Queue Manager metrics.
 * [Optional] Create a Job to register the Queue Manager with the Operations Dashboard.
 
 ## Prerequisites
 
-* OpenShift Container Platform v4.2 (Kubernetes 1.14)
+* OpenShift Container Platform v4.2 and v4.3 (Kubernetes 1.14 & 1.16)
 * If persistence is enabled (see the **configuration** section), then you either need to create a Persistent Volume, or specify a Storage Class if classes are defined in your cluster.
 * Administrator is the minimum role required to install this chart.
 * The following IBM Platform Core Services are required: `tiller` & `auth-idp`.
@@ -30,28 +30,30 @@ This chart will do the following:
 
 This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre-install actions that need to occur.
 
-The predefined SecurityContextConstraints name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+The predefined SecurityContextConstraints name: [`anyuid`](https://ibm.biz/cpkspec-scc) has been verified for this chart when `security.initVolumeAsRoot=false`, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
 
-This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied scripts in the `pak_extensions` pre-install directory.
+The predefined SecurityContextConstraints name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart when `security.initVolumeAsRoot=true`, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+
+This chart also defines a custom SecurityContextConstraints which can be used when `security.initVolumeAsRoot=true` to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied scripts in the `pak_extensions` pre-install directory.
 
   - Custom SecurityContextConstraints definition:
     ```
     apiVersion: security.openshift.io/v1
     kind: SecurityContextConstraints
     metadata:
-      name: ibm-mq-integration-scc
+      name: ibm-mq-init-volume-as-root-scc
     allowHostDirVolumePlugin: false
     allowHostIPC: false
     allowHostNetwork: false
     allowHostPID: false
     allowHostPorts: false
+    allowPrivilegeEscalation: true
     allowPrivilegedContainer: false
     allowedCapabilities:
     - CHOWN
     - FOWNER
     - DAC_OVERRIDE
-    allowedFlexVolumes: []
-    defaultAddCapabilities: []
+    defaultAddCapabilities: null
     fsGroup:
       type: RunAsAny
     readOnlyRootFilesystem: false
@@ -60,13 +62,16 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     runAsUser:
       type: RunAsAny
     seLinuxContext:
-      type: RunAsAny
+      type: MustRunAs
     supplementalGroups:
       type: RunAsAny
     volumes:
     - secret
     - configMap
+    - downwardAPI
+    - emptyDir
     - persistentVolumeClaim
+    - projected
     users: []
     priority: 0
     ```
@@ -99,7 +104,7 @@ helm install --name foo mylocal-repo/ibm-mqadvanced-server-integration-prod --se
 
 This example assumes that you have a local Helm repository configured, called `mylocal-repo`.  You could alternatively reference a local directory containing the Helm chart code.
 
-This command accepts the [IBM MQ Advanced license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-BBSHJL) and deploys an MQ Advanced server on the Kubernetes cluster. The **configuration** section lists the parameters that can be configured during installation.
+This command accepts the [IBM MQ Advanced license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-BGMHFW) and deploys an MQ Advanced server on the Kubernetes cluster. The **configuration** section lists the parameters that can be configured during installation.
 
 > **Tip**: See all the resources deployed by the chart using `kubectl get all -l release=foo`
 
@@ -122,17 +127,14 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `license`                       | Set to `accept` to accept the terms of the IBM license          | `"not accepted"`                           |
 | `productionDeployment`          | Whether the application is running production workloads         | `true`                                     |
 | `image.repository`              | Image full name including repository                            | `MQ image`                                 |
-| `image.tag`                     | Image tag                                                       | `Tag of MQ image                 `         |
+| `image.tag`                     | Image tag                                                       | `Tag of MQ image`                          |
 | `image.pullPolicy`              | Image pull policy (for all images)                              | `IfNotPresent`                             |
 | `image.pullSecret`              | Image pull secret, if you are using a private Docker registry   | `nil`                                      |
 | `icp4i.namespace`               | Namespace where the platform navigator is installed             | `integration`                              |
 | `sso.registrationImage.repository` | Single sign-on registration image name including repository  | `SSO registration image`                   |
 | `sso.registrationImage.tag`     | Single sign-on registration image tag                           | `Tag of SSO registration image`            |
-| `sso.webAdminUsers`             | List of users that will be configured with admin access to the Web UI | `"admin"`                            |
-| `sso.uniqueUserIdentifier`      | Attribute that will be used to identify the user                | `"sub"`                                    |
-| `tls.generate`                  | Whether to generate a new certificate or use an existing certificate | `false` - will use an existing certificate |
+| `tls.generate`                  | Whether to generate a new certificate or use an existing certificate | `true`                                |
 | `tls.hostname`                  | The hostname of the cluster                                     | Mandatory - a hostname must be set         |
-| `tls.secret`                    | DEPRECATED: use `pki.keys` instead and set `pki.keys.name` to `default`. Name of the secret that contains an existing certificate to be used for the web console | `nil` |
 | `metadata.labels`               | Additional labels to be added to resources                      | `{}`                                       |
 | `persistence.enabled`           | Use persistent volumes for all defined volumes                  | `true`                                     |
 | `persistence.useDynamicProvisioning` | Use dynamic provisioning (storage classes) for all volumes | `true`                                     |
@@ -154,10 +156,11 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `resources.requests.memory`     | Kubernetes memory request for the Queue Manager container       | `1Gi`                                      |
 | `security.context.fsGroup`      | File system group ID (if required by storage provider)          | `nil`                                      |
 | `security.context.supplementalGroups` | List of supplemental groups (if required by storage provider) | `nil`                                  |
-| `security.initVolumeAsRoot`     | Whether or not storage provider requires root permissions to initialize | `true`                             |
+| `security.initVolumeAsRoot`     | Whether or not storage provider requires root permissions to initialize | `true` - when set to true, you may need a custom SecurityContextConstraints (see the section on Red Hat OpenShift SecurityContextConstraints requirements) |
 | `queueManager.name`             | MQ Queue Manager name                                           | Helm release name                          |
 | `queueManager.multiInstance`    | Whether to run in multi-instance mode with an active and standby queue manager | `false`                     |
-| `pki.keys`                      | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates with private keys for use by the queue manager. See section titled "Supplying certificates to be used for TLS" for more details  | `name: default, secret: {secretName: ibm-mq-tls-secret, items: [tls.key, tls.crt]}` |
+| `queueManager.terminationGracePeriodSeconds` | The duration in seconds the Queue Manager needs to terminate gracefully | `30`                  |
+| `pki.keys`                      | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates with private keys for use by the queue manager. See section titled "Supplying certificates to be used for TLS" for more details  | `[]` |
 | `pki.trust`                     | An array of YAML objects that detail Kubernetes secrets containing trusted TLS Certificates for use by the queue manager and MQ Console. See section titled "Supplying certificates to be used for TLS" for more details  | `[]` |
 | `nameOverride`                  | Set to partially override the resource names used in this chart | `ibm-mq`                                   |
 | `livenessProbe.initialDelaySeconds` | The initial delay before starting the liveness probe. Useful for slower systems that take longer to start the Queue Manager. | 60 |
@@ -168,8 +171,9 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `readinessProbe.periodSeconds`  | How often to run the probe                                      | 5                                          |
 | `readinessProbe.timeoutSeconds` | Number of seconds after which the probe times out               | 3                                          |
 | `readinessProbe.failureThreshold` | Minimum consecutive failures for the probe to be considered failed after having succeeded | 1              |
-| `log.format`                    | Error log format on container's console.  Either `json` or `basic` | `basic`                                  |
+| `log.format`                    | Error log format on container's console.  Either `json` or `basic` | `basic`                                 |
 | `log.debug`                     | Enables additional log output for debug purposes                | `false`                                    |
+| `trace.strmqm`                  | Whether to enable MQ trace on queue manager start, i.e. `strmqm` | `false` |
 | `odTracingConfig.enabled`       | Whether or not to enable the OD for this release                | `false`                                    |
 | `odTracingConfig.odAgentImageRepository` | Repository where the OD agent image is located         | `OD agent image`                           |
 | `odTracingConfig.odAgentImageTag` | The tag for the Docker image for the OD agent                 | `Tag of OD agent image`                    |
@@ -185,23 +189,11 @@ Specify each parameter using the `--set key=value[,key=value]` argument to `helm
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
 
-> **Tip**: You can use the default [values.yaml](values.yaml)
+> **Tip**: You can use the default values.yaml
 
 ## Single sign-on
 
-You can specify the list of users that will be configured with admin access to the Web UI.  By default the `sub` attribute is used to provide the user identity.  With this setting, each user should be entered on a new line using their `username`.
-
-**Note**: the default value for the username is `admin`
-
-If you choose to set `sso.uniqueUserIdentifier` to `uniqueSecurityName` then each user should be entered on a new line using the following format:
-
-`user:[REALM]/[DISTINGUISHED_NAME]`
-
-> Where:
-> - [REALM] is the LDAP realm for the user
-> - [DISTINGUISHED_NAME] is the LDAP distinguished name for the user
-
-Example: `user:PrimaryRealm/uid=admin1,ou=users,dc=ibm,dc=com`
+Authorization for the MQ Web Console is controlled by IAM roles.  To access the MQ Web Console you must either have the `administrator` role for the namespace where MQ is deployed or have the cluster-administrator role.
 
 ## Storage
 
@@ -318,6 +310,7 @@ The `pki.trust` and `pki.keys` allow you to supply details of Kubernetes secrets
 If you supply invalid files or invalid YAML objects then the container will terminate with an appropriate termination message. The next 2 sections will detail the requirements for supplying each type of certificate.
 
 #### Supplying certificates which contain the public and private keys
+
 When supplying a Kubernetes secret that contains a certificate files for both the public and private key you must ensure that the secret contains a file that ends in `.crt` and a file that ends in `.key` named the same. For example: `tls.crt` and `tls.key`. The extension of the file denotes whether the file is the public key (`.crt`) or the private key (`.key`) and must be correct. If your certificate has been issued by a Certificate Authority, then the certificate from the CA must be included as a seperate file with the `.crt` extension. For example: `ca.crt`.
 
 The format of the YAML objects for `pki.keys` value is as follows:
@@ -345,6 +338,7 @@ To supply the YAML objects when deploying via Helm you should use the following:
 If you supply multiple YAML objects then the queue manager will use the first object chosen by the label name alphabetically. For example if you supply the following labels: `alabel`, `blabel` and `clabel`. The queue manager will use the certificate with the label `alabel` for its identity. This can be changed at runtime by executing the MQSC command: `ALTER QMGR CERTLABL('<new label>')`.
 
 #### Supplying certificates which contain only the public key
+
 When supplying a Kubernetes secret that contains a certificate file with only the public key you must ensure that the secret contains files that have the extension `.crt`. For example: `tls.crt` and `ca.crt`.
 
 The format of the YAML objects for `pki.trust` value is as follows:
@@ -366,7 +360,7 @@ To supply the YAML objects when deploying via Helm you should use the following:
 
 If you supply multiple YAML objects then all of the certificates specified will be added into the queue manager and MQ Console Truststores.
 
-###  Configuring Operations Dashboard(OD)
+### Configuring Operations Dashboard (OD)
 
 You can enable this feature by setting `odTracingConfig.enabled=true` option. By default, this feature will be disabled.  
 
