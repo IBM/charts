@@ -1,14 +1,14 @@
 {{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
 
 {{ define "hsts.spec.volumes.common" -}}
-- name: hsts-storage
+{{- range $i, $p := .Values.persistence }}
+- name: {{ include "hsts.transfer.pvc" (list $ $p $i) }}
   persistentVolumeClaim:
-    claimName: {{ template "hsts.transfer.pvc" . }}
+    claimName: {{ include "hsts.transfer.pvc" (list $ $p $i) }}
+{{- end }}
 - name: asperanoded-cert
   secret:
     secretName: {{ include "hsts.cert" . }}
-- name: external-process-log
-  emptyDir: {}
 - name: aspera-conf
   emptyDir: {}
 - name: aspera-configmap
@@ -16,7 +16,7 @@
     name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.asperanode.configMap ) | quote }}
 - name: license-secret
   secret:
-    secretName: {{ .Values.asperanode.serverSecret }}
+    secretName: {{ .Values.asperanode.asperaLicense }}
 {{- end }}
 
 # ----
@@ -36,24 +36,12 @@
       - ALL
   image: {{ include "hsts.image.asperanode" . }}
   imagePullPolicy: {{ .Values.asperanode.image.pullPolicy }}
-  resources:
-    requests:
-      memory: {{ .Values.asperanode.resources.requests.memory }}
-      cpu: {{ .Values.asperanode.resources.requests.cpu }}
-    limits:
-      memory: {{ .Values.asperanode.resources.limits.memory }}
-      cpu: {{ .Values.asperanode.resources.limits.cpu }}
-  command:
-  - /opt/aspera/sbin/asperanoded
-  args:
-  - -L
-  - /opt/aspera/var/log
-  - -!
+{{ include "hsts.resources.static.asperanode" . | indent 2 }}
   volumeMounts:
-  - name: external-process-log
-    mountPath: /opt/aspera/var/log
-  - name: hsts-storage
-    mountPath: {{ .Values.persistence.mountPath }}
+  {{- range $i, $p := .Values.persistence }}
+  - name: {{ include "hsts.transfer.pvc" (list $ $p $i) }}
+    mountPath: {{ $p.mountPath }}
+  {{- end }}
   - name: aspera-conf
     mountPath: "/opt/aspera/etc/aspera.conf"
     subPath: aspera.conf
@@ -101,9 +89,7 @@
   imagePullPolicy: {{ .Values.probe.image.pullPolicy }}
 {{  include "hsts.resources.static.small" . | indent 2 }}
   command: ["/bin/sh","-c"]
-  args: ["
-          until [ -f /var/log/aspera/aspera-scp-transfer.log ]; do sleep 5; done && tail -n+1 -f /var/log/aspera/aspera-scp-transfer.log
-        "]
+  args: ["tail --follow=name --retry -n+1 /var/log/aspera/aspera-scp-transfer.log"]
   livenessProbe:
     exec:
       command:
@@ -119,44 +105,7 @@
     initialDelaySeconds: 2
     periodSeconds: 30
   volumeMounts:
-  - name: external-process-log
-    mountPath: /var/log/aspera
-{{- end }}
-
-{{ define "hsts.spec.container.nodelog" -}}
-- name: asperanode-log
-  securityContext:
-    privileged: false
-    readOnlyRootFilesystem: true
-    allowPrivilegeEscalation: false
-    runAsNonRoot: true
-    runAsUser: 8000
-    capabilities:
-      drop:
-      - ALL
-  image: {{ include "hsts.image.probe" . }}
-  imagePullPolicy: {{ .Values.probe.image.pullPolicy }}
-  command: ["/bin/sh","-c"]
-{{  include "hsts.resources.static.small" . | indent 2 }}
-  args: ["
-          until [ -f /var/log/aspera/asperanoded.log ]; do sleep 5; done && tail -n+1 -f /var/log/aspera/asperanoded.log
-        "]
-  livenessProbe:
-    exec:
-      command:
-      - ls
-      - /var/log/aspera
-    initialDelaySeconds: 20
-    periodSeconds: 30
-  readinessProbe:
-    exec:
-      command:
-      - ls
-      - /var/log/aspera
-    initialDelaySeconds: 2
-    periodSeconds: 30
-  volumeMounts:
-  - name: external-process-log
+  - name: aspera-log-dir
     mountPath: /var/log/aspera
 {{- end }}
 
@@ -253,23 +202,6 @@
   command: ['/bin/bash', '-c', 'until nc -zv {{ template "hsts.hosts.aej" . }} {{ template "hsts.ports.aej" . }}; do echo Waiting for aej...; sleep 1; done']
 {{- end }}
 
-{{ define "hsts.spec.init.probe.kafka" -}}
-- name: kafka-probe
-  securityContext:
-    privileged: false
-    readOnlyRootFilesystem: true
-    allowPrivilegeEscalation: false
-    runAsNonRoot: true
-    runAsUser: 8000
-    capabilities:
-      drop:
-      - ALL
-  image: {{ include "hsts.image.probe" . }}
-  imagePullPolicy: {{ .Values.probe.image.pullPolicy }}
-{{  include "hsts.resources.static.small" . | indent 2 }}
-  command: ['/bin/bash', '-c', 'until timeout 3 nc -vz {{ template "hsts.hosts.kafka" . }} {{ template "hsts.ports.kafka" . }}; do echo Waiting for kafka...; sleep 1; done']
-{{- end }}
-
 {{ define "hsts.spec.init.probe.redis" -}}
 - name: redis-probe
   securityContext:
@@ -339,7 +271,7 @@
 # Order of asconfigurator commands executed:
 #   1) User values provided via .Values.asperaconfig
 #   2) Parameters passed via calling template
-#   3) Setting token_encryption_key specified via serverSecret
+#   3) Setting token_encryption_key specified via tokenEncryptionKeySecret
 {{ define "hsts.spec.init.asperaconf" -}}
   {{- $params := . -}}
   {{- $top := first $params }}
@@ -365,7 +297,7 @@
     - name: TOKEN_ENCRYPTION_KEY
       valueFrom:
         secretKeyRef:
-          name: {{ $top.Values.asperanode.serverSecret }}
+          name: {{ include "hsts.secret.tokenEncryptionKey" $top }}
           key: TOKEN_ENCRYPTION_KEY
     - name: NODE_ID
       valueFrom:
@@ -401,7 +333,13 @@
 
 {{- end }}
 
-{{ define "hsts.default.accessKeyConfig" -}}
-transfer:
-  target_rate_kbps: 100000
+#### node labels
+
+{{ define "hsts.spec.nodeLabels" -}}
+  {{- $t := dict }}
+  {{- range $p := .nodeLabels }}
+    {{- $parts := split "=" $p }}
+    {{- $_ := set $t $parts._0 $parts._1 }}
+  {{- end }}
+  {{- toJson $t | quote }}
 {{- end }}

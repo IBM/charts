@@ -33,7 +33,7 @@ metadata:
     # This needs to run before we deploy, as the dashboard install
     # depend on the secrets existing already, and will fail to start
     # otherwise.
-    "helm.sh/hook": pre-install
+    "helm.sh/hook": pre-install,pre-upgrade
     # We don't delete this if it fails, as the logs may be useful to
     # diagnose a failed install
     "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
@@ -43,16 +43,8 @@ metadata:
 spec:
   activeDeadlineSeconds: 600
   template:
-    metadata:
-      labels:
-{{ $labels | indent 8 }}
     spec:
       serviceAccountName: {{ $saName }}
-      imagePullSecrets:
-      {{- if .Values.image.pullSecret }}
-        - name: {{ .Values.image.pullSecret }}
-      {{- end }}
-        - name: ibm-entitlement-key
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -74,6 +66,13 @@ spec:
         - name: "secret-gen"
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.configurator "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "1028Mi"
           securityContext:
             privileged: false
             readOnlyRootFilesystem: false
@@ -87,13 +86,6 @@ spec:
             - sh
             - -c
             - /dashboard/generateConfig.sh
-          resources:
-            requests:
-              cpu: "250m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
-              memory: "1028Mi"
           volumeMounts:
           - name: {{ $cfgMapName }}
             mountPath: /dashboard/

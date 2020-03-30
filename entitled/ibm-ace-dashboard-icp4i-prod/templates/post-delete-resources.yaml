@@ -34,16 +34,8 @@ metadata:
     "helm.sh/hook-delete-policy": hook-succeeded, hook-failed
 spec:
   template:
-    metadata:
-      labels:
-{{ $labels | indent 8 }}
     spec:
       serviceAccountName: {{ $saName }}
-      imagePullSecrets:
-      {{- if .Values.image.pullSecret }}
-        - name: {{ .Values.image.pullSecret }}
-      {{- end }}
-        - name: ibm-entitlement-key
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -65,6 +57,13 @@ spec:
         - name: "secret-del"
           image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.configurator "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "1028Mi"
           securityContext:
             privileged: false
             readOnlyRootFilesystem: true
@@ -75,7 +74,7 @@ spec:
               drop:
               - ALL
           command: ["sh"]
-          args: ["-c", 'kubectl delete secrets,configmaps,routes,clients -n {{ .Release.Namespace | quote }} -l release={{ .Release.Name | quote }} && echo Done']
+          args: ["-c", 'kubectl delete secrets,configmaps,clients --ignore-not-found=true -n {{ .Release.Namespace | quote }} -l release={{ .Release.Name | quote }} && echo Done']
           resources:
             requests:
               cpu: "250m"

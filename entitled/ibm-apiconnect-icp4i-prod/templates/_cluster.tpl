@@ -1,4 +1,8 @@
 {{- define "ibm-apiconnect-cip.apic-cluster-spec" -}}
+apiVersion: apic.ibm.com/v1
+kind: APIConnectCluster
+metadata:
+  name: {{ .Release.Name }}-apic-cluster
 spec:
   secret-name: {{ .Release.Name }}-apic-cluster
   subsystems:
@@ -6,10 +10,10 @@ spec:
   - apiVersion: v1
     kind: apic.ibm.com/ManagementSubsystem
     metadata:
-      name: management
+      name: {{ .Values.management.name }}
     spec:
       CloudProperties:
-        extra-values-file: /home/apic/extra-values/management-extra-values.yaml
+        extra-values-file: /home/apic/extra-values/{{ .Values.management.name }}-extra-values.yaml
         ingress-type:      {{ .Values.global.routingType }}
         mode:              {{ .Values.global.mode }}
         namespace:         {{ .Release.Namespace }}
@@ -21,7 +25,7 @@ spec:
         {{- end }}
         storage-class:     {{ .Values.management.storageClass | default .Values.global.storageClass }}
       SubsystemProperties:
-        secret-name: {{ .Release.Name }}-apic-cluster-management
+        secret-name: {{ .Release.Name }}-apic-cluster-{{ .Values.management.name }}
         target: kubernetes
       endpoints:
         api-manager-ui: {{ .Values.management.apiManagerUiEndpoint }}
@@ -52,10 +56,10 @@ spec:
   - apiVersion: v1
     kind: apic.ibm.com/PortalSubsystem
     metadata:
-      name: portal
+      name: {{ .Values.portal.name }}
     spec:
       CloudProperties:
-        extra-values-file: /home/apic/extra-values/portal-extra-values.yaml
+        extra-values-file: /home/apic/extra-values/{{ .Values.portal.name }}-extra-values.yaml
         ingress-type:      {{ .Values.global.routingType }}
         mode:              {{ .Values.global.mode }}
         namespace:         {{ .Release.Namespace }}
@@ -67,7 +71,7 @@ spec:
         {{- end }}
         storage-class:     {{ .Values.portal.storageClass | default .Values.global.storageClass }}
       SubsystemProperties:
-        secret-name: {{ .Release.Name }}-apic-cluster-portal
+        secret-name: {{ .Release.Name }}-apic-cluster-{{ .Values.portal.name }}
         target: kubernetes
       endpoints:
         portal-admin: {{ .Values.portal.portalDirectorEndpoint }}
@@ -90,10 +94,10 @@ spec:
   - apiVersion: v1
     kind: apic.ibm.com/AnalyticsSubsystem
     metadata:
-      name: analytics
+      name: {{ .Values.analytics.name }}
     spec:
       CloudProperties:
-        extra-values-file: /home/apic/extra-values/analytics-extra-values.yaml
+        extra-values-file: /home/apic/extra-values/{{ .Values.analytics.name }}-extra-values.yaml
         ingress-type:      {{ .Values.global.routingType }}
         mode:              {{ .Values.global.mode }}
         namespace:         {{ .Release.Namespace }}
@@ -105,7 +109,7 @@ spec:
         {{- end }}
         storage-class:     {{ .Values.analytics.storageClass | default .Values.global.storageClass }}
       SubsystemProperties:
-        secret-name: {{ .Release.Name }}-apic-cluster-analytics
+        secret-name: {{ .Release.Name }}-apic-cluster-{{ .Values.analytics.name }}
         target: kubernetes
       endpoints:
         analytics-client: {{ .Values.analytics.analyticsClientEndpoint }}
@@ -124,10 +128,10 @@ spec:
   - apiVersion: v1
     kind: apic.ibm.com/GatewaySubsystem
     metadata:
-      name: gateway
+      name: {{ .Values.gateway.name }}
     spec:
       CloudProperties:
-        extra-values-file: /home/apic/extra-values/gateway-extra-values.yaml
+        extra-values-file: /home/apic/extra-values/{{ .Values.gateway.name }}-extra-values.yaml
         ingress-type:      {{ .Values.global.routingType }}
         mode:              {{ .Values.global.mode }}
         namespace:         {{ .Release.Namespace }}
@@ -139,7 +143,7 @@ spec:
         {{- end }}
         storage-class:     {{ .Values.gateway.storageClass | default .Values.global.storageClass }}
       SubsystemProperties:
-        secret-name: {{ .Release.Name }}-apic-cluster-gateway
+        secret-name: {{ .Release.Name }}-apic-cluster-{{ .Values.gateway.name }}
         target: kubernetes
       endpoints:
         api-gateway:     {{ .Values.gateway.apiGatewayEndpoint }}
@@ -157,5 +161,43 @@ spec:
         v5-compatibility-mode:           {{ .Values.gateway.v5CompatibilityMode }}
         monitor-image-repository:        {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.gateway.monitoringImage }}
         monitor-image-tag:               {{ .Values.gateway.monitoringImageTag }}
+{{- end }}
+{{- if .Values.gateway2.enabled }}
+  - apiVersion: v1
+    kind: apic.ibm.com/GatewaySubsystem
+    metadata:
+      name: {{ .Values.gateway2.name }}
+    spec:
+      CloudProperties:
+        extra-values-file: /home/apic/extra-values/{{ .Values.gateway2.name }}-extra-values.yaml
+        ingress-type:      {{ .Values.global.routingType }}
+        mode:              {{ .Values.global.mode }}
+        namespace:         {{ .Release.Namespace }}
+        registry:          ""
+        {{- if .Values.global.registrySecret }}
+        registry-secret:   {{ .Values.global.registrySecret }}
+        {{- else }}
+        registry-secret: ibm-entitlement-key
+        {{- end }}
+        storage-class:     {{ .Values.gateway2.storageClass | default .Values.global.storageClass }}
+      SubsystemProperties:
+        secret-name: {{ .Release.Name }}-apic-cluster-{{ .Values.gateway2.name }}
+        target: kubernetes
+      endpoints:
+        api-gateway:     {{ .Values.gateway2.apiGatewayEndpoint }}
+        apic-gw-service: {{ .Values.gateway2.gatewayServiceEndpoint }}
+      settings:
+        enable-tms:                      {{ .Values.gateway2.enableTms }}
+        enable-high-performance-peering: {{ eq .Values.gateway2.highPerformancePeering true | quote }}
+        image-pull-policy:               {{ .Values.gateway2.imagePullPolicy }}
+        image-repository:                {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.gateway2.image }}
+        image-tag:                       {{ .Values.gateway2.imageTag }}
+        max-cpu:                         {{ .Values.gateway2.maxCpu }}
+        max-memory-gb:                   {{ .Values.gateway2.maxMemoryGb }}
+        replica-count:                   {{ .Values.gateway2.replicaCount }}
+        tms-peering-storage-size-gb:     {{ .Values.gateway2.tmsPeeringStorageSizeGb }}
+        v5-compatibility-mode:           {{ .Values.gateway2.v5CompatibilityMode }}
+        monitor-image-repository:        {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.gateway2.monitoringImage }}
+        monitor-image-tag:               {{ .Values.gateway2.monitoringImageTag }}
 {{- end }}
 {{- end -}}

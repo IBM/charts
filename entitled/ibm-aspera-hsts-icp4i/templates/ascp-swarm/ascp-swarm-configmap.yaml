@@ -16,7 +16,7 @@ data:
         checksum/aspera-conf-configmap: {{ include (print $.Template.BasePath "/asperanode/asperanode-configmap.yaml") . |  sha256sum | trunc 63 }}
         checksum/asconfigurator: {{ tpl (toYaml .Values.asperaconfig) . | sha256sum | trunc 63 }}
         checksum/sshd-secret: {{ tpl (toYaml .Values.sshdKeysSecret) . | sha256sum | trunc 63 }}
-        checksum/authorizedKeys: {{ tpl (toYaml .Values.receiver.authorizedKeys) . | sha256sum | trunc 63 }}
+        checksum/authorizedKeys: {{ tpl (toYaml .Values.authorizedKeys) . | sha256sum | trunc 63 }}
         kompose.cmd: kompose convert -c -f docker-compose-json.yml
         kompose.version: 1.9.0 (HEAD)
         {{- if .Values.productionDeployment }}
@@ -25,8 +25,8 @@ data:
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringNonProd) | indent 8 }}
         {{- end }}
       labels:
-{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.receiver.compName) | indent 8 }}
-        service: {{ include "sch.names.fullCompName" (list . .sch.chart.components.receiver.compName ) | quote }}
+{{  include "sch.metadata.labels.standard" (list . .sch.chart.components.ascpSwarm.member.compName) | indent 8 }}
+        service: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.member.compName ) | quote }}
         uuid: __UUID__
     spec:
       nodeName: __NODE__
@@ -38,14 +38,14 @@ data:
         - min: 34001
           max: 34101
       securityContext:
-        fsGroup: {{ .Values.persistence.fsGroup }}
+        fsGroup: {{ .Values.securityContext.fsGroup }}
         runAsNonRoot: true
         runAsUser: 8000
       affinity:
 {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
-      {{- if .Values.image.pullSecret }}
+      {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
-      - name: {{ .Values.image.pullSecret }}
+      - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
       initContainers:
       - name: authorizedkeys
@@ -58,15 +58,15 @@ data:
           capabilities:
             drop:
             - ALL
-        image: {{ include "hsts.image.receiverSwarm" . }}
-        imagePullPolicy: {{ .Values.receiver.swarm.image.pullPolicy }}
+        image: {{ include "hsts.image.ascp" . }}
+        imagePullPolicy: {{ .Values.ascp.image.pullPolicy }}
         volumeMounts:
         - name: authorized-keys
           mountPath: "/tmp/keys"
         command: ["/bin/sh","-c"]
         args: ["
-                {{- if (.Values.receiver.authorizedKeys) -}}
-                  {{- range $k := .Values.receiver.authorizedKeys }}
+                {{- if (.Values.authorizedKeys) -}}
+                  {{- range $k := .Values.authorizedKeys }}
                     {{- if eq (empty $k) false }}
                 echo '{{ $k }}' >> /tmp/keys/authorized_keys &&
                     {{ end -}}
@@ -89,7 +89,7 @@ data:
         imagePullPolicy: {{ .Values.firstboot.image.pullPolicy }}
         envFrom:
         - configMapRef:
-            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.receiver.env.compName ) | quote }}
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.member.env.compName ) | quote }}
         env:
         - name: FIRSTBOOT_NAMESPACE
           valueFrom:
@@ -109,7 +109,7 @@ data:
           subPath: aspera.conf
       containers:
 {{ include "hsts.spec.container.ascplog" . | indent 6 }}
-      - name: receiver
+      - name: ascp
         securityContext:
           privileged: false
           readOnlyRootFilesystem: false
@@ -119,27 +119,9 @@ data:
           capabilities:
             drop:
             - ALL
-        image: {{ include "hsts.image.receiverSwarm" . }}
-        imagePullPolicy: {{ .Values.receiver.swarm.image.pullPolicy }}
-        resources:
-          requests:
-            memory: {{ .Values.receiver.swarm.resources.requests.memory }}
-            cpu: {{ .Values.receiver.swarm.resources.requests.cpu }}
-          limits:
-            memory: {{ .Values.receiver.swarm.resources.limits.memory }}
-            cpu: {{ .Values.receiver.swarm.resources.limits.cpu }}
-        envFrom:
-        - configMapRef:
-            name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.receiver.env.compName ) | quote }}
-        env:
-        - name: TRANSFER_MONITOR_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: TRANSFER_MONITOR_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
+        image: {{ include "hsts.image.ascp" . }}
+        imagePullPolicy: {{ .Values.ascp.image.pullPolicy }}
+{{ include "hsts.resources.static.ascp" . | indent 8 }}
         ports:
         - name: fasptcp
           protocol: TCP
@@ -158,8 +140,10 @@ data:
           tcpSocket:
             port: fasptcp
         volumeMounts:
-        - name: hsts-storage
-          mountPath: {{ .Values.persistence.mountPath }}
+        {{- range $i, $p := .Values.persistence }}
+        - name: {{ include "hsts.transfer.pvc" (list $ $p $i) }}
+          mountPath: {{ $p.mountPath }}
+        {{- end }}
         - name: sshd-keys
           mountPath: "/etc/ssh/ssh_host_rsa_key"
           subPath: ssh_host_rsa_key
@@ -169,9 +153,9 @@ data:
         - name: aspera-conf
           mountPath: "/opt/aspera/etc/aspera.conf"
           subPath: aspera.conf
-        - name: external-process-log
+        - name: aspera-log-dir
           mountPath: /opt/aspera/var/log
-        - name: receiver-config
+        - name: ascp-swarm-member-config
           mountPath: "/etc/ssh/sshd_config"
           subPath: sshd_config
         - name: license-secret
@@ -196,7 +180,9 @@ data:
             mode: 0644
       - name: authorized-keys
         emptyDir: {}
-      - name: receiver-config
+      - name: ascp-swarm-member-config
         configMap:
-          name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.receiver.compName ) | quote }}
+          name: {{ include "sch.names.fullCompName" (list . .sch.chart.components.ascpSwarm.member.compName ) | quote }}
+      - name: aspera-log-dir
+        emptyDir: {}
     status: {}
