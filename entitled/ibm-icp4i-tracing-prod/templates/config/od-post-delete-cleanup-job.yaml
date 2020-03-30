@@ -16,7 +16,12 @@ kind: Job
 metadata:
   name: icp4i-od-cleanup-job
   labels:
+    release: {{ .Release.Name }}
     app.kubernetes.io/component: icp4i-od-manager
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    app.kubernetes.io/name: icp4i-od-cleanup-job
+    helm.sh/chart: {{ .Chart.Name }}
   annotations:
     "helm.sh/hook": post-delete
     "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
@@ -26,18 +31,33 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/component: icp4i-od-manager   
+        app.kubernetes.io/component: icp4i-od-manager
+        release: {{ .Release.Name }}
+        app.kubernetes.io/component: icp4i-od-manager
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        app.kubernetes.io/name: icp4i-od-cleanup-job
+        helm.sh/chart: {{ .Chart.Name }}
     spec:      
       hostNetwork: false
       hostPID: false
       hostIPC: false
       restartPolicy: Never
       serviceAccountName: od-sec-{{ .Release.Namespace }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
       containers:
         - name: icp4i-od-oauth-reg
           image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdOidcConfigurator }}"
           command: ["sh"]
-          args: ["-c", "kubectl delete Client ${OIDC_CLIENT_NAME} && kubectl get secret |grep 'icp4i-od' |grep -v 'icp4i-od-oidc-client-secret' |awk '{print $1}' |xargs kubectl delete secret
+          args: ["-c", "kubectl delete Client ${OIDC_CLIENT_NAME} && kubectl get secret |grep 'icp4i-od' |grep -v 'icp4i-od-oidc-client-secret' | grep -v token |awk '{print $1}' |xargs kubectl delete secret
  && echo Done"]
           imagePullPolicy: {{ .Values.global.images.pullPolicy }}
           securityContext:

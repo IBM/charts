@@ -8,7 +8,7 @@ else
 fi
 
 if [[ -n "$ADMIN_USER_PASSWORD_HASHED" ]] ; then
-cat << EOF > /drouter/config/auto-user.cfg
+cat << EOF >> /opt/ibm/datapower/drouter/config/auto-user.cfg
 top; configure terminal;
 
 %if% available "user"

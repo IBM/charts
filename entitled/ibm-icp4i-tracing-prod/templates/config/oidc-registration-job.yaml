@@ -16,7 +16,12 @@ kind: Job
 metadata:
   name: icp4i-od-oauth-reg-job
   labels:
+    release: {{ .Release.Name }}
     app.kubernetes.io/component: icp4i-od-manager
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    app.kubernetes.io/name: icp4i-od-oauth-reg-job
+    helm.sh/chart: {{ .Chart.Name }}
   annotations:
     "helm.sh/hook": pre-install
     "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
@@ -27,12 +32,26 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/component: icp4i-od-manager   
+        release: {{ .Release.Name }}
+        helm.sh/chart: {{ .Chart.Name }}
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        app.kubernetes.io/name: icp4i-od-oauth-reg-job
     spec:      
       hostNetwork: false
       hostPID: false
       hostIPC: false
       restartPolicy: Never      
       serviceAccountName: od-sec-{{ .Release.Namespace }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
       containers:
         - name: icp4i-od-oauth-reg
           image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdOidcConfigurator }}"

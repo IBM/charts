@@ -1,0 +1,68 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+
+############################################################################################
+# Runs a container that registers the IBM ICP4I Operations Dashboard UI as an OAuth endpoint
+#  to allow log-ins to the Operations Dashboard UI
+############################################################################################
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: icp4i-od-test
+  labels:
+    release: {{ .Release.Name }}
+    app.kubernetes.io/component: icp4i-od-manager
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    app.kubernetes.io/name: icp4i-od-test
+    helm.sh/chart: {{ .Chart.Name }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  restartPolicy: Never      
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+  containers:
+  - name: icp4i-od-test
+    image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdOidcConfigurator }}"
+    imagePullPolicy: {{ .Values.global.images.pullPolicy }}
+    resources:
+{{ toYaml .Values.resources.jobs | indent 6 }}    
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1001
+      capabilities:
+        drop:
+        - ALL
+    command:
+      - sh
+    args:
+      - -xc
+      - timeout $TIMEOUT /bin/sh -c "until curl -k --write-out %{http_code} -s --output /dev/null  https://$ICP4I_OD_SVC:443/$INGRESS_PATH;do sleep 1; done"        
+    env:
+      - name: "INGRESS_PATH"
+        value: {{ .Values.ingress.odURI }}
+      - name: "ICP4I_OD_SVC"
+        value: "icp4i-od"
+      - name: "TIMEOUT"
+        value: "120s"        
+              

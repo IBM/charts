@@ -105,6 +105,7 @@ auto-startup.cfg: |
 {{- end }}
 {{- end }}
 
+{{- if ne .Values.patternName "none" }}
     domain "{{ .Values.patternName}}"
       base-dir local:
       base-dir {{ .Values.patternName }}:
@@ -118,6 +119,8 @@ auto-startup.cfg: |
       local-ip-rewrite
       maxchkpoints 3
     exit
+{{- end }}
+
 auto-user.cfg: |
     top; configure terminal;
 

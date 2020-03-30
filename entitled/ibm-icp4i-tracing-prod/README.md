@@ -12,9 +12,9 @@ This Helm chart will:
 * Create a Big Data, ElasticSearch based store using a [StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/).
 
 ## Prerequisites
-* Kubernetes 1.11 or greater, with beta APIs enabled.
-* Cloud Pak Foundation fix pack 3.2.0.1907.
-* A user with Operator role is required to install the chart.
+* Red Hat OpenShift version 4.2 or 4.3.
+* Cloud Pak Foundation fix pack 3.2.4.
+* A user with cluster Operator role is required to install the chart.
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
 This chart requires a SecurityContextConstraint to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.	
@@ -23,9 +23,9 @@ The predefined SecurityContextConstraint name: [`anyuid`](https://ibm.biz/cpkspe
 
 This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied instructions/scripts in the pak_extension pre-install directory.
 
-From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
-        Custom PodSecurityPolicy definition:    
-
+- From the user interface, you can copy and paste the following snippets to enable the custom SecurityContextConstraints
+  - Custom SecurityContextConstraints definition:
+        ```
         apiVersion: security.openshift.io/v1
         kind: SecurityContextConstraints
         metadata:
@@ -66,6 +66,7 @@ From the user interface, you can copy and paste the following snippets to enable
           - downwardAPI
           - persistentVolumeClaim
         forbiddenSysctls: []
+        ```
 
 
 ## Resources Required
@@ -145,7 +146,7 @@ The chart mounts a two [Persistent Volumes](http://kubernetes.io/docs/user-guide
 * Chart can only run on amd64 architecture type.
 
 ## Documentation
- [`IBM Cloud Pak for Integration Knowledge Center`](https://www.ibm.com/support/knowledgecenter/SSGT7J_19.3/op_dashboard.html)
+ [`IBM Cloud Pak for Integration Knowledge Center`](https://www.ibm.com/support/knowledgecenter/SSGT7J_20.1/op_dashboard.html)
 
 _Copyright IBM Corporation 2019. All Rights Reserved._
 
