@@ -99,16 +99,6 @@ spec:
           items:
           - key: OIDC_CERTIFICATE
             path: OIDC_CERTIFICATE.crt
-      {{- if and (not .Values.tls.generate) .Values.tls.secret }}
-      - name: tls-secret
-        secret:
-          secretName: {{ .Values.tls.secret }}
-          items:
-          - key: tls.crt
-            path: tls.crt
-          - key: tls.key
-            path: tls.key
-      {{- end }}
       {{- range $index, $source := .Values.pki.trust }}
       {{- if $source.secret }}
       - name: trust{{- $index }}
@@ -157,6 +147,7 @@ spec:
           secretName: icp4i-od-store-cred
           optional: true
       {{ end }}
+      terminationGracePeriodSeconds: {{.Values.queueManager.terminationGracePeriodSeconds}}
       containers:
         {{- if .Values.odTracingConfig.enabled }}
           # sidecar - od agent
@@ -192,8 +183,6 @@ spec:
             - name: ES_TLS_CA
               value: '/usr/share/jaeger/ca/certs/icp4i-od-cacert.pem'
           securityContext:
-            seLinuxOptions:
-              type: spc_t
             allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false
             runAsNonRoot: true
@@ -284,8 +273,6 @@ spec:
               cpu: 256m
               memory: 128Mi
           securityContext:
-            seLinuxOptions:
-              type: spc_t
             allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false
             runAsNonRoot: true
@@ -334,18 +321,20 @@ spec:
             value: "{{ .Values.metrics.enabled | default false }}"
           - name: DEBUG
             value: "{{ .Values.log.debug | default false }}"
+          - name: MQ_ENABLE_TRACE_STRMQM
+            value: "{{ .Values.trace.strmqm | default false }}"
           - name: MQ_EPHEMERAL_PREFIX
             value: "/run/mqm"
+          - name: MQ_GRACE_PERIOD
+            value: "{{sub .Values.queueManager.terminationGracePeriodSeconds 1}}"
           - name: MQ_ENABLE_EMBEDDED_WEB_SERVER
             value: "true"
           - name: MQ_ICP4I_NAMESPACE
             value: {{ .Values.icp4i.namespace | quote }}
           - name: MQ_BETA_ENABLE_SSO
             value: "true"
-          - name: MQ_WEB_ADMIN_USERS
-            value: {{ .Values.sso.webAdminUsers | quote }}
           - name: MQ_OIDC_UNIQUE_USER_IDENTIFIER
-            value: {{ .Values.sso.uniqueUserIdentifier | quote }}
+            value: "sub"
           - name: MQ_ENABLE_OPEN_TRACING
             value: "{{ .Values.odTracingConfig.enabled | default false }}"
           {{- if .Values.tls.generate }}
@@ -362,13 +351,11 @@ spec:
               secretKeyRef:
                 name: {{ .Release.Name }}-oidc-reg-secret
                 key: CLIENT_SECRET
+          - name: MQ_NAMESPACE
+            value: {{ .Release.Namespace }}
           volumeMounts:
           - mountPath: "/etc/mqm/pki/trust/default"
             name: oidc-configmap
-          {{- if and (not .Values.tls.generate) .Values.tls.secret }}
-          - mountPath: "/etc/mqm/pki/keys/default"
-            name: tls-secret
-          {{- end }}
           {{- range $index, $source := .Values.pki.trust }}
           - name: trust{{- $index }}
             mountPath: "/etc/mqm/pki/trust/{{- $index }}"
@@ -392,8 +379,6 @@ spec:
           {{- end }}
           {{- end }}
           securityContext:
-            seLinuxOptions:
-              type: spc_t
             allowPrivilegeEscalation: true
             readOnlyRootFilesystem: false
             runAsNonRoot: true
@@ -458,8 +443,6 @@ spec:
           {{- end }}
           {{- end }}
           securityContext:
-            seLinuxOptions:
-              type: spc_t
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             runAsNonRoot: false

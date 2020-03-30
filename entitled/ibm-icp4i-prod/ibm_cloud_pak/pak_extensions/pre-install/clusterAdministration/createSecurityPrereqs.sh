@@ -24,10 +24,3 @@ if supports_scc; then
   kubectl apply -f ibm-icp4i-prod-scc.yaml --validate=false
   oc adm policy add-scc-to-group ibm-icp4i-prod-scc system:authenticated
 fi
-
-if supports_psp; then 
-  # Create the PodSecurityPolicy and ClusterRole for all releases of this chart.
-  echo "Creating the PodSecurityPolicy..."
-  kubectl apply -f ibm-icp4i-prod-psp.yaml
-  kubectl apply -f ibm-icp4i-prod-clusterrole.yaml
-fi

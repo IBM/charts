@@ -12,7 +12,7 @@ The installation of the ICP4I Asset Repository is carried out through the ICP4I 
 This is a Helm chart for the IBM Cloud Pak for Integration Asset Repository. It provides the ability to centrally store and manage integration assets across the platform capabilities.
 
 ## Prerequisites
-* OpenShift 4.2 with Kubernetes 1.14 or greater, with beta APIs enabled
+* OpenShift 4.2 or 4.3 with Kubernetes 1.14 or greater, with beta APIs enabled
 * A user with cluster administrator role is required to install the chart.
 * A storage provider that supports Read Write Many (RWX) persistent volumes
 
@@ -21,14 +21,49 @@ This is a Helm chart for the IBM Cloud Pak for Integration Asset Repository. It 
 
 This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster-scoped, as well as namespace-scoped, pre- and post-actions that need to occur.
 
-The predefined SecurityContextConstraints [`ibm-privileged-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart; if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+The predefined SecurityContextConstraints [`privileged`](https://ibm.biz/cpkspec-scc) has been verified for this chart; if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
 
 Run the following command to add the service account of the Integration server to the privileged scc:
 
 ```
-oc adm policy add-scc-to-group ibm-privileged-scc system:serviceaccounts:<namespace>
+oc adm policy add-scc-to-group privileged system:serviceaccounts:<namespace>
 ```
 
+Custom SecurityContextConstraints definition:
+
+```
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: ibm-asset-repo-scc
+spec:
+  allowHostNetwork: true
+  allowHostPorts: true
+  allowHostPID: true
+  allowHostIPC: true
+  allowPrivileged: true
+  allowPrivilegeEscalation: true
+  allowedCapabilities:
+  - '*'
+  allowedUnsafeSysctls:
+  - '*'
+  defaultCapabilities: null
+  fsGroup:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  priority: null
+  readOnlyRootFilesystem: false
+  requiredDropCapabilities: null
+  seccompProfiles:
+  - '*'
+  volumes:
+  - '*'
+```
 ## Resources Required
 This chart deploys in a HA configuration by default which has the following resource requirements:
 * 4.25 CPUs
@@ -72,23 +107,15 @@ The following table lists the configurable parameters of the ICP4I Asset Reposit
 | `global.images.pullSecret`                                                    | Pull secret for registry containing chart images  | ``                           |
 | `global.images.registry`                                                      | Registry containing chart images                  | ``                           |
 | `global.images.pullPolicy`                                                    | Image pull policy for chart images                | `IfNotPresent`               |
-| `global.productionDeployment`                                                 | Will this release be used in production           | `true`                       |
-| `global.tls.generate`                                                         | Whether to generate SSL certificates              | `true`                       |
-| `global.tls.hostname`                                                         | Hostname of the ingress proxy to be configured    | `mycluster.icp`              |
-| `global.tls.secret`                                                           | TLS secret name                                   | `icp4i-asset-repo-tls-secret`|
-| `global.tls.ingresspath`                                                      | Path used by the ingress for the service          | `assetrepo`                  |
-| `global.persistence.storageClassName`                                         | Storage class for the Cloudant metadata store     | `glusterfs`                  |
-| `global.cloudant.replicas`                                                    | Number of replicas for the Cloudant metadata store| `3`                          |
+| `couchdb.persistentVolume.storageClass`                                       | Storage class for the CouchDB metadata store      | ``                           |
+| `couchdb.replicas`                                                            | Number of replicas for the CouchDB metadata store | `3`                          |
 | `prereqs.redis-ha.replicas.servers`                                           | Redis server replicas                             | `3`                          |
 | `prereqs.redis-ha.replicas.sentinels`                                         | Redis sentinel replicas                           | `3`                          |
-| `prereqs.wdp-cloudant:.ibm-cloudant-internal.db.storage.db..requests.storage` | Cloudant metadata store size                      | `1Gi`                        |
-| `wkcbase.catalog-api-charts.replicas`                                         | Catalog API replicas                              | `3`                          |
-| `assetUI..replicas`                                                           | Asset repository UI replicas                      | `3`                          |
-| `wsbase.asset-files-api.deployment.replicaCount`                              | Asset storage replicas                            | `3`                          |
-| `wsbase.asset-files-api.persistence.storageClassName`                         | Asset storage storage class                       | `glusterfs`                  |
-| `wsbase.asset-files-api.persistence.requests.storage`                         | Asset storage size                                | `1Gi`                        |
+| `couchdb.persistentVolume.size`                                               | CouchDB metadata store size                       | `1Gi`                        |
+| `couchdb.dns.clusterDomainSuffix`                                             | Cluster DNS subdomain for CouchDB                 | `cluster.local`              |
+| `assetUI.replicas`                                                            | Asset repository UI replicas                      | `3`                          |
 | `assetSync.replicaCount`                                                      | Asset remotes replicas                            | `3`                          |
-| `assetSync.storageClassName`                                                  | Asset remotes storage class                       | `glusterfs`                  |
+| `assetSync.storageClassName`                                                  | Asset remotes storage class                       | ``                           |
 | `assetSync.storage`                                                           | Asset remotes size                                | `2Gi`                        |
 
 
@@ -100,7 +127,8 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 ## Storage
 * Storage is required by the microservices installed by this chart.
 * The following file systems are supported: 
- - GlusterFS
+ - A RWX file system for asset storage and asset remote storage 
+ - A RWO file system or block storage for CouchDB metadata storage
 
 ## Limitations
 * Chart can only run on amd64 architecture type.

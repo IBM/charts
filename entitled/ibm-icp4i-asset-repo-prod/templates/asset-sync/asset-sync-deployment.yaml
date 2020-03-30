@@ -53,6 +53,7 @@ spec:
                 operator: In
                 values:
                 - amd64
+{{- if .Values.global.initVolumeAsRoot }}
       initContainers:
       - command:
         - bash
@@ -92,6 +93,7 @@ spec:
           limits:
             memory: 512Mi
             cpu: 250m
+{{- end }}
       containers:
       - name: {{ .Release.Name }}-asset-sync
         image: {{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.assetSync }}
@@ -131,17 +133,10 @@ spec:
               configMapKeyRef:
                 name: {{ include "sch.names.fullCompName" (list . "configmap") }}
                 key: clusterExternalHost
-          - name: "OPTIONAL_MASTER_PORT"
-            valueFrom:
-              configMapKeyRef:
-                name: {{ include "sch.names.fullCompName" (list . "configmap") }}
-                key: optionalClusterExternalPort
-          - name: config__catalog_api
-            value: "https://{{ .Release.Name }}-catalog-api.{{ .Release.Namespace }}.svc:443"
-          - name: config__git_working_directory
+          - name: config__assets_working_directory
             value: /mnt/assets
-          - name: config__asset_files_api
-            value: "https://{{ .Release.Name }}-asset-files-api.{{ .Release.Namespace }}.svc:443"
+          - name: config__git_working_directory
+            value: /mnt/assets/git
           - name: auth__enabled
             value: "true"
           - name: auth__crn
@@ -200,7 +195,7 @@ spec:
           - name: namespace
             value: {{ .Release.Namespace }}
           - name: cloudant__account
-            value: "https://{{ .Release.Name }}-clt:443"
+            value: "https://{{ include "sch.names.fullCompName" (list . "couchdb") }}:443"
           - name: cloudant__user
             valueFrom:
               secretKeyRef:

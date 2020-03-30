@@ -29,7 +29,7 @@ sch:
     meteringProd:
       productName: IBM Cloud Pak for Integration - IBM App Connect Enterprise (Chargeable)
       productID: 606f1a9feb4f4cbc85b17a637f6a6b24
-      productVersion: "11.0.0.6"
+      productVersion: "11.0.0.7"
       productMetric: VIRTUAL_PROCESSOR_CORE
       productChargedContainers: All
       cloudpakName: IBM Cloud Pak for Integration
@@ -39,7 +39,7 @@ sch:
     meteringNonProd:
       productName: IBM Cloud Pak for Integration (Non-production) - IBM App Connect Enterprise (Chargeable)
       productID: 30fd0181a948441ebe3be59192171987
-      productVersion: "11.0.0.6"
+      productVersion: "11.0.0.7"
       productMetric: VIRTUAL_PROCESSOR_CORE
       productChargedContainers: All
       cloudpakName: IBM Cloud Pak for Integration
@@ -47,4 +47,46 @@ sch:
       cloudpakVersion: 2019.4.1
       productCloudpakRatio: 2:3
     labelType: prefixed
+{{- end -}}
+
+{{/*
+
+"sch.names.routeName" is a shared helper to build a route name based of the release
+and namespace and route name.
+
+Config Values Used: NA
+  
+Uses: NA
+    
+Parameters input as an array of one values:
+  - the root context (required)
+  - the release name to test (required)
+  - the namespace name to test (required)
+  - the route type to test (required)
+Usage:
+  {{- $routeName :=  include "sch.names.routeName" (list $root "MyRelease" "MyNamespace" "MyTypeOfRoute") -}}
+
+*/}}
+{{- define "sch.names.routeName" -}}
+  {{- $params := . -}}
+  {{- $root := first $params -}}
+  {{- $releaseName := (include "sch.utils.getItem" (list $params 1 "")) -}}
+  {{- $namespaceName := (include "sch.utils.getItem" (list $params 2 "")) -}}
+  {{- $namespaceLen := len $namespaceName -}}
+  {{- $routeName := (include "sch.utils.getItem" (list $params 3 "")) -}}
+  {{- $routeLen := len (printf "-%s-" $routeName) -}}
+  {{- $maxLength := 62 -}}
+  {{- $truncLength := (sub $maxLength $namespaceLen) -}}
+
+  {{- $fullLengthString := (printf "%s-%s" $releaseName $routeName) -}}
+  {{- $fullLengthResult :=  include "sch.utils.withinLength" (list $root $fullLengthString $truncLength) -}}
+
+  {{- if $fullLengthResult -}}
+    {{- $fullLengthResult | lower | trimSuffix "-" -}}
+  {{- else -}}
+    {{- $buildNameParms := (list) -}}
+    {{- $buildNameParms := append $buildNameParms (dict "name" $fullLengthString "length" (sub $truncLength 1)) -}}
+    {{- $shortResult := print (include "sch.names.buildName" $buildNameParms) -}}
+    {{- $shortResult | lower | trimSuffix "-" | trimPrefix "-" -}}
+  {{- end -}}
 {{- end -}}
