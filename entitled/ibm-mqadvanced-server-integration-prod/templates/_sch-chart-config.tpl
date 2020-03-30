@@ -29,23 +29,23 @@ sch:
     meteringProd:
       productName: "IBM MQ Advanced"
       productID: "208423bb063c43288328b1d788745b0c"
-      productVersion: "9.1.3"
+      productVersion: "9.1.4"
       productMetric: "VIRTUAL_PROCESSOR_CORE"
       productChargedContainers: "qmgr"
       productCloudpakRatio: "2:1"
       cloudpakName: "IBM Cloud Pak for Integration"
       cloudpakId: "c8b82d189e7545f0892db9ef2731b90d"
-      cloudpakVersion: "2019.4.1"
+      cloudpakVersion: "2020.1.1"
     meteringNonProd:
       productName: "IBM MQ Advanced for Non-Production"
       productID: "21dfe9a0f00f444f888756d835334909"
-      productVersion: "9.1.3"
+      productVersion: "9.1.4"
       productMetric: "VIRTUAL_PROCESSOR_CORE"
       productChargedContainers: "qmgr"
       productCloudpakRatio: "4:1"
       cloudpakName: "IBM Cloud Pak for Integration"
       cloudpakId: "c8b82d189e7545f0892db9ef2731b90d"
-      cloudpakVersion: "2019.4.1"
+      cloudpakVersion: "2020.1.1"
 {{- end -}}
 
 {{- define "ibm-mq.sch.chart.config.metadata.labels" }}

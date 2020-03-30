@@ -17,13 +17,5 @@
 if supports_scc; then
   # Create the custom SCC for OpenShift
   echo "Creating SecurityContextConstraints..."
-  # Note: this script only works on OpenShift >= 3.11, otherwise you must run the following command manually
-  kubectl apply -f ibm-mq-integration-scc.yaml --validate=false
-fi
-
-if supports_psp; then
-  # Create the PodSecurityPolicy and ClusterRole for all releases of this chart.
-  echo "Creating the PodSecurityPolicy..."
-  kubectl apply -f ibm-mq-integration-psp.yaml
-  kubectl apply -f ibm-mq-integration-cr.yaml
+  kubectl apply -f ibm-mq-init-volume-as-root-scc.yaml --validate=false
 fi
