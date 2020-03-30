@@ -21,6 +21,10 @@ metadata:
   labels:
     app.kubernetes.io/component: icp4i-od-manager
     release: {{ .Release.Name }}
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    app.kubernetes.io/name: {{ template "fullname" . }}
+    helm.sh/chart: {{ .Chart.Name }}
 spec:
   selector:
     matchLabels:
@@ -37,7 +41,7 @@ spec:
         productName: 'IBM Cloud Pak for Integration OD Add-On'
         productVersion: '1.0.1'
         productMetric: 'VPC'
-        productChargedContainers:
+        productChargedContainers: ""
         productCloudpakRatio: '1:1'
         cloudpakName: 'IBM Cloud Pak for Integration'
         cloudpakId: 'c8b82d189e7545f0892db9ef2731b90d'
@@ -47,18 +51,41 @@ spec:
         helm.sh/chart: "{{ .Chart.Name }}"
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: icp4i-od-manager
+        release: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
       imagePullSecrets:
         - name: sa-{{ .Release.Namespace }}
         - name: ibm-entitlement-key
       {{- if .Values.global.images.pullSecret }}
         - name: {{ .Values.global.images.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false      
       containers:
       ####################### ui-manager ##################################### 
       - name: ui-manager
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdUiManager }}"
-        imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }} 
+        imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         volumeMounts:
         - name: ibm-ca-chain
           mountPath: "/usr/local/tomee/conf/cert/ibmca"
@@ -131,6 +158,8 @@ spec:
             value: '/mnt/icp4iod/shared/conf/realm.properties'    
           - name: OD_WEB_CONSOLE_CONTEXT_ROOT
             value: {{ .Values.ingress.odURI | quote }}              
+          - name: OD_WEB_CONSOLE_ROUTE_HOST
+            value: {{ .Values.ingress.odUiHost | quote }}              
         ports:
         - name: tomee-ui
           containerPort: 8085
@@ -139,7 +168,7 @@ spec:
         livenessProbe:
           tcpSocket:
             port: 8070
-          initialDelaySeconds: 10
+          initialDelaySeconds: 8
           timeoutSeconds: 2
           periodSeconds: 5
           failureThreshold: 3
@@ -156,6 +185,15 @@ spec:
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdUiProxy }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
         #command: ["tail","-f","/dev/null"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         volumeMounts:
         - name: ibm-ca-chain
           mountPath: "/etc/httpd/conf/cert/ibmca" 
@@ -182,7 +220,9 @@ spec:
           - name: OD_IBM_CA_CHAIN     
             value: '/etc/httpd/conf/cert/ibmca/icp_ca_chain.crt'
           - name: OD_WEB_CONSOLE_CONTEXT_ROOT
-            value: {{ .Values.ingress.odURI | quote }}              
+            value: {{ .Values.ingress.odURI | quote }} 
+          - name: "OD_ICI_NAVIGATOR_URL"
+            value: "https://{{ .Values.platformNavigatorHost }}" 
         ports:    
         - name: reg-https
           containerPort: 443
@@ -193,7 +233,7 @@ spec:
               - -XGET
               - --insecure            
               - https://localhost:443/
-          initialDelaySeconds: 10
+          initialDelaySeconds: 8
           timeoutSeconds: 2
           periodSeconds: 5
           failureThreshold: 3
@@ -213,6 +253,15 @@ spec:
       - name: registration-endpoint
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdRegistrationEndpoint }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         ports:    
         - name: reg-https
           containerPort: 8090
@@ -223,7 +272,7 @@ spec:
               - -XGET
               - --insecure            
               - https://localhost:8090/
-          initialDelaySeconds: 10
+          initialDelaySeconds: 8
           timeoutSeconds: 2
           periodSeconds: 5        
           failureThreshold: 3
@@ -240,7 +289,7 @@ spec:
           failureThreshold: 2
         volumeMounts:
         - name: registration-data
-          mountPath: /var/log/httpd24
+          mountPath: /var/log/httpd
         resources:
 {{ toYaml .Values.resources.registration_endpoint | indent 11 }}          
 ###########################################################################          
@@ -248,6 +297,15 @@ spec:
       - name: config-db
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdConfigDb }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}  
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         #command: ["tail","-f","/dev/null"]   
         ports:
         - containerPort: 1527
@@ -259,7 +317,7 @@ spec:
           exec:
             command:
               - /usr/local/bin/test_db.sh
-          initialDelaySeconds: 10
+          initialDelaySeconds: 8
           timeoutSeconds: 2
           periodSeconds: 5        
           failureThreshold: 5
@@ -278,13 +336,22 @@ spec:
       - name: registration-processor
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdRegistrationProcessor }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }} 
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         env:
           - name: OD_WEB_CONSOLE_CONTEXT_ROOT
             value: {{ .Values.ingress.odURI | quote }}                      
         livenessProbe:
           tcpSocket:
             port: 7777
-          initialDelaySeconds: 10
+          initialDelaySeconds: 8
           timeoutSeconds: 2
           periodSeconds: 5        
           failureThreshold: 3
@@ -297,7 +364,7 @@ spec:
           failureThreshold: 2
         volumeMounts:
         - name: registration-data
-          mountPath: /var/log/httpd24  
+          mountPath: /var/log/httpd
         - name: mng-shared
           mountPath: "/mnt/icp4iod/shared" 
           readOnly: true
@@ -307,7 +374,16 @@ spec:
 ####################### sidecar store-retention #################################         
       - name: store-retention
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdStoreRetention }}"
-        imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }} 
+        imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         resources:
 {{ toYaml .Values.resources.store_retention | indent 11 }}                                      
         env:          
@@ -336,7 +412,7 @@ spec:
         livenessProbe:
           tcpSocket:
             port: 8071
-          initialDelaySeconds: 30
+          initialDelaySeconds: 28
           timeoutSeconds: 2
           periodSeconds: 5        
           failureThreshold: 3
@@ -358,6 +434,15 @@ spec:
       - name: housekeeping
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdRetention }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }} 
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         resources:
 {{ toYaml .Values.resources.housekeeping | indent 11 }}                             
         env:          
@@ -379,7 +464,7 @@ spec:
         livenessProbe:
           tcpSocket:
             port: 8072
-          initialDelaySeconds: 30
+          initialDelaySeconds: 28
           timeoutSeconds: 2
           periodSeconds: 5        
           failureThreshold: 3
@@ -399,6 +484,15 @@ spec:
       - name: reports
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdReports }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         resources:
 {{ toYaml .Values.resources.reports | indent 11 }}                                     
         env:          
@@ -424,7 +518,7 @@ spec:
         livenessProbe:
           tcpSocket:
             port: 8073
-          initialDelaySeconds: 30
+          initialDelaySeconds: 28
           timeoutSeconds: 2
           periodSeconds: 5        
           failureThreshold: 3
@@ -448,6 +542,15 @@ spec:
       - name: legacy-ui
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdLegacyUi }}"
         imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }} 
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         command: ["/go/bin/query-linux","--es.use-aliases=true", "--query.base-path=/{{ .Values.ingress.odURI }}/jaeger"]
         volumeMounts:
         - name: icp4i-od-ca-certificate
@@ -483,7 +586,7 @@ spec:
         livenessProbe:
           tcpSocket:
             port: 14987
-          initialDelaySeconds: 30
+          initialDelaySeconds: 28
           timeoutSeconds: 2
           periodSeconds: 5        
           failureThreshold: 3
@@ -498,7 +601,16 @@ spec:
       initContainers:
       - name: config-db-init
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdConfigDb }}"
-        imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}   
+        imagePullPolicy: {{ .Values.global.images.pullPolicy | quote }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         command: ["/usr/local/bin/icp4i_od_init_config_db.sh"]
         volumeMounts:
         - name: config-db

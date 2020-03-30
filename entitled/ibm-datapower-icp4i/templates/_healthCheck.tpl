@@ -84,7 +84,7 @@ health-check.cfg: |
 
     source-http "HTTPHealth"
       local-address 0.0.0.0
-      port 7878
+      port {{ .Values.health.readinessPort }}
       http-client-version HTTP/1.1
       allowed-features "HTTP-1.0+HTTP-1.1+GET"
       persistent-connections

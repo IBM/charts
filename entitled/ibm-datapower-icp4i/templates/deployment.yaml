@@ -58,20 +58,25 @@ spec:
       hostIPC: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 101
+        runAsUser: 1000
       containers:
       - name: {{ .Chart.Name }}
+        {{- if .Values.datapower.image.tagOverride }}
+        image: "{{ .Values.datapower.image.repository }}:{{ .Values.datapower.image.tagOverride }}"
+        {{- else }}
         image: {{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.datapower.image.repository "${1}cp/icp4i/datapower/" }}:{{ .Values.datapower.image.version }}-{{ .Values.datapower.image.license }}
+        {{- end }}
         imagePullPolicy: {{ .Values.datapower.image.pullPolicy }}
         command:
           - sh
           - -c
           - |
-            cp -r /opt/ibm/datapower/init/config/. /drouter/config/
+            sh /opt/ibm/datapower/init/scripts/initConfig.sh
 {{- if .Values.datapower.adminUserSecret }}
             sh /opt/ibm/datapower/init/admin-user/init-admin-user.sh
 {{- end }}
-            exec /start.sh --log-format {{ .Values.datapower.env.defaultLogFormat }}
+            /usr/local/bin/datapower-health-check -port={{ .Values.health.livenessPort }} &
+            exec /opt/ibm/datapower/start.sh --log-format {{ .Values.datapower.env.defaultLogFormat }}
         stdin: true
         tty: true
         securityContext:
@@ -84,7 +89,7 @@ spec:
           runAsUser: 0
 {{- else }}
           runAsNonRoot: true
-          runAsUser: 101
+          runAsUser: 1000
 {{- end }}
           capabilities:
             drop:
@@ -110,43 +115,67 @@ spec:
           value: "true"
         - name: DATAPOWER_LOG_COLOR
           value: "false"
+        - name: DATAPOWER_LOG_STDOUT
+          value: "true"
 {{- if .Values.datapower.env.workerThreads }}
 {{- if gt .Values.datapower.env.workerThreads 0.0 }}
         - name: DATAPOWER_WORKER_THREADS
           value: {{ .Values.datapower.env.workerThreads | quote }}
 {{- end }}
 {{- end }}
-{{- if ne .Values.patternName "none"}}
         livenessProbe:
-          exec:
-            command:
-            - pgrep
-            - drouter
+          httpGet:
+            path: /
+            port: liveness
+            scheme: HTTP
           initialDelaySeconds: 5
           timeoutSeconds: 5
           periodSeconds: 5
         readinessProbe:
           httpGet:
             path: /health
-            port: health
+            port: readiness
             scheme: HTTP
           initialDelaySeconds: 120
           timeoutSeconds: 5
           periodSeconds: 10
         ports:
+{{- if ne .Values.patternName "none" }}
         - name: service
           containerPort: {{ $values.containerPort }}
-        - name: health
-          containerPort: 7878
+{{- end }}
+        - name: readiness
+          containerPort: {{ .Values.health.readinessPort }}
+        - name: liveness
+          containerPort: {{ .Values.health.livenessPort }}
         volumeMounts:
-            - mountPath: "/opt/ibm/datapower/init/config"
-              name: {{ template "ibm-datapower-icp4i.fullname" . }}-init-config-volume
-            - mountPath: "/drouter/config"
-              name: {{ template "ibm-datapower-icp4i.fullname" . }}-config-volume
-            - mountPath: "/drouter/local/health"
-              name: {{ template "ibm-datapower-icp4i.fullname" . }}-health
-{{- if .Values.crypto.frontsideSecret }}
-            - mountPath: "/drouter/secure/usrcerts/{{ .Values.patternName }}"
+            - mountPath: "/opt/ibm/datapower/init/chart-overrides"
+              name: {{ template "ibm-datapower-icp4i.fullname" . }}-init-overrides-volume
+            - mountPath: "/opt/ibm/datapower/init/scripts"
+              name: {{ template "ibm-datapower-icp4i.fullname" . }}-scripts-volume
+{{- if .Values.datapower.additionalConfig }}
+            {{- range .Values.datapower.additionalConfig }}
+            - mountPath: "/opt/ibm/datapower/init/config/{{ .domain }}/{{ .config }}"
+              name: {{ $.Release.Name }}-{{ .domain }}-{{ .config }}-volume
+            {{- end }}
+{{- end }}
+{{- if .Values.datapower.additionalLocal }}
+            - mountPath: "/opt/ibm/datapower/init/local"
+              name: {{ .Release.Name }}-init-additional-local-volume
+{{- end }}
+{{- if .Values.datapower.additionalCerts }}
+    {{- range .Values.datapower.additionalCerts }}
+    {{- $certtype := .certType | default "usrcert" }}
+            - mountPath: "/opt/ibm/datapower/init/{{ $certtype }}s/{{ .domain }}/{{ .secret }}"
+              name: {{ $.Release.Name }}-{{ .domain }}-{{ .secret }}-volume
+    {{- end }}
+{{- end }}
+{{- if ne .Values.patternName "none" }}
+            - mountPath: "/opt/ibm/datapower/init/config/{{ .Values.patternName }}"
+              name: {{ template "ibm-datapower-icp4i.fullname" . }}-pattern-config-volume
+{{- end }}
+{{- if and .Values.crypto.frontsideSecret ( ne .Values.patternName "none" ) }}
+            - mountPath: "/opt/ibm/datapower/init/usrcerts/{{ .Values.patternName }}"
               name: {{ template "ibm-datapower-icp4i.fullname" . }}-secret-volume
 {{- end }}
 {{- if .Values.datapower.adminUserSecret }}
@@ -156,25 +185,46 @@ spec:
               mountPath: /opt/ibm/datapower/init/admin-user-secret
 {{- end }}
       volumes:
-        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-config-volume
-          emptyDir: {}
-        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-init-config-volume
+        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-init-overrides-volume
           configMap:
-            name: {{ template "ibm-datapower-icp4i.fullname" . }}-config
+            name: {{ template "ibm-datapower-icp4i.fullname" . }}-default-overrides
             items:
-            - key: {{ .Values.patternName }}.cfg
-              path: "{{ .Values.patternName }}/{{ .Values.patternName }}.cfg"
-            - key: auto-user.cfg
-              path: "auto-user.cfg"
             - key: auto-startup.cfg
-              path: "auto-startup.cfg"
+              path: auto-startup.cfg
+            - key: auto-user.cfg
+              path: auto-user.cfg
+            - key: health.js
+              path: local/health/health.js
             - key: health-check.cfg
-              path: "health-check.cfg"
-        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-health
+              path: health-check.cfg
+        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-scripts-volume
           configMap:
-            name: {{ template "ibm-datapower-icp4i.fullname" . }}-static-health
-
-{{- if .Values.crypto.frontsideSecret }}
+            name: {{ template "ibm-datapower-icp4i.fullname" . }}-static-scripts
+{{- if .Values.datapower.additionalConfig }}
+    {{- range .Values.datapower.additionalConfig }}
+        - name: {{ $.Release.Name }}-{{ .domain }}-{{ .config }}-volume
+          configMap:
+            name: {{ .config }}
+    {{- end }}
+{{- end }}
+{{- if .Values.datapower.additionalLocal }}
+        - name: {{ .Release.Name }}-init-additional-local-volume
+          configMap:
+            name: {{ .Values.datapower.additionalLocal }}
+{{- end }}
+{{- if .Values.datapower.additionalCerts }}
+    {{- range .Values.datapower.additionalCerts }}
+        - name: {{ $.Release.Name }}-{{ .domain }}-{{ .secret }}-volume
+          secret:
+            secretName: {{ .secret }}
+    {{- end }}
+{{- end }}
+{{- if ne .Values.patternName "none" }}
+        - name: {{ template "ibm-datapower-icp4i.fullname" . }}-pattern-config-volume
+          configMap:
+            name: {{ template "ibm-datapower-icp4i.fullname" . }}-pattern-config
+{{- end }}
+{{- if and .Values.crypto.frontsideSecret ( ne .Values.patternName "none" ) }}
         - name: {{ template "ibm-datapower-icp4i.fullname" . }}-secret-volume
           secret:
             secretName: {{ .Values.crypto.frontsideSecret }}
@@ -196,4 +246,3 @@ spec:
                 - key: "beta.kubernetes.io/arch"
                   operator: In
                   values: ["amd64"]
-{{- end }}

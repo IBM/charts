@@ -1,19 +1,20 @@
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ template "uname" . }}
   labels:
-    heritage: {{ .Release.Service | quote }}
-    release: {{ .Release.Name | quote }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    app: "{{ template "uname" . }}"
     app.kubernetes.io/component: icp4i-od-manager
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+    app.kubernetes.io/name: "{{ template "uname" . }}"
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   serviceName: {{ template "uname" . }}-headless
   selector:
     matchLabels:
-      app: "{{ template "uname" . }}"     
+      app.kubernetes.io/name: "{{ template "uname" . }}"      
   replicas: {{ default .Values.replicas }}
   podManagementPolicy: {{ .Values.podManagementPolicy }}
   updateStrategy:
@@ -28,10 +29,12 @@ spec:
       name: "{{ template "uname" . }}"
       annotations:
       labels:
-        heritage: {{ .Release.Service | quote }}
-        release: {{ .Release.Name | quote }}
-        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-        app: "{{ template "uname" . }}"
+        app.kubernetes.io/component: icp4i-od-manager
+        release: "{{ .Release.Name }}"
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+        app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+        app.kubernetes.io/name: "{{ template "uname" . }}"
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
         tuned.openshift.io/elasticsearch: "true"
     spec:
       securityContext:
@@ -46,28 +49,25 @@ spec:
       {{- end }}
       {{- if eq .Values.antiAffinity "hard" }}
       affinity:
-        podAntiAffinity:
+        nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - "{{ template "uname" .}}"
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
             topologyKey: {{ .Values.antiAffinityTopologyKey }}
       {{- else if eq .Values.antiAffinity "soft" }}
       affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 1
-            podAffinityTerm:
-              topologyKey: {{ .Values.antiAffinityTopologyKey }}
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - "{{ template "uname" . }}"
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
       {{- end }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriod }}
       {{- if .Values.secretMounts }}
@@ -84,10 +84,22 @@ spec:
       {{- if .Values.global.images.pullSecret }}
         - name: {{ .Values.global.images.pullSecret }}
       {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false      
       containers: 
       - name: "{{ template "name" . }}"
         image: "{{ trimSuffix "/" .Values.global.images.registry }}/{{ .Values.global.images.OdElasticsearch }}"
         imagePullPolicy: "{{ .Values.global.images.pullPolicy }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          privileged: false
+          #capabilities:
+          #  drop:
+          #    - ALL 
         livenessProbe:
           initialDelaySeconds: 30
           periodSeconds: 10
