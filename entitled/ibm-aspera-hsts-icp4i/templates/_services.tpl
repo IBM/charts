@@ -16,16 +16,11 @@
 {{- end }}
 
 {{ define "hsts.services.redis" -}}
-  {{-  if .Values.deployRedis }}
+  {{-  if .Values.redis.deploy }}
     {{- printf "%s-%s:%d" .Release.Name "redis-ha" 6379 -}}
   {{ else }}
-    {{- printf "%s:%s" .Values.redisHost (toString .Values.redisPort) -}}
+    {{- printf "%s:%s" .Values.redis.host (toString .Values.redis.port) -}}
   {{ end }}
-{{- end }}
-
-
-{{ define "hsts.services.kafka" -}}
-  {{- printf "%s:%s" .Values.aej.kafkaHost (toString .Values.aej.kafkaPort) -}}
 {{- end }}
 
 # Service hosts
@@ -36,21 +31,14 @@
 {{- end }}
 
 {{ define "hsts.hosts.redis" -}}
-  {{-  if .Values.deployRedis }}
+  {{-  if .Values.redis.deploy }}
     {{- printf "%s-%s" .Release.Name "redis-ha-master" -}}
   {{ else }}
-    {{- if (or (empty .Values.redisHost) (empty .Values.redisPort)) }}
-      {{ fail "Configuration error: .Values.redisHost and .Values.redisPort required when not deploying redis" }}
+    {{- if (or (empty .Values.redis.host) (empty .Values.redis.port)) }}
+      {{ fail "Configuration error: .Values.redis.host and .Values.redis.port required when not deploying redis" }}
     {{- end -}}
-    {{- printf "%s" .Values.redisHost -}}
+    {{- printf "%s" .Values.redis.host -}}
   {{ end }}
-{{- end }}
-
-{{ define "hsts.hosts.kafka" -}}
-  {{- if (or (empty .Values.aej.kafkaHost) (empty .Values.aej.kafkaPort)) }}
-    {{ fail "Configuration error: .Values.aej.kafkaHost and .Values.aej.kafkaPort required." }}
-  {{- end -}}
-  {{- printf "%s" .Values.aej.kafkaHost -}}
 {{- end }}
 
 # Service Ports
@@ -59,15 +47,11 @@
 {{- end }}
 
 {{ define "hsts.ports.redis" -}}
-  {{-  if .Values.deployRedis }}
+  {{-  if .Values.redis.deploy }}
     {{- printf "%d" 6379 -}}
   {{ else }}
-    {{- printf "%s" (toString .Values.redisPort) -}}
+    {{- printf "%s" (toString .Values.redis.port) -}}
   {{ end }}
-{{- end }}
-
-{{ define "hsts.ports.kafka" -}}
-  {{- printf "%s" (toString .Values.aej.kafkaPort) -}}
 {{- end }}
 
 {{ define "hsts.locks.assemble" -}}
@@ -94,5 +78,10 @@
 
 {{ define "hsts.locks.prometheusEndpoint" -}}
   {{- $params := (list . .sch.chart.components.prometheusEndpoint.compName) -}}
+  {{ include "hsts.locks.assemble" $params }}
+{{- end }}
+
+{{ define "hsts.locks.lifecycle" -}}
+  {{- $params := (list . .sch.chart.components.lifecycle.compName) -}}
   {{ include "hsts.locks.assemble" $params }}
 {{- end }}

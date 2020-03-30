@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The IBM Aspera High-Speed Transfer Server (HSTS) is a versatile software application that allows an unlimited number of concurrent users to transfer files of any size at top speed using an Aspera client. Server administrators enjoy a powerful set of management features, including the ability to monitor and control the transfer queue in real time, adjust bandwidth targets on the fly, and configure granular access-control settings.
+The IBM Aspera High-Speed Transfer Server (HSTS) is a versatile software application that allows an unlimited number of concurrent users to transfer files of any size at top speed using an Aspera client. Server administrators enjoy a powerful set of management features, including the ability to monitor and control the transfer queue in real time, adjust bandwidth targets on the fly, and configure granular access-control settings. These instructions provide guidance for both the prerequisites that are required for HSTS; as well as for configuring and starting HSTS itself.
 
 ## Chart Details
 
@@ -10,54 +10,54 @@ This chart installs an HSTS cluster with the following resources:
 
 Deployments
 
+* Aspera Event Journal (3 pods)
+* Aspera `ascp` Loadbalancer (3 pods)
+* Aspera `ascp` Swarm (3 pods)
+* Aspera HTTP Proxy (3 pods)
+* Aspera Lifecycle (3 pods)
+* Aspera Node API (3 pods)
 * Aspera Node Master (1 pod)
-* Aspera Node API (3 pods by default)
-* Aspera Event Journal (1 pod)
-* Aspera ascp Loadbalancer (1 pod)
-* Aspera Node Loadbalancer (1 pod)
-* Aspera Loadbalancer (1 pod)
-* Aspera Stats (1 pod)
-* Aspera ascp Swarm (1 pod)
-* Aspera Node Swarm (1 pod)
-* Aspera TCP Proxy (1 pod)
+* Aspera Node Loadbalancer (3 pods)
+* Aspera Node Swarm (3 pods)
+* Aspera Prometheus Endpoint (3 pods)
+* Aspera Stats (3 pods)
+* Aspera TCP Proxy (3 pods)
 * Redis Server (3 pods)
 * Redis Sentinel (3 pods)
 
 Services
 
-* Aspera TCP Proxy
-* Aspera Node API
-* Aspera Loadbalancer
-* Aspera Stats
-* Aspera Swarm
 * Aspera Event Journal
+* Aspera `ascp` Loadbalancer
+* Aspera `ascp` Swarm
+* Aspera HTTP Proxy
+* Aspera Lifecycle
+* Aspera Node API
+* Aspera Node Loadbalancer
+* Aspera Node Swarm
+* Aspera Prometheus Endpoint
+* Aspera Stats
+* Aspera TCP Proxy
 * Redis HA
 
 ## Prerequisites
 
-* An existing Kafka deployment.
 * An Aspera Proxy Server installation configured for reverse proxy, external to the Kubernetes cluster.
-* The PersistentVolumeClaim provided for transfer storage (**asperanode.volume.existingClaimName**) must have access mode **RWX**.
+* The PersistentVolumeClaim provided for transfer storage (**persistence[$i].claimName**) must have access mode **RWX**.
 * Role-based access control (RBAC) must be configured before you deploy Aspera HSTS. See PodSecurityPolicy Requirements and Additional RBAC Requirements below.
 * Three Secret objects must be created before you install this chart:
   * Node administrator secret (**nodeAdminSecret**) - Contains the username (**NODE_USER**) and password (**NODE_PASS**) for the node user that will be created during the installation.
-  * Access key secret (**accessKeySecret**) - Contains the access key ID (**ACCESS_KEY_ID**) and secret (**ACCESS_KEY_SECRET**) for the access key that will be created during the installation. This access key with have its storage set to the volume mount path.
-  * Aspera server secret (**serverSecret**) - Contains the Aspera license (**ASPERA_LICENSE**) and token encryption key (**TOKEN_ENCRYPTION_KEY**) that will be used for all asperanoded containers.
-
-### Required Services
-
-Kafka is required as part of an Aspera HSTS installation. At this time, Kafka is not deployed as part of this chart and will need to be provisioned separately.
-
-It is recommended to use IBM Event Streams as the Kafka backend for production deployments.
+  * Aspera license secret (**asperaLicense**) - Contains the Aspera license (**ASPERA_LICENSE**) that will be used for all asperanoded containers.
+  * Aspera token encryption key secret (**tokenEncryptionKeySecret**) - Contains the token encryption key (**TOKEN_ENCRYPTION_KEY**) that will be used for all asperanoded containers.
 
 ### Aspera Reverse Proxy
 
-In order to facilitate transfers originating from outside the Kubernetes cluster, an Aspera Proxy Server instance is required, and must be configured as a reverse proxy (_rproxy_). The intent is for external traffic to be directed at this rproxy instance, which in turn routes the traffic to the corresponding Aspera services inside the Kubernetes cluster (exposed via a NodePort).
+In order to facilitate transfers originating from outside the Kubernetes cluster, an IBM Aspera Proxy Server instance must be installed and configured outside of the Kubernetes cluster. The intent is for external traffic to be directed at this rproxy instance, which in turn routes the traffic to the corresponding Aspera services inside the Kubernetes cluster (exposed via a NodePort). For information about the proxy server, see the [IBM Aspera Proxy Server Admin Guide](https://www.ibm.com/support/knowledgecenter/)
 
 You must have the following on hand before you deploy this chart:
 
 * The address of the Aspera reverse proxy instance.
-* [Optional] The public SSH key that is created as part of the Aspera reverse proxy installation. The public key(s) are provided via the **receiver.authorizedKeys** value.
+* [Optional] The public SSH key that is created as part of the Aspera reverse proxy installation. The public key(s) are provided via the **authorizedKeys** value.
 
 After you deploy this chart, you must update the **aspera.conf** of the rproxy with the corresponding NodePort that exposes the TCP proxy service. To view the TCP service:
 
@@ -92,7 +92,7 @@ Example rproxy **aspera.conf** for a TCP proxy service exposed via NodePort **32
 
 In order to ensure high availability, the Aspera Swarm services will attempt to create a configurable number of pods on each node in the Kubernetes cluster.
 
-The nodes on which the receiver pods are running can be restricted via the **nodeLabels** values.
+The nodes on which the ascp pods are running can be restricted via the **nodeLabels** values.
 
 For example, the following would restrict pods to nodes with the `node-role.kubernetes.io/worker=true` label.
 
@@ -116,11 +116,11 @@ At this time, only on-premises licenses are supported.
 
 ### Storage Permissions
 
-If using an existing PersistentVolumeClaim, it is required that the `persistence.fsGroup` (default `1001`) has read and write permissions.
+If using an existing PersistentVolumeClaim, it is required that the `securityContext.fsGroup` (default `1001`) has read and write permissions.
 
 There are two options to ensure proper permissions:
 
-1) Set `persistence.fsGroup` value to be the existing group id
+1) Set `securityContext.fsGroup` value to be the existing group id
 2) Update the permissions of the existing directory
 
 To update the permissions, mount the volume temporarily or access the host machine. The permissions can be updated with the following commands (using `fsGroup` as `1001` and `/aspera` as the example PVC root):
@@ -425,8 +425,8 @@ The following tables describe the default usage and limits per pod.
 
 |Pod|CPU Requested|CPU Limit
 |--|--|--|
-| Redis Server | .01 | .2 |
-| Redis Sentinel | .005 | .02 |
+| Redis Server | .2 | 1 |
+| Redis Sentinel | .05 | .2 |
 | Aspera Event Journal | .01 | .2 |
 | Aspera HSTS HTTP Loadbalancer | .01 | .05 |
 | Aspera HSTS ascp Loadbalancer | .01 | .05 |
@@ -435,8 +435,8 @@ The following tables describe the default usage and limits per pod.
 | Aspera HSTS Stats | .002 | .01 |
 | Aspera HSTS TCP Proxy | .005 | .05 |
 | Aspera HSTS HTTP Proxy | .005 | .05 |
-| Aspera HSTS ascp Transfer | .01 | .5 |
-| Aspera HSTS Node Transfer | .02 | .6 |
+| Aspera HSTS ascp Transfer | .02 | 1 |
+| Aspera HSTS Node Transfer | .02 | 1 |
 
 ## Installing the Chart
 
@@ -444,24 +444,24 @@ The following tables describe the default usage and limits per pod.
 
 ```bash
 kubectl create secret generic aspera-server \
---from-file=ASPERA_LICENSE="./aspera-license" \
---from-literal=TOKEN_ENCRYPTION_KEY="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 40)"
+--from-file=ASPERA_LICENSE="./aspera-license"
 ```
 
-### 2. [Optional] Create Secrets to use existing credentials or certificates
+### 2. [Optional] Create Secrets to use existing credentials, certificates or token encryption key
 
 ```bash
 kubectl create secret generic asperanode-nodeadmin \
 --from-literal=NODE_USER="myuser" \
 --from-literal=NODE_PASS="mypassword"
-
-kubectl create secret generic asperanode-accesskey \
---from-literal=ACCESS_KEY_ID="my_access_key" \
---from-literal=ACCESS_KEY_SECRET="my_access_key_secret"
 ```
 
 ```bash
 kubectl create secret tls asperahsts --key hsts.key --cert hsts.crt
+```
+
+```bash
+kubectl create secret generic asperanode-token-encryption-key \
+--from-literal=TOKEN_ENCRYPTION_KEY="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 40)"
 ```
 
 ### 3. [Optional] Create a secret containing the sshd server private/public keys
@@ -475,26 +475,7 @@ kubectl create secret generic hsts-sshd-keys \
 --from-literal=SSHD_FINGERPRINT=$(cat ./ssh_host_rsa_key.pub | awk '{print $2}' | base64 -d | sha1sum)
 ```
 
-### 4. [Optional] If using a Kafka that requires authentication, create a secret containing the credentials
-
-The following secret contains the username and password used to authenticate with Kafka:
-
-```bash
-kubectl create secret generic kafka-auth \
---from-literal=KAFKA_USER="username" \
---from-literal=KAFKA_PASS="password"
-```
-
-### 5. [Optional] If using a Kafka that requires ssl, create a secret containing the Kafka certificate
-
-The following secret contains the username and password used to authenticate with Kafka:
-
-```bash
-kubectl create secret generic kafka-cert \
---from-file=KAFKA_CERT="./kafka.pem"
-```
-
-### 6. Create a corresponding **values.yaml**
+### 4. Create a corresponding **values.yaml**
 
 Substitute **RPROXY_ADDRESS** as needed:
 
@@ -507,9 +488,9 @@ ingress:
 
 asperanode:
   # These secrets only need to be provided if created above
-  serverSecret: aspera-server
+  asperaLicense: aspera-server
+  tokenEncryptionKeySecret: asperanode-token-encryption-key
   nodeAdminSecret: asperanode-nodeadmin
-  accessKeySecret: asperanode-accesskey
 
 rproxy:
   address: RPROXY_ADDRESS
@@ -525,10 +506,40 @@ asperaconfig:
   - set_logging_data;level,dbg2
 ```
 
-### Install the chart
+### 5. Install the chart with Helm
 
+To install the chart with the source files (helm templates) in the current directory, run:
 ```bash
 helm install -f values.yaml . --tls
+```
+
+### 6. Create Access Keys through the Node API
+
+To create access keys, send a request to the Node API `/access_keys` endpoint by using curl command.
+
+To create an access key, run the following command on the server:
+```sh
+curl -ki -u node_username:node_password -X POST https://<node-api-address>/access_keys -d @access_key_config.json
+```
+where `access_key_config.json` is the access key configuration file.
+
+The access key configuration is specified in JSON. Only the "storage" object is required; the Node API creates an access key ID and secret if they are not provided. Here is an example `access_key_config.json`:
+```json
+{
+  "id" : "my_access_key",
+  "root_file_id" : "1",
+  "token_verification_key" : null,
+  "license" : null,
+  "storage" : {
+    "type" : "local",
+    "path" : "/asperanode"
+  },
+  "configuration" : {
+    "transfer" : {
+      "target_rate_kbps" : 100000
+    }
+  }
+}
 ```
 
 ## Limitations
@@ -560,13 +571,13 @@ If installing on ICP for RedHat OpenShift, the HSTS API can be accessed via port
 |Parameter|Description|Default
 |--|--|--|
 | `productionDeployment` | productionDeployment | `true` |
-| `image.repository` | repository for image | `` |
-| `image.pullSecret` | pullSecret for image | `` |
+| `global.image.repository` | repository for image | `` |
+| `global.image.pullSecret` | pullSecret for image | `` |
 | `rbac.serviceAccountName` | serviceAccountName for rbac | `ibm-aspera-hsts-icp4i` |
 | `arch.amd64` | amd64 for arch | `3 - Most preferred` |
-| `deployRedis` | deployRedis | `true` |
-| `redisHost` | redisHost | `` |
-| `redisPort` | redisPort | `6379` |
+| `redis.deploy` | deploy redis cluster | `true` |
+| `redis.host` | set redis host | `none` |
+| `redis.port` | set redis port | `6379` |
 | `redis.serviceAccount.create` | create redis service account | `false` |
 | `redis.serviceAccount.name` | service account for redis server pods, if using an existing service account | `ibm-aspera-hsts-icp4i` |
 | `redis.persistence.enabled` | enable redis persistence | `false` |
@@ -574,11 +585,9 @@ If installing on ICP for RedHat OpenShift, the HSTS API can be accessed via port
 | `redis.persistence.existingClaimName` | existing PVC for redis persistence | `` |
 | `redis.persistence.accessMode` | accessMode for redis persistence, when dynamic provisioning enabled | `ReadWriteMany` |
 | `redis.persistence.storageClassName` | storageClassName for redis persistence, when dynamic provisioning enabled | `` |
-| `redis.image.repository` | repository for redis image | `` |
 | `redis.image.name` | name for redis image | `aspera-redis` |
 | `redis.image.tag` | tag for redis image | `4.0.12-rhel-amd64` |
 | `redis.image.pullPolicy` | pullPolicy for redis image | `IfNotPresent` |
-| `redis.image.pullSecret` | pullSecret for redis image | `` |
 | `redis.rbac.create` | create redis RBAC resources | `false` |
 | `redis.resources.server.requests.memory` | memory for redis resources server requests | `100Mi` |
 | `redis.resources.server.requests.cpu` | cpu request for redis  server | `.01` |
@@ -593,19 +602,19 @@ If installing on ICP for RedHat OpenShift, the HSTS API can be accessed via port
 | `ingress.tlsSecret` | tlsSecret for ingress | `` |
 | `asperaconfig` | list of `asconfigurator` commands to be run in each container | `[]` |
 | `sshdKeysSecret` | Secret containing public/private sshd keys | `` |
-| `persistence.useDynamicProvisioning` | useDynamicProvisioning for persistence | `true` |
-| `persistence.storageClassName` | storageClassName for persistence | `` |
-| `persistence.size` | size for persistence | `10Gi` |
-| `persistence.existingClaimName` | existingClaimName for persistence | `` |
-| `persistence.mountPath` | mountPath for persistence | `/asperanode` |
-| `persistence.fsGroup` | The groupId that has read and write permissions on the transfer volume. See Storage Permissions | `1001` |
+| `persistence` | `[]` |
+| `persistence[$i].useDynamicProvisioning` | useDynamicProvisioning for persistence | `` |
+| `persistence[$i].storageClassName` | storageClassName for persistence | `` |
+| `persistence[$i].size` | size for persistence | `` |
+| `persistence[$i].claimName` | claimName for persistence | `` |
+| `persistence[$i].mountPath` | mountPath for persistence | `` |
+| `securityContext.fsGroup` | The groupId that has read and write permissions on the transfer volume. See Storage Permissions | `1001` |
 | `asperanode.clusterId` | clusterId for asperanode | `` |
 | `asperanode.httpsPort` | httpsPort for asperanode | `9092` |
 | `asperanode.nodeCount` | nodeCount for asperanode | `3` |
-| `asperanode.serverSecret` | serverSecret for asperanode | `` |
+| `asperanode.asperaLicense` | asperaLicense for asperanode | `` |
+| `asperanode.tokenEncryptionKeySecret` | tokenEncryptionKeySecret secret for asperanode | `` |
 | `asperanode.nodeAdminSecret` | nodeAdminSecret for asperanode | `` |
-| `asperanode.accessKeySecret` | accessKeySecret for asperanode | `` |
-| `asperanode.accessKeyConfig.transfer.target_rate_kbps` | target_rate_kbps for asperanode accessKeyConfig transfer | `100000` |
 | `asperanode.image.repository` | repository for asperanode image | `` |
 | `asperanode.image.name` | name for asperanode image | `aspera-hsts-asperanode` |
 | `asperanode.image.tag` | tag for asperanode image | `3.9.1-rhel-amd64` |
@@ -619,12 +628,6 @@ If installing on ICP for RedHat OpenShift, the HSTS API can be accessed via port
 | `asperanode.resources.limits.memory` | memory for asperanode resources limits | `700Mi` |
 | `asperanode.resources.limits.cpu` | cpu for asperanode resources limits | `0.6` |
 | `dashboard.enabled` | Install HSTS Grafana dashboard  | `true` |
-| `aej.kafkaHost` | kafkaHost for aej | `` |
-| `aej.kafkaPort` | kafkaPort for aej | `9092` |
-| `aej.kafkaProtocol` | kafkaProtocol for aej | `PLAINTEXT` |
-| `aej.kafkaSaslMechanism` | kafkaSaslMechanism for aej | `PLAIN` |
-| `aej.kafkaAuthSecret` | kafkaAuthSecret for aej | `` |
-| `aej.kafkaCertSecret` | kafkaCertSecret for aej | `` |
 | `aej.replicas` | replicas for aej | `3` |
 | `aej.image.repository` | repository for aej image | `` |
 | `aej.image.name` | name for aej image | `aspera-hsts-aej` |
@@ -679,24 +682,20 @@ If installing on ICP for RedHat OpenShift, the HSTS API can be accessed via port
 | `nodedSwarm.config.minAvailable` | minAvailable for noded swarm config | `1` |
 | `nodedSwarm.config.maxRunning` | maxRunning for noded swarm config | `2` |
 | `nodedSwarm.config.member.name.prefix` | prefix for noded swarm config member name | `` |
-| `firstboot.image.repository` | repository for receiver firstboot image | `` |
-| `firstboot.image.name` | name for receiver firstboot image | `aspera-hsts-firstboot` |
-| `firstboot.image.tag` | tag for receiver firstboot image | `3.9.1-1.2.1-rhel-amd64` |
-| `firstboot.image.pullPolicy` | pullPolicy for receiver firstboot image | `IfNotPresent` |
-| `nodedSwarmMember.image.repository` | repository for nodedSwarmMember image | `` |
-| `nodedSwarmMember.image.name` | name for nodedSwarmMember image | `aspera-hsts-noded-swarm-member` |
-| `nodedSwarmMember.image.tag` | tag for nodedSwarmMember image | `3.9.1-1.2.1-rhel-amd64` |
-| `nodedSwarmMember.image.pullPolicy` | pullPolicy for nodedSwarmMember image | `IfNotPresent` |
-| `receiver.authorizedKeys` | authorizedKeys for receiver | `[]` |
-| `receiver.vlinks` | vlinks for receiver | `[]` |
-| `receiver.swarm.image.repository` | repository for receiver swarm image | `` |
-| `receiver.swarm.image.name` | name for receiver swarm image | `aspera-hsts-receiver-swarm-member` |
-| `receiver.swarm.image.tag` | tag for receiver swarm image | `3.9.1-1.2.1-rhel-amd64` |
-| `receiver.swarm.image.pullPolicy` | pullPolicy for receiver swarm image | `IfNotPresent` |
-| `receiver.swarm.resources.requests.memory` | memory for receiver swarm resources requests | `50Mi` |
-| `receiver.swarm.resources.requests.cpu` | cpu for receiver swarm resources requests | `.01` |
-| `receiver.swarm.resources.limits.memory` | memory for receiver swarm resources limits | `700Mi` |
-| `receiver.swarm.resources.limits.cpu` | cpu for receiver swarm resources limits | `0.5` |
+| `firstboot.image.repository` | repository for firstboot image | `` |
+| `firstboot.image.name` | name for firstboot image | `aspera-hsts-firstboot` |
+| `firstboot.image.tag` | tag for firstboot image | `3.9.1-1.2.1-rhel-amd64` |
+| `firstboot.image.pullPolicy` | pullPolicy for firstboot image | `IfNotPresent` |
+| `authorizedKeys` | authorized keys for ascp | `[]` |
+| `vlinks` | vlinks for ascp | `[]` |
+| `ascp.image.repository` | repository for ascp image | `` |
+| `ascp.image.name` | name for ascp image | `aspera-hsts-ascp-server` |
+| `ascp.image.tag` | tag for ascp image | `3.9.1-1.2.1-rhel-amd64` |
+| `ascp.image.pullPolicy` | pullPolicy for ascp image | `IfNotPresent` |
+| `ascp.resources.requests.memory` | memory for ascp resources requests | `50Mi` |
+| `ascp.resources.requests.cpu` | cpu for ascp resources requests | `.01` |
+| `ascp.resources.limits.memory` | memory for ascp resources limits | `700Mi` |
+| `ascp.resources.limits.cpu` | cpu for ascp resources limits | `0.5` |
 | `httpProxy.replicas` | replicas for httpProxy | `3` |
 | `httpProxy.image.repository` | repository for httpProxy image | `` |
 | `httpProxy.image.name` | name for httpProxy image | `aspera-hsts-http-proxy` |
@@ -724,8 +723,6 @@ If installing on ICP for RedHat OpenShift, the HSTS API can be accessed via port
 | `rproxy.address` | address for rproxy | `` |
 | `nameOverride` | nameOverride | `aspera-hsts` |
 | `sch.rbac.serviceAccountName` | serviceAccountName for sch rbac | `ibm-sch-secret-gen` |
-| `sch.global.image.repository` | repository for sch image | `` |
 | `sch.image.name` | name for sch image | `aspera-hsts-utils` |
 | `sch.image.tag` | tag for sch image | `1.2.1-rhel-amd64` |
 | `sch.image.pullPolicy` | pullPolicy for sch image | `IfNotPresent` |
-| `sch.image.pullSecret` | pullSecret for sch image | `` |

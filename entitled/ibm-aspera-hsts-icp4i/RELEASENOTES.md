@@ -4,7 +4,12 @@ ___
 
 ## What's new
 
-* Metering annotations
+* Upgrade to HSTS v3.9.6
+* Openshift Container Storage (OCS) Support
+* Openshift Routes support
+* Openshift 4.3 ROKS support
+* Remove Kafka dependency
+* Remove access key generation
 
 ## Fixes
 
@@ -12,11 +17,11 @@ ___
 
 ## Breaking Changes
 
-* None
+* Remove Kafka dependency
 
 ## Prerequisites
 
-1. Kubernetes version >= 1.9.1
+1. Kubernetes version >= 1.11.0
 2. IBM Cloud Private version >= 3.1.0
 3. See the client secret requirements in README.md.
 
@@ -30,11 +35,12 @@ ___
 
 | Chart | Date        | Kubernetes Required | Image(s) Supported         | Details                                                             |
 | ----- | ----------- | ------------------- | -------------------------- | ------------------------------------------------------------------- |
-| 1.2.4 | November 30, 2019 | >= 1.9.1         | aspera-hsts-*  | Metering annotations |
-| 1.2.3 | October 31, 2019 | >= 1.9.1         | aspera-hsts-*  | Secret generation flag fix |
-| 1.2.2 | September 29, 2019 | >= 1.9.1         | aspera-hsts-*  | Entitled Registry support |
-| 1.2.1 | July 5, 2019 | >= 1.9.1         | aspera-hsts-*  | All deployments updated to support multiple replicas, default secret generation |
-| 1.2.0 | June 11, 2019 | >= 1.9.1         | aspera-hsts-*  | Support for IBM Cloud Private on OpenShift |
-| 1.1.1 | March 12, 2019 | >= 1.11.1         | aspera-hsts-*  | Support for IBM Cloud Private 3.1.2 nginx controller, securityContext additions for initContainers|
-| 1.1.0 | February 6, 2019 | >= 1.11.1         | aspera-hsts-*  | Add redis subchart, ConfigMap checksum annotations|
-| 1.0.0 | December 14, 2018 | >= 1.11.1         | aspera-hsts-*  | Initial Release |
+| 1.3.0 | March 6, 2020      | >= 1.11.0 | aspera-hsts-* | Upgrade to HSTS v3.9.6, Openshift Container Storage (OCS) Support, Openshift Routes support, Openshift 4.3 ROKS support, remove Kafka dependency, remove access key generation |
+| 1.2.4 | November 30, 2019  | >= 1.9.1  | aspera-hsts-* | Metering annotations |
+| 1.2.3 | October 31, 2019   | >= 1.9.1  | aspera-hsts-* | Secret generation flag fix |
+| 1.2.2 | September 29, 2019 | >= 1.9.1  | aspera-hsts-* | Entitled Registry support |
+| 1.2.1 | July 5, 2019       | >= 1.9.1  | aspera-hsts-* | All deployments updated to support multiple replicas, default secret generation |
+| 1.2.0 | June 11, 2019      | >= 1.9.1  | aspera-hsts-* | Support for IBM Cloud Private on OpenShift |
+| 1.1.1 | March 12, 2019     | >= 1.11.1 | aspera-hsts-* | Support for IBM Cloud Private 3.1.2 nginx controller, securityContext additions for initContainers |
+| 1.1.0 | February 6, 2019   | >= 1.11.1 | aspera-hsts-* | Add redis subchart, ConfigMap checksum annotations|
+| 1.0.0 | December 14, 2018  | >= 1.11.1 | aspera-hsts-* | Initial Release |

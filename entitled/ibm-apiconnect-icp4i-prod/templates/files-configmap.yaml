@@ -1,26 +1,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "ibm-apiconnect-cip.fullname" . }}-cr-files
+  name: {{ template "ibm-apiconnect-cip.init-files.fullname" . }}
   annotations:
-    icp4i.ibm.com/product: apiconnect
-    icp4i.ibm.com/release: {{ .Release.Name }}
-    productName: {{ template "ibm-apiconnect-cip.productName" . }}
-    productID: {{ template "ibm-apiconnect-cip.productID" . }}
-    productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
+{{ include "ibm-apiconnect-cip.annotations" . | indent 4 }}
   labels:
-    app: {{ template "ibm-apiconnect-cip.name" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{ include "ibm-apiconnect-cip.labels" . | indent 4 }}
 data:
-  # apiconnect-up.yaml templated with cluster CR fields
-  apiconnect-up: |-
-    apiVersion: v1
-    kind: apic.ibm.com/APIConnectCluster
-    metadata:
-      name: {{ .Release.Name }}-apic-cluster
-{{ include "ibm-apiconnect-cip.apic-cluster-spec" . | indent 4 }}
   # empty kubeconfig to allow apicup commands to run
   kubeconfig: |-
     apiVersion: v1
@@ -30,9 +16,13 @@ data:
     kind: Config
     preferences: {}
     users: []
-  # init script to copy set-up files to working dir
   init: |-
     #!/bin/bash
+    ######################################################
+    # init.sh: operator main entrypoint wrapper; updates
+    #   and validates config prior to running operator commands
+    # params: none
+    ######################################################
     set -e
 
     cp -Lr /home/apic/init-files/*.yml . || true
@@ -59,24 +49,144 @@ data:
 
     echo "Running command: $@"
     $@
+  register-crd: |-
+    #!/bin/bash
+    ######################################################
+    # register-crd.sh: creates apic custom resource definition
+    # params: none
+    ######################################################
+
+    CRD_INFO=$(kubectl get customresourcedefinition apiconnectclusters.apic.ibm.com)
+    RC=$?
+
+    # if crd does not exist, create it; insufficient crd create permissions should not result in failure
+    if [ "$RC" != "0" ]; then
+    echo "Custom resource does not exist. Creating..."
+    cat <<EOF | kubectl apply -f -
+    apiVersion: apiextensions.k8s.io/v1beta1
+    kind: CustomResourceDefinition
+    metadata:
+      name: apiconnectclusters.apic.ibm.com
+    spec:
+      group: apic.ibm.com
+      names:
+        kind: APIConnectCluster
+        listKind: APIConnectClusterList
+        plural: apiconnectclusters
+        shortNames:
+        - apic
+        singular: apiconnectcluster
+      scope: Namespaced
+      version: v1
+    EOF
+    fi
+  update-cr: |-
+    #!/bin/bash
+    ######################################################
+    # update-cr.sh: merges new helm chart cr values into cluster's cr
+    #  and creates a corresponding local apiconnect-up.yml copy; this
+    #  allows params such as backup and restore credentials to persist
+    # params: none
+    ######################################################
+
+    # write helm cr info to a file
+    cat <<EOF > /home/apic/apiconnect-up.yml
+{{ include "ibm-apiconnect-cip.apic-cluster-spec" . | indent 4 }}
+    EOF
+
+    # HELM_CR_INFO=$(cat /home/apic/apiconnect-up.yml)
+    HELM_CR_INFO=$(kubectl create -f /home/apic/apiconnect-up.yml --dry-run -o json | jq '. | del(.spec.subsystems[].spec.settings[] | select(.==""))')
+
+    # obtain any existing cluster cr info
+    CLUSTER_CR_INFO=$(kubectl get apiconnectcluster {{ .Release.Name }}-apic-cluster --namespace {{ .Release.Namespace }} --export -o json)
+    RC=$?
+
+    # if cluster cr exists, implement merge between it and helm cr
+    if [ "$RC" == "0" ]; then
+      # filter cr to remove unnecessary fields
+      CLUSTER_CR_INFO=$(echo "$CLUSTER_CR_INFO" | jq '. | .metadata={name: .metadata.name} | del(.status) | del(.spec.subsystems[].spec.settings[] | select(.==""))')
+
+      # get array of subsystems from cluster and helm cr's; base64 encode to enable iterating over them
+      CLUSTER_CR_SUBSYSTEMS=$(echo "$CLUSTER_CR_INFO" | jq -cr '.spec.subsystems[] | @base64')
+      HELM_CR_SUBSYSTEMS=$(echo "$HELM_CR_INFO" | jq -cr '.spec.subsystems[] | @base64')
+
+      # merge helm chart cr with cluster cr; ignore subsystems, as these will be merged below
+      NEW_CR_SPEC=$(echo -e "$CLUSTER_CR_INFO" "$HELM_CR_INFO" | jq -rcs '.[0] * .[1] | .spec.subsystems=[]')
+      NEW_CR_SUBSYSTEMS="[]"
+
+      for i in $CLUSTER_CR_SUBSYSTEMS; do
+        # obtain subsystem info; base64 decode to get it into json form
+        SUBSYS_INFO=$(echo $i | base64 --decode)
+        SUBSYS_NAME=$(echo $SUBSYS_INFO | jq -r '.metadata.name')
+
+        # find any matching subsystem between helm chart cr and cluster cr
+        HELM_SUBSYS_INFO=$(echo "$HELM_CR_INFO" | jq --arg SUBSYS_NAME "$SUBSYS_NAME" '.spec.subsystems[] | select(.metadata.name == $SUBSYS_NAME) | .')
+
+        if [ "$HELM_SUBSYS_INFO" != "" ]; then
+          # merge cluster cr subsystem data with helm cr subsystem data
+          NEW_SUBSYS_INFO=$(echo -e "$SUBSYS_INFO" "$HELM_SUBSYS_INFO" | jq -s '.[0] * .[1]')
+
+          # update new subsystem list with merged data
+          NEW_CR_SUBSYSTEMS=$(echo -e "$NEW_CR_SUBSYSTEMS" "$NEW_SUBSYS_INFO" | jq -rcs '.[0] + [.[1]]')
+        else
+          # subsystem exists only in cluster cr; carry over into new subsystem list
+          NEW_CR_SUBSYSTEMS=$(echo -e "$NEW_CR_SUBSYSTEMS" "$SUBSYS_INFO" | jq -rcs '.[0] + [.[1]]')
+        fi
+      done
+      for i in $HELM_CR_SUBSYSTEMS; do
+        # obtain subsystem info; base64 decode to get it into json form
+        SUBSYS_INFO=$(echo $i | base64 --decode)
+        SUBSYS_NAME=$(echo $SUBSYS_INFO | jq -r '.metadata.name')
+
+        # find any matching subsystem between helm chart cr and cluster cr
+        CLUSTER_SUBSYS_INFO=$(echo "$CLUSTER_CR_INFO" | jq --arg SUBSYS_NAME "$SUBSYS_NAME" '.spec.subsystems[] | select(.metadata.name == $SUBSYS_NAME) | .')
+
+        if [ "$CLUSTER_SUBSYS_INFO" == "" ]; then
+          # subsystem exists only in helm cr; carry over into new subsystem list
+          NEW_CR_SUBSYSTEMS=$(echo -e "$NEW_CR_SUBSYSTEMS" "$SUBSYS_INFO" | jq -rcs '.[0] + [.[1]]')
+        fi
+      done
+
+      # add subsystem list to local cr copy
+      NEW_CR_SPEC=$(echo "$NEW_CR_SPEC" | jq -rc . | sed 's#"subsystems":\[\]#"subsystems":'"$NEW_CR_SUBSYSTEMS"'#g') 
+      echo "$NEW_CR_SPEC" | jq . > /home/apic/apiconnect-up.yml
+    fi
+
+    # apply new resource to the cluster
+    kubectl apply -f /home/apic/apiconnect-up.yml
+
+    # update local cr copy to match apiconnect-up.yml spec
+    kubectl get apiconnectcluster {{ .Release.Name }}-apic-cluster --namespace {{ .Release.Namespace }} --export -o yaml | sed 's#apiVersion: apic.ibm.com/v1#apiVersion: v1#g; s#kind: APIConnectCluster#kind: apic.ibm.com/APIConnectCluster#g' > /home/apic/apiconnect-up.yml
   helm-wrapper: |-
     #!/bin/bash
+    ######################################################
+    # helm_wrapper.sh: wraps helm commands with required --tls
+    #   flag and optional flags use for Tiller NodePort
+    # params: none
+    ######################################################
+
     {{ if .Values.operator.tiller.useNodePort }}
     /opt/helm/{{"{{"}}.helm_version{{"}}"}}/helm $@ --tls --host {{"{{"}}.cluster_addr{{"}}"}}:{{"{{"}}.tiller_port{{"}}"}}
     {{ else }}
     /opt/helm/{{"{{"}}.helm_version{{"}}"}}/helm $@ --tls
     {{ end }}
-  # top-level delete script for cluster CR and subsystem delete jobs
   delete-cluster: |-
     #!/bin/bash
+    ######################################################
+    # delete-cluster.sh: deletes all apic top-level and subsystem
+    #   resources
+    # params: top-level release to delete
+    ######################################################
     set -xe
     set -o pipefail
 
     CR_NAMESPACE="{{ .Release.Namespace }}"
-    echo "Getting apiconnectcluster release data"
-    CR_RELEASE_DATA=$(kubectl get apiconnectcluster ${1}-apic-cluster --namespace $CR_NAMESPACE -o json | jq -r '.status.releases | values[]')
-    RELEASES=()
     ICP_CLIENT_NAME="{{ .Release.Name }}-oidc-client"
+    RELEASES=()
+
+    echo "Getting apiconnectcluster release data"
+    CR_RELEASE_DATA=$(kubectl get apiconnectcluster ${1}-apic-cluster --namespace $CR_NAMESPACE -o json | jq -r '.status.appliedChartHash | keys[]')
+    HELM_RELEASE_DATA=$(helm ls --all --namespace $CR_NAMESPACE | awk '{print $1}')
 
     # delete apiconnectcluster CR
     echo "Deleting apiconnectcluster custom resource"
@@ -89,28 +199,35 @@ data:
     echo "Deleting subsystem secrets"
     kubectl delete secrets -l heritage=apicup --namespace $CR_NAMESPACE
     for SUBSYS_RELEASE in ${CR_RELEASE_DATA}; do
+
+    if [[ "$HELM_RELEASE_DATA" =~ "$SUBSYS_RELEASE" ]]; then
     cat <<EOF | kubectl create -f -
 {{ include "ibm-apiconnect-cip.delete-subsys-job" . | indent 4 }}
     EOF
+    fi
     done
 
-     for i in `seq 1 40`; do
+    for i in `seq 1 40`; do
       RELEASES_DELETED=true
       for SUBSYS_RELEASE in ${CR_RELEASE_DATA}; do
-          JOB_DATA=$(kubectl get job {{ template "ibm-apiconnect-cip.fullname" . }}-delete-$SUBSYS_RELEASE -o json)
-          SUCCESS=$(echo $JOB_DATA | jq .status.succeeded)
-          if [ "$SUCCESS" != "1" ]; then
-            echo "Waiting for release $SUBSYS_RELEASE to be deleted..."
-            RELEASES_DELETED=false
-          else
-            echo "Release $SUBSYS_RELEASE has been deleted"
+          if [[ "$HELM_RELEASE_DATA" =~ "$SUBSYS_RELEASE" ]]; then
+            JOB_DATA=$(kubectl get job {{ printf "%s" .Release.Name | trunc 44 | trimSuffix "-" }}-delete-$SUBSYS_RELEASE -o json)
+            SUCCESS=$(echo $JOB_DATA | jq .status.succeeded)
+            if [ "$SUCCESS" != "1" ]; then
+              echo "Waiting for release $SUBSYS_RELEASE to be deleted..."
+              RELEASES_DELETED=false
+            else
+              echo "Release $SUBSYS_RELEASE has been deleted"
+            fi
           fi
       done
 
       if [ "${RELEASES_DELETED}" == "true" ]; then 
         echo "All releases have been deleted"
         for SUBSYS_RELEASE in ${CR_RELEASE_DATA}; do
-          kubectl delete job {{ template "ibm-apiconnect-cip.fullname" . }}-delete-$SUBSYS_RELEASE
+          if [[ "$HELM_RELEASE_DATA" =~ "$SUBSYS_RELEASE" ]]; then
+            kubectl delete job {{ printf "%s" .Release.Name | trunc 44 | trimSuffix "-" }}-delete-$SUBSYS_RELEASE
+          fi
         done
         exit 0
       fi
@@ -120,9 +237,12 @@ data:
 
     echo "Atempts exceeded waiting for releases to be deleted"
     exit 1
-  # subsystem delete script
   delete-subsys: |-
     #!/bin/bash
+    ######################################################
+    # delete-subsys.sh: deletes all resources of a given subsystem
+    # params: none
+    ######################################################
     set -xe
     set -o pipefail
 
@@ -133,8 +253,27 @@ data:
     kubectl delete pvc,job -l release=$SUBSYS_RELEASE --namespace $SUBSYS_NAMESPACE
     kubectl delete pvc,job -l controller=$SUBSYS_RELEASE-apiconnect-cc --namespace $SUBSYS_NAMESPACE
     kubectl delete secrets -l heritage=apicup --namespace $SUBSYS_NAMESPACE
+  migrate-helm-releases: |-
+    #!/bin/bash
+    ######################################################
+    # migrate-helm-releases.sh: migrate subsystem helm
+    #   releases to support k8s 1.16+
+    # params: none
+    ######################################################
+    set -e
+
+    SUBSYSTEMS=$(kubectl get apiconnectcluster {{ .Release.Name }}-apic-cluster --namespace {{ .Release.Namespace }} --export -o json | jq -r .spec.subsystems[].metadata.name)
+    for i in $SUBSYSTEMS; do
+      apicup subsys helm-migrate $i  --accept-license
+    done
   patch-pullsecrets: |-
     #!/bin/bash
+    ######################################################
+    # patch-pullsecrets.sh: removes empty {} pullsecret to
+    #   prevent upgrades from breaking
+    # params: none
+    ######################################################
+
     SERVICEACCOUNTS=$(kubectl get sa -o json | jq -r '.items[] | select(.imagePullSecrets) | select(.imagePullSecrets[] | .name | not) | .metadata.name')
     for NAME in ${SERVICEACCOUNTS}; do
       PULLSECRETS=$(kubectl get sa $NAME -o json | jq -r .imagePullSecrets)
@@ -167,7 +306,8 @@ data:
   register-oidc: |-
     #!/bin/bash
     ######################################################
-    # register-oidc.sh
+    # register-oidc.sh: configures single sign-on for apic
+    #   via icp user registry
     # params:
     #   registration_type: 'install' or 'upgrade'
     ######################################################
@@ -191,6 +331,9 @@ data:
 
     MGMT_API_EP="{{ .Values.management.platformApiEndpoint }}"
     echo "Using APIC platform API endpoint: ${MGMT_API_EP}"
+
+    CONSUMER_API_EP="{{ .Values.management.consumerApiEndpoint }}"
+    echo "Using APIC consumer API endpoint: ${CONSUMER_API_EP}"
 
     cat <<EOF | kubectl apply -f -
     apiVersion: oidc.security.ibm.com/v1
@@ -223,10 +366,22 @@ data:
         - ${ICP_MASTER_EP}:${ICP_HTTPS_PORT}
         redirect_uris:
         - https://${MGMT_API_EP}/api/oauth2/redirect
+        - https://${CONSUMER_API_EP}/consumer-api/oauth2/redirect
     EOF
 
     # for now, sleep; in the future, wait for a status
-    sleep 120
+    RETRIES=12
+    echo "Waiting for ready OIDC client..."
+    while [ "$(kubectl get client $ICP_CLIENT_NAME -o json | jq '.status.conditions[] | select(.type=="Ready" and .status=="True")')" == "" ]; do
+      if [[ "$RETRIES" -le 0 ]]; then
+          echo "[ERROR] Timeout waiting for ready OIDC client"
+          exit 1
+      else
+        echo "OIDC client is not ready. Checking again in 10 seconds..."
+      fi
+      RETRIES=$(($RETRIES-1))
+      sleep 10
+    done
 
     # obtain ICS client id and secret
     ICP_CLIENT_DATA=$(kubectl get secret $ICP_CLIENT_SECRET_NAME --namespace=$APIC_CLIENT_SECRET_NAMESPACE -o json | jq .data)
@@ -313,20 +468,21 @@ data:
       -H "authorization: Bearer ${ADMIN_TOKEN}" \
       -H 'content-type: application/json' | jq -r .url)
 
-    # get or create new user registry and obtain url
-    echo "Searching for existing Common Services user registry..."
-    REG_URL=$(curl -k -sS GET \
+    REG_DATA=$(curl -k -sS GET \
       https://${MGMT_API_EP}/api/orgs/admin/user-registries \
       -H 'accept: application/json' \
       -H "authorization: Bearer ${ADMIN_TOKEN}" \
-      -H 'content-type: application/json' | jq -r '.results[] | select((.name == "ibm-cloud-private") or (.name == "ibm-common-services")) | .url')
+      -H 'content-type: application/json' | jq '.results')
 
-    if [ "$REG_URL" != "" ]; then
+    # get or create new user registry and obtain url
+    echo "Searching for existing Common Services user registry..."
+    ICP_REG_URL=$(echo "$REG_DATA" | jq -r '.[] | select((.name == "ibm-cloud-private") or (.name == "ibm-common-services")) | .url' )
+
+    if [ "$ICP_REG_URL" != "" ]; then
       echo "Found existing Common Services user registry"
     else
       echo "No IBM Common Services user registry found - creating new user registry..."
-      echo ""
-      REG_URL=$(curl -k -sS -X POST \
+      ICP_REG_URL=$(curl -k -sS -X POST \
         https://${MGMT_API_EP}/api/orgs/admin/user-registries \
         -H 'accept: application/json' \
         -H "authorization: Bearer ${ADMIN_TOKEN}" \
@@ -367,11 +523,32 @@ data:
     EXISTING_PROVIDER_REG=$(echo $EXISTING_REG | jq -r .provider_user_registry_urls)
     EXISTING_ADMIN_REG=$(echo $EXISTING_REG | jq -r .admin_user_registry_urls)
 
-    if [[ "$EXISTING_PROVIDER_REG" =~ "$REG_URL" ]]; then
+    # get apim lur url
+    APIM_LUR_URL=$(echo "$REG_DATA" | jq -r '.[] | select(.name == "api-manager-lur") | .url' )
+
+    if [[ "$EXISTING_PROVIDER_REG" =~ "$APIM_LUR_URL" ]]; then
+      echo "APIM local user registry already added to api provider scope..."
+    else
+      # concat existing provider and newly-created user registries
+      UPDATED_PROVIDER_REGISTRIES=$(echo $EXISTING_PROVIDER_REG | jq -r --arg APIM_LUR_URL "$APIM_LUR_URL" '. += [$APIM_LUR_URL] | join("\", \"")')
+
+      # add new user registry to the api provider scope
+      echo "Adding API Manager Local User Registry back to provider scope..."
+      curl -k -sS -X PUT \
+        https://${MGMT_API_EP}/api/cloud/settings/user-registries \
+        -H 'accept: application/json' \
+        -H "authorization: Bearer ${ADMIN_TOKEN}" \
+        -H 'content-type: application/json' \
+        -d '{
+          "provider_user_registry_urls": [ "'"$UPDATED_PROVIDER_REGISTRIES"'" ]
+        }'
+    fi
+
+    if [[ "$EXISTING_PROVIDER_REG" =~ "$ICP_REG_URL" ]]; then
       echo "IBM Common Services user registry already added to api provider scope..."
     else
       # concat existing provider and newly-created user registries
-      UPDATED_PROVIDER_REGISTRIES=$(echo $EXISTING_PROVIDER_REG | jq -r --arg REG_URL "$REG_URL" '. += [$REG_URL] | join("\", \"")')
+      UPDATED_PROVIDER_REGISTRIES=$(echo $EXISTING_PROVIDER_REG | jq -r --arg ICP_REG_URL "$ICP_REG_URL" '. += [$ICP_REG_URL] | join("\", \"")')
 
       # add new user registry to the api provider scope
       echo "Adding new user registry to provider scope..."
@@ -382,14 +559,14 @@ data:
         -H 'content-type: application/json' \
         -d '{
           "provider_user_registry_urls": [ "'"$UPDATED_PROVIDER_REGISTRIES"'" ]
-      }'
+        }'
     fi
 
-    if [[ "$EXISTING_ADMIN_REG" =~ "$REG_URL" ]]; then
+    if [[ "$EXISTING_ADMIN_REG" =~ "$ICP_REG_URL" ]]; then
       echo "IBM Common Services user registry already added to admin scope..."
     else
       # concat existing admin and newly-created user registries
-      UPDATED_ADMIN_REGISTRIES=$(echo $EXISTING_ADMIN_REG | jq -r --arg REG_URL "$REG_URL" '. += [$REG_URL] | join("\", \"")')
+      UPDATED_ADMIN_REGISTRIES=$(echo $EXISTING_ADMIN_REG | jq -r --arg ICP_REG_URL "$ICP_REG_URL" '. += [$ICP_REG_URL] | join("\", \"")')
 
       # add new user registry to admin scope
       echo "Adding new user registry to admin scope..."
@@ -411,7 +588,7 @@ data:
       -H "authorization: Bearer ${ADMIN_TOKEN}" \
       -H 'content-type: application/json' \
       -d '{
-        "provider_user_registry_default_url": "'"${REG_URL}"'"
+        "provider_user_registry_default_url": "'"${ICP_REG_URL}"'"
       }'
     curl -k -sS -X PUT \
       https://${MGMT_API_EP}/api/cloud/settings/user-registries \
@@ -419,21 +596,8 @@ data:
       -H "authorization: Bearer ${ADMIN_TOKEN}" \
       -H 'content-type: application/json' \
       -d '{
-        "admin_user_registry_default_url": "'"${REG_URL}"'"
+        "admin_user_registry_default_url": "'"${ICP_REG_URL}"'"
       }'
-
-    # remove other user registries from the api provider scope
-    echo "Removing non-ICS user registries from provider scope..."
-    curl -k -sS -X PUT \
-      https://${MGMT_API_EP}/api/cloud/settings/user-registries \
-      -H 'accept: application/json' \
-      -H "authorization: Bearer ${ADMIN_TOKEN}" \
-      -H 'content-type: application/json' \
-      -d '{
-       "provider_user_registry_urls":[
-          "'"${REG_URL}"'"
-       ]
-    }'
 
     # find ID of OIDC registry created previously
     REG_ID=$(curl -k -sS GET \

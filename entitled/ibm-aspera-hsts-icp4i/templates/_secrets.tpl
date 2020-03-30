@@ -1,21 +1,32 @@
 {{- include "sch.config.init" (list . "hsts.sch.chart.config.values") -}}
 
 {{ define "hsts.cert" -}}
- {{- if .Values.ingress.tlsSecret -}}
- {{ .Values.ingress.tlsSecret }}
- {{- else if .Values.tls.issuer -}}
- {{ include "sch.names.fullCompName" (list . .sch.chart.components.certificate) | quote }}
- {{- else -}}
- {{ printf "%s-%s" "cert" .sch.chart.secretGen.suffix }}
- {{- end -}}
+  {{- if .Values.ingress.tlsSecret -}}
+  {{ .Values.ingress.tlsSecret }}
+  {{- else if .Values.tls.issuer -}}
+  {{ include "sch.names.fullCompName" (list . .sch.chart.components.certificate) | quote }}
+  {{- else -}}
+  {{ printf "%s-%s" "cert" .sch.chart.secretGen.suffix }}
+  {{- end -}}
 {{- end }}
 
-{{ define "hsts.secret.accessKey" -}}
-  {{ default (printf "%s-%s" "access-key" .sch.chart.secretGen.suffix) .Values.asperanode.accessKeySecret }}
+# On OpenShift we use service annotations to generate unique secrets for each service
+{{ define "hsts.cert.transfers" -}}
+  {{- if .Values.ingress.tlsSecret -}}
+  {{ .Values.ingress.tlsSecret }}
+  {{- else if .Values.tls.issuer -}}
+  {{ include "sch.names.fullCompName" (list . .sch.chart.components.certificate) | quote }}
+  {{- else -}}
+  {{ printf "%s-%s-transfers" "cert" .sch.chart.secretGen.suffix }}
+  {{- end -}}
 {{- end }}
 
 {{ define "hsts.secret.nodeAdmin" -}}
   {{ default (printf "%s-%s" "node-admin" .sch.chart.secretGen.suffix) .Values.asperanode.nodeAdminSecret }}
+{{- end }}
+
+{{ define "hsts.secret.tokenEncryptionKey" -}}
+  {{ default (printf "%s-%s" "token-encryption-key" .sch.chart.secretGen.suffix) .Values.asperanode.tokenEncryptionKeySecret }}
 {{- end }}
 
 {{ define "hsts.secret.sshdKeys" -}}

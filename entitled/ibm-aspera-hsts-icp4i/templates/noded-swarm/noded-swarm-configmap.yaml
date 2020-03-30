@@ -16,7 +16,7 @@ data:
       annotations:
         checksum/aspera-conf-configmap: {{ include (print $.Template.BasePath "/asperanode/asperanode-configmap.yaml") . |  sha256sum | trunc 63 }}
         checksum/asconfigurator: {{ tpl (toYaml .Values.asperaconfig) . | sha256sum | trunc 63 }}
-        checksum/server-secret: {{ tpl (toYaml .Values.asperanode.serverSecret) . | sha256sum | trunc 63 }}
+        checksum/server-secret: {{ tpl (toYaml .Values.asperanode.asperaLicense) . | sha256sum | trunc 63 }}
         kompose.cmd: kompose convert -c -f docker-compose-json.yml
         kompose.version: 1.9.0 (HEAD)
         {{- if .Values.productionDeployment }}
@@ -31,14 +31,16 @@ data:
     spec:
       nodeName: __NODE__
       serviceAccountName: {{ .Values.rbac.serviceAccountName }}
-      {{- if .Values.image.pullSecret }}
+      {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
-      - name: {{ .Values.image.pullSecret }}
+      - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
       affinity:
 {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
       volumes:
 {{ include "hsts.spec.volumes.common" . | indent 6 }}
+      - name: aspera-log-dir
+        emptyDir: {}
       initContainers:
 {{ include "hsts.spec.init.asperacert" . | indent 6 }}
 {{ include "hsts.spec.init.probe.redisMaster" . | indent 6 }}
@@ -78,10 +80,9 @@ data:
           subPath: aspera.conf
       containers:
 {{ include "hsts.spec.container.ascplog" . | indent 6 }}
-{{ include "hsts.spec.container.nodelog" . | indent 6 }}
       - name: asperanode
         securityContext:
-          fsGroup: {{ .Values.persistence.fsGroup }}
+          fsGroup: {{ .Values.securityContext.fsGroup }}
           privileged: false
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
@@ -90,22 +91,15 @@ data:
           capabilities:
             drop:
             - ALL
-        image: {{ include "hsts.image.nodedSwarmMember" . }}
-        imagePullPolicy: {{ .Values.nodedSwarmMember.image.pullPolicy }}
-        env:
-        - name: TRANSFER_MONITOR_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: TRANSFER_MONITOR_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
+        image: {{ include "hsts.image.asperanode" . }}
+        imagePullPolicy: {{ .Values.asperanode.image.pullPolicy }}
         volumeMounts:
-        - name: external-process-log
+        - name: aspera-log-dir
           mountPath: /opt/aspera/var/log
-        - name: hsts-storage
-          mountPath: {{ .Values.persistence.mountPath }}
+        {{- range $i, $p := .Values.persistence }}
+        - name: {{ include "hsts.transfer.pvc" (list $ $p $i) }}
+          mountPath: {{ $p.mountPath }}
+        {{- end }}
         - name: aspera-conf
           mountPath: "/opt/aspera/etc/aspera.conf"
           subPath: aspera.conf

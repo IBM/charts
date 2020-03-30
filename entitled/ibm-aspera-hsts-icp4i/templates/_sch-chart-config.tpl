@@ -24,10 +24,6 @@ sch:
         compName: "prometheus-endpoint"
       stats:
         compName: "stats"
-      receiver:
-        compName: "receiver"
-        env:
-          compName: "receiver-env"
       ascpLoadbalancer:
         compName: "ascp-loadbalancer"
       ascpSwarm:
@@ -36,6 +32,8 @@ sch:
           compName: "ascp-swarm-env"
         member:
           compName: "ascp-swarm-member"
+          env:
+            compName: "ascp-swarm-member-env"
         delete:
           compName: "ascp-swarm-delete"
         prefix: "ascp"
@@ -71,24 +69,24 @@ sch:
           api: "node-api"
         ingress: "ingress"
         configMap: "node"
-        job:
-          createAccessKey: "create-access-key-v1"
+      lifecycle:
+        compName: "lifecycle"
 
     meteringProd:
-      productName: "IBM Cloud Pak for Integration - Aspera High-Speed Transfer Server (Chargeable)"
-      productID: "AsperaHSTS_5737_I89_ICP4I_chargeable"
+      productName: "IBM Aspera High-Speed Transfer Server (Chargeable)"
+      productID: "e73360a854824b6f9198f9b314e8802b"
       productMetric: "VIRTUAL_PROCESSOR_CORE"
-      productVersion: "3.9.5"
+      productVersion: "3.9.10"
       productCloudpakRatio: "1:2"
       productChargedContainers: "All"
       cloudpakName: "IBM Cloud Pak for Integration"
       cloudpakId: "c8b82d189e7545f0892db9ef2731b90d"
 
     meteringNonProd:
-      productName: "IBM Cloud Pak for Integration (non-production) - Aspera High-Speed Transfer Server (Chargeable)"
-      productID: "AsperaHSTS_5737_I89_ICP4I_nonProd_chargeable"
+      productName: "IBM Aspera High-Speed Transfer Server (Non-production) (Chargeable)"
+      productID: "e73360a854824b6f9198f9b314e8802b"
       productMetric: "VIRTUAL_PROCESSOR_CORE"
-      productVersion: "3.9.5"
+      productVersion: "3.9.10"
       productCloudpakRatio: "1:1"
       productChargedContainers: "All"
       cloudpakName: "IBM Cloud Pak for Integration"
@@ -98,13 +96,11 @@ sch:
       suffix: "{{ .Release.Name }}-ibm-aspera-hsts"
       overwriteExisting: false
       secrets:
-      - name: access-key
-        create: {{ empty .Values.asperanode.accessKeySecret }}
+      - name: token-encryption-key
+        create: {{ empty .Values.asperanode.tokenEncryptionKeySecret }}
         type: generic
         values:
-        - name: ACCESS_KEY_ID
-          length: 40
-        - name: ACCESS_KEY_SECRET
+        - name: TOKEN_ENCRYPTION_KEY
           length: 40
       - name: node-admin
         create: {{ empty .Values.asperanode.nodeAdminSecret }}
@@ -115,11 +111,11 @@ sch:
         - name: NODE_PASS
           length: 40
       - name: cert
-        create: {{ and (empty .Values.ingress.tlsSecret) (empty .Values.tls.issuer) }}
+        create: {{ and (empty .Values.ingress.tlsSecret) (empty .Values.tls.issuer) ( not (.Capabilities.APIVersions.Has "route.openshift.io/v1") ) }}
         type: tls
         cn: "{{ .Values.ingress.hostname }}"
       - name: sshd
-        create: {{ empty .Values.sshdKeysSecret }}
+        create: "{{ empty .Values.sshdKeysSecret }}"
         type: rsa
         privateKeyName: ssh_host_rsa_key
         publicKeyName: ssh_host_rsa_key.pub

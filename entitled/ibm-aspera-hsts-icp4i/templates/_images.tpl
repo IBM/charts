@@ -11,14 +11,14 @@
   {{- $imageRepository := index $params 1 -}}
   {{- $name := index $params 2 -}}
   {{- $tag := index $params 3 -}}
-  {{- $repository := coalesce $imageRepository $context.Values.image.repository -}}
+  {{- $repository := coalesce $imageRepository $context.Values.global.image.repository -}}
   {{ list $repository $name | join "/" | clean }}:{{ $tag }}
 {{- end }}
 
 {{ define "hsts.image.pullSecrets" -}}
   {{- $imageSecList := list -}}
-  {{- if (.Values.image.pullSecret) }}
-    {{- $imageSecList := append $imageSecList .Values.image.pullSecret -}}
+  {{- if (.Values.global.image.pullSecret) }}
+    {{- $imageSecList := append $imageSecList .Values.global.image.pullSecret -}}
   {{- end }}
 {{ (dict "imagePullSecrets" $imageSecList) | toYaml  }}
 {{- end }}
@@ -48,11 +48,6 @@
    {{ include "hsts.image.assemble" ($params) }}
 {{- end }}
 
-{{ define "hsts.image.nodedSwarmMember" -}}
-   {{- $params := (list . .Values.nodedSwarmMember.image.repository .Values.nodedSwarmMember.image.name .Values.nodedSwarmMember.image.tag) -}}
-   {{ include "hsts.image.assemble" ($params) }}
-{{- end }}
-
 {{ define "hsts.image.election" -}}
    {{- $params := (list . .Values.election.image.repository .Values.election.image.name .Values.election.image.tag) -}}
    {{ include "hsts.image.assemble" ($params) }}
@@ -60,11 +55,6 @@
 
 {{ define "hsts.image.swarm" -}}
    {{- $params := (list . .Values.swarm.image.repository .Values.swarm.image.name .Values.swarm.image.tag) -}}
-   {{ include "hsts.image.assemble" ($params) }}
-{{- end }}
-
-{{ define "hsts.image.receiverSwarm" -}}
-   {{- $params := (list . .Values.receiver.swarm.image.repository .Values.receiver.swarm.image.name .Values.receiver.swarm.image.tag) -}}
    {{ include "hsts.image.assemble" ($params) }}
 {{- end }}
 
@@ -96,4 +86,14 @@
 {{ define "hsts.image.sch" -}}
    {{- $params := (list . .Values.sch.global.image.repository .Values.sch.image.name .Values.sch.image.tag) -}}
    {{ include "hsts.image.assemble" ($params) }}
+{{- end }}
+
+{{ define "hsts.image.ascp" -}}
+  {{- $params := (list . .Values.ascp.image.repository .Values.ascp.image.name .Values.ascp.image.tag) -}}
+  {{ include "hsts.image.assemble" ($params) }}
+{{- end }}
+
+{{ define "hsts.image.lifecycle" -}}
+  {{- $params := (list . .Values.lifecycle.image.repository .Values.lifecycle.image.name .Values.lifecycle.image.tag) -}}
+  {{ include "hsts.image.assemble" ($params) }}
 {{- end }}

@@ -1,39 +1,25 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ template "ibm-apiconnect-cip.fullname" . }}-operator
+  name: {{ template "ibm-apiconnect-cip.operator.fullname" . }}
   labels:
-    app: {{ template "ibm-apiconnect-cip.name" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
-    component: {{ template "ibm-apiconnect-cip.name" . }}-operator
+{{ include "ibm-apiconnect-cip.labels" . | indent 4 }}
+    component: ibm-apiconnect-icp4i-prod-operator
+    revision: "{{ .Release.Revision }}"
 spec:
   replicas: 1
-  serviceName: {{ template "ibm-apiconnect-cip.fullname" . }}-operator
+  serviceName: {{ template "ibm-apiconnect-cip.operator.fullname" . }}
   selector:
     matchLabels:
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "ibm-apiconnect-cip.name" . }}
-        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-        release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
-        component: {{ template "ibm-apiconnect-cip.name" . }}-operator
+{{ include "ibm-apiconnect-cip.labels" . | indent 8 }}
+        component: ibm-apiconnect-icp4i-prod-operator
+        revision: "{{ .Release.Revision }}"
       annotations:
-        icp4i.ibm.com/product: apiconnect
-        icp4i.ibm.com/release: {{ .Release.Name }}
-        productName: {{ template "ibm-apiconnect-cip.productName" . }}
-        productID: {{ template "ibm-apiconnect-cip.productID" . }}
-        productVersion: {{ template "ibm-apiconnect-cip.productVersion" . }}
-        productMetric: {{ template "ibm-apiconnect-cip.productMetric" . }}
-        productChargedContainers: ""
-        productCloudpakRatio: {{ template "ibm-apiconnect-cip.productCloudpakRatio" . }}
-        cloudpakName: {{ template "ibm-apiconnect-cip.cloudpakName" . }}
-        cloudpakId: {{ template "ibm-apiconnect-cip.cloudpakId" . }}
-        cloudpakVersion: {{ template "ibm-apiconnect-cip.cloudpakVersion" . }}
+{{ include "ibm-apiconnect-cip.annotations" . | indent 8 }}
     spec:
       serviceAccountName: {{ template "ibm-apiconnect-cip.serviceAccountName" . }}
       affinity:
@@ -51,62 +37,65 @@ spec:
       securityContext:
 {{ include "ibm-apiconnect-cip.podSecurityContext" . | indent 8 }}
       initContainers:
-{{- if not .Release.IsInstall }}
-        - name: patch-pullsecrets
-{{- if .Values.operator.registry }}
-          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
-{{- else }}
-          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
-{{- end }}
-          imagePullPolicy: {{ .Values.operator.pullPolicy }}
-          command: [ "/home/apic/init-files/patch-pullsecrets.sh" ]
-          workingDir: /home/apic
-          resources:
-{{ include "ibm-apiconnect-cip.resources" . | indent 12 }}
+{{- if .Values.global.createCrds }}
+        # initialize cluster crd
+        - name: register-crd
+{{ include "ibm-apiconnect-cip.containerSpec" . | indent 10 }}
+          command: [ "/home/apic/init-files/register-crd.sh" ]
           volumeMounts:
           - name: init-files
             mountPath: "/home/apic/init-files"
-          securityContext:
-{{ include "ibm-apiconnect-cip.securityContext" . | indent 12 }}
-{{- end}}
-        - name: wait
-{{- if .Values.operator.registry }}
-          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
-{{- else }}
-          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
 {{- end }}
-          imagePullPolicy: {{ .Values.operator.pullPolicy }}
-          command: [ "bash", "-c", "sleep 180" ]
-          resources:
-{{ include "ibm-apiconnect-cip.resources" . | indent 12 }}
-          securityContext:
-{{ include "ibm-apiconnect-cip.securityContext" . | indent 12 }}
-        - name: clean-project
-{{- if .Values.operator.registry }}
-          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
-{{- else }}
-          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
-{{- end }}
-          imagePullPolicy: {{ .Values.operator.pullPolicy }}
-          command: [ "bash", "-c", "find . -maxdepth 1 -name '*-apic-cluster-*' -type d -exec rm -rf {} +" ]
-          workingDir: /home/apic
-          resources:
-{{ include "ibm-apiconnect-cip.resources" . | indent 12 }}
+        # merge cluster and helm custom resources, create a corresponding local apiconnect-up.yml copy, and update the remote resource
+        - name: update-cr
+{{ include "ibm-apiconnect-cip.containerSpec" . | indent 10 }}
+          command: [ "/home/apic/init-files/update-cr.sh" ]
           volumeMounts:
           - name: project
             mountPath: "/home/apic"
-          securityContext:
-{{ include "ibm-apiconnect-cip.securityContext" . | indent 12 }}
-      containers:
-        - name: {{ .Chart.Name }}
-{{- if .Values.operator.registry }}
-          image: {{ regexReplaceAll "/$" .Values.operator.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
-{{- else }}
-          image: {{ regexReplaceAll "/$" .Values.global.registry "" }}/{{ .Values.operator.image }}:{{ .Values.operator.tag }}
+          - name: init-files
+            mountPath: "/home/apic/init-files"
+{{- if not .Release.IsInstall }}
+        # use helm migration tool to prepare subsystem releases for k8s 1.16+
+        - name: migrate-helm-releases
+{{ include "ibm-apiconnect-cip.containerSpec" . | indent 10 }}
+          command: [ "/home/apic/init-files/migrate-helm-releases.sh" ]
+          workingDir: /home/apic
+          volumeMounts:
+          - name: project
+            mountPath: "/home/apic"
+          - name: init-files
+            mountPath: "/home/apic/init-files"
+          env:
+            - name: HOME
+              value: "/home/apic"
+            - name: KUBECONFIG
+              value: "/home/apic/init-files/config"
 {{- end }}
-          imagePullPolicy: {{ .Values.operator.pullPolicy }}
+{{- if not .Release.IsInstall }}
+        # fix any empty pull secrets that would break upgrade
+        - name: patch-pullsecrets
+{{ include "ibm-apiconnect-cip.containerSpec" . | indent 10 }}
+          command: [ "/home/apic/init-files/patch-pullsecrets.sh" ]
+          workingDir: /home/apic
+          volumeMounts:
+          - name: init-files
+            mountPath: "/home/apic/init-files"
+{{- end }}
+        # remove directories that must be regenerated by apicup
+        - name: clean-project
+{{ include "ibm-apiconnect-cip.containerSpec" . | indent 10 }}
+          command: [ "bash", "-c", "find . -maxdepth 1 -name '*-apic-cluster-*' -type d -exec rm -rf {} +" ]
+          workingDir: /home/apic
+          volumeMounts:
+          - name: project
+            mountPath: "/home/apic"
+      containers:
+        # start the operator
+        - name: operator
+{{ include "ibm-apiconnect-cip.containerSpec" . | indent 10 }}
           command: [ "/home/apic/init-files/init.sh" ]
-          args: [ "apicup", "server", "--debug", "--create-crd={{ .Values.global.createCrds }}", "--accept-license" ]
+          args: [ "apicup", "server", "--debug", "--create-crd=false", "--accept-license" ]
           env:
             - name: HOME
               value: "/home/apic"
@@ -121,6 +110,7 @@ spec:
           ports:
             - containerPort: 1776
           livenessProbe:
+            initialDelaySeconds: 30
             httpGet:
               path: /
               port: 1777
@@ -129,8 +119,6 @@ spec:
               path: /
               port: 1777
           workingDir: /home/apic
-          resources:
-{{ include "ibm-apiconnect-cip.resources" . | indent 12 }}
           volumeMounts:
           - name: apic-extra-values
             mountPath: "/home/apic/extra-values"
@@ -142,25 +130,25 @@ spec:
             mountPath: "/home/apic/init-files"
           - name: project
             mountPath: "/home/apic"
-          securityContext:
-{{ include "ibm-apiconnect-cip.securityContext" . | indent 12 }}
       volumes:
       - name: apic-extra-values
         configMap:
           {{- if .Values.global.extraValuesConfig }}
           name: {{ .Values.global.extraValuesConfig }}
           {{- else }}
-          name: {{ template "ibm-apiconnect-cip.fullname" . }}-extra-values
+          name: {{ template "ibm-apiconnect-cip.extra-vals.fullname" . }}
           {{- end }}
           items:
-            - key: management
-              path: management-extra-values.yaml
-            - key: analytics
-              path: analytics-extra-values.yaml
-            - key: portal
-              path: portal-extra-values.yaml
-            - key: gateway
-              path: gateway-extra-values.yaml
+            - key: {{ .Values.management.name }}
+              path: {{ .Values.management.name }}-extra-values.yaml
+            - key: {{ .Values.analytics.name }}
+              path: {{ .Values.analytics.name }}-extra-values.yaml
+            - key: {{ .Values.portal.name }}
+              path: {{ .Values.portal.name }}-extra-values.yaml
+            - key: {{ .Values.gateway.name }}
+              path: {{ .Values.gateway.name }}-extra-values.yaml
+            - key: {{ .Values.gateway2.name }}
+              path: {{ .Values.gateway2.name }}-extra-values.yaml
       {{- if .Values.operator.helmTlsSecret }}
       - name: helm-tls
         secret:
@@ -181,11 +169,11 @@ spec:
         projected:
           sources:
           - configMap:
-              name: {{ template "ibm-apiconnect-cip.fullname" . }}-cr-files
+              name: {{ template "ibm-apiconnect-cip.init-files.fullname" . }}
               items:
-                - key: apiconnect-up
-                  path: apiconnect-up.yml
-                  mode: 0640
+                - key: register-crd
+                  path: register-crd.sh
+                  mode: 0750
                 - key: kubeconfig
                   path: config
                 - key: init
@@ -197,8 +185,14 @@ spec:
                 - key: register-oidc
                   path: register-oidc.sh
                   mode: 0750
+                - key: migrate-helm-releases
+                  path: migrate-helm-releases.sh
+                  mode: 0750
                 - key: patch-pullsecrets
                   path: patch-pullsecrets.sh
+                  mode: 0750
+                - key: update-cr
+                  path: update-cr.sh
                   mode: 0750
       {{- if .Values.global.certSecret }}
           - secret:
@@ -212,31 +206,39 @@ spec:
           - secret:
               name: {{ .Values.management.certSecret }}
               items:
-                - key: "{{ .Release.Name }}-apic-cluster-management-{{ .Release.Namespace }}-secrets.yml"
-                  path: "{{ .Release.Name }}-apic-cluster-management-{{ .Release.Namespace }}-secrets.yml"
+                - key: "{{ .Release.Name }}-apic-cluster-{{ .Values.management.name }}-{{ .Release.Namespace }}-secrets.yml"
+                  path: "{{ .Release.Name }}-apic-cluster-{{ .Values.management.name }}-{{ .Release.Namespace }}-secrets.yml"
                   mode: 0640
       {{- end }}
       {{- if .Values.analytics.certSecret }}
           - secret:
               name: {{ .Values.analytics.certSecret }}
               items:
-                - key: "{{ .Release.Name }}-apic-cluster-analytics-{{ .Release.Namespace }}-secrets.yml"
-                  path: "{{ .Release.Name }}-apic-cluster-analytics-{{ .Release.Namespace }}-secrets.yml"
+                - key: "{{ .Release.Name }}-apic-cluster-{{ .Values.analytics.name }}-{{ .Release.Namespace }}-secrets.yml"
+                  path: "{{ .Release.Name }}-apic-cluster-{{ .Values.analytics.name }}-{{ .Release.Namespace }}-secrets.yml"
                   mode: 0640
       {{- end }}
       {{- if .Values.portal.certSecret }}
           - secret:
               name: {{ .Values.portal.certSecret }}
               items:
-                - key: "{{ .Release.Name }}-apic-cluster-portal-{{ .Release.Namespace }}-secrets.yml"
-                  path: "{{ .Release.Name }}-apic-cluster-portal-{{ .Release.Namespace }}-secrets.yml"
+                - key: "{{ .Release.Name }}-apic-cluster-{{ .Values.portal.name }}-{{ .Release.Namespace }}-secrets.yml"
+                  path: "{{ .Release.Name }}-apic-cluster-{{ .Values.portal.name }}-{{ .Release.Namespace }}-secrets.yml"
                   mode: 0640
       {{- end }}
       {{- if .Values.gateway.certSecret }}
           - secret:
               name: {{ .Values.gateway.certSecret }}
               items:
-                - key: {{ .Release.Name }}-apic-cluster-gateway-{{ .Release.Namespace }}-secrets.yml
-                  path: {{ .Release.Name }}-apic-cluster-gateway-{{ .Release.Namespace }}-secrets.yml
+                - key: {{ .Release.Name }}-apic-cluster-{{ .Values.gateway.name }}-{{ .Release.Namespace }}-secrets.yml
+                  path: {{ .Release.Name }}-apic-cluster-{{ .Values.gateway.name }}-{{ .Release.Namespace }}-secrets.yml
+                  mode: 0640
+      {{- end }}
+      {{- if .Values.gateway2.certSecret }}
+          - secret:
+              name: {{ .Values.gateway2.certSecret }}
+              items:
+                - key: {{ .Release.Name }}-apic-cluster-{{ .Values.gateway2.name }}-{{ .Release.Namespace }}-secrets.yml
+                  path: {{ .Release.Name }}-apic-cluster-{{ .Values.gateway2.name }}-{{ .Release.Namespace }}-secrets.yml
                   mode: 0640
       {{- end }}

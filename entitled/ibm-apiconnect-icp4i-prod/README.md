@@ -221,7 +221,6 @@ $ kubectl delete pvc -l release=my-release
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------- |
 | `productionDeployment`              | Indicates that chart will be installed to run with production workloads                                                  | `true`          |
 | `cloudAdministratorUsername`        | Username of IBM Cloud Private user to set as API Connect Cloud Manager admin                                             | `admin`         |
-| `cloudIntegrationPlatformEndpoint`  | Endpoint on which Cloud Integration Platform is running. This should NOT be set to a wildcard for production deployments | `*`             |
 | `cloudIntegrationPlatformNamespace` | Namespace in which Cloud Integration Platform is installed                                                               | `integration`   |
 | `clusterDomainSuffix`               | Cluster DNS search domain suffux                                                                                         | `cluster.local` |
 
@@ -249,15 +248,16 @@ $ kubectl delete pvc -l release=my-release
 
 ### Management subsystem configuration
 
-| Parameter                         | Description                                                     | Default |
-| --------------------------------- | --------------------------------------------------------------- | ------- |
-| `management.enabled`              | Enable installation of management subsystem                     | `true`  |
-| `management.certSecret`           | (Optional) Secret containing custom or existing subsystem certs |         |
-| `management.storageClass`         | (Optional) Storage class override for management subsystem      |         |
-| `management.apiManagerUiEndpoint` | FQDN of API manager UI endpoint                                 |         |
-| `management.cloudAdminUiEndpoint` | FQDN of Cloud admin endpoint                                    |         |
-| `management.consumerApiEndpoint`  | FQDN of consumer API endpoint                                   |         |
-| `management.platformApiEndpoint`  | FQDN of platform API endpoint                                   |         |
+| Parameter                         | Description                                                     | Default       |
+| --------------------------------- | --------------------------------------------------------------- | ------------- |
+| `management.enabled`              | Enable installation of management subsystem                     | `true`        |
+| `management.name`                 | Management subsystem name                                       | `management`  |
+| `management.certSecret`           | (Optional) Secret containing custom or existing subsystem certs |               |
+| `management.storageClass`         | (Optional) Storage class override for management subsystem      |               |
+| `management.apiManagerUiEndpoint` | FQDN of API manager UI endpoint                                 |               |
+| `management.cloudAdminUiEndpoint` | FQDN of Cloud admin endpoint                                    |               |
+| `management.consumerApiEndpoint`  | FQDN of consumer API endpoint                                   |               |
+| `management.platformApiEndpoint`  | FQDN of platform API endpoint                                   |               |
 
 ### Cassandra cluster configuration
 
@@ -292,18 +292,19 @@ $ kubectl delete pvc -l release=my-release
 
 ### Portal subsystem configuration
 
-| Parameter                       | Description                                                   | Default |
-| ------------------------------- | ------------------------------------------------------------- | ------- |
-| `portal.enabled`                | Enable the portal subsystem                                   | `true`  |
-| `portal.certSecret`             | (Optional) Secret containing custom or existing portal certs  |         |
-| `portal.storageClass`           | (Optional) Storage class override for portal subsystem        |         |
-| `portal.portalDirectorEndpoint` | FQDN of Portal admin endpoint                                 |         |
-| `portal.portalWebEndpoint`      | FQDN of Portal web endpoint                                   |         |
-| `portal.adminStorageSizeGb`     | Size of admin storage volume                                  | `1`     |
-| `portal.backupStorageSizeGb`    | Size of backup data storage volume                            | `5`     |
-| `portal.dbLogsStorageSizeGb`    | Size of DB logs storage volume                                | `2`     |
-| `portal.dbStorageSizeGb`        | Size of DB storage volume                                     | `12`    |
-| `portal.wwwStorageSizeGb`       | Size of Site data storage volume                              | `5`     |
+| Parameter                       | Description                                                   | Default  |
+| ------------------------------- | ------------------------------------------------------------- | -------- |
+| `portal.enabled`                | Enable the portal subsystem                                   | `true`   |
+| `portal.name`                   | Portal subsystem name                                         | `portal` |
+| `portal.certSecret`             | (Optional) Secret containing custom or existing portal certs  |          |
+| `portal.storageClass`           | (Optional) Storage class override for portal subsystem        |          |
+| `portal.portalDirectorEndpoint` | FQDN of Portal admin endpoint                                 |          |
+| `portal.portalWebEndpoint`      | FQDN of Portal web endpoint                                   |          |
+| `portal.adminStorageSizeGb`     | Size of admin storage volume                                  | `1`      |
+| `portal.backupStorageSizeGb`    | Size of backup data storage volume                            | `5`      |
+| `portal.dbLogsStorageSizeGb`    | Size of DB logs storage volume                                | `2`      |
+| `portal.dbStorageSizeGb`        | Size of DB storage volume                                     | `12`     |
+| `portal.wwwStorageSizeGb`       | Size of Site data storage volume                              | `5`      |
 
 ### Portal backup configuration
 
@@ -320,27 +321,29 @@ $ kubectl delete pvc -l release=my-release
 
 ### Analytics subsystem configuration
 
-| Parameter                              | Description                                                     | Default |
-| -------------------------------------- | --------------------------------------------------------------- | ------- |
-| `analytics.enabled`                    | Enable the analytics subsystem                                  | `true`  |
-| `analytics.certSecret`                 | (Optional) Secret containing custom or existing analytics certs |         |
-| `analytics.storageClass`               | (Optional) Storage class override for analytics subsystem       |         |
-| `analytics.esStorageClass`             | (Optional) Storage class override for ES                        |         |
-| `analytics.enableMessageQueue`         | (Optional) Enable Analytics Message Queue Service               | `false` |
-| `analytics.mqStorageClass`             | (Optional) Storage class override for Message Queue             |         |
-| `analytics.analyticsClientEndpoint`    | FQDN of Analytics client/UI endpoint                            |         | 
-| `analytics.analyticsIngestionEndpoint` | FQDN of Analytics ingestion endpoint                            |         |
-| `analytics.coordinatingMaxMemoryGb`    | Memory limit for ES coordinating nodes                          | `12`    |
-| `analytics.dataMaxMemoryGb`            | Memory limit for ES data nodes                                  | `12`    |
-| `analytics.dataStorageSizeGb`          | Size of data storage volume                                     | `200`   |
-| `analytics.masterMaxMemoryGb`          | Memory limit for ES master nodes                                | `12`    |
-| `analytics.masterStorageSizeGb`        | Size of master storage volume                                   | `5`     |
+| Parameter                              | Description                                                     | Default     |
+| -------------------------------------- | --------------------------------------------------------------- | ----------- |
+| `analytics.enabled`                    | Enable the analytics subsystem                                  | `true`      |
+| `analytics.name`                       | Analytics subsystem name                                        | `analytics` |
+| `analytics.certSecret`                 | (Optional) Secret containing custom or existing analytics certs |             |
+| `analytics.storageClass`               | (Optional) Storage class override for analytics subsystem       |             |
+| `analytics.esStorageClass`             | (Optional) Storage class override for ES                        |             |
+| `analytics.enableMessageQueue`         | (Optional) Enable Analytics Message Queue Service               | `false`     |
+| `analytics.mqStorageClass`             | (Optional) Storage class override for Message Queue             |             |
+| `analytics.analyticsClientEndpoint`    | FQDN of Analytics client/UI endpoint                            |             |
+| `analytics.analyticsIngestionEndpoint` | FQDN of Analytics ingestion endpoint                            |             |
+| `analytics.coordinatingMaxMemoryGb`    | Memory limit for ES coordinating nodes                          | `12`        |
+| `analytics.dataMaxMemoryGb`            | Memory limit for ES data nodes                                  | `12`        |
+| `analytics.dataStorageSizeGb`          | Size of data storage volume                                     | `200`       |
+| `analytics.masterMaxMemoryGb`          | Memory limit for ES master nodes                                | `12`        |
+| `analytics.masterStorageSizeGb`        | Size of master storage volume                                   | `5`         |
 
 ### Gateway subsystem configuration
 
 | Parameter                                      | Description                                                                       | Default        |
 | ---------------------------------------------- | --------------------------------------------------------------------------------- | -------------- |
 | `gateway.enabled`                              | Enable the Gateway subsystem                                                      | `true`         |
+| `gateway.name`                                 | Gateway subsystem name                                                            | `gateway`      |
 | `gateway.certSecret`                           | (Optional) Secret containing custom or existing gateway certs                     |                |
 | `gateway.storageClass`                         | (Optional) Storage class override for gateway subsystem                           |                |
 | `gateway.apiGatewayEndpoint`                   | FQDN of API Gateway traffic                                                       |                |

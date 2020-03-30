@@ -7,7 +7,7 @@ metadata:
   labels:
 {{  include "sch.metadata.labels.standard" (list . $component) | indent 4 }}
 spec:
-  replicas: {{ .Values.asperanode.nodeCount }}
+  replicas: {{ include "hsts.replicas.asperanode" . }}
   selector:
     matchLabels:
 {{  include "sch.metadata.labels.standard" (list . $component) | indent 6 }}
@@ -16,7 +16,7 @@ spec:
       annotations:
         checksum/aspera-conf-configmap: {{ include (print $.Template.BasePath "/asperanode/asperanode-configmap.yaml") . |  sha256sum | trunc 63 }}
         checksum/asconfigurator: {{ tpl (toYaml .Values.asperaconfig) . | sha256sum | trunc 63 }}
-        checksum/server-secret: {{ tpl (toYaml .Values.asperanode.serverSecret) . | sha256sum | trunc 63 }}
+        checksum/server-secret: {{ tpl (toYaml .Values.asperanode.asperaLicense) . | sha256sum | trunc 63 }}
         {{- if .Values.productionDeployment }}
 {{- include "sch.metadata.annotations.metering" (list . .sch.chart.meteringProd) | indent 8 }}
         {{- else }}
@@ -30,12 +30,12 @@ spec:
       hostPID: false
       hostIPC: false
       securityContext:
-        fsGroup: {{ .Values.persistence.fsGroup }}
+        fsGroup: {{ .Values.securityContext.fsGroup }}
         runAsNonRoot: true
         runAsUser: 8000
-      {{- if .Values.image.pullSecret }}
+      {{- if .Values.global.image.pullSecret }}
       imagePullSecrets:
-      - name: {{ .Values.image.pullSecret }}
+      - name: {{ .Values.global.image.pullSecret }}
       {{- end }}
       affinity:
 {{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
@@ -58,5 +58,4 @@ spec:
 {{ include "hsts.spec.init.probe.aej" . | indent 6 }}
 {{ include "hsts.spec.init.asperaconf" (list .) | indent 6 }}
       containers:
-{{ include "hsts.spec.container.nodelog" . | indent 6 }}
 {{ include "hsts.spec.container.asperanode" . | indent 6 }}
