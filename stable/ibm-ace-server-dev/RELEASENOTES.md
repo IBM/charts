@@ -1,25 +1,24 @@
-# Breaking Changes (Prior to 2.1.0)
+# Breaking Changes (migrating from versions prior to 3.0.0)
 
-* Version 2.1.0 of this chart replaced the 'Local default Queue Manager' checkbox (used in versions 1.0.0-2.0.0) with a 'Which type of image to run' dropown list. That's because the chart now comes with an additional Docker image, the 'App Connect Enterprise with MQ client' image. Users of releases 2.0.0 and earlier of this chart can reuse existing values when upgrading to 2.2.0, but must ensure that the new option has the correct value to maintain your image selection, where 'App Connect Enterprise with MQ server' is the equivalent of selecting 'Local default Queue Manager'.
+* Version 3.0.0 of this chart introduced Routes to support handling HTTP and HTTPS traffic on OpenShift 4.2. This has resulted in the removal of the "Proxy Node IP or FQDN" for specifying the proxy address used to access the endpoints of deployed integrations. Instead a Route is created which generates a hostname.
+* Custom ports can no longer be specified via the Helm UI and must be configured by customising the charts
+* Version 3.0.0 of this chart introduced the string `designerFlowsOperationMode` to replace the boolean `designerFlowsEnabled` from Versions 2.x of this chart in order to introduce more options for deployment of App Connect Designer flows. Users of Versions 2.x who had `designerFlowsEnabled` set to true can reuse existing values when upgrading to 3.1.0, but must select one of the two new options to continue deploying the additional sidecars for Designer flows.
 
-* Version 2.1.0 of this chart changed the way we specify images. In versions 1.0.0 through to 2.0.0 we used a common tag across all images. In version 2.1.0 we moved to including the tag with the name of the image. If you have customised the image name you will need to make sure that when upgrading you include the image tag on the appropriate image value.
+# What’s new in IBM App Connect Enterprise certified container Version 3.1.0
 
-* There are no breaking changes when upgrading from version 2.1.0 to 2.2.0
+In this version of IBM App Connect Enterprise certified container, the following new features are available:
 
-# What’s new in Chart Version 2.2.0
-
-With IBM App Connect Enterprise Chart for Kubernetes environments, the following new features
-are available:
-
-* IBM App Connect Enterprise 11.0.0.6
-* IBM Cloud Pak for Integration Operational Dashboard Tracing support
+* New interface for creating integration servers without leaving the dashboard. Simplifies the user experience, so fewer steps are required and advanced configuration is hidden until necessary.
+* You can now delete an integration server from within the dashboard interface.
+* Ability to update a BAR file, including when used in Deployments and StatefulSets.
 
 # Fixes
 
+None
+
 # Prerequisites
 
-* The following IBM Platform Core Service is required: tiller
-* Requires IBM Cloud Private 3.2.0.1906 (Fix Pack 1)
+* Requires Red Hat OpenShift Container Platform 4.2
 
 # Documentation
 
@@ -29,6 +28,7 @@ For more information go to [IBM App Connect Enterprise Knowledge Center](https:/
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ----| ------------------- | ------------------ | ---------------- | ------- |
+| 3.1.0 | Mar 2020 | >=v1.14.0 | = ACE 11.0.0.8-r1 | none | Update BAR files, New create server interface, Delete servers in dashboard |
 | 2.2.0 | Oct 2019 | >=v1.11.0 | = ACE 11.0.0.6 | none | Updates ACE version, Operational Dashboard Tracing |
 | 2.1.0 | Sept 2019 | >=v1.11.0 | = ACE 11.0.0.5.1 | none | New image includes MQ client, Supports MQ 9.1.3, Operational Dashboard support, Support for configuring Switch ports, Support for configuring custom ports |
 | 2.0.0 | July 2019 | >=v1.11.0 | = ACE 11.0.0.5 | Now runs as user ID 888 when using MQ, Verification of MQSC files, Some values renamed | 11.0.0.5 FP Update, Image based on UBI, Supports MQ 9.1.2 |

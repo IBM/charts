@@ -1,0 +1,71 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+#  Script run by create secrets job
+#
+###############################################################################
+
+{{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
+{{- $cfgMapName := include "sch.names.fullCompName" (list . "create-configurator-config") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "config") }}
+{{- $deploymentName := include "sch.names.fullName" (list .) }}
+{{- $ssName := include "sch.names.statefulSetName" (list .) }}
+{{- $secretName := ternary $ssName $deploymentName (eq .Values.imageType "acemqserver") }}
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $cfgMapName }}
+  labels:
+{{ $labels | indent 4 }}
+data:
+  createwebusers.sh: |
+    #!/bin/bash -e
+    echo "Check if secret {{ $secretName }} already exists"
+    kubectl get secret {{ $secretName }} && echo "Secret already exists" && exit 0
+
+    {{- if eq .Values.imageType "acemqserver" }}
+    uid=$(oc get StatefulSet {{ $ssName }} -o jsonpath="{.metadata.uid}")
+    {{- else }}
+    uid=$(oc get Deployment {{ $deploymentName }} -o jsonpath="{.metadata.uid}")
+    {{- end }}
+    cp /server/webusers.yaml /tmp/
+    sed -i "s/REPLACEME/$uid/g" /tmp/webusers.yaml
+
+    sed -i "s/ADMIN_USER/$(echo "ibm-ace-dashboard-admin "$(uuid -v4) | base64 -w 100)/g" /tmp/webusers.yaml
+    sed -i "s/OPERATOR_USER/$(echo "ibm-ace-dashboard-operator "$(uuid -v4) | base64 -w 100)/g" /tmp/webusers.yaml
+    sed -i "s/VIEWER_USER/$(echo "ibm-ace-dashboard-viewer "$(uuid -v4) | base64 -w 100)/g" /tmp/webusers.yaml
+    sed -i "s/EDITOR_USER/$(echo "ibm-ace-dashboard-editor "$(uuid -v4) | base64 -w 100)/g" /tmp/webusers.yaml
+    sed -i "s/AUDIT_USER/$(echo "ibm-ace-dashboard-audit "$(uuid -v4) | base64 -w 100)/g" /tmp/webusers.yaml
+
+    echo "Creating secret {{ $secretName }} for release {{ .Release.Name | quote }}"
+    kubectl apply -f /tmp/webusers.yaml
+  webusers.yaml: |
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: {{ $secretName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . ) | indent 8 }}
+      ownerReferences:
+      - apiVersion: apps/v1
+        {{- if eq .Values.imageType "acemqserver" }}
+        kind: StatefulSet
+        {{- else }}
+        kind: Deployment
+        {{- end }}
+        name: {{ include "sch.names.fullName" (list .) }}
+        uid: REPLACEME
+    type: Opaque
+    data:
+      adminusers: ADMIN_USER
+      operatorusers: OPERATOR_USER
+      viewerusers: VIEWER_USER
+      editorusers: EDITOR_USER
+      auditusers: AUDIT_USER

@@ -13,20 +13,18 @@
 # limitations under the License.
 
 ###############################################################################
-# Runs a container that generates certificates and keys for communication
-# between internal components.
+# Runs a container that creates users and routes
 ###############################################################################
-
 {{- if .Values.contentServerURL }}
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
-{{- $jobName := include "sch.names.fullCompName" (list . "secret-gen") }}
+{{- $cfgMapName := include "sch.names.fullCompName" (list . "create-configurator-config") }}
+{{- $jobName := include "sch.names.fullCompName" (list . "config-gen") }}
 {{- $fullName := include "sch.names.fullName" (list .) }}
-{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "secret-gen")) }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "config-gen")) }}
+{{- $saName := include "sch.names.fullCompName" (list . "serviceaccount") }}
 {{- $ssName := include "sch.names.statefulSetName" (list .) }}
-{{- $deploymentName := include "sch.names.fullName" (list .) }}
+{{- $deploymentName := include "sch.names.fullName" (list . ) }}
 {{- $secretName := ternary $ssName $deploymentName (eq .Values.imageType "acemqserver") }}
-{{- $configSecretName := .Values.integrationServer.configurationSecret | default (printf "%s-%s" $secretName "configuration") }}
-{{- $saName := include "sch.names.fullCompName" (list . "handle-secret-serviceaccount") }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -34,29 +32,11 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
 {{ $labels | indent 4 }}
-  annotations:
-    # This needs to run before we deploy, as the dashboard install
-    # depend on the secrets existing already, and will fail to start
-    # otherwise.
-    "helm.sh/hook": pre-install
-    # We don't delete this if it fails, as the logs may be useful to
-    # diagnose a failed install
-    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
-    # This needs to happen before the deployment as that needs to access
-    # this secret
-    "helm.sh/hook-weight": "4"
 spec:
   activeDeadlineSeconds: 600
   template:
-    metadata:
-      labels:
-{{ $labels | indent 8 }}
     spec:
       serviceAccountName: {{ $saName }}
-      {{- if .Values.image.pullSecret }}
-      imagePullSecrets:
-        - name: {{ .Values.image.pullSecret }}
-      {{- end }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -75,9 +55,16 @@ spec:
                       - amd64
       restartPolicy: Never
       containers:
-        - name: "secret-gen"
+        - name: "config-gen"
           image: "{{ .Values.image.configurator }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
           securityContext:
             privileged: false
             readOnlyRootFilesystem: false
@@ -86,16 +73,24 @@ spec:
             runAsUser: 1001
             capabilities:
               drop:
-              - all
-          env:
-            - name: "RELEASE_NAME"
-              value: {{ .Release.Name | quote }}
-            - name: "TARGET_SECRET_NAME"
-              value: {{ $secretName }}
-            - name: "CONFIG_SECRET"
-              value: {{ $configSecretName }}
+              - ALL
           command:
             - sh
             - -c
-            - /usr/server/generateSecrets.sh
+            - /server/createwebusers.sh
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "1028Mi"
+          volumeMounts:
+          - name: {{ $cfgMapName }}
+            mountPath: /server/
+      volumes:
+        - name: {{ $cfgMapName }}
+          configMap:
+            name: {{ $cfgMapName }}
+            defaultMode: 0555
 {{- end }}

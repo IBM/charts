@@ -12,45 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-###############################################################################
-# Runs a container that generates certificates and keys for communication
-# between internal components.
-###############################################################################
+#######################################################################################
+# Runs a container that deletes the secret that the dashboard used for certs and keys
+#######################################################################################
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
-{{- $jobName := include "sch.names.fullCompName" (list . "secret-gen") }}
+{{- $jobName := include "sch.names.fullCompName" (list . "secret-del") }}
 {{- $fullName := include "sch.names.fullName" (list .) }}
-{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "secret-gen")) }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "secret-del")) }}
 {{- $saName := include "sch.names.fullCompName" (list . "handle-secret-serviceaccount") }}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ $jobName }}
-  namespace: {{ .Release.Namespace }}
   labels:
 {{ $labels | indent 4 }}
   annotations:
-    # This needs to run before we deploy, as the dashboard install
-    # depend on the secrets existing already, and will fail to start
-    # otherwise.
-    "helm.sh/hook": pre-install
-    # We don't delete this if it fails, as the logs may be useful to
-    # diagnose a failed install
-    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
-    # This needs to happen before the deployment as that needs to access
-    # this secret
+    # This needs to run after the rest of the release has been deleted.
+    "helm.sh/hook": post-delete
     "helm.sh/hook-weight": "4"
+    # Clean up the Job after running irrespective of success
+    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed
 spec:
-  activeDeadlineSeconds: 600
   template:
-    metadata:
-      labels:
-{{ $labels | indent 8 }}
     spec:
       serviceAccountName: {{ $saName }}
-      {{- if .Values.image.pullSecret }}
-      imagePullSecrets:
-        - name: {{ .Values.image.pullSecret }}
-      {{- end }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -69,31 +54,27 @@ spec:
                       - amd64
       restartPolicy: Never
       containers:
-        - name: "secret-gen"
+        - name: "secret-del"
           image: "{{ .Values.image.configurator }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "1028Mi"
           securityContext:
             privileged: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
             runAsUser: 1001
             capabilities:
               drop:
               - ALL
-          env:
-            - name: "TARGET_NAMESPACE"
-              value: {{ .Release.Namespace | quote }}
-            - name: "RELEASE_NAME"
-              value: {{ .Release.Name | quote }}
-            - name: "TARGET_SECRET_NAME"
-              value: {{ $fullName }}
-            - name: "COMMON_NAME"
-              value: {{ $fullName }}
-          command:
-            - sh
-            - -c
-            - /usr/dashboard/generateSecrets.sh
+          command: ["sh"]
+          args: ["-c", 'kubectl delete secrets,configmaps --ignore-not-found=true -n {{ .Release.Namespace | quote }} -l release={{ .Release.Name | quote }} && echo Done']
           resources:
             requests:
               cpu: "250m"

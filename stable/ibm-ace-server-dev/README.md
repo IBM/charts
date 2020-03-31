@@ -8,7 +8,7 @@ IBM® App Connect Enterprise is a market-leading lightweight enterprise integrat
 
 ## Chart Details
 
-This chart deploys a single IBM App Connect Enterprise for Developers integration server into a Kubernetes environment.
+This chart deploys a single IBM App Connect Enterprise for Developers integration server into a Kubernetes environment. 
 
 ## Prerequisites
 
@@ -47,6 +47,7 @@ data:
   tls.key
   truststoreCert-<alias>:
   truststorePassword:
+  useraccounts
 ```
 
 Below is an example of the format of the secret where two certs are being supplied
@@ -64,6 +65,7 @@ data:
   agentx:
   appPassword:
   ca.crt:
+  credentials:
   extensions:
   keystoreCert-MyCert1:
   keystoreKey-MyCert1:
@@ -79,6 +81,8 @@ data:
   serverconf:
   setdbparms:
   switch:
+  tls.cert
+  tls.key
   truststoreCert-MyCert1:
   truststoreCert-MyCert2:
   truststorePassword:
@@ -91,7 +95,8 @@ The following table describes the secret keys:
 | `agentc`                        | Multi-line value containing a agentc.json file.                     |
 | `agentp`                        | Multi-line value containing a agentp.json file.                     |
 | `agentx`                        | Multi-line value containing a agentx.json file.                     |
-| `ca.crt`                         | The ca certificate in PEM format (will be copied into /home/aceuser/aceserver/tls on startup)  |
+| `credentials`                   | Multi-line value containing a file which has details of accounts used to connect to external endpoints  |
+| `ca.crt`                        | The ca certificate in PEM format (will be copied into /home/aceuser/aceserver/tls on startup)  |
 | `extensions`                    | Multi-line value containing an extensions.zip file.                 |
 | `keystoreCert-<alias>`          | Multi-line value containing the certificate in PEM format.          |
 | `keystoreKey-<alias>`           | Multi-line value containing the private key in PEM format.          |
@@ -109,53 +114,61 @@ The following table describes the secret keys:
 | `tls.crt`                        | The tls certificate in PEM format (will be copied into /home/aceuser/aceserver/tls on startup) |
 | `truststoreCert-<alias>`        | Multi-line value containing the trust certificate in PEM format.    |
 | `truststorePassword`            | A password to set for the integration server's truststore.          |
+| `useraccounts`                  | Multi-line value containing a credentials.yaml file containing endpoint accounts details to create data source  | 
 
 If using `ibm-ace-dashboard-dev` for managing integration servers then further instructions and helper script are provided when adding a server. A full set of working example secrets can be found in the pak_extensions/pre-install directory.
 
-### Red Hat OpenShift SecurityContextConstraints Requirements
+## IBM App Connect Designer Flows Prerequisites
+
+The integration server can optionally host flows that are authored in IBM App Connect Designer. This can be enabled by using the "IBM App Connect Designer flows" drop-down list on the Configuration tab.
+
+| Value | Description |
+|-------|-------------|
+| Disabled | Use this option if your BAR file does not contain any IBM App Connect Designer flows. |
+| Enabled for cloud-managed and local connectors | Use this option if your BAR file contains IBM App Connect Designer flows that use cloud-managed or local connectors. An IBM Cloud API key must be provided in the Kubernetes secret that contains your server configuration. |
+| Enabled for local connectors only | Use this option if your BAR file contains IBM App Connect Designer flows that use only local connectors. |
+
+For more information, see [https://ibm.biz/createintserver-ace](https://ibm.biz/createintserver-ace).
+
+
+## MQ Prerequisites
+
+If running with MQ server, you must create a secret in the target namespace that contains the 'admin' user password and optionally the 'app' user password to use for mq messaging.
+
+## Red Hat OpenShift SecurityContextConstraints Requirements
 
 This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster-scoped, as well as namespace-scoped, pre- and post-actions that need to occur.
 
 The predefined SecurityContextConstraints [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart. If your target namespace is not bound to this SecurityContextConstraints resource you can bind it with the following command:
 
 `oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:<namespace>` For example, for release into the `default` namespace:
-``` 
+```bash
 oc adm policy add-scc-to-group ibm-anyuid-scc system:serviceaccounts:default
 ```
 
-* Custom SecurityContextConstraints definition:
+### Custom SecurityContextConstraints definition:
 
 ```
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
   name: ibm-ace-scc
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+fsGroup:
+  type: RunAsAny
 spec:
   allowPrivilegeEscalation: true
-  fsGroup:
-    rule: RunAsAny
   requiredDropCapabilities:
   - MKNOD
   allowedCapabilities:
-  - SETPCAP
-  - AUDIT_WRITE
   - CHOWN
-  - NET_RAW
-  - DAC_OVERRIDE
   - FOWNER
-  - FSETID
-  - KILL
-  - SETUID
-  - SETGID
-  - NET_BIND_SERVICE
-  - SYS_CHROOT
-  - SETFCAP
-  runAsUser:
-    rule: RunAsAny
-  seLinux:
-    rule: RunAsAny
-  supplementalGroups:
-    rule: RunAsAny
+  - DAC_OVERRIDE
   volumes:
   - configMap
   - emptyDir
@@ -191,25 +204,25 @@ If using a private Docker registry, an image pull secret needs to be created bef
 
 To install the chart with the release name `ace-server-dev`:
 
-```
+```bash
 helm install --name ace-server-dev ibm-ace-server-dev --set license=accept --tls
 ```
 
 This command accepts the IBM App Connect Enterprise license and deploys an IBM App Connect Enterprise integration server on the Kubernetes cluster.  Note that this will deploy an empty integration server.  If you have an IBM App Connect Enterprise dashboard, you can get a content server URL and set it in the release with the following command:
 
-```
+```bash
 helm install --name ace-server-dev ibm-ace-server-dev --set license=accept --set contentServerURL="{your content server URL}" --tls
 ```
 
 The configuration section lists the parameters that can be configured during installation.
 
- **Tip**: See all the resources deployed by the chart by using `kubectl get all -l release=ace-server-dev`.
+> **Tip**: See all the resources deployed by the chart by using `kubectl get all -l release=ace-server-dev`.
 
 ## Verifying the Chart
 
 See the instruction (from NOTES.txt in the chart) after the helm installation completes for chart verification. The instruction can also be viewed by running the command:
 
-```
+```bash
 helm status ace-server-dev --tls`
 ```
 
@@ -231,65 +244,74 @@ The following table lists the configurable parameters of the `ibm-ace-server-dev
 | `license`                        | Set to `accept` to accept the terms of the IBM license.  | `Not accepted`                                     |
 | `contentServerURL`               | URL provided by the App Connect Enterprise dashboard to pull resources from. | `nil`                      |
 | `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
-| `designerFlowsEnabled`           | Boolean toggle for whether to deploy a sidecar container into the pod for running flows authored in App Connect Designer. | `false` |
-| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `ibm-ace-server-dev:11.0.0.6` |
-| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `ibm-ace-mqclient-server-dev:11.0.0.6`         |
-| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `ibm-ace-mq-server-dev:11.0.0.6`               |
-| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `ibm-ace-icp-configurator-dev:11.0.0.6` |
-| `image.designerflows`             | Image repository and tag for the App Connect Enterprise designer flows image.    | `ibm-ace-designer-flows-dev:11.0.0.6` |
+| `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
+| `designerFlowsOperationMode`     | Choose whether to deploy sidecar containers into the pod for running flows authored in App Connect Designer. Options `disabled`, `all` (Enabled for cloud-managed and local connectors) or `local` (Enabled for local connectors only) | `disabled` |
+| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `ibmcom/ace:11.0.0.8-r1` |
+| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `ibmcom/ace-mqclient:11.0.0.8-r1`         |
+| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `ibmcom/ace-mq:11.0.0.8-r1`               |
+| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `ibmcom/acecc-configurator:11.0.0.8-r1` |
+| `image.designerflows`            | Image repository and tag for the App Connect Enterprise designer flows image.    | `ibmcom/ace-designer-flows:11.0.0.8-r1` |
+| `image.connectors`               | Image repository and tag for the App Connect Enterprise loopback connector image.    | `ibmcom/ace-lcp:11.0.0.8-r1` |
 | `image.pullPolicy`               | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`               | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                           | Architecture scheduling preference for worker node (only amd64 supported) - read only. | `amd64`              |
 | `persistence.enabled`            | Use Persistent Volumes for all defined volumes.  | `true`                                                     |
 | `persistence.useDynamicProvisioning`| Use dynamic provisioning (storage classes) for all volumes. | `true`                                       |
 | `dataPVC.name`                   | Suffix for the Persistent Volume Claim name.     | `data`                                                     |
-| `dataPVC.storageClassName`       | Storage class of volume for main MQ data (under /var/mqm). | `nil`                                     |
+| `dataPVC.storageClassName`       | Storage class of volume for main MQ data (under /var/mqm). | `nil`                                            |
 | `dataPVC.size`                   | Size of volume for main MQ data (under /var/mqm). | `2Gi`                                                     |
-| `service.type`                   | Kubernetes service type exposing ports.          | `NodePort`                                                 |
+| `service.type`                   | Kubernetes service type exposing ports.          | `ClusterIP`                                                 |
 | `service.webuiPort`              | Web UI port number - read only.                   | `7600`                                                    |
 | `service.serverlistenerPort`     | HTTP server listener port number - read only.     | `7800`                                                    |
 | `service.serverlistenerTLSPort`  | HTTPS server listener port number - read only.    | `7843`                                                    |
-| `service.customPorts`            | Used for configuring custom ports on the service. | `nil`                                                    |
 | `service.switchAgentCPort`       | Port used by the Switch for agentC calls, normally 9010.   | `nil`                                            |
 | `service.switchAgentPPort`       | Port used by the Switch for agentP calls, normally 9011.   | `nil`                                            |
 | `service.switchAdminPort`        | Port used by the Switch for admin calls, normally 9012.    | `nil`                                            |
 | `service.iP`                     | An IP address or DNS name that the nodeport is connected to, that is, the proxy node's IP or fully qualified domain name (FQDN). | `nil`               |
-| `aceonly.resources.limits.cpu`        | Kubernetes CPU limit for the container when running a server without MQ.      | `1`                                                       |
-| `aceonly.resources.limits.memory`     | Kubernetes memory limit for the container when running a server without MQ.   | `1024Mi`                                                  |
-| `aceonly.resources.requests.cpu`      | Kubernetes CPU request for the container when running a server without MQ.    | `1`                                                       |
-| `aceonly.resources.requests.memory`   | Kubernetes memory request for the container when running a server without MQ. | `1024Mi`                                                  |
-| `aceonly.replicaCount`                | When running without a queue manager, set how many replicas of the deployment pod to run. | `3`               |
-| `acemq.resources.limits.cpu`      | Kubernetes CPU limit for the container when running a server with MQ.      | `1`                                                       |
-| `acemq.resources.limits.memory`   | Kubernetes memory limit for the container when running a server with MQ.   | `2048Mi`                                                  |
-| `acemq.resources.requests.cpu`    | Kubernetes CPU request for the container when running a server with MQ.    | `1`                                                       |
-| `acemq.resources.requests.memory` | Kubernetes memory request for the container when running a server with MQ. | `2048Mi`                                                  |
+| `aceonly.resources.limits.cpu`        | Kubernetes CPU limit for the container when running a server without MQ.      | `1`                      |
+| `aceonly.resources.limits.memory`     | Kubernetes memory limit for the container when running a server without MQ.   | `1024Mi`                 |
+| `aceonly.resources.requests.cpu`      | Kubernetes CPU request for the container when running a server without MQ.    | `200m`                   |
+| `aceonly.resources.requests.memory`   | Kubernetes memory request for the container when running a server without MQ. | `256Mi`                  |
+| `aceonly.replicaCount`                | When running without a queue manager, set how many replicas of the deployment pod to run. | `3`          |
+| `acemq.resources.limits.cpu`      | Kubernetes CPU limit for the container when running a server with MQ.      | `1`                             |
+| `acemq.resources.limits.memory`   | Kubernetes memory limit for the container when running a server with MQ.   | `2048Mi`                        |
+| `acemq.resources.requests.cpu`    | Kubernetes CPU request for the container when running a server with MQ.    | `500m`                          |
+| `acemq.resources.requests.memory` | Kubernetes memory request for the container when running a server with MQ. | `512Mi`                         |
 | `acemq.pki.keys`                      | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates with private keys. See section titled "Supplying certificates to be used for TLS" for more details.  | `[]` |
 | `acemq.pki.trust`                     | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates. See section titled "Supplying certificates to be used for TLS" for more details.  | `[]` |
 | `acemq.qmname`              | MQ queue manager name.                           | Helm release name.                                          |
-| `acemq.initVolumeAsRoot`              | Whether or not the storage class (such as NFS) requires root permissions to initialize.                           | Initialize MQ volume using root.                                          | `true`
+| `acemq.initVolumeAsRoot`              | Whether or not the storage class (such as NFS) requires root permissions to initialize.                           | Initialize MQ volume using root.                                          | `true` 
+| `acemq.qmSecret.name`              | Secret that contains the 'admin' user password and optionally the 'app' user password to use for messaging | Mandatory - a secret name must be set   |
+| `acemq.qmSecret.mqAdminPasswordKey` | Secret key that contains the 'admin' user password | Mandatory - a key must be set                 |
+| `acemq.qmSecret.mqAppPasswordKey`   | Secret key that contains the 'app' user password   | `nil` (no password required to connect an MQ client)  |
 | `nameOverride`                  | Set to partially override the resource names used in this chart. | `ibm-mq`                                   |
 | `designerflows.resources.limits.cpu`        | Kubernetes CPU limit for the sidecar container for running flows authored in App Connect Designer.      | `1`                      |
 | `designerflows.resources.limits.memory`     | Kubernetes memory limit for the sidecar container for running flows authored in App Connect Designer.   | `256Mi`                 |
-| `designerflows.resources.requests.cpu`      | Kubernetes CPU request for the sidecar container for running flows authored in App Connect Designer.    | `1`                      |
-| `designerflows.resources.requests.memory`   | Kubernetes memory request for the sidecar container for running flows authored in App Connect Designer. | `256Mi`                 |
+| `designerflows.resources.requests.cpu`      | Kubernetes CPU request for the sidecar container for running flows authored in App Connect Designer.    | `50m`                      |
+| `designerflows.resources.requests.memory`   | Kubernetes memory request for the sidecar container for running flows authored in App Connect Designer. | `32Mi`                 |
+| `connectors.resources.limits.cpu`        | Kubernetes CPU limit for the loopback connector provider sidecar container. | `1`                      |
+| `connectors.resources.limits.memory`     | Kubernetes memory limit for loopback connector provider sidecar container.  | `768Mi`                 |
+| `connectors.resources.requests.cpu`      | Kubernetes CPU request for loopback connector provider sidecar container    | `150m`                      |
+| `connectors.resources.requests.memory`   | Kubernetes memory request for loopback connector provider sidecar container | `200Mi`      |
 | `integrationServer.name`         | App Connect Enterprise integration server name.                     | Helm release name.                                          |
 | `integrationServer.defaultAppName`         | Allows you to specify a name for the default application for the deployment of independent resources.                     | `nil`                                          |
 | `integrationServer.configurationSecret`            | The name of the secret to create or to use that contains the server configuration. | `nil`                    |
 | `integrationServer.fsGroupGid`                     | File system group ID for volumes that support ownership management (such as NFS). | `nil`  |
 | `log.format`                     | Output log format on container's console. Either `json` or `basic`. | `json`                                         |
+| `log.mqDebug`                     | Enables additional MQ log output for debug purposes. | `false`                                         |
 | `metrics.enabled`                | Enable Prometheus metrics for the queue manager and integration server. | `true`                              |
 | `livenessProbe.initialDelaySeconds` | The initial delay before starting the liveness probe. Useful for slower systems that take longer to start the queue manager. |	`360` |
 | `readinessProbe.initialDelaySeconds` | The initial delay before starting the readiness probe. |	`10` |
-| `odTracingConfig.enabled`                                        | Whether or not to enable the OD for this release      | `false`                   |
-| `odTracingConfig.odAgentImageRepository`                         | Repository where the OD agent image is located        | `ibmcom/ace-od-agent`     |
-| `odTracingConfig.odAgentImageTag`                                | The tag for the Docker image for the OD agent         | `1.0.0`                   |
-| `odTracingConfig.odAgentLivenessProbe.initialDelaySeconds`       | How long to wait before starting the probe            | `60`                      |
-| `odTracingConfig.odAgentReadinessProbe.initialDelaySeconds`      | How long to wait before the probe is ready            | `10`                      |
-| `odTracingConfig.odCollectorImageRepository`                     | Repository where the OD collector image is located    | `ibmcom/ace-od-collector` |
-| `odTracingConfig.odCollectorImageTag`                            | The tag for the Docker image for the OD collector     | `1.0.0`                   |
-| `odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds`   | How long to wait before starting the probe            | `60`                      |
-| `odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds`  | How long to wait before the probe is ready            | `10`                      |
-| `odTracingConfig.odTracingNamespace`                             | Namespace where the Operation Dashboard was released  | ``                        |
+| `odTracingConfig.enabled`                                        | Whether or not to enable the OD for this release      | `false`               |
+| `odTracingConfig.odAgentImageRepository`                         | Repository where the OD agent image is located        | `ibmcom/ace-od-agent`      |
+| `odTracingConfig.odAgentImageTag`                                | The tag for the Docker image for the OD agent         | `1.0.2`               |
+| `odTracingConfig.odAgentLivenessProbe.initialDelaySeconds`       | How long to wait before starting the probe            | `60`                  |
+| `odTracingConfig.odAgentReadinessProbe.initialDelaySeconds`      | How long to wait before the probe is ready            | `10`                  |
+| `odTracingConfig.odCollectorImageRepository`                     | Repository where the OD collector image is located    | `ibmcom/ace-od-collector`  |
+| `odTracingConfig.odCollectorImageTag`                            | The tag for the Docker image for the OD collector     | `1.0.2`               |
+| `odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds`   | How long to wait before starting the probe            | `60`                  |
+| `odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds`  | How long to wait before the probe is ready            | `10`                  |
+| `odTracingConfig.odTracingNamespace`                             | Namespace where the Operation Dashboard was released  | `nil`                 |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
