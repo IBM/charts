@@ -9,18 +9,28 @@ The following table lists and describes the configurable files supported by the 
 | -------------------------------- | ------------------------------------------------------------------ |
 | `adminPassword.txt`              | MQ Developer defaults - administrator password                     |  
 | `appPassword.txt`                | MQ Developer defaults - app password                               |
-| `mqsc.txt`                       | An mqsc file to run against the Queue Manager                      |
-| `keystorePassword`               | A password to set for the Integration Server's keystore            |
-| `keystore-{keyname}.pass`        | The passphrase for the private key being imported, if there is one |
-| `keystore-{keyname}.key`         | The private key in PEM format                                      |
-| `keystore-{keyname}.crt`         | The certificate in PEM format                                      |
-| `truststorePassword.txt`         | A password to set for the Integration Server's truststore          |
-| `truststore-{certname}.crt`      | The trust certificate in PEM format                                |
-| `odbc.ini`                       | An odbc.ini file for the Integration Server to define any ODBC data connections |
-| `policy.xml`                     | Policies to apply                                                  |
-| `policyDescriptor.xml`           | The policy descriptor file                                         |
-| `serverconf.yaml`                | The server.conf.yaml                                               |
-| `setdbparms.txt`                 | Multi-line file containing the `{ResourceName} {UserId} {Password}` to pass to [mqsisetdbparms command](https://www.ibm.com/support/knowledgecenter/en/SSTTDS_11.0.0/com.ibm.etools.mft.doc/an09155_.htm) |
+| `agentc`                        | Multi-line value containing a agentc.json file.                     |
+| `agentp`                        | Multi-line value containing a agentp.json file.                     |
+| `agentx`                        | Multi-line value containing a agentx.json file.                     |
+| `credentials`                   | Multi-line value containing a file which has details of accounts used to connect to external endpoints  |
+| `ca.crt`                        | The ca certificate in PEM format (will be copied into /home/aceuser/aceserver/tls on startup)  |
+| `extensions`                    | Multi-line value containing an extensions.zip file.                 |
+| `keystoreCert-<alias>`          | Multi-line value containing the certificate in PEM format.          |
+| `keystoreKey-<alias>`           | Multi-line value containing the private key in PEM format.          |
+| `keystorePass-<alias>`          | The passphrase for the private key being imported, if there is one. |
+| `keystorePassword`              | A password to set for the integration server's keystore.            |
+| `mqsc`                          | Multi-line value containing an mqsc file to run against the queue manager. |
+| `odbcini`                       | Multi-line value containing an odbc.ini file for the integration server to define any ODBC data connections. |
+| `policy`                        | Multi-line value containing a policy to apply.                      |
+| `policyDescriptor`              | Multi-line value containing the policy descriptor file.             |
+| `serverconf`                    | Multi-line value containing a server.conf.yaml.                     |
+| `setdbparms`                    | This supports 2 formats: Each line which starts mqsisetdbparms will be run as written, or each line should specify the <resource> <userId> <password>, separated by a single space |
+| `serverconf`                    | Multi-line value containing a server.conf.yaml.                     |
+| `switch`                        | Multi-line value containing a switch.json.                          |
+| `tls.key`                        | The tls key in PEM format (will be copied into /home/aceuser/aceserver/tls on startup) |
+| `tls.crt`                        | The tls certificate in PEM format (will be copied into /home/aceuser/aceserver/tls on startup) |
+| `truststoreCert-<alias>`        | Multi-line value containing the trust certificate in PEM format.    |
+| `truststorePassword`            | A password to set for the integration server's truststore.          |
 
 Sample configuration files can be found in the `sample-configuration-files` sub-directory.
 

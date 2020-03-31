@@ -24,24 +24,33 @@ imageType: ace
 
 arch: amd64
 
-# Whether to start an image with a designer flows sidecar container enabled
-designerFlowsEnabled: false
+# Whether to start an image with a designer flows sidecars container enabled
+designerFlowsOperationMode: 'disabled'
+
+customContentServer: false
 
 image:
-  aceonly: ibmcom/ace:11.0.0.6
-  acemqclient: ibmcom/ace-mqclient:11.0.0.6
-  acemq: ibmcom/ace-mq:11.0.0.6
-  configurator: ibmcom/ace-icp-configurator:11.0.0.6
-  designerflows: ibmcom/ace-designer-flows:11.0.0.6
+  aceonly: ibmcom/ace:11.0.0.8-r1
+  acemqclient: ibmcom/ace-mqclient:11.0.0.8-r1
+  acemq: ibmcom/ace-mq:11.0.0.8-r1
+  configurator: ibmcom/acecc-configurator:11.0.0.8-r1
+  designerflows: ibmcom/ace-designer-flows:11.0.0.8-r1
+  connectors: ibmcom/ace-lcp:11.0.0.8-r1
   pullPolicy: IfNotPresent
   pullSecret:
 
 service:
-  type: NodePort
+  type: ClusterIP
+  endpointType: http
   webuiPort: 7600
   serverlistenerPort: 7800
   serverlistenerTLSPort: 7843
-  iP:
+  # Port used by the switch for agentC calls, normally 9010
+  switchAgentCPort:
+  # Port used by the switch for agentP calls, normally 9011
+  switchAgentPPort:
+  # Port used by the switch for admin calls, normally 9012
+  switchAdminPort:
 
 # integrationServer section specifies settings for the ACE Integration Server
 integrationServer:
@@ -66,8 +75,8 @@ aceonly:
   # ref: http://kubernetes.io/docs/user-guide/compute-resources/
   resources:
     requests:
-      cpu: "1"
-      memory: 1024Mi
+      cpu: "200m"
+      memory: 256Mi
     limits:
       cpu: "1"
       memory: 1024Mi
@@ -82,8 +91,8 @@ acemq:
   # ref: http://kubernetes.io/docs/user-guide/compute-resources/
   resources:
     requests:
-      cpu: "1"
-      memory: 2048Mi
+      cpu: "500m"
+      memory: 512Mi
     limits:
       cpu: "1"
       memory: 2048Mi
@@ -100,7 +109,14 @@ acemq:
   # name allows you to specify the name to use for the queue manager.  Defaults to the Helm release name.
   qmname:
   # initVolumeAsRoot specifies whether or not storage provider requires root permissions to initialize
-  initVolumeAsRoot: true
+  initVolumeAsRoot: true 
+  qmSecret:
+    # name is the secret that contains the 'admin' user password and optionally the 'app' user password to use for messaging with mq dev charts
+    name:
+    # adminPasswordKey is the secret key that contains the 'admin' user password
+    mqAdminPasswordKey:
+    # appPasswordKey is the secret key that contains the 'app' user password
+    mqAppPasswordKey:
 
 ###########################################################
 # Designer Flow specific settings
@@ -110,11 +126,26 @@ designerflows:
   # ref: http://kubernetes.io/docs/user-guide/compute-resources/
   resources:
     requests:
-      cpu: "1"
-      memory: 256Mi
+      cpu: "50m"
+      memory: 32Mi
     limits:
       cpu: "1"
       memory: 256Mi
+
+
+###########################################################
+# Connectors specific settings
+###########################################################
+connectors:
+  # resource limits to apply to the Designer Flow sidecar containers
+  # ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  resources:
+    requests:
+      cpu: "150m"
+      memory: 200Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
 
 # persistence section specifies persistence settings which apply to the whole chart
 persistence:
@@ -134,7 +165,8 @@ dataPVC:
 
 # log section specifies settings for MQ error logs and Integration Server console logs
 log:
-  format: json
+  format: basic
+  mqDebug: false
 
 # metrics section specifies settings for generating queue manager and Integration Server metrics
 metrics:
@@ -158,12 +190,15 @@ readinessProbe:
 # Grafana dashboard deployment
 dashboardEnabled: true
 
+# Resource Statistics connection for Grafana
+adminServerSecure: false
+
 # Operations dashboard configuration
 odTracingConfig:
   enabled: false
 
   odAgentImageRepository: ibmcom/ace-od-agent
-  odAgentImageTag: 1.0.0
+  odAgentImageTag: 1.0.2
   odAgentLivenessProbe:
     initialDelaySeconds: 10
     periodSeconds: 10
@@ -176,7 +211,7 @@ odTracingConfig:
     failureThreshold: 3
 
   odCollectorImageRepository: ibmcom/ace-od-collector
-  odCollectorImageTag: 1.0.0
+  odCollectorImageTag: 1.0.2
   odCollectorLivenessProbe:
     initialDelaySeconds: 10
     periodSeconds: 10

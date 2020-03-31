@@ -13,18 +13,15 @@
 # limitations under the License.
 
 ###############################################################################
-# Runs a container that deletes the secret that the server used for the dashboard user
+# Runs a container that generates certificates and keys for communication
+# between internal components.
 ###############################################################################
-
-{{- if .Values.contentServerURL }}
 {{- include "sch.config.init" (list . "ibm-ace.sch.chart.config.values") }}
-{{- $jobName := include "sch.names.fullCompName" (list . "secret-del") }}
+{{- $jobName := include "sch.names.fullCompName" (list . "config-gen") }}
 {{- $fullName := include "sch.names.fullName" (list .) }}
-{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "secret-del")) }}
-{{- $ssName := include "sch.names.statefulSetName" (list .) }}
-{{- $deploymentName := include "sch.names.fullName" (list .) }}
-{{- $secretName := ternary $ssName $deploymentName (eq .Values.imageType "acemqserver") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "config-gen")) }}
 {{- $saName := include "sch.names.fullCompName" (list . "handle-secret-serviceaccount") }}
+{{- $cfgMapName := include "sch.names.fullCompName" (list . "create-configurator-config") }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -33,29 +30,28 @@ metadata:
   labels:
 {{ $labels | indent 4 }}
   annotations:
-    # This needs to run after the rest of the release has been deleted.
-    "helm.sh/hook": post-delete
-    "helm.sh/hook-weight": "2"
-    # Clean up the Job after running irrespective of success
-    "helm.sh/hook-delete-policy": hook-succeeded, hook-failed
+    # This needs to run before we deploy, as the dashboard install
+    # depend on the secrets existing already, and will fail to start
+    # otherwise.
+    "helm.sh/hook": pre-install,pre-upgrade
+    # We don't delete this if it fails, as the logs may be useful to
+    # diagnose a failed install
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    # This needs to happen before the deployment as that needs to access
+    # this secret
+    "helm.sh/hook-weight": "4"
 spec:
+  activeDeadlineSeconds: 600
   template:
-    metadata:
-      labels:
-{{ $labels | indent 8 }}
     spec:
       serviceAccountName: {{ $saName }}
-      {{- if .Values.image.pullSecret }}
-      imagePullSecrets:
-        - name: {{ .Values.image.pullSecret }}
-      {{- end }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
-        fsGroup: {{ default 1001 .Values.integrationServer.fsGroupGid }}
+        fsGroup: {{ default 1001 .Values.security.fsGroupGid }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -67,9 +63,16 @@ spec:
                       - amd64
       restartPolicy: Never
       containers:
-        - name: "secret-del"
+        - name: "secret-gen"
           image: "{{ .Values.image.configurator }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "1028Mi"
           securityContext:
             privileged: false
             readOnlyRootFilesystem: false
@@ -78,7 +81,16 @@ spec:
             runAsUser: 1001
             capabilities:
               drop:
-              - all
-          command: ["sh"]
-          args: ["-c", "kubectl delete secret {{ $secretName }} && echo Done"]
-{{- end }}
+              - ALL
+          command:
+            - sh
+            - -c
+            - /dashboard/generateConfig.sh
+          volumeMounts:
+          - name: {{ $cfgMapName }}
+            mountPath: /dashboard/
+      volumes:
+        - name: {{ $cfgMapName }}
+          configMap:
+            name: {{ $cfgMapName }}
+            defaultMode: 0555

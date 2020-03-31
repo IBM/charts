@@ -30,6 +30,46 @@ sch:
     metering:
       productName: IBM App Connect Enterprise for Developers (Free)
       productID: IBMAppConnectEnterprise_f9e7010beec748fe98ff292138860707
-      productVersion: 11.0.0.6
+      productVersion: 11.0.0.8-r1
     labelType: prefixed
+{{- end -}}
+
+{{- /*
+"sch.names.routeName" is a shared helper to build a route name based of the release
+and namespace and route name.
+Config Values Used: NA
+  
+Uses: NA
+    
+Parameters input as an array of one values:
+  - the root context (required)
+  - the release name to test (required)
+  - the namespace name to test (required)
+  - the route type to test (required)
+Usage:
+  {{- $routeName :=  include "sch.names.routeName" (list $root "MyRelease" "MyNamespace" "MyTypeOfRoute") -}}
+
+*/ -}}
+{{- define "sch.names.routeName" -}}
+  {{- $params := . -}}
+  {{- $root := first $params -}}
+  {{- $releaseName := (include "sch.utils.getItem" (list $params 1 "")) -}}
+  {{- $namespaceName := (include "sch.utils.getItem" (list $params 2 "")) -}}
+  {{- $namespaceLen := len $namespaceName -}}
+  {{- $routeName := (include "sch.utils.getItem" (list $params 3 "")) -}}
+  {{- $routeLen := len (printf "-%s-" $routeName) -}}
+  {{- $maxLength := 62 -}}
+  {{- $truncLength := (sub $maxLength $namespaceLen) -}}
+
+  {{- $fullLengthString := (printf "%s-%s" $releaseName $routeName) -}}
+  {{- $fullLengthResult :=  include "sch.utils.withinLength" (list $root $fullLengthString $truncLength) -}}
+
+  {{- if $fullLengthResult -}}
+    {{- $fullLengthResult | lower | trimSuffix "-" -}}
+  {{- else -}}
+    {{- $buildNameParms := (list) -}}
+    {{- $buildNameParms := append $buildNameParms (dict "name" $fullLengthString "length" (sub $truncLength 1)) -}}
+    {{- $shortResult := print (include "sch.names.buildName" $buildNameParms) -}}
+    {{- $shortResult | lower | trimSuffix "-" | trimPrefix "-" -}}
+  {{- end -}}
 {{- end -}}
