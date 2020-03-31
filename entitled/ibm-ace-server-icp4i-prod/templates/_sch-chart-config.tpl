@@ -29,7 +29,7 @@ sch:
     meteringProd:
       productName: IBM Cloud Pak for Integration - IBM App Connect Enterprise (Chargeable)
       productID: 606f1a9feb4f4cbc85b17a637f6a6b24
-      productVersion: "11.0.0.7"
+      productVersion: "11.0.0.8"
       productMetric: VIRTUAL_PROCESSOR_CORE
       productChargedContainers: All
       cloudpakName: IBM Cloud Pak for Integration
@@ -39,7 +39,7 @@ sch:
     meteringNonProd:
       productName: IBM Cloud Pak for Integration (Non-production) - IBM App Connect Enterprise (Chargeable)
       productID: 30fd0181a948441ebe3be59192171987
-      productVersion: "11.0.0.7"
+      productVersion: "11.0.0.8"
       productMetric: VIRTUAL_PROCESSOR_CORE
       productChargedContainers: All
       cloudpakName: IBM Cloud Pak for Integration
