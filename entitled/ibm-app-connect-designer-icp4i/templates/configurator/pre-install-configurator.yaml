@@ -1,0 +1,103 @@
+# © Copyright IBM Corporation 2019
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+###############################################################################
+# Runs a container that generates certificates and keys for communication
+# between internal components.
+###############################################################################
+{{- include "sch.config.init" (list . "ibm-ac.sch.chart.config.values") }}
+{{- $jobName := include "sch.names.fullCompName" (list . "secret-configmap-gen") }}
+{{- $fullName := include "sch.names.fullName" (list .) }}
+{{- $uiname := include "sch.names.fullCompName" (list . "ui") }}
+{{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "secret-configmap-gen")) }}
+{{- $saName := include "sch.names.fullCompName" (list . "secret-configmap-serviceaccount") }}
+{{- $cfgMapName := include "sch.names.fullCompName" (list . "designer-configurator") }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $jobName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    # This should run after the configurator configmap has been created
+    "helm.sh/hook-weight": "5"
+spec:
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      serviceAccountName: {{ $saName }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      restartPolicy: Never
+      containers:
+        - name: "secret-gen"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.configurator "${1}cp/icp4i/ace/" }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop:
+              - ALL
+          {{- if eq .Values.global.designerFlowsOperationMode "all" }}
+          env:
+            - name: "FIREFLY_API_APIKEY"
+              valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.global.appConnectSecret }}
+                    key: apikey
+          {{- end }}
+          command:
+            - sh
+            - -c
+            - /designer/generateConfig.sh
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "1028Mi"
+          volumeMounts:
+          - name: {{ $cfgMapName }}
+            mountPath: /designer/
+      volumes:
+        - name: {{ $cfgMapName }}
+          configMap:
+            name: {{ $cfgMapName }}
+            defaultMode: 0555
