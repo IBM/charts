@@ -244,12 +244,12 @@ The following table lists the configurable parameters of the `ibm-ace-server-icp
 | `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
 | `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
 | `designerFlowsOperationMode`     | Choose whether to deploy sidecar containers into the pod for running flows authored in App Connect Designer. Options `disabled`, `all` (Enabled for cloud-managed and local connectors) or `local` (Enabled for local connectors only) | `disabled` |
-| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-server-prod:11.0.0.7-r3` |
-| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-mqclient-server-prod:11.0.0.7-r3`         |
-| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `cp.icr.io/cp/icp4i/ace/ibm-ace-mq-server-prod:11.0.0.7-r3`               |
-| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `cp.icr.io/cp/icp4i/ace/ibm-acecc-configurator-prod:11.0.0.7-r3` |
-| `image.designerflows`            | Image repository and tag for the App Connect Enterprise designer flows image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-designer-flows-prod:11.0.0.7-r3` |
-| `image.connectors`               | Image repository and tag for the App Connect Enterprise loopback connector image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-lcp-prod:11.0.0.7-r3` |
+| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-server-prod:11.0.0.8-r1` |
+| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-mqclient-server-prod:11.0.0.8-r1`         |
+| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `cp.icr.io/cp/icp4i/ace/ibm-ace-mq-server-prod:11.0.0.8-r1`               |
+| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `cp.icr.io/cp/icp4i/ace/ibm-acecc-configurator-prod:11.0.0.8-r1` |
+| `image.designerflows`            | Image repository and tag for the App Connect Enterprise designer flows image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-designer-flows-prod:11.0.0.8-r1` |
+| `image.connectors`               | Image repository and tag for the App Connect Enterprise loopback connector image.    | `cp.icr.io/cp/icp4i/ace/ibm-ace-lcp-prod:11.0.0.8-r1` |
 | `image.pullPolicy`               | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`               | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                           | Architecture scheduling preference for worker node (only amd64 supported) - read only. | `amd64`              |

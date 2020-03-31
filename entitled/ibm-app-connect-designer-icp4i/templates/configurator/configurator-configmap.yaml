@@ -1,0 +1,342 @@
+###############################################################################
+#  Licensed Materials - Property of IBM
+#
+# 5737-I89
+# © Copyright IBM Corp. 2019 All Rights Reserved
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+###############################################################################
+#  Script run by create secrets job
+#
+###############################################################################
+{{- include "sch.config.init" (list . "ibm-ac.sch.chart.config.values") }}
+{{- $configuratorConfigMapName := include "sch.names.fullCompName" (list . "designer-configurator") }}
+{{- $envConfigMapName := include "sch.names.fullCompName" (list . "env")}}
+{{- $labels := include "sch.metadata.labels.standard" (list . "") }}
+{{- $fullName := include "sch.names.fullName" (list .) }}
+{{- $isSecretName := include "sch.names.fullCompName" (list . "is")}}
+{{- $uiServiceName := include "sch.names.fullCompName" (list . "ui") }}
+{{- $routeName := include "sch.names.routeName" (list . .Release.Name .Release.Namespace "ui") }}
+{{- $isServiceName := include "sch.names.fullCompName" (list . "is")  }}
+{{- $flowdocauthoringServiceName := include "sch.names.fullCompName" (list . "flowdoc-authoring") }}
+{{- $flowTestManagerServiceName := include "sch.names.fullCompName" (list . "flow-test-manager") }}
+{{- $runtimeServiceName := include "sch.names.fullCompName" (list . "runtime") }}
+{{- $connectorAuthServiceName := include "sch.names.fullCompName" (list . "connector-auth-service") }}
+{{- $clientName := include "sch.names.fullCompName" (list . "oidc") }}
+{{- $httpsRouteName := include "sch.names.routeName" (list . .Release.Name .Release.Namespace "https") }}
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $configuratorConfigMapName }}
+  labels:
+{{ $labels | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded, before-hook-creation
+    # This should run before the configurator job has been created
+    "helm.sh/hook-weight": "4"
+data:
+  generateConfig.sh: |
+    #!/bin/bash -e
+
+    SECRET_ARGS=
+    CONFIG_ARGS=
+
+    ######################################################
+    # Generate rootcert.crt
+    ######################################################
+
+    echo "Generating CA"
+    # Generate public/private keypair to form basis of the Root CA
+    openssl genpkey -algorithm RSA -out rootkey.key -pkeyopt rsa_keygen_bits:2048
+    # Create a certificate signing request (CSR)
+    openssl req -new -key rootkey.key -out rootreq.csr -config /designer/rootcert.cnf
+    # Sign the CSR with the private key
+    openssl x509 -req -days 800 -in rootreq.csr -signkey rootkey.key -out rootcert.crt
+
+    ######################################################
+    # Generate microservice certificate and private key
+    ######################################################
+
+    echo "Generating private key and cert for dashboard"
+    # Generate public/private keypair
+    openssl genpkey -algorithm RSA -out dashboard.key -pkeyopt rsa_keygen_bits:2048
+    # Create a certificate signing request (CSR)
+    openssl req -new -key dashboard.key -out dashboard.csr -config /designer/dashboardcert.cnf
+    # Sign the CSR using the rootcert.crt and rootkey.key to generate a certificate
+    openssl x509 -req -days 800 -in dashboard.csr -CA rootcert.crt -CAkey rootkey.key -CAserial rootcert.srl -CAcreateserial -out dashboard.crt -extensions SAN -extfile /designer/dashboardcert.cnf
+
+    SECRET_ARGS="${SECRET_ARGS} --from-file=ca.crt=./rootcert.crt "
+    SECRET_ARGS="${SECRET_ARGS} --from-file=tls.key=./dashboard.key"
+    SECRET_ARGS="${SECRET_ARGS} --from-file=tls.crt=./dashboard.crt"
+
+    ######################################################
+    # Create security creds
+    ######################################################
+
+    basicAuthUsername=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1)
+    basicAuthPassword=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+    cat <<EOT >> ./setdbparms.txt
+    {{- if eq .Values.global.designerFlowsOperationMode "all" }}
+    mqsisetdbparms -w /home/aceuser/ace-server -n AppConnectAPIKey -u apikey -p ${FIREFLY_API_APIKEY}
+    {{- end }}
+    mqsisetdbparms -w /home/aceuser/ace-server -n basicAuthOverride -u ${basicAuthUsername} -p ${basicAuthPassword}
+    EOT
+    SECRET_ARGS="${SECRET_ARGS} --from-file=setdbparms=./setdbparms.txt"
+
+    ######################################################
+    # Add Policies for basic auth
+    ######################################################
+
+    SECRET_ARGS="${SECRET_ARGS} --from-file=policy=/designer//policy.xml"
+    SECRET_ARGS="${SECRET_ARGS} --from-file=policyDescriptor=/designer//policyDescriptor.xml"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=SINGLE_TENANT_API_USERNAME=${basicAuthUsername}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=SINGLE_TENANT_API_PASSWORD=${basicAuthPassword}"
+
+    ######################################################
+    # Add server.conf.yaml
+    ######################################################
+
+    SECRET_ARGS="${SECRET_ARGS} --from-file=serverconf=/designer//server.conf.yaml"
+
+    ######################################################
+    # Create the Routes
+    ######################################################
+
+    echo "Creating designer dashboard route"
+    cat /designer/routes.yaml
+    oc apply -f /designer/routes.yaml
+
+    DESIGNER_URL=https://$(oc get route {{ $routeName }} -o jsonpath="{.spec.host}")
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=DESIGNER_URL=${DESIGNER_URL}"
+    echo "Finished creating designer dashboard route"
+
+    SINGLE_TENANT_API_BASE_URL=https://$(oc get route {{ $httpsRouteName }} -o jsonpath="{.spec.host}")
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=SINGLE_TENANT_API_BASE_URL=${SINGLE_TENANT_API_BASE_URL}"
+    echo "Added IS route to configmap"
+
+    {{- if .Values.ssoEnabled }}
+    ######################################################
+    # Designer OIDC Registration
+    ######################################################
+    echo "Creating oidc registration"
+
+    cat <<EOT >> ./oidc-registration.yaml
+    apiVersion: oidc.security.ibm.com/v1
+    kind: Client
+    metadata:
+      name: {{ $clientName }}
+      namespace: {{ .Release.Namespace }}
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      secret: {{ $clientName }}
+      oidcLibertyClient:
+        redirect_uris:
+          - ${DESIGNER_URL}/auth/icp/callback
+        trusted_uri_prefixes:
+          - ${DESIGNER_URL}
+        post_logout_redirect_uris:
+          - ${DESIGNER_URL}/logout
+    EOT
+    cat ./oidc-registration.yaml
+    oc apply -f ./oidc-registration.yaml
+    /usr/local/bin/kubectl label client {{ $clientName }} --overwrite=true release={{ .Release.Name }}
+    echo "Finished creating oidc registration"
+    {{- end }}
+
+    ######################################################
+    # Add Routes to env ConfigMap
+    ######################################################
+    echo "Creating routes for env ConfigMap"
+    {{- if eq .Values.global.designerFlowsOperationMode "all" }}
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_ROUTE_API={{ .Values.global.appConnectURL }}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_API_INSTANCE_ID={{ .Values.global.appConnectInstanceID }}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_USERID={{ .Release.Name }}-{{ .Values.global.appConnectInstanceID }}"
+    {{- else }}
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_USERID={{ .Release.Name }}"
+    {{- end}}
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_AUTH_ISSUER=appconnect-privatecloud"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_ROUTE_UI=$DESIGNER_URL"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_ROUTE_FLOWDOC_AUTH=https://{{ $flowdocauthoringServiceName }}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FLOWDOC_AUTHORING_ROUTE=https://{{ $flowdocauthoringServiceName }}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_ROUTE_FLOW_TEST_MANAGER=https://{{ $flowTestManagerServiceName }}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_ROUTE_RUNTIME=https://{{ $runtimeServiceName }}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=AUTH_SERVICE_URL=https://{{ $connectorAuthServiceName }}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_ROUTE_LOOPBACK_CONNECTOR_PROVIDER=https://{{ $isServiceName }}:3001"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=ACE_INTEGRATION_SERVER=https://{{ $isServiceName }}:7600"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=DESIGNER_FLOWS_OPERATION_MODE={{ .Values.global.designerFlowsOperationMode }}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=FIREFLY_IS_SECRET={{ $isSecretName }}"
+    {{- if .Values.ssoEnabled }}
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=IAM_ICP_STRATEGY=1"
+    {{- end }}
+
+    ######################################################
+    # truststore and keystore for integration server for customer flows
+    ######################################################
+
+    echo "Generating private key and cert for integration server"
+    # Generate public/private keypair
+    openssl genpkey -algorithm RSA -out is.key -pkeyopt rsa_keygen_bits:2048
+    # Create a certificate signing request (CSR)
+    openssl req -new -key is.key -out is.csr -config /designer/rootcert.cnf
+    # Sign the CSR using the rootcert.crt and rootkey.key to generate a certificate
+    openssl x509 -req -days 7305 -in is.csr -CA rootcert.crt -CAkey rootkey.key -CAserial rootcert.srl -CAcreateserial -out is.crt -extfile <(printf "extendedKeyUsage = serverAuth \n subjectAltName=DNS:$DESIGNER_URL")
+
+    SECRET_ARGS="${SECRET_ARGS} --from-literal=keystorePassword=changeit"
+    SECRET_ARGS="${SECRET_ARGS} --from-file=keystoreKey-iskey=./is.key"
+    SECRET_ARGS="${SECRET_ARGS} --from-file=keystoreCert-iskey=./is.crt"
+
+    ######################################################
+    # Generate JWT certificate and private key
+    ######################################################
+
+    echo "Generating private key and cert for JTW"
+    # Generate private key
+    openssl genpkey -algorithm RSA -out jwt.key -pkeyopt rsa_keygen_bits:2048
+    # Generate public key
+    openssl rsa -in ./jwt.key  -pubout > jwt.pub
+
+    SECRET_ARGS="${SECRET_ARGS} --from-file=jwt.pri=./jwt.key"
+    SECRET_ARGS="${SECRET_ARGS} --from-file=jwt.pub=./jwt.pub"
+    {{- if .Values.ssoEnabled }}
+    ######################################################
+    # Add Cluster information to env ConfigMap
+    ######################################################
+
+    IDENTITY_URL=`kubectl get cm ibmcloud-cluster-info -n kube-public -o jsonpath="https://{.data.cluster_address}:{.data.cluster_router_https_port}"`
+    MASTER_IP=`kubectl get cm ibmcloud-cluster-info -n kube-public -o=jsonpath="{.data.cluster_address}" `
+    CLUSTER_NAME=`kubectl get cm ibmcloud-cluster-info -n kube-public -o jsonpath="{.data.cluster_name}"`
+
+    echo "IDENTITY_URL = ${IDENTITY_URL}"
+    echo "MASTER_IP = ${MASTER_IP}"
+    echo "CLUSTER_NAME = ${CLUSTER_NAME}"
+
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=CLUSTER_EXTERNAL_URL=$IDENTITY_URL"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=IAM_GLOBAL_HOSTNAME=$IDENTITY_URL"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=CLUSTER_EXTERNAL_IP=$MASTER_IP"
+    CONFIG_ARGS="${CONFIG_ARGS}  --from-literal=CLUSTER_NAME=$CLUSTER_NAME"
+
+    ######################################################
+    # CRN information
+    ######################################################
+
+    ACE_DESIGNER_CRN="crn:v1:icp:private:ace-designer:$CLUSTER_NAME:n/{{ .Release.Namespace }}:r/{{ .Release.Name }}::"
+    ACE_DESIGNER_NAMESPACE_CRN="crn:v1:icp:private:k8:$CLUSTER_NAME:n/{{ .Release.Namespace }}:::"
+
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=ACE_DESIGNER_CRN=${ACE_DESIGNER_CRN}"
+    CONFIG_ARGS="${CONFIG_ARGS} --from-literal=ACE_DESIGNER_NAMESPACE_CRN=${ACE_DESIGNER_NAMESPACE_CRN}"
+
+    {{- end }}
+    ######################################################
+    # Create the Kubernetes secret resource
+    ######################################################
+
+    # Create secret if it does not exist (e.g. install vs upgrade)
+    if [ -n "$(kubectl get secret {{ $isSecretName }})" ]; then
+      echo "Secret already exists, skipping creation"
+    else
+      echo "Create secret as it does not already exist"
+      # Create secret
+      /usr/local/bin/kubectl create secret generic {{ $isSecretName }} ${SECRET_ARGS} --dry-run -o yaml | kubectl apply -f -
+      # Set label on secret
+      /usr/local/bin/kubectl label secret {{ $isSecretName }} release={{ .Release.Name }} --overwrite
+    fi
+
+    ######################################################
+    # Create the Kubernetes configmap resource
+    ######################################################
+
+    echo "Creating configmap"
+    # Create secret
+    /usr/local/bin/kubectl create configmap {{ $envConfigMapName }} ${CONFIG_ARGS} --dry-run -o yaml | kubectl apply -f -
+    # Set secret label
+    /usr/local/bin/kubectl label configmap {{ $envConfigMapName }} release={{ .Release.Name }} --overwrite
+
+    ######################################################
+    # Create couchdb security creds
+    ######################################################
+
+    kubectl get secret {{ .Release.Name }}-couchdb && exit 0
+    echo "CouchDB secret does not exist so creating one"
+    couchDBPassword=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
+    couchDBCookie=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
+    # Create secret
+    kubectl create secret generic {{ .Release.Name }}-couchdb --from-literal=adminUsername=admin --from-literal=adminPassword=$couchDBPassword --from-literal=cookieAuthSecret=$couchDBCookie
+    # Set secret label
+    /usr/local/bin/kubectl label secret {{ .Release.Name }}-couchdb release={{ .Release.Name }} --overwrite
+
+  dashboardcert.cnf: |
+    [req]
+    distinguished_name = req_distinguished_name
+    prompt             = no
+    req_extensions     = SAN
+
+    [req_distinguished_name]
+    CN                 = {{ $fullName }}
+
+    [ SAN ]
+    subjectAltName = DNS:{{ include "sch.names.fullCompName" (list . "ui") }},DNS:{{ include "sch.names.fullCompName" (list . "runtime") }},DNS:{{ include "sch.names.fullCompName" (list . "flowdoc-authoring")  }},DNS:{{ include "sch.names.fullCompName" (list . "flow-test-manager") }},DNS:{{ include "sch.names.fullCompName" (list . "is") }},DNS:{{ include "sch.names.fullCompName" (list . "connector-auth-service") }},DNS:{{ include "sch.names.fullCompName" (list . "svc-couchdb") }},DNS:{{ .Release.Name }}-svc-couchdb
+
+  rootcert.cnf: |
+    [req]
+    distinguished_name = req_distinguished_name
+    prompt             = no
+
+    [req_distinguished_name]
+    CN                 = app-connect-ca
+
+  policy.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <policies>
+    <policy policyType="SecurityProfiles" policyName="SecProfLocal">
+        <authentication>Local</authentication>
+        <authenticationConfig>basicAuthOverride</authenticationConfig>
+    </policy>
+    </policies>
+
+  policyDescriptor.xml: |
+    <?xml version="1.0" encoding="UTF-8" standalone="yes"?><ns2:policyProjectDescriptor xmlns="http://com.ibm.etools.mft.descriptor.base" xmlns:ns2="http://com.ibm.etools.mft.descriptor.policyProject"><references/></ns2:policyProjectDescriptor>
+
+  server.conf.yaml: |
+    RestAdminListener:
+      # SSL Server auth
+      sslCertificate: '/home/aceuser/ace-server/ssl/tls.crt.pem'    # See comment below
+      sslPassword: '/home/aceuser/ace-server/ssl/tls.key.pem'        # See comment below
+      # SSL Client auth
+      requireClientCert: true                    # Request a certificate from the client
+      caPath: '/home/aceuser/ace-server/ssl'     # CA certs, all files at this path will be read
+    # Force all flows to use https
+    forceServerHTTPS: true
+    # Force all flows to use basic auth
+    forceServerHTTPSecurityProfile: '{DefaultPolicies}:SecProfLocal'
+    # Configure Certs for HTTPS Connector
+    ResourceManagers:
+      HTTPSConnector:
+        ListenerPort: 7843
+        KeystoreFile: '/home/aceuser/ace-server/keystore.jks'
+        KeystorePassword: 'changeit'
+        CORSEnabled: true
+
+  routes.yaml: |
+    apiVersion: route.openshift.io/v1
+    kind: Route
+    metadata:
+      name: {{ $routeName }}
+      annotations:
+        icp4i.ibm.com/release: {{ .Release.Name }}
+        icp4i.ibm.com/native-header: "true"
+      labels:
+{{ $labels | indent 8 }}
+    spec:
+      host:
+      port:
+        targetPort: ui
+      to:
+        kind: Service
+        name: {{ $uiServiceName }}
+      tls:
+        termination: reencrypt
+        insecureEdgeTerminationPolicy: Redirect

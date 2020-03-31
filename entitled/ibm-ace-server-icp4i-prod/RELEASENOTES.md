@@ -28,7 +28,7 @@ For more information go to [IBM App Connect Enterprise Knowledge Center](https:/
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ----| ------------------- | ------------------ | ---------------- | ------- |
-| 3.1.0 | Mar 2020 | >=v1.14.0 | = ACE 11.0.0.7-r3 | none | Update BAR files, New create server interface, Delete servers in dashboard |
+| 3.1.0 | Mar 2020 | >=v1.14.0 | = ACE 11.0.0.8-r1 | none | Update BAR files, New create server interface, Delete servers in dashboard |
 | 3.0.0 | Nov 2019 | >=v1.11.0 | = ACE 11.0.0.6.1 | Removal of proxy node IP or FQDN value, custom port changes, `designerFlowsEnabled` replaced | Support for OpenShift 4.2, `log.format` now defaults to basic |
 | 2.2.0 | Oct 2019 | >=v1.11.0 | = ACE 11.0.0.6 | none | Updates ACE version, Operational Dashboard Tracing |
 | 2.1.0 | Sept 2019 | >=v1.11.0 | = ACE 11.0.0.5.1 | none | New image includes MQ client, Supports MQ 9.1.3, Operational Dashboard support, Support for configuring Switch ports, Support for configuring custom ports |
