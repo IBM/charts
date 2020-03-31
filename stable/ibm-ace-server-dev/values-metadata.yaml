@@ -27,7 +27,7 @@ contentServerURL:
 imageType:
   __metadata:
     label: "Which type of image to run"
-    description: "Run a standalone integration server a standalone server, an integration server with MQ client or an integration server with MQ server"
+    description: "Run a standalone integration server, an integration server with MQ client, or an integration server with MQ server"
     options:
     - label: 'App Connect Enterprise only'
       value: 'ace'
@@ -38,18 +38,37 @@ imageType:
 
 # Grafana Dashboard deployment
 dashboardEnabled:
-    __metadata:
-      label: "Deploy the dashboard to grafana"
-      description: "Automatically deploy the dashboard into grafana"
-      type: "boolean"
-      hidden: true
-
-# DesignerFlows enablement metadata
-designerFlowsEnabled:
   __metadata:
-    label: "Enable IBM App Connect Designer flows"
-    description: "Run an Integration Server with an associated sidecar container for running flows authored in IBM App Connect Designer"
+    label: "Deploy the dashboard to grafana"
+    description: "Automatically deploy the dashboard into grafana"
     type: "boolean"
+    hidden: true
+
+# Resource Statistics connection for Grafana
+adminServerSecure:
+  __metadata:
+    label: "Admin server security needed to gather statistics for Grafana"
+    description: "If true we need to connect to the admin port using SSL to gather statistics"
+    type: "boolean"
+
+# Designer flows operation mode
+designerFlowsOperationMode:
+  __metadata:
+    label: "IBM App Connect Designer flows"
+    description: "When 'Enabled for cloud-managed and local connectors' is selected, an IBM Cloud API key must be provided in the Kubernetes secret that contains your server configuration. Enabling Designer flow support will install additional sidecar containers."
+    type: "string"
+    required: true
+    options:
+    - label: 'Disabled'
+      value: 'disabled'
+    - label: 'Enabled for cloud-managed and local connectors'
+      value: 'all'
+    - label: 'Enabled for local connectors only'
+      value: 'local'
+
+customContentServer:
+    __metadata:
+      hidden: true  
 
 # Image configuration metadata
 image:
@@ -84,6 +103,12 @@ image:
     __metadata:
       label: "Designer flows Docker image"
       description: "Docker registry image to pull for the App Connect Designer flows"
+      type: "string"
+      required: true
+  connectors:
+    __metadata:
+      label: "Connectors Docker image"
+      description: "Docker registry image to pull for the App Connect Connectors"
       type: "string"
       required: true
   pullPolicy:
@@ -172,6 +197,17 @@ service:
         value: "ClusterIP"
       - label: "NodePort"
         value: "NodePort"
+  endpointType:
+    __metadata:
+      label: "Endpoint type"
+      description: "The type of transport used by the integration endpoint"
+      type: "string"
+      required: true
+      options:
+      - label: "HTTP"
+        value: "http"
+      - label: "HTTPS"
+        value: "https"
   webuiPort:
     __metadata:
       label: "Web UI Port"
@@ -193,12 +229,21 @@ service:
       type: "number"
       immutable: true
       required: true
-  iP:
+  switchAgentCPort:
     __metadata:
-      label: "Proxy Node IP or FQDN"
-      description: "An IP address or DNS name that the nodeport is connected to, that is, the proxy node's IP or fully qualified domain name (FQDN)"
-      type: "string"
-      required: true
+      label: "Switch AgentC Port"
+      description: "This is the Switch server agentC port number"
+      type: "number"
+  switchAgentPPort:
+    __metadata:
+      label: "Switch AgentP Port"
+      description: "This is the Switch server agentP port number"
+      type: "number"
+  switchAdminPort:
+    __metadata:
+      label: "Switch Admin Port"
+      description: "This is the Switch server admin port number"
+      type: "number"
 
 # Settings specific to deployments of ACE without MQ
 aceonly:
@@ -298,13 +343,66 @@ acemq:
       label: "Initialize MQ volume using root"
       description: "Whether or not the storage class (such as NFS) requires root permissions to initialize"
       type: "boolean"
-      required: true
+      required: true 
+  qmSecret:
+    name:
+      __metadata:
+        label: "MQ Password secret name"
+        description: "Secret that contains the 'admin' user password and optionally the 'app' user password to use for MQ messaging"
+        type: "string"
+        required: false
+    mqAdminPasswordKey:
+      __metadata:
+        label: "MQ Admin password key"
+        description: "Secret key that contains the 'admin' user password"
+        type: "string"
+        required: false
+    mqAppPasswordKey:
+      __metadata:
+        label: "MQ App password key"
+        description: "Secret key that contains the 'app' user password"
+        type: "string"
+        required: false
 
 # Settings specific to deployments of ACE with a sidecar for running flows authored in IBM App Connect Designer
 designerflows:
   __metadata:
     label: "Resources for running IBM App Connect Designer flows"
     description: "Resource settings for sidecar containers to run flows authored in IBM App Connect Designer"
+  # Resource requests and limits configuration metadata
+  resources:
+    requests:
+      cpu:
+        __metadata:
+          label: "CPU request"
+          description: "Minimum number of CPU cores. Specify integer, fractional (e.g., 0.5), or millicore values (e.g., 100m, where 100m is equivalent to 0.1 core)."
+          type: "string"
+          required: true
+      memory:
+        __metadata:
+          label: "Memory request"
+          description: "The minimum memory in bytes. Specify integers with one of these suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki."
+          type: "string"
+          required: true
+    limits:
+      cpu:
+        __metadata:
+          label: "CPU limit"
+          description: "Upper limit of CPU cores. Specify integer, fractional (e.g., 0.5), or millicore values (e.g., 100m, where 100m is equivalent to 0.1 core)."
+          type: "string"
+          required: true
+      memory:
+        __metadata:
+          label: "Memory limit"
+          description: "The memory upper limit in bytes. Specify integers with suffixes: E, P, T, G, M, K, or power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki."
+          type: "string"
+          required: true
+
+# Settings specific to deployments of ACE with a sidecar for running LCP Software
+connectors:
+  __metadata:
+    label: "Resources for running IBM App Connect Connectors"
+    description: "Resource settings for Connectors sidecar containers"
   # Resource requests and limits configuration metadata
   resources:
     requests:
@@ -389,6 +487,12 @@ log:
         value: "json"
       - label: "Basic"
         value: "basic"
+  mqDebug:
+    __metadata:
+      label: "Enable MQ debug log output"
+      description: "Enables additional MQ log output for debug purposes"
+      type: "boolean"
+      required: true
 
 # Metrics metadata
 metrics:

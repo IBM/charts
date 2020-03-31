@@ -17,6 +17,8 @@
 {{- $labels := include "sch.metadata.labels.standard" (list . "" (dict "serviceSelector" "ace-dashboard")) }}
 {{- $serverChartName := .sch.chart.serverChartName }}
 {{- $pvcName := "dataPVC" }}
+{{- $configMapName := include "sch.names.fullCompName" (list . "env")}}
+{{- $certName := include "sch.names.fullCompName" (list . "ui-cert") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -50,10 +52,11 @@ spec:
                 values:
                 - {{ .Values.arch }}
       serviceAccountName: {{ $saName }}
-      {{- if .Values.image.pullSecret }}
       imagePullSecrets:
+      {{- if .Values.image.pullSecret }}
         - name: {{ .Values.image.pullSecret }}
       {{- end }}
+        - name: ibm-entitlement-key
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -76,8 +79,6 @@ spec:
         image: "{{ .Values.image.configurator }}-{{ .Values.arch }}"
         name: {{ include "sch.names.fullCompName" (list . "content-server-init") }}
         securityContext:
-          seLinuxOptions:
-            type: spc_t
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
           runAsNonRoot: false
@@ -114,9 +115,9 @@ spec:
                   name: {{ $deploymentName }}
                   key: ibmAceControlApiKey
             - name: LOG_FORMAT
-              value: {{ .Values.log.format | default "json" | quote }}
+              value: {{ .Values.log.format | default "basic" | quote }}
           volumeMounts:
-            - name: tls
+            - name: shared-certs
               mountPath: /home/contentserver/ssl
               readOnly: true
             - name: content
@@ -161,35 +162,35 @@ spec:
             mkdir /mnt/data/content
             {{- end }}
             ln -s /mnt/data/content /home/contentserver/content
-            server
+            npx bytenode server.jsc
         - name: {{ include "sch.names.fullCompName" (list . "control-ui") }}
           image: "{{ .Values.image.controlUI }}-{{ .Values.arch }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            - name: ACE_INGRESS_HOSTNAME
-              {{- if .Values.tls.port }}
-              value: "{{ .Values.tls.hostname }}:{{ .Values.tls.port }}"
-              {{- else }}
-              value: "{{ .Values.tls.hostname }}"
-              {{- end }}
             - name: ACE_SERVER_CHART_NAME
               value: {{ $serverChartName }}
             - name: ACE_SERVER_CHART_VERSION
               value: {{ .Chart.Version }}
-            - name: ACE_SERVER_CHARTS_LOCATION
-              value: "ibm-charts"
+            - name: ACE_SERVER_IMAGE_REPO
+              value: {{ regexReplaceAll "(.*/).*ace-dashboard-prod:.*" .Values.image.controlUI "${1}" }}
             - name: ACE_DASHBOARD_KEY_FILE
               value: /home/dashboardui/ssl/controlui-pri.key
             - name: ACE_DASHBOARD_CERT_FILE
               value: /home/dashboardui/ssl/controlui-cert.pem
             - name: ACE_DASHBOARD_NAMESPACE
               value: {{ .Release.Namespace | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.log.format | default "basic" | quote }}
+            - name: ACE_DASHBOARD_LOG_LEVEL
+              value: {{ .Values.log.level | default "info" | quote }}
             - name: ACE_DASHBOARD_SSO_ENABLED
               value: {{ .Values.ssoEnabled | quote }}
-            - name: ACE_INGRESS_PATH
-              value: {{ print .Release.Namespace "-" .Release.Name | quote }}
             - name: ACE_CONTENT_SERVER_SERVICE_NAME
               value: {{ $deploymentName }}
+            - name: ACE_INFRA_API_SERVICE_NAME
+              value: {{ $deploymentName }}
+            - name: certDirectory
+              value: /home/dashboardui/shared-certs
             - name: ibmAceControlApiKey
               valueFrom:
                 secretKeyRef:
@@ -197,11 +198,6 @@ spec:
                   key: ibmAceControlApiKey
             - name: ACE_DISCOVERY_ANNOTATION
               value: appconnectenterprise=dev
-            - name: CLUSTER_EXTERNAL_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $deploymentName }}
-                  key: clusterExternalUrl
             {{- if .Values.ssoEnabled }}
             - name: CLIENT_ID
               valueFrom:
@@ -213,13 +209,16 @@ spec:
                 secretKeyRef:
                   name: {{ include "sch.names.fullCompName" (list . "oidc") }}
                   key: CLIENT_SECRET
+            {{- else }}
+            - name: CLIENT_SECRET
+              value: {{ .Release.Name }}-{{ .Chart.Name }}
             {{- end }}
-            - name: ACE_DASHBOARD_ROLE
-              value: {{ .Values.defaultRole | quote }}
           volumeMounts:
-            - name: tls
+            - name: ui-certs
               mountPath: /home/dashboardui/ssl
               readOnly: true
+            - name: shared-certs
+              mountPath: /home/dashboardui/shared-certs
           securityContext:
             privileged: false
             readOnlyRootFilesystem: true
@@ -254,8 +253,87 @@ spec:
 {{ toYaml .Values.controlUI.resources.limits | indent 14 }}
             requests:
 {{ toYaml .Values.controlUI.resources.requests | indent 14 }}
+          envFrom:
+            - configMapRef:
+                name: {{ $configMapName }}
+        - name: {{ include "sch.names.fullCompName" (list . "infra") }}
+          image: "{{ .Values.image.infra }}-{{ .Values.arch }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+          - bash
+          - -c
+          - |
+            npx bytenode server.jsc
+          env:
+            - name: SSLCERTFILE
+              value: "/opt/app-root/src/ssl/cert.pem"
+            - name: SSLKEYFILE
+              value: "/opt/app-root/src/ssl/pri.key"
+            - name: SSLCAFILE
+              value: "/opt/app-root/src/ssl/cacert.pem"
+            - name: certDirectory
+              value: "/opt/app-root/src/ssl"
+            - name: HTTPSPORT
+              value: "33443"
+            {{- if .Values.helmTlsSecret }}
+            - name: TILLER_ADDRESS
+              value: {{ .Values.helmAddress | quote }}
+            {{- else }}  
+            - name: TILLER_TLS
+              value: "false"
+            {{- end }}
+            {{- if .Values.tillerNamespace}}
+            - name: TILLER_NAMESPACE
+              value: {{ .Values.tillerNamespace | quote }}
+            {{- end }}
+            - name: ACE_SERVER_CHART
+              value: ./helm-charts/ibm-ace-server-dev
+            - name: ACE_DASHBOARD_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.log.format | default "basic" | quote }}
+            - name: ACE_DASHBOARD_LOG_LEVEL
+              value: {{ .Values.log.level | default "info" | quote }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          # Set liveness probe to determine if the integration server is running
+          livenessProbe:
+            exec:
+              command:
+              - /readiness/ready.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          # Set readiness probe to determine if the integration server admin endpoint is running
+          readinessProbe:
+            exec:
+              command:
+              - /readiness/ready.sh
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          resources:
+            limits:
+{{ toYaml .Values.infra.resources.limits | indent 14 }}
+            requests:
+{{ toYaml .Values.infra.resources.requests | indent 14 }}
+          volumeMounts:
+            - name: shared-certs
+              mountPath: /opt/app-root/src/ssl/
+              readOnly: true
+            {{- if and .Values.helmTlsSecret }}
+            - name: helm-certs
+              mountPath: /opt/app-root/src/.helm/
+            {{- end }}
       volumes:
-        - name: tls
+        - name: shared-certs
           secret:
             secretName: {{ $deploymentName }}
             items:
@@ -265,12 +343,6 @@ spec:
                 path: pri.key
               - key: contentServerCert
                 path: cert.pem
-              - key: controlUICACert
-                path: controlui-cacert.pem
-              - key: controlUIPrivateKey
-                path: controlui-pri.key
-              - key: controlUICert
-                path: controlui-cert.pem
         - name: content
         {{- if and .Values.persistence.enabled .Values.persistence.existingClaimName}}
           persistentVolumeClaim:
@@ -281,3 +353,25 @@ spec:
         {{- else }}
           emptyDir: {}
         {{- end }}
+        {{- if and .Values.helmTlsSecret }}
+        - name: helm-certs
+          secret:
+            secretName: {{ .Values.helmTlsSecret }}
+            defaultMode: 0644
+            items:
+              - key: cert.pem
+                path: cert.pem
+              - key: ca.pem
+                path: ca.pem
+              - key: key.pem
+                path: key.pem
+        {{- end }}     
+        - name: ui-certs
+          secret:
+            secretName: {{ $certName }}
+            defaultMode: 0644
+            items:
+              - key: tls.key
+                path: controlui-pri.key
+              - key: tls.crt
+                path: controlui-cert.pem
