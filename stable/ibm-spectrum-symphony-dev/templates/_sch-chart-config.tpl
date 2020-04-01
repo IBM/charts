@@ -17,21 +17,30 @@ sch:
       imagePullPolicy: {{ .Values.image.pullPolicy }}
       tty: true
     metering:
-      productVersion: "7.2.1.1"
+      productVersion: "7.3"
 {{- if .Values.master.entitlementSecretName }}
       productName: "IBM Spectrum Symphony"
-      productID: "IBMSpectrumSymphony_5725G86"
+      productID: "28826cfd6dcd4beebca2cb2d9ef0ffe4"
+      productMetric: ”VIRTUAL_PROCESSOR_CORE”
+      productChargedContainers: ”All”
 {{- else }}
-      productName: "IBM Spectrum Symphony CE"
-      productID: "IBMSpectrumSymphony_5725G86_CE"
+      productName: "IBM Spectrum Symphony Community Edition"
+      productID: "762afa9e64da4fec89452dd822e63370"
+      productMetric: ”VIRTUAL_PROCESSOR_CORE”
+      productChargedContainers: ””
 {{- end }}
     labels:
       app: {{ include "sch.names.appName" (list .) }}
       release: {{ .Release.Name }}
       chart: "{{ .Chart.Name }}"
       heritage: "{{ .Release.Service }}"
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/managed-by: {{ .Release.Service }}
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      helm.sh/chart: {{ .Chart.Name }}
     nodeAffinity:
       nodeAffinityRequiredDuringScheduling:
+        key: beta.kubernetes.io/arch
         operator: In
         values:
         - amd64
@@ -47,14 +56,17 @@ sch:
       hostIPC: false
       securityContext:
         runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
         runAsUser: 1000
-        fsGroup: 1000          
+{{- end }}
     containerSecurity:
       privileged: false
       readOnlyRootFilesystem: false
       allowPrivilegeEscalation: false
       runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
       runAsUser: 1000
+{{- end }}
       capabilities:
         drop:
           - ALL
@@ -63,10 +75,6 @@ sch:
         value: "accept"
       {{- if .Values.cluster.logsOnShared }}
       - name: LOGS_ON_SHARED
-        value: "Y"
-      {{- end }}
-      {{- if .Values.cluster.enableSSHD }}
-      - name: START_SSHD
         value: "Y"
       {{- end }}
       {{- if .Values.cluster.enableSharedSubdir }}
@@ -81,3 +89,12 @@ sch:
 {{- end }}
 
 {{- end -}}
+
+{{- define "ibm-spectrum-symphony.serviceAccountName" -}}
+{{- if (.Values.serviceAccountName) -}}
+{{- .Values.serviceAccountName -}}
+{{- else -}}
+{{ include "sch.names.fullName" (list .) }}-serviceaccount
+{{- end -}}
+{{- end -}}
+
