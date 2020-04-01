@@ -1,14 +1,8 @@
-# ibm-nodejs-sample@2.0.0
+# ibm-nodejs-sample@2.0.1
 
-## Breaking Changes
-* Removal of Node 6 Docker image due to Node 6 being End-of-Life. 
-* Defaults to Node 10 Docker image. 
+## Breaking Changes 
 
-## What’s new in Chart Version 2.0.0
-* Node 10 Docker image. 
-
-## Fixes
-* Includes missing metadata for catalog classification and parameter values
+THIS CHART IS NOW DEPRECATED. On March 30, 2020 the ibm-nodejs-sample Helm chart will no longer be supported. As this chart was a demonstrative sample application, that was not intended to be used in production, there will be no replacement chart. The chart will be removed on April 30, 2020.
 
 ## Prerequisites
 * Kubernetes >=1.9.1
@@ -33,6 +27,7 @@ See NOTES.txt associated with this chart for information on accessing the sanple
 
 | Chart | Date     | Kubernetes Required | Image(s) Supported       | Breaking Changes | Details |
 | ----- | -------- | ------------------- | -----------------------  | ---------------- | ------- | 
-| 2.0.0 | Mar 2018 | >=1.9.1             | icp-nodejs-sample:latest | None             | Node 10 changes                            |
+| 2.0.1 | Mar 2020 | >=1.9.1             | icp-nodejs-sample:latest | None             | Chart Deprecation |
+| 2.0.0 | Mar 2019 | >=1.9.1             | icp-nodejs-sample:latest | None             | Node 10 changes                            |
 | 1.2.1 | Dec 2018 | >=1.9.1             | icp-nodejs-sample:latest | None             | Chart metadata and documentation changes |
 | 1.2.0 | Mar 2018 | >=1.9.1             | icp-nodejs-sample:latest | None             | First release                              |

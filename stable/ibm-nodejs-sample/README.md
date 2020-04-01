@@ -1,5 +1,7 @@
 # ibm-nodejs-sample
 
+THIS CHART IS NOW DEPRECATED. On March 30, 2020 the ibm-nodejs-sample Helm chart will no longer be supported. As this chart was a demonstrative sample application, that was not intended to be used in production, there will be no replacement chart. The chart will be removed on April 30, 2020.
+
 * A sample application using Node.js
 
 ### This sample is for demonstrative purposes only and is NOT for production use. ###
