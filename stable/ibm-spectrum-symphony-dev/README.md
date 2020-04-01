@@ -39,13 +39,75 @@ This chart deploys IBM Spectrum Symphony Community Edition with the following st
 
 - For SSH access to the client host, an SSH public key must be encoded in base64 and saved into a Kubernetes secret. For SSH access from the client host to the management and compute hosts, the corresponding SSH private key must also be encoded. For more information, refer to the [Before Installing the Chart](#before-installing-the-chart) section.
 
-- If you want to replace the self-signed SSL certificate generated during cluster deployment with your own, a client deployment must be enabled ('client.enabled' set to true) and SSH access from the client host to the management and compute hosts must be enabled ('cluster.enableSSHD' set to true). Additionally, both public and private SSH keys must be saved into a Kubernetes secret and specified in 'cluster.sshKeysSecretName' before the chart is deployed. 
+## PodDisruptionBudget
 
-  After the cluster is deployed, use SSH to access the client host. Then, access the master host from the client and replace the self-signed  certificate with your own. For more information on using your own SSL certificate, refer to the [Enabling SSL for the cluster management console using an external certificate](https://www.ibm.com/support/knowledgecenter/SSZUMP_7.2.1/security/security_https_pmc_enabling_prod.html) topic. 
+Set to true to enable Pod Disruption Budget to maintain high availability during a node maintenance. Administrator role or higher is required to enable Pod Disruption Budget on clusters with Role Based Access Control. The default is false.
 
-### PodSecurityPolicy Requirements
+### Red Hat OpenShift SecurityContextConstraints Requirements
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace before installation. Choose predefined PodSecurityPolicy [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp).
+This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
+
+The predefined SecurityContextConstraints name: [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+
+Custom SecurityContextConstraints definition:
+```
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  annotations:
+    kubernetes.io/description: "This policy is the most restrictive, 
+      requiring pods to run with a non-root UID, and preventing pods from accessing the host.
+      The UID and GID will be bound by ranges specified at the Namespace level." 
+    cloudpak.ibm.com/version: "1.1.0"
+  name: ibm-restricted-scc
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+allowPrivilegeEscalation: false
+allowedCapabilities: null
+allowedFlexVolumes: null
+allowedUnsafeSysctls: null
+defaultAddCapabilities: null
+defaultAllowPrivilegeEscalation: false
+forbiddenSysctls:
+  - "*"
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - max: 65535
+    min: 1
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- ALL
+runAsUser:
+  type: MustRunAsNonRoot
+seccompProfiles:
+- docker/default
+# This can be customized for seLinuxOptions specific to your host machine
+seLinuxContext:
+  type: RunAsAny
+# seLinuxOptions:
+#   level:
+#   user:
+#   role:
+#   type:
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - max: 65535
+    min: 1
+# This can be customized to host specifics
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+```
 
 ## Resources Required
 
@@ -60,8 +122,6 @@ To control decisions about which nodes to place pods on, specify how much resour
 For CPU and memory values that you can set, refer to the [Kubernetes specification](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu).
 
 ## Before Installing the Chart
-
-- Only SSH public key authentication is enabled for SSH access to the IBM Spectrum Symphony cluster. When a client deployment is enabled ('client.enabled' set to true), only a public key is required. When SSH access is enabled from the client host to the management and compute hosts ('cluster.enableSSHD' set to true), the private key corresponding to the public key is also required. The public key and optionally private key must be base64-encoded and saved into a Kubernetes secret before the chart is deployed. For more information, refer to the [Creating secrets](https://www.ibm.com/support/knowledgecenter/SSZUMP_7.2.1/install_grid_sym/symphony_icp_creating_secrets.html) topic.
 
 - If you want to use scripts to configure your IBM Spectrum Symphony cluster before and/or after cluster startup, create scripts and package all the necessary files (including the scripts) as a .tar.gz file. Then, create a base64-encoded Kubernetes secret for the package before the chart is deployed. For more information, refer to the [Creating secrets](https://www.ibm.com/support/knowledgecenter/SSZUMP_7.2.1/install_grid_sym/symphony_icp_creating_secrets.html) topic.
 
@@ -98,6 +158,7 @@ The following table lists the configurable parameters of the ibm-spectrum-sympho
 | image.repository         | Docker repository for the IBM Spectrum Symphony image  | `ibmcom/spectrum-symphony` |
 | image.tag                | Tag for the IBM Spectrum Symphony image | `7.2.1.1`  |
 | image.pullPolicy         | Pull policy for the IBM Spectrum Symphony image | `Always` if `imageTag` is `latest`, else `IfNotPresent` |
+| serviceAccountName         | Service Account Name to use for deployment, if empty one is created  | `""` |
 | cluster.clusterName              | Name of the cluster. If "", the cluster takes the name '*release_name*-ibm-spectrum-symphony-dev'. | `""` |
 | cluster.pvc.useDynamicProvisioning | Whether storage volumes must be dynamically provisioned. If true, the PersistentVolumeClaim uses the storageClassName to bind the volume. If false, the selector is used to refine the binding process. | `true` |
 | cluster.pvc.storageClassName       | Storage class name for dynamic storage provisioning. Specify a custom storageClassName per volume, or leave the value empty to use the default storageClass or any available PersistentVolume that can satisfy the capacity request (for example, 5Gi).  | `""` |
@@ -108,8 +169,6 @@ The following table lists the configurable parameters of the ibm-spectrum-sympho
 | cluster.enableSharedSubdir | Whether to create a subdirectory inside the shared volume mount, enabling the shared volume to be re-used in a single pod. If true, a subdirectory that takes the name of your Helm release is created inside the /shared directory. | `true` |
 | cluster.logsOnShared | Whether component logs on management and compute hosts must be saved to the mounted shared directory to be shared by containers across multiple hosts. If true, resource manager logs (EGO) are saved at /shared/logs/kernel/logs/, workload logs (SOAM) at /shared/logs/soam/logs/,  cluster management console (WEBGUI) logs at /shared/logs/gui/logs/, and reporting logs (PERF) at /shared/logs/perf/logs/.      | `true` |
 | cluster.scriptsSecretName | Name of the secret created to hold predefined scripts that configure your cluster before and/or after startup (see [Before Installing the Chart](#before-installing-the-chart)). | `""`|
-| cluster.sshKeysSecretName | Name of the secret created to hold public and private keys for SSH access to hosts in the cluster (see [Before Installing the Chart](#before-installing-the-chart)). | `""`|
-| cluster.enableSSHD               | Whether the SSH daemon must be enabled internally on management and compute containers to access these  hosts from the client host when a client deployment is enabled ('client.enabled' set to true). | `false` |
 | master.resources.requests.cpu      | Initial CPU requested for the master (see [Resources Required](#resources-required)). | `2` |
 | master.resources.requests.memory   | Initial memory requested for the master (see [Resources Required](#resources-required)). | `2048Mi` |
 | master.resources.limits.cpu        | CPU limit for the master (see [Resources Required](#resources-required)).| `2` |
@@ -126,11 +185,6 @@ The following table lists the configurable parameters of the ibm-spectrum-sympho
 | compute.minReplicas      | Minimum number of deployment replicas for compute | `1` |
 | compute.maxReplicas      | Maximum number of deployment replicas for compute | `64` |
 | compute.targetCPUUtilizationPercentage| When autoscaling is enabled ('compute.usePodAutoscaler' set to true), target CPU utilization threshold (in percentage) on compute host pods | `70` |
-| client.enabled | Whether a client must be deployed, enabling access to the cluster from the client node | `true`|
-| client.resources.requests.cpu     | Initial CPU requested for client (see [Resources Required](#resources-required)).| `1` |
-| client.resources.requests.memory  | Initial memory requested for client (see [Resources Required](#resources-required)).| `1024Mi` |
-| client.resources.limits.cpu       | CPU limit for client (see [Resources Required](#resources-required)). | `1` |
-| client.resources.limits.memory    | Memory limit for client (see [Resources Required](#resources-required)). |`1024Mi` |
 
 ## Accessing IBM Spectrum Symphony
 
@@ -158,7 +212,11 @@ This command removes all the Kubernetes components associated with the chart and
 
 ## Limitations
 * Supported platforms are `amd64` and `ppc64le`.
-* Cannot upgrade or roll back the Helm release version after the chart is deployed. 
+* There is no limitation on number of Symphony deployments in the cluster
+* PersistentVolumeClaim uses RWX (ReadWriteMany) permission
+* For Symphony version upgrade and rollback it's recommended to re-deploy Symphony cluster
+* Shared mount (PersistentVolumeClaim) could be reused for HA
+* To backup or recovery Symphony, use data on allocated PersistentVolumeClaim
 
 ## Documentation
 * [IBM Spectrum Symphony for analytic workload management](https://www.ibm.com/us-en/marketplace/analytics-workload-management)
