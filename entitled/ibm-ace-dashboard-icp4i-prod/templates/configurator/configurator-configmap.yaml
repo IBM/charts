@@ -159,11 +159,16 @@ data:
     # Create the Kubernetes secret resource
     ######################################################
 
-    echo "Creating secret"
-    # Create secret
-    /usr/local/bin/kubectl create secret generic {{ $fullName }} ${SECRET_ARGS} --dry-run -o yaml | kubectl apply -f -
-    # Set secret label
-    /usr/local/bin/kubectl label secret {{ $fullName }} release={{ .Release.Name }} --overwrite
+    # Create secret if it does not exist (e.g. install vs upgrade)
+    if [ -n "$(kubectl get secret {{ $fullName }})" ]; then
+      echo "Secret already exists, skipping creation"
+    else
+      echo "Creating secret as it doesn't exist"
+      # Create secret
+      /usr/local/bin/kubectl create secret generic {{ $fullName }} ${SECRET_ARGS} --dry-run -o yaml | kubectl apply -f -
+      # Set secret label
+      /usr/local/bin/kubectl label secret {{ $fullName }} release={{ .Release.Name }} --overwrite
+    fi
 
     echo "Creating configmap"
     # Create secret
