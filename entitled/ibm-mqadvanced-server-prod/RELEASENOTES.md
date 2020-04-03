@@ -1,14 +1,26 @@
 # Breaking Changes
 
-- If you have existing MQ connections via the NodePort service, they need to be changed to use an OpenShift Route.
+- To upgrade from an existing 9.1.4 Queue Manager, you will need to add the 888 group as a supplemental group prior to the upgrade. This is to allow file permissions to be updated in line with no longer running as a user in the MQM group. To upgrade from an existing installation called `my-release`, you can upgrade with the following command:
+```
+helm upgrade --reuse-values my-release ibm-entitled-charts/ibm-mqadvanced-server-prod --version 5.0.0 --set security.context.supplementalGroups={888} && \
+helm upgrade my-release ibm-entitled-charts/ibm-mqadvanced-server-prod --version 6.0.0
+```
+*This assumes that you have previously added the entitled Helm repository as a remote Helm repository. If you have not yet added the entitled Helm repository as a remote Helm repository, you can do so by running the following command:*
+```
+helm repo add ibm-entitled-charts https://raw.githubusercontent.com/IBM/charts/master/repo/entitled
+```
 
-# What’s new in the MQ Advanced Chart, Version 5.0.x
+To remove the 888 supplemental group from your upgraded Helm release, you can run the following command:
+```
+helm upgrade --reuse-values my-release ibm-entitled-charts/ibm-mqadvanced-server-prod --version 6.0.0 --set security.context.supplementalGroups={}
+```
 
-- Updated to IBM MQ 9.1.4
-- Added support for deploying through the Entitled Catalog & Registry
-- Added an OpenShift Route for the queue manager
-- Added a Service Account
-- `log.format` now defaults to `basic`
+# What’s new in the MQ Advanced Chart, Version 6.0.x
+
+- Updated to IBM MQ 9.1.5
+- No longer required to run as MQM user, can run as a random UID
+- Added an option to enable MQ trace on the startup of the queue manager
+- Added an option to modify the pod termination grace period
 
 # Fixes
 
@@ -16,7 +28,7 @@
 
 # Prerequisites
 
-- None
+- OpenShift Container Platform v3.11, v4.2 and v4.3 (Kubernetes 1.11, 1.14 & 1.16) on AMD64
 
 # Documentation
 
@@ -27,6 +39,7 @@
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 6.0.0 | April 2020 | >= 1.11.0 | = MQ 9.1.5.0 | Run as a random UID | Updated to IBM MQ 9.1.5; No longer required to run as MQM user, can run as a random UID; Added an option to enable MQ trace on the startup of the queue manager; Added an option to modify the pod termination grace period |
 | 5.0.0 | December 2019 | >= 1.11.0 | = MQ 9.1.4.0 | Use OpenShift Routes instead of NodePorts | Updated to IBM MQ 9.1.4; Entitled Catalog & Registry; Added an OpenShift Route for the queue manager; Added a Service Account; `log.format` now defaults to `basic` |
 | 4.1.2 | September 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated go-toolset to version 1.11.13 |
 | 4.1.1 | August 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated UBI 7 base image |

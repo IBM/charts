@@ -35,7 +35,7 @@ fi
 if supports_scc; then
   echo "Removing all namespace users from SCC..."
   if command -v oc >/dev/null 2>&1 ; then
-    oc adm policy remove-scc-from-group ibm-mq-scc system:serviceaccounts:$namespace
+    oc adm policy remove-scc-from-group ibm-mq-init-volume-as-root-scc system:serviceaccounts:$namespace
   else
     echo "ERROR:  The OpenShift CLI is not available..."
   fi
