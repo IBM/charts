@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2017, 2019
+# © Copyright IBM Corporation 2017, 2020
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ spec:
   template:
     metadata:
       annotations:
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
       labels:
         statefulSetName: {{ $statefulSetName | quote }}
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
@@ -49,8 +49,17 @@ spec:
     spec:
       affinity:
         nodeAffinity:
-{{ include "ibm-mq.sch.affinity.nodeAffinityRequiredDuringSchedulingRequiredDuringExecution" . | indent 10 }}
-{{ include "ibm-mq.sch.affinity.nodeAffinityPreferredDuringSchedulingRequiredDuringExecution" . | indent 10 }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - "amd64"
+              - key: beta.kubernetes.io/os
+                operator: In
+                values:
+                - "linux"
         {{- if .Values.queueManager.multiInstance }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -117,6 +126,7 @@ spec:
       {{- end }}
       {{- end }}
       {{- end }}
+      terminationGracePeriodSeconds: {{.Values.queueManager.terminationGracePeriodSeconds}}
       containers:
         - name: qmgr
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -139,8 +149,12 @@ spec:
             value: "{{ .Values.metrics.enabled | default false }}"
           - name: DEBUG
             value: "{{ .Values.log.debug | default false }}"
+          - name: MQ_ENABLE_TRACE_STRMQM
+            value: "{{ .Values.trace.strmqm | default false }}"
           - name: MQ_EPHEMERAL_PREFIX
             value: "/run/mqm"
+          - name: MQ_GRACE_PERIOD
+            value: "{{sub .Values.queueManager.terminationGracePeriodSeconds 1}}"
           - name: MQ_ADMIN_PASSWORD
             valueFrom:
               secretKeyRef:
@@ -183,20 +197,11 @@ spec:
           {{- end }}
           {{- end }}
           securityContext:
-            seLinuxOptions:
-              type: spc_t
-            allowPrivilegeEscalation: true
+            allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             runAsNonRoot: true
-            runAsUser: 888
             privileged: false
             capabilities:
-              add:
-                - CHOWN
-                - SETGID
-                - SETUID
-                - AUDIT_WRITE
-                - DAC_OVERRIDE
               drop:
                 - ALL
           # Set liveness probe to determine if the queue manager is running
@@ -255,8 +260,6 @@ spec:
           {{- end }}
           {{- end }}
           securityContext:
-            seLinuxOptions:
-              type: spc_t
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             runAsNonRoot: false

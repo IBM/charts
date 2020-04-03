@@ -29,7 +29,7 @@ sch:
     metering:
       productName: "IBM MQ Advanced"
       productID: "208423bb063c43288328b1d788745b0c"
-      productVersion: "9.1.4.0"
+      productVersion: "9.1.5.0"
       productMetric: {{ .Values.ilmt.productMetric }}
       productChargedContainers: "All"
 {{- end -}}

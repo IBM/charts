@@ -1,12 +1,27 @@
 # Breaking Changes
 
-- If you have existing MQ connections via the NodePort service, they need to be changed to use an OpenShift Route.  A default Route will be created for the web console only.
+- To upgrade from an existing 9.1.4 Queue Manager, you will need to add the 888 group as a supplemental group prior to the upgrade. This is to allow file permissions to be updated in line with no longer running as a user in the MQM group. To upgrade from an existing installation called `my-release`, you can upgrade with the following command:
+```
+helm upgrade --reuse-values my-release ibm-stable-charts/ibm-mqadvanced-server-dev --version 5.0.0 --set security.context.supplementalGroups={888} && \
+helm upgrade my-release ibm-stable-charts/ibm-mqadvanced-server-dev --version 6.0.0
+```
 
-# What’s new in the MQ Advanced for Developers Chart, Version 5.0.x
+*This assumes that you have previously added the stable Helm repository as a remote Helm repository. If you have not yet added the entitled Helm repository as a remote Helm repository, you can do so by running the following command:*
+```
+helm repo add ibm-stable-charts https://raw.githubusercontent.com/IBM/charts/master/repo/stable
+```
 
-- Updated to IBM MQ 9.1.4
-- Added OpenShift Routes for the web console & queue manager
-- Added a Service Account
+To remove the 888 supplemental group from your upgraded Helm release, you can run the following command:
+```
+helm upgrade --reuse-values my-release ibm-stable-charts/ibm-mqadvanced-server-dev --version 6.0.0 --set security.context.supplementalGroups={}
+```
+
+# What’s new in the MQ Advanced for Developers Chart, Version 6.0.x
+
+- Updated to IBM MQ 9.1.5
+- No longer required to run as MQM user, can run as a random UID
+- Added an option to enable MQ trace on the startup of the queue manager
+- Added an option to modify the pod termination grace period
 
 # Fixes
 
@@ -14,8 +29,7 @@
 
 # Prerequisites
 
-- The following IBM Platform Core Service is required: `tiller`
-
+- OpenShift Container Platform v3.11, v4.2 and v4.3 (Kubernetes 1.11, 1.14 & 1.16) on AMD64
 # Documentation
 
 - [What's new and changed in IBM MQ Version 9.1.x](https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.1.0/com.ibm.mq.pro.doc/q113110_.htm)
@@ -24,6 +38,7 @@
 # Version History
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
+| 6.0.0 | April 2020 | >= 1.11.0 | = MQ 9.1.5.0 | Run as a random UID | Updated to IBM MQ 9.1.5; No longer required to run as MQM user, can run as a random UID; Added an option to enable MQ trace on the startup of the queue manager; Added an option to modify the pod termination grace period |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
 | 5.0.0 | December 2019 | >= 1.11.0 | = MQ 9.1.4.0 | Use OpenShift Routes instead of NodePorts | Updated to IBM MQ 9.1.4; Added an OpenShift Route for the web console & queue manager; Added a Service Account |
 | 4.1.2 | September 2019 | >= 1.11.0 | = MQ 9.1.3.0 | None | Updated go-toolset to version 1.11.13 |
