@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2017, 2019
+# © Copyright IBM Corporation 2017, 2020
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ spec:
   template:
     metadata:
       annotations:
-{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
       labels:
         statefulSetName: {{ $statefulSetName | quote }}
 {{ include "sch.metadata.labels.standard" (list . "") | indent 8 }}
@@ -55,11 +55,7 @@ spec:
               - key: beta.kubernetes.io/arch
                 operator: In
                 values:
-                {{- if .Values.arch }}
-                - {{ .Values.arch }}
-                {{- else }}
-                - {{ template "ibm-mq.chart.helpers.arch" . }}
-                {{- end }}
+                - "amd64"
               - key: beta.kubernetes.io/os
                 operator: In
                 values:
@@ -130,9 +126,10 @@ spec:
       {{- end }}
       {{- end }}
       {{- end }}
+      terminationGracePeriodSeconds: {{.Values.queueManager.terminationGracePeriodSeconds}}
       containers:
         - name: qmgr
-          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}{{ template "ibm-mq.chart.helpers.platform" . }}"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}-amd64"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           terminationMessagePath: "/run/termination-log"
           ports:
@@ -151,8 +148,12 @@ spec:
             value: "{{ .Values.metrics.enabled | default false }}"
           - name: DEBUG
             value: "{{ .Values.log.debug | default false }}"
+          - name: MQ_ENABLE_TRACE_STRMQM
+            value: "{{ .Values.trace.strmqm | default false }}"
           - name: MQ_EPHEMERAL_PREFIX
             value: "/run/mqm"
+          - name: MQ_GRACE_PERIOD
+            value: "{{sub .Values.queueManager.terminationGracePeriodSeconds 1}}"
           {{- if or (.Values.persistence.enabled) (or (.Values.pki.trust) (.Values.pki.keys)) }}
           volumeMounts:
           {{- if .Values.pki.trust }}
@@ -183,12 +184,9 @@ spec:
           {{- end }}
           {{- end }}
           securityContext:
-            seLinuxOptions:
-              type: spc_t
-            allowPrivilegeEscalation: true
+            allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             runAsNonRoot: true
-            runAsUser: 888
             privileged: false
             capabilities:
               drop:
@@ -219,7 +217,7 @@ spec:
       {{- if .Values.security.initVolumeAsRoot }}
       initContainers:
         - name: qmgr-init
-          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}{{ template "ibm-mq.chart.helpers.platform" . }}"
+          image: "{{ regexReplaceAll "(^cp\\.(stg\\.)?icr\\.io/)" .Values.image.repository "${1}cp/" }}:{{ .Values.image.tag }}-amd64"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           terminationMessagePath: "/run/termination-log"
           args: ["-i"]
@@ -248,8 +246,6 @@ spec:
           {{- end }}
           {{- end }}
           securityContext:
-            seLinuxOptions:
-              type: spc_t
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             runAsNonRoot: false

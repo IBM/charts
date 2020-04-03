@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This chart deploys a single IBM® MQ version 9.1.4 Advanced server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
+This chart deploys a single IBM® MQ version 9.1.5 Advanced server (Queue Manager).  IBM MQ is messaging middleware that simplifies and accelerates the integration of diverse applications and business data across multiple platforms.  It uses message queues to facilitate the exchanges of information and offers a single messaging solution for cloud, mobile, Internet of Things (IoT) and on-premises environments.
 
 ## Chart Details
 
@@ -10,41 +10,41 @@ This chart will do the following:
 
 * Create a single MQ server (Queue Manager) using a [Stateful Set](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/) with one or two replicas depending on whether multi-instance queue managers are enabled.  Kubernetes will ensure that if it fails for some reason, it will be restarted, possibly on a different worker node.
 * Create a [Service](https://kubernetes.io/docs/concepts/services-networking/service/).  This is used to ensure that MQ client applications have a consistent IP address to connect to, regardless of where the Queue Manager is actually running.
-* Create an [OpenShift Route](https://docs.openshift.com/container-platform/3.9/architecture/networking/routes.html) for the queue manager.
+* Create an [OpenShift Route](https://docs.openshift.com/container-platform/3.11/architecture/networking/routes.html) for the queue manager.
 * [Optional] Create additional [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) for use with a multi-instance Queue Manager.
 * [Optional] Create a metrics [Service](https://kubernetes.io/docs/concepts/services-networking/service/) for accessing Queue Manager metrics.
 
 ## Prerequisites
 
-* Kubernetes 1.11.0 or greater, with beta APIs enabled.
+* OpenShift Container Platform v3.11, v4.2 and v4.3 (Kubernetes 1.11, 1.14 & 1.16)
 * If persistence is enabled (see the **configuration** section), then you either need to create a PersistentVolume, or specify a Storage Class if classes are defined in your cluster.
 
 ### Red Hat OpenShift SecurityContextConstraints Requirements
 
-This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre-install actions that need to occur.
+The predefined OpenShift SecurityContextConstraints name: [`restricted`](https://ibm.biz/cpkspec-scc) has been verified for this chart when `security.initVolumeAsRoot=false`, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart. This is the most restrictive SCC and it is used by default for authenticated users.
 
-The predefined SecurityContextConstraints name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
+The IBM defined SecurityContextConstraints name: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc) has been verified for this chart when `security.initVolumeAsRoot=true`, if your target namespace is bound to this SecurityContextConstraints resource you can proceed to install the chart.
 
-This chart also defines a custom SecurityContextConstraints which can be used to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied scripts in the `pak_extensions` pre-install directory.
+This chart also defines a custom SecurityContextConstraints which can be used when `security.initVolumeAsRoot=true` to finely control the permissions/capabilities needed to deploy this chart. You can enable this custom SecurityContextConstraints resource using the supplied scripts in the `pak_extensions` pre-install directory.
 
   - Custom SecurityContextConstraints definition:
     ```
     apiVersion: security.openshift.io/v1
     kind: SecurityContextConstraints
     metadata:
-      name: ibm-mq-scc
+      name: ibm-mq-init-volume-as-root-scc
     allowHostDirVolumePlugin: false
     allowHostIPC: false
     allowHostNetwork: false
     allowHostPID: false
     allowHostPorts: false
+    allowPrivilegeEscalation: true
     allowPrivilegedContainer: false
     allowedCapabilities:
     - CHOWN
     - FOWNER
     - DAC_OVERRIDE
-    allowedFlexVolumes: []
-    defaultAddCapabilities: []
+    defaultAddCapabilities: null
     fsGroup:
       type: RunAsAny
     readOnlyRootFilesystem: false
@@ -53,12 +53,16 @@ This chart also defines a custom SecurityContextConstraints which can be used to
     runAsUser:
       type: RunAsAny
     seLinuxContext:
-      type: RunAsAny
+      type: MustRunAs
     supplementalGroups:
       type: RunAsAny
     volumes:
     - secret
+    - configMap
+    - downwardAPI
+    - emptyDir
     - persistentVolumeClaim
+    - projected
     users: []
     priority: 0
     ```
@@ -83,15 +87,18 @@ See the **configuration** section for how to configure these values.
 
 ## Installing the Chart
 
-Install the chart, specifying the release name (for example `foo`) and Helm repository name (for example `mylocal-repo`) with the following command:
+Install the chart, specifying the release name (for example `foo`) and remote Helm repository name `ibm-entitled-charts` with the following command:
 
 ```sh
-helm install --name foo mylocal-repo/ibm-mqadvanced-server-prod --set license=accept --tls
+helm install --name foo ibm-entitled-charts/ibm-mqadvanced-server-prod --set license=accept --tls
 ```
 
-This example assumes that you have a local Helm repository configured, called `mylocal-repo`.  You could alternatively reference a local directory containing the Helm chart code.
+This example assumes that you have added the entitled Helm repository as a remote Helm repository. If you have not yet added the entitled Helm repository as a remote Helm repository, you can do so by running the following command:
+```
+helm repo add ibm-entitled-charts https://raw.githubusercontent.com/IBM/charts/master/repo/entitled
+```
 
-This command accepts the [IBM MQ Advanced license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-BGMHFW) and deploys an MQ Advanced server on the Kubernetes cluster. The **configuration** section lists the parameters that can be configured during installation.
+This command accepts the [IBM MQ Advanced license](http://www14.software.ibm.com/cgi-bin/weblap/lap.pl?la_formnum=Z125-3301-14&li_formnum=L-APIG-BJAKBF) and deploys an MQ Advanced server on the Kubernetes cluster. The **configuration** section lists the parameters that can be configured during installation.
 
 > **Tip**: See all the resources deployed by the chart using `kubectl get all -l release=foo`
 
@@ -116,7 +123,6 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `image.tag`                     | Image tag                                                       | `Tag of MQ image`                          |
 | `image.pullPolicy`              | Image pull policy                                               | `IfNotPresent`                             |
 | `image.pullSecret`              | Image pull secret, if you are using a private Docker registry   | `nil`                                      |
-| `arch`                          | CPU architecture of worker node.  Either `amd64`, `ppc64le`, or `s390x` | `nil` - Will try to detect architecture automatically |
 | `metadata.labels`               | Additional labels to be added to resources                      | `{}`                                       |
 | `persistence.enabled`           | Use persistent volumes for all defined volumes                  | `true`                                     |
 | `persistence.useDynamicProvisioning` | Use dynamic provisioning (storage classes) for all volumes | `true`                                     |
@@ -142,6 +148,7 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `security.initVolumeAsRoot`     | Whether or not storage provider requires root permissions to initialize | `false`                            |
 | `queueManager.name`             | MQ Queue Manager name                                           | Helm release name                          |
 | `queueManager.multiInstance`    | Whether to run in multi-instance mode with an active and standby queue manager | `false`                     |
+| `queueManager.terminationGracePeriodSeconds` | The duration in seconds the Queue Manager needs to terminate gracefully | 30                |
 | `pki.keys`                      | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates with private keys. See section titled "Supplying certificates to be used for TLS" for more details  | `[]` |
 | `pki.trust`                     | An array of YAML objects that detail Kubernetes secrets containing TLS Certificates. See section titled "Supplying certificates to be used for TLS" for more details  | `[]` |
 | `nameOverride`                  | Set to partially override the resource names used in this chart | `ibm-mq`                                   |
@@ -155,6 +162,7 @@ The following table lists the configurable parameters of the `ibm-mqadvanced-ser
 | `readinessProbe.failureThreshold` | Minimum consecutive failures for the probe to be considered failed after having succeeded | 1              |
 | `log.format`                    | Error log format on container's console.  Either `json` or `basic` | `basic`                                  |
 | `log.debug`                     | Enables additional log output for debug purposes. | `false` |
+| `trace.strmqm`                  | Whether to enable MQ trace on queue manager start, i.e. `strmqm` | `false` |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`.
 
@@ -194,72 +202,6 @@ The web console and REST administrative API are not currently supported.
 #### Configuring MQ using a new image layer
 
 You can create a new container image layer, on top of the IBM MQ Advanced base image.  You can add MQSC files to define MQ objects such as queues and topics, and place these files into `/etc/mqm` in your image.  When the MQ pod starts, it will run any MQSC files found in this directory (in sorted order).
-
-#### Example Dockerfile and MQSC script for creating a new image
-
-In this example you will create a Dockerfile that creates two users:
-
-* `admin` - Administrator user which is a member of the `mqm` group
-* `app` - Client application user which is a member of the `mqclient` group. (You will also create this group)
-
-You will also create a MQSC Script file called `config.mqsc` that will be run automatically when your container starts. This script will do the following:
-
-* Create default local queues for my applications
-* Create channels for use by the `admin` and `app` users
-* Configure security to allow use of the channels by remote applications
-* Create authority records to allow members of the `mqclient` group to access the Queue Manager and the default local queues.
-
-First create a file called `config.mqsc`. This the MQSC file that will be run when an MQ container starts. It should contain the following:
-
-```
-* Create Local Queues that my application(s) can use.
-DEFINE QLOCAL('EXAMPLE.QUEUE.1') REPLACE
-DEFINE QLOCAL('EXAMPLE.QUEUE.2') REPLACE
-
-* Create a Dead Letter Queue for undeliverable messages and set the Queue Manager to use it.
-DEFINE QLOCAL('EXAMPLE.DEAD.LETTER.QUEUE') REPLACE
-ALTER QMGR DEADQ('EXAMPLE.DEAD.LETTER.QUEUE')
-
-* Set ADOPTCTX to YES so we use the same userid passed for authentication as the one for authorization and refresh the security configuration
-ALTER AUTHINFO(SYSTEM.DEFAULT.AUTHINFO.IDPWOS) AUTHTYPE(IDPWOS) ADOPTCTX(YES)
-REFRESH SECURITY(*) TYPE(CONNAUTH)
-
-* Create a entry channel for the Admin user and Application user
-DEFINE CHANNEL('EXAMP.ADMIN.SVRCONN') CHLTYPE(SVRCONN) REPLACE
-DEFINE CHANNEL('EXAMP.APP.SVRCONN') CHLTYPE(SVRCONN) MCAUSER('app') REPLACE
-
-* Set Channel authentication rules to only allow access through the two channels we created and only allow admin users to connect through EXAMPLE.ADMIN.SVRCONN
-SET CHLAUTH('*') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(NOACCESS) DESCR('Back-stop rule - Blocks everyone') ACTION(REPLACE)
-SET CHLAUTH('EXAMP.APP.SVRCONN') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) DESCR('Allows connection via APP channel') ACTION(REPLACE)
-SET CHLAUTH('EXAMP.ADMIN.SVRCONN') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) DESCR('Allows connection via ADMIN channel') ACTION(REPLACE)
-SET CHLAUTH('EXAMP.ADMIN.SVRCONN') TYPE(BLOCKUSER) USERLIST('nobody') DESCR('Allows admins on ADMIN channel') ACTION(REPLACE)
-
-* Set Authority records to allow the members of the mqclient group to connect to the Queue Manager and access the Local Queues which start with "EXAMPLE."
-SET AUTHREC OBJTYPE(QMGR) GROUP('mqclient') AUTHADD(CONNECT,INQ)
-SET AUTHREC PROFILE('EXAMPLE.**') OBJTYPE(QUEUE) GROUP('mqclient') AUTHADD(INQ,PUT,GET,BROWSE)
-```
-
-Next create a `Dockerfile` that expands on the MQ Advanced Server image to create the users and groups. It should contain the following, replacing `<IMAGE NAME>` with the MQ image you want to use as a base:
-
-```dockerfile
-FROM <IMAGE NAME>
-USER root
-# Add the admin user as a member of the mqm group and set their password
-RUN useradd admin -G mqm \
-    && echo admin:passw0rd | chpasswd \
-# Create the mqclient group
-    && groupadd mqclient \
-# Create the app user as a member of the mqclient group and set their password
-    && useradd app -G mqclient \
-    && echo app:passw0rd | chpasswd
-USER mqm
-# Copy the configuration script to /etc/mqm where it will be picked up automatically
-COPY config.mqsc /etc/mqm/
-```
-
-Finally, build and push the image to your registry.
-
-You can then use the new image when you deploy MQ into your cluster. You will find that once you have run the image you will be able to see your new default objects and users.
 
 ### JSON log output
 
@@ -328,4 +270,4 @@ If you supply multiple YAML objects then all of the certificates specified will 
 
 ## Copyright
 
-© Copyright IBM Corporation 2017, 2019
+© Copyright IBM Corporation 2017, 2020

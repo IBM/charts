@@ -19,5 +19,5 @@
 
 if supports_scc; then
   echo "Removing the SCC..."
-  kubectl delete -f ../../pre-install/clusterAdministration/ibm-mq-dev-scc.yaml
+  kubectl delete -f ../../pre-install/clusterAdministration/ibm-mq-init-volume-as-root-scc.yaml
 fi

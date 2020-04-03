@@ -1,4 +1,4 @@
-# © Copyright IBM Corporation 2017, 2019
+# © Copyright IBM Corporation 2017, 2020
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ sch:
     metering:
       productName: "IBM MQ Advanced for Developers"
       productID: "2f886a3eefbe4ccb89b2adb97c78b9cb"
-      productVersion: "9.1.4.0"
+      productVersion: "9.1.5.0"
       productMetric: "FREE_USAGE"
       productChargedContainers: ""
 {{- end -}}
@@ -39,39 +39,6 @@ sch:
 {{ $key }}: {{ $value | quote }}
 {{- end }}
 {{- end }}
-
-{{- define "ibm-mq.sch.affinity.nodeAffinityRequiredDuringSchedulingRequiredDuringExecution" -}}
-{{- $values := .Values.arch -}}
-requiredDuringSchedulingIgnoredDuringExecution:
-  nodeSelectorTerms:
-  - matchExpressions:
-    - key: {{ default "beta.kubernetes.io/arch"}}
-      operator: In
-      values:
-  {{- range $key , $value := $values }}
-      - {{ $key }}
-  {{- end }}
-    - key: {{ default "beta.kubernetes.io/os"}}
-      operator: In
-      values:
-      - {{"linux"}}
-{{- end -}}
-
-{{- define "ibm-mq.sch.affinity.nodeAffinityPreferredDuringSchedulingRequiredDuringExecution" -}}
-{{- $values := .Values.arch -}}
-preferredDuringSchedulingIgnoredDuringExecution:
-{{- range $key , $value := $values }}
-- preference:
-    matchExpressions:
-    - key: {{ default "beta.kubernetes.io/arch"}}
-      operator: In
-      values:
-      - {{ $key }}
-      {{- $splitValue := split " " $value }}
-          {{- $weight := $splitValue._0 | int64 }}
-  weight: {{ $weight }}
-{{- end }}
-{{- end -}}
 
 {{- define "ibm-mq.chart.config.validate-multi-instance-persistence" -}}
 {{- if or (eq .Values.queueManager.multiInstance false) (and .Values.queueManager.multiInstance .Values.persistence.enabled) -}}

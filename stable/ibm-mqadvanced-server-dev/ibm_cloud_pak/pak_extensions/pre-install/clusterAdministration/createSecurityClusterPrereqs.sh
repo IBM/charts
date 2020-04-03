@@ -17,5 +17,5 @@
 if supports_scc; then
   # Create the custom SCC for OpenShift
   echo "Creating SecurityContextConstraints..."
-  kubectl apply -f ibm-mq-dev-scc.yaml --validate=false
+  kubectl apply -f ibm-mq-init-volume-as-root-scc.yaml --validate=false
 fi
