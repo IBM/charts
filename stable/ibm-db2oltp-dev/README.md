@@ -1,4 +1,6 @@
 # IBM Db2 Developer-C Helm Chart
+
+THIS CHART IS NOW DEPRECATED. On May 5, 2020 this version of the Helm chart for IBM Db2 Developer-C will no longer be supported. The dev chart will be replaced by `ibm-db2` chart on May 5, 2020. 
   
 [Db2 Developer-C Edition](http://www-03.ibm.com/software/products/sv/db2-developer-edition) enables you to develop, test, evaluate and demonstrate database and warehousing applications in a non-production environment.
 
