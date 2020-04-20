@@ -1,22 +1,28 @@
-# What’s new in Chart Version 1.0.1
-	- This is the first release of this chart.
-	
-# Breaking Changes
-  - See [Details](https://www.ibm.com/support/knowledgecenter/en/SSQNUZ_2.1.0/com.ibm.icpdata.doc/zen/overview/whats-new.html)
-	
-# Fixes
-   - See [Details](https://www.ibm.com/support/knowledgecenter/en/SSQNUZ_2.1.0/com.ibm.icpdata.doc/zen/overview/whats-new.html)
-	
-# Prerequisites
-	1. IBM Cloud Private version 3.1.0 or later
-	2. IBM Cloud Private platform services (example only):  `auth-idp`, `cert-manager`, `icp-management-ingress`, `logging`, `monitoring`, `nginx-ingress`, `storage-glusterfs`
-	- See [Details](https://www.ibm.com/support/knowledgecenter/en/SSQNUZ_2.1.0/com.ibm.icpdata.doc/zen/install/ovu.html)
+# Release Notes
 
-# Documentation
-	For detailed upgrade instructions go to http://rhea.svl.ibm.com:9081/support/knowledgecenter/SSQNUZ_2.5.0/cpd/svc/spss/spss-install.html .
-	
-# Version History
-	
-	| Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
-	| ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
-	| 1.0.1 | Nov, 2019 | >= 1.11 | None | Initial release of this chart.|
+## What's new
+
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/overview.html)
+
+## Fixes
+
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/whats-new.html)
+
+## Breaking Changes
+
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/whats-new.html)
+
+## Prerequisites
+
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/whats-new.html)
+
+## Documentation
+
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/overview.html)
+
+## Version History
+
+| Chart | Date | Kubernetes Version Required | Breaking Changes | Details |
+| ----- | ---- | --------------------------- | ---------------- | ------- |
+| 3.0.0 | Apr 7, 2020  | >= 1.11 | None | Added support for Openshift 4.3|
+| 1.1 | Nov 22, 2019 | >= 1.9 | None | Initial release of this chart.|

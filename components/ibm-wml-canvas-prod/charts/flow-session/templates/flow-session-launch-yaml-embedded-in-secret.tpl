@@ -10,13 +10,15 @@ kind: Pod
 metadata:
   name:  {{ template "flow-session.fullname" . }}
   labels:
-    app: {{ template "flow-session.name" . }}
-    release: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ template "flow-session.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
   annotations:
     build: {{ .Values.global.buildVersion | quote }}
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
 spec:
   automountServiceAccountToken: false
-
   {{ if .Values.global.docker.useImagePullSecret }}
   imagePullSecrets:
   - name: {{ .Values.global.imagePullSecretName }}
@@ -70,10 +72,10 @@ spec:
     resources:
       limits:
         cpu: {{ .Values.global.flowSession.cpuLimits }}
-        memory: {{ .Values.resources.memory }}
+        memory: {{ .Values.global.flowSession.memLimits }}
       requests:
         cpu: {{ .Values.global.flowSession.cpuRequests }}
-        memory: {{ .Values.resources.memory }}
+        memory: {{ .Values.global.flowSession.memRequests }}
 
     volumeMounts:
       {{- if .Values.usePVCForTempDiskSpace }}
@@ -145,14 +147,13 @@ spec:
         value: "false"
       - name: USE_ICONSET
         value: "v1/"
-
       # TODO: Check the value here matches what Don P has coded.
       - name: MODEL_VIEWER_SERVICE
         value: "{{ .Values.global.modelViewer.url }}"
-
       - name: MODEL_VIEWER_BROWSER_PREFIX
         value: "/model-viewer"
-
+      - name: LOCALFS_ROOT_PATH
+        value: "/"
       {{ if .Values.global.auth.icp4d.enabled }}
       - name: ICP4D_PUBLIC_KEY_URL
         value: {{ .Values.global.auth.icp4d.publicKeyUrl | quote }}
