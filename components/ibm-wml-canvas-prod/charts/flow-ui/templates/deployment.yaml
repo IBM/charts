@@ -3,25 +3,31 @@ kind: Deployment
 metadata:
   name: {{ template "flow-ui.fullname" . }}
   labels:
-    app: {{ template "flow-ui.name" . }}
-    chart: {{ template "flow-ui.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "flow-ui.name" . }}
+    helm.sh/chart: {{ template "flow-ui.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
   annotations:
     build: {{ .Values.global.buildVersion | quote }}
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
 spec:
-  replicas: {{ .Values.resources.replicaCount }}
+  replicas: 1
   selector:
     matchLabels:
-      app: {{ template "flow-ui.name" . }}
-      release: {{ .Release.Name }}
+      app.kubernetes.io/name: {{ template "flow-ui.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "flow-ui.name" . }}
-        release: {{ .Release.Name }}
+        app.kubernetes.io/name: {{ template "flow-ui.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
       annotations:
         build: {{ .Values.global.buildVersion | quote }}
+        {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 8 }}
+        {{- end }}
     spec:
       affinity:
         nodeAffinity:
@@ -178,6 +184,11 @@ spec:
           value: {{ .Values.global.auth.icp4d.authorizationUrl }}
         - name: auth__icp4d__publicKeyUrl
           value: {{ .Values.global.auth.icp4d.publicKeyUrl }}
+        - name: auth__icp4d__serviceIdAuth
+          valueFrom:
+            secretKeyRef:
+              name: wdp-service-id
+              key: service-id-credentials
         - name: auth__icp4d__callbackUrl
           value: {{ .Values.global.auth.icp4d.callbackUrl }}
         - name: auth__icp4d__logoutUrl
@@ -242,16 +253,6 @@ spec:
           value: {{ .Values.nginx.internalSSLCertificate.mountFolder }}/{{ .Values.nginx.internalSSLCertificate.fileName }}
         {{- end }}
 
-        {{- if .Values.global.auth.icp4d.enabled }}
-        # icp4d auth.
-        - name: auth__icp4d__publicKeyUrl
-          value: {{ .Values.global.auth.icp4d.publicKeyUrl }}
-        - name: auth__icp4d__serviceIdAuth
-          valueFrom:
-            secretKeyRef:
-              name: wdp-service-id
-              key: service-id-credentials
-        {{- end }}
 
       {{ if .Values.global.docker.useImagePullSecret }}
       imagePullSecrets:

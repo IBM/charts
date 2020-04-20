@@ -1,4 +1,4 @@
-{{- $compName := "spss-preinstaller-embedded-yaml" -}}
+{{- $compName := "spss-preupgrade-deletejobs" -}}
 kind: Job
 apiVersion: batch/v1
 metadata:
@@ -7,10 +7,10 @@ metadata:
     app.kubernetes.io/name: {{$compName}}
     helm.sh/chart: {{$compName}}
     app.kubernetes.io/instance: {{$compName}}
-    run: {{$compName}}
   annotations:
-    "helm.sh/hook": pre-install, pre-upgrade
-    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded 
+    "helm.sh/hook-weight": "-5"
     {{- if .Values.global.annotations }}
 {{ toYaml .Values.global.annotations | trim | indent 4 }}
     {{- end }}
@@ -20,7 +20,7 @@ spec:
       labels:
         app.kubernetes.io/name: {{$compName}}
         helm.sh/chart: {{$compName}}
-        app.kubernetes.io/component: {{$compName}}
+        component: {{$compName}}
         app.kubernetes.io/instance: {{$compName}}
     spec:
       hostNetwork: false
@@ -44,8 +44,8 @@ spec:
       restartPolicy: Never
       containers:
         - name: {{$compName}}
-          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.preInstaller.name }}:{{ .Values.global.preInstaller.tag }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ template "full-image-url" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}          
           resources:
             limits:
               cpu: "0.5"
@@ -62,25 +62,5 @@ spec:
             capabilities:
               drop:
                 - ALL
-          command:
-            - "/bin/bash"
-            - -c
-            - |
-              cat <<EOF | kubectl apply -f -
-              apiVersion: v1
-              kind: Secret
-              metadata:
-                name: flow-session-template-yml
-                labels:
-                  app.kubernetes.io/name: {{ template "flow-session.name" . }}
-                  helm.sh/chart: {{ template "flow-session.chart" . }}
-                  app.kubernetes.io/instance: {{ .Release.Name }}
-                annotations:
-                  build: {{ .Values.global.buildVersion | quote }}
-              type: Opaque
-              data:
-                # This stanza puts an entire rendered yaml into the secret store, so that a pod can be
-                # launched using it. Substitutions are made by moustache as normal, and the result is base64 encoded
-                # as per normal secrets.
-                flow_session_deployment_snippet.yml: {{ include "launch_yaml" . | b64enc }}
-              EOF
+          command: [ "/bin/bash" , "-c" ,
+                   "/home/hook/upgrade_delete_jobs.sh" ]

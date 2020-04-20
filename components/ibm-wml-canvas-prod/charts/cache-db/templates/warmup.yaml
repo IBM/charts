@@ -5,11 +5,14 @@ metadata:
   name: {{ template "cache-db-warmup.fullname" . }}
   annotations:
     build: {{ .Values.global.buildVersion | quote }}
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
   labels:
-    app: {{ template "cache-db-warmup.name" . }}
-    chart: {{ template "cache-db.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "cache-db-warmup.name" . }}
+    helm.sh/chart: {{ template "cache-db.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   replicas: 4
   strategy:
@@ -20,10 +23,13 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "cache-db-warmup.name" . }}
-        release: {{ .Release.Name }}
+        app.kubernetes.io/name: {{ template "cache-db-warmup.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
       annotations:
         build: {{ .Values.global.buildVersion | quote }}
+        {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 8 }}
+        {{- end }}
     spec:
       # Prefer to not run on a node that already has a warmup pod running on it.
       affinity:
@@ -55,6 +61,12 @@ spec:
       - name: postgres
         image: {{ template "full-image-url" . }}
         imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsUser: {{ $.Values.global.runAsUser }}
+          fsGroup: 2000
+          capabilities:
+            drop:
+            - ALL
         resources:
           limits:
             cpu: 25m
@@ -65,10 +77,6 @@ spec:
         # Sleep for 365 days. This pod doesn't actually do anything, just here
         # to pull down the image to the node.
         command: [ "/bin/sh", "-c", "sleep 365d" ]
-      {{ if .Values.global.docker.useImagePullSecret }}
-      imagePullSecrets:
-      - name: {{ .Values.global.imagePullSecretName }}
-      {{ end }}
       # Mount the PVC so the warmup runs on nodes that have access to the PVC.
       # Especially applicable to MZR in cloud where the PVC is only accessible
       # from a single zone.

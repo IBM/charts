@@ -1,4 +1,4 @@
-{{- $compName := "spss-preinstaller-embedded-yaml" -}}
+{{- $compName := "spss-modeler-post-delete-hook-pod" -}}
 kind: Job
 apiVersion: batch/v1
 metadata:
@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/instance: {{$compName}}
     run: {{$compName}}
   annotations:
-    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook": "post-delete"
     "helm.sh/hook-delete-policy": hook-succeeded
     {{- if .Values.global.annotations }}
 {{ toYaml .Values.global.annotations | trim | indent 4 }}
@@ -20,17 +20,17 @@ spec:
       labels:
         app.kubernetes.io/name: {{$compName}}
         helm.sh/chart: {{$compName}}
-        app.kubernetes.io/component: {{$compName}}
+        component: {{$compName}}
         app.kubernetes.io/instance: {{$compName}}
     spec:
+      serviceAccount: {{ .Values.global.editor.sa }}
+      serviceAccountName: {{ .Values.global.editor.sa }}
       hostNetwork: false
       hostPID: false
       hostIPC: false
       securityContext:
         runAsNonRoot: true
         runAsUser: {{ .Values.global.runAsUser }}
-      serviceAccount: {{ .Values.global.editor.sa }}
-      serviceAccountName: {{ .Values.global.editor.sa }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -41,11 +41,12 @@ spec:
                     values:
                       - "amd64"
                       - "ppc64le"
-      restartPolicy: Never
       containers:
         - name: {{$compName}}
           image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.preInstaller.name }}:{{ .Values.global.preInstaller.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/bash"]
+          args: ["/usr/local/bin/post-delete.sh"]
           resources:
             limits:
               cpu: "0.5"
@@ -55,32 +56,12 @@ spec:
               memory: "256Mi"
           securityContext:
             privileged: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
             runAsUser: {{ .Values.global.runAsUser }}
             capabilities:
               drop:
                 - ALL
-          command:
-            - "/bin/bash"
-            - -c
-            - |
-              cat <<EOF | kubectl apply -f -
-              apiVersion: v1
-              kind: Secret
-              metadata:
-                name: flow-session-template-yml
-                labels:
-                  app.kubernetes.io/name: {{ template "flow-session.name" . }}
-                  helm.sh/chart: {{ template "flow-session.chart" . }}
-                  app.kubernetes.io/instance: {{ .Release.Name }}
-                annotations:
-                  build: {{ .Values.global.buildVersion | quote }}
-              type: Opaque
-              data:
-                # This stanza puts an entire rendered yaml into the secret store, so that a pod can be
-                # launched using it. Substitutions are made by moustache as normal, and the result is base64 encoded
-                # as per normal secrets.
-                flow_session_deployment_snippet.yml: {{ include "launch_yaml" . | b64enc }}
-              EOF
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 0
