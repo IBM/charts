@@ -1,119 +1,59 @@
-# wml-canvas helm chart
+# IBM Watson Studio Local
 
-Use the SPSS® Modeler service to create SPSS Modeler flows in IBM Cloud™ Pak™ for Data. You can quickly develop predictive models using business expertise and deploy them into business operations to improve decision making. Designed around the long-established SPSS Modeler client software and the industry-standard CRISP-DM model it uses, the flows interface in Cloud Pak for Data supports the entire data mining process, from data to better business results.
+IBM Watson Studio Local provides a suite of tools for data scientists, application developers, subject matter experts and other teams in the organization so they can collaboratively connect to data, manipulate that data, and use it to build, train, and deploy models at scale.
 
-## Objectives
-- Be a *top-level* helm chart under which all the other helm charts for canvas can exist.
-- Be a single point such that installing this helm chart will install all the others to make the wml-canvas work.
-- Provide a modular structure so we can add/remove subcharts as our mix of docker images changes
-- Provide any over-all cross-canvas values which will over-ride the sub-chart values
-- Provide any global values which the sub-charts can use
+IBM Watson Machine Learning accelerates the process of moving to deployment and integrate AI into their applications. Watson Studio along with Watson Machine Learning offers a single interface to manage the entire analytics lifecycle, from discovery to production.
+
+IBM Watson Studio Local - SPSS Modeler Add On accelerate time to value and achieve desired outcomes by speeding up operational tasks for data scientists.  SPSS Modeler now comes with many new features which includes Graph node to generate interactive charts and Text Analytics.
 
 ## Introduction
-This helm chart deploy spss modeler add-on
+
+This chart deploys IBM Watson Studio Local.
 
 ## Chart Details
-- See [Details](http://rhea.svl.ibm.com:9081/support/knowledgecenter/SSQNUZ_2.5.0/cpd/svc/spss/spss-install-svc.html)
 
-## Resources Required
-- See [Details](http://rhea.svl.ibm.com:9081/support/knowledgecenter/SSQNUZ_2.5.0/cpd/svc/spss/spss-install-svc.html)
-
+- See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/overview/overview.html)
 
 ## Prerequisites
-* Kubernetes 1.11.0 or later / Openshift 3.11, with beta APIs enabled.
-* A user with cluster administrator role is required to install the chart.
 
-	  
+- Install a PodDisruptionBudget.
+- See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/install/install.html)
+
+## Resources Required
+
+- See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/install/install.html)
+
 ## Installing the Chart
 
-* Use cp4d installer command: 
- See [Details](http://rhea.svl.ibm.com:9081/support/knowledgecenter/SSQNUZ_2.5.0/cpd/svc/spss/spss-install-svc.html)
+- See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/svc/services.html)
 
-* Use helm install command
+## Limitations
 
-```
-	helm install --name ibm-wml-canvas-prod --tls
-```
+* You must create a pull secret if you are using external docker image registry.
+* You must install IBM Cloud Pak for Data before installing Watson Studio Local.
 
 ## Configuration
-- See [Details](http://rhea.svl.ibm.com:9081/support/knowledgecenter/SSQNUZ_2.5.0/cpd/svc/spss/spss-install-svc.html)
 
-## Limitations
-- See [Details](http://rhea.svl.ibm.com:9081/support/knowledgecenter/SSQNUZ_2.5.0/cpd/svc/spss/spss-install-svc.html)
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/install/install.html)
 
-## PodSecurityPolicy Requirements
+## Requirements
 
-This chart requires a PodSecurityPolicy to be bound to the target namespace prior to installation. Choose either a predefined PodSecurityPolicy or have your cluster administrator create a custom PodSecurityPolicy for you:
-* Predefined PodSecurityPolicy name: [`ibm-restricted-psp`](https://ibm.biz/cpkspec-psp)
-* Custom PodSecurityPolicy definition:
+* See [Details](https://www.ibm.com/support/producthub/icpdata/docs/content/SSQNUZ_current/cpd/install/install.html)
 
-- From the user interface, you can copy and paste the following snippets to enable the custom PodSecurityPolicy
-  - Custom PodSecurityPolicy definition:
-    ```yaml
-    apiVersion: extensions/v1beta1
-    kind: PodSecurityPolicy
-    metadata:
-      annotations:
-        kubernetes.io/description: "This policy is the most restrictive,
-          requiring pods to run with a non-root UID, and preventing pods from accessing the host."
-        seccomp.security.alpha.kubernetes.io/allowedProfileNames: docker/default
-        seccomp.security.alpha.kubernetes.io/defaultProfileName: docker/default
-      name: ibm-restricted-psp-custom-wa
-    spec:
-      allowPrivilegeEscalation: false
-      forbiddenSysctls:
-      - '*'
-      fsGroup:
-        ranges:
-        - max: 65535
-          min: 1
-        rule: MustRunAs
-      requiredDropCapabilities:
-      - ALL
-      runAsUser:
-        rule: MustRunAsNonRoot
-      seLinux:
-        rule: RunAsAny
-      supplementalGroups:
-        ranges:
-        - max: 65535
-          min: 1
-        rule: MustRunAs
-      volumes:
-      - configMap
-      - emptyDir
-      - projected
-      - secret
-      - downwardAPI
-      - persistentVolumeClaim
+### Red Hat OpenShift SecurityContextConstraints Requirements
+
+* Cluster administrator role is required for installation.
+* This chart references the [`ibm-restricted-scc`](https://ibm.biz/cpkspec-scc) custom SecurityContextConstraints definition:
     ```
-  - Custom ClusterRole for the custom PodSecurityPolicy:
-    ```yaml
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRole
+    apiVersion: security.openshift.io/v1
+    kind: SecurityContextConstraints
     metadata:
-      name: ibm-restricted-clusterrole-custom-wa
-    rules:
-    - apiGroups:
-      - extensions
-      resourceNames:
-      - ibm-restricted-psp-custom-wa
-      resources:
-      - podsecuritypolicies
-      verbs:
-      - use
+    annotations:
+        kubernetes.io/description: "This policy is the most restrictive, 
+        requiring pods to run with a non-root UID, and preventing pods from accessing the host.
+        The UID and GID will be bound by ranges specified at the Namespace level." 
+        cloudpak.ibm.com/version: "1.1.0"
+    name: ibm-restricted-scc
+    :
     ```
-- Alternatively, you can go to `ibm_cloud_pak/pak_extensions/pre-install/namespaceAdministration` in your chart directory and run ```./createSecurityNamespacePrereqs.sh {namespace-name}```
-
-## Red Hat OpenShift SecurityContextConstraints Requirements
-- This chart requires a SecurityContextConstraints to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
-
-## Limitations
-- Linux on Power (ppc64le) is not supported.
-- Mixed worker node architecture deployments are not supported.
-
-## Documentation
-
-Find out more about [Creating SPSS Modeler Flows](http://rhea.svl.ibm.com:9081/support/knowledgecenter/SSQNUZ_2.5.0/wsd/spss-modeler.html).
-
-_Copyright© IBM Corporation 2018, 2019. All Rights Reserved._
+    

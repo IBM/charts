@@ -1,15 +1,22 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
   name: {{ template "cache-db.fullname" . }}
   annotations:
     build: .{{ .Values.global.buildVersion | quote }}
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
   labels:
-    app: {{ template "cache-db.name" . }}
-    chart: {{ template "cache-db.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "cache-db.name" . }}
+    helm.sh/chart: {{ template "cache-db.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ template "cache-db.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
   revisionHistoryLimit: 2
   replicas: 1
   strategy:
@@ -21,9 +28,12 @@ spec:
     metadata:
       annotations:
         build: {{ .Values.global.buildVersion | quote }}
+        {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 8 }}
+        {{- end }}
       labels:
-        app: {{ template "cache-db.name" . }}
-        release: {{ .Release.Name }}
+        app.kubernetes.io/name: {{ template "cache-db.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       # Prefer to run on a node that already has a warmup pod running on it
       # as it will start faster when the image is already pulled.

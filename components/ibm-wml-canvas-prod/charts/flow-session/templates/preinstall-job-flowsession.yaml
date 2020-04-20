@@ -4,21 +4,24 @@ apiVersion: batch/v1
 metadata:
   name: {{$compName}}
   labels:
-    app: {{$compName}}
-    chart: {{$compName}}
-    release: {{$compName}}
+    app.kubernetes.io/name: {{$compName}}
+    helm.sh/chart: {{$compName}}
+    app.kubernetes.io/instance: {{$compName}}
     run: {{$compName}}
   annotations:
-    "helm.sh/hook": pre-install
-    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded 
+    {{- if .Values.global.annotations }}
+{{ toYaml .Values.global.annotations | trim | indent 4 }}
+    {{- end }}
 spec:
   template:
     metadata:
       labels:
-        app: {{$compName}}
-        chart: {{$compName}}
-        component: {{$compName}}
-        release: {{$compName}}
+        app.kubernetes.io/name: {{$compName}}
+        helm.sh/chart: {{$compName}}
+        app.kubernetes.io/component: {{$compName}}
+        app.kubernetes.io/instance: {{$compName}}
     spec:
       hostNetwork: false
       hostPID: false
@@ -36,7 +39,8 @@ spec:
                   - key: beta.kubernetes.io/arch
                     operator: In
                     values:
-                      - amd64
+                      - "amd64"
+                      - "ppc64le"
       restartPolicy: Never
       containers:
         - name: {{$compName}}
@@ -68,9 +72,9 @@ spec:
               metadata:
                 name: {{ template "flow-session.playcryptosecret" . }}
                 labels:
-                  app: {{ template "flow-session.name" . }}
-                  chart: {{ template "flow-session.chart" . }}
-                  release: {{ .Release.Name }}
+                  app.kubernetes.io/name: {{ template "flow-session.name" . }}
+                  helm.sh/chart: {{ template "flow-session.chart" . }}
+                  app.kubernetes.io/instance: {{ .Release.Name }}
                 annotations:
                   build: {{ .Values.global.buildVersion | quote }}
               type: Opaque
