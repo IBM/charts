@@ -31,6 +31,10 @@ sch:
         name: "crawler"
       diagnosis:
         name: "diagnosis"
+      diagnosisEvaluation:
+        name: "diagnosis-evaluation"
+      diagnosisLearning:
+        name: "diagnosis-learning"
       diagnosisDataloader:
         name: "diagnosis-dataloader"
       landingPage:
@@ -70,7 +74,7 @@ sch:
     metering:
       productID: "ICP4D-addon-2977879613e54cc2a38b8874c291cb57-EMA"
       productName: "IBM Maximo Equipment Maintenance Assistant On-Premises"
-      productVersion: 1.1.0
+      productVersion: 1.1.1
     nodeAffinity:
       nodeAffinityRequiredDuringScheduling:
         operator: In

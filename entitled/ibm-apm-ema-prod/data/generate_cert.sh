@@ -35,6 +35,8 @@ DNS.13 = ema-diagnosis-dataloader-service
 DNS.14 = ema-addon.${ICP4D_NAMESPACE}
 DNS.15 = ema-service-provider.${ICP4D_NAMESPACE}
 DNS.16 = ema-auth-service.${ICP4D_NAMESPACE}
+DNS.17 = ema-diagnosis-learning-service
+DNS.18 = ema-diagnosis-evaluation-service
 EOF
 
 cat>sanExternal.conf<<EOF
