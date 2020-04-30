@@ -18,6 +18,7 @@ It includes the following endpoints:
  - document query service endpoints accessible on `/ema/api/v1/document-query`.
  - usage service endpoints accessible on `/ema/api/v1/usage`.
  - diagnosis service endpoints accessible on `/ema/api/v1/diagnosis`.
+ - diagnosis v1.1 service endpoints accessible on `/ema/api/v1.1/diagnosis`.
  - diagnosis dataloader service endpoints accessible on `/ema/api/v1/dataloader`.
 
 ## Prerequisites
@@ -25,28 +26,31 @@ It includes the following endpoints:
 1. Red Hat OpenShift version 3.11 is installed.
 2. Kubernetes 1.11 or later is installed.
 3. Helm 2.9.1 or later is installed.
-4. Cluster Admin privilege is only required for preinstall of cluster security policies creation and post delete clean up.
-5. The default Docker images for IBM Maximo Equipment Maintenance Assistant On-Premises are loaded to an appropriate Docker Image Repository.
+4. IBM Cloud Pak for Data version 2.5.0. or later
+5. Cluster Admin privilege is only required for preinstall of cluster security policies creation and post delete clean up.
+6. The default Docker images for IBM Maximo Equipment Maintenance Assistant On-Premises are loaded to an appropriate Docker Image Repository.
 Note: If the archive download from IBM Passport Advantage is loaded to Red Hat OpenShift, the Docker image is automatically loaded to the default Docker registry for Red Hat OpenShift in the namespace which you login.
   
    Docker Images  | Tag | Description |
    --------  | -----|-----|
-   ema-admin-console| 1.1.0 | ema admin console |
-   ema-api | 1.1.0 | ema service|
-   ema-crawler | 1.1.0 | ema crawler|
-   ema-diagnosis | 1.1.0 |ema diagnosis service|
-   ema-diagnosis-dataloader | 1.1.0 |ema diagnosis dataloader service|
-   ema-landing-page|1.1.0|ema landing page|
-   ema-auth|1.1.0|ema auth|
-   ema-maximo-integration|1.1.0|ema maximo integration|
-   ema-sample-app|1.1.0|ema sample app|
-   ema-studio|1.1.0|ema studio|
-   ema-multi-tenant|1.1.0|ema multi tenant|
-   ema-monitor|1.1.0|ema monitor|
+   ema-admin-console| 1.1.1 | ema admin console |
+   ema-api | 1.1.1 | ema service|
+   ema-crawler | 1.1.1 | ema crawler|
+   ema-diagnosis-learning | 1.1.1 |ema diagnosis learning|
+   ema-diagnosis-evaluation | 1.1.1 |ema diagnosis evaluation|
+   ema-diagnosis | 1.1.1 |ema diagnosis service|
+   ema-diagnosis-dataloader | 1.1.1 |ema diagnosis dataloader service|
+   ema-landing-page|1.1.1|ema landing page|
+   ema-auth|1.1.1|ema auth|
+   ema-maximo-integration|1.1.1|ema maximo integration|
+   ema-sample-app|1.1.1|ema sample app|
+   ema-studio|1.1.1|ema studio|
+   ema-multi-tenant|1.1.1|ema multi tenant|
+   ema-monitor|1.1.1|ema monitor|
    opencontent-common-utils|1.1.2|User problem template management |
 Before installing IBM Maximo Equipment Maintenance Assistant On-Premises, you must install and configure helm and kubectl.
 
-### Red Hat OpenShift SecurityContextConstraints Requirements
+### SecurityContextConstraints Requirements
 
 This chart requires a `SecurityContextConstraints` to be bound to the target namespace prior to installation. To meet this requirement there may be cluster scoped as well as namespace scoped pre and post actions that need to occur.
 
@@ -193,6 +197,8 @@ kubectl create secret -n YOUR_NAMESPACE docker-registry openshift-docker-pull --
   |ema-api | 3 | 200m |  1 | 500Mi | 2Gi
   |ema-auth | 3 | 100m | 1 | 100Mi | 1Gi
   |ema-crawler | 1 | 200m |  1 | 500Mi | 2Gi
+  |ema-diagnosis-evaluation | 3 | 200m |  2 | 500Mi | 2Gi
+  |ema-diagnosis-learning | 3 | 200m |  2 | 500Mi | 2Gi
   |ema-diagnosis | 3 | 200m |  2 | 500Mi | 2Gi
   |ema-diagnosis-dataloader | 1 | 100m |  1 | 100Mi | 1Gi
   |ema-landing-page| 3 | 100m |  1 | 100Mi | 1Gi
@@ -219,6 +225,18 @@ $ helm install --name {my-release} -f {my-values.yaml} stable/ibm-apm-ema-prod -
 When it completes, the command displays the current status of the release.
 
 Note: If multiple installs of the chart in a single Red Hat OpenShift environment is required, you must set different Ingress Hostname between installs.
+
+### Upgrade Install the Chart from Previous version via the Command Line
+To upgrade install the chart, run the following command:
+```bash
+$ helm upgrade  {my-previous-release} -f {my-values.yaml} ../ibm-apm-ema-prod 
+```
+-   Replace `{my-previous-release}` with a name for your previous release.(Run `helm list` to check your previous installed release for old version)
+-   Replace `{my-values.yaml}` with the path to a YAML file that specifies the values that are to be used with the `install` command. Specifying a YAML file is optional.
+
+When it completes, the command displays the current status of the release.
+
+Note: IBM Maximo Equipment Maintenance Assistant On-Premises latest version is supported to be upgraded from the previous releases, please check the documents for the supported versions that can be upgraded to the current version.
 
 ## Post installation
 1. Follow the instructions to complete the OIDC registration. The instructions can be displayed after the helm installation completes. The instructions can also be displayed by viewing the installed helm release under Menu -> Workloads -> Helm Releases or by running the command: helm status <release> --tls.
@@ -253,7 +271,8 @@ The following tables lists the configurable parameters of the IBM Maximo Equipme
 | `ingress.annotations` | decide if need to enable annotations in ingress |    true      |
 | `ingress.enabled` | decide if need to enable ingress |    true      |
 | `ingress.tlsenabled`        | decide if need to enable tls in ingress    |    true      |
-| `global.license` | Users must read the license and set the value to `accepted` | `not accepted` |
+| `global.license` | Users must read the license and set the value to `accepted` and also config the correct value for `global.isAddOnSwidTag` based on the license | `not accepted` |
+| `global.isAddOnSwidTag` | After user accepted the license, user need to set this value. If user want to install IBM Maximo Equipment Maintenance Assistant Add-On set this value to `true` | `false` |
 | `global.icpDockerRepo`| docker repository for image               |    docker-registry.default.svc:5000/ema/      |
 | `global.jksJob.image.repository`| job image repository	               |    docker-registry.default.svc:5000/ema/opencontent-common-utils      |
 | `global.jksJob.image.tag`  | job image tag	               |    1.1.2      |
@@ -268,85 +287,99 @@ The following tables lists the configurable parameters of the IBM Maximo Equipme
 | `emaAdminConsole.name`  | ema admin console name      |  true    |
 | `emaAdminConsole.failureThreshold`  | failure threshold of ema admin console in chart            |  10    |
 | `emaAdminConsole.image.repository`  | repository for ema admin console service            |   ema-admin-console    |
-| `emaAdminConsole.image.tag`  | tag for ema admin console service            |    1.1.0    |
-| `emaAdminConsole.image.pullPolicy`  | image pull policy for ema admin console service      |    Always    |
+| `emaAdminConsole.image.tag`  | tag for ema admin console service            |    1.1.1    |
+| `emaAdminConsole.image.pullPolicy`  | image pull policy for ema admin console service      |    IfNotPresent    |
 | `emaApi.enabled`  | decide if enable ema API in chart            |  true    |
 | `emaApi.replicaCount`  | replica count of ema API            |  3   |
 | `emaApi.name`  | ema API name      |  true    |
 | `emaApi.failureThreshold`  | failure threshold of ema API in chart            |  10    |
 | `emaApi.image.repository`  | repository for ema API service            |   ema-api    |
-| `emaApi.image.tag`  | tag for ema API service            |    1.1.0    |
-| `emaApi.image.pullPolicy`  | image pull policy for ema API service      |    Always    |
+| `emaApi.image.tag`  | tag for ema API service            |    1.1.1    |
+| `emaApi.image.pullPolicy`  | image pull policy for ema API service      |    IfNotPresent    |
 | `emaCrawler.enabled`  | decide if enable ema crawler in chart            |  true    |
 | `emaCrawler.replicaCount`  | replica count of ema crawler            |  3   |
 | `emaCrawler.name`  | ema crawler name      |  true    |
 | `emaCrawler.failureThreshold`  | failure threshold of ema crawler in chart            |  10    |
 | `emaCrawler.image.repository`  | repository for ema crawler service            |   ema-crawler   |
-| `emaCrawler.image.tag`  | tag for ema crawler service            |    1.1.0    |
-| `emaCrawler.image.pullPolicy`  | image pull policy for ema crawler service      |    Always    |
+| `emaCrawler.image.tag`  | tag for ema crawler service            |    1.1.1    |
+| `emaCrawler.image.pullPolicy`  | image pull policy for ema crawler service      |    IfNotPresent    |
 | `emaDiagnosis.enabled`  | decide if enable ema diagnosis in chart            |  true    |
 | `emaDiagnosis.replicaCount`  | replica count of ema diagnosis            |  3    |
 | `emaDiagnosis.name`  | ema diagnosis name      |  true    |
 | `emaDiagnosis.failureThreshold`  | failure threshold of ema diagnosis in chart            |  10    |
 | `emaDiagnosis.image.repository`  | repository for ema diagnosis service            |   ema-diagnosis    |
-| `emaDiagnosis.image.tag`  | tag for ema diagnosis service            |    1.1.0    |
-| `emaDiagnosis.image.pullPolicy`  | image pull policy for ema diagnosis service      |    Always    |
+| `emaDiagnosis.image.tag`  | tag for ema diagnosis service            |    1.1.1    |
+| `emaDiagnosis.image.pullPolicy`  | image pull policy for ema diagnosis service      |    IfNotPresent    |
+| `emaDiagnosisLearning.enabled`  | decide if enable ema diagnosis learning in chart            |  true    |
+| `emaDiagnosisLearning.replicaCount`  | replica count of ema diagnosis learning            |  3    |
+| `emaDiagnosisLearning.name`  | ema diagnosis learning name      |  true    |
+| `emaDiagnosisLearning.failureThreshold`  | failure threshold of ema diagnosis learning in chart            |  10    |
+| `emaDiagnosisLearning.image.repository`  | repository for ema diagnosis learning service            |   ema-diagnosis-learning    |
+| `emaDiagnosisLearning.image.tag`  | tag for ema diagnosis learning service            |    1.1.1    |
+| `emaDiagnosisLearning.image.pullPolicy`  | image pull policy for ema diagnosis learning service      |    IfNotPresent    |
+| `emaDiagnosisEvaluation.enabled`  | decide if enable ema diagnosis evaluation in chart            |  true    |
+| `emaDiagnosisEvaluation.replicaCount`  | replica count of ema diagnosis evaluation            |  3    |
+| `emaDiagnosisEvaluation.name`  | ema diagnosis evaluation name      |  true    |
+| `emaDiagnosisEvaluation.failureThreshold`  | failure threshold of ema diagnosis evaluation in chart            |  10    |
+| `emaDiagnosisEvaluation.image.repository`  | repository for ema diagnosis evaluation service            |   ema-diagnosis-evaluation    |
+| `emaDiagnosisEvaluation.image.tag`  | tag for ema diagnosis evaluation service            |    1.1.1    |
+| `emaDiagnosisEvaluation.image.pullPolicy`  | image pull policy for ema diagnosis evaluation service      |    IfNotPresent    |
 | `emaDiagnosisDataloader.enabled`  | decide if enable ema diagnosis dataloader in chart            |  true    |
 | `emaDiagnosisDataloader.replicaCount`  | replica count of ema diagnosis dataloader            |  3   |
 | `emaDiagnosisDataloader.name`  | ema diagnosis dataloader name      |  true    |
 | `emaDiagnosisDataloader.failureThreshold`  | failure threshold of ema diagnosis dataloader in chart            |  10    |
 | `emaDiagnosisDataloader.image.repository`  | repository for ema diagnosis dataloader service            |   ema-diagnosis-dataloader    |
-| `emaDiagnosisDataloader.image.tag`  | tag for ema diagnosis dataloader service            |    1.1.0    |
-| `emaDiagnosisDataloader.image.pullPolicy`  | image pull policy for ema diagnosis dataloader service      |    Always    |
+| `emaDiagnosisDataloader.image.tag`  | tag for ema diagnosis dataloader service            |    1.1.1    |
+| `emaDiagnosisDataloader.image.pullPolicy`  | image pull policy for ema diagnosis dataloader service      |    IfNotPresent    |
 | `emaLandingPage.enabled`  | decide if enable ema landing page in chart            |  true    |
 | `emaLandingPage.replicaCount`  | replica count of ema landing page            |  3   |
 | `emaLandingPage.name`  | ema landing page name      |  true    |
 | `emaLandingPage.failureThreshold`  | failure threshold of ema landing page in chart            |  10    |
 | `emaLandingPage.image.repository`  | repository for ema landing page service            |   ema-landing-page    |
-| `emaLandingPage.image.tag`  | tag for ema landing page service            |    1.1.0    |
-| `emaLandingPage.image.pullPolicy`  | image pull policy for ema landing page service      |    Always    |
+| `emaLandingPage.image.tag`  | tag for ema landing page service            |    1.1.1    |
+| `emaLandingPage.image.pullPolicy`  | image pull policy for ema landing page service      |    IfNotPresent    |
 | `emaAuth.enabled`  | decide if enable ema auth in chart            |  true    |
 | `emaAuth.replicaCount`  | replica count of ema auth            |  3   |
 | `emaAuth.name`  | ema auth name      |  true    |
 | `emaAuth.failureThreshold`  | failure threshold of ema auth in chart            |  10    |
 | `emaAuth.image.repository`  | repository for ema auth service            |   ema-auth    |
-| `emaAuth.image.tag`  | tag for ema auth service            |    1.1.0    |
-| `emaAuth.image.pullPolicy`  | image pull policy for ema auth service      |    Always    |
+| `emaAuth.image.tag`  | tag for ema auth service            |    1.1.1    |
+| `emaAuth.image.pullPolicy`  | image pull policy for ema auth service      |    IfNotPresent    |
 | `emaMaximoIntegration.enabled`  | decide if enable ema maximo integration in chart            |  true    |
 | `emaMaximoIntegration.replicaCount`  | replica count of ema maximo integration            |  3    |
 | `emaMaximoIntegration.name`  | ema maximo integration name      |  true    |
 | `emaMaximoIntegration.failureThreshold`  | failure threshold of ema maximo integration in chart            |  10    |
 | `emaMaximoIntegration.image.repository`  | repository for ema maximo integration service            |   ema-maximo-integration    |
-| `emaMaximoIntegration.image.tag`  | tag for ema maximo integration service            |    1.1.0    |
-| `emaMaximoIntegration.image.pullPolicy`  | image pull policy for ema maximo integration service      |    Always    |
+| `emaMaximoIntegration.image.tag`  | tag for ema maximo integration service            |    1.1.1    |
+| `emaMaximoIntegration.image.pullPolicy`  | image pull policy for ema maximo integration service      |    IfNotPresent    |
 | `emaSampleApp.enabled`  | decide if enable ema sample app in chart            |  true    |
 | `emaSampleApp.replicaCount`  | replica count of ema sample app            |  3   |
 | `emaSampleApp.name`  | ema sample app name      |  true    |
 | `emaSampleApp.failureThreshold`  | failure threshold of ema sample app in chart            |  10    |
 | `emaSampleApp.image.repository`  | repository for ema sample app service            |   ema-sample-app    |
-| `emaSampleApp.image.tag`  | tag for ema sample app service            |    1.1.0    |
-| `emaSampleApp.image.pullPolicy`  | image pull policy for ema sample app service      |    Always    |
+| `emaSampleApp.image.tag`  | tag for ema sample app service            |    1.1.1    |
+| `emaSampleApp.image.pullPolicy`  | image pull policy for ema sample app service      |    IfNotPresent    |
 | `emaStudio.enabled`  | decide if enable ema studio in chart            |  true    |
 | `emaStudio.replicaCount`  | replica count of ema studio            |  3    |
 | `emaStudio.name`  | ema studio name      |  true    |
 | `emaStudio.failureThreshold`  | failure threshold of ema studio in chart            |  10    |
 | `emaStudio.image.repository`  | repository for ema studio service            |   ema-studio    |
-| `emaStudio.image.tag`  | tag for ema studio service            |    1.1.0    |
-| `emaStudio.image.pullPolicy`  | image pull policy for ema studio service      |    Always    |
+| `emaStudio.image.tag`  | tag for ema studio service            |    1.1.1    |
+| `emaStudio.image.pullPolicy`  | image pull policy for ema studio service      |    IfNotPresent    |
 | `emaMultiTenant.enabled`  | decide if enable ema multiTenant in chart            |  true    |
 | `emaMultiTenant.replicaCount`  | replica count of ema multiTenant            |  3    |
 | `emaMultiTenant.name`  | ema multiTenant name      |  true    |
 | `emaMultiTenant.failureThreshold`  | failure threshold of ema multiTenant in chart            |  10    |
 | `emaMultiTenant.image.repository`  | repository for ema multiTenant service            |   ema-multi-tennant   |
-| `emaMultiTenant.image.tag`  | tag for ema multiTenant service            |    1.1.0    |
-| `emaMultiTenant.image.pullPolicy`  | image pull policy for ema multiTenant service      |    Always    |
+| `emaMultiTenant.image.tag`  | tag for ema multiTenant service            |    1.1.1    |
+| `emaMultiTenant.image.pullPolicy`  | image pull policy for ema multiTenant service      |    IfNotPresent    |
 | `emaMonitor.enabled`  | decide if enable ema monitor in chart            |  true    |
 | `emaMonitor.replicaCount`  | replica count of ema monitor            |  1    |
 | `emaMonitor.name`  | ema monitor name      |  true    |
 | `emaMonitor.failureThreshold`  | failure threshold of ema monitor in chart            |  10    |
 | `emaMonitor.image.repository`  | repository for ema monitor service            |   ema-monitor    |
-| `emaMonitor.image.tag`  | tag for ema monitor service            |    1.1.0    |
-| `emaMonitor.image.pullPolicy`  | image pull policy for ema monitor service      |    Always    |
+| `emaMonitor.image.tag`  | tag for ema monitor service            |    1.1.1    |
+| `emaMonitor.image.pullPolicy`  | image pull policy for ema monitor service      |    IfNotPresent    |
 | `dashboard.enabled`  | decide if enable dashboard in chart            |  true    |
   * ingress hostname is the hostname where the Ingress controller is deployed, by default, it is deployed on proxy or master nodes. Also, user can define their own DNS entry and point to the ip address of proxy/master nodes.
 You can specify all configuration values by using the `--set` parameter. For example:
@@ -408,38 +441,4 @@ You also can add the prometheus to your grafana as a datasource and import the p
 
 ### Logging
 IBM Maximo Equipment Maintenance Assistant On-Premises sends its logs to the standard output, and thus cluster administrators can deploy the cluster logging to see the IBM Maximo Equipment Maintenance Assistant On-Premises logs. You can import the IBM Maximo Equipment Maintenance Assistant predefined kibana dashboard data/ema-kibana-dashboard.json.
-
-### Hot fix
-## Description
-Bug fixed:
-Fix listing data issue caused by couchdb query return limit to 25 records by default.
-API query performance improvement. 
-Fix monitor issue related to external api availability prom metric.
-Update related helm charts for deployment.
-Add error handler in crawler when get tenant failed.
-Fix nodejs express default timeout(2min) issue, increase to 10min, configurable
-
-## Instruction
-To apply the hotfix for IBM Maximo Equipment Maintenance Assistant On-Premises, you can follow the same steps described in the previous part.
-
-The updated images of hotfix for IBM Maximo Equipment Maintenance Assistant On-Premises are as below.
-
-Docker Images  | Tag | Description |
-   --------  | -----|-----|
-   ema-api | 1.1.0-hotfix.1 | ema service|
-   ema-crawler | 1.1.0-hotfix.1 | ema crawler|
-   ema-diagnosis | 1.1.0-hotfix.1 |ema diagnosis service|
-   ema-service-provider | 1.1.0-hotfix.1 |ema service provider|
-   ema-monitor| 1.1.0-hotfix.1 |ema monitor|
-   ema-admin-console| 1.1.0-hotfix.1 | ema admin console |
-   ema-diagnosis-dataloader | 1.1.0-hotfix.1 |ema diagnosis dataloader service|
-   ema-landing-page|1.1.0-hotfix.1|ema landing page|
-   ema-auth|1.1.0-hotfix.1|ema auth|
-   ema-maximo-integration|1.1.0-hotfix.1|ema maximo integration|
-   ema-sample-app|1.1.0-hotfix.1|ema sample app|
-   ema-studio|1.1.0-hotfix.1|ema studio|
-   ema-multi-tenant|1.1.0-hotfix.1|ema multi tenant|
-
-
-
 
