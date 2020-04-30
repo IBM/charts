@@ -43,10 +43,24 @@ spec:
           successThreshold: 1
           failureThreshold: {{ .Values.failureThreshold }}
         readinessProbe:
-          httpGet:
-            path: /ema/ui/studio/healthcheck
-            port: 3000
-            scheme: HTTPS
+          # httpGet:
+          #   path: /ema/ui/studio/healthcheck
+          #   port: 3000
+          #   scheme: HTTPS
+          exec:
+          {{- if .Values.global.isAddOnSwidTag }}
+            command:
+              - "/bin/bash"
+              - -c
+              - |
+{{ (tpl (.Files.Get "data/delete_swidtag.sh") . ) | indent 16 }}
+          {{- else}}
+            command:
+              - "/bin/bash"
+              - -c
+              - |
+{{ (tpl (.Files.Get "data/delete_addonswidtag.sh") . ) | indent 16 }}
+          {{- end }}
           initialDelaySeconds: 5 ## equals to minimum startup time of the application
           timeoutSeconds: 5
           successThreshold: 1
@@ -61,12 +75,6 @@ spec:
             secretKeyRef:
               name: ema-secret
               key: MULTI_TENANT_SERVICE_API_KEY
-              
-        - name : CF_SPACE
-          valueFrom:
-            configMapKeyRef:
-              name: ema-config
-              key: CF_SPACE
 
         - name: JWT_ENCRYPT_SECRET
           valueFrom:
@@ -140,3 +148,6 @@ spec:
         # trust kubernetes root ca
         - name: NODE_EXTRA_CA_CERTS
           value: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+
+        - name: NODE_ENV
+          value: "production"

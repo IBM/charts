@@ -50,7 +50,7 @@ body=$(cat << EOF
 EOF
 )
 echo $body
-status=$(curl -k -m 10 -o /dev/null -w %{http_code} -X DELETE \
+status=$(curl -k -m 100 -o /dev/null -w %{http_code} -X DELETE \
   $server/provision/ \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json' \

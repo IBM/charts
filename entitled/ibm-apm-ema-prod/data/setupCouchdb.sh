@@ -140,61 +140,67 @@ body=$(cat << EOF
       "_id": "equipment-advisor-admin-console",
       "type": "UI",
       "name": "Admin Console",
-      "description": "Allow user to access Equipment Insights Admin Console"
+      "description": "Allow user to access Admin Console"
     },
     {
       "_id": "equipment-advisor-api",
       "type": "API",
       "name": "All APIs",
-      "description": "Allow user to access all Equipment Insights APIs"
+      "description": "Allow user to access all APIs"
     },
     {
       "_id": "equipment-advisor-api-document-management",
       "type": "API",
       "name": "Document Management APIs",
-      "description": "Allow user to access Equipment Insights Document Management APIs"
+      "description": "Allow user to access Document Management APIs"
     },
     {
       "_id": "equipment-advisor-api-document-query",
       "type": "API",
       "name": "Document Query APIs",
-      "description": "Allow user to access Equipment Advisor Document Query APIs"
+      "description": "Allow user to access Document Query APIs"
     },
     {
       "_id": "equipment-advisor-api-user-management",
       "type": "API",
       "name": "User Management APIs",
-      "description": "Allow user to access Equipment Insights User Management APIs"
+      "description": "Allow user to access User Management APIs"
     },
     {
       "_id": "equipment-advisor-api-maximo-integration",
       "type": "API",
       "name": "Maximo integration APIs",
-      "description": "Allow user to access Equipment Insights Maximo Integration APIs"
+      "description": "Allow user to access Maximo Integration APIs"
     },
     {
       "_id": "equipment-advisor-sample-app",
       "type": "UI",
       "name": "Sample Application",
-      "description": "Allow user to access Equipment Insights Sample Application"
+      "description": "Allow user to access Sample Application"
     },
     {
       "_id": "equipment-advisor-studio",
       "type": "UI",
       "name": "Studio",
-      "description": "Allow user to access Equipment Insights Studio"
+      "description": "Allow user to access Studio"
     },
     {
       "_id": "equipment-advisor-api-diagnosis",
       "type": "API",
       "name": "Diagnosis APIs",
-      "description": "Allow user to access Equipment Insights Diagnosis APIs"
+      "description": "Allow user to access Diagnosis APIs"
     },
     {
       "_id": "equipment-advisor-api-diagnosis-model-manager",
       "type": "API",
       "name": "Diagnosis Model Manager APIs",
-      "description": "Allow user to access Equipment Insights Diagnosis Model Manager APIs"
+      "description": "Allow user to access Diagnosis Model Manager APIs"
+    },
+    {
+      "_id": "equipment-advisor-api-usage",
+      "type": "API",
+      "name": "Usage APIs",
+      "description": "Allow user to access Usage APIs"
     }
   ]
 }

@@ -1,0 +1,108 @@
+{{- include "sch.config.init" (list . "emaRef.sch.chart.config.values") -}}
+{{- $compName :=  .sch.chart.components.diagnosisEvaluation.name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering) | indent 8 }}
+    spec:
+    {{- include "ema.securitycontext.pod" . | indent 6 }}
+      affinity:
+{{- include "sch.affinity.nodeAffinity" (list .) | indent 8 }}
+      containers:
+      - name: {{ .Values.name }}
+        image: "{{ .Values.global.icpDockerRepo }}{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          requests:
+            cpu: 200m
+            memory: 500Mi
+          limits:
+            cpu: 2
+            memory: 2Gi
+        # add liveness and readiness later
+        livenessProbe:
+          httpGet:
+            path: /api/v1.1/evaluation/healthcheck
+            port: 3000
+            scheme: HTTPS
+          initialDelaySeconds: 60 ## equals to the maximum startup time of the application + couple of seconds
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: {{ .Values.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /api/v1.1/evaluation/healthcheck
+            port: 3000
+            scheme: HTTPS
+          initialDelaySeconds: 5 ## equals to minimum startup time of the application
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: {{ .Values.failureThreshold }}
+        {{- include "ema.securitycontext.container" . | indent 8 }}
+        ports:
+        - containerPort: 3000
+        env:
+        - name : SCAN_SERVER_HOST
+          value: "ema-antivirus-service"
+        - name : SCAN_SERVER_PORT
+          value : "1344"
+        - name : ENABLE_ANTIVIRUS_SCAN
+          value: "FALSE"
+        - name: OP_CLOUDANT_URL
+          valueFrom:
+            secretKeyRef:
+              name: ema-secret
+              key: OP_CLOUDANT_URL
+        - name: DIAGNOSIS_EVALUATION_SERVICE
+          value: "https://ema-diagnosis-evaluation-service"
+        - name: DIAGNOSIS_LEARNING_SERVICE
+          value: "https://ema-diagnosis-learning-service"
+        - name: DIAGNOSIS_EVAL_SERVICE
+          value: "https://ema-diagnosis-evaluation-service"
+        - name: MULTI_TENANT_SERVICE
+          value: "https://ema-multi-tenant-service"
+
+        - name: MULTI_TENANT_SERVICE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ema-secret
+              key: MULTI_TENANT_SERVICE_API_KEY
+
+        - name: DB_ENCRYPT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ema-secret
+              key: DB_ENCRYPT_SECRET
+
+        - name: LOG_LEVEL
+          value: "INFO"
+        
+        # tls 
+        - name: TLS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ema-tls
+              key: tls.key
+
+        - name: TLS_CERT
+          valueFrom:
+            secretKeyRef:
+              name: ema-tls
+              key: tls.crt
+        
+        # trust kubernetes root ca
+        - name: NODE_EXTRA_CA_CERTS
+          value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
