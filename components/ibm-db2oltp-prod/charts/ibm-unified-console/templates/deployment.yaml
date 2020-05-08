@@ -1,24 +1,53 @@
+{{- if  eq .Values.consoleArch "standalone"  }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+{{- if .Values.deployment.name }}
+  name: {{ .Values.deployment.name }}
+{{- else }}
   name: {{ template "uc.fullname" . }}
+{{- end }}
   labels:
 {{- if .Values.customLabels }}
 {{ .Values.customLabels | indent 4  }}
 {{- end }}
+    {{- if .Values.customLabelValues.app }}
+    app: {{ .Values.customLabelValues.app }}
+    {{- else }}
     app: {{ template "uc.fullname" . }}
+    {{- end }}
     component: "uc"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
     chart: "{{ .Chart.Name }}"
+    {{- if .Values.customLabelValues.serviceInstanceID }}
+{{- $customServiceInstanceID := .Values.customLabelValues.serviceInstanceID | int64 }}
+    ServiceInstanceID: "{{ $customServiceInstanceID }}"
+    {{- else }}
+{{- $zenServiceInstanceID := .Values.zenServiceInstanceId | int64 }}
+    ServiceInstanceID: "{{ $zenServiceInstanceID }}"
+    {{- end }}
+    {{- if .Values.customLabelValues.appKubeIo.instance }}
+    app.kubernetes.io/instance: .Values.customLabelValues.appKubeIo.instance }}
+    {{- else }}
     app.kubernetes.io/instance: {{ template "uc.fullname" . }}
+    {{- end }}
     app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: deployment
+    {{- if .Values.customLabelValues.appKubeIo.name }}
+    app.kubernetes.io/name: {{ .Values.customLabelValues.appKubeIo.name }}
+    {{- else }}
+    app.kubernetes.io/name: {{ .Chart.Name  }}
+    {{- end }}
+    app.kubernetes.io/component: uc-deployment
     helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
 spec:
   selector:
     matchLabels:
+      {{- if .Values.customLabelValues.app }}
+      app: {{ .Values.customLabelValues.app }}
+      {{- else }}
       app: {{ template "uc.fullname" . }}
+      {{- end }}
       release: "{{ .Release.Name }}"
       heritage: "{{ .Release.Service }}"
       component: "uc"
@@ -28,16 +57,39 @@ spec:
 {{- if .Values.customLabels }}
 {{ .Values.customLabels | indent 8  }}
 {{- end }}
+        {{- if .Values.customLabelValues.app }}
+        app: {{ .Values.customLabelValues.app }}
+        {{- else }}
         app: {{ template "uc.fullname" . }}
+        {{- end }}
         component: "uc"
-        chart: "{{ .Chart.Name }}"
         release: "{{ .Release.Name }}"
         heritage: "{{ .Release.Service }}"
+        chart: "{{ .Chart.Name }}"
+        {{- if .Values.customLabelValues.serviceInstanceID }}
+    {{- $customServiceInstanceID := .Values.customLabelValues.serviceInstanceID | int64 }}
+        ServiceInstanceID: "{{ $customServiceInstanceID }}"
+        {{- else }}
+    {{- $zenServiceInstanceID := .Values.zenServiceInstanceId | int64 }}
+        ServiceInstanceID: "{{ $zenServiceInstanceID }}"
+        {{- end }}
+        {{- if .Values.customLabelValues.appKubeIo.instance }}
+        app.kubernetes.io/instance: {{ .Values.customLabelValues.appKubeIo.instance }}
+        {{- else }}
         app.kubernetes.io/instance: {{ template "uc.fullname" . }}
+        {{- end }}
         app.kubernetes.io/managed-by: helm
-        app.kubernetes.io/name: deployment
+        {{- if .Values.customLabelValues.appKubeIo.name }}
+        app.kubernetes.io/name: {{ .Values.customLabelValues.appKubeIo.name }}
+        {{- else }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        {{- end }}
+        app.kubernetes.io/component: uc-deployment
         helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
       annotations:
+{{- if .Values.customAnnotations }}
+{{ .Values.customAnnotations | indent 8  }}
+{{- end }}
         productName: {{ .Values.productName }}
         productID: {{ .Values.productID }}
         {{- if .Values.productVersion  }}
@@ -78,8 +130,6 @@ spec:
           privileged: false
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: true
-          runAsNonRoot: true
-          runAsUser: 1000320901
         name: uc
       {{- if ( eq .Values.platformCode "PLATFORM_ICP4D_DV" ) }}
         image: "{{ .Values.docker_registry_prefix }}/{{ .Values.image.docker_image }}:{{ .Values.image.tag }}"
@@ -95,7 +145,7 @@ spec:
         - name: DEV_EDITION
           value: "false"
         - name: CONSOLE_SECURE_PORT
-          value: "443"
+          value: "8443"
         - name: POD_NAMESPACE
           value: "{{ .Release.Namespace }}"
         - name: DISABLE_HOST_CHECK
@@ -206,7 +256,7 @@ spec:
           {{- end }}
         {{- end }}
         ports:
-        - containerPort: 443
+        - containerPort: 8443
         livenessProbe:
           exec:
             command:
@@ -263,13 +313,13 @@ spec:
       - name: metadb-secret 
         secret:
           secretName: {{ .Values.dataServer.metadb.pwdSecretName }} 
-          defaultMode: 256
+          defaultMode: 420
       {{- end }}
       {{- if .Values.dataServer.ldap.rootPwdSecretName }}
       - name: ldap-secret
         secret:
           secretName: {{ .Values.dataServer.ldap.rootPwdSecretName }}
-          defaultMode: 256
+          defaultMode: 420
       {{- end }}
       {{- if or .Values.dataServer.sharedPVC.onlyForShare  (not .Values.dataServer.sharedPVC.enabled) }}
       - name: console-data
@@ -289,3 +339,4 @@ spec:
         persistentVolumeClaim:
           claimName: {{ .Values.dataServer.sharedPVC.name }}
       {{- end }}
+ {{- end  }}

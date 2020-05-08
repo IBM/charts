@@ -1,0 +1,66 @@
+{{- if  (eq .Values.consoleArch "multi_tenant" )  }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "uc.fullname" . }}-{{ .Values.scheduler.service.name }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "uc.fullname" . }}
+    component: "job-scheduler"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}-scheduler
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: scheduler
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  type: ClusterIP
+  ports:
+  {{- if eq .Values.enableMesh true }}
+  - port: {{ .Values.scheduler.service.httpPort }}
+    targetPort: 8080
+    protocol: TCP
+    name: {{ .Values.scheduler.service.name }}-http
+  {{- else }}
+  - port: {{ .Values.scheduler.service.httpsPort }}
+    targetPort: 8443
+    protocol: TCP
+    name: {{ .Values.scheduler.service.name }}-https
+  {{- end }}
+  selector:
+    app: {{ template "uc.fullname" . }}
+    component: "job-scheduler"
+---
+## service for external access for debug
+{{- if eq .Values.debug true }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.scheduler.service.name }}-external-uc
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "uc.fullname" . }}
+    component: "job-scheduler"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  type: NodePort
+  ports:
+  {{- if eq .Values.enableMesh true }}
+  - port: {{ .Values.scheduler.service.httpPort }}
+    targetPort: 8080
+    nodePort: 30089
+    protocol: TCP
+    name: {{ .Values.scheduler.service.name }}-http
+  {{- else }}
+  - port: {{ .Values.scheduler.service.httpsPort }}
+    targetPort: 8443
+    nodePort: 30889
+    protocol: TCP
+    name: {{ .Values.scheduler.service.name }}-https
+  {{- end }}
+  selector:
+    app: {{ template "uc.fullname" . }}
+    component: "job-scheduere"  
+{{- end }}
+{{- end }}

@@ -1,0 +1,159 @@
+{{- if  (eq .Values.consoleArch "multi_tenant" )  }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "uc.fullname" . }}-nginx
+  labels:
+    app: {{ template "uc.fullname" . }}
+    component: "nginx"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+    version: "{{ .Values.nginx.image.tag }}"
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}-nginx
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: nginx
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  replicas: {{ .Values.nginx.service.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "uc.fullname" . }}
+      component: "nginx"
+      chart: "{{ .Chart.Name }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+  template:
+    metadata:
+      labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 8  }}
+{{- end }}
+        app: {{ template "uc.fullname" . }}
+        component: "nginx"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        func: "nginx"
+        version: "{{ .Values.nginx.image.tag }}"
+        app.kubernetes.io/instance: {{ template "uc.fullname" . }}
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: nginx
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+      annotations:
+{{- if .Values.customAnnotations }}
+{{ .Values.customAnnotations | indent 8  }}
+{{- end }}
+        productName: {{ .Values.productName }}
+        productID: {{ .Values.productID }}
+        {{- if .Values.productVersion  }}
+        productVersion: {{ .Values.productVersion }}
+        {{- else }}
+        productVersion: {{ .Values.nginx.image.tag }}
+        {{- end }}
+        sidecar.istio.io/inject: "true"
+    spec:
+      {{- if .Values.serviceAccountName  }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- else }}
+         {{- if .Values.global.serviceAccount }}
+      serviceAccountName: {{ .Values.global.serviceAccount }}
+         {{- else }}
+           {{- if  eq ( .Values.platformCode | trunc 14 ) "PLATFORM_ICP4D"  }}
+      serviceAccountName:  "cpd-viewer-sa"
+           {{- end }}   
+         {{- end }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000320901
+      {{- end }}
+      {{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      affinity:
+      {{- include "uc.nodeAffinity" . | indent 8 }}
+      {{- include "uc.podAffinity" . | indent 8 }}
+      {{- include "uc.podAntiAffinity" . | indent 8 }}
+      tolerations:
+      {{- include "uc.tolerations" . | indent 8 }}
+      containers:
+      - name: nginx
+      {{- if .Values.image.arch }}
+        image: "{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+        image: "{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag }}"
+      {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+        env:
+        - name: EXTERNAL_HOST
+          value: "{{ .Values.externalHost }}"
+        - name: INGRESS_HOST
+          value: "{{ .Values.ingress.fullnameOverride }}-{{ .Values.ingress.controller.name }}.{{ .Release.Namespace }}.{{ .Values.clusterDomainName }}"
+        - name: INGRESS_PORT
+        {{- if eq .Values.enableMesh true }}
+          value: "8080"
+        {{- else }}
+          value: "8443"
+        {{- end }}
+        - name: DBAPI_HOST
+          value: {{ template "uc.fullname" . }}-{{ .Values.dbapi.service.name }}.{{ .Release.Namespace }}.{{ .Values.clusterDomainName }}
+        - name: DBAPI_PORT
+          value: {{ include "uc.service.port" . | quote }}
+        - name: ADMIN_HOST
+          value: {{ template "uc.fullname" . }}-{{ .Values.admin.service.name }}.{{ .Release.Namespace }}.{{ .Values.clusterDomainName }}
+        - name: ADMIN_PORT
+          value: {{ include "uc.service.port" . | quote }}
+        - name: MONITOR_HOST
+          value: {{ template "uc.fullname" . }}-{{ .Values.monitor.service.name }}.{{ .Release.Namespace }}.{{ .Values.clusterDomainName }}
+        - name: MONITOR_PORT
+          value: {{ include "uc.service.port" . | quote }}
+        - name: LOG_TO_STDOUT_STDERR
+          value: "{{ .Values.logToStdoutStderr }}"
+        - name: CONSOLE_ARCH
+          value: "{{ .Values.consoleArch }}"
+        - name: CLUSTER_NAME
+          value: "{{ .Values.clusterName }}"
+        - name: ENABLE_MESH
+          value: "{{ .Values.enableMesh }}"
+        ports:
+        - containerPort: 8443
+        livenessProbe:
+          exec:
+            command:
+            - /usr/bin/status
+          initialDelaySeconds: 120
+        readinessProbe:
+          exec:
+            command:
+            - /usr/bin/status
+          initialDelaySeconds: 120
+        resources:
+{{ toYaml .Values.nginx.resources | indent 10 }}
+        volumeMounts:
+        - name: profile-route-config
+          mountPath: /opt/ibm/zdtproxy/confd/watch
+        - name: tls
+          readOnly: true
+          mountPath: /opt/ibm/zdtproxy/certs
+      volumes:
+      - name: profile-route-config
+        configMap:
+          name: {{ .Values.ucConfigMapName }}
+          defaultMode: 420
+          items:
+          - key: profile_mon_map.yaml
+            path: profile_mon_map.yaml
+      - name: tls
+        secret:
+         secretName: nginx-tls
+{{- end }}
