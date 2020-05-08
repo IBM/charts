@@ -43,6 +43,8 @@ metadata:
     heritage: "{{ .Release.Service }}"
     component: "{{ .Values.global.dbType }}"
     type: "engine"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
 spec:
   serviceName: "{{ template "fullname" . }}-db2u-internal"
   podManagementPolicy: "Parallel"
@@ -65,6 +67,8 @@ spec:
         component: "{{ .Values.global.dbType }}"
         type: "engine"
         api-progress: "{{ .Values.servicename }}db2oltp-api"
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
       annotations:
         {{- include "db2oltp.annotations" . | indent 8 }}
     spec:
@@ -85,7 +89,7 @@ spec:
       {{- end }}
       {{- include "podAntiAffinityDb2" . | indent 8 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "root.securityContext" . | indent 6}}
+      {{- include "nonroot.securityContext" . | indent 6}}
       serviceAccount: {{ default "default" .Values.global.serviceAccount }}
       hostIPC: true
       terminationGracePeriodSeconds: 30
@@ -105,8 +109,8 @@ spec:
             cpu: "100m"
             memory: "50Mi"
           limits:
-            cpu: "500m"
-            memory: "256Mi"
+            cpu: "200m"
+            memory: "100Mi"
         command: ['/bin/sh']
         args: ["-cx", '/tools/pre-install/set_kernel_params.sh']
         volumeMounts:
@@ -118,7 +122,7 @@ spec:
           readOnly: false
       {{- end }}
       - name: init-db2-node-cfg
-        {{- include "root.containers.securityContext" . | indent 8}}
+        {{- include "nonroot.containers.securityContext" . | indent 8}}
         {{- if .Values.images.tools.image.tag }}
         image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
         {{- else }}
@@ -131,7 +135,7 @@ spec:
             memory: "50Mi"
           limits:
             cpu: "200m"
-            memory: "200Mi"
+            memory: "100Mi"
         command:
           - "/bin/sh"
           - "-ec"
@@ -153,7 +157,7 @@ spec:
           - name: POD_NAMESPACE
             valueFrom:
               fieldRef:
-                fieldPath: metadata.namespace 
+                fieldPath: metadata.namespace
         volumeMounts:
         - mountPath: /mnt/blumeta0
           {{- if .Values.storage.storageLocation.metaStorage.enabled }}
@@ -166,7 +170,6 @@ spec:
         image: '{{ .Values.images.db2u.image.repository }}:{{ .Values.images.db2u.image.tag }}{{ template "platform" . }}'
         imagePullPolicy: {{ .Values.images.pullPolicy }}
         {{- include "db2u.containers.securityContext" . | indent 8}}
-        command: ["/sbin/init"]
         resources:
           limits:
             memory: {{ .Values.limit.memory }}
@@ -175,7 +178,6 @@ spec:
             memory: {{ .Values.limit.memory }}
             cpu: {{ .Values.limit.cpu }}
         tty: true
-        command: ["/sbin/init"]
         resources:
           limits:
             memory: {{ .Values.limit.memory }}
@@ -184,6 +186,17 @@ spec:
             memory: {{ .Values.limit.memory }}
             cpu: {{ .Values.limit.cpu }}
         env:
+        # MEMORY_REQUEST is probably not needed
+        - name: MEMORY_REQUEST
+          valueFrom:
+            resourceFieldRef:
+              divisor: 1M
+              resource: requests.memory
+        - name: MEMORY_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              divisor: 1M
+              resource: limits.memory
         - name: etcdoperator
           value: "true"
         - name: POD
@@ -201,9 +214,6 @@ spec:
         volumeMounts:
         - mountPath: /dev/shm
           name: dshm
-        - mountPath: /sys/fs/cgroup
-          name: cgvol
-          readOnly: true
         - mountPath: /mnt/blumeta0
           {{- if .Values.storage.storageLocation.metaStorage.enabled }}
           name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
@@ -225,7 +235,7 @@ spec:
           name: {{ .Values.storage.storageLocation.growthStorage.volumeName }}
           {{- end }}
           {{- if .Values.storage.storageLocation.tieredStorage.enabled }}
-            {{- range $tier := .Values.storage.storageLocation.tieredStorage.tiers }}
+            {{- range $tier := .Values.storage.storageLocation.tieredStorage.tiers -}}
               {{ $tierSettings := (index $.Values.storage.storageLocation.tieredStorage $tier) }}
               {{- if $tierSettings.enabled }}
         - mountPath: /mnt/tiered/{{ $tier }}
@@ -233,32 +243,32 @@ spec:
               {{- end }}
             {{- end }}
           {{- end }}
-        - mountPath: /mnt/blumeta0/configmap
+        - mountPath: /mnt/blumeta0/configmap/db2u
           name: {{ template "fullname" . }}-db2u-config-volume
-        - mountPath: /mnt/blumeta0/wv-config
-          name: {{ template "fullname" . }}-config-wv-volume
+        - mountPath: /mnt/blumeta0/configmap/wv
+          name: {{ template "fullname" . }}-db2u-wv-config-volume
+        - mountPath: /mnt/blumeta0/configmap/hadr
+          name: {{ template "fullname" . }}-db2u-hadr-config-volume
         - mountPath: /run
           name: runvol
         - name: db2instance-secret
           mountPath: "/secrets/db2instancepwd"
           readOnly: true
-        readinessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - ls -1 /db2u/.db2u_initialized &> /dev/null
-          initialDelaySeconds: 45
-          periodSeconds: 5
-          failureThreshold: 50
-          successThreshold: 3
+        - mountPath: /db2u/license
+          name: {{ template "fullname" . }}-db2u-lic-volume
+          readOnly: false
         lifecycle:
           preStop:
             exec:
               command:
-              - bash
-              - -c
-              - ipcrm -a
+              - "/bin/bash"
+              - "-cl"
+              - |
+                sleep 1
+                uID=$(grep "${DB2INSTANCE}" /etc/passwd | cut -d: -f3)
+                fencID=$(grep "${FENCED_USER}" /etc/passwd | cut -d: -f3)
+                sudo bash -c "/db2u/scripts/clean_ipc.sh $uID $fencID &>> ${SUPPORTDIR}/clean_ipc_stdout.log"
+                sudo kill -CONT 1
         ports:
           - containerPort: 50000
             protocol: TCP
@@ -291,12 +301,9 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
     {{- end }}
       volumes:
-      - emptyDir:
+      - name: dshm
+        emptyDir:
           medium: Memory
-        name: dshm
-      - name: cgvol
-        hostPath:
-          path: /sys/fs/cgroup
       - name: sys
         hostPath:
           path: /proc/sys
@@ -307,19 +314,7 @@ spec:
         emptyDir:
           medium: Memory
       {{- if .Values.storage.storageLocation.dataStorage.enabled }}
-      - name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
-        {{- if eq .Values.storage.storageLocation.dataStorage.volumeType "hostPath" }}
-        hostPath:
-          path: {{ .Values.storage.storageLocation.dataStorage.hostPath.path }}
-          type: {{ .Values.storage.storageLocation.dataStorage.hostPath.type }}
-        {{- else }}
-        persistentVolumeClaim:
-          {{- if .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
-          claimName: {{ .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
-          {{- else }}
-          claimName: {{ template "fullname" . }}-db2u-data-storage
-          {{- end }}
-        {{- end }}
+        {{- include "db2u.container.storage.dataStorage" . | indent 6 }}
       {{- else }}
       - name: {{ template "fullname" . }}-db2u-sqllib-shared
         persistentVolumeClaim:
@@ -330,83 +325,37 @@ spec:
           {{- end }}
       {{- end }}
       {{- if .Values.storage.storageLocation.metaStorage.enabled }}
-      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
-        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
-        hostPath:
-          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
-          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
-        {{- else }}
-        persistentVolumeClaim:
-          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
-          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
-          {{- else }}
-          claimName: {{ template "fullname" . }}-db2u-meta-storage
-          {{- end }}
-        {{- end }}
+        {{- include "db2u.container.storage.metaStorage" . | indent 6 }}
       {{- end }}
       {{- if .Values.storage.storageLocation.backupStorage.enabled }}
-      - name: {{ .Values.storage.storageLocation.backupStorage.volumeName }}
-        {{- if eq .Values.storage.storageLocation.backupStorage.volumeType "hostPath" }}
-        hostPath:
-          path: {{ .Values.storage.storageLocation.backupStorage.hostPath.path }}
-          type: {{ .Values.storage.storageLocation.backupStorage.hostPath.type }}
-        {{- else }}
-        persistentVolumeClaim:
-          {{- if .Values.storage.storageLocation.backupStorage.pvc.existingClaim.name }}
-          claimName: {{ .Values.storage.storageLocation.backupStorage.pvc.existingClaim.name }}
-          {{- else }}
-          claimName: {{ .Values.storage.storageLocation.backupStorage.pvc.claim.name }}
-          {{- end }}
-        {{- end }}
+        {{- include "db2u.container.storage.backupStorage" . | indent 6 }}
       {{- end }}
       {{- if .Values.storage.storageLocation.growthStorage.enabled }}
-      - name: {{ .Values.storage.storageLocation.growthStorage.volumeName }}
-        {{- if eq .Values.storage.storageLocation.growthStorage.volumeType "hostPath" }}
-        hostPath:
-          path: {{ .Values.storage.storageLocation.growthStorage.hostPath.path }}
-          type: {{ .Values.storage.storageLocation.growthStorage.hostPath.type }}
-        {{- else }}
-        persistentVolumeClaim:
-          {{- if .Values.storage.storageLocation.growthStorage.pvc.existingClaim.name }}
-          claimName: {{ .Values.storage.storageLocation.growthStorage.pvc.existingClaim.name }}
-          {{- else }}
-          claimName: {{ .Values.storage.storageLocation.growthStorage.pvc.claim.name }}
-          {{- end }}
-        {{- end }}
+        {{- include "db2u.container.storage.growthStorage" . | indent 6 }}
       {{- end }}
       {{- if .Values.storage.storageLocation.tieredStorage.enabled }}
-        {{- range $tier := .Values.storage.storageLocation.tieredStorage.tiers }}
-          {{ $tierSettings := (index $.Values.storage.storageLocation.tieredStorage $tier) }}
-          {{- if $tierSettings.enabled }}
-      - name: {{ $tierSettings.volumeName }}
-            {{- if eq $tierSettings.volumeType "hostPath" }}
-        hostPath:
-          path: {{ $tierSettings.hostPath.path }}
-          type: {{ $tierSettings.hostPath.type }}
-            {{- else }}
-        persistentVolumeClaim:
-              {{- if $tierSettings.pvc.existingClaim.name }}
-          claimName: {{ $tierSettings.pvc.existingClaim.name }}
-              {{- else }}
-          claimName: {{ template "fullname" . }}-db2u-tiered-{{ $tier }}-storage
-              {{- end }}
-            {{- end }}
-          {{- end }}
-        {{- end }}
+        {{- include "db2u.container.storage.tieredStorage" . | indent 6 }}
       {{- end }}
       - name: {{ template "fullname" . }}-db2u-config-volume
         configMap:
-          name: {{ template "fullname" . }}-db2u-config-files
+          name: {{ template "fullname" . }}-db2u-config
           items:
-          - key: db2u-db2cfg-var
-            path: db2u-config-var
-      - name: {{ template "fullname" . }}-config-wv-volume
+          - key: db2u-var
+            path: db2u-var
+      - name: {{ template "fullname" . }}-db2u-lic-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-lic
+          items:
+            - key: db2u-lic
+              path: db2u-lic
+      - name: {{ template "fullname" . }}-db2u-wv-config-volume
         configMap:
           name: {{ template "fullname" . }}-db2u-wv-config
-          items:
-          - key: wolverine-conf
-            path: wv-config-var
+      - name: {{ template "fullname" . }}-db2u-hadr-config-volume
+        configMap:
+          name: {{ template "fullname" . }}-db2u-hadr-config
       - name: db2instance-secret
         secret:
           secretName: {{ template "fullname" . }}-db2u-instance
           defaultMode: 256
+  {{- include "db2u.pod.storage.volumeClaimTemplates" . | indent 2 }}
