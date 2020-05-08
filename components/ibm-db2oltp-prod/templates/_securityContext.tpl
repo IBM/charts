@@ -10,13 +10,13 @@ securityContext:
     - ALL
 {{- end }}
 
-{{- define "root.containers.ldap.securityContext" }}
+{{- define "nonroot.containers.ldap.securityContext" }}
 securityContext:
   privileged: false
   readOnlyRootFilesystem: false
   allowPrivilegeEscalation: false
-  runAsNonRoot: false
-  runAsUser: 0
+  runAsNonRoot: true
+  runAsUser: 55
   capabilities:
     add:
     - CHOWN
@@ -43,6 +43,23 @@ securityContext:
     - ALL
 {{- end }}
 
+{{- define "root.containers.client.securityContext" }}
+securityContext:
+  privileged: false
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  runAsNonRoot: false
+  runAsUser: 0
+  capabilities:
+    add:
+    - SETGID
+    - SETUID
+    - CHOWN
+    - FOWNER
+    drop:
+    - ALL
+{{- end }}
+
 {{- define "root.securityContext" }}
 hostNetwork: false
 hostPID: false
@@ -58,7 +75,6 @@ hostPID: false
 hostIPC: false
 securityContext:
   runAsNonRoot: true
-  runAsUser: 1000
 {{- end  }}
 
 {{- define "nonroot.containers.securityContext" }}
@@ -67,6 +83,7 @@ securityContext:
   readOnlyRootFilesystem: false
   allowPrivilegeEscalation: false
   runAsNonRoot: true
+  runAsUser: 500
   capabilities:
     drop:
     - ALL

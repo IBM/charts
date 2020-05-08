@@ -9,7 +9,11 @@ metadata:
     component: "ldap"
     heritage: "{{ .Release.Service }}"
     chart: "{{ .Chart.Name }}"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
 spec:
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: {{ template "fullname" . }}
@@ -25,24 +29,14 @@ spec:
         release: "{{ .Release.Name }}"
         component: "ldap"
         heritage: "{{ .Release.Service }}"
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
       annotations:
         {{- include "db2oltp.annotations" .  | indent 8 }}
     spec:
       volumes:
       {{- if .Values.storage.storageLocation.metaStorage.enabled }}
-      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
-        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
-        hostPath:
-          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
-          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
-        {{- else }}
-        persistentVolumeClaim:
-          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
-          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
-          {{- else }}
-          claimName: {{ template "fullname" . }}-db2u-meta-storage
-          {{- end }}
-        {{- end }}
+        {{- include "db2u.container.storage.metaStorage" . | indent 6 }}
       {{- else }}
       - name: {{ template "fullname" . }}-db2u-sqllib-shared
         persistentVolumeClaim:
@@ -55,29 +49,63 @@ spec:
       - name: ldap-secret
         secret:
           secretName: {{ template "fullname" . }}-db2u-ldap
-          defaultMode: 256
+          defaultMode: 292
       - name: bluadmin-secret
         secret:
           secretName: {{ template "fullname" . }}-db2u-ldap-bluadmin
-          defaultMode: 256
+          defaultMode: 292
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "podAffinityDedicated" . | indent 8 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "root.securityContext" . | indent 6}}
+      {{- include "nonroot.securityContext" . | indent 6}}
       serviceAccount: {{ default "default" .Values.global.serviceAccount }}
+      initContainers:
+      - name: init-ldapdb-dir
+        {{- if .Values.images.tools.image.tag }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.tools.image.tag }}{{ template "platform" . }}"
+        {{- else }}
+        image: "{{ .Values.images.tools.image.repository }}:{{ .Values.images.universalTag }}{{ template "platform" . }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        {{- include "nonroot.containers.securityContext" . | indent 8 }}
+        {{- include "jobs.resources" . | indent 8 }}
+        command:
+          - "/bin/sh"
+          - "-ecx"
+          - |
+            /tools/post-install/db2u_ready.sh \
+                --replicas {{ .Values.images.db2u.replicas }} \
+                --template {{ template "fullname" . }} \
+                --namespace {{ .Release.Namespace }} \
+                --dbType {{ .Values.global.dbType }}
+            DETERMINATION_FILE=/mnt/blumeta0/nodeslist
+            CAT_NODE=$(head -1 $DETERMINATION_FILE)
+            kubectl exec -it -n {{ .Release.Namespace }} ${CAT_NODE?} -- bash -c \
+                "sudo mkdir -p /mnt/blumeta0/ldap_db /mnt/blumeta0/ldap_rootCA \
+                && sudo chown -c -R 55:55 /mnt/blumeta0/ldap_db /mnt/blumeta0/ldap_rootCA \
+                && sudo chmod -c -R 640 /mnt/blumeta0/ldap_db \
+                && sudo chmod -c 700 /mnt/blumeta0/ldap_db"
+            exit $?
+        volumeMounts:
+          - mountPath: /mnt/blumeta0
+            {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+            name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
+            {{- else }}
+            name: {{ template "fullname" . }}-db2u-sqllib-shared
+            {{- end }}
       containers:
       - name: ldap
         image: "{{ .Values.images.auth.image.repository }}:{{ .Values.images.auth.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.images.pullPolicy }}
-        {{- include "root.containers.ldap.securityContext" . | indent 8 }}
+        {{- include "nonroot.containers.ldap.securityContext" . | indent 8 }}
         readinessProbe:
           timeoutSeconds: 3
           initialDelaySeconds: 10
           exec:
             command:
-            - "/bin/bash"
+            - "/bin/sh"
             - "-c"
-            - "supervisorctl status slapd"
+            - "test -f /opt/ibm/scripts/.ldap_initialized"
           periodSeconds: 30
           successThreshold: 1
           failureThreshold: 5
@@ -86,22 +114,22 @@ spec:
           initialDelaySeconds: 20
           exec:
             command:
-            - "/bin/bash"
+            - "/bin/sh"
             - "-c"
-            - "supervisorctl status slapd"
+            - "test -f /opt/ibm/scripts/.ldap_initialized"
           periodSeconds: 30
           successThreshold: 1
           failureThreshold: 5
         resources:
           requests:
-            cpu: "500m"
+            cpu: "100m"
             memory: "512Mi"
           limits:
-            cpu: "1"
-            memory: "1Gi"
+            cpu: "200m"
+            memory: "2Gi"
         env:
         - name: INSTANCE_NAME
-          value: {{ default "db2inst1" .Values.database.db2InstanceUser | quote }}
+          value: {{ default "db2inst1" .Values.instance.db2InstanceUser | quote }}
         - name: SERVICE_NAME
           value: {{ template "fullname" . }}-db2u-ldap
         - name: LDAP_PWD

@@ -1,0 +1,70 @@
+{{- if or (eq .Values.consoleArch "multi_tenant" ) (.Values.ucgoapi.enabled) }}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- if .Values.ucgoapi.enabled }}
+  name: {{ template "ucgoapi.fullname" . }}
+  {{- else }}
+  name: {{ template "uc.fullname" . }}-{{ .Values.ucgoapi.service.name }}
+  {{- end }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "ucgoapi.fullname" . }}
+    component: "ucgoapi"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    app.kubernetes.io/instance: {{ template "ucgoapi.fullname" . }}-svc
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: ucgoapi
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  type: {{ .Values.ucgoapi.service.type }}
+  selector:
+    app: {{ template "ucgoapi.fullname" . }}
+    component: "ucgoapi"
+  ports:
+  {{- if eq .Values.enableMesh true }}
+  - port: {{ .Values.ucgoapi.service.httpPort }}
+    targetPort: {{ .Values.ucgoapi.service.targetPort }}
+    protocol: TCP
+    name: {{ .Values.ucgoapi.service.name }}-http
+  {{- else }}
+  - port: {{ .Values.ucgoapi.service.httpsPort }}
+    targetPort: {{ .Values.ucgoapi.service.targetPort }}
+    protocol: TCP
+    name: {{ .Values.ucgoapi.service.name }}-https
+  {{- end }}
+---
+## service for external access for debug
+{{- if eq .Values.debug true }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.ucgoapi.service.name }}-external-uc
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    app: {{ template "uc.fullname" . }}
+    component: "ucgoapi"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  type: NodePort
+  ports:
+  {{- if eq .Values.enableMesh true }}
+  - port: {{ .Values.ucgoapi.service.httpPort }}
+    targetPort: 3500
+    nodePort: 30090
+    protocol: TCP
+    name: {{ .Values.ucgoapi.service.name }}-http
+  {{- else }}
+  - port: {{ .Values.ucgoapi.service.httpsPort }}
+    targetPort: 3500
+    nodePort: 30090
+    protocol: TCP
+    name: {{ .Values.ucgoapi.service.name }}-https
+  {{- end }}
+  selector:
+    app: {{ template "uc.fullname" . }}
+    component: "ucgoapi"
+{{- end }}
+{{- end }}

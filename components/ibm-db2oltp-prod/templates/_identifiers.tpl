@@ -21,6 +21,19 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 
 {{/*
+Create zenServiceInstanceId template for icpdsupport/serviceInstanceId label.
+*/}}
+{{- define "zenServiceInstanceId" -}}
+  {{- if not .Values.zenServiceInstanceId }}
+    {{- $name := default .Chart.Name .Values.nameOverride -}}
+    {{- $shortname := .Release.Name | trunc 10 -}}
+    {{- printf "%s-%s" $shortname $name | trunc 63 | trimSuffix "-" -}}
+  {{- else }}
+    {{- printf "%s" (int .Values.zenServiceInstanceId | toString) }}
+  {{- end }}
+{{- end -}}
+
+{{/*
 Create a default hadr store name
 We truncate at 10 chars for the name as we reach a limit when PVCs for the statefulset are created
 */}}
