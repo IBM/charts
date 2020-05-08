@@ -7,15 +7,29 @@ metadata:
     chart: "{{ .Chart.Name }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
+    icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+    icpdsupport/app: {{ template "fullname" . }}
+  annotations:
+    {{- include "db2oltp.annotations" . | indent 4 }}
 spec:
   template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        icpdsupport/serviceInstanceId: "{{ template "zenServiceInstanceId" . }}"
+        icpdsupport/app: {{ template "fullname" . }}
+      annotations:
+        {{- include "db2oltp.annotations" .  | indent 8 }}
     spec:
       hostNetwork: false
       hostPID: false
       hostIPC: false
       {{- include "nodeaffinity" . | indent 6 }}
       {{- include "tolerations" . | indent 6 }}
-      {{- include "root.securityContext" . | indent 6 }}
+      {{- include "nonroot.securityContext" . | indent 6 }}
       containers:
       - name: {{ template "fullname" . }}-db2-init
         {{- if .Values.images.tools.image.tag }}
@@ -27,47 +41,24 @@ spec:
         {{- include "sqllib.containers.securityContext" . | indent 8 }}
         command: ['/bin/sh']
         args: ['-cx', '/Db2wh_preinit/instdb_entrypoint.sh']
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "100Mi"
-          limits:
-            memory: "512Mi"
+        {{- include "jobs.resources.2X" . | indent 8 }}
         env:
         - name: SERVICENAME
           value: "{{ .Values.servicename }}"
         volumeMounts:
-        - mountPath: /mnt/bludata0
-          {{- if .Values.storage.storageLocation.dataStorage.enabled }}
-          name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
-          {{- else }}
-          name: {{ template "fullname" . }}-db2u-sqllib-shared
-          {{- end }}
         - mountPath: /mnt/blumeta0
           {{- if .Values.storage.storageLocation.metaStorage.enabled }}
           name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
           {{- else }}
           name: {{ template "fullname" . }}-db2u-sqllib-shared
           {{- end }}
-        - mountPath: /mnt/blumeta0/configmap
+        - mountPath: /mnt/blumeta0/configmap/db2u
           name: {{ template "fullname" . }}-db2u-config-volume
       restartPolicy: Never
       serviceAccount: {{ default "default" .Values.global.serviceAccount }}
       volumes:
-      {{- if .Values.storage.storageLocation.dataStorage.enabled }}
-      - name: {{ .Values.storage.storageLocation.dataStorage.volumeName }}
-        {{- if eq .Values.storage.storageLocation.dataStorage.volumeType "hostPath" }}
-        hostPath:
-          path: {{ .Values.storage.storageLocation.dataStorage.hostPath.path }}
-          type: {{ .Values.storage.storageLocation.dataStorage.hostPath.type }}
-        {{- else }}
-        persistentVolumeClaim:
-          {{- if .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
-          claimName: {{ .Values.storage.storageLocation.dataStorage.pvc.existingClaim.name }}
-          {{- else }}
-          claimName: {{ template "fullname" . }}-db2u-data-storage
-          {{- end }}
-        {{- end }}
+      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
+        {{- include "db2u.container.storage.metaStorage" . | indent 6 }}
       {{- else }}
       - name: {{ template "fullname" . }}-db2u-sqllib-shared
         persistentVolumeClaim:
@@ -77,24 +68,9 @@ spec:
           claimName: {{ template "fullname" . }}-db2u-sqllib-shared
           {{- end }}
       {{- end }}
-      {{- if .Values.storage.storageLocation.metaStorage.enabled }}
-      - name: {{ .Values.storage.storageLocation.metaStorage.volumeName }}
-        {{- if eq .Values.storage.storageLocation.metaStorage.volumeType "hostPath" }}
-        hostPath:
-          path: {{ .Values.storage.storageLocation.metaStorage.hostPath.path }}
-          type: {{ .Values.storage.storageLocation.metaStorage.hostPath.type }}
-        {{- else }}
-        persistentVolumeClaim:
-          {{- if .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
-          claimName: {{ .Values.storage.storageLocation.metaStorage.pvc.existingClaim.name }}
-          {{- else }}
-          claimName: {{ template "fullname" . }}-db2u-meta-storage
-          {{- end }}
-        {{- end }}
-      {{- end }}
       - name: {{ template "fullname" . }}-db2u-config-volume
         configMap:
-          name: {{ template "fullname" . }}-db2u-config-files
+          name: {{ template "fullname" . }}-db2u-config
           items:
-          - key: db2u-db2cfg-var
-            path: db2u-config-var
+          - key: db2u-var
+            path: db2u-var

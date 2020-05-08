@@ -1,9 +1,21 @@
 {{- define "db2oltp.annotations" }}
 productName: "Db2 Advanced Edition"
-{{- if ( eq .Values.runtime "ICP4Data" ) }}
-productID: "ICP4D-addon-5725-L47"
-{{- else }}
-productID: "5725-L47"
+productID: "5737-K73"
+productVersion: "11.5.2.0"
+cloudpakName: "{{ .Values.global.cloudpakName }}"
+cloudpakId: "{{ .Values.global.cloudpakId }}"
+cloudpakVersion: "{{ .Values.global.cloudpakVersion }}"
+productMetric: "VIRTUAL_PROCESSOR_CORE"
+productChargedContainers: "All"
 {{- end }}
-productVersion: "11.5.1.0"
+
+{{- define "uc.annotations" }}
+productName: "Db2 Advanced Edition"
+productID: "5737-K73"
+productVersion: "11.5.2.0"
+cloudpakName: "{{ .Values.global.cloudpakName }}"
+cloudpakId: "{{ .Values.global.cloudpakId }}"
+cloudpakVersion: "{{ .Values.global.cloudpakVersion }}"
+productMetric: "VIRTUAL_PROCESSOR_CORE"
+productChargedContainers: "All"
 {{- end }}

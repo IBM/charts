@@ -77,3 +77,13 @@ podAntiAffinity:
 {{ toYaml .Values.customPodAntiAffinity }}
   {{- end }}
 {{- end }}
+
+{{- define "uc.annotations" }}
+productName: {{ .Values.productName }}
+productID: {{ .Values.productID }}
+  {{- if .Values.productVersion  }}
+productVersion: {{ .Values.productVersion }}
+  {{- else }}
+productVersion: {{ .Values.image.tag }}
+  {{- end }}
+{{- end }}

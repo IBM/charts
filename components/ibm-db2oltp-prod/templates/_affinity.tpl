@@ -69,10 +69,18 @@ podAntiAffinity:
 {{- define "nodeAffinityICP4Data" }}
       nodeSelectorTerms:
       - matchExpressions:
+  {{- if eq .Values.global.nodeLabel.key "" }}
         - key: icp4data
+  {{- else }}
+        - key: {{ .Values.global.nodeLabel.key }}
+  {{- end }}
           operator: In
           values:
+  {{- if eq .Values.global.nodeLabel.value "" }}
             - database-{{ .Values.global.dbType }}
+  {{- else }}
+            - {{ .Values.global.nodeLabel.value }}
+  {{- end }}
 {{- end }}
 
 {{- define "nodeAffinitySelector" }}
@@ -85,10 +93,18 @@ podAntiAffinity:
 
 {{- define "uc.customNodeSelectorTerms" }}
 {{- if .Values.dedicated }}
+  {{- if eq .Values.global.nodeLabel.key "" }}
 - key: icp4data
+  {{- else }}
+- key: {{ .Values.global.nodeLabel.key }}
+  {{- end }}
   operator: In
   values:
+  {{- if eq .Values.global.nodeLabel.value "" }}
     - database-{{ .Values.global.dbType }}
+  {{- else }}
+    - {{ .Values.global.nodeLabel.value }}
+  {{- end }}
 {{- end }}
 {{- end }}
 

@@ -2,9 +2,9 @@
 securityContext:
   privileged: false
   readOnlyRootFilesystem: false
-  allowPrivilegeEscalation: false
-  runAsNonRoot: false
-  runAsUser: 0
+  allowPrivilegeEscalation: true
+  runAsNonRoot: true
+  runAsUser: 700
   capabilities:
     add:
     #Default capabilities, re-add some back
@@ -40,9 +40,8 @@ securityContext:
   privileged: false
   readOnlyRootFilesystem: false
   allowPrivilegeEscalation: true
-  runAsNonRoot: false
-  runAsUser: 0
-  hostIPC: true
+  runAsNonRoot: true
+  runAsUser: 600
   procMount: Default
   capabilities:
     add:
@@ -65,5 +64,3 @@ securityContext:
     drop:
     - "ALL"
 {{- end }}
-
-

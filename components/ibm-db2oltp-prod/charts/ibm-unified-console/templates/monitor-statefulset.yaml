@@ -1,0 +1,287 @@
+{{- if  (eq .Values.consoleArch "multi_tenant" )  }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "uc.fullname" . }}-monitor
+  labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 4  }}
+{{- end }}
+    app: {{ template "uc.fullname" . }}
+    component: "monitor"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    chart: "{{ .Chart.Name }}"
+    version: "{{ .Values.monitor.image.tag }}"
+    canary: "false"
+    app.kubernetes.io/instance: {{ template "uc.fullname" . }}-monitor
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: monitor
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  serviceName: {{ template "uc.fullname" . }}-{{ .Values.monitor.service.name }}-stateful
+  podManagementPolicy: Parallel
+  replicas: {{ .Values.monitor.service.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "uc.fullname" . }}
+      component: "monitor"
+      chart: "{{ .Chart.Name }}"
+      release: "{{ .Release.Name }}"
+      heritage: "{{ .Release.Service }}"
+      canary: "false"
+  template:
+    metadata:
+      labels:
+{{- if .Values.customLabels }}
+{{ .Values.customLabels | indent 8  }}
+{{- end }}
+        app: {{ template "uc.fullname" . }}
+        component: "monitor"
+        chart: "{{ .Chart.Name }}"
+        release: "{{ .Release.Name }}"
+        heritage: "{{ .Release.Service }}"
+        func: "ucapi"
+        version: "{{ .Values.monitor.image.tag }}"
+        canary: "false"
+        app.kubernetes.io/instance: {{ template "uc.fullname" . }}-monitor
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/name: monitor
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+      annotations:
+{{- if .Values.customAnnotations }}
+{{ .Values.customAnnotations | indent 8  }}
+{{- end }}
+        productName: {{ .Values.productName }}
+        productID: {{ .Values.productID }}
+        {{- if .Values.productVersion  }}
+        productVersion: {{ .Values.productVersion }}
+        {{- else }}
+        productVersion: {{ .Values.image.tag }}
+        {{- end }}
+        sidecar.istio.io/inject: "true"
+    spec:
+      {{- if .Values.serviceAccountName  }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- else }}
+         {{- if .Values.global.serviceAccount }}
+      serviceAccountName: {{ .Values.global.serviceAccount }}
+         {{- else }}
+           {{- if  eq ( .Values.platformCode | trunc 14 ) "PLATFORM_ICP4D"  }}
+      serviceAccountName:  "cpd-viewer-sa"
+           {{- else }}
+      serviceAccountName: {{ template "uc.fullname" . }}
+           {{- end }}   
+         {{- end }}
+      {{- end }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+      {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 1000320901
+      {{- end }}
+      {{- if .Values.global.image.secretName }}
+      imagePullSecrets:
+      - name: {{ .Values.global.image.secretName }}
+      {{- end }}
+      affinity:
+      {{- include "uc.nodeAffinity" . | indent 8 }}
+      {{- include "uc.podAffinity" . | indent 8 }}
+      {{- include "uc.podAntiAffinity" . | indent 8 }}
+      tolerations:
+      {{- include "uc.tolerations" . | indent 8 }}
+      initContainers:
+      - name: wait-redis
+      {{- if .Values.image.arch }}
+        image: "{{ .Values.monitor.image.repository }}:{{ .Values.monitor.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+        image: "{{ .Values.monitor.image.repository }}:{{ .Values.monitor.image.tag }}"
+      {{- end }}
+        command: ['sh', '-c', 'ready_replicas=0; until [[ $ready_replicas -eq 3 ]]; do ready_replicas=`kubectl get statefulset {{ .Release.Name}}-redis-server -o=jsonpath={.status.readyReplicas}`;sleep 3; done'] 
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+      - name: init-check
+      {{- if .Values.image.arch }}
+        image: "{{ .Values.monitor.image.repository }}:{{ .Values.monitor.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+        image: "{{ .Values.monitor.image.repository }}:{{ .Values.monitor.image.tag }}"
+      {{- end }}
+        {{- if eq .Values.enableMesh true }}
+        command: ['sh', '-c', 'while [ $(curl --connect-timeout 5 -sw %{http_code} http://{{ template "uc.fullname" . }}-{{ .Values.dbapi.service.name }}:{{ template "uc.service.port" .}}/dbapi/v4/internal/status -o /dev/null) -ne 200 ]; do echo waiting {{ template "uc.fullname" . }}-{{ .Values.dbapi.service.name }}; sleep 20; done;']
+        {{- else }}
+        command: ['sh', '-c', 'while [ $(curl -k --connect-timeout 5 -sw %{http_code} https://{{ template "uc.fullname" . }}-{{ .Values.dbapi.service.name }}:{{ template "uc.service.port" .}}/dbapi/v4/internal/status -o /dev/null) -ne 200 ]; do echo waiting {{ template "uc.fullname" . }}-{{ .Values.dbapi.service.name }}; sleep 20; done;']
+        {{- end }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+      containers:
+      - securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+        name: uc
+      {{- if .Values.image.arch }}
+        image: "{{ .Values.monitor.image.repository }}:{{ .Values.monitor.image.tag }}-{{ .Values.image.arch }}"
+      {{- else }}
+        image: "{{ .Values.monitor.image.repository }}:{{ .Values.monitor.image.tag }}"
+      {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: CONSOLE_ARCH
+          value: "{{ .Values.consoleArch }}"
+        - name: ENABLE_MESH
+          value: "{{ .Values.enableMesh }}"
+        - name: CLUSTER_NAME
+          value: "{{ .Values.clusterName }}"
+        - name: LOG_NAME
+          value: "monitor"
+        - name: LOG_TO_STDOUT_STDERR
+          value: "{{ .Values.logToStdoutStderr }}"
+        - name: ADMIN_SERVICE_HOST
+          value: {{ template "uc.fullname" . }}-{{ .Values.admin.service.name }}
+        - name: RUNSQL_SERVICE_HOST
+          value: {{ template "uc.fullname" . }}-{{ .Values.runsql.service.name }}
+        - name: DBAPI_SERVICE_HOST
+          value: {{ template "uc.fullname" . }}-{{ .Values.dbapi.service.name }}
+        - name: REGISTRY_SERVICE_HOST
+          value: {{ template "uc.fullname" . }}-{{ .Values.registry.service.name }}
+        - name: REGISTRY_SERVICE_PORT
+          value: {{ include "registry.service.port" . | quote }}
+        - name: SCHEDULER_SERVICE_HOST
+          value: {{ template "uc.fullname" . }}-{{ .Values.scheduler.service.name }}
+        - name: SCHEDULER_SERVICE_PORT
+          value: {{ include "scheduler.service.port" . | quote }}
+        - name: CONSOLE_SERVICE_PORT
+          value: {{ include "uc.service.port" . | quote }}
+        - name: REDIS_SENTINELS
+          value: "{{ template "redis.sentinel.list" . }}"
+        - name: REDIS_MASTER_SET
+          value: "{{ .Values.redis.redis.masterGroupName }}"
+        - name: REDIS_PASSWORD
+          value: "{{ .Values.redis.redisPassword }}"
+        - name: UC_API_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: console-api-key
+              key: consoleApiKey
+        - name: LICENSE
+          value: accept
+        - name: DEV_EDITION
+          value: "false"
+        - name: CONSOLE_SECURE_PORT
+          value: "8443"
+        - name: POD_NAMESPACE
+          value: "{{ .Release.Namespace }}"
+        - name: DISABLE_HOST_CHECK
+          value: "{{ .Values.disableHostCheck }}"
+        - name: RUN_NGINX
+          value: "{{ .Values.runNginx }}"
+        - name: CACHE_CRYPT_BY_MEMCHD
+          value: "true"
+        {{- if eq .Values.debug true }}
+        - name: DEBUG_MODE
+          value: "true"
+        {{- end }}
+
+      {{- if not .Values.useConfigMap }}
+        - name: PLATFORM_CODE
+        {{- if and .Values.platform (.Values.product) }}
+          value: "{{ .Values.platform }}_{{ .Values.product }}"
+        {{- else }}
+          value: "{{ .Values.platformCode }}"
+        {{- end }}
+      {{- end }}
+
+        envFrom:
+        {{- if .Values.useConfigMap }}
+        - configMapRef:
+          {{- if .Values.configMapName }}
+            name: {{ .Values.configMapName }}
+          {{- else }}
+            name: uc-config-{{ .Values.zenServiceInstanceId }}
+          {{- end }}
+        {{- end }}
+        - secretRef:
+            name: scheduler
+        - secretRef:
+            name: registry
+        ports:
+        - containerPort: 11080
+          name: http-monitor
+        - containerPort: 11081
+          name: https-monitor
+        livenessProbe:
+          exec:
+            command:
+            - /usr/bin/status
+          initialDelaySeconds: 1200
+        readinessProbe:
+          exec:
+            command:
+            - /usr/bin/status
+          initialDelaySeconds: 120
+        resources:
+{{ toYaml .Values.monitor.resources | indent 10 }}
+        volumeMounts:
+        {{- if .Values.dataServer.metadb.pwdSecretName }}
+        - name: metadb-secret 
+          mountPath: "/etc/metaDBPwdSecret"
+          readOnly: true
+        {{- end }}
+        {{- if .Values.dataServer.ldap.rootPwdSecretName }}
+        - name: ldap-secret
+          mountPath: "/etc/ldapRootPwdSecret"
+          readOnly: true  
+        {{- end }}
+        - name: global-log-config
+          mountPath: /opt/ibm-datasrvrmgr/Config/globalLog
+        - name: global-ds-config
+          mountPath: /opt/ibm-datasrvrmgr/Config/globalDsSetting
+        {{- if eq .Values.debug true }}  
+        - name: heap-dumps
+          mountPath: /dumps
+        {{- end }}
+        - name: secret-volume
+          readOnly: true
+          mountPath: /opt/ibm-datasrvrmgr/Config/secrets
+      volumes:
+      {{- if .Values.dataServer.metadb.pwdSecretName }}
+      - name: metadb-secret 
+        secret:
+          secretName: {{ .Values.dataServer.metadb.pwdSecretName }} 
+          defaultMode: 420
+      {{- end }}
+      {{- if .Values.dataServer.ldap.rootPwdSecretName }}
+      - name: ldap-secret
+        secret:
+          secretName: {{ .Values.dataServer.ldap.rootPwdSecretName }}
+          defaultMode: 420
+      {{- end }}
+      - name: global-log-config
+        configMap:
+          name: {{ .Values.ucConfigMapName }}
+          defaultMode: 420
+          items:
+          - key: monitor_log.properties
+            path: monitor_log.properties
+      - name: global-ds-config
+        configMap:
+          name: {{ .Values.ucConfigMapName }}
+          defaultMode: 420
+          items:
+          - key: dswebserver_global.properties
+            path: dswebserver_global.properties
+      {{- if eq .Values.debug true }}
+      - name: heap-dumps
+        emptyDir: {}
+      {{- end }} 
+      - name: secret-volume
+        secret:
+          secretName: console-secret  
+---
+{{- end }}
