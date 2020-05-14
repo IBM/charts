@@ -2,7 +2,7 @@
 
 * None
 
-# What’s new in IBM App Connect Designer Chart Version 3.1.0
+# What’s new in IBM App Connect Designer Chart Version 3.1.2
 
 You can perform the following tasks with the IBM App Connect Designer chart:
 
@@ -12,7 +12,7 @@ You can perform the following tasks with the IBM App Connect Designer chart:
 
 # Fixes
 
-None
+Version 3.1.2 contains fixes for user interface issues identified in the 3.1.0 and 3.1.1 releases.
 
 # Prerequisites
 
@@ -28,4 +28,6 @@ For any latest service bulletins register here: https://www.ibm.com/support/page
 # Version History
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------ | ------------------ | ---------------- | ------- |
+| 3.1.2 | May 2020 | >=v1.14.0 | 11.0.0.8-r1, 11.0.0.8-r2 (ibm-appconnect-ui only) | none | Fixes for the UI |
+| 3.1.1 | Mar 2020 | >=v1.14.0 | 11.0.0.8-r1 | none | Minor fix |
 | 3.1.0 | Mar 2020 | >=v1.14.0 | 11.0.0.8-r1 | none | Designer Experience - Initial Chart |
