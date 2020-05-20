@@ -1,11 +1,13 @@
-# Design and Known Issues Justification Document
+# Chart: Sysdig
 
-## Goal
+## Design and Known Issues Justification Document
+
+### Goal
 
 The goal of this file is to document and give some context about some issues that
 forced me to take some decisions in this Chart.
 
-## Loading Custom App Checks using a ConfigMap and a Yaml file
+### Loading Custom App Checks using a ConfigMap and a Yaml file
 
 In Helm, we are not able to add an external file to a Chart deployment, in fact,
 there is an [issue](https://github.com/helm/helm/issues/3276) about this.
@@ -18,7 +20,7 @@ And the way to manage them using Helm is to pass file contents as values to Char
 deployment. A nice tip is using a Yaml file and pass to deployment command line
 using the -f flag.
 
-## OpenShift support
+### OpenShift support
 
 Right now, there are an issue in [OpenShift](https://github.com/openshift/origin/issues/20788)
 and other in [Helm](https://github.com/helm/helm/issues/4533) that makes a bit
