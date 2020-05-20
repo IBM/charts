@@ -1,3 +1,5 @@
+# Chart: Sysdig
+
 ## Deploying the AWS Marketplace Sysdig agent image
 
 This is an use case similar to pulling images from a private registry. First you

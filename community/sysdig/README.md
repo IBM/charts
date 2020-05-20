@@ -1,4 +1,4 @@
-# Sysdig
+# Chart: Sysdig
 
 [Sysdig](https://sysdig.com/) is a unified platform for container and microservices monitoring, troubleshooting, security and forensics. Sysdig platform has been built on top of [Sysdig tool](https://sysdig.com/opensource/sysdig/) and [Sysdig Inspect](https://sysdig.com/blog/sysdig-inspect/) open-source technologies.
 
@@ -51,7 +51,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | ---                               | ---                                                                    | ---                                         |
 | `image.registry`                  | Sysdig Agent image registry                                            | `docker.io`                                 |
 | `image.repository`                | The image repository to pull from                                      | `sysdig/agent`                              |
-| `image.tag`                       | The image tag to pull                                                  | `9.8.0`                                     |
+| `image.tag`                       | The image tag to pull                                                  | `10.0.0`                                    |
 | `image.pullPolicy`                | The Image pull policy                                                  | `IfNotPresent`                              |
 | `image.pullSecrets`               | Image pull secrets                                                     | `nil`                                       |
 | `resources.requests.cpu`          | CPU requested for being run in a node                                  | `600m`                                      |
@@ -62,7 +62,8 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `serviceAccount.create`           | Create serviceAccount                                                  | `true`                                      |
 | `serviceAccount.name`             | Use this value as serviceAccountName                                   | ` `                                         |
 | `daemonset.updateStrategy.type`   | The updateStrategy for updating the daemonset                          | `RollingUpdate`                             |
-| `daemonset.affinity`              | Node affinities                                                        | `nil`                                       |
+| `daemonset.affinity`              | Node affinities                                                        | `schedule on amd64 and linux`               |
+| `daemonset.annotations`           | Custom annotations for daemonset                                       | `{}`                                        |
 | `slim.enabled`                    | Use the slim based Sysdig Agent image                                  | `false`                                     |
 | `slim.kmoduleImage.repository`    | The kernel module image builder repository to pull from                | `sysdig/agent-kmodule`                      |
 | `slim.resources.requests.cpu`     | CPU requested for building the kernel module                           | `1000m`                                     |
@@ -79,6 +80,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `auditLog.dynamicBackend.enabled` | Deploy the Audit Sink where Sysdig listens for K8s audit log events    | `false`                                     |
 | `customAppChecks`                 | The custom app checks deployed with your agent                         | `{}`                                        |
 | `tolerations`                     | The tolerations for scheduling                                         | `node-role.kubernetes.io/master:NoSchedule` |
+| `scc.create`                      | Create OpenShift's Security Context Constraint                         | `false`                                     |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
@@ -264,7 +266,7 @@ $ helm install --name my-release -f values.yaml community/sysdig
 
 ### Automating the generation of custom-app-checks.yaml file
 
-Sometimes editing and maintaining YAML files can be a bit cumbersome and error prone, so we have created a script for automating this process and make your life easier.
+Sometimes editing and maintaining YAML files can be a bit cumbersome and error-prone, so we have created a script for automating this process and make your life easier.
 
 Imagine that you have custom AppChecks for a number of services like Redis, MongoDB and Traefik.
 
@@ -286,8 +288,8 @@ sysdig:
 You can generate an additional values YAML file with the custom AppChecks:
 
 ```bash
-$ git clone https://github.com/kubernetes/charts.git
-$ cd community/sysdig
+$ git clone https://github.com/IBM/charts.git
+$ cd charts/community/sysdig
 $ ./scripts/appchecks2helm appChecks/solr.py appChecks/traefik.py appChecks/nats.py > custom-app-checks.yaml
 ```
 
@@ -307,6 +309,6 @@ components of the Sysdig Platform:
 
 * [Sysdig Monitor](https://app.sysdigcloud.com)
 * [Sysdig Secure](https://secure.sysdig.com)
-* [Platform Documentation](https://sysdigdocs.atlassian.net/wiki/spaces/Platform)
-* [Monitor Documentation](https://sysdigdocs.atlassian.net/wiki/spaces/Monitor)
-* [Secure Documentation](https://sysdigdocs.atlassian.net/wiki/spaces/Secure)
+* [Platform Documentation](https://docs.sysdig.com/en/sysdig-platform.html)
+* [Monitor Documentation](https://docs.sysdig.com/en/sysdig-monitor.html)
+* [Secure Documentation](https://docs.sysdig.com/en/sysdig-secure.html)
