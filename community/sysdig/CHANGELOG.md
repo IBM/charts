@@ -5,12 +5,12 @@
 This file documents all notable changes to Sysdig Helm Chart. The release
 numbering uses [semantic versioning](http://semver.org).
 
-
 ## v1.7.17
 
 ### Minor changes
 
 * Add onPrem as explicit option to set collector host, port and settings
+* Fail if no sysdig.accessKey value is provided
 
 ## v1.7.16
 
