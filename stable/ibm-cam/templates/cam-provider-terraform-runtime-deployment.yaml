@@ -8,12 +8,13 @@
 #  IBM Corporation - initial API and implementation
 ###############################################################################
 
+{{- if .Values.camProviderTerraform.isolateRuntime }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cam-provider-terraform
+  name: cam-provider-terraform-runtime
   labels:
-    name: cam-provider-terraform
+    name: cam-provider-terraform-runtime
     "app.kubernetes.io/name": {{ template "fullname" . }}
     "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
@@ -22,10 +23,10 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   progressDeadlineSeconds: 1800
-  replicas: {{ .Values.camProxy.replicaCount }}
+  replicas: {{ .Values.camProviderTerraform.runtime.replicaCount }}
   selector:
     matchLabels:
-      name: cam-provider-terraform
+      name: cam-provider-terraform-runtime
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -35,7 +36,7 @@ spec:
   template:
     metadata:
       labels:
-        name: cam-provider-terraform
+        name: cam-provider-terraform-runtime
         "app.kubernetes.io/name": {{ template "fullname" . }}
         "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
         release: "{{ .Release.Name }}"
@@ -64,9 +65,11 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
-      hostname: cam-provider-terraform
+      hostname: cam-provider-terraform-runtime
       volumes:
-      - name: tmp-empty 
+      - name: tmp-empty
+        emptyDir: {}
+      - name: stacks-empty
         emptyDir: {}
       - name: cam-cert
         secret:
@@ -85,6 +88,7 @@ spec:
       - name: {{ .Values.camTerraformPV.name }}
       {{- if .Values.camTerraformPV.persistence.enabled }}
         persistentVolumeClaim:
+          readOnly: true
         {{- if .Values.camTerraformPV.persistence.existingClaimName }}
           claimName: {{ .Values.camTerraformPV.persistence.existingClaimName }}
         {{- else }}
@@ -100,7 +104,7 @@ spec:
       {{- end }}
       {{- end }}
       containers:
-      - name: cam-provider-terraform
+      - name: cam-provider-terraform-runtime
         securityContext:
           privileged: false
           readOnlyRootFilesystem: true
@@ -128,7 +132,7 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 20
         resources:
-{{ toYaml .Values.resources | indent 10 }}
+{{ toYaml .Values.camProviderTerraform.runtime.resources | indent 10 }}
         volumeMounts:
           - name: tmp-empty
             mountPath: /tmp
@@ -139,7 +143,10 @@ spec:
             mountPath: /var/camlog
           - name: {{ .Values.camTerraformPV.name }}
             mountPath: /home/terraform
+            readOnly: true
             subPath: cam-provider-terraform
+          - name: stacks-empty
+            mountPath: /stacks
         envFrom:
         - configMapRef:
             name: common-config
@@ -233,8 +240,10 @@ spec:
         - name: LOG_LEVEL
           value: {{ .Values.camLoggingPolicies.logLevel }}
         - name: MAX_LOCAL_TERRAFORM_JOBS
-          value: "100"
-{{- if .Values.proxy.useProxy }}
+          value: "1"
+        - name: PROVIDER_TERRAFORM_ROLE
+          value: runtime
+        {{- if .Values.proxy.useProxy }}
         - name: HTTPS_PROXY
           valueFrom:
             secretKeyRef:
@@ -289,4 +298,5 @@ spec:
               name: cam-secure-values-secret
               {{- end }}
               key: noProxy  
+        {{- end }}
 {{- end }}
