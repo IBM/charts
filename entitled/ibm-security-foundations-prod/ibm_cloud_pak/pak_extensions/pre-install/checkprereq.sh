@@ -102,6 +102,33 @@ echo "INFO: Default storage class set to $dsc"
 isPresent securitycontextconstraints ibm-isc-scc
 isPresent secret ibm-isc-pull-secret
 
+machineconfigpool=$(oc get machineconfigpool worker 2>/dev/null)
+if [ $? -eq 0 ]; then
+  updating=$(oc get machineconfigpool worker | awk '{print $4}' | grep False)
+  if [ "X$updating" == X ]; then
+    echo "ERROR: worker nodes are still updating"
+    exit 1
+  else
+    worker_nodes=$(kubectl get node -o name -lnode-role.kubernetes.io/compute=true)
+      if [ "X$worker_nodes" == "X" ]; then 
+        worker_nodes=$(kubectl get node -o name -lnode-role.kubernetes.io/worker)
+      fi
+      for node in $worker_nodes
+      do
+        isReady=$(oc get $node | awk '{print $2}' | grep Ready)
+        if [ "X$isReady" == "X" ]; then
+          echo "ERROR: $node is not ready"
+          exit 1
+        fi
+        isSchedulable=$(oc get $node | awk '{print $2}' | grep SchedulingDisabled)
+        if [ ! "X$isSchedulable" == "X" ]; then
+          echo "ERROR: $node is not schedulable"
+          exit 1
+        fi
+      done
+  fi
+fi
+
 if [ "X$SOLUTIONS" == "X" ]; then
   echo "INFO: ibm-security-foundations prerequisites are OK"
   exit 0

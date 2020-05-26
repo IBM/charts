@@ -1,0 +1,98 @@
+{{- $op := index $.Values.global "extensionDiscovery" -}}
+{{- $ndx := index $.Values.global.images "extensionDiscovery" -}}
+{{- $image := printf "%s/%s:%s" (include "foundations.repository" .) $ndx.image $ndx.tag }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{.Release.Name}}-extensiondiscovery-test
+  labels:
+    app.kubernetes.io/name: extensiondiscovery-test
+    helm.sh/chart: {{ $.Chart.Name }}
+    release: {{ $.Release.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+      restartPolicy: Never
+      serviceAccountName: ibm-isc-operators
+      securityContext:
+        runAsUser: 1001
+        runAsNonRoot: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                 - {{ $.Values.global.arch | default "amd64" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - extensiondiscovery-test
+            topologyKey: kubernetes.io/hostname
+      {{- if $.Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml $.Values.global.nodeSelector | nindent 8 }}
+      {{- end }}
+    {{- if $.Values.global.tolerations }}
+      tolerations:
+        {{- toYaml $.Values.global.tolerations | nindent 8 }}
+    {{- end }}
+      containers:
+        - name: extensiondiscovery
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          image: {{ $image }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy | default "IfNotPresent" }}
+          resources:
+          {{- toYaml $op.resources | nindent 14 }}
+          livenessProbe:
+            exec:
+              command: 
+              - /usr/bin/true
+          readinessProbe:
+            exec:
+              command: 
+              - /usr/bin/true
+          volumeMounts:
+          - mountPath: /tmp/ansible-operator/runner
+            name: runner
+          command:
+          - kubectl
+          - get
+          - pod
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: {{ $.Values.global.extensionDiscovery.name }}
+            - name: HELM_HOME
+              value: /tmp/.helm
+      imagePullSecrets:
+        - name: ibm-isc-pull-secret
+        - name: sa-{{ $.Release.Namespace }}
+      volumes:
+        - name: runner
+          emptyDir: {}
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false

@@ -72,6 +72,9 @@ spec:
                 values:
                 - {{ $op }}
             topologyKey: kubernetes.io/hostname
+      dnsConfig:
+        options:
+        - name: single-request-reopen
       {{- if $.Values.global.nodeSelector }}
       nodeSelector:
         {{- toYaml $.Values.global.nodeSelector | nindent 8 }}
@@ -81,54 +84,6 @@ spec:
         {{- toYaml $.Values.global.tolerations | nindent 8 }}
     {{- end }}
       containers:
-        - name: ansible
-          securityContext:
-            privileged: false
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
-            runAsNonRoot: true
-            capabilities:
-              drop:
-              - ALL
-          {{- if eq "enabled" ( $.Values.global.resourceManagement | default "enabled" ) }}
-          resources:
-          {{- toYaml $.Values.ansible.resources | nindent 14 }}
-          {{- end }}
-          command:
-          - /usr/local/bin/ao-logs
-          - /tmp/ansible-operator/runner
-          - stdout
-          livenessProbe:
-            exec:
-              command: 
-              - /usr/bin/true
-          readinessProbe:
-            exec:
-              command: 
-              - /usr/bin/true
-          env:
-          {{- if $v.debug }}
-          - name: ANSIBLE_VERBOSITY
-            value: "1"
-          {{- end }}
-          - name: REPO_URL
-            value: {{ $registry }}
-          - name: REPO_PULLS
-            value: ibm-isc-pull-secret
-          - name: TILLER_NAMESPACE
-            value: kube-system
-          - name: HELM_INIT_ARGS
-            value: ""
-          - name: HELM_ARGS
-            value: "--tls"                                    
-          - name: HELM_USER 
-            value: "{{ $.Values.global.helmUser }}"
-          image: {{ $image }}
-          imagePullPolicy: {{ $.Values.global.imagePullPolicy | default "IfNotPresent" }}
-          volumeMounts:
-          - mountPath: /tmp/ansible-operator/runner
-            name: runner
-            readOnly: true
         - name: operator
           securityContext:
             privileged: false
@@ -186,6 +141,8 @@ spec:
               value: {{ $.Values.global.cloudType | default "notset" }}
             - name: RESOURCE_MANAGEMENT
               value: {{ $.Values.global.resourceManagement | default "enabled" }}
+            - name: ANSIBLE_DEBUG_LOGS
+              value: "True"
       imagePullSecrets:
         - name: ibm-isc-pull-secret
         - name: sa-{{ $.Release.Namespace }}

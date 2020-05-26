@@ -30,11 +30,11 @@ if [ "X$CRD" == "X" ]; then
 fi
 
 case $CRD in
-  redis|couchdb|minio|etcd|elastic|cases|iscopenwhisk)
+  redis|couchdb|minio|etcd|elastic|cases|iscopenwhisk|connectors|appentitlements)
     ;;
   *) 
   echo "Invalid CRD: $CRD"
-  echo "Valid values are: redis|couchdb|minio|etcd|elastic|cases|iscopenwhisk"
+  echo "Valid values are: redis|couchdb|minio|etcd|elastic|cases|iscopenwhisk|connectors|appentitlements"
   exit 1
 esac
 
