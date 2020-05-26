@@ -103,6 +103,270 @@ This chart also defines a custom PodSecurityPolicy which can be used to finely c
       - '*' 
     ```
 
+### SecurityContextConstraints Requirements
+This chart is designed to work with the `ibm-anyuid-scc` SCC.
+
+* Predefined SecurityContextConstraint: [`ibm-anyuid-scc`](https://ibm.biz/cpkspec-scc)
+
+- Custom SecurityContextConstraints definition:
+  ```
+  apiVersion: security.openshift.io/v1
+  kind: SecurityContextConstraints
+  metadata:
+    annotations:
+      kubernetes.io/description: "This policy allows pods to run with
+        any UID and GID, but preventing access to the host."
+      cloudpak.ibm.com/version: "1.1.0"
+    name: ibm-datapower-scc
+  allowHostDirVolumePlugin: false
+  allowHostIPC: false
+  allowHostNetwork: false
+  allowHostPID: false
+  allowHostPorts: false
+  allowPrivilegedContainer: false
+  allowPrivilegeEscalation: true
+  allowedCapabilities:
+  - SETPCAP
+  - AUDIT_WRITE
+  - CHOWN
+  - NET_RAW
+  - DAC_OVERRIDE
+  - FOWNER
+  - FSETID
+  - KILL
+  - SETUID
+  - SETGID
+  - NET_BIND_SERVICE
+  - SYS_CHROOT
+  - SETFCAP
+  allowedFlexVolumes: []
+  allowedUnsafeSysctls: []
+  defaultAddCapabilities: []
+  defaultAllowPrivilegeEscalation: true
+  forbiddenSysctls:
+    - "*"
+  fsGroup:
+    type: RunAsAny
+  readOnlyRootFilesystem: false
+  requiredDropCapabilities:
+  - MKNOD
+  runAsUser:
+    type: RunAsAny
+  # This can be customized for your host machine
+  seLinuxContext:
+    type: RunAsAny
+  # seLinuxOptions:
+  #   level:
+  #   user:
+  #   role:
+  #   type:
+  supplementalGroups:
+    type: RunAsAny
+  # This can be customized for your host machine
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+  # If you want a priority on your SCC -- set for a value more than 0
+  # priority:
+  ```
+
+## Configuration
+There are two approaches to installing DataPower configuration using this chart:
+1. Deploy custom application configuration with configmaps
+2. Building a DataPower Application Image
+
+### 1. Deploying DataPower Application Configuration with configmaps
+#### i. Adding DataPower config
+New DataPower configuration can be added into DataPower by using the `datapower.additionalConfig` value. This value takes the form of a list of `domain-config` pairs.
+```
+datapower:
+  additionalConfig:
+  - domain: "default"
+    config: "default-configmap"
+  - domain: "newdomain"
+    config: "newdomain-configmap"
+```
+
+The `config` parameter must be a configmap created directly from a standard DataPower config file.
+```
+kubectl create configmap default-configmap --from-file=/path/to/config.cfg
+```
+
+A user with sufficient cluster permission needs to create your configmaps before deploying.
+
+#### ii. Adding local files
+Local files, such as gatewayscript files, can be added into the DataPower deployment by using the `datapower.additionalLocal` value. This value is a Kubernetes configmap of a tar file that contains all the files you want to add. This tar file must be a well-formed DataPower `local:` directory where files intended for the `default` domain are on the top level and all files intended for a different domain are in a subdirectory named for that domain.
+
+Example tar file contents:
+```
+$ ls local/*
+newdomain/ <default-domain-files>
+
+local/newdomain:
+<newdomain files>
+```
+
+Example tar file creation:
+```
+tar czf datapower-local-files.tar.gz local/*
+```
+
+Example configmap creation:
+```
+kubectl create configmap datapower-local-configmap --from-file=datapower-local-files.tar.gz
+```
+
+#### iii. Adding certificates
+Certificates and other crypto files can be added to the DataPower `cert:` directory by using the `datapower.additionalCerts` value. This value takes the form of a list of `domain-secret` pairs with an optional `certType`.
+```
+datapower:
+  additionalCerts:
+  - domain: "default"
+    secret: "some-default-cert-secret"
+    certType: sharedcert
+  - domain: "newdomain"
+    secret: "some-newdomain-cert-secret"
+    certType: usrcert
+```
+`certType` is an optional field that determines whether a cert is shared between domains or unique. Set to `sharedcert` for the cert to be shared across domains or `usrcert` to keep it isolated to the specified domain. The default value is `usrcert`.
+
+
+The secrets are Kubernetes secrets which contain the crypto files you want to use. To create the secret from an existing crypto key-cert pair:
+```
+kubectl create secret generic my-secret --from-file=/path/to/key.pem --from-file=/path/to/cert.pem
+```
+
+### 2. Building a DataPower Application Image
+#### i. Creating the DataPower configuration
+Before you can build and deploy a DataPower Docker application you must create an export package that contains the DataPower configuration for the DataPower Docker image. You create and export the DataPower configuration on a DataPower appliance or virtual DataPower offering.
+
+You can create the DataPower configuration using the DataPower GUI, CLI, or other management interface, which can be importing an existing export package from a secure server and using a deployment policy with deployment policy variables to modify the configuration in the export package during import. The resultant and exported configuration should be the explicit configuration for your DataPower Docker application.
+
+The defined and imported configuration is restricted to features supported by DataPower for Docker. If you create an export package from another DataPower offering with features not supported by DataPower for Docker, these feature will be unavailable.
+
+The easiest way to export and import packages is through the DataPower GUI, but you can use the DataPower `backup` command to do an export.
+
+For complete information about creating the DataPower configuration, see [IBM Knowledge Center: DataPower Gateway](https://www.ibm.com/support/knowledgecenter/SS9H2Y_7.7.0/com.ibm.dp.doc/welcome.html). When within the DataPower documentation, use the search feature to find the information you need.
+
+#### ii. Building a DataPower Docker Application
+The first-class approach to build DataPower Gateway as a containerized application is to build and upload a DataPower Docker image to your repository. A DataPower Docker image is the combination of your DataPower configuration artifacts and a version-specific DataPower firmware image. Each DataPower Docker image in your repository is a purpose-built application that you can deploy without any post-deployment activities.
+
+
+To build your DataPower Docker image, you must develop the application’s configuration. The easiest method is in the Docker containers on your workstation.
+
+1. Download the version-specific DataPower firmware image from the read-only IBM Entitled Registry.
+
+2. Create a clean working directory with the config, local, and certs subdirectories. These subdirectories will be mounted inside the container to extract the application’s configuration.
+
+3. Grant full permission to ensure that everyone can access these subdirectories.
+   ```
+   chmod -R 777 config local certs
+   ```
+
+4. Start the container. The following snippet is the minimum required set of parameters.
+   ```
+   docker run -it –-name <name> \
+   -v $(pwd)/config:/drouter/config \
+   -v $(pwd)/local:/drouter/local \
+   -v $(pwd)/certs:/root/secure/usrcerts \
+   -e DATAPOWER_ACCEPT_LICENSE="true" \
+   -e DATAPOWER_INTERACTIVE="true" \
+   -p 9090:9090 \
+   <tag>
+   ```
+   Where `<name>` is the name of the container, and `<tag>` is generally in the `<registry-path>:<version>.<build>-<edition>` format.
+
+5. Configure access to the DataPower GUI.
+   ```
+   # configure terminal
+   # web-mgmt
+   # admin-state "enabled"
+   # exit
+   ```
+
+6. Access the DataPower Gateway to import the export package that contains your DataPower configuration.
+   - To start a GUI session, enter https://localhost:9090 as the URL in your browser.
+   - To start a CLI session, use the `docker attach` command.
+
+7. After you write and test your configuration, save everything to your mounted volumes.
+   - In the GUI, click Save Configuration.
+   - In the CLI, issue the `write memory` command.
+
+8. Stop the DataPower container, where <name> is the name of the container.
+   ```
+   docker stop -t 300 <name>
+   ```
+
+9. Change ownership of files owned by root.
+   ```
+   chown -R $USER:$USER config local certs
+   ```
+
+10. Create the Dockerfile for the DataPower Docker image. The following snippet is the most basic Dockerfile that you should require.
+    ```
+    FROM <tag>
+    COPY config /drouter/config
+    COPY local /drouter/local
+    COPY certs /root/secure/usrcerts
+    USER root
+    RUN chown -R drouter:drouter /drouter/config \
+                                 /drouter/local \
+                                 /root/secure/usrcerts
+    RUN set-user drouter
+    USER drouter
+    ```
+    Where `<tag>` is generally in the `<registry-path>:<version>.<build>-<edition>` format.
+
+11. With your Dockerfile, build your DataPower Docker image, where `<my-image>` is the name that differentiates various DataPower Docker images in your repository.
+    ```
+    docker build . -f Dockerfile -t <my-image>
+    ```
+
+12. Use the `docker push` command to upload the DataPower Docker image to your repository.
+
+### Values
+The helm chart has the following Values that can be overriden using the install `--set` parameter or by providing your own values file. For example:
+
+`helm install --set image.repository=<myimage> stable/ibm-datapower-dev --tls`
+
+| Value                                 | Description                                   | Default             |
+|---------------------------------------|-----------------------------------------------|---------------------|
+| `datapower.replicaCount`              | The replicaCount for the deployment           | 1                   |
+| `datapower.image.repository`          | The image to use for this deployment          | ibmcom/datapower    |
+| `datapower.image.tag`                 | The image tag to use for this deployment      | 2018.4.1.10.318002  |
+| `datapower.image.pullPolicy`          | Determines when the image should be pulled    | IfNotPresent        |
+| `datapower.image.pullSecret`          | Secret used for pulling images                | N/A                 |
+| `datapower.env.workerThreads`         | Number of DataPower worker threads            | 4                   |
+| `datapower.resources.limits.cpu`      | Container CPU limit                           | 8                   |
+| `datapower.resources.limits.memory`   | Container memory limit                        | 64Gi                |
+| `datapower.resources.requests.cpu`    | Container CPU requested                       | 4                   |
+| `datapower.resources.requests.memory` | Container Memory requested                    | 8Gi                 |
+| `datapower.webGuiManagementState`     | WebGUI Management admin state                 | disabled            |
+| `datapower.webGuiManagementPort`      | WebGUI Management port                        | 9090                |
+| `datapower.gatewaySshState`           | SSH admin state                               | disabled            |
+| `datapower.gatewaySshPort`            | SSH Port                                      | 9022                |
+| `datapower.restManagementState`       | REST Management admin state                   | disabled            |
+| `datapower.restManagementPort`        | REST Management port                          | 5554                |
+| `datapower.xmlManagementState`        | XML Management admin state                    | disabled            |
+| `datapower.xmlManagementPort`         | XML Management port                           | 5550                |
+| `datapower.snmpState`                 | SNMP admin state                              | enabled             |
+| `datapower.snmpPort`                  | SNMP interface port                           | 1161                |
+| `datapower.flexpointBundle`           | ILMT Flexpoint Bundle type                    | N/A                 |
+| `datapower.additionalConfig`          | List of domain-config pairs                   | N/A                 |
+| `datapower.additionalLocal`           | Configmap containing local.tar                | N/A                 |
+| `datapower.additionalCerts`           | List of domains-cert pairs                    | N/A                 |
+| `health.livenessPort`                 | Listening port for livenessProbe              | 7879                |
+| `health.readinessPort`                | Listening port for readinessProbe             | 7878                |
+| `service.name`                        | Name to add to service                        | datapower           |
+| `patternName`                         | The name of the datapower pattern to load     | none                |
+| `restProxy.backendURL`                | The backend URL datapower will proxy          | https://www.ibm.com |
+| `restProxy.containerPort`             | The backend URL datapower will proxy          | 8443                |
+| `crypto.frontsideSecret`              | Secret containing key and cert data           | N/A                 |
+
 [//]: # (Resources Required Start)
 ## Resources Required
 Minimum resources per pod: 2 CPU and 4 GB RAM
@@ -134,40 +398,6 @@ To completely uninstall/delete the `my-release` deployment:
 ```bash
 $ helm delete --purge my-release --tls
 ```
-
-## Configuration
-The helm chart has the following Values that can be overriden using the install `--set` parameter or by providing your own values file. For example:
-
-`helm install --set image.repository=<myimage> stable/ibm-datapower-dev --tls`
-
-| Value                                 | Description                                   | Default             |
-|---------------------------------------|-----------------------------------------------|---------------------|
-| `datapower.replicaCount`              | The replicaCount for the deployment           | 1                   |
-| `datapower.image.repository`          | The image to use for this deployment          | ibmcom/datapower    |
-| `datapower.image.tag`                 | The image tag to use for this deployment      | 2018.4.1.10.318002  |
-| `datapower.image.pullPolicy`          | Determines when the image should be pulled    | IfNotPresent        |
-| `datapower.image.pullSecret`          | Secret used for pulling images                | N/A                 |
-| `datapower.env.workerThreads`         | Number of DataPower worker threads            | 4                   |
-| `datapower.resources.limits.cpu`      | Container CPU limit                           | 8                   |
-| `datapower.resources.limits.memory`   | Container memory limit                        | 64Gi                |
-| `datapower.resources.requests.cpu`    | Container CPU requested                       | 4                   |
-| `datapower.resources.requests.memory` | Container Memory requested                    | 8Gi                 |
-| `datapower.webGuiManagementState`     | WebGUI Management admin state                 | disabled            |
-| `datapower.webGuiManagementPort`      | WebGUI Management port                        | 9090                |
-| `datapower.gatewaySshState`           | SSH admin state                               | disabled            |
-| `datapower.gatewaySshPort`            | SSH Port                                      | 9022                |
-| `datapower.restManagementState`       | REST Management admin state                   | disabled            |
-| `datapower.restManagementPort`        | REST Management port                          | 5554                |
-| `datapower.xmlManagementState`        | XML Management admin state                    | disabled            |
-| `datapower.xmlManagementPort`         | XML Management port                           | 5550                |
-| `datapower.snmpState`                 | SNMP admin state                              | enabled             |
-| `datapower.snmpPort`                  | SNMP interface port                           | 1161                |
-| `datapower.flexpointBundle`           | ILMT Flexpoint Bundle type                    | N/A                 |
-| `service.name`                        | Name to add to service                        | datapower           |
-| `patternName`                         | The name of the datapower pattern to load     | none                |
-| `restProxy.backendURL`                | The backend URL datapower will proxy          | https://www.ibm.com |
-| `restProxy.containerPort`             | The backend URL datapower will proxy          | 8443                |
-| `crypto.frontsideSecret`              | Secret containing key and cert data           | N/A                 |
 
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
