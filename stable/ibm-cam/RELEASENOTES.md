@@ -25,6 +25,7 @@ None
 
 | Chart | Date | IBM Cloud Automation Manager version | Kubernetes Required | Details |
 | ----- | ---- | ------------------------------------ | ------------------- | ------- | 
+| 4.2.1 | May, 2020| 4.2.0.1 | >=1.10.0 | 1Q20 release |
 | 4.2.0 | March 27, 2020| 4.2.0.0 | >=1.10.0 | 1Q20 release |
 | 4.1.1 | March 6, 2020| 4.1.0.1 | >=1.10.0 | 1Q20 release |
 | 4.1.0 | December 13, 2019| 4.1.0.0 | >=1.10.0 | 4Q19 release |

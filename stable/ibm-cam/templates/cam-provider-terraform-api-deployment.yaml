@@ -11,9 +11,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cam-tenant-api
+  name: cam-provider-terraform-api
   labels:
-    name: cam-tenant-api
+    name: cam-provider-terraform-api
     "app.kubernetes.io/name": {{ template "fullname" . }}
     "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
@@ -22,10 +22,10 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   progressDeadlineSeconds: 1800
-  replicas: {{ .Values.camAPI.replicaCount }}
+  replicas: {{ .Values.camProxy.replicaCount }}
   selector:
     matchLabels:
-      name: cam-tenant-api
+      name: cam-provider-terraform-api
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -35,7 +35,7 @@ spec:
   template:
     metadata:
       labels:
-        name: cam-tenant-api
+        name: cam-provider-terraform-api
         "app.kubernetes.io/name": {{ template "fullname" . }}
         "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version }}"
         release: "{{ .Release.Name }}"
@@ -51,7 +51,7 @@ spec:
       hostIPC: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
+        runAsUser: 1111
         fsGroup: 1000
         supplementalGroups:
           - 1000
@@ -64,14 +64,16 @@ spec:
                 operator: In
                 values:
                 - {{ .Values.arch }}
-      hostname: cam-tenant-api
+      hostname: cam-provider-terraform-api
       volumes:
-      - name: tmp-empty 
+      - name: tmp-empty
+        emptyDir: {}
+      - name: stacks-empty
         emptyDir: {}
       - name: cam-cert
         secret:
           secretName: {{ .Values.camAPI.certificate.certName }}
-      - name:  {{ .Values.camLogsPV.name }}
+      - name: {{ .Values.camLogsPV.name }}
       {{- if .Values.camLogsPV.persistence.enabled }}
         persistentVolumeClaim:
         {{- if .Values.camLogsPV.persistence.existingClaimName }}
@@ -82,11 +84,17 @@ spec:
       {{- else }}
         emptyDir: {}
       {{- end }}
-      {{- if eq .Values.platform "mcmp"}}
-      - name: mcmp-cert
-        secret:
-          secretName: mcmp-certificate-secret
-      {{- end}}
+      - name: {{ .Values.camTerraformPV.name }}
+      {{- if .Values.camTerraformPV.persistence.enabled }}
+        persistentVolumeClaim:
+        {{- if .Values.camTerraformPV.persistence.existingClaimName }}
+          claimName: {{ .Values.camTerraformPV.persistence.existingClaimName }}
+        {{- else }}
+          claimName:  {{ .Values.camTerraformPV.name }}
+        {{- end }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
       {{- if .Values.global.image.secretName }}
       {{- if ne .Values.global.image.secretName "default"}}
       imagePullSecrets:
@@ -94,7 +102,7 @@ spec:
       {{- end }}
       {{- end }}
       containers:
-      - name: cam-tenant-api
+      - name: cam-provider-terraform-api
         securityContext:
           privileged: false
           readOnlyRootFilesystem: true
@@ -102,21 +110,21 @@ spec:
           capabilities:
             drop:
             - MKNOD
-        image: "{{ .Values.image.repository }}icam-tenant-api:{{ .Values.image.tag }}{{ template "platform" . }}"
+        image: "{{ .Values.image.repository }}icam-provider-terraform:{{ .Values.image.tag }}{{ template "platform" . }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - name: liveness-port
-          containerPort: 4500
+          containerPort: 7000
         livenessProbe:
           httpGet:
-            path: /api/v1/health
+            path: /api/health
             port: liveness-port
             scheme: HTTPS
           initialDelaySeconds: 300
           periodSeconds: 20
         readinessProbe:
           httpGet:
-            path: /api/v1/ready
+            path: /api/health
             port: liveness-port
             scheme: HTTPS
           initialDelaySeconds: 5
@@ -129,19 +137,16 @@ spec:
           - name: cam-cert
             mountPath: /usr/src/app/certs
             readOnly: true
-          - name:  {{ .Values.camLogsPV.name }}
+          - name: {{ .Values.camLogsPV.name }}
             mountPath: /var/camlog
-          {{- if eq .Values.platform "mcmp"}}
-          - name: mcmp-cert
-            mountPath: /usr/src/app/mcmpcerts
-          {{- end}}
+          - name: {{ .Values.camTerraformPV.name }}
+            mountPath: /home/terraform
+            subPath: cam-provider-terraform
+          - name: stacks-empty
+            mountPath: /stacks
         envFrom:
         - configMapRef:
             name: common-config
-{{- if .Capabilities.APIVersions.Has "security.openshift.io/v1" }}
-        - configMapRef:
-            name: router-config
-{{- end}}
         env:
         - name: MONGODB_PASSWORD
           valueFrom:
@@ -161,6 +166,34 @@ spec:
               name: cam-secure-values-secret
               {{- end }}
               key: mongoDbUrl
+        - name: CIPHER_PWD
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: encryptionPassword
+        - name: CIPHER_PWD_NEW
+          valueFrom:
+            secretKeyRef:
+              name: cam-cipher-migration-secret
+              key: newpassword
+        - name: CIPHER_MIGRATION_TIMESTAMP_FILE
+          valueFrom:
+            secretKeyRef:
+              name: cam-cipher-migration-secret
+              key: timestampfile
+        - name: IAM_CLIENT_ID
+        - name: IAM_CLIENT_ID_STAGE1
+        - name: IAM_SECRET
+        - name: IAM_SECRET_STAGE1
+        - name: TENANT_MGMT_SERVICE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.camAPI.camSecret.secretName }}
+              key: token
         - name: CAM_TOKEN
           valueFrom:
             secretKeyRef:
@@ -176,16 +209,6 @@ spec:
             configMapKeyRef:
               name: common-config
               key: ICP_PORT
-        - name: ICP_PROXY_IP
-          valueFrom:
-            configMapKeyRef:
-              name: oauth-client-map
-              key: PROXY_IP
-        - name: ICP_CLUSTER_CA_DOMAIN
-          valueFrom:
-            configMapKeyRef:
-              name: oauth-client-map
-              key: CLUSTER_CA_DOMAIN
         - name: ICP_ENDPOINT
           value: https://$(ICP_MASTER_IP):$(ICP_PORT)
         - name: ORPHEUS_IDENTITY_ENDPOINT
@@ -201,61 +224,81 @@ spec:
           {{- end }}
         - name: ORPHEUS_IDENTITY_API_URL
           value: $(ORPHEUS_IDENTITY_URL)
-        - name: ORPHEUS_AUTH_DIRECTORY_URL
-          value: http://cam-auth-service:3100
-        - name: ICP_DEFAULT_ADMIN_USER
-          valueFrom:
-            secretKeyRef:
-              name: oauth-client-secret
-              key: DEFAULT_ADMIN_USER
-        - name: CAM_HELM_RELEASE_NAME
-          value: {{ .Release.Name }}
+        - name: TERRAFORM_HOME
+          value: /home/terraform
+        - name: TERRAFORM_UID
+          value: "1111"
+        - name: TERRAFORM_GID
+          value: "1111"
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
         - name: LOG_LEVEL
           value: {{ .Values.camLoggingPolicies.logLevel }}
-        - name: WLP_CLIENT_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.camAPI.camSecret.secretName }}
-              key: wlp_client_id
-        - name: WLP_CLIENT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.camAPI.camSecret.secretName }}
-              key: wlp_client_secret
-        - name: IAM_DEPLOY_API_KEY
-          value: {{ .Values.global.iam.deployApiKey }}
-        - name: ICP_WLP_CLIENT_REGISTRATION_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: oauth-client-secret
-              key: WLP_CLIENT_REGISTRATION_SECRET
-        {{- if eq .Values.platform "mcmp" }}
-        - name: MCMP_GATEWAY_URL
-          value: {{ .Values.mcmp.gatewayUrl }}
-        - name: MCMP_SYSTEM_USER_ID
-          valueFrom:
-            secretKeyRef:
-              {{- if .Values.secureValues.secretName }}
-              name: {{ .Values.secureValues.secretName }}
-              {{- else }}
-              name: cam-secure-values-secret
-              {{- end }}
-              key: mcmpSystemUserId
-        - name: MCMP_SYSTEM_USER_API_KEY
-          valueFrom:
-            secretKeyRef:
-              {{- if .Values.secureValues.secretName }}
-              name: {{ .Values.secureValues.secretName }}
-              {{- else }}
-              name: cam-secure-values-secret
-              {{- end }}
-              key: mcmpSystemUserAPIKey
-        - name: CAM_HOSTNAME
-          value: "{{ .Values.mcmp.camHostName }}"
-        - name: CAM_PORT
-          value: "{{ .Values.mcmp.camPort }}"
+        - name: MAX_LOCAL_TERRAFORM_JOBS
+          value: "100"
+{{- if .Values.camProviderTerraform.isolateRuntime }}
+        - name: PROVIDER_TERRAFORM_ROLE
+          value: api
+        {{- if .Values.camProviderTerraform.runtime.hostname }}
+        - name: PROVIDER_TERRAFORM_RUNTIME_HOSTNAME
+          value: {{ .Values.camProviderTerraform.runtime.hostname }}
         {{- end }}
+{{- end }}
+{{- if .Values.proxy.useProxy }}
+        - name: HTTPS_PROXY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpsProxy  
+        - name: https_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpsProxy  
+        - name: HTTP_PROXY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpProxy  
+        - name: http_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: httpProxy  
+        - name: NO_PROXY
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: noProxy  
+        - name: no_proxy
+          valueFrom:
+            secretKeyRef:
+              {{- if .Values.secureValues.secretName }}
+              name: {{ .Values.secureValues.secretName }}
+              {{- else }}
+              name: cam-secure-values-secret
+              {{- end }}
+              key: noProxy  
+{{- end }}
