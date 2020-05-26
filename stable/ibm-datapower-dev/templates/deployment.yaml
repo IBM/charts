@@ -53,10 +53,11 @@ spec:
           - sh
           - -c
           - |
-            cp -r /opt/ibm/datapower/init/config/. /drouter/config/
+            sh /opt/ibm/datapower/init/scripts/initConfig.sh
 {{- if .Values.datapower.adminUserSecret }}
             sh /opt/ibm/datapower/init/admin-user/init-admin-user.sh
 {{- end }}
+            /usr/local/bin/datapower-health-check -port={{ .Values.health.livenessPort }} &
             exec /start.sh --log-format {{ .Values.datapower.env.defaultLogFormat }}
         stdin: true
         tty: true
@@ -103,10 +104,10 @@ spec:
 {{- end }}
 {{- end }}
         livenessProbe:
-          exec:
-            command:
-            - pgrep
-            - drouter
+          httpGet:
+            path: /
+            port: liveness
+            scheme: HTTP
           initialDelaySeconds: 5
           timeoutSeconds: 5
           periodSeconds: 5
@@ -120,18 +121,37 @@ spec:
           periodSeconds: 10
         ports:
         - name: health
-          containerPort: 7878
+          containerPort: {{ .Values.health.readinessPort }}
+        - name: liveness
+          containerPort: {{ .Values.health.livenessPort }}
 {{- if ne .Values.patternName "none" }}
         - name: service
           containerPort: {{ $values.containerPort }}
 {{- end }}
         volumeMounts:
-            - mountPath: "/opt/ibm/datapower/init/config"
-              name: {{ template "ibm-datapower-dev.fullname" . }}-init-config-volume
-            - mountPath: "/drouter/config"
-              name: {{ template "ibm-datapower-dev.fullname" . }}-config-volume
+            - mountPath: "/opt/ibm/datapower/init/chart-overrides"
+              name: {{ template "ibm-datapower-dev.fullname" . }}-init-overrides-volume
+            - mountPath: "/opt/ibm/datapower/init/scripts"
+              name: {{ template "ibm-datapower-dev.fullname" . }}-scripts-volume
             - mountPath: "/drouter/local/health"
               name: {{ template "ibm-datapower-dev.fullname" . }}-health
+{{- if .Values.datapower.additionalConfig }}
+            {{- range .Values.datapower.additionalConfig }}
+            - mountPath: "/opt/ibm/datapower/init/config/{{ .domain }}/{{ .config }}"
+              name: {{ $.Release.Name }}-{{ .domain }}-{{ .config }}-volume
+            {{- end }}
+{{- end }}
+{{- if .Values.datapower.additionalLocal }}
+            - mountPath: "/opt/ibm/datapower/init/local"
+              name: {{ .Release.Name }}-init-additional-local-volume
+{{- end }}
+{{- if .Values.datapower.additionalCerts }}
+    {{- range .Values.datapower.additionalCerts }}
+    {{- $certtype := .certType | default "usrcert" }}
+            - mountPath: "/opt/ibm/datapower/init/{{ $certtype }}s/{{ .domain }}/{{ .secret }}"
+              name: {{ $.Release.Name }}-{{ .domain }}-{{ .secret }}-volume
+    {{- end }}
+{{- end }}
 {{- if .Values.datapower.adminUserSecret }}
             - name: init-admin-user
               mountPath: /opt/ibm/datapower/init/admin-user
@@ -145,11 +165,9 @@ spec:
 {{- end }}
 {{- end }} # ne patternName "none"
       volumes:
-        - name: {{ template "ibm-datapower-dev.fullname" . }}-config-volume
-          emptyDir: {}
-        - name: {{ template "ibm-datapower-dev.fullname" . }}-init-config-volume
+        - name: {{ template "ibm-datapower-dev.fullname" . }}-init-overrides-volume
           configMap:
-            name: {{ template "ibm-datapower-dev.fullname" . }}-config
+            name: {{ template "ibm-datapower-dev.fullname" . }}-default-overrides
             items:
             - key: auto-user.cfg
               path: "auto-user.cfg"
@@ -161,6 +179,28 @@ spec:
             - key: {{ .Values.patternName }}.cfg
               path: "{{ .Values.patternName }}/{{ .Values.patternName }}.cfg"
             {{- end }}
+        - name: {{ template "ibm-datapower-dev.fullname" . }}-scripts-volume
+          configMap:
+            name: {{ template "ibm-datapower-dev.fullname" . }}-static-scripts
+{{- if .Values.datapower.additionalConfig }}
+    {{- range .Values.datapower.additionalConfig }}
+        - name: {{ $.Release.Name }}-{{ .domain }}-{{ .config }}-volume
+          configMap:
+            name: {{ .config }}
+    {{- end }}
+{{- end }}
+{{- if .Values.datapower.additionalLocal }}
+        - name: {{ .Release.Name }}-init-additional-local-volume
+          configMap:
+            name: {{ .Values.datapower.additionalLocal }}
+{{- end }}
+{{- if .Values.datapower.additionalCerts }}
+    {{- range .Values.datapower.additionalCerts }}
+        - name: {{ $.Release.Name }}-{{ .domain }}-{{ .secret }}-volume
+          secret:
+            secretName: {{ .secret }}
+    {{- end }}
+{{- end }}
         - name: {{ template "ibm-datapower-dev.fullname" . }}-health
           configMap:
             name: {{ template "ibm-datapower-dev.fullname" . }}-static-health
