@@ -142,7 +142,7 @@ esac
 done
 
 checkSeq
-for crd in couchdb redis etcd minio iscopenwhisk elastic cases
+for crd in couchdb redis etcd minio iscopenwhisk elastic cases connectors appentitlements
 do 
   checkCR $crd
 done
@@ -158,13 +158,25 @@ fi
 
 pods=$(kubectl get deploy -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.status.replicas} {.status.readyReplicas}{"\n"}'| awk '{ if ($2 != $3) print $1 ": expect " $2 " pods have uptodate " $3 }')
 if [ "X$pods" != "X" ]; then
-  echo "Problems in deployments:" 
+  echo "Problems in deployments replicas:" 
+  echo "$pods"
+fi
+
+pods=$(kubectl get deploy -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.dnsConfig}{"\n"}' | egrep -v "arango|postgres" | awk '{ if ($2 == "") print $1 ": dnsConfig not configured." }')
+if [ "X$pods" != "X" ]; then
+  echo "Problems in deployments dnsConfig:" 
   echo "$pods"
 fi
 
 pods=$(kubectl get statefulset -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.status.replicas} {.status.readyReplicas}{"\n"}' | awk '{ if ($2 != $3) print $1 ": expect " $2 " pods, but have " $3 }')
 if [ "X$pods" != "X" ]; then
-  echo "Problems in statefulsets:" 
+  echo "Problems in statefulsets replicas:" 
+  echo "$pods"
+fi
+
+pods=$(kubectl get statefulset -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.dnsConfig}{"\n"}' | awk '{ if ($2 == "") print $1 ": dnsConfig not configured." }')
+if [ "X$pods" != "X" ]; then
+  echo "Problems in statefulsets dnsConfig:" 
   echo "$pods"
 fi
 
