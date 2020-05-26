@@ -27,6 +27,10 @@ IBM Cloud Transformation Advisor can scan and analyze the following on-premises 
 ## Chart Details
 The Transformation Advisor is delivered as an interconnected set of pods and kubernetes services. It consists of three pods: server, ui and database.
 
+THIS CHART IS NOW DEPRECATED. No further updates will be provided and the chart will be removed on Aug 25th, 2020 after which the chart will no longer be displayed in the catalog. This will not impact existing deployments of the helm chart.  See https://ibm.biz/cloudta for alternative IBM Transformation Advisor 2.x deployment options.
+
+
+
 ## Dynamic Provisioning
 
 By default Transformation Advisor is configured to use dynamic provisioning. We strongly recommend that you use this option for your data storage.

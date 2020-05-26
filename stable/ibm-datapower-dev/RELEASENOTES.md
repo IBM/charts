@@ -1,7 +1,9 @@
 ## What's new...
-DataPower 2018.4.1.10
+DataPower 2018.4.1.11
+Configure DataPower with ConfigMaps
 
 ## Fixes
+HTTP LivenessProbe to avoid OpenShift exec probe bug
 
 ## Prerequisites
 None
@@ -15,6 +17,7 @@ See README.md
 
 | Chart   |   Date  | Kubernetes Required |    Image(s) Supported    | Breaking Changes | Details |
 | ------- | ------------ | -------- | ------------------------------------ | ---- | -------------------------------------------------------------- |
+| 3.1.0   | May 11, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.11.320653  | None | 2018.4.1.11, http health check, configmaps |
 | 3.0.5   | Mar 06, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.10.318002  | None | Change default pattern to "none" |
 | 3.0.4   | Jan 03, 2020 | >=1.13.0 | ibmcom/datapower:2018.4.1.9.315826   | None | 2018.4.1.9 refresh |
 | 3.0.3+r | Nov 22, 2019 | >=1.13.0 | ibmcom/datapower:2018.4.1.8r.315390r | None | 2018.4.1.8 refresh |
