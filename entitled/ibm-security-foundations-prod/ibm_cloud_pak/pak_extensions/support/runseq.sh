@@ -17,12 +17,8 @@
 #     ./runseq.sh <sequence>
 #
 
+run_sequence() {
 NAME="$1"
-if [ "X$NAME" == "X" ]; then
-  echo "Usage $0 sequence"
-  exit 1
-fi
-
 # Strip type prefix if set
 NAME=$(echo $NAME | sed -e 's!^.*/!!')
 
@@ -48,4 +44,21 @@ kubectl patch iscsequence $NAME --type merge --patch '{"spec":{"labels":{"genera
 
 seq=$(kubectl get iscsequence $NAME -o 'jsonpath={.spec.labels.generation}' 2>/dev/null)
 echo "Updated sequence uuid: $seq"
+}
 
+arg="$1"
+case "X$arg" in
+  X)
+    echo "Usage $0 sequence"
+    exit 1
+    ;;
+  X-all)
+     for sequence in $(kubectl get iscsequence -o name)
+     do
+       run_sequence "$sequence"
+     done
+    ;;
+  *)
+    run_sequence "$arg"
+    ;;
+esac

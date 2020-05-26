@@ -103,6 +103,67 @@ set_namespace()
     exit 1
   fi
 }
+uninstall_cases_operator() {
+    echo "Delete Cases Resources"
+    kubedel cases.isc.ibm.com --all --wait=false
+    #wait_crs function ensures CR is removed, it removes finalizer if required
+    wait_crs 'cases.isc.ibm.com' 'none'
+    kubedelc crd cases.isc.ibm.com
+
+    #Log details of resources that were not deleted.
+    echo "The CASES objects not propertly deleted:"
+    kubectl get crd,pvc,configmap,serviceaccount,secret,service,deployment,routes,statefulset,jobs -l app.kubernetes.io/instance=ibm-isc-cases-prod -o=jsonpath='{range .items[*]}{.kind}{"\t"}{.metadata.name}{"\t"}{.metadata.ownerReferences}{"\n"}{end}'
+
+    #Remove the ambassador-stomp svc finaliser
+    kubectl patch -n $NAMESPACE svc ambassador-stomp --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
+    for n in $(kubectl get -o=name clusterrole,clusterrolebinding,role,rolebinding,configmap,serviceaccount,secret,service,deployment,routes,statefulset,jobs -l app.kubernetes.io/instance=ibm-isc-cases-prod)
+    do
+        kubedel $n
+    done
+
+    echo "Delete Cases Pods"
+    for n in $(kubectl get -o=name pods -l app.kubernetes.io/instance=ibm-isc-cases-prod)
+    do
+        kubedel $n --wait=false
+    done
+}
+
+uninstall_cp4s_postgres_operator() {
+    echo "Delete CP4S Postgres Operator Resources"
+    kubedel postgresqloperators.isc.ibm.com --all --wait=false
+    #wait_crs function ensures CR is removed, it removes finalizer if required
+    wait_crs 'postgresqloperators.isc.ibm.com' 'none'
+    kubedelc crd postgresqloperators.isc.ibm.com
+}
+
+uninstall_pgcluster() {
+    echo "Delete PgCluster Resources"
+    kubedel deploy isc-cases-postgres
+    kubedel svc isc-cases-postgres
+    for pvc in $(kubectl get -n $NAMESPACE pvc -o name|grep 'persistentvolumeclaim/isc-cases-postgres')
+    do
+      kubedel --wait=false $pvc
+    done
+    kubedel secret isc-cases-postgres-testuser-secret isc-cases-postgres-primaryuser-secret \
+      isc-cases-postgres-postgres-secret isc-cases-postgres-backrest-repo-config
+}
+
+uninstall_crunchy_operator() {
+    echo "Delete Crunchy Postgres Operator Resources"
+    kubedel deploy postgres-operator
+
+    kubedelc crd pgbackups.crunchydata.com pgclusters.crunchydata.com pgpolicies.crunchydata.com pgreplicas.crunchydata.com \
+    pgtasks.crunchydata.com
+    kubedel configmap pgo-config
+    kubedel secret pgo-user pgo.tls pgo-backrest-repo-config
+    kubedel role pgo-backrest-role pgo-role
+    kubedel rolebinding pgo-backrest-role-binding pgo-role-binding
+    kubedel serviceaccount postgres-operator pgo-backrest
+    kubedel secret "${NAMESPACE}clusterrole" "${NAMESPACE}clusterrolecrd"
+    kubedel clusterrole "${NAMESPACE}clusterrolesecret" "${NAMESPACE}clusterrole" "${NAMESPACE}clusterrolecrd"
+    kubedel clusterrolebinding "${NAMESPACE}clusterbinding" "${NAMESPACE}clusterbindingcrd" "${NAMESPACE}clusterbindingsecret"
+    kubedel service postgres-operator
+}
 
 if [ "X$WATCH_NAMESPACE" == "X" ]; then
   NAMESPACE=$(oc project | sed -e 's/^[^"]*"//' -e 's/".*$//')
@@ -166,6 +227,13 @@ echo "Removing elastic resources"
 kubedel elastic --all --wait=false
 echo "Removing openwhisk resources"
 kubedel iscopenwhisk --all --wait=false
+echo "Removing arango deployment"
+kubedel arangodeployment --all --wait=false
+echo "Removing appentitlments resources"
+kubedel appentitlements.entitlements.extensions.platform.cp4s.ibm.com \
+  --all --wait=false
+echo "Removing connector resources"
+kubedel connectors.connector.isc.ibm.com --all --wait=false
 
 wait_crs 'redis' 'middleware'
 wait_crs 'couchdb' 'middleware'
@@ -174,6 +242,9 @@ wait_crs 'minio' 'middleware'
 wait_crs 'iscopenwhisk' 'middleware'
 wait_crs 'elastic' 'middleware'
 wait_crs 'oidcclient' 'middleware'
+wait_crs 'arangodeployment' 'none'
+wait_crs 'appentitlements.entitlements.extensions.platform.cp4s.ibm.com' 'isc-entitlements-operator'
+wait_crs 'connectors.connector.isc.ibm.com' 'cp4s-extension'
 
 # check that 
 echo "Deleting ibm-redis helm charts"
@@ -234,6 +305,11 @@ if [ "X$dchart" != "X" ]; then
   helm delete --tls --purge ibm-dba-ek-isc-cases-elastic
 fi
 
+uninstall_cases_operator
+uninstall_pgcluster
+uninstall_cp4s_postgres_operator
+uninstall_crunchy_operator
+
 echo "Delete deployments:"
 kubedel deploy -lplatform=isc
 echo "Delete secrets:"
@@ -244,22 +320,35 @@ echo "Delete services:"
 kubedel service -lplatform=isc
 echo "Delete pvc:"
 kubedel pvc -lplatform=isc
-
-kubedel deploy isc-cases-operator
-kubedel deploy cp4s-pgoperator
-kubedel deploy postgres-operator
-kubedel deploy isc-cases-postgres
-kubedel deploy isc-cases-activemq
-kubedel deploy isc-cases-application
-kubedel job isc-cases-operator-create-cr-1
-kubedel job isc-cases-operator-delete-cr-1
-kubedel job cp4s-pgoperator-create-cr-1
-kubedel job cp4s-pgoperator-delete-cr-1
+kubedel deploy isc-entitlements-operator
 kubedel job uds-deploy-functions
+kubedel svc de-minio-route
+
+# deleting arangodb pods
+for type in "agnt" "sngl"
+do
+   for pod in $(kubectl get pod -n $NAMESPACE -o name | grep "^pod/arangodb-${type}-")
+   do
+       kubectl patch -n $NAMESPACE $pod --type json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
+       kubedel $pod --wait=false
+   done
+done
+
+# deleting arango services
+kubedel svc -larango_deployment=arangodb
+
+# delete configstore service
+kubedel svc cp4sint
+
 
 ### Delete PVC for etcd
 echo "Deleting pvc for ibm-etcd:"
 for pvc in $(kubectl get -n $NAMESPACE pvc -o name|grep 'persistentvolumeclaim/data-ibm-etcd-')
+do
+  kubedel --wait=false $pvc
+done
+
+for pvc in $(kubectl get -n $NAMESPACE pvc -o name|grep 'persistentvolumeclaim/arangodb-')
 do
   kubedel --wait=false $pvc
 done
@@ -283,51 +372,28 @@ do
   kubedel --wait=false $pvc
 done
 
-for pvc in $(kubectl get -n $NAMESPACE pvc -o name|grep 'persistentvolumeclaim/isc-cases-postgres')
-do
-  kubedel --wait=false $pvc
-done
+
 
 # serviceaccounts
-kubedelc clusterrole isc-cases-operator
-kubedelc clusterrolebinding isc-cases-operator
-kubedel serviceaccount isc-cases-operator
 kubedel serviceaccount ibm-isc-aitk-orchestrator
 kubedelc clusterrolebinding ibm-isc-aitk-orchestrator
-kubedelc clusterrolebinding cp4s-pgoperator-pgo-clusterrolebinding
-kubedelc clusterrole cp4s-pgoperator-pgo-clusterrole
-kubedelc role cp4s-pgoperator-pgo-role
-kubedelc role cp4s-pgoperator
-kubedelc rolebinding cp4s-pgoperator-pgo-rolebinding
-kubedelc rolebinding cp4s-pgoperator
-
+kubedelc clusterrolebinding ibm-cp4s-car-connector-config-cluster-role-binding
+kubedelc clusterrole ibm-cp4s-car-connector-config-cluster-role
+kubedel serviceaccount car-connector-config
 kubedel --wait=false clients.oidc.security.ibm.com ibm-isc-oidc-credentials
 
-kubedel cases.isc.ibm.com --all --wait=false
-kubedel postgresqloperators.isc.ibm.com --all --wait=false
-wait_crs 'cases.isc.ibm.com' 'none'
-wait_crs 'postgresqloperators.isc.ibm.com' 'none'
-kubedelc crd cases.isc.ibm.com
-kubedelc crd postgresqloperators.isc.ibm.com
-kubedelc crd pgbackups.crunchydata.com pgclusters.crunchydata.com pgpolicies.crunchydata.com pgreplicas.crunchydata.com \
-  pgtasks.crunchydata.com
-kubedel configmap isc-cases-pgcluster-configmap isc-cases-postgres-ca-cert pgo-config
-kubedel secret ibmcp4s-image-pull-secret isc-cases-postgres-testuser-secret isc-cases-postgres-primaryuser-secret \
-  isc-cases-postgres-postgres-secret isc-cases-postgres-backrest-repo-config pgo-user pgo.tls pgo-backrest-repo-config
-kubedel role pgo-backrest-role pgo-role
-kubedel rolebinding pgo-backrest-role-binding pgo-role-binding
-kubedel serviceaccount postgres-operator pgo-backrest cp4s-pgoperator
-kubedel secret "${NAMESPACE}clusterrole" "${NAMESPACE}clusterrolecrd"
-kubedel clusterrole "${NAMESPACE}clusterrolesecret" "${NAMESPACE}clusterrole" "${NAMESPACE}clusterrolecrd"
-kubedel clusterrolebinding "${NAMESPACE}clusterbinding" "${NAMESPACE}clusterbindingcrd" "${NAMESPACE}clusterbindingsecret"
-kubedel service postgres-operator
+# ATK jobs clean up
+kubedelc jobs -l jobowner=iscatk
+kubedelc services -l svcowner=iscatkjob
+kubedelc secrets -l secretowner=iscatk
+kubedelc configmaps -l mapowner=iscatk
 
 kubedel monitoringdashboards.monitoringcontroller.cloud.ibm.com ibm-security-solutions-prod-ibm-security-solutions-inventory
 
 kubedel route isc-route-default
 
 # Remove license
-for cm in ibm-security-solutions-prod-license ibm-security-solutions-prod isc-cases-activemq-keystore isc-cases-application-keystore
+for cm in ibm-security-solutions-prod-license ibm-security-solutions-prod
 do
   kubedel configmap $cm
 done

@@ -1,0 +1,117 @@
+{{- $founationsRepo := (include "foundations.repository" .) }}
+{{- $ndx := $.Values.global.images.extensionDiscovery }}
+{{- $image := printf "%s/%s:%s" $founationsRepo $ndx.image $ndx.tag }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Values.global.extensionDiscovery.name }}
+  labels:
+    name: {{ $.Values.global.extensionDiscovery.name }}
+    app.kubernetes.io/name: {{ $.Values.global.extensionDiscovery.name }}
+    helm.sh/chart: {{ $.Chart.Name }}
+    release: {{ $.Release.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+  annotations:
+    cloudpakId: {{ $.Values.cloudpak.id }}
+    cloudpakName: {{ $.Values.cloudpak.name }}
+    cloudpakVersion: {{ $.Values.cloudpak.version }}
+    productID: {{ $.Values.product.id }}
+    productName: {{ $.Values.product.name }}
+    productVersion: {{ $.Values.product.version }}
+spec:
+  replicas: {{ $.Values.global.extensionDiscovery.replicaCount | default "1" }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $.Values.global.extensionDiscovery.name }}
+  template:
+    metadata:
+      labels:
+        name: {{ $.Values.global.extensionDiscovery.name }}
+        app.kubernetes.io/name: {{ $.Values.global.extensionDiscovery.name }}
+        helm.sh/chart: {{ $.Chart.Name }}
+        release: {{ $.Release.Name }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/managed-by: {{ $.Release.Service }}
+      annotations:
+        cloudpakId: {{ $.Values.cloudpak.id }}
+        cloudpakName: {{ $.Values.cloudpak.name }}
+        cloudpakVersion: {{ $.Values.cloudpak.version }}
+        productID: {{ $.Values.product.id }}
+        productName: {{ $.Values.product.name }}
+        productVersion: {{ $.Values.product.version }}
+    spec:
+      serviceAccountName: ibm-isc-operators
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+      securityContext:
+        runAsUser: 1001
+        runAsNonRoot: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ $.Values.global.arch | default "amd64" }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - {{ $.Values.global.extensionDiscovery.name }}
+            topologyKey: kubernetes.io/hostname
+      dnsConfig:
+        options:
+        - name: single-request-reopen
+      {{- if $.Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml $.Values.global.nodeSelector | nindent 8 }}
+      {{- end }}
+    {{- if $.Values.global.tolerations }}
+      tolerations:
+        {{- toYaml $.Values.global.tolerations | nindent 8 }}
+    {{- end }}
+      containers:
+        - name: {{ $.Values.global.extensionDiscovery.name }}
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+              - ALL
+          image: {{ $image }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy | default "IfNotPresent" }}
+          {{- if eq "enabled" ( $.Values.global.resourceManagement | default "enabled" ) }}
+          resources:
+          {{- toYaml $.Values.global.extensionDiscovery.resources | nindent 14 }}
+          {{- end }}
+          livenessProbe:
+            exec:
+              command: 
+              - /usr/bin/true
+          readinessProbe:
+            exec:
+              command: 
+              - /usr/bin/true
+          env:
+          - name: WATCH_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: OPERATOR_NAME
+            value: {{ $.Values.global.extensionDiscovery.name }}
+      imagePullSecrets:
+        - name: ibm-isc-pull-secret
+        - name: sa-{{ $.Release.Namespace }}

@@ -23,7 +23,6 @@ where options are one or more of the following options
 -cert certfile -key keyfile - to associate cp4s ingress with 
                               provided set of SSL keys
 -ca certfile                - to provide certificate of CA if not well known
--selfsigned domain          - to generate self-signed certificate for domain
 EOF
 }
 

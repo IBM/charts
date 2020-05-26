@@ -79,15 +79,20 @@ initSysctlOCP3() {
 initSCC() {
   scc=$(kubectl get scc ibm-isc-scc -o name 2>/dev/null)
   if [ "X$scc" == "X" ]; then
-    if [ "X$mc" == "X" ]; then
-      kubectl create -f $dir/clusterAdministration/ibm-isc-scc.yaml
-    else
-      kubectl create --validate=false -f $dir/clusterAdministration/ibm-isc-scc-42.yaml
-    fi
-    if [ $? -ne 0 ]; then
+    case "$version" in
+      3.11)
+        kubectl create -f $dir/clusterAdministration/ibm-isc-scc.yaml
+        rc=$?
+        ;;
+      4.2|4.3)
+        kubectl create --validate=false -f $dir/clusterAdministration/ibm-isc-scc-42.yaml
+        rc=$?
+        ;;
+     esac
+     if [ $rc -ne 0 ]; then
       echo "ERROR: Failed to create scc/ibm-isc-scc"
       exit 1
-    fi
+     fi
   fi
  
   if [ $SYSCTL -ne 0 ]; then
@@ -114,12 +119,12 @@ initSCC() {
 markNodes() {
    compute=$(kubectl get nodes | awk '{print $3}' | grep compute)
    worker=$(kubectl get nodes | awk '{print $3}' | grep worker)
-   if [ "X$compute" != "X" ]; then
+   if [ "X$worker" != "X" ]; then
+      #worker label found on nodes
+      kubectl label nodes --selector='node-role.kubernetes.io/worker' openwhisk-role=invoker   
+  elif [ "X$compute" != "X" ]; then
       #compute label found on nodes
       kubectl label nodes --selector='node-role.kubernetes.io/compute' openwhisk-role=invoker
-  elif [ "X$worker" != "X" ]; then
-      #worker label found on nodes
-      kubectl label nodes --selector='node-role.kubernetes.io/worker' openwhisk-role=invoker
   else
      echo "ERROR : Neither worker not compute label found on nodes, unable to label openwhisk invoker"
      exit 1
@@ -208,6 +213,8 @@ where args may be
 -force             : force objects being overridden
 -repo <REPOSITORY> <USER> <PASSWORD>   : to specify the image repository
 -sysctl            : to enable nondefault net.core.somaxconn sysctl
+-ibmcloud          : if installation is performed on IBM Cloud 
+-version           : OpenShift version (3.11, 4.2 or 4.3) to override autodetection
 EOF
 }
 
@@ -217,6 +224,8 @@ SYSCTL=0
 repository=""
 username=""
 password=""
+IBMCLOUD=0
+version="4.3"
 
 while true
 do
@@ -244,6 +253,13 @@ do
     -sysctl)
       SYSCTL=1
       ;;
+    -ibmcloud)
+      IBMCLOUD=1
+      ;;
+    -version)
+      version="$1"
+      shift
+      ;;
      *)
       echo "ERROR: Invalid argument: $arg"
       usage
@@ -252,21 +268,43 @@ do
   esac
 done
 
+case "X$version" in
+  X3.11|X4.2|X4.3)
+    ;;
+  X)
+    mc=$(kubectl get MachineConfigPool worker -o name 2>/dev/null)
+    if [ "X$mc" == "X" ]; then
+      version="3.11"
+    else
+      version="4.2"
+    fi
+    ;;  
+  *)
+    echo "ERROR: Unsupported version $version"
+    echo "Supported versions are 3.11, 4.2 or 4.3"
+    exit 1
+    ;;
+ esac
+
 if [ "X$repository" != "X" ]; then
   setPullSecret
 fi
 
-# check if MachineConfigPool exists
-mc=$(kubectl get MachineConfigPool worker -o name 2>/dev/null)
-
 initSCC
 
 if [ $SYSCTL -eq 1 ]; then
-  if [ "X$mc" == "X" ]; then
-    initSysctlOCP3
-  else
-    initSysctlOCP4
+  if [ $IBMCLOUD -ne 0 ]; then
+    echo "-sysctl flag is not used when in IBM Cloud"
+    exit 1
   fi
+  case $version in
+    3.11)
+      initSysctlOCP3
+      ;;
+    *)
+      initSysctlOCP4
+      ;;
+  esac
 fi
 
 markNodes

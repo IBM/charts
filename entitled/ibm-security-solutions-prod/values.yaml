@@ -12,17 +12,19 @@ global:
   replicas: 2
 ## default storage class
   storageClass: ""
+  nodeSelector: {}
+  tolerations: {}
 
   cluster:
-     ## FQDN of the Openshift Cluster
+     ## FQDN of the Openshift Cluster (Only required in Upgrade Scenario)
      hostname: ""
-     ## ICP Console Hostname - only applicable for IBM Cloud deployment
+     ## FQDN of ICP Console (Required)
      icphostname: ""
   domain:
     default:
-      ## FQDN of CloudPak for Security Application  
+      ## FQDN of CloudPak for Security Application
       domain: ""
-       
+
   useDynamicProvisioning: true
   redis:
     default:
@@ -44,32 +46,86 @@ global:
           limits:
             memory:
             cpu:
+  arangodb:
+    environment: Production 
+    deploymentName: "arangodb"
+    lifecycle:
+      resources:
+        limits:
+          cpu: 75m
+          memory: 256Mi
+        requests:
+          cpu: 12m
+          memory: 128Mi
+    metrics:
+      resources:
+        limits:
+          cpu: 75m
+          memory: 256Mi
+        requests:
+          cpu: 12m
+          memory: 128Mi
+    agentConfiguration:
+      probes:
+        livenessProbeDisabled: false
+        readinessProbeDisabled: false
+      count: 3
+      args:
+        - "--rocksdb.block-cache-size=1073741824"
+        - "--cache.size=134217728"
+        - "--rocksdb.total-write-buffer-size=1073741824"
+        - "--agency.supervision-grace-period=30"
+      resources:
+        requests:
+          storage: 20Gi
+          cpu: 50m
+          memory: 400Mi
+        limits:
+          cpu: 400m
+          memory: 2500Mi
+    singleConfiguration:
+      probes:
+        livenessProbeDisabled: false
+        readinessProbeDisabled: false
+      count: 2
+      args:
+        - "--rocksdb.block-cache-size=1073741824"
+        - "--cache.size=134217728"
+        - "--rocksdb.total-write-buffer-size=1073741824"
+      resources:
+        requests:
+          storage: 20Gi
+          cpu: 25m
+          memory: 580Mi
+        limits:
+          cpu: 1
+          memory: 5Gi
   couchdb:
       default:
         installOptions:
-          version: v2
+          version: v3
           storageClass:
-          nodes: 
+          nodes:
           storage: "10Gi"
           requests:
             cpu: "100m"
-            memory: "128Mi"
+            memory: "256Mi"
           limits:
             cpu: 1.5
-            memory: "500Mi"        
+            memory: "1Gi"
       v3:
         installOptions:
           version: v3
-          storage: "1Gi"
+          storage: "10Gi"
           storageClass:
-          nodes: 
+          nodes:
           requests:
             cpu:
             memory: "1024Mi"
           limits:
             cpu:
             memory: "2048Mi"
-        
+
   etcd:
     default:
       host:
@@ -79,14 +135,14 @@ global:
       pass:
       installOptions:
         requests:
-          memory: 500Mi
+          memory: 300Mi
           cpu: 200m
         limits:
-          memory: 1Gi
+          memory: 600Mi
           cpu: 500m
         threads:
         storageClass:
-        storageSize: 
+        storageSize:
   postgres:
     cases:
       installOptions:
@@ -100,6 +156,9 @@ global:
         limits:
           cpu: 2
           memory: 1Gi
+  aitk:
+    analyticsImageTag: '1.3.0.0-amd64'
+    activeJobsLimit: 100
 
   bindings:
     authsvc:
@@ -128,6 +187,13 @@ global:
       replicas:
     udswebui:
       replicas:
+    car:
+      replicas:
+      ingressUrl: '/api/car/v2'
+    carConnectorConfig:
+      replicas: 1
+    carFrontendUi:
+      replicas: 1
     uds:
      redis: "default"
     tisrfi:
@@ -161,26 +227,28 @@ global:
     storageSize: 10Gi
     dynamicProvisioning: true
     limits:
-      memory: 2Gi
+      memory: 1Gi
     requests:
       cpu: 250m
-      memory: 2Gi
+      memory: 1Gi
 
   elastic:
     cases:
       installOptions:
         storageSize: 25Gi
         storageClassName: ""
-  
+
 # OIDC registration configuration
   oidc:
     redirect_uris: []
     post_logout_redirect_uris: []
 
-  
+
   invokerReplicaCount: 3
 
   ibm-isc-de-prod:
+    enabled: true
+  ibm-isc-car-prod:
     enabled: true
   ibm-isc-cases-prod:
     enabled: true
@@ -192,10 +260,12 @@ global:
     enabled: true
   ibm-isc-tis-prod:
     enabled: true
+  ibm-cp4s-extensions-prod:
+    enabled: true
   ibm-isc-csaadapter-prod:
-    enabled: false 
+    enabled: false
 # Resource limits for microservices:
-  
+
   resources:
     cases:
       application:
@@ -212,6 +282,13 @@ global:
         requests:
           memory: 768Mi
           cpu: 100m
+      resutil:
+        limits:
+          memory: 200Mi
+          cpu: 200m
+        requests:
+          memory: 10Mi
+          cpu: 10m
       scripting:
         limits:
           memory: 1024Mi
@@ -301,27 +378,34 @@ global:
         limits:
           cpu: 1
           memory: 200Mi
+      configstore:
+        requests:
+          cpu: 25m
+          memory: 100Mi
+        limits:
+          cpu: 50m
+          memory: 128Mi
       orchestrator:
         orchestrator:
           requests:
             cpu: 100m
             memory: 300Mi
           limits:
-            cpu: 1
+            cpu: 500m
             memory: 600Mi
         celery:
           requests:
             cpu: 100m
-            memory: 300Mi
+            memory: 900Mi
           limits:
             cpu: 1
-            memory: 600Mi
+            memory: 1200Mi
         celerybeat:
           requests:
             cpu: 100m
             memory: 128Mi
           limits:
-            cpu: 1
+            cpu: 200m
             memory: 200Mi
       entitlements:
         requests:
@@ -330,6 +414,13 @@ global:
         limits:
           cpu: 250m
           memory: 256Mi
+      entitlements_operator:
+        requests:
+          cpu: 100m
+          memory: 100Mi
+        limits:
+          cpu: 500m
+          memory: 250Mi
     de:
       webui:
         requests:
@@ -339,6 +430,28 @@ global:
           cpu: 300m
           memory: 512Mi
       backend:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 1
+          memory: 512Mi
+    car:
+      car:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
+      carConnectorConfig:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
+      carFrontendUi:
         requests:
           cpu: 100m
           memory: 128Mi
@@ -405,20 +518,20 @@ global:
           cpu: 1
           memory: 512Mi
     tis:
-      tisrfi:
-        requests:
-          cpu: 100m
-          memory: 256Mi
-        limits:
-          cpu: 1
-          memory: 512Mi
       tisaia:
         requests:
           cpu: 100m
-          memory: 256Mi
+          memory: 128Mi
         limits:
           cpu: 1
-          memory: 512Mi
+          memory: 256Mi
+      tiscoordinator:
+        requests:
+          cpu: 50m
+          memory: 100Mi
+        limits:
+          cpu: 0.25
+          memory: 128Mi
       tisdatagateway:
         requests:
           cpu: 100m
@@ -426,143 +539,220 @@ global:
         limits:
           cpu: 1
           memory: 512Mi
-      tisuserregistration:
+      tisrfi:
         requests:
           cpu: 100m
-          memory: 256Mi
+          memory: 128Mi
         limits:
-          cpu: 1
-          memory: 512Mi
-      tiscoordinator:
-        requests:
-          cpu: 100m
+          cpu: 0.25
           memory: 256Mi
-        limits:
-          cpu: 1
-          memory: 512Mi
       tisscoring:
         requests:
           cpu: 100m
-          memory: 256Mi
+          memory: 128Mi
         limits:
           cpu: 1
-          memory: 512Mi
+          memory: 256Mi
+      tisuserregistration:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 0.25
+          memory: 256Mi
+    carConnectorTenable:
+      carConnectorTenable:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
+    carConnectorAzure:
+      carConnectorAzure:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
+    carConnectorATP:
+      carConnectorATP:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
+    carConnectorAWS:
+      carConnectorAWS:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 256Mi
 
 # IMAGES
   images:
     platform:
       authsvc:
         image: isc-authsvc
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       iscprofile:
         image: isc-common-xfeplus-profileservice-ocp
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       iscauth:
         image: isc-common-auth
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       shell:
         image: isc-common-shell
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       console:
         image: isc-common-console
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       pulse:
         image: pulse-dashboard
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       configstore:
         image: isc-common-configstore
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       entitlements:
         image: isc-entitlements
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
+      entitlements_operator:
+        image: isc-entitlements-operator	        
+        tag: 1.3.0.0-amd64
       orchestrator:
         image: isc-aitk-orchestrator
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       aitkwebui:
         image: isc-aitk-webui
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
+      aitkuds2file:
+        image: isc-uds2file
+        tag: 1.3.0.0-amd64
+      aitkdefeatureanalysis:
+        image: isc-de-feature-analysis
+        tag: 1.3.0.0-amd64
+
     cases:
-      operator:
-        image: isc-cases-operator
-        tag: 1.2.0.0-amd64
-      postgresOperator:
-        image: isc-postgresql-operator
-        tag: 1.2.0.0-amd64
       activemq:
         image: isc-cases-activemq
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       activemqLoggingSidecar:
         image: isc-cases-activemq-logging-sidecar
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       application:
         image: isc-cases-application
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       databaseInit:
         image: isc-cases-database-init
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       databaseUpgrade:
         image: isc-cases-database-upgrade
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       loggingSidecar:
         image: isc-cases-logging-sidecar
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
+      operator:
+        image: isc-cases-operator
+        tag: 1.3.0.0-amd64
+      resutil:
+        image: isc-cases-resutil
+        tag: 1.3.0.0-amd64
       scripting:
         image: isc-cases-scripting
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
+      postgresOperator:
+        image: isc-postgresql-operator
+        tag: 1.3.0.0-amd64
     tii:
       tiisearch:
         image: isc-common-xfeplus-search-service
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       tiiapp:
         image: isc-common-xfeplus-threat-intelligence-app
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       tiireports:
         image: isc-common-xfeplus-reports
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       tiithreats:
         image: isc-common-xfeplus-threat-cards
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       tiisettings:
         image: isc-common-xfeplus-settings
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       tiixfeproxy:
         image: isc-common-xfeplus-xfe-proxy
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
     tis:
-      tisrfi:
-        image: isc-tis-rfi
-        tag: 1.2.0.0-amd64
       tisaia:
         image: isc-tis-aia
-        tag: 1.2.0.0-amd64
-      tisdatagateway:
-        image: isc-tis-data-gateway
-        tag: 1.2.0.0-amd64
-      tisuserregistration:
-        image: isc-tis-user-registration
-        tag: 1.2.0.0-amd64
-      tisscoring:
-        image: isc-tis-score-controller
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       tiscoordinator:
         image: isc-tis-coordinator
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
+      tisdatagateway:
+        image: isc-tis-data-gateway
+        tag: 1.3.0.0-amd64
+      tisrfi:
+        image: isc-tis-rfi
+        tag: 1.3.0.0-amd64
+      tisscoring:
+        image: isc-tis-score-controller
+        tag: 1.3.0.0-amd64
+      tisuserregistration:
+        image: isc-tis-user-registration
+        tag: 1.3.0.0-amd64
     de:
       webui:
         image: isc-investigate-webui
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       backend:
         image: isc-investigate-backend
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
     uds:
       udswebui:
         image: isc-settings-datasources
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
       functionsdeploy:
         image: isc-uds-deploy
-        tag: 1.2.0.0-amd64
+        tag: 1.3.0.0-amd64
     csa:
       csaadapter:
         image: isc-csaadapter
-        tag: 1.2.0.0-amd64
-
+        tag: 1.3.0.0-amd64
+    car:
+      car:
+        image: isc-car
+        tag: 1.3.0.0-amd64
+      carConnectorConfig:
+        image: cp4s-car-connector-config
+        tag: 1.3.0.0-amd64
+      carFrontendUi:
+        image: cp4s-car-frontend-ui
+        tag: 1.3.0.0-amd64
+    arangodb:
+      arangodb:
+        image: arangodb-community
+        tag: 1.3.0.0-amd64
+      exporter:
+        image: arangodb-exporter
+        tag: 1.3.0.0-amd64
+    carConnectorTenable:
+      carConnectorTenable:
+        image: isc-car-connector-tenable
+        tag: 1.3.0.0-amd64
+    carConnectorAzure:
+      carConnectorAzure:
+        image: isc-car-connector-azure
+        tag: 1.3.0.0-amd64
+    carConnectorATP:
+      carConnectorATP:
+        image: isc-car-connector-atp
+        tag: 1.3.0.0-amd64
+    carConnectorAWS:
+      carConnectorAWS:
+        image: isc-car-connector-aws
+        tag: 1.3.0.0-amd64
