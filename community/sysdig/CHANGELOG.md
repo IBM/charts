@@ -9,7 +9,7 @@ numbering uses [semantic versioning](http://semver.org).
 
 ### Minor changes
 
-* Add explicit  *disable captures* option to agent settings.
+* Add explicit *disable captures* option to agent settings.
 
 ## v1.7.17
 
