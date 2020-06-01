@@ -5,6 +5,12 @@
 This file documents all notable changes to Sysdig Helm Chart. The release
 numbering uses [semantic versioning](http://semver.org).
 
+## v1.7.18
+
+### Minor changes
+
+* Add explicit  *disable captures* option to agent settings.
+
 ## v1.7.17
 
 ### Minor changes
