@@ -3,10 +3,7 @@ kind: ConfigMap
 metadata:
   name: {{ template "sysdig.fullname" . }}
   labels:
-    app: {{ template "sysdig.fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+{{ include "sysdig.labels" . | indent 4 }}
 data:
   dragent.yaml: |
     new_k8s: true
@@ -23,6 +20,20 @@ data:
     memdump:
       enabled: true
 {{- end }}
+{{- end }}
+{{- if eq .Values.sysdig.disableCaptures true }}
+    {{- if hasKey .Values.sysdig.settings "sysdig_capture_enabled" }}{{ fail "sysdig_capture_enabled options in both .sysdig.disableCaptures and sysdig.settings.collesysdig_capture_enabledctor"}}{{ end }}
+    sysdig_capture_enabled: false 
+{{- end }}
+{{- if .Values.onPrem.enabled }}
+    {{- if hasKey .Values.sysdig.settings "collector" }}{{ fail "Collector host specified in both .onPrem.collectorHost and sysdig.settings.collector"}}{{ end }}
+    {{- if hasKey .Values.sysdig.settings "collector_port" }}{{ fail "Collector port specified in both .onPrem.collectorPort and sysdig.settings.collector_port"}}{{ end }}
+    {{- if hasKey .Values.sysdig.settings "ssl"  }}{{ fail "Collector SSL option specified in both .onPrem.ssl and sysdig.settings.ssl"}}{{ end }}
+    {{- if hasKey .Values.sysdig.settings "ssl_verify_certificate" }}{{ fail "Collector SSL Verify Certificate option specified in both .onPrem.sslVerifyCertificate and sysdig.settings.ssl_verify_certificate"}}{{ end }}
+    collector: {{ .Values.onPrem.collectorHost }}
+    collector_port: {{ .Values.onPrem.collectorPort }}
+    ssl: {{ .Values.onPrem.ssl }}
+    ssl_verify_certificate: {{ .Values.onPrem.sslVerifyCertificate }}
 {{- end }}
 {{- if .Values.sysdig.settings }}
 {{ toYaml .Values.sysdig.settings | indent 4 }}

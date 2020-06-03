@@ -1,7 +1,92 @@
-# Change Log
+# Chart: Sysdig
+
+## Change Log
 
 This file documents all notable changes to Sysdig Helm Chart. The release
 numbering uses [semantic versioning](http://semver.org).
+
+## v1.17.20
+
+###  Minor changes
+
+* Use the latest image from Agent (10.1.1) by default.
+
+## v1.17.19
+
+###  Minor changes
+
+* Use the latest image from Agent (10.1.0) by default.
+
+## v1.7.18
+
+### Minor changes
+
+* Add explicit *disable captures* option to agent settings.
+
+## v1.7.17
+
+### Minor changes
+
+* Add onPrem as explicit option to set collector host, port and settings
+* Fail if no sysdig.accessKey value is provided
+
+## v1.7.16
+
+### Minor changes
+
+* Include support links in README.md
+
+## v1.7.15
+
+### Minor changes
+
+* Use the latest image from Agent (10.0.0) by default.
+
+## v1.7.14
+
+### Minor changes
+
+* Implement a more comprehensive securityContext for running the pod.
+
+## v1.7.13
+
+### Minor changes
+
+* Implement scheduling with affinity and not with nodeSelector on amd64 & linux nodes.
+* Add support for custom annotations on daemonSet.
+
+## v1.7.12
+
+### Minor changes
+
+* Use the latest image from Agent (9.9.1) by default.
+* Use kubernetes.io/arch label on daemonSet to schedule pods only on amd64 nodes.
+* Add a livenessProbe to daemonSet.
+
+## v1.7.11
+
+### Minor changes
+
+* Use app.kubernetes.io labels instead of custom ones
+
+## v1.7.10
+
+### Minor changes
+
+* Use the latest image from Agent (9.9.0) by default.
+
+## v1.7.9
+
+### Minor changes
+
+* Add the SecurityContextConstraints if the security.openshift.io/v1 API is detected.
+
+## v1.7.8
+
+### Minor changes
+
+* Add an image.overrideValue value which is a hack to support
+  RELATED_IMAGE_<identifier> feature in Helm based operators.
 
 ## v1.7.7
 
