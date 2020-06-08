@@ -1,0 +1,30 @@
+{{- if .Values.exchange.autoscaling.enabled }}
+{{ include "sch.config.init" (list . "ibm-edge.sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.exchange }}
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-{{ $compName }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-{{ $compName }}
+  minReplicas: {{ .Values.exchange.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.exchange.autoscaling.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.exchange.autoscaling.cpu }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.exchange.autoscaling.memory }}
+{{ end }}

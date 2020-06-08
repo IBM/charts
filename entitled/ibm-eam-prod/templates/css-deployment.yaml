@@ -1,0 +1,160 @@
+{{ include "sch.config.init" (list . "ibm-edge.sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.css }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-{{ $compName }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+spec:
+  progressDeadlineSeconds: 900
+  replicas: {{ if .Values.global.maintenanceMode }}0{{else}}{{ .Values.css.replicaCount }}{{ end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $compName }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.common.maxSurge }}
+      maxUnavailable: {{ .Values.css.maxUnavailable }}
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+        timestamp: '{{ date "20060102150405" .Release.Time }}'
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName:  {{ include "ieam.serviceAccountName" . | quote }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+      containers:
+      - name: {{ .Release.Name }}-{{ $compName }}
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.css.image }}:{{ .Values.css.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.css.resources | indent 10 }}
+        env:
+        - name: HZN_EXCHANGE_URL
+          value: "http://{{ .Release.Name }}-exchange/v1"
+        - name: EDGE_CSS_DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: css-db-host
+        - name: EDGE_CSS_DB_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: css-db-auth
+        - name: EDGE_CSS_DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: css-db-user
+        - name: EDGE_CSS_DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-{{ $compName }}db-auth-secret
+              key: password
+        - name: EDGE_CSS_DB_SSL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: css-db-ssl
+        ports:
+        - containerPort: {{ .Values.common.httpPort }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          timeoutSeconds: 5
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: css-config
+          mountPath: /etc/edge-sync-service/sync.conf.tmpl
+          subPath: sync.conf.tmpl
+        {{ if and .Values.remoteDBs.enableCssTLS (not .Values.localDBs.enabled) }}
+        - name: {{ .Release.Name }}-db-cert
+          mountPath: /etc/ssl/certs/{{ .Release.Name }}-trusted-certs.pem
+          subPath: {{ .Release.Name }}-trusted-certs.pem
+        {{ end }}
+      {{- if ( .Values.localDBs.enabled ) and eq .Values.localDBs.enabled true }}
+      initContainers:
+      - name: init-css
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.kubectl.image }}:{{ .Values.kubectl.tag }}
+        command: ['sh', '-c', 'until timeout 1 bash -c "cat < /dev/null > /dev/tcp/{{ .Release.Name }}-cssdb-server-0.{{ .Release.Name }}-cssdb-headless-svc/27017"; do echo waiting for css database; sleep 10; done;'] 
+        resources: 
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi 
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL 
+      {{- end }}    
+      volumes:
+      - name: css-config
+        configMap:
+          name: {{ .Release.Name }}-config
+          items:
+          - key: css-config
+            path: sync.conf.tmpl
+      {{ if and .Values.remoteDBs.enableCssTLS (not .Values.localDBs.enabled) }}
+      - name: {{ .Release.Name }}-db-cert
+        secret:
+          secretName: {{ .Release.Name }}-remote-dbs
+          items:
+          - key: trusted-certs
+            path: {{ .Release.Name }}-trusted-certs.pem
+
+      {{ end }}
+      restartPolicy: Always

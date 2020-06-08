@@ -1,0 +1,86 @@
+{{ include "sch.config.init" (list . "ibm-edge.sch.chart.config.values") }}
+{{- $compName := .sch.chart.components.configGen }}
+{{- $configName := printf "%s-%s" .Release.Name .sch.chart.components.config }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $configName }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+data:
+  agbot-config: |-
+    {
+      "Edge":{
+      },
+      "AgreementBot": {
+          "DBPath": "",
+          "Postgresql": {
+              "Host": "$EDGE_AGBOT_DB_HOST",
+              "Port": "$EDGE_AGBOT_DB_PORT",
+              "User": "$EDGE_AGBOT_DB_USER",
+              "Password": "$EDGE_AGBOT_DB_PASS",
+              "DBName": "$EDGE_AGBOT_DB_NAME",
+              "SSLMode": "$EDGE_AGBOT_DB_SSL",
+              "MaxOpenConnections": {{ .Values.agbot.dbPool }}
+          },
+          "Partitions": "part0",
+          "TxLostDelayTolerationSeconds": 120,
+          "AgreementWorkers": 15,
+          "ProtocolTimeoutS": 240,
+          "AgreementTimeoutS": 360,
+          "NoDataIntervalS": 300,
+          "ActiveAgreementsURL": "",
+          "ActiveAgreementsUser": "",
+          "ActiveAgreementsPW": "",
+          "PolicyPath": "/home/agbotuser/policy.d",
+          "NewContractIntervalS": 10,
+          "ProcessGovernanceIntervalS": 10,
+          "IgnoreContractWithAttribs": "ethereum_account",
+          "ExchangeURL": "${EDGE_AGBOT_EXCHANGE_URL}",
+          "ExchangeId": "${EDGE_AGBOT_EXCHANGE_ID}",
+          "ExchangeToken": "${EDGE_AGBOT_TOKEN}",
+          "ExchangeVersionCheckIntervalM": 1,
+          "ExchangeHeartbeat": 10,
+          "ExchangeMessageTTL": 1800,
+          "ActiveDeviceTimeoutS": 180,
+          "DefaultWorkloadPW": "",
+          "MessageKeyPath": "msgKey",
+          "APIListen": "127.0.0.1:8080",
+          "PurgeArchivedAgreementHours": 1,
+          "CheckUpdatedPolicyS": 15,
+          "CSSURL": "${CSS_URL}",
+          "SecureAPIListenHost": "0.0.0.0",
+          "SecureAPIListenPort": "8083",
+          "AgreementBatchSize": 1300
+      }
+    }
+  css-config: |-
+    NodeType CSS
+    ListeningType unsecure
+    UnsecureListeningPort 8080
+    CommunicationProtocol http
+    LogLevel INFO
+    LogTraceDestination stdout
+    TraceLevel INFO
+    MongoAddressCsv $EDGE_CSS_DB_HOST
+    MongoAuthDbName $EDGE_CSS_DB_AUTH
+    MongoUsername $EDGE_CSS_DB_USER
+    MongoPassword $EDGE_CSS_DB_PASS
+    MongoUseSSL $EDGE_CSS_DB_SSL
+  exchange-config: |-
+    {
+      "api": {
+        "db": { "jdbcUrl": "$EDGE_EXCHANGE_DB_URL",
+          "user": "$EDGE_EXCHANGE_DB_USER",
+          "password": "$EDGE_EXCHANGE_DB_PASS",
+          "maxPoolSize": "{{ div (sub .Values.exchangedb.maxConnections 8) .Values.exchange.replicaCount }}"
+        },
+        "logging": {
+          "level": "INFO"
+        },
+        "root": { 
+          "password": "$EDGE_EXCHANGE_ROOT_PASS",
+          "enabled": "true"
+        }
+      }
+    }

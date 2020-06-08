@@ -1,0 +1,89 @@
+{{ include "sch.config.init" (list . "ibm-edge.sch.chart.config.values") }}
+{{- $compName := .sch.chart.components.authCleanup }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-{{ $compName }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-delete,post-rollback
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+    "helm.sh/hook-weight": "1"
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: {{ .Release.Name }}-{{ $compName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+      - name: auth-gen
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.kubectl.image }}:{{ .Values.kubectl.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+              - ALL
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          set -e
+          {{- $rb := include "ieam.serviceAccountName" . }}
+          if kubectl get rolebinding {{ $rb }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting RoleBinding {{ $rb }} ..."
+            kubectl delete rolebinding {{ $rb }} -n {{ .Release.Namespace }}
+          else
+            echo "=>>>RoleBinding {{ $rb }} does not exist (already deleted)"
+          fi
+
+          {{- $role := include "ieam.serviceAccountName" . }}
+          if kubectl get role {{ $role }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting role {{ $role }} ..."
+            kubectl delete role {{ $role }} -n {{ .Release.Namespace }}
+          else
+            echo "=>>>Role {{ $role }} does not exist (already deleted)"
+          fi
+
+          {{- $sa := include "ieam.serviceAccountName" . }}
+          if kubectl get sa {{ $sa }} -n {{ .Release.Namespace }} ; then
+            echo "=>>>Deleting Service Account {{ $sa }} ..."
+            kubectl delete sa {{ $sa }} -n {{ .Release.Namespace }}
+          else
+            echo "=>>>Service Acount {{ $sa }} does not exist (already deleted)"
+          fi
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: 100m
+          limits:
+            memory: 200Mi
+            cpu: 200m
+      restartPolicy: Never
