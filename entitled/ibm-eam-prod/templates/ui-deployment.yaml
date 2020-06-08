@@ -1,0 +1,103 @@
+{{ include "sch.config.init" (list . "ibm-edge.sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.ui }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    prometheus.io/scrape: 'true'
+  name: {{ .Release.Name }}-{{ $compName }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+spec:
+  replicas: {{ if .Values.global.maintenanceMode }}0{{else}}{{ .Values.ui.replicaCount }}{{ end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $compName }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.common.maxSurge }}
+      maxUnavailable: {{ .Values.ui.maxUnavailable }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+        timestamp: '{{ date "20060102150405" .Release.Time }}'
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName:  {{ include "ieam.serviceAccountName" . | quote }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+      containers:
+      - name: {{ .Release.Name }}-{{ $compName }}
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.ui.image }}:{{ .Values.ui.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        env:
+          - name: HTTP_PORT
+            value: "{{ .Values.common.httpPort }}"
+          - name: CLUSTER_URL
+            value: "https://{{ .Values.common.clusterUrl }}"
+          - name: PLATFORM_IDENTITY_PROVIDER_URL
+            value: "https://{{ .Values.common.clusterUrl }}"
+          - name: hznApiUrl
+            value: "http://{{ .Release.Name }}-exchange/v1/"
+          - name: WLP_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: platform-oidc-credentials
+                key: WLP_CLIENT_ID
+          - name: WLP_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: platform-oidc-credentials
+                key: WLP_CLIENT_SECRET
+        ports:
+        - containerPort: {{ .Values.common.httpPort }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          timeoutSeconds: 5
+        resources:
+{{ toYaml .Values.ui.resources | indent 10 }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+              - ALL

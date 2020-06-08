@@ -1,0 +1,217 @@
+{{ include "sch.config.init" (list . "ibm-edge.sch.chart.config.values") }}
+{{- $compName := .sch.chart.components.authGen }}
+{{- $authName := printf "%s-%s" .Release.Name .sch.chart.components.auth }}
+{{- $remoteDBsName := printf "%s-%s" .Release.Name .sch.chart.components.remoteDBs }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-{{ $compName }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+    "helm.sh/hook-weight": "10"
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      name: {{ .Release.Name }}-{{ $compName }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 8 }}
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName:  {{ include "ieam.serviceAccountName" . | quote }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      containers:
+      - name: auth-gen
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.kubectl.image }}:{{ .Values.kubectl.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+              - ALL
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          set -e
+          CLUSTER_NAME=$(kubectl get configmap --namespace kube-public ibmcloud-cluster-info -o jsonpath="{.data.cluster_name}")
+          EDGE_SECRET="kubectl --namespace kube-system get secret {{ $authName }}"
+          EDGE_DB_SECRET="kubectl --namespace kube-system get secret {{ $remoteDBsName }}"
+          BASE_DOMAIN=$(kubectl -n kube-public get cm ibmcloud-cluster-info -o jsonpath='{.data.cluster_ca_domain}')
+          {{- if .Values.localDBs.enabled }}
+          echo "Defining local DB values"
+          EDGE_AGBOT_DB_HOST={{ .Release.Name }}-agbotdb-proxy-svc
+          EDGE_AGBOT_DB_PORT=5432
+          EDGE_AGBOT_DB_USER={{ .Values.agbotdb.auth.pgSuperuserName }}
+          EDGE_AGBOT_DB_NAME=postgres
+          EDGE_AGBOT_DB_SSL=disable
+          EDGE_CSS_DB_HOST={{ .Release.Name }}-cssdb-headless-svc.kube-system:27017
+          EDGE_CSS_DB_AUTH=$(echo -n "admin" | base64 | tr -d '\n')
+          EDGE_CSS_DB_USER=$(echo -n "admin" | base64 | tr -d '\n')
+          EDGE_CSS_DB_PASS=$(openssl rand -hex 64 | tr -d '\n' | base64 | tr -d '\n')
+          EDGE_CSS_DB_SSL=false
+          EDGE_EXCHANGE_DB_HOST={{ .Release.Name }}-exchangedb-proxy-svc
+          EDGE_EXCHANGE_DB_PORT=5432
+          EDGE_EXCHANGE_DB_USER={{ .Values.agbotdb.auth.pgSuperuserName }}
+          EDGE_EXCHANGE_DB_NAME=postgres
+          EDGE_EXCHANGE_DB_SSL=disable
+
+          {{ else }}
+          echo "Defining remote DB values"
+          # If the DB secret exists already
+          if $EDGE_DB_SECRET > /dev/null 2>&1; then
+            # Setting all the connection parameters for each DB, pulling from $EDGE_DB_SECRET
+            for CONNECTION_PARAM in HOST USER NAME SSL; do
+              eval EDGE_AGBOT_DB_${CONNECTION_PARAM}=$($EDGE_DB_SECRET -o jsonpath="{.data.agbot-db-$(echo $CONNECTION_PARAM | tr '[:upper:]' '[:lower:]')}" | base64 --decode | tr -d '\n')
+              eval EDGE_CSS_DB_${CONNECTION_PARAM}=$($EDGE_DB_SECRET -o jsonpath="{.data.css-db-$(echo $CONNECTION_PARAM | tr '[:upper:]' '[:lower:]')}" | base64 --decode | tr -d '\n')
+              eval EDGE_EXCHANGE_DB_${CONNECTION_PARAM}=$($EDGE_DB_SECRET -o jsonpath="{.data.exchange-db-$(echo $CONNECTION_PARAM | tr '[:upper:]' '[:lower:]')}" | base64 --decode | tr -d '\n')
+            done
+            # We export the password separately from the above because we want to keep the password base64 encoded for accuracy reasons
+            EDGE_AGBOT_DB_PASS=$($EDGE_DB_SECRET -o jsonpath="{.data.agbot-db-pass}")
+            EDGE_CSS_DB_PASS=$($EDGE_DB_SECRET -o jsonpath="{.data.css-db-pass}")
+            EDGE_EXCHANGE_DB_PASS=$($EDGE_DB_SECRET -o jsonpath="{.data.exchange-db-pass}")
+            # We separate out the port for postgresql
+            EDGE_AGBOT_DB_PORT=$($EDGE_DB_SECRET -o jsonpath="{.data.agbot-db-port}" | base64 --decode | tr -d '\n')
+            EDGE_EXCHANGE_DB_PORT=$($EDGE_DB_SECRET -o jsonpath="{.data.exchange-db-port}" | base64 --decode | tr -d '\n')
+            # Mongodb also has an auth DB and keeping the user in base64
+            EDGE_CSS_DB_AUTH=$($EDGE_DB_SECRET -o jsonpath="{.data.css-db-auth}")
+            EDGE_CSS_DB_USER=$($EDGE_DB_SECRET -o jsonpath="{.data.css-db-user}")
+          else
+            echo "Value 'localDBs.enabled' is false, but secret {{ $remoteDBsName }} is not defined, exiting"
+            exit 1
+          fi
+          {{ end }}
+
+          AGBOT_MSG_KEY=$(openssl genrsa 2048 2>/dev/null) 
+          EDGE_AGBOT_MSG_KEY=$(echo "$AGBOT_MSG_KEY" | base64 -w 0 | tr -d '\n')
+          EDGE_AGBOT_MSG_PUB=$(echo "$AGBOT_MSG_KEY" | openssl rsa -pubout | base64 -w 0 | tr -d '\n')
+          EDGE_AGBOT_TOKEN=$(openssl rand -base64 40 | tr -d "=+/" | cut -c1-30 | tr -d '\n')
+          EDGE_EXCHANGE_ROOT_PASS=$(openssl rand -base64 40 | tr -d "=+/" | cut -c1-30 | tr -d '\n')
+
+          # If our main secret exists already
+          if $EDGE_SECRET > /dev/null 2>&1; then
+            echo "Creating {{ $authName }} secret backup"
+            kubectl get secret {{ $authName }} -o yaml | sed "s/name: {{ $authName }}/name: {{ $authName }}-backup/" | sed '/creationTimestamp:/d' | sed '/uid/d' | sed '/resourceVersion:/d' | kubectl apply -n kube-system -f-
+            kubectl annotate secret {{ $authName }}-backup kubectl.kubernetes.io/last-applied-configuration-
+
+            echo "Copying existing values from old secret"
+            # If the values don't exist yet, don't copy empty values which overwrite them (enables adding new values in future upgrades)
+            function check_defined_val() {
+              if [ "$($EDGE_SECRET -o jsonpath={.data.$1})" == '' ]; then
+                return 1
+              fi
+            }
+            if check_defined_val agbot-token; then EDGE_AGBOT_TOKEN=$($EDGE_SECRET -o jsonpath="{.data.agbot-token}" | base64 --decode | tr -d '\n'); fi
+            if check_defined_val agbot-messagekey-private; then EDGE_AGBOT_MSG_KEY=$($EDGE_SECRET -o jsonpath="{.data.agbot-messagekey-private}"); fi
+            if check_defined_val agbot-messagekey-public; then EDGE_AGBOT_MSG_PUB=$($EDGE_SECRET -o jsonpath="{.data.agbot-messagekey-public}"); fi
+            if check_defined_val exchange-root-pass; then EDGE_EXCHANGE_ROOT_PASS=$($EDGE_SECRET -o jsonpath="{.data.exchange-root-pass}"| base64 --decode | tr -d '\n'); fi
+            {{- if .Values.localDBs.enabled }} # If using local DB's, need to copy their credentials
+            EDGE_AGBOT_DB_PASS=$($EDGE_SECRET -o jsonpath="{.data.agbot-db-pass}")
+            EDGE_CSS_DB_PASS=$($EDGE_SECRET -o jsonpath="{.data.css-db-pass}")
+            EDGE_EXCHANGE_DB_PASS=$($EDGE_SECRET -o jsonpath="{.data.exchange-db-pass}")
+            {{ end }}
+          fi
+
+          echo "Creating {{ $authName }} secret"
+          cat <<EOF | kubectl apply -n {{ .Release.Namespace }} -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: {{ $authName }}
+            labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 14 }}
+          type: Opaque
+          data:
+            agbot-messagekey-private: $EDGE_AGBOT_MSG_KEY
+            agbot-messagekey-public: $EDGE_AGBOT_MSG_PUB
+          stringData:
+            cluster-name: $CLUSTER_NAME
+            exchange-db-url: jdbc:postgresql://$EDGE_EXCHANGE_DB_HOST:$EDGE_EXCHANGE_DB_PORT/$EDGE_EXCHANGE_DB_NAME
+            exchange-db-user: $EDGE_EXCHANGE_DB_USER
+            exchange-root-pass: $EDGE_EXCHANGE_ROOT_PASS
+            agbot-db-host: $EDGE_AGBOT_DB_HOST
+            agbot-db-port: "$EDGE_AGBOT_DB_PORT"
+            agbot-db-user: $EDGE_EXCHANGE_DB_USER
+            agbot-db-name: $EDGE_AGBOT_DB_NAME
+            agbot-db-ssl: $EDGE_AGBOT_DB_SSL
+            agbot-token: $EDGE_AGBOT_TOKEN
+            agbot-exchange-url: http://{{ .Release.Name }}-exchange/v1
+            agbot-exchange-id: IBM/${CLUSTER_NAME}-agbot
+            css-url: http://{{ .Release.Name }}-css
+            css-db-host: $EDGE_CSS_DB_HOST
+            css-db-auth: $(echo $EDGE_CSS_DB_AUTH | base64 --decode | tr -d '\n')
+            css-db-user: $(echo $EDGE_CSS_DB_USER | base64 --decode | tr -d '\n')
+            css-db-ssl: "$EDGE_CSS_DB_SSL"
+          EOF
+          {{- if eq .Values.localDBs.enabled false }}
+          echo "Creating {{ .Release.Name }}-agbotdb-auth-secret secret"
+          cat <<EOF | kubectl apply -n {{ .Release.Namespace }} -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: {{ .Release.Name }}-agbotdb-auth-secret
+            labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 14 }}
+          type: Opaque
+          data:
+            pg_su_password: $EDGE_AGBOT_DB_PASS
+          EOF
+          echo "Creating {{ .Release.Name }}-exchangedb-auth-secret secret"
+          cat <<EOF | kubectl apply -n {{ .Release.Namespace }} -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: {{ .Release.Name }}-exchangedb-auth-secret
+            labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 14 }}
+          type: Opaque
+          data:
+            pg_su_password: $EDGE_EXCHANGE_DB_PASS
+          EOF
+          echo "Creating {{ .Release.Name }}-exchangedb-auth-secret secret"
+          cat <<EOF | kubectl apply -n {{ .Release.Namespace }} -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: {{ .Release.Name }}-cssdb-auth-secret
+            labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 14 }}
+          type: Opaque
+          data:
+            password: $EDGE_CSS_DB_PASS
+          EOF
+          {{ end }}
+          kubectl annotate secret {{ $authName }} kubectl.kubernetes.io/last-applied-configuration-
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: 100m
+          limits:
+            memory: 200Mi
+            cpu: 200m
+      restartPolicy: Never

@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+#################################################################
+# Licensed Materials - Property of IBM
+# (C) Copyright IBM Corp. 2020.  All Rights Reserved.
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with
+# IBM Corp.
+#################################################################
+
+trap "echo -e '\nScript exited prematurely ...\n' && exit 1" ERR
+
+# Script prerequisites
+PREREQUISITES=( oc )
+# Checking prerequisites
+function check_prereqs(){
+  for i in "${PREREQUISITES[@]}"; do
+    if ! command -v ${i} >/dev/null 2>&1; then
+      echo "'${i}' not found. Please install this prerequisite, exiting ..."
+      exit 1
+    fi
+  done
+}
+
+check_prereqs
+
+# Define our needed ENV vars
+EDGE_NAMESPACE=kube-system  #Deploying to kube-system namespace to integrate the edge UI
+EDGE_OC="oc --namespace $EDGE_NAMESPACE"
+EDGE_RELEASE=ibm-edge
+EDGE_AUTH_SECRET=$EDGE_RELEASE-auth
+
+function backup_ieam() {
+    echo "Backing up IEAM data to '$BACKUP_DIR'"
+    # Backup authentication/secrets
+    $EDGE_OC get secret $EDGE_AUTH_SECRET -o yaml > $BACKUP_DIR/$EDGE_AUTH_SECRET-secret.yaml
+    $EDGE_OC get secret $EDGE_RELEASE-agbotdb-auth-secret -o yaml > $BACKUP_DIR/$EDGE_RELEASE-agbotdb-auth-secret-backup.yaml
+    $EDGE_OC get secret $EDGE_RELEASE-exchangedb-auth-secret -o yaml > $BACKUP_DIR/$EDGE_RELEASE-exchangedb-auth-secret-backup.yaml
+    $EDGE_OC get secret $EDGE_RELEASE-cssdb-auth-secret -o yaml > $BACKUP_DIR/$EDGE_RELEASE-cssdb-auth-secret-backup.yaml
+}
+
+function backup_localdbs() {
+    echo "Backing up local databases to '$BACKUP_DIR'"
+    # Backup database content
+    $EDGE_OC exec $EDGE_RELEASE-exchangedb-keeper-0 -- bash -c "export PGPASSWORD=$($EDGE_OC get secret $EDGE_RELEASE-exchangedb-auth-secret -o jsonpath="{.data.pg_su_password}" | base64 --decode) && pg_dump -U admin -h $EDGE_RELEASE-exchangedb-proxy-svc -F t postgres > /stolon-data/exchange-backup.tar"
+    $EDGE_OC cp $EDGE_RELEASE-exchangedb-keeper-0:/stolon-data/exchange-backup.tar $BACKUP_DIR/exchange-backup.tar
+
+    $EDGE_OC exec $EDGE_RELEASE-agbotdb-keeper-0 -- bash -c "export PGPASSWORD=$($EDGE_OC get secret $EDGE_RELEASE-agbotdb-auth-secret -o jsonpath="{.data.pg_su_password}" | base64 --decode) && pg_dump -U admin -h $EDGE_RELEASE-agbotdb-proxy-svc -F t postgres > /stolon-data/agbot-backup.tar"
+    $EDGE_OC cp $EDGE_RELEASE-agbotdb-keeper-0:/stolon-data/agbot-backup.tar $BACKUP_DIR/agbot-backup.tar
+
+    $EDGE_OC exec $EDGE_RELEASE-cssdb-server-0 -- bash -c "mkdir -p /data/db/backup; mongodump -u admin -p $($EDGE_OC get secret $EDGE_RELEASE-cssdb-auth-secret -o jsonpath="{.data.password}" | base64 --decode) --out /data/db/css-backup"
+    $EDGE_OC cp $EDGE_RELEASE-cssdb-server-0:/data/db/css-backup $BACKUP_DIR/css-backup
+
+    # Once backups are verified, remove the backups from the stateless containers
+    $EDGE_OC exec $EDGE_RELEASE-exchangedb-keeper-0 -- bash -c "rm -f /stolon-data/exchange-backup.tar"
+    $EDGE_OC exec $EDGE_RELEASE-agbotdb-keeper-0 -- bash -c "rm -f /stolon-data/agbot-backup.tar"
+    $EDGE_OC exec $EDGE_RELEASE-cssdb-server-0 -- bash -c "rm -rf /data/db/css-backup"
+}
+
+function restore_ieam() {
+    echo "Restoring IEAM data from '$RESTORE_DIR'"
+    $EDGE_OC delete secret $EDGE_AUTH_SECRET $EDGE_RELEASE-agbotdb-auth-secret $EDGE_RELEASE-exchangedb-auth-secret $EDGE_RELEASE-cssdb-auth-secret;
+    
+    $EDGE_OC apply -f $RESTORE_DIR
+    echo "Reinstall IBM Edge Application Manager before proceeding further, follow the instructions in the Installing the Chart section"
+}
+
+function restore_localdbs() {
+    echo "Restoring Local Databases from '$RESTORE_DIR'"
+    echo "Restoring exchange database"
+    $EDGE_OC cp $RESTORE_DIR/exchange-backup.tar $EDGE_RELEASE-exchangedb-keeper-0:/stolon-data/exchange-backup.tar
+    $EDGE_OC exec $EDGE_RELEASE-exchangedb-keeper-0 -- bash -c "export PGPASSWORD=$($EDGE_OC get secret $EDGE_RELEASE-exchangedb-auth-secret -o jsonpath="{.data.pg_su_password}"| base64 --decode) && pg_restore -U admin -h $EDGE_RELEASE-exchangedb-proxy-svc -d postgres -C -c /stolon-data/exchange-backup.tar"
+
+    echo "Restoring agbot database"
+    $EDGE_OC cp $RESTORE_DIR/agbot-backup.tar $EDGE_RELEASE-agbotdb-keeper-0:/stolon-data/agbot-backup.tar
+    $EDGE_OC exec $EDGE_RELEASE-agbotdb-keeper-0 -- bash -c "export PGPASSWORD=$($EDGE_OC get secret $EDGE_RELEASE-agbotdb-auth-secret -o jsonpath="{.data.pg_su_password}" | base64 --decode) && pg_restore -U admin -h $EDGE_RELEASE-agbotdb-proxy-svc -d postgres -C -c /stolon-data/agbot-backup.tar"
+
+    echo "Restoring css database"
+    $EDGE_OC cp $RESTORE_DIR/css-backup $EDGE_RELEASE-cssdb-server-0:/data/db/css-backup
+    $EDGE_OC exec $EDGE_RELEASE-cssdb-server-0 -- bash -c "mongorestore -u admin -p $($EDGE_OC get secret $EDGE_RELEASE-cssdb-auth-secret -o jsonpath="{.data.password}" | base64 --decode) --drop /data/db/css-backup";
+    
+    echo "Restarting stateful DB pods"
+    for POD in $($EDGE_OC get pods | grep -E '\-agbotdb\-keeper|\-cssdb\-server|\-exchangedb\-keeper' | awk '{print $1}'); do
+        $EDGE_OC delete pod $POD
+    done
+}

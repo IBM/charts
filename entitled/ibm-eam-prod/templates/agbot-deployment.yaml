@@ -1,0 +1,229 @@
+{{ include "sch.config.init" (list . "ibm-edge.sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.agbot }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-{{ $compName }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+spec:
+  progressDeadlineSeconds: 900
+  replicas: {{ if .Values.global.maintenanceMode }}0{{else}}{{ .Values.agbot.replicaCount }}{{ end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $compName }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.common.maxSurge }}
+      maxUnavailable: {{ .Values.agbot.maxUnavailable }}
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+        timestamp: '{{ date "20060102150405" .Release.Time }}'
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName:  {{ include "ieam.serviceAccountName" . | quote }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+      containers:
+      - name: {{ .Release.Name }}-{{ $compName }}
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.agbot.image }}:{{ .Values.agbot.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.agbot.resources | indent 10 }}
+        env:
+        - name: ANAX_LOG_LEVEL
+          value: "{{ .Values.agbot.loglevel }}"
+        - name: EDGE_AGBOT_DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: agbot-db-host
+        - name: EDGE_AGBOT_DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: agbot-db-port
+        - name: EDGE_AGBOT_DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: agbot-db-user
+        - name: EDGE_AGBOT_DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-{{ $compName }}db-auth-secret
+              key: pg_su_password
+        - name: EDGE_AGBOT_DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: agbot-db-name
+        - name: EDGE_AGBOT_DB_SSL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: agbot-db-ssl
+        - name: EDGE_AGBOT_EXCHANGE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: agbot-exchange-url
+        - name: EDGE_AGBOT_EXCHANGE_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: agbot-exchange-id
+        - name: EDGE_AGBOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: agbot-token
+        - name: CSS_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-auth
+              key: css-url     
+        ports:
+        - containerPort: {{ .Values.common.httpPort }}
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - http://localhost:{{ .Values.common.httpPort }}/status
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - test $(($(date +%s) - $(curl -sSL http://localhost:8080/status | jq -r .liveHealth.lastDBHeartbeat))) -le 60
+          periodSeconds: 30
+          timeoutSeconds: 30
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: agbot-config
+          mountPath: /etc/horizon/anax.json.tmpl
+          subPath: anax.json.tmpl
+        - name: agbot-message-priv
+          mountPath: /var/horizon/msgKey/privateMessagingKey.pem
+          subPath: privateMessagingKey.pem
+        - name: agbot-message-pub
+          mountPath: /var/horizon/msgKey/publicMessagingKey.pem
+          subPath: publicMessagingKey.pem
+        {{ if and .Values.remoteDBs.enableAgbotTLS (not .Values.localDBs.enabled) }}
+        - name: {{ .Release.Name }}-db-cert
+          mountPath: /etc/ssl/certs/{{ .Release.Name }}-trusted-certs.pem
+          subPath: {{ .Release.Name }}-trusted-certs.pem
+        {{ end }}
+      {{- if ( .Values.localDBs.enabled ) and eq .Values.localDBs.enabled true }}
+      initContainers:
+      - name: init-agbotdb-keeper
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.kubectl.image }}:{{ .Values.kubectl.tag }}
+        command: ['sh', '-c', 'until timeout 1 bash -c "cat < /dev/null > /dev/tcp/{{ .Release.Name }}-agbotdb-keeper-svc/5432"; do echo waiting for agbot database; sleep 10; done;'] 
+        resources: 
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi 
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+      - name: init-agbotdb-proxy
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.kubectl.image }}:{{ .Values.kubectl.tag }}
+        command: ['sh', '-c', 'until timeout 1 bash -c "cat < /dev/null > /dev/tcp/{{ .Release.Name }}-agbotdb-proxy-svc/5432"; do echo waiting for agbot database; sleep 10; done;'] 
+        resources: 
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi 
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+      {{- end }}
+      volumes:
+      - name: agbot-config
+        configMap:
+          name: {{ .Release.Name }}-config
+          items:
+          - key: agbot-config
+            path: anax.json.tmpl
+      - name: agbot-message-priv
+        secret:
+          secretName: {{ .Release.Name }}-auth
+          items:
+          - key: agbot-messagekey-private
+            path: privateMessagingKey.pem
+      - name: agbot-message-pub
+        secret:
+          secretName: {{ .Release.Name }}-auth
+          items:
+          - key: agbot-messagekey-public
+            path: publicMessagingKey.pem
+      {{ if and .Values.remoteDBs.enableAgbotTLS (not .Values.localDBs.enabled) }}
+      - name: {{ .Release.Name }}-db-cert
+        secret:
+          secretName: {{ .Release.Name }}-remote-dbs
+          items:
+          - key: trusted-certs
+            path: {{ .Release.Name }}-trusted-certs.pem
+      {{ end }}
+      restartPolicy: Always
+        
+
