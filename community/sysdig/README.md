@@ -25,6 +25,12 @@ kubectl -n sysdig create rolebinding ibm-privileged-clusterrole-rolebinding --cl
 To install the chart with the release name `my-release`, retrieve your Sysdig Monitor Access Key from your [Account Settings](https://app.sysdigcloud.com/#/settings/agentInstallation) and run:
 
 ```bash
+$ helm repo add community https://raw.githubusercontent.com/IBM/charts/master/repo/community
+```
+
+to add the `community` Helm chart repository. Then run:
+
+```bash
 $ helm install --name my-release --set sysdig.accessKey=YOUR-KEY-HERE community/sysdig
 ```
 
@@ -59,6 +65,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `resources.limits.cpu`            | CPU limit                                                                           | `2000m`                                     |
 | `resources.limits.memory`         | Memory limit                                                                        | `1536Mi`                                    |
 | `rbac.create`                     | If true, create & use RBAC resources                                                | `true`                                      |
+| `scc.create`                      | Create OpenShift's Security Context Constraint                                      | `true`                                     |
 | `serviceAccount.create`           | Create serviceAccount                                                               | `true`                                      |
 | `serviceAccount.name`             | Use this value as serviceAccountName                                                | ` `                                         |
 | `daemonset.updateStrategy.type`   | The updateStrategy for updating the daemonset                                       | `RollingUpdate`                             |
@@ -71,6 +78,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `slim.resources.limits.memory`    | Memory limit for building the kernel module                                         | `512Mi`                                     |
 | `ebpf.enabled`                    | Enable eBPF support for Sysdig instead of `sysdig-probe` kernel module              | `false`                                     |
 | `ebpf.settings.mountEtcVolume`    | Needed to detect which kernel version are running in Google COS                     | `true`                                      |
+| `clusterName`                     | Set a cluster name to identify events using *kubernetes.cluster.name* tag           | ` `                                         |
 | `sysdig.accessKey`                | Your Sysdig Monitor Access Key                                                      | `Nil` You must provide your own key         |
 | `sysdig.disableCaptures`          | Disable capture functionality (see https://docs.sysdig.com/en/disable-captures.html)| `false`                                     |
 | `sysdig.settings`                 | Settings for agent's configuration file                                             | ` `                                         |
@@ -81,7 +89,6 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `auditLog.dynamicBackend.enabled` | Deploy the Audit Sink where Sysdig listens for K8s audit log events                 | `false`                                     |
 | `customAppChecks`                 | The custom app checks deployed with your agent                                      | `{}`                                        |
 | `tolerations`                     | The tolerations for scheduling                                                      | `node-role.kubernetes.io/master:NoSchedule` |
-| `scc.create`                      | Create OpenShift's Security Context Constraint                                      | `false`                                     |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
