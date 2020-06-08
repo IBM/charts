@@ -1,0 +1,209 @@
+arch: amd64
+
+global:
+  image:
+    pullPolicy: IfNotPresent
+    # The repository is set to default to the local image registry using the ibmcom namespace for installation images
+    repository: "image-registry.openshift-image-registry.svc:5000/ibmcom"
+    pullSecret: ""
+  # NOTE: Switching between HA and non-HA requires a backup + restore of databases
+  databaseHA: true
+  sch:
+    enabled: false
+  # Changing this to true starts up all services, but the replicaCount for all non-DB pods are set to 0. Used for database restoration.
+  maintenanceMode: false
+
+# Specifies whether or not to use the custom Service Account and RBAC
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+
+common:
+  servicePort: 80
+  httpPort: 8080
+  clusterUrl: icp-management-ingress.kube-system.svc:443
+  maxSurge: 1
+
+# Use local databases
+localDBs:
+  enabled: true
+# Remote database controls
+remoteDBs:
+  enableAgbotTLS: true
+  enableCssTLS: true
+  enableExchangeTLS: true
+
+# Services
+agbot:
+  replicaCount: 2
+  maxUnavailable: 0
+  image: amd64_agbot
+  tag: 4.1.0
+  loglevel: 3
+  dbPool: 45
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 10m
+    limits:
+      memory: 2Gi
+      cpu: 2
+agbotdb:
+  name: agbotdb
+  nameOverride: agbotdb
+  keeper:
+    replicas: 3
+    resources:
+      limits:
+        memory: 2Gi
+        cpu: 2
+  sentinel:
+    replicas: 3
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 1
+  proxy:
+    replicas: 3
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 1
+  persistence:
+    enabled: true
+    storageClassName: null
+    size: 20Gi
+  auth:
+    pgSuperuserName: admin
+  dataPVC: 
+    name: agbot-db-claim
+  serviceAccount:
+    create: true
+exchange:
+  # dbPool must also be adjusted if replicaCount is increased, to ensure (dbPool * replicaCount) is less than maxConnections for the exchangedb
+  replicaCount: 3
+  maxUnavailable: 1
+  image: amd64_exchange-api
+  tag: 4.1.0
+  jvmOpts: "-Xmx1G"
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 10m
+    limits:
+      memory: 2Gi
+      cpu: 2
+  # Autoscaling is not recommended with this release. Consideration must be made between exchange replicas in relation
+  # to the exchange.dbPool and the available max connections of the exchange database
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    cpu: 1750
+    memory: 300
+exchangedb:
+  name: exchangedb
+  nameOverride: exchangedb
+  keeper:
+    replicas: 3
+    resources:
+      limits:
+        memory: 2Gi
+        cpu: 2
+  sentinel:
+    replicas: 3
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 1
+  proxy:
+    replicas: 3
+    resources:
+      limits:
+        memory: 1Gi
+        cpu: 1
+  serviceAccount:
+    create: true
+  persistence:
+    enabled: true
+    storageClassName: null
+    size: 20Gi
+  auth:
+    pgSuperuserName: admin
+  maxConnections: 100
+  dataPVC:
+    name: exchange-db-claim
+css:
+  replicaCount: 3
+  maxUnavailable: 1
+  image: amd64_cloud-sync-service
+  tag: 4.1.0
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 10m
+    limits:
+      memory: 2Gi
+      cpu: 2
+cssdb:
+  nameOverride: cssdb
+  replicas: 3
+  resources:
+    limits:
+      cpu: 2
+      memory: 2Gi
+  persistentVolume:
+    enabled: true
+    storageClass: null
+    size: 50Gi
+  tls:
+    enabled: false
+  serviceAccount:
+      create: true
+  creds:
+    image: 
+      tag: "1.1.3"
+  configmap: >
+    {
+      "storage": {
+        "dbPath": "/data/db"
+      },
+      "net": {
+        "port": 27017,
+        "ssl": {
+          "mode": "disabled"
+        }
+      },
+      "replication": {
+        "replSetName": "rs0"
+      },
+      "security": {
+        "keyFile": "/data/configdb/key.txt"
+      }
+    }
+ui:
+  replicaCount: 3
+  maxUnavailable: 1
+  image: edge-ui-amd64
+  tag: 4.1.0
+  uiMenu:
+    enabled: false
+    name: "Edge Application Manager"
+    id: add-ons
+    roles: ClusterAdministrator,Administrator,Operator,Viewer
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 10m
+    limits:
+      memory: 2Gi
+      cpu: 2
+kubectl:
+  image: opencontent-icp-cert-gen-1
+  tag: 1.1.3
+
+## Enable custom grafana dashboard load on install
+dashboard:
+  enabled: true

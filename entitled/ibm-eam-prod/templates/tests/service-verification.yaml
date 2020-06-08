@@ -1,0 +1,110 @@
+{{ include "sch.config.init" (list . "ibm-edge.sch.chart.config.values") }}
+{{- $compName := .sch.chart.components.serviceVerification }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-{{ $compName }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 4 }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  serviceAccountName:  {{ include "ieam.serviceAccountName" . | quote }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  {{- if .Values.global.image.pullSecret }}
+  imagePullSecrets:
+    - name: {{ .Values.global.image.pullSecret }}
+  {{- end }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: "beta.kubernetes.io/arch"
+            operator: In
+            values:
+            - {{ .Values.arch }}
+  containers:
+  - name: {{ .Release.Name }}-{{ $compName }}
+    image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.agbot.image }}:{{ .Values.agbot.tag }}
+    imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+    resources:
+      requests:
+        memory: 100Mi
+        cpu: 100m
+      limits:
+        memory: 200Mi
+        cpu: 200m
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+    env:
+      - name: EXCHANGE_ROOT_PASS
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Release.Name }}-auth
+            key: exchange-root-pass
+      - name: AGBOT_EXCHANGE_ID
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Release.Name }}-auth
+            key: agbot-exchange-id
+      - name: AGBOT_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Release.Name }}-auth
+            key: agbot-token
+    command:
+    - "/bin/bash"
+    - -c
+    - |
+      echo "Running verification helm tests against IBM Edge Application Manager, for release '{{ .Release.Name }}'"
+       
+      # Define some variables based off supplied ones
+      export HZN_ORG_ID=IBM \
+      HZN_CSS_URL=http://{{ .Release.Name }}-css \
+      HZN_EXCHANGE_URL=http://{{ .Release.Name }}-exchange/v1 \
+      HZN_EXCHANGE_USER_AUTH="root/root:$EXCHANGE_ROOT_PASS"
+      AGBOT_ID=$(echo $AGBOT_EXCHANGE_ID | awk -F "$HZN_ORG_ID/" '{print $2}')
+      HZN_AGBOT_AUTH="$HZN_ORG_ID/$AGBOT_ID:$AGBOT_TOKEN"
+
+      # Some final automated/manual checks
+      FAIL_FLAG=0
+      echo -e "\n==Running final verification of service availability=="
+      if [[ $(curl -sSf -u "$HZN_EXCHANGE_USER_AUTH" $HZN_EXCHANGE_URL/admin/status | jq -r .msg) == "Exchange server operating normally" ]]; then
+        echo "SUCCESS: IBM Edge Application Manager Exchange API is operational"
+      else
+        echo "FAILURE: IBM Edge Application Manager Exchange API is not operational"
+        FAIL_FLAG=1
+      fi
+      if [[ $(curl -sSf -u "$HZN_EXCHANGE_USER_AUTH" $HZN_CSS_URL/api/v1/health | jq -r .general.healthStatus) == "green" ]]; then
+        echo "SUCCESS: IBM Edge Application Manager Cloud Sync Service is operational"
+      else
+        echo "FAILURE: IBM Edge Application Manager Cloud Sync Service is not operational"
+        FAIL_FLAG=1
+      fi
+      if curl -sSf -u "$HZN_AGBOT_AUTH" $HZN_EXCHANGE_URL/orgs/$HZN_ORG_ID/agbots/$AGBOT_ID > /dev/null; then
+        echo "SUCCESS: IBM Edge Application Manager Agbot authentication is configured correctly"
+      else
+        echo "FAILURE: IBM Edge Application Manager Agbot authentication is configured incorrectly, using '$HZN_ORG_ID/$AGBOT_ID'"
+        FAIL_FLAG=1
+      fi
+      echo "VERIFY: Please visit $(curl -k -s https://{{ .Values.common.clusterUrl }}/api/v1/config | jq -r .cluster_url)/edge for the IBM Edge Application Manager UI"
+
+      # Did we fail
+      if [ $FAIL_FLAG == 1 ]; then
+        exit 1
+      fi
+  restartPolicy: Never

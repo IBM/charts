@@ -1,0 +1,185 @@
+{{ include "sch.config.init" (list . "ibm-edge.sch.chart.config.values") }}
+{{- $compName :=  .sch.chart.components.exchange }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-{{ $compName }}
+  labels:
+{{  include "sch.metadata.labels.standard" (list . $compName ) | indent 4 }}
+spec:
+  progressDeadlineSeconds: 900
+  replicas: {{ if .Values.global.maintenanceMode }}0{{else}}{{ .Values.exchange.replicaCount }}{{ end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $compName }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.common.maxSurge }}
+      maxUnavailable: {{ .Values.exchange.maxUnavailable }}
+  minReadySeconds: 5
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | indent 8 }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" nil) | indent 8 }}
+        timestamp: '{{ date "20060102150405" .Release.Time }}'
+    spec:
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      serviceAccountName:  {{ include "ieam.serviceAccountName" . | quote }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+      {{- if .Values.global.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.image.pullSecret }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "beta.kubernetes.io/arch"
+                operator: In
+                values:
+                - {{ .Values.arch }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - {{ $compName }}
+      containers:
+      - name: {{ .Release.Name }}-{{ $compName }}
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.exchange.image }}:{{ .Values.exchange.tag }}
+        imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+        resources:
+{{ toYaml .Values.exchange.resources | indent 10 }}
+        ports:
+        - containerPort: {{ .Values.common.httpPort }}
+        env:
+          - name: ICP_EXTERNAL_MGMT_INGRESS
+            value: "{{ .Values.common.clusterUrl }}"
+          - name: JAVA_OPTS
+            value: "{{ .Values.exchange.jvmOpts }}"
+          - name: EDGE_EXCHANGE_DB_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-auth
+                key: exchange-db-url
+          - name: EDGE_EXCHANGE_DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-auth
+                key: exchange-db-user
+          - name: EDGE_EXCHANGE_DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-{{ $compName }}db-auth-secret
+                key: pg_su_password
+          - name: EDGE_EXCHANGE_ROOT_PASS
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Release.Name }}-auth
+                key: exchange-root-pass
+        readinessProbe:
+          httpGet:
+            path: /v1/admin/version
+            port: {{ .Values.common.httpPort }}
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.common.httpPort }}
+          periodSeconds: 30
+          timeoutSeconds: 30
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: exchange-config
+          mountPath: /etc/horizon/exchange/exchange-api.tmpl
+          subPath: exchange-api.tmpl
+        - name: ca-cert
+          mountPath: /etc/horizon/exchange/icp
+       {{ if and .Values.remoteDBs.enableExchangeTLS (not .Values.localDBs.enabled) }}
+        - name: {{ .Release.Name }}-db-cert
+          mountPath: /home/jetty/.postgresql/root.crt
+          subPath: root.crt
+       {{ end }}
+      {{- if ( .Values.localDBs.enabled ) and eq .Values.localDBs.enabled true }}
+      initContainers:
+      - name: init-exchangedb-keeper
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.kubectl.image }}:{{ .Values.kubectl.tag }}
+        command: ['sh', '-c', 'until timeout 1 bash -c "cat < /dev/null > /dev/tcp/{{ .Release.Name }}-exchangedb-keeper-svc/5432"; do echo waiting for exchange database; sleep 10; done;'] 
+        resources: 
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+      - name: init-exchangedb-proxy
+        image: {{ if .Values.global.image.repository }}{{ trimSuffix "/" .Values.global.image.repository }}{{ end }}/{{ .Values.kubectl.image }}:{{ .Values.kubectl.tag }}
+        command: ['sh', '-c', 'until timeout 1 bash -c "cat < /dev/null > /dev/tcp/{{ .Release.Name }}-exchangedb-proxy-svc/5432"; do echo waiting for exchange database; sleep 10; done;'] 
+        resources: 
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+      {{- end }}  
+      volumes:
+      - name: exchange-config
+        configMap:
+          name: {{ .Release.Name }}-config
+          items:
+          - key: exchange-config
+            path: exchange-api.tmpl
+      - name: ca-cert
+        secret:
+          secretName: cluster-ca-cert
+          items:
+          - key: tls.crt
+            path: ca.crt
+      {{ if and .Values.remoteDBs.enableExchangeTLS (not .Values.localDBs.enabled) }}
+      - name: {{ .Release.Name }}-db-cert
+        secret:
+          secretName: {{ .Release.Name }}-remote-dbs
+          items:
+          - key: trusted-certs
+            path: root.crt
+      {{ end }}
+      restartPolicy: Always
