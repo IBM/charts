@@ -80,7 +80,7 @@ The following table lists the configurable parameters of the Sysdig chart and th
 | `ebpf.settings.mountEtcVolume`    | Needed to detect which kernel version are running in Google COS                     | `true`                                      |
 | `clusterName`                     | Set a cluster name to identify events using *kubernetes.cluster.name* tag           | ` `                                         |
 | `sysdig.accessKey`                | Your Sysdig Monitor Access Key                                                      | `Nil` You must provide your own key         |
-| `sysdig.disableCaptures`          | Disable capture functionality (see https://docs.sysdig.com/en/disable-captures.html)| `false`                                     |
+| `sysdig.disableCaptures`          | Disable capture functionality (see https://docs.sysdig.com/en/disable-captures.html)| `true`                                      |
 | `sysdig.settings`                 | Settings for agent's configuration file                                             | ` `                                         |
 | `secure.enabled`                  | Enable Sysdig Secure                                                                | `true`                                      |
 | `auditLog.enabled`                | Enable K8s audit log support for Sysdig Secure                                      | `false`                                     |
