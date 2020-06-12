@@ -1,0 +1,76 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "baas.fullname" . }}-spp-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: spp-agent
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "baas.name" . }}
+      app.kubernetes.io/version: {{ include "baas.appversion" . }}
+      app.kubernetes.io/component: spp-agent
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: "{{ .Values.clusterCIDR }}"
+  - from:
+    - ipBlock:
+        cidr: "{{ .Values.SPPips }}/32"
+    ports:
+    - protocol: TCP
+      port: {{ .Values.sppagent.service.port }}
+  egress:
+  - to:
+    - ipBlock:
+        cidr: "{{ .Values.clusterAPIServerips }}/32"
+    ports:
+    - protocol: TCP
+      port: {{ .Values.clusterAPIServerport }}
+  - to:
+    - ipBlock:
+        cidr: "{{ .Values.SPPips }}/32"
+    ports:
+    - protocol: TCP
+      port: {{ .Values.SPPport }}
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "baas.name" . }}
+          app.kubernetes.io/version: {{ include "baas.appversion" . }}
+          app.kubernetes.io/component: transaction-manager
+    ports:
+    - protocol: TCP
+      port: {{ .Values.tm.service.port }}
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "baas.name" . }}
+          app.kubernetes.io/version: {{ include "baas.appversion" . }}
+          app.kubernetes.io/component: scheduler
+    ports:
+    - protocol: TCP
+      port: {{ .Values.sdl.service.port }}
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "baas.name" . }}
+          app.kubernetes.io/version: {{ include "baas.appversion" . }}
+          app.kubernetes.io/component: kafka
+    ports:
+    - protocol: TCP
+      port: {{ .Values.kafka.service.serverPort }}

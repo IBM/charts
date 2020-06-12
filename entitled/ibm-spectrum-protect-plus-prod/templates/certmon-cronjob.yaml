@@ -1,0 +1,90 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ include "baas.fullname" . }}-cert-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: cert-monitor
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 1
+  schedule: "@daily"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ include "baas.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            app.kubernetes.io/version: {{ include "baas.appversion" . }}
+            app.kubernetes.io/component: cert-monitor
+            app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+            helm.sh/chart: {{ .Chart.Name }}
+        spec:
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                    - {{ .Values.arch }}
+          securityContext:
+            runAsUser: 1001
+            runAsGroup: 1001
+            runAsNonRoot: true
+            fsGroup: 1001
+          hostNetwork: false
+          hostPID: false
+          hostIPC: false
+          containers:
+          - name: {{ include "baas.fullname" . }}-cert-monitor
+            {{- if .Values.imageRegistryNamespace }}
+            image: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.certmon.image.name }}:{{ .Values.certmon.image.tag }}
+            {{- else }}
+            image: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.certmon.image.name }}:{{ .Values.certmon.image.tag }}
+            {{- end }}
+            imagePullPolicy: {{ .Values.certmon.image.pullPolicy }}
+            resources:
+              limits:
+                memory: "250Mi"
+                cpu: "1"
+              requests:
+                memory: "50Mi"
+                cpu: "250m"
+            securityContext:
+              privileged: false
+              readOnlyRootFilesystem: false
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+                  apiVersion: v1
+            - name: SECRET_LABEL_NAME
+              value: {{ include "baas.name" . }}
+            - name: SECRET_LABEL_INSTANCE
+              value: {{ .Release.Name }}
+            - name: SECRET_LABEL_VERSION
+              value: {{ include "baas.appversion" . }}
+            - name: SECRET_LABEL_COMPONENT
+              value: {{ include "baas.fullname" . }}-cert-monitor
+            - name: SECRET_LABEL_MANAGED_BY
+              value: {{ .Values.managedBy }}
+            - name: SECRET_LABEL_CHART
+              value: {{ .Chart.Name }}
+            - name: EXPIRE_DAYS
+              value: "90"
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "baas.fullname" . }}-cert-monitor
+
