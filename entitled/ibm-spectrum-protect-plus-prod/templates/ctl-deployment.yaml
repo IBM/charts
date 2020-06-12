@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "baas.fullname" . }}-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.ctl.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "baas.name" . }}
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+  template:
+    metadata:
+      annotations:
+        productID: {{ include "baas.productID" . }}
+        productName: {{ include "baas.productName" . }}
+        productVersion: {{ include "baas.productVersion" . }}
+      labels:
+        app.kubernetes.io/name: {{ include "baas.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/version: {{ include "baas.appversion" . }}
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+        helm.sh/chart: {{ .Chart.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+      containers:
+      - name: {{ include "baas.fullname" . }}-controller
+        {{- if .Values.imageRegistryNamespace }}
+        image: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.ctl.image.name }}:{{ .Values.ctl.image.tag }}
+        {{- else }}        
+        image: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.ctl.image.name }}:{{ .Values.ctl.image.tag }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.ctl.image.pullPolicy }}
+        resources:
+          limits:
+            memory: "250Mi"
+            cpu: "1"
+          requests:
+            memory: "50Mi"
+            cpu: "250m"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: configmap-volume
+          mountPath: "/etc/baas-config"
+          readOnly: true
+        {{- if .Values.ctl.readinessProbe.enabled}}
+        readinessProbe:
+          exec:
+            command:
+              - /bin/bash
+              - -c
+              - /usr/bin/testbaas
+          initialDelaySeconds: {{ .Values.ctl.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.ctl.readinessProbe.periodSeconds }}
+        {{- end }}
+        {{- if .Values.ctl.livenessProbe.enabled}}
+        livenessProbe:
+          exec:
+            command:
+              - /bin/bash
+              - -c
+              - /usr/bin/testbaas
+          initialDelaySeconds: {{ .Values.ctl.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.ctl.livenessProbe.periodSeconds }}
+        {{- end }}
+      volumes:
+      - name: configmap-volume
+        configMap:
+          name: {{ include "baas.fullname" . }}-configmap
+          defaultMode: 420                  
+      serviceAccountName: {{ include "baas.fullname" . }}-controller

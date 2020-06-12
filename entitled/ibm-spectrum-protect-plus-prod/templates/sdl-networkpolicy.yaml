@@ -1,0 +1,58 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "baas.fullname" . }}-scheduler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: scheduler
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "baas.name" . }}
+      app.kubernetes.io/version: {{ include "baas.appversion" . }}
+      app.kubernetes.io/component: scheduler
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "baas.name" . }}
+          app.kubernetes.io/version: {{ include "baas.appversion" . }}
+          app.kubernetes.io/component: transaction-manager
+    ports:
+    - protocol: TCP
+      port: 5000
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+  - to:
+    - ipBlock:
+        cidr: "{{ .Values.clusterAPIServerips }}/32"
+    ports:
+    - protocol: TCP
+      port: {{ .Values.clusterAPIServerport }}
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "baas.name" . }}
+          app.kubernetes.io/version: {{ include "baas.appversion" . }}
+          app.kubernetes.io/component: transaction-manager
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "baas.name" . }}
+          app.kubernetes.io/version: {{ include "baas.appversion" . }}
+          app.kubernetes.io/component: spp-agent
+    ports:
+    - protocol: TCP
+      port: 8000
+   

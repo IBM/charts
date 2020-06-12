@@ -1,0 +1,119 @@
+apiVersion:  apiextensions.k8s.io/v1beta1
+kind:  CustomResourceDefinition
+metadata:
+  name:  baasreqs.baas.io
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: baasreqs
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+  annotations:
+    displayName: BaasReq
+    description: The custom resource definition for container backup support requests (also known as baas requests).
+spec:
+  group:  baas.io
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served:  true
+    storage: true
+  scope:  Namespaced
+  names:
+    kind:  BaaSReq
+    listKind:  BaaSReqList
+    plural:  baasreqs
+    singular:  baasreq
+  validation:
+    openAPIV3Schema:
+      type: object
+      properties:
+        spec:
+          type: object
+          description: An object that represents a baas request.
+          required:
+          - spec
+          type: object
+          description: Specifications for a baas request.
+          required:
+          - requesttype
+          properties:
+            requesttype:
+              type: string
+              description: >
+                The type of baas request. The following types are supported and are case-insensitive:
+
+                Backup - Schedule a backup operation for a PVC.
+
+                Restore - Restore a PVC from a snapshot backup or a copy backup.
+
+                Destroy - Delete all snapshot and copy backups and mark the scheduled job as destroyed.
+
+                OnDemandBackup - Request an immediate snapshot backup of the PVC.
+
+                BackupNamespace - Schedule a backup operation for PVCs in the specified namespace.
+
+                BackupLabel - Schedule a backup operation for PVCs with the specified label.
+
+              pattern: ^(?i)(BACKUP|RESTORE|DESTROY|ONDEMANDBACKUP|BACKUPNAMESPACE|BACKUPLABEL)$
+
+            sla:
+              type: array
+              description:  >
+                The name of the service level agreement (SLA) policy that determines the schedule for backup operations.
+
+                Used for BACKUP and ONDEMANDBACKUP request types.
+
+                To show the available SLA policies, enter the following command
+
+                kubectl describe configmap baas-sla -n baas
+
+                If an SLA policy has not been created by the storage administrator, the output will be empty.
+
+            volumesnapshotclass:
+              type: string
+              description: >
+                The snapshot class for snapshot backups. If you do not specify the snapshot class, the default snapshot
+
+                class is used if the snapshotter in the default snapshot class matches the provisioner of the volume.
+
+                Otherwise, the backup request is invalid.
+
+
+            pvcname:
+              type: string
+              description: The name of the PVC. Used for the ONDEMANDBACKUP and RESTORE request types.
+
+            targetvolume:
+              type: string
+              description: >
+                The name of the PVC that you want to restore the volume to. Used for the Restore request type.
+
+                For fast restores, the volume is always restored to a new PVC. In this case, provide the name of the new PVC.
+
+                For copy restores, you can restore the volume to the original or new PVC. If you are restoring a copy backup to a new persistent
+
+                volume, the PVC for the new volume is automatically created when you restore the copy backup. Except for the original location,
+
+                the restore fails if you specify a PVC that already exists.
+
+            restorepoint:
+              type: string
+              description: >
+                The time stamp of the source snapshot or copy backup that you want to restore from. The time stamp is in
+
+                Coordinated Universal Time (UTC) format. If you do not specify a time stamp, the most recent snapshot or copy backup is restored.
+
+                Used for the RESTORE request type.
+
+            restoretype:
+              type: string
+              description: >
+                The type of restore operation to use. The following types are supported and are case-insensitive:
+
+                Fast - Restores a volume from a snapshot backup.
+
+                Copy - Restores a volume from a copy backup.
+
+              pattern: ^(?i)(FAST|COPY)$

@@ -1,0 +1,237 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "baas.fullname" . }}-transaction-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: transaction-manager
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.tm.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "baas.name" . }}
+      app.kubernetes.io/component: transaction-manager
+      app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+  template:
+    metadata:
+      annotations:
+        productID: {{ include "baas.productID" . }}
+        productName: {{ include "baas.productName" . }}
+        productVersion: {{ include "baas.productVersion" . }}
+      labels:
+        app.kubernetes.io/name: {{ include "baas.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/version: {{ include "baas.appversion" . }}
+        app.kubernetes.io/component: transaction-manager
+        app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+        helm.sh/chart: {{ .Chart.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+      containers:
+      - name: {{ include "baas.fullname" . }}-transaction-manager-redis
+        {{- if .Values.imageRegistryNamespace }}
+        image: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.tmredis.image.name }}:{{ .Values.tmredis.image.tag }}
+        {{- else }}        
+        image: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.tmredis.image.name }}:{{ .Values.tmredis.image.tag }}
+        {{- end }}
+        resources:
+          limits: 
+            cpu: "200m"
+            memory: "250Mi" 
+          requests:
+            cpu: "50m"
+            memory: "50Mi"
+        imagePullPolicy: {{ .Values.tmredis.image.pullPolicy }}
+        securityContext:
+          runAsUser: 1001
+          runAsGroup: 1001
+          runAsNonRoot: true
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        {{- if .Values.tmredis.readinessProbe.enabled}}
+        readinessProbe:
+          initialDelaySeconds: {{ .Values.tmredis.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.tmredis.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.tmredis.readinessProbe.failureThreshold }}
+          exec:
+            command:
+            - /opt/rh/rh-redis5/root/usr/bin/redis-cli
+            - ping
+        {{- end }}
+        {{- if .Values.tmredis.livenessProbe.enabled}}
+        livenessProbe:
+          initialDelaySeconds: {{ .Values.tmredis.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.tmredis.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.tmredis.livenessProbe.failureThreshold }}
+          exec:
+            command:
+            - /opt/rh/rh-redis5/root/usr/bin/redis-cli
+            - ping
+        {{- end }}
+      
+      - name: {{ include "baas.fullname" . }}-transaction-manager-worker
+        {{- if .Values.imageRegistryNamespace }}
+        image: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.tmw.image.name }}:{{ .Values.tmw.image.tag }}
+        {{- else }}        
+        image: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.tmw.image.name }}:{{ .Values.tmw.image.tag }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: "2"
+            memory: "500Mi"
+          requests:
+            cpu: "200m"
+            memory: "250Mi"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        imagePullPolicy: {{ .Values.tmw.image.pullPolicy }}
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+              apiVersion: v1
+        ports:
+        - containerPort: {{ .Values.tmw.image.port }}
+          name: {{ .Values.tmw.image.portName }}
+          protocol: TCP
+        volumeMounts:
+        - name: credentials
+          mountPath: "/etc/credentials"
+          readOnly: true
+        - name: baas
+          mountPath: "/etc/baas"
+          readOnly: true
+        {{- if .Values.tmw.readinessProbe.enabled}}
+        readinessProbe:
+          httpGet:
+            path: /
+            port: {{ .Values.tmw.image.port }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.tmw.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.tmw.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.tmw.readinessProbe.failureThreshold }}
+        {{- end }} 
+        {{- if .Values.tmw.livenessProbe.enabled}}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: {{ .Values.tmw.image.port }}
+            scheme: HTTPS
+          initialDelaySeconds: {{ .Values.tmw.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.tmw.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.tmw.livenessProbe.failureThreshold }}
+        {{- end }}
+
+      - name: {{ include "baas.fullname" . }}-transaction-manager
+        {{- if .Values.imageRegistryNamespace }}
+        image: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.tm.image.name }}:{{ .Values.tm.image.tag }}
+        {{- else }}        
+        image: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.tm.image.name }}:{{ .Values.tm.image.tag }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: "1"
+            memory: "500Mi"
+          requests:
+            cpu: "200m"
+            memory: "100Mi"
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+              apiVersion: v1
+        - name: TM_SERVICE_NAME
+          value: {{ include "baas.fullname" . }}-transaction-manager
+        - name: TM_SERVICE_PORT
+          value: "{{ .Values.tm.service.port }}"
+        imagePullPolicy: {{ .Values.tm.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.tm.image.port }}
+          name: {{ .Values.tm.image.portName }}
+          protocol: TCP
+        volumeMounts:
+        - name: credentials
+          mountPath: "/etc/credentials"
+          readOnly: true
+        - name: baas
+          mountPath: "/etc/baas"
+          readOnly: true
+        - name: tls-key-crt
+          mountPath: "/etc/tls-key-crt"
+          readOnly: true
+        {{- if .Values.tm.readinessProbe.enabled}}
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - /usr/bin/testtm
+          failureThreshold: {{ .Values.tm.readinessProbe.failureThreshold }}
+          initialDelaySeconds: {{ .Values.tm.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.tm.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.tm.readinessProbe.timeoutSeconds }}
+        {{- end }}
+        {{- if .Values.tm.livenessProbe.enabled}}
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - /usr/bin/testtm
+          failureThreshold: {{ .Values.tm.livenessProbe.failureThreshold }}
+          initialDelaySeconds: {{ .Values.tm.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.tm.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.tm.livenessProbe.timeoutSeconds }}
+        {{- end }}
+      volumes:
+      - name: credentials
+        secret:
+          secretName: {{ include "baas.fullname" . }}-secret
+          defaultMode: 256
+      - name: tls-key-crt
+        secret:
+          secretName: {{ include "baas.fullname" . }}-key-crt
+          defaultMode: 256
+      - name: baas
+        configMap:
+          name: {{ include "baas.fullname" . }}-configmap
+      serviceAccountName: {{ include "baas.fullname" . }}-transaction-manager
