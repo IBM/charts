@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "baas.fullname" . }}-ctl-networkpolicy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "baas.name" . }}
+      app.kubernetes.io/version: {{ include "baas.appversion" . }}
+      app.kubernetes.io/component: controller
+  policyTypes:
+  - Ingress
+  - Egress
+  # No ingress rules - deny all
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: {{ include "baas.name" . }}
+          app.kubernetes.io/version: {{ include "baas.appversion" . }}
+          app.kubernetes.io/component: transaction-manager
+    ports:
+    - protocol: TCP
+      port: 5000
+  # Kubernetes api
+  - to:
+    - ipBlock:
+        cidr: {{ .Values.clusterAPIServerips }}/32
+    ports:
+    - protocol: TCP
+      port: {{ .Values.clusterAPIServerport }}
+  # Kubernetes DNS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53

@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "baas.fullname" . }}-spp-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "baas.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ include "baas.appversion" . }}
+    app.kubernetes.io/component: spp-agent
+    app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+    helm.sh/chart: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.sppagent.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "baas.name" . }}
+      app.kubernetes.io/component: spp-agent
+      app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+  template:
+    metadata:
+      annotations:
+        productID: {{ include "baas.productID" . }}
+        productName: {{ include "baas.productName" . }}
+        productVersion: {{ include "baas.productVersion" . }}
+      labels:
+        app.kubernetes.io/name: {{ include "baas.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/version: {{ include "baas.appversion" . }}
+        app.kubernetes.io/component: spp-agent
+        app.kubernetes.io/managed-by: {{ .Values.managedBy }}
+        helm.sh/chart: {{ .Chart.Name }}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - {{ .Values.arch }}
+      securityContext:
+        fsGroup: 100
+        runAsNonRoot: true
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      containers:
+        - name: {{ include "baas.fullname" . }}-spp-agent
+          {{- if .Values.imageRegistryNamespace }}
+          image: {{ .Values.imageRegistry }}/{{ .Values.imageRegistryNamespace }}/{{ .Values.sppagent.image.name }}:{{ .Values.sppagent.image.tag }}
+          {{- else }}        
+          image: {{ .Values.imageRegistry }}/{{ .Release.Namespace }}/{{ .Values.sppagent.image.name }}:{{ .Values.sppagent.image.tag }}
+          {{- end }}
+          ports:
+          - containerPort: {{ .Values.sppagent.image.port }}
+            name: {{ .Values.sppagent.image.portName }}
+            protocol: TCP
+          {{- if .Values.sppagent.readinessProbe.enabled}}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.sppagent.service.port }}
+            initialDelaySeconds: {{ .Values.sppagent.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.sppagent.readinessProbe.periodSeconds }}
+          {{- end }}
+          {{- if .Values.sppagent.livenessProbe.enabled}}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.sppagent.service.port }}
+            initialDelaySeconds: {{ .Values.sppagent.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.sppagent.livenessProbe.periodSeconds }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.sppagent.image.pullPolicy }}
+          securityContext:
+            runAsUser: 1000
+            privileged: true
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            limits:
+              cpu: "3"
+              memory: 1000Mi
+            requests:
+              cpu: "2"
+              memory: 800Mi
+          volumeMounts:
+          - name: credentials
+            mountPath: "/etc/credentials"
+            readOnly: true
+          - name: baas
+            mountPath: "/etc/baas"
+            readOnly: true
+          - name: tls-crt
+            mountPath: "/etc/tls-crt"
+            readOnly: true
+          env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+                apiVersion: v1
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+                apiVersion: v1
+          - name: CLUSTER_NAME
+            value: {{ .Values.clusterName }}
+          - name: BAAS_CONFIG_MOUNTPOINT
+            value: "/etc/baas"
+      volumes:
+      - name: credentials
+        secret:
+          secretName: {{ include "baas.fullname" . }}-secret
+          defaultMode: 256
+      - name: baas
+        configMap:
+          name: {{ include "baas.fullname" . }}-configmap
+      - name: tls-crt
+        secret:
+          secretName: {{ include "baas.fullname" . }}-crt
+          defaultMode: 256
+      serviceAccountName: {{ include "baas.fullname" . }}-spp-agent
