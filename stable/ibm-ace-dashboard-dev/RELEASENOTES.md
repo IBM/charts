@@ -2,7 +2,7 @@
 
 None
 
-# What’s new in IBM App Connect Enterprise certified container Version 3.1.0
+# What’s new in IBM App Connect Enterprise certified container Version 3.1.3
 
 In this version of IBM App Connect Enterprise certified container, the following new features are available:
 
@@ -26,6 +26,8 @@ For more information go to [IBM App Connect Enterprise Knowledge Center](https:/
 
 | Chart | Date | Kubernetes Required | Image(s) Supported | Breaking Changes | Details |
 | ----- | ---- | ------------------- | ------------------ | ---------------- | ------- |
+| 3.1.3 | June 2020 | >=v1.14.0 | = ACE 11.0.0.9-r1 | none | Add support for OpenShift Container Platform 4.4, 11.0.0.9 FP Update |
+| 3.1.1 | Mar 2020 | >=v1.14.0 | = ACE 11.0.0.8-r1 | none | Fix image references |
 | 3.1.0 | Mar 2020 | >=v1.14.0 | = ACE 11.0.0.8-r1 | none | Update BAR files, New create server interface, Delete servers in dashboard |
 | 2.2.0 | Oct 2019 | >=v1.11.0 | = ACE 11.0.0.6 | none | No changes to the Dashboard |
 | 2.1.0 | Sept 2019 | >=v1.11.0 | = ACE 11.0.0.5.1 | Images specified with tag, `fsGroupGid` moved under security catagory | Support for running as an administrator (to allow Push To API Connect) |
