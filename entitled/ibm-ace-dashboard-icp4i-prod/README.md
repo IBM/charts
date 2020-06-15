@@ -164,10 +164,10 @@ The following table lists the configurable parameters of the `ibm-ace-dashboard-
 
 | Parameter                                 | Description                                     | Default                                                    |
 | ----------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
-| `image.contentServer`                     | Content server Docker image                     | `cp.icr.io/cp/icp4i/ace/ibm-ace-content-server-prod:11.0.0.8-r1`                   |
-| `image.controlUI`                         | Control UI Docker image                         | `cp.icr.io/cp/icp4i/ace/ibm-ace-dashboard-prod:11.0.0.8-r1`                       |
-| `image.configurator`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-acecc-configurator-prod:11.0.0.8-r1`                 |
-| `image.infra`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-acecc-infra-prod:11.0.0.8-r1`                 |
+| `image.contentServer`                     | Content server Docker image                     | `cp.icr.io/cp/icp4i/ace/ibm-ace-content-server-prod:11.0.0.9-r1`                   |
+| `image.controlUI`                         | Control UI Docker image                         | `cp.icr.io/cp/icp4i/ace/ibm-ace-dashboard-prod:11.0.0.9-r1`                       |
+| `image.configurator`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-acecc-configurator-prod:11.0.0.9-r1`                 |
+| `image.infra`                      | Configurator Docker image                       | `cp.icr.io/cp/icp4i/ace/ibm-acecc-infra-prod:11.0.0.9-r1`                 |
 | `image.pullPolicy`                        | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`                        | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                                    | Architecture scheduling preference for worker node (only amd64 supported) - readonly. | `amd64`               |
