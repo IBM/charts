@@ -30,7 +30,7 @@ sch:
     metering:
       productName: IBM App Connect Enterprise for Developers (Free)
       productID: IBMAppConnectEnterprise_f9e7010beec748fe98ff292138860707
-      productVersion: 11.0.0.8-r1
+      productVersion: 11.0.0.9-r1
     labelType: prefixed
 {{- end -}}
 
