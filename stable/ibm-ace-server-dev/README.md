@@ -246,12 +246,12 @@ The following table lists the configurable parameters of the `ibm-ace-server-dev
 | `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
 | `imageType`                      | Run an integration server a standalone server, an integration server with MQ client or an integration server with MQ server. Options `ace`, `acemqclient` or `acemqserver`. | `ace` |
 | `designerFlowsOperationMode`     | Choose whether to deploy sidecar containers into the pod for running flows authored in App Connect Designer. Options `disabled`, `all` (Enabled for cloud-managed and local connectors) or `local` (Enabled for local connectors only) | `disabled` |
-| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `ibmcom/ace:11.0.0.8-r1` |
-| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `ibmcom/ace-mqclient:11.0.0.8-r1`         |
-| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `ibmcom/ace-mq:11.0.0.8-r1`               |
-| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `ibmcom/acecc-configurator:11.0.0.8-r1` |
-| `image.designerflows`            | Image repository and tag for the App Connect Enterprise designer flows image.    | `ibmcom/ace-designer-flows:11.0.0.8-r1` |
-| `image.connectors`               | Image repository and tag for the App Connect Enterprise loopback connector image.    | `ibmcom/ace-lcp:11.0.0.8-r1` |
+| `image.aceonly`                  | Image repository and tag for the App Connect Enterprise Server only image.    | `ibmcom/ace:11.0.0.9-r1` |
+| `image.acemqclient`              | Image repository and tag for the App Connect Enterprise Server  & MQ Client image.    | `ibmcom/ace-mqclient:11.0.0.9-r1`         |
+| `image.acemq`                    | Image repository and tag for the App Connect Enterprise Server  & MQ Server image.  | `ibmcom/ace-mq:11.0.0.9-r1`               |
+| `image.configurator`             | Image repository and tag for the App Connect Enterprise configurator image.    | `ibmcom/acecc-configurator:11.0.0.9-r1` |
+| `image.designerflows`            | Image repository and tag for the App Connect Enterprise designer flows image.    | `ibmcom/ace-designer-flows:11.0.0.9-r1` |
+| `image.connectors`               | Image repository and tag for the App Connect Enterprise loopback connector image.    | `ibmcom/ace-lcp:11.0.0.9-r1` |
 | `image.pullPolicy`               | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`               | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                           | Architecture scheduling preference for worker node (only amd64 supported) - read only. | `amd64`              |
@@ -304,11 +304,11 @@ The following table lists the configurable parameters of the `ibm-ace-server-dev
 | `readinessProbe.initialDelaySeconds` | The initial delay before starting the readiness probe. |	`10` |
 | `odTracingConfig.enabled`                                        | Whether or not to enable the OD for this release      | `false`               |
 | `odTracingConfig.odAgentImageRepository`                         | Repository where the OD agent image is located        | `ibmcom/ace-od-agent`      |
-| `odTracingConfig.odAgentImageTag`                                | The tag for the Docker image for the OD agent         | `1.0.2`               |
+| `odTracingConfig.odAgentImageTag`                                | The tag for the Docker image for the OD agent         | `1.0.3`               |
 | `odTracingConfig.odAgentLivenessProbe.initialDelaySeconds`       | How long to wait before starting the probe            | `60`                  |
 | `odTracingConfig.odAgentReadinessProbe.initialDelaySeconds`      | How long to wait before the probe is ready            | `10`                  |
 | `odTracingConfig.odCollectorImageRepository`                     | Repository where the OD collector image is located    | `ibmcom/ace-od-collector`  |
-| `odTracingConfig.odCollectorImageTag`                            | The tag for the Docker image for the OD collector     | `1.0.2`               |
+| `odTracingConfig.odCollectorImageTag`                            | The tag for the Docker image for the OD collector     | `1.0.3`               |
 | `odTracingConfig.odCollectorLivenessProbe.initialDelaySeconds`   | How long to wait before starting the probe            | `60`                  |
 | `odTracingConfig.odCollectorReadinessProbe.initialDelaySeconds`  | How long to wait before the probe is ready            | `10`                  |
 | `odTracingConfig.odTracingNamespace`                             | Namespace where the Operation Dashboard was released  | `nil`                 |
