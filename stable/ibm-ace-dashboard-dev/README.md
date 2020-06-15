@@ -155,10 +155,10 @@ The following table lists the configurable parameters of the `ibm-ace-dashboard-
 
 | Parameter                                 | Description                                     | Default                                                    |
 | ----------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
-| `image.contentServer`                     | Content server Docker image                     | `ibmcom/ace-content-server:11.0.0.8-r1`                     |
-| `image.controlUI`                         | Control UI Docker image                     | `ibmcom/ace-dashboard:11.0.0.8-r1`                          |
-| `image.configurator`                      | Configurator Docker image                    | `ibmcom/acecc-configurator:11.0.0.8-r1`                   |
-| `image.infra`                      | Configurator Docker image                    | `ibmcom/acecc-infra:11.0.0.8-r1`                   |
+| `image.contentServer`                     | Content server Docker image                     | `ibmcom/ace-content-server:11.0.0.9-r1`                     |
+| `image.controlUI`                         | Control UI Docker image                     | `ibmcom/ace-dashboard:11.0.0.9-r1`                          |
+| `image.configurator`                      | Configurator Docker image                    | `ibmcom/acecc-configurator:11.0.0.9-r1`                   |
+| `image.infra`                      | Configurator Docker image                    | `ibmcom/acecc-infra:11.0.0.9-r1`                   |
 | `image.pullPolicy`                        | Image pull policy.                               | `IfNotPresent`                                             |
 | `image.pullSecret`                        | Image pull secret, if you are using a private Docker registry. | `nil`                                        |
 | `arch`                                    | Architecture scheduling preference for worker node (only amd64 supported) - readonly. | `amd64`               |
