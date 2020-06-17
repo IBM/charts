@@ -4,27 +4,25 @@ kind: Deployment
 metadata:
   name: {{ template "security-auth.fullname" . }}-nodejs
   labels:
-    app: {{ template "security-auth.name" . }}-nodejs
-    chart: {{ template "security-auth.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "security-auth.name" .) "nodejs") (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   selector:
     matchLabels:
-      app: {{ template "security-auth.name" . }}-nodejs
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "security-auth.name" .) "nodejs" ) .Release.Name ) | indent 6 }}
   replicas: {{ .Values.replicas }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "security-auth.name" . }}-nodejs
-        release: {{ .Release.Name }}
-        chart: {{ template "security-auth.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "security-auth.name" .) "nodejs") (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "auth" "platform") | indent 8 }}
     spec:
-      serviceAccountName: {{ .Release.Name }}-common
+{{- if eq .Values.global.IDENTITY_SERVER_TYPE "cp4d" }}
+      serviceAccountName: {{ .Values.securityAuthConfig.CP_ADMIN_SA }}
+{{- else }}
+      serviceAccountName: fci-common
+{{- end }}
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
       securityContext:
@@ -32,6 +30,11 @@ spec:
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
       volumes:
+{{- if eq .Values.global.IDENTITY_SERVER_TYPE "cp4d" }}
+        - name: user-home-mount
+          persistentVolumeClaim:
+            claimName: "user-home-pvc"
+{{- end }}
         - name: file-secrets
           secret:
             secretName: {{ .Release.Name }}-platform-secret-files
@@ -43,27 +46,23 @@ spec:
         securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
         env:
-        - name: JWT_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: JWT_KEY
+{{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 8 }}
 {{- if ne .Values.global.IDENTITY_SERVER_TYPE "none" }}
         - name: LDAP_SERVER_BINDCREDENTIALS
           valueFrom:
             secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
+              name: {{ .Values.global.externalSecretName }}
               key: LDAP_SERVER_BINDCREDENTIALS
 {{- end }}
         - name: APPID_API_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
+              name: {{ .Values.global.externalSecretName }}
               key: APPID_API_KEY
         - name: APPID_SECRET
           valueFrom:
             secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
+              name: {{ .Values.global.externalSecretName }}
               key: APPID_SECRET
 
         {{- range $key, $value := .Values.securityAuthConfig }}
@@ -71,7 +70,7 @@ spec:
         - name: {{ $key | replace "_ID_" "_PASSWORD_" }}
           valueFrom:
             secretKeyRef:
-              name: {{ $releaseName }}-platform-secrets-env
+              name: {{ $releaseName }}-auth-secrets-env
               key: {{ $key | replace "_ID_" "_PASSWORD_" }}
         {{- end }}
         {{- end }}
@@ -85,10 +84,16 @@ spec:
         - name: file-secrets
           mountPath: /opt/ibm/fci/security-auth/certs/ldap.crt
           subPath: fci_universal_ks.crt.pem
+{{- if eq .Values.global.IDENTITY_SERVER_TYPE "cp4d" }}
+        - mountPath: /user-home
+          name: user-home-mount
+{{- end }}
         imagePullPolicy: {{ .Values.nodejs.image.pullPolicy }}
-{{ include "common.readinessProbe" . | indent 8 }}
-{{ include "common.livenessProbe" . | indent 8 }}
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.nodejs.image.repository }}:{{ .Values.nodejs.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.nodejs.image.repository }}:{{ .Values.nodejs.image.tag }}
+        livenessProbe:
+{{ toYaml .Values.nodejs.livenessProbe | indent 10 }}
+        readinessProbe:
+{{ toYaml .Values.nodejs.readinessProbe | indent 10 }}
         resources:
 {{ toYaml .Values.nodejs.resources | indent 10 }}
         ports:

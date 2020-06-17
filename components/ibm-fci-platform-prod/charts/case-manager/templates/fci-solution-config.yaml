@@ -3,27 +3,18 @@ kind: ConfigMap
 metadata:
   name: {{ template "case.fullname" . }}
   labels:
-    app: {{ template "case.name" . }}-fci-solution
-    chart: {{ template "case.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "case.name" .) "fci-solution") (include "case.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 {{- with .Values.libertyConfig }}
 data:
 {{    toYaml . | indent 2 }}
 {{- end }}
   SECURITY_AUTH_REST_URL: "https://{{ .Release.Name }}-security-auth-nodejs:3000"
   SEARCH_REST_URL: "https://{{ .Release.Name }}-search-liberty:9443"
+  FCI_API_GATEWAY: "https://{{ .Release.Name }}-common-ui-nginx:3000"
   com_fci_mq_server: {{ template "case.fullname" . }}-fci-messaging
   com_fci_db2_server: {{ .Release.Name }}-{{ .Values.libertyConfig.db2_service }}
   com_isii_db2_server: {{ .Release.Name }}-{{ .Values.libertyConfig.db2_service }}
   BOOTSTRAP_SERVERS_CONFIG: {{ .Release.Name }}-kafka:9092
-{{ if .Values.global.webProxyServer }}
-  com_fci_solution_server_rest_url: "https://{{ .Values.global.webProxyServer }}"
-  com_fci_analytic_server_rest_url: "https://{{ .Values.global.webProxyServer }}"
-{{ else  }}
-  com_fci_solution_server_rest_url: "https://{{ .Values.global.managerFQDN }}"
-  com_fci_analytic_server_rest_url: "https://{{ .Values.global.managerFQDN }}"
-{{ end }}
 {{- with .Values.global.hbase }}
 {{    toYaml . | indent 2 }}
 {{- end }}

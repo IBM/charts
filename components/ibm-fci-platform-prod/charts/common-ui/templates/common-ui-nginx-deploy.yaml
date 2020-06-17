@@ -3,24 +3,18 @@ kind: Deployment
 metadata:
   name: {{ template "common-ui.fullname" . }}-nginx
   labels:
-    app: {{ template "common-ui.name" . }}-nginx
-    chart: {{ template "common-ui.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common-ui.name" .) "nginx" ) (include "common-ui.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   selector:
     matchLabels:
-      app: {{ template "common-ui.name" . }}-nginx
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common-ui.name" .) "nginx") .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "common-ui.name" . }}-nginx
-        release: {{ .Release.Name }}
-        chart: {{ template "common-ui.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common-ui.name" .) "nginx" ) (include "common-ui.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "elastic") | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -28,7 +22,7 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{ template "common-ui.core-release-name" . }}-common-scripts
+      serviceAccountName: fci-kube-api-chown
       volumes:
         - name: iui-nginx-data
           persistentVolumeClaim:
@@ -50,30 +44,22 @@ spec:
             secretName: {{ template "common-ui.core-release-name" . }}-platform-secret-files
       initContainers:
         - name: init-svc-depend
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           command: [ "/common-scripts/init-container-svc-depend.sh" ]
           securityContext:
-{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+{{ include "common.AnyuidContainerSecurityContext" . | indent 12 }}
           args: [ "{{ .Release.Namespace }}/{{ template "common-ui.fullname" . }}-nodejs" ]
-        {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
+        {{- if .Values.global.pvRequiresPermissionsFix }}
         - name: pv-permissions
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           securityContext:
-            runAsNonRoot: false
-            privileged: false
-            readOnlyRootFilesystem:  true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - ALL
-              add:
-              - CHOWN
+{{ include "common.RootChownerContainerSecurityContext" . | indent 12 }}
           args:
-          - chown -R 100 /mount;
+          - chown -R 1000 /mount;
           command:
           - /bin/sh
           - -c
@@ -83,7 +69,7 @@ spec:
         {{- end }}
       containers:
       - name: nginx
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag }}
         imagePullPolicy: {{ .Values.nginx.image.pullPolicy }}
 {{ include "common.readinessProbe" . | indent 8 }}
 {{ include "common.livenessProbe" . | indent 8 }}
@@ -104,11 +90,7 @@ spec:
 {{ toYaml . | indent 10 }}
 {{- end }}
         env:
-        - name: SI_ELASTIC_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "common-ui.core-release-name" . }}-platform-secrets-env
-              key: ELASTIC_ADMIN_PASSWORD
+{{- include "common.import-secret" (list . "SI_ELASTIC_PASSWORD" "elastic" "ELASTIC_ADMIN_PASSWORD") | indent 8 }}
         ports:
         - containerPort: 3000
         envFrom:

@@ -8,9 +8,13 @@ This chart deploys IBM Financial Crimes Insight for Conduct Surveillance Softwar
 ## Chart Details
 This Helm chart will install the following:
 
-- A Conduct surveillance component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) 
+- A Conduct surveillance component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- A Conduct surveillance designstudio component as [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 - A Logstash instance as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)  
 - A Filebeat instance as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- A Conduct surveillance EComm component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- A Conduct surveillance Voice component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- A Conduct surveillance Complaints component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 
 ## Prerequisites
 To install using the command line, ensure you have the following:

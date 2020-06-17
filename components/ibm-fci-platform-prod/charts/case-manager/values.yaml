@@ -4,7 +4,7 @@
 
 global:
   imagePullSecrets:
-  dockerRepository: ""
+  dockerRegistryPrefix: ""
   createPv: true
   persistence:
     storageClassName: ''
@@ -14,6 +14,7 @@ global:
     mqm: __FCI_GENERATED_PW__
     env_fci_batch_password: __FCI_GENERATED_PW__
     fciadmin_password: __FCI_GENERATED_PW__
+  runAsUser: 1000
 
 enabled: True
 
@@ -34,6 +35,7 @@ arch: amd64
 mq:
   #Load Balancer Node Ports - Ports to expose in loadbalancer for CP4D installs
   mqNodePort: 30683
+  mqSeriesNodePort: 30997
   image:
     repository: ibmcom/fci-messaging
     tag: 1.0.3.1
@@ -41,13 +43,10 @@ mq:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: ".1"
-    limits:
-      memory: "512Mi"
-      cpu: "2"
+  securityContext:  
+    fsGroup: 1502
+    supplementalGroups:
+    - 0
 
 liberty:
   image:
@@ -57,29 +56,62 @@ liberty:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  #Liberty Container
+  readinessProbe:
+    initialDelaySeconds: 60
+    httpGet:
+      path: /console/api/docs/
+      port: 9080
+  livenessProbe:
+    initialDelaySeconds: 300
+    httpGet:
+      path: /console/api/docs/
+      port: 9080
+
+kerberosClient:
   resources:
-    requests:
-      memory: "256Mi"
-      cpu: ".1"
     limits:
-      memory: "6Gi"
-      cpu: "4"
+      cpu: "100m"
+      memory: "128Mi"
+    requests:
+      cpu: "20m"
+      memory: "64Mi"
+  livenessProbe:
+    exec:
+      command:
+        - sh
+        - '-c'
+        - pgrep krblogin.sh
+    failureThreshold: 3
+    initialDelaySeconds: 300
+    periodSeconds: 60
+    successThreshold: 1
+    timeoutSeconds: 10
+  readinessProbe:
+    exec:
+      command:
+        - sh
+        - '-c'
+        - pgrep krblogin.sh
+    failureThreshold: 3
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    successThreshold: 1
+    timeoutSeconds: 10
 
 solutionPvNfsPath: /fci-solution
 
 solutionPvcSpec:
   accessModes:
   - ReadWriteMany
-  storageClassName: nfs-storage-class
+  storageClassName: null
   size: 1Gi
 
 mqPvNfsPath: /fci-messaging
 
 mqPvcSpec:
   accessModes:
-  - ReadWriteMany
-  storageClassName: nfs-storage-class
+  - ReadWriteOnce
+  storageClassName: null
   size: 1Gi
 
 mqConfig:

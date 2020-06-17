@@ -8,7 +8,7 @@ This chart deploys Financial Crimes Insight for Claims Fraud Software. For more 
 ## Chart Details
 This Helm chart will install the following:
 
-- Liberty Server of the Claims Fraud Software as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) 
+- Liberty Server of the Claims Fraud Software as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 
 ## Prerequisites
 To install using the command line, ensure you have the following:
@@ -77,7 +77,7 @@ For information about the resource requirements of the IBM Financial Crimes Insi
 
 ## Installing the Chart
 
-These are the steps to install IBM Financial Crimes Insight for Claims Fraud Software in your environment: 
+These are the steps to install IBM Financial Crimes Insight for Claims Fraud Software in your environment:
 
 - Install IBM Financial Crime Insight
 - Install IBM Financial Crimes Insight for Claims Fraud Software

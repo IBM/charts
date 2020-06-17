@@ -4,15 +4,11 @@ kind: StatefulSet
 metadata:
   name: {{ include "kafka.fullname" . }}
   labels:
-    app: {{ include "kafka.name" . }}
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "kafka.name" .) (include "kafka.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   selector:
     matchLabels:
-      app: {{ include "kafka.name" . }}
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list .  (include "kafka.name" .) .Release.Name ) | indent 6 }}
   serviceName: {{ include "kafka.fullname" . }}-headless
   podManagementPolicy: {{ .Values.podManagementPolicy }}
 {{ if .Values.enabled }}
@@ -40,18 +36,14 @@ spec:
 {{- if not .Values.global.persistence.useDynamicProvisioning }}
       selector:
         matchLabels:
-          app: {{ template "kafka.name" . }}
-          release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list .  (include "kafka.name" .) .Release.Name ) | indent 10 }}
 {{ end }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ include "kafka.name" . }}
-        release: {{ .Release.Name }}
-        chart: {{ template "kafka.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "kafka.name" .) (include "kafka.chart" .) .Release.Name .Release.Service ) | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -70,35 +62,25 @@ spec:
       nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
 {{- end }}
-      serviceAccount: {{ include "kafka.fullname" . }}
-      serviceAccountName: {{ include "kafka.fullname" . }}
+      serviceAccount: fci-kafka
+      serviceAccountName: fci-kafka
       initContainers:
-        {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
         - name: permissionsfix
           securityContext:
-            runAsNonRoot: false
-            privileged: false
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - ALL
-              add:
-              - CHOWN 
+{{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
           args:
-          - chown -R 1000:1000 /mount;
+          - chmod -R g+w /mount;
           command:
           - /bin/sh
           - -c
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           volumeMounts:
           - mountPath: /mount
             name: {{ .Release.Name }}-data
-        {{- end }}
         - name: init-svc-depend
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           command: [ "/common-scripts/init-container-svc-depend.sh" ]
@@ -109,7 +91,7 @@ spec:
               - ALL
           args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-kafka-zk" ]
         - name: nodeport-data
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           env:
           - name: POD_NAME
             valueFrom:
@@ -135,7 +117,7 @@ spec:
               ($KUBECTL patch svc ${POD_NAME}-external --patch '{"spec": {"ports": [{"port": 19092,"targetPort": '${NODE_PORT}'}]}}' || exit 0)
       containers:
       - name: {{ include "kafka.name" . }}-broker
-        image: "{{ .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: "{{ .Values.image.pullPolicy }}"
         livenessProbe:
           exec:
@@ -171,21 +153,19 @@ spec:
             fieldRef:
               fieldPath: status.hostIP
         - name: MASTER_HOST
-          value: {{ .Values.global.managerFQDN }}
-        - name: ULIMIT_NOFILES
-          value: {{ .Values.ulimitNofiles | quote }}
+          value: {{ .Values.global.tcpIngressSubdomain }}
         - name: KAFKA_HEAP_OPTS
           value: {{ .Values.kafkaHeapOptions }}
         - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
-          value: {{ .Values.replicas | quote }} 
+          value: {{ .Values.replicas | quote }}
         - name: KAFKA_DEFAULT_REPLICATION_FACTOR
           value: {{ .Values.replicas | quote }}
         - name: KAFKA_MESSAGE_MAX_BYTES
           value: {{ int .Values.messageMaxBytes | quote}}
         - name: KAFKA_REPLICA_FETCH_MAX_BYTES
-          value: {{ int .Values.messageMaxBytes | quote }} 
+          value: {{ int .Values.messageMaxBytes | quote }}
         - name: KAFKA_ZOOKEEPER_CONNECT
-          value: {{ include "kafka.zookeeper.connect" . }} 
+          value: {{ include "kafka.zookeeper.connect" . }}
         - name: KAFKA_LOG4J_LOGGERS
           value: "kafka.controller=WARN,state.change.logger=WARN,kafka.log.LogCleaner=WARN,kafka=WARN"
         - name: CONNECT_LOG4J_ROOT_LOGLEVEL
@@ -196,8 +176,6 @@ spec:
           value: WARN
         - name: KAFKA_LOG_DIRS
           value: {{ printf "%s/%s" .Values.persistence.mountPath .Values.logSubPath | quote }}
-        - name: KAFKA_SSL_CLIENT_AUTH
-          value: required
         - name: KAFKA_SSL_KEYSTORE_FILENAME
           value: kafka.client.keystore.jks
         - name: KAFKA_SSL_TRUSTSTORE_FILENAME
@@ -224,16 +202,13 @@ spec:
           export NODE_PORT=$(cat /data/nodeport) && \
           export KAFKA_BROKER_ID=${HOSTNAME##*-} && \
           export KAFKA_ADVERTISED_LISTENERS=SSL://${POD_IP}:9092{{ if kindIs "string" $advertisedListenersOverride }}{{ printf ",%s" $advertisedListenersOverride }}{{ end }} && \
-          ulimit -n "${ULIMIT_NOFILES}" && \
           ulimit -a && \
           exec /etc/confluent/docker/run
         securityContext:
-{{ include "common.PrivilegedContainerSecurityContext" . | indent 10 }}
+{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
           capabilities:
             drop:
             - ALL
-            add: ["SYS_RESOURCE"]
-          runAsUser: 0
         volumeMounts:
         - name: {{ .Release.Name }}-data
           mountPath: {{ .Values.persistence.mountPath | quote }}

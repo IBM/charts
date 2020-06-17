@@ -2,16 +2,12 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   labels:
-    app: {{ template "mongodb.name" . }}
-    chart: {{ template "mongodb.chart" . }}
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
+{{- include "common.label.metadata" (list . (include "mongodb.name" .) (include "mongodb.chart" .) .Release.Name .Release.Service ) | indent 4 }}
   name: {{ template "mongodb.fullname" . }}-secondary
 spec:
   selector:
     matchLabels:
-      app: {{ template "mongodb.name" . }}
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (include "mongodb.name" .) .Release.Name ) | indent 6 }}
       component: secondary
   podManagementPolicy: "Parallel"
   serviceName: {{ template "mongodb.fullname" . }}-headless
@@ -19,23 +15,21 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ template "mongodb.name" . }}
-        chart: {{ template "mongodb.chart" . }}
-        release: {{ .Release.Name }}
+{{- include "common.label.metadata" (list . (include "mongodb.name" .) (include "mongodb.chart" .) .Release.Name .Release.Service ) | indent 8 }}
         component: secondary
-        heritage: {{ .Release.Service }}
+{{- include "common.using-secrets" (list "mongo") | indent 8 }}
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       {{- if .Values.podAnnotations }}
 {{ toYaml .Values.podAnnotations | indent 8 }}
       {{- end }}
     spec:
-      serviceAccountName: {{ .Release.Name }}-common
+      serviceAccountName: fci-mongodb
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      {{- if and (.Values.securityContext.enabled) (not (or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS)) }}
+      {{- if .Values.securityContext.enabled }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
         runAsUser: {{ .Values.securityContext.runAsUser }}
@@ -49,14 +43,12 @@ spec:
       {{- end }}
       containers:
         - name: {{ template "mongodb.name" . }}-secondary
-          image: "{{ .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
-          {{- if .Values.global.deployOnCP4D }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-          {{- end }}
           ports:
           - containerPort: {{ .Values.service.port }}
             name: mongodb
@@ -73,16 +65,8 @@ spec:
             value: {{ .Values.replicaSet.name | quote }}
           - name: MONGODB_ADVERTISED_HOSTNAME
             value: "$(MONGODB_POD_NAME).{{ template "mongodb.fullname" . }}-headless.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-          - name: MONGODB_PRIMARY_ROOT_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-root-password
-          - name: MONGODB_REPLICA_SET_KEY
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-replica-set-key
+{{- include "common.import-secret" (list . "MONGODB_PRIMARY_ROOT_PASSWORD" "mongo" "mongodb-root-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_REPLICA_SET_KEY" "mongo" "mongodb-replica-set-key") | indent 10 }}
           - name: MONGODB_ENABLE_IPV6
           {{- if .Values.mongodbEnableIPv6 }}
             value: "yes"
@@ -151,6 +135,5 @@ spec:
 {{- if not .Values.global.persistence.useDynamicProvisioning }}
         selector:
           matchLabels:
-            app: {{ template "mongodb.name" . }}-secondary
-            release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "mongodb.name" .) "secondary") .Release.Name ) | indent 10 }}
 {{- end -}}

@@ -7,10 +7,15 @@ do
 done  
 
 MONGODB_TLS_DEFAULT_DB="${MONGODB_TLS_DB}_${MONGODB_TLS_USER}_${MONGODB_TLS_DEFAULT_DBNAME}"
+MONGODB_PRIMARY_ROOT_USER=root
 
 echo "Creating IUI database"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_IUI_USER}', pwd: '${MONGODB_IUI_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_IUI_DB}' }]})"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_IUI_USER}', { pwd: '${MONGODB_IUI_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_IUI_DB}' }]})"
+
+echo "Creating IUI Narratives database"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_NARRATIVES_USER}', pwd: '${MONGODB_NARRATIVES_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_NARRATIVES_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_NARRATIVES_USER}', { pwd: '${MONGODB_NARRATIVES_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_NARRATIVES_DB}' }]})"
 
 echo "Creating FCDD database"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_FCDD_USER}', pwd: '${MONGODB_FCDD_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_FCDD_DB}' }]})"
@@ -23,6 +28,10 @@ mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates
 echo "Creating DSF database"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_DSF_USER}', pwd: '${MONGODB_DSF_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_DSF_DB}' }]})"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_DSF_USER}', { pwd: '${MONGODB_DSF_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_DSF_DB}' }]})"
+
+echo "Creating ERaaS EES database"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_EES_USER}', pwd: '${MONGODB_ERAAS_EES_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_EES_DB}' }]})"
+mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.updateUser('${MONGODB_ERAAS_EES_USER}', { pwd: '${MONGODB_ERAAS_EES_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_EES_DB}' }]})"
 
 echo "Creating ERaaS Investigation database"
 mongo admin --host ${MONGODB_HOSTNAME}:27017 --ssl --sslAllowInvalidCertificates -u ${MONGODB_PRIMARY_ROOT_USER} -p ${MONGODB_ROOT_PASSWORD} --eval "db.createUser( { user: '${MONGODB_ERAAS_INVESTIGATION_USER}', pwd: '${MONGODB_ERAAS_INVESTIGATION_PASSWORD}', roles: [ { role: 'readWrite', db: '${MONGODB_ERAAS_INVESTIGATION_DB}' }]})"

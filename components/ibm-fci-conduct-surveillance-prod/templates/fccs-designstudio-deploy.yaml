@@ -1,0 +1,199 @@
+{{- $coreReleaseName := include "ibm-fci-conduct-surveillance.core-release-name" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-rms-designstudio
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "rms-designstudio" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "rms-designstudio" ) .Release.Name ) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "rms-designstudio" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      serviceAccountName: fci-common-scripts
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secret-files
+        - name: db2-instance
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-db2-scripts-{{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-{{ .Values.rmsdbConfig.db2_service }}
+        - name: rms-designstudio-modules
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-rms-designstudio-modules
+        - name: rms-designstudio-hdfs
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-rms-designstudio-hdfs
+        - name: rms-designstudio-liberty-volume
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-rms-designstudio-liberty
+        - name: logs
+          emptyDir: {}
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.initContainerResource.resources | indent 12 }}
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          args: [ "{{ .Release.Namespace }}/{{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-{{ .Values.rmsdbConfig.db2_service }}" ]
+        - name: rms-data-store-client
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.rmsdb2Client.image.repository }}:{{ .Values.rmsdb2Client.image.tag }}"
+          resources:
+{{ toYaml .Values.rmsdb2Client.resources | indent 12 }}
+          imagePullPolicy: {{ .Values.rmsdb2Client.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          command: ["/bin/sh","-c"]
+          args: ["mkdir -p /db2Instance/fcrms; cp -r /flyway/mountable/fcrms/* /db2Instance/fcrms/; ls -latr /db2Instance/fcrms/rmsmaster; /flyway/flyway migrate"]
+          envFrom:
+          - configMapRef:
+              name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-rms-db
+          env:
+          - name: FLYWAY_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-db2-secrets-env
+                key: DB2INST1_PASSWORD
+          - name: SSL_KEYSTORE_PASSWORD_CONFIG
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: FLYWAY_URL
+            value: "{{ printf "jdbc:db2://%s-%s:56000/fcidb:sslConnection=true;sslTrustStoreLocation=/fci_universal_ks.jks;sslTrustStorePassword=$(SSL_KEYSTORE_PASSWORD_CONFIG);" $coreReleaseName .Values.rmsdbConfig.db2_service }}"
+          volumeMounts:
+            - name: file-secrets
+              mountPath: /fci_universal_ks.jks
+              subPath: fci_universal_ks.jks
+            - name: db2-instance
+              mountPath: /db2Instance
+      containers:
+        - name: rms-designstudio
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.rmsDesignStudio.image.repository }}:{{ .Values.rmsDesignStudio.image.tag }}"
+          imagePullPolicy: {{ .Values.rmsDesignStudio.image.pullPolicy }}
+{{ include "common.readinessProbe" . | indent 10 }}
+{{ include "common.livenessProbe" . | indent 10 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-rms
+          env:
+          - name: rms_wasadmin_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-odm-secrets-env
+                key: rms_wasadmin_password
+          - name: SSL_TRUSTSTORE_PASSWORD_CONFIG
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: SSL_KEYSTORE_PASSWORD_CONFIG
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: SSL_KEY_PASSWORD_CONFIG
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: FCI_KAFKA_MSG_KS_ALIASNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_KAFKA_MSG_JKS_ALIASNAME
+          - name: FCI_KAFKA_MSG_KS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_KAFKA_MSG_JKS_PASSWORD
+          - name: SERVER_TRUSTSTORE_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: rms_db2_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-db2-secrets-env
+                key: FCIAUTHID_PASSWORD
+          - name: JWT_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: JWT_KEY
+          ports:
+          - containerPort: 9080
+          - containerPort: 9443
+          volumeMounts:
+            - name: rms-designstudio-modules
+              mountPath: /modules
+            - name: rms-designstudio-hdfs
+              mountPath: /hdfsaccess
+            - name: rms-designstudio-liberty-volume
+              mountPath: /opt/ibm/rms
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
+              subPath: fci_universal_ks.jks
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.truststore.jks
+              subPath: fci_universal_ks.jks
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.keystore.jks
+              subPath: fci_universal_ks.jks
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_kafka_msg.p12
+              subPath: fci_kafka_msg.p12
+            - name: logs
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
+          resources:
+{{ toYaml .Values.rmsDesignStudio.resources | indent 12 }}
+        - name: message-log
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+{{ include "common.sideCarHealthCheck" . | indent 10 }}
+          volumeMounts:
+          - name: logs
+            mountPath: /logs
+        - name: trace-log
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          args: [/bin/sh, -c, 'tail -n+1 -F /logs/trace.log']
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+{{ include "common.sideCarHealthCheck" . | indent 10 }}
+          volumeMounts:
+          - name: logs
+            mountPath: /logs
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+{{- with .Values.affinity }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}

@@ -1,29 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ template "logging.fullname" . }}-kb 
+  name: {{ template "logging.fullname" . }}-kb
   labels:
-    app: {{ template "logging.name" . }}-kb
-    chart: {{ template "logging.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "logging.name" .) "kb") (include "logging.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
 {{ include "common.scaleDownIfDisabled" . | indent 2 }}
   selector:
     matchLabels:
-      app: {{ template "logging.name" . }}-kb
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "logging.name" .) "kb") .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "logging.name" . }}-kb
-        release: {{ .Release.Name }}
-        chart: {{ template "logging.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "logging.name" .) "kb") (include "logging.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "elastic") | indent 8 }}
     spec:
-      serviceAccountName: {{ .Release.Name }}-common
+      serviceAccountName: fci-common
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
       securityContext:
@@ -34,7 +28,7 @@ spec:
             secretName: {{ .Release.Name }}-platform-secret-files
       containers:
         - name: kibana
-          image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.kibana.image.repository }}:{{ .Values.kibana.image.tag }}
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kibana.image.repository }}:{{ .Values.kibana.image.tag }}
           imagePullPolicy: {{ .Values.kibana.image.pullPolicy }}
           livenessProbe:
 {{ toYaml .Values.kibana.livenessProbe | indent 12 }}
@@ -43,6 +37,7 @@ spec:
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           env:
+{{- include "common.import-secret" (list . "ELASTICSEARCH_PASSWORD" "elastic" "ELASTIC_ADMIN_PASSWORD") | indent 10 }}
           {{- range $key, $value := .Values.kbEnv }}
           - name: "{{ $key }}"
             value: "{{ $value }}"
@@ -51,11 +46,6 @@ spec:
             value: https://{{ .Release.Name }}-elasticsearch:9200
           - name: ELASTICSEARCH_USERNAME
             value: {{ .Values.elasticsearchUsername }}
-          - name: ELASTICSEARCH_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: ELASTIC_ADMIN_PASSWORD
           volumeMounts:
           - name: file-secrets
             mountPath: /usr/share/kibana/config/kibana.key
@@ -80,4 +70,3 @@ spec:
       tolerations:
 {{ toYaml . | indent 8 }}
     {{- end }}
-

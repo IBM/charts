@@ -3,10 +3,7 @@ kind: ConfigMap
 metadata:
   name: {{ template "security-auth.fullname" . }}
   labels:
-    app: {{ template "security-auth.name" . }}
-    chart: {{ template "security-auth.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "security-auth.name" .) (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 {{- with .Values.securityAuthConfig }}
 data:
 {{ toYaml . | indent 2 }}
@@ -19,6 +16,7 @@ data:
   LDAP_PROFILE_GROUPS: {{ .Values.global.LDAP_PROFILE_GROUPS }}
   LDAP_PROFILE_ID: {{ .Values.global.LDAP_PROFILE_ID }}
   LDAP_SERVER_BINDDN: {{ .Values.global.LDAP_SERVER_BINDDN }}
+  LDAP_PROFILE_TENANTS: {{ .Values.global.LDAP_PROFILE_TENANTS }}
   LDAP_SERVER_SEARCHBASE: {{ .Values.global.LDAP_SERVER_SEARCHBASE }}
 {{ if .Values.global.LDAP_SERVER_SSL }}
   LDAP_SERVER_URL: ldaps://{{ .Values.global.LDAP_SERVER_HOST }}:{{ .Values.global.LDAP_SERVER_PORT }}
@@ -43,11 +41,12 @@ data:
   HEALTHCHECK: 'internal'
 {{ end }}
   LDAP_SERVER_USERNAME_MAPPING: {{ .Values.global.LDAP_SERVER_USERNAME_MAPPING }}
-  SAML_CALLBACK_HOST: https://{{ .Values.global.managerFQDN }}:3080
 {{ if .Values.global.webProxyServer }}
   SAML_CALLBACK_REDIRECT_URL: "https://{{ .Values.global.webProxyServer }}/common-ui/api/v1.0/login/saml"
+  SAML_CALLBACK_HOST: https://{{ .Values.global.webProxyServer }}:{{ .Values.global.commonUI.SSO_PORT }}
+  APPID_CALLBACK_HOST: https://{{ .Values.global.webProxyServer }}:{{ .Values.global.commonUI.SSO_PORT }}
 {{ else  }}
-  SAML_CALLBACK_REDIRECT_URL: "https://{{ .Values.global.managerFQDN }}:3080/common-ui/api/v1.0/login/saml"
+  SAML_CALLBACK_REDIRECT_URL: "https://{{ .Values.global.commonUI.SSO_HOSTNAME }}:{{ .Values.global.commonUI.SSO_PORT }}/common-ui/api/v1.0/login/saml"
+  SAML_CALLBACK_HOST: https://{{ .Values.global.commonUI.SSO_HOSTNAME }}:{{ .Values.global.commonUI.SSO_PORT }}
+  APPID_CALLBACK_HOST: https://{{ .Values.global.commonUI.SSO_HOSTNAME }}:{{ .Values.global.commonUI.SSO_PORT }}
 {{ end }}
-  # Redirect to security service host after authentication
-  APPID_CALLBACK_HOST: https://{{ .Values.global.managerFQDN }}:3080

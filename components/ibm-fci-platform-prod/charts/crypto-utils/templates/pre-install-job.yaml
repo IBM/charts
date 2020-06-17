@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "crypto-utils.fullname" . }}-gencerts
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "crypto-utils.name" .) "config") (include "crypto-utils.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "crypto-utils.name" .) "config") (include "crypto-utils.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "platform") | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: fci-common-scripts
+      containers:
+        - name: {{ template "crypto-utils.fullname" . }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          env:
+{{- include "common.import-secret" (list . "FCI_JKS_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+          - name: USE_DEFAULT_CERTS
+            value: {{ .Values.config.USE_DEFAULT_CERTS | quote }}
+          - name: REGENERATE_CERTS
+            value: {{ .Values.config.REGENERATE_CERTS | quote }}
+          - name: SECRET_NAME
+            value: {{ .Release.Name }}-{{ .Values.config.SECRET_NAME }}
+          - name: CUSTOMER_SECRET
+            value: {{ .Values.config.USER_SECRET_NAME }}
+          - name: CERT_DN
+            value: {{ .Values.config.CERT_DN | quote }}
+          - name: CERT_SAN_DNS_SPEC
+            value: {{ .Values.config.CERT_SAN_DNS_SPEC | quote }}
+          - name: CERT_SAN_IP_SPEC
+            value: {{ .Values.config.CERT_SAN_IP_SPEC | quote }}
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - bash
+            - -c
+            - /opt/ibm/fci/bin/generateCerts.sh
+          resources:
+{{ toYaml .Values.resources | indent 12 }}

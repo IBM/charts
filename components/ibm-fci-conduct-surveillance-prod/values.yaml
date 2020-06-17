@@ -1,63 +1,44 @@
-config:
-  #<hdp_host> normally would be the Active name node
-  DISCLAIMER_URL: "https://<hdp_host>:5026/analytics/models/v1/disclaimer/"
-  KEY_LIVY_URL: "https://<hdp_host>:8998/batches"
-
-  esUsername: fci_admin
-
-  #If using 3 node HDP topology use 'dev' below.
-  hdp_env_type: prod
-
-  #Fill the details of your HDP cluster below.
-  HDP_MASTER_IP: x.x.x.x
-  HDP_MASTER_HOST: hdpmaster.example.com
-  HDP_GATEWAY_IP: x.x.x.x
-  HDP_GATEWAY_HOST: hdpgateway.example.com
-  HDP_AMBARI_IP: x.x.x.x
-  HDP_AMBARI_HOST: hdpambari.example.com
-
-  #Fill below details only if you are using 'prod' topology(6 node HDP)
-  HDP_SECONDARY_IP: x.x.x.x
-  HDP_SECONDARY_HOST: hdpsecondary.example.com
-  HDP_SLAVE1_IP: x.x.x.x
-  HDP_SLAVE1_HOST: hdpslave1.example.com
-  HDP_SLAVE2_IP: x.x.x.x
-  HDP_SLAVE2_HOST: hdpslave2.example.com
-
-  #The below is for 6 node HDP cluster. if you are using 3 node HDP, replace it with active_namenode_hostname:8020
-  HDFS_NAMENODE: fcicluster
-
-  #values of below parameters hbase.zookeeper.quorum and hbase.zookeeper.property.clientPort can be found on Ambari -> HBase -> Configs -> Advanced -> Advanced hbase-site
-  HDP_ZOOKEEPER_URL: "<hbase.zookeeper.quorum>:<hbase.zookeeper.property.clientPort>"
-
-  HDP_SECURITY_TYPE: "/hbase-secure:sifsuser@FCI.IBM"
-
-  #Below is default value. update the below value accordingly to your nfs server and it's path.
-  VOICE_BULK_EXPORT_ARCHIVE_FILE_DESTINATION_EXTERNALIZED: "/fci-exports/sifs-liberty-instance/voice/bulk-export"
-
-  COMMDATA_PROP_LOC: ""
-  COMMDATA_FULL_CLASSNAME: ""
-
-  #Comma separated value of each kafka host and its corresponding port.
-  FCI_KAFKA_BOOTSTRAP_SERVERS: "<cp4d.com>:31090,<cp4d.com>:31091,<cp4d.com>:31092"
-
-
 global:
   managerFQDN: ""
   coreReleaseName: fci
-  dockerRepository: ""
-  createPv: true
+  dockerRegistryPrefix: ""
+  createPv: false
   nfsServer: ""
   persistence:
-    storageClassName: ''
-    useDynamicProvisioning: false
+    storageClassName: null
+    useDynamicProvisioning: true
     
-  #UnComment the below section according to the component installation
-  #swidtag:
-     #EComm: ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_-_Electronic_Communication_component-6.5.0.swidtag
-     #Voice: ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_Voice-6.5.0.swidtag
-     #Trade: ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_Trade-6.5.0.swidtag
-     #Complaints: ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_-_Complaint_Analytics-6.5.0.swidtag
+  # hostAliases provides a way to manage /etc/hosts in all Kubernetes 
+  # pods that will be installed in the Kubernetes cluster.  
+  # This is useful in situations where DNS may not work properly,
+  # or DNS entries are not used at all.  Most often, this is used
+  # to add the Hadoop (HDP) servers into the /etc/hosts of each pod to
+  # ensure that pods can resolve the HDP servers to the correct IP
+  # addresses.
+
+  # In addition if you are using this because of DNS issues
+  # you most likely would need to create /etc/hosts entries on the
+  # nodes (hosts) that are running Kubernetes (the Kubernetes Master
+  # and Kubernetes Worker nodes) to contain the hostnames and ip 
+  # addresses of the Hadoop servers (nodes). 
+  #
+  # Below are examples with hostnames of hdp1, hdp2, hdp3
+  # and the dns of the servers end in .yourcompany.com
+  # If you have 6 HDP servers then follow the pattern below 
+  # and enter ip and hostnames for 6 servers
+  # 
+  # Also uncomment all the lines below for this to take affect
+  #
+  # hostAliases:
+  # - ip: "10.187.45.4"
+  #   hostnames:
+  #   - "hdp1.yourcompany.com"
+  # - ip: "10.187.45.38"
+  #   hostnames:
+  #   - "hdp2.yourcompany.com"
+  # - ip: "10.187.45.37"
+  #   hostnames:
+  #   - "hdp3.yourcompany.com"
     
   # Set to true if deploying on IBM Cloud Pak for Data
   deployOnCP4D: true
@@ -75,21 +56,161 @@ global:
     image:
       repository: ibmcom/fci-common-scripts
       tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: "16Mi"
+        cpu: "0.5"
+      limits:
+        memory: "256Mi"
+        cpu: "0.5"
 
+  config:
+    esUsername: fci_admin
+
+    #Fill your HDP Ambari and Master Hostnames below
+    HDP_MASTER_HOST: hdpmaster.example.com
+    HDP_AMBARI_HOST: hdpambari.example.com
+
+    #The below is for 6 node HDP cluster. if you are using 3 node HDP, replace it with active_namenode_hostname:8020
+    HDFS_NAMENODE: fcicluster
+
+    #values of below parameters hbase.zookeeper.quorum and hbase.zookeeper.property.clientPort can be found on Ambari -> HBase -> Configs -> Advanced -> Advanced hbase-site
+    hdp_zookeeper_host_port: "<hbase.zookeeper.quorum>:<hbase.zookeeper.property.clientPort>"
+
+    HDP_SECURITY_TYPE: "/hbase-secure:sifsuser@FCI.IBM"
+
+    #Below is default value. update the below value accordingly to your nfs server and it's path.
+    VOICE_BULK_EXPORT_ARCHIVE_FILE_DESTINATION_EXTERNALIZED: "/fci-exports/sifs-liberty-instance/voice/bulk-export"
+
+    COMMDATA_PROP_LOC: ""
+    COMMDATA_FULL_CLASSNAME: ""
+
+  rmsConfig:
+    HDFS_URL: "hdfs://localhost/"
+    
 dbConfig:
    FLYWAY_BASELINE_VERSION: '01.01.01.00.006'
    DB_SERVICE: 'db2-datastore-0'
 
+rmsdbConfig:
+   FLYWAY_BASELINE_VERSION: '01.01.01.00.020'
+   db2_service: 'db2-datastore-0'
+
 arch: "amd64"
+
+rmsDesignStudio:
+  image:
+    repository: ibmcom/fci-rms-designstudio
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.5"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+
+surveillanceLiberty:
+  image:
+    repository: ibmcom/fccs-base-liberty
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: "1Gi"
+    limits:
+      cpu: "2"
+      memory: "3Gi"
+
+surveillance_ecomm:
+
+  # Whether or not to enable the containers for the EComm offering
+  enabled: true
+  
+  # Indicate swidtag used for EComm installation.
+  swidtag:
+    file: 'ibm.com_IBM_FCI_for_Conduct_Surveillance_Software_-_Electronic_Communication-6.5.1.swidtag'
+
+  ecomm:
+    image:
+      repository: ibmcom/fccs-ecomm-liberty
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: "0.5"
+        memory: "1Gi"
+      limits:
+        cpu: "2"
+        memory: "3Gi"
+
+surveillance_voice:
+
+  # Whether or not to enable the containers for the Voice offering
+  # The surveillance EComm should be enabled by default for Voice
+  enabled: false
+  
+  # Indicate swidtag used for Voice installation.
+  #swidtag:
+  #  file: 'ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_Voice-6.5.1.swidtag'
+
+  voice:
+    image:
+      repository: ibmcom/fccs-voice-liberty
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: "0.5"
+        memory: "1Gi"
+      limits:
+        cpu: "2"
+        memory: "3Gi"
+
+
+surveillance_complaints:
+
+  # Whether or not to enable the containers for the Complaints offering
+  enabled: false
+  
+  # Indicate swidtag used for Complaints installation.
+  swidtag:
+    file: 'ibm.com_IBM_Financial_Crimes_Insight_for_Conduct_Surveillance_Software_-_Complaint_Analytics-6.5.1.swidtag'
+
+  complaints:
+    image:
+      repository: ibmcom/fccs-complaints-liberty
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: "0.5"
+        memory: "1Gi"
+      limits:
+        cpu: "2"
+        memory: "3Gi"
 
 initContainerResource:
   resources:
     requests:
       cpu: "0.5"
-      memory: "0.5Gi"
+      memory: "512Mi"
     limits:
-      cpu: "0.5"
-      memory: "0.5Gi"
+      cpu: "1"
+      memory: "1Gi"
+
+#Leightweight init containers
+sideCarContainers:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: ".1"
+    limits:
+      memory: "512Mi"
+      cpu: "1"
 
 db2Container:
   image:
@@ -98,24 +219,24 @@ db2Container:
     pullPolicy: IfNotPresent
   resources:
     requests:
-      cpu: "1"
-      memory: "1Gi"
+      cpu: "0.1"
+      memory: "256Mi"
     limits:
-      cpu: "1"
-      memory: "1Gi"
+      cpu: "0.5"
+      memory: "512Mi"
 
-surveillanceLiberty:
+rmsdb2Client:
   image:
-    repository: ibmcom/sifs-liberty
+    repository: ibmcom/fci-rms-data-store
     tag: <BUILD_TAG>
     pullPolicy: IfNotPresent
   resources:
     requests:
-      cpu: "1"
-      memory: "1.5Gi"
+      memory: "256Mi"
+      cpu: "0.1"
     limits:
-      cpu: "1"
-      memory: "1.5Gi"
+      memory: "512Mi"
+      cpu: "0.5"
 
 surveillanceLogstash:
   image:
@@ -124,10 +245,10 @@ surveillanceLogstash:
     pullPolicy: IfNotPresent
   resources:
     requests:
-      cpu: "1"
-      memory: "3Gi"
+      cpu: "0.5"
+      memory: "512Mi"
     limits:
-      cpu: "1"
+      cpu: "2"
       memory: "3Gi"
 
 surveillanceLogstashproxy:
@@ -137,8 +258,8 @@ surveillanceLogstashproxy:
     pullPolicy: IfNotPresent
   resources:
     requests:
-      cpu: "1"
-      memory: "1Gi"
+      cpu: "0.5"
+      memory: "512Mi"
     limits:
       cpu: "1"
       memory: "1Gi"
@@ -150,56 +271,119 @@ surveillanceFilebeat:
     pullPolicy: IfNotPresent
   resources:
     requests:
-      cpu: "1"
-      memory: "1Gi"
+      cpu: "0.5"
+      memory: "512Mi"
     limits:
-      cpu: "1"
-      memory: "1Gi"
+      cpu: "2"
+      memory: "2Gi"
+ 
+kerberosClient:
+  image:
+    repository: ibmcom/fci-hdp-client
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
+  livenessProbe:
+    exec:
+      command:
+        - sh
+        - '-c'
+        - pgrep krblogin.sh
+    failureThreshold: 3
+    initialDelaySeconds: 300
+    periodSeconds: 60
+    successThreshold: 1
+    timeoutSeconds: 10
+  readinessProbe:
+    exec:
+      command:
+        - sh
+        - '-c'
+        - pgrep krblogin.sh
+    failureThreshold: 3
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    successThreshold: 1
+    timeoutSeconds: 10
+
+rmslibertymodulesPvNfsPath: /fccs-rms-liberty-modules-data
+rmslibertymodulesPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: null
+  size: 10Gi
+
+rmslibertyhdfsPvNfsPath: /fccs-rms-liberty-hdfs-data
+rmslibertyhdfsPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: null
+  size: 10Gi
+
+rmslibertyPvNfsPath: /fccs-rms-liberty-data
+rmslibertyPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: null
+  size: 30Gi
 
 libertyPvNfsPath: /sifs-liberty-instance
 libertyPvcSpec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-storage-class
-  size: 30Gi
+  storageClassName: null
+  size: 20Gi
 
+ecommPvNfsPath: /sifs-ecomm-instance
+ecommPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: null
+  size: 20Gi
+
+voicePvNfsPath: /sifs-voice-instance
+voicePvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: null
+  size: 20Gi
+
+complaintsPvNfsPath: /sifs-complaints-instance
+complaintsPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: null
+  size: 20Gi
+  
+sharedPvNfsPath: /sifs-shared-instance
+sharedPvcSpec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: null
+  size: 1Gi
+  
 logstashPvNfsPath: /sifs-logstash-instance
 logstashPvcSpec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-storage-class
-  size: 30Gi
+  storageClassName: null
+  size: 10Gi
 
 filebeatPvNfsPath: /sifs-filebeat-instance
 filebeatPvcSpec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-storage-class
-  size: 30Gi
-
-filebeatlibPvNfsPath: /sifs-liberty-instance
-filebeatlibPvcSpec:
-  accessModes:
-    - ReadWriteMany
-  storageClassName: nfs-storage-class
-  size: 30Gi
-
-filebeatstreamsPvNfsPath: /fci-rms-voice-data
-filebeatstreamsPvcSpec:
-  accessModes:
-    - ReadWriteMany
-  storageClassName: nfs-storage-class
-  size: 30Gi
-
+  storageClassName: null
+  size: 1Gi
+  
 livenessProbe:
-  initialDelaySeconds: 600
-  periodSeconds: 60
-  timeoutSeconds: 30
+  initialDelaySeconds: 300
+  periodSeconds: 20
+  timeoutSeconds: 10
   successThreshold: 1
   failureThreshold: 3
 
 readinessProbe:
-  initialDelaySeconds: 70
+  initialDelaySeconds: 60
   periodSeconds: 20
   timeoutSeconds: 10
   successThreshold: 1
@@ -210,5 +394,3 @@ affinity: {}
 nodeSelector: {}
 
 tolerations: []
-
-arch: amd64

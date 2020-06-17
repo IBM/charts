@@ -3,26 +3,20 @@ kind: StatefulSet
 metadata:
   name: {{ template "elasticsearch.fullname" . }}
   labels:
-    app: {{ template "elasticsearch.name" . }}
-    chart: {{ template "elasticsearch.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "elasticsearch.name" .) (include "elasticsearch.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
 {{ include "common.scaleDownIfDisabled" . | indent 2 }}
   serviceName: {{ template "elasticsearch.name" . }}
   selector:
     matchLabels:
-      app: {{ template "elasticsearch.name" . }}
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (include "elasticsearch.name" .) .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "elasticsearch.name" . }}
-        release: {{ .Release.Name }}
-        chart: {{ template "elasticsearch.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "elasticsearch.name" .) (include "elasticsearch.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "elastic") | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -30,7 +24,7 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{ .Release.Name }}-common
+      serviceAccountName: fci-elasticsearch
       volumes:
       - name: file-secrets
         secret:
@@ -39,24 +33,16 @@ spec:
         persistentVolumeClaim:
           claimName: {{ template "elasticsearch.fullname" . }}
       initContainers:
-      {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
+      {{- if .Values.global.pvRequiresPermissionsFix }}
       - name: permissionsfix
         securityContext:
-          runAsNonRoot: false
-          privileged: false
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-            add:
-            - CHOWN 
+{{ include "common.RootChownerContainerSecurityContext" . | indent 10 }}
         args:
         - chown -R 1000:1000 /mount;
         command:
         - /bin/sh
         - -c
-        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 10 }}
         volumeMounts:
@@ -65,7 +51,7 @@ spec:
       {{- end }}
       containers:
         - name: elasticsearch
-          image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
 {{ include "common.readinessProbe" . | indent 10 }}
 {{ include "common.livenessProbe" . | indent 10 }}
@@ -97,7 +83,7 @@ spec:
           ports:
             - containerPort: 9200
         - name: elasticsearch-proxy
-          image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
           resources:
 {{ toYaml .Values.global.nginxSslProxy.resources | indent 12 }}
           imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
@@ -105,6 +91,7 @@ spec:
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           env:
+{{- include "common.import-secret" (list . "HTTP_AUTH_PASSWORD" "elastic" "ELASTIC_ADMIN_PASSWORD") | indent 10 }}
           - name: "SERVICE_HOST_ENV_NAME"
             value: "localhost"
           - name: "SERVICE_PORT_ENV_NAME"
@@ -115,11 +102,8 @@ spec:
             value: "true"
           - name: "HTTP_AUTH_USERID"
             value: "fci_admin"
-          - name: "HTTP_AUTH_PASSWORD"
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: ELASTIC_ADMIN_PASSWORD
+          - name: "PROXY_READ_TIMEOUT"
+            value: "360"
           volumeMounts:
           - name: file-secrets
             mountPath: /etc/secrets/proxykey

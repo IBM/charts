@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "fci-insurance.fullname" . }}-pre-upgrade
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "fci-insurance.name" .) "pre-upgrade") (include "fci-insurance.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "fci-insurance.name" .) "pre-upgrade") (include "fci-insurance.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: fci-common-scripts
+      containers:
+        - name: {{ template "fci-insurance.fullname" . }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          imagePullPolicy: {{ .Values.global.commonScripts.image.pullPolicy }}
+          env:
+          - name: CORE_REL_NAME
+            value: {{ .Values.global.coreReleaseName }}
+          - name: SWIDTAGS_CONFIGMAP
+            value: {{ .Release.Name }}-swidtag-files
+          command:
+            - bash
+            - -c
+            - /common-scripts/fcii-preinstall.sh
+          resources:
+{{ toYaml .Values.global.commonScripts.resources | indent 12 }}

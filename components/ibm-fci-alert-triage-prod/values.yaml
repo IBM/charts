@@ -16,24 +16,87 @@ global:
   # for the services.
   coreReleaseName: fci
   # The docker repository that holds the images to be deployed.
-  dockerRepository: ""
+  dockerRegistryPrefix: ""
   # When set to true, the installer will create the PVs.  When set to
   # false, the PVs must be created ahead of time by the kubernetes admin
   # using the correct names, and then the install script run.
-  createPv: true
+  createPv: false
   # The NFS server that maintains the PVs.  When createPv is set to true,
   # this must contain the name of the NFS server.  When createPv is set to
   # false, this value can be left blank.
   nfsServer: ""
 
+  # generateInternalPasswords determines whether passwords for internal services are randomly generated
+  # Set to false to use a pre-existing secret instead of randomly generated passwords
+  generateInternalPasswords: true
+
+  # hostAliases provides a way to manage /etc/hosts in all Kubernetes
+  # pods that will be installed in the Kubernetes cluster.
+  # This is useful in situations where DNS may not work properly,
+  # or DNS entries are not used at all.  Most often, this is used
+  # to add the Hadoop (HDP) servers into the /etc/hosts of each pod to
+  # ensure that pods can resolve the HDP servers to the correct IP
+  # addresses.
+
+  # In addition if you are using this because of DNS issues
+  # you most likely would need to create /etc/hosts entries on the
+  # nodes (hosts) that are running Kubernetes (the Kubernetes Master
+  # and Kubernetes Worker nodes) to contain the hostnames and ip
+  # addresses of the Hadoop servers (nodes).
+  #
+  # Below are examples with hostnames of hdp1, hdp2, hdp3
+  # and the dns of the servers end in .yourcompany.com
+  # If you have 6 HDP servers then follow the pattern below
+  # and enter ip and hostnames for 6 servers
+  #
+  # Also uncomment all the lines below for this to take affect
+  #
+  # hostAliases:
+  # - ip: "10.187.45.4"
+  #   hostnames:
+  #   - "hdp1.yourcompany.com"
+  # - ip: "10.187.45.38"
+  #   hostnames:
+  #   - "hdp2.yourcompany.com"
+  # - ip: "10.187.45.37"
+  #   hostnames:
+  #   - "hdp3.yourcompany.com"
+
+  swidtag:
+    # Indicate license used for this installation.
+    # For FCAI use, set file to: ibm.com_IBM_Financial_Crimes_Insight_for_Anti-Money_Laundering_Software-6.5.1.swidtag
+    # For TLS use, set file to: ibm.com_IBM_Financial_Crimes_Insight_for_Alert_Triage_for_Software_-_Transaction_List_Screening-6.5.1.swidtag
+    # For AML Transaction Monitoring use, set file to: ibm.com_IBM_FCI_for_Alert_Triage_Software_-_AML_Transaction_Monitoring-6.5.1.swidtag
+    # For Customer List Screening use, set file to: ibm.com_IBM_Financial_Crimes_Insight_for_Alert_Triage_Software_-_Customer_List_Screening-6.5.1.swidtag
+    file: 'ibm.com_IBM_Financial_Crimes_Insight_for_Anti-Money_Laundering_Software-6.5.1.swidtag'
+
+
+  # In some cases, when persistent volumes are created, the filesystem is
+  # in a state where the pods will not have permission to write files to the
+  # filesystem because they do not have permission.  This is often (but not
+  # always) the case with auto-provisioners.
+  # Setting this to true will create an initContainer that will run with
+  # root-level priviledges in order to mount the volume, fix the filesystem
+  # permissions, and then terminate.  If the PVs that are allocated already
+  # have appropriate permissions, this field may be set to false.
+  pvRequiresPermissionsFix: false
+
   persistence:
-    storageClassName: ''
+    storageClassName: null
     useDynamicProvisioning: true
 
   commonScripts:
     image:
       repository: ibmcom/fci-common-scripts
       tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: "16Mi"
+        cpu: "0.1"
+      limits:
+        memory: "256Mi"
+        cpu: "0.2"
 
   #For Non Cloud-Pak deployments, set the userid for non-root containers to run
   runAsUser: 1000
@@ -78,6 +141,7 @@ fcai_alert_review:
         cpu: ".5"
       requests:
         memory: "128Mi"
+        cpu: ".5"
 
     alertReviewConfig:
       NODE_ENV: "production"
@@ -93,7 +157,37 @@ fcai_alert_review:
       AUDIT_ACTIVE: "1"
       AUDIT_TIMEOUT: "100"
       CEDM_CERT_SELF_SIGNED: "true"
+      PLATFORM_API_PORT: "9443"
       DB2CODEPAGE: "1208"
+
+  tmTriage:
+    livenessProbe:
+      initialDelaySeconds: 300
+      periodSeconds: 60
+      timeoutSeconds: 30
+      successThreshold: 1
+      failureThreshold: 2
+    image:
+      repository: ibmcom/fcai-tm-triage-ui
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        memory: "512Mi"
+        cpu: ".5"
+      requests:
+        memory: "128Mi"
+        cpu: ".1"
+
+    tmTriageConfig:
+      NODE_ENV: "production"
+      LOG_FILE_LEVEL: "info"
+      HTTPS_KEY: "alert-review.pem"
+      HTTPS_CERT: "alert-review.crt"
+      JWT_ISSUER: "fci.ibm.com"
+      AUDIT_API_PORT: "9443"
+      AUDIT_ACTIVE: "1"
+      AUDIT_TIMEOUT: "100"
 
   dbclient:
     image:
@@ -111,37 +205,6 @@ fcai_alert_review:
         cpu: ".1"
       requests:
         memory: "32Mi"
-
-  fcaiShiny:
-    shinyConfig:
-      SPARK_HOME: "/home/shiny/spark/spark-2.2.0-bin-hadoop2.7"
-
-      # Set the spark driver memory. Leave at least .5G of memory for the rest of the container
-      SPARK_DRIVER_MEMORY: "3G"
-
-      # At installation  time of the FCI Data Platform, the user must select either "dev" or "prod" as the "environment type"
-      # For a "prod" defined environment type for the FCI Data Platform (Hortonworks Data Platform [HDP]) topology - default 6 node topology
-         # <master_hostname> should be replaced with the Fully Qualified Domain Name (FQDN) of the hadoop master node
-         # <secondary_hostname> should be replaced with the FQDN of the hadoop secondary node
-      # For a "dev" defined environment type for the FCI  Data Platform (HDP) - default 3 node topology
-         # <master_hostname> should be replaced with the FQDN of the hadoop master node
-         # <secondary_hostname> should be replaced with the FQDN of the hadoop master node
-         # For the "dev" defined environment type, the HDP_MASTER and HDP_SECONDARY are both set to hadoop master
-      HDP_MASTER: <master_hostname>
-      HDP_SECONDARY: <secondary_hostname>
-
-    image:
-      repository: ibmcom/fcai-shiny
-      tag: <BUILD_TAG>
-      pullPolicy: IfNotPresent
-
-    resources:
-      limits:
-        # Limit of 3.5G for the container
-        memory: "3584Mi"
-        cpu: ".5"
-      requests:
-        memory: "64Mi"
 
 fcai_transaction_list_screening:
   # Whether or not to enable the containers for the FCAI Transaction List Screening (TLS) offering
@@ -161,7 +224,9 @@ fcai_transaction_list_screening:
       requests:
         memory: "8192Mi"
         cpu: "2"
-
+    # runAsUser is the user id that containers requiring updates to file system permissions
+    # run as if pvRequiresPermissionsFix is set to true
+    runAsUser: 1000
 
     # Extra configuration properties for FCAI Transaction List Screening
     tlsConfig:
@@ -206,6 +271,7 @@ fcai_transaction_list_screening:
         cpu: ".2"
       requests:
         memory: "16Mi"
+        cpu: ".2"
 
     config:
       JWT_ISSUER: "fci.ibm.com"
@@ -215,7 +281,7 @@ tlsPvNfsPath: /fcai-tls
 tlsPvcSpec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-storage-class
+  storageClassName: null
   size: 30Gi
 
 arch: amd64

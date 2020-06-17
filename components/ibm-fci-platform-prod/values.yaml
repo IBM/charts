@@ -1,29 +1,138 @@
-# Passwords in this file are base64 encoded
-# These passwords can be generated from the linux command line by using this command:
-# echo -n "plaintext-password" | base64
-# Note that the -n parameter to echo is important to avoid encoding a newline
-# as part of the actual password.  Also keep the quotes (") around the password.
 global:
 
-  # Set to true if deploying on IBM Cloud Kubernetes Service (https://www.ibm.com/cloud/)
-  # Set to false if deploying in FCI Softlayer Bare Metal Cloud and on premises.
-  deployOnIBMCloud: false
+  persistence:
+    # This field can always be left blank because when running the cpd
+    # installer, the storage class is provided using the -c command line
+    # option, which overrides this setting.
+    storageClassName: ''
 
-  # Set to true if deploying on IBM Cloud Pak for Data
-  deployOnCP4D: true
+    # By default, installation assumes that there is a dynamic provisioner
+    # that allocates persistent volues using the storageClassName provided
+    # above.
+    #
+    # If a dynamic provisioner is not in use, change useDynamicProvisioning
+    # to false and if appropriate, set createPv to true.
+    useDynamicProvisioning: true
 
-  # By default there will be one DB2 instance deployed.
-  # Increase this number if additional DB2 instances need to be deployed.  Each component that uses DB2 will need to be configured with the correct DB2 instance if this value ir greater than 1.
+  # createPv should be left false in cases where the PVs are auto-provisioned
+  # or precreated by an administrator.  However, it's possible to use an NFS
+  # server, set global.nfsServer to the value, and then set createPv to true,
+  # and when installing the chart, the PVs will be created automatically using
+  # the NFS Server.  Note that the NFS server must support NFS v4.1 or later.
+  createPv: false
+
+  # In some cases, when persistent volumes are created, the filesystem is
+  # in a state where the pods will not have permission to write files to the
+  # filesystem because they do not have permission.  This is often (but not
+  # always) the case with auto-provisioners.
+  # Setting this to true will create an initContainer that will run with
+  # root-level priviledges in order to mount the volume, fix the filesystem
+  # permissions, and then terminate.  If the PVs that are allocated already
+  # have appropriate permissions, this field may be set to false.
+  pvRequiresPermissionsFix: true
+
+  # runAsUser is the user id that containers requiring updates to file system permissions
+  # run as if pvRequiresPermissionsFix is set to true
+  runAsUser: 1000
+
+  # Provide the subdomain of the host used to access the cluster for
+  # HTTP/HTTPS traffic.  This often can be determined by running this command:
+  # oc get route console -n openshift-console | grep -v 'HOST/PORT' | awk '{print $2}'
+  # This provides the URL of the OpenShift console.  After removing the
+  # hostname up to the first dot, the remaining value will be the subdomain
+  # required here.  For example, if the output of the command is:
+  # console-openshift-console.apps.fyrecluster.os.fyre.ibm.com
+  # then enter `apps.fyrecluster.os.fyre.ibm.com` here.
+  # Or type this command
+  # oc get route console -n openshift-console | grep -v 'HOST/PORT' | awk '{print $2}' | cut -d'.' -f 2-
+  # which should give you `apps.fyrecluster.os.fyre.ibm.com`
+  # If unsure, verify with the administrator that configured the OpenShift
+  # cluster.  There can be a hardware loadbalancer in front of the cluster
+  # making it impossible to determine the correct URL automatically.
+  httpsIngressSubdomain: localhost.localdomain
+
+  # Provide the subdomain of the host used to access the cluster for TCP/IP
+  # traffic.  This is much more difficult to determine automatically.  In
+  # some cases, this is the same as the httpsIngressSubdomain.  In other
+  # cases, this could be a different value.  For example, in IBM Cloud (ibm.com/cloud),
+  # the correct value for this can be determined by running this command:
+  # oc get cm -n kube-system ibm-cloud-cluster-ingress-info -o yaml | grep ' ingress-subdomain'
+  # which may output a value like:
+  # sl-roks-441333-2ff4384e3bbe791290bc084e4f9f6c9a-0000.tor01.containers.appdomain.cloud
+  # If unsure, verify with the administrator that configured the OpenShift
+  # cluster.  There can be a hardware loadbalancer in front of the cluster
+  # making it impossible to determine the correct URL automatically.
+  tcpIngressSubdomain: localhost.localdomain
+
+  # At this time, DB2 instances must be set to 1
   db2Instances: 1
 
-  persistence:
-    storageClassName: ''
-    useDynamicProvisioning: true
+  # generateInternalPasswords determines whether secrets for internal
+  # services are randomly generated.  Set to false to use a pre-existing
+  # secret instead of randomly generated values.  In this case, all
+  # values must be precreated for all secrets.  See the knowledge center
+  # for a list of all of the secrets and the keys that need to be created.
+  generateInternalPasswords: true
+
+  # externalSecretName is the name of the OpenShift secret object that
+  # contains passwords to external services, such as LDAP.  This value
+  # does not normally need to be changed.
+  externalSecretName: fci-platform-external-secrets-env
+
+  # hostAliases provides a way to manage /etc/hosts in all Kubernetes
+  # pods that will be installed in the Kubernetes cluster.
+  # This is useful in situations where DNS may not work properly,
+  # or DNS entries are not used at all.  Most often, this is used
+  # to add the Hadoop (HDP) servers into the /etc/hosts of each pod to
+  # ensure that pods can resolve the HDP servers to the correct IP
+  # addresses.
+  #
+  # In addition if you are using this because of DNS issues
+  # you most likely would need to create /etc/hosts entries on the
+  # nodes (hosts) that are running Kubernetes (the Kubernetes Master
+  # and Kubernetes Worker nodes) to contain the hostnames and ip
+  # addresses of the Hadoop servers (nodes).
+  #
+  # Below are examples with hostnames of hdp1, hdp2, hdp3
+  # and the dns of the servers end in .yourcompany.com
+  # If you have 6 HDP servers then follow the pattern below
+  # and enter ip and hostnames for 6 servers
+  #
+  # Also uncomment all the lines below for this to take affect
+  #
+  # hostAliases:
+  # - ip: "10.187.45.4"
+  #   hostnames:
+  #   - "hdp1.yourcompany.com"
+  # - ip: "10.187.45.38"
+  #   hostnames:
+  #   - "hdp2.yourcompany.com"
+  # - ip: "10.187.45.37"
+  #   hostnames:
+  #   - "hdp3.yourcompany.com"
+
+
+  swidtag:
+    # Indicate license used for this installation.
+    # For production use, set file to: ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight-6.5.1.swidtag
+    # For non-production use, set file to: ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight_for_Non-Production_Environment-6.5.1.swidtag
+    # For FCI for Watson Private use, set file to: ibm.com_IBM_Financial_Crimes_Insight_with_Watson_Private-6.5.1.swidtag
+    file: 'ibm.com_IBM_Cloud_Pak_for_Data_Financial_Crimes_Insight_for_Non-Production_Environment-6.5.1.swidtag'
+
+##########################################################################
+###
+### With a few exceptions around specific components, not many fields
+### need to be modified below here.  An example of where a number
+### of changes are required would be to enable an LDAP server in
+### security-auth section or enabling/disabling individual components.
+###
+##########################################################################
 
   commonScripts:
     image:
       repository: ibmcom/fci-common-scripts
       tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
 
   nginxSslProxy:
     image:
@@ -37,11 +146,6 @@ global:
       requests:
         cpu: 100m
         memory: 64Mi
-
-  # If you want to monitor the resource utilization of your cluster and the nodes,
-  # set this to true, else set this to false.
-
-  enableMonitoring: true
 
   # SMTP Authentication to use for email alerting. Refer alertmanagerConfig and elastalertConfig further down this file
   smtp_auth_username: "<string>"
@@ -73,6 +177,7 @@ global:
   LDAP_PROFILE_EMAIL: 'userPrincipalName'
   LDAP_PROFILE_GROUPS: 'memberOf'
   LDAP_PROFILE_ID: 'sAMAccountName'
+  LDAP_PROFILE_TENANTS: 'fciTenants'
   LDAP_SERVER_USERNAME_MAPPING: 'sAMAccountName'
 
   # These are the default user search filters:
@@ -85,30 +190,72 @@ global:
   # Performs a nested group search.
   # Set to true only if the LDAP server does not support recursive server-side searches.
   LDAP_SERVER_RECURSIVE_SEARCH: 'false'
-  
-  #For Non Cloud-Pak deployments, set the userid for non-root containers to run
-  runAsUser: 1000
-  
-  #Set the Additional Group ID settings that the containers should run as
-  #This depends on the GID of the shared storage like NFS
+
+  # Set the Additional Group ID settings that the containers should run as
+  # This depends on the GID of the shared storage like NFS
   fsGroupConfig:
     supplementalGroups:
     - 0
-  
+
+  hdp:
+    # If using a non-prod HDP topology do two things to configure the HDP_NAME_NODE
+    # i) uncomment the line below and provide HDP_MASTER_NODE (just delete the #)
+    #HDP_NAME_NODE: 'hdfs://<HDP_MASTER_NODE>:8020'
+    # ii) comment out the other line HDP_NAME_NODE: 'hdfs://fcicluster'
+
+    # If using the HDP production environment, leave the line below as is. For HDP dev env. & single server comment it out
+    HDP_NAME_NODE: 'hdfs://fcicluster'
+
+    # Set to the fully qualified domain name of the HDP master node.
+    HDP_MASTER_NODE: 'HDP_MASTER_FQDN'
+
+    # If using the HDP production environment, make sure to set to the fully qualified domain name of the HDP secondary master node.
+    HDP_SECONDARY_MASTER_NODE: 'HDP_SECONDARY_MASTER_FQDN'
+
+    # Set to the fully qualified domain name of the HDP Ambari server.
+    HDP_AMBARI_NODE: 'AMBARI_FQDN'
+
+  kerberos:
+    # This value should not be changed.
+    KERBEROS_REALM: 'FCI.IBM'
+
+    KINIT_SECONDS: '3600'
+    HADOOP_VERSION: '3.x'
+    HDP_CLUSTER_NAME: 'fcicluster'
+    KERBEROS_ENABLED: 'true'
+
+    runAsUser: 1000
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: ".1"
+      limits:
+        memory: "512Mi"
+        cpu: ".5"
+
+
   hbase:
     # For the hbase_zookeeper_quorum property, you must specify at least one zookeeper
     # server. For a 6 server hdp install (prod topology)  Zookeeper servers are: HDP Master Node.
     # HDP Gateway and HDP Secondary Master. For 3 server hdp install (dev topology) the Zookeeper servers are:
     # HDP Master and HDP Gateway. For single server hdp install the Zookeeper server is the HDP Hostname.
+    # Do not inlcude the <> in the hostname.  For example
+    # hbase_zookeeper_quorum: 'hdp-master.acme.com,hdp-gw.acme.com,hdp-2gw.acme.com'
     hbase_zookeeper_quorum: '<ZOOKEEPER_SERVER_1,ZOOKEEPER_SERVER_2,ZOOKEEPER_SERVER_N>'
     hbase_zookeeper_property_clientPort: '2181'
 
-#platform-secrets:
+  commonUI:
+    # For ROKS and CP4D releases, add full hostname (subdomain of the ingress subdomain) of fci-common-ui-nginx route for http traffic
+    SSO_HOSTNAME: "<roks_subdomain>"
+    # Prior releases to 6.5, keep this to 3000 for the security-auth service port.
+    SSO_PORT: "443"
 
 db2:
   hostIPC: true
   # Select antiAffinity as either hard or soft
   podAntiAffinity: hard
+
+  nodeSelector: {}
 
   resources:
     requests:
@@ -118,7 +265,7 @@ db2:
       memory: "32Gi"
       cpu: "8"
 
-  #Load Balancer Node Ports - Ports to expose in loadbalancer for CP4D installs
+  # Load Balancer Node Ports - Ports to expose in load balancer for CP4D installs
   # Set to an empty string to use a random port
   sslNodePort: "30560"
 
@@ -126,6 +273,24 @@ db2:
     repository: ibmcom/fci-data-store-server
     tag: <BUILD_TAG>
     pullPolicy: "IfNotPresent"
+
+  instancePvcSpec:
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: null
+    size: 1Gi
+
+  dbPvcSpec:
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: null
+    size: 100Gi
+
+  scriptsPvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 1Gi
 
 global-name-mgmt:
   enabled: false
@@ -140,12 +305,13 @@ kafka:
   enabled: True
 
   # A cluster of three Kafka and Zookeeper instances is created by default.
-  # In a non-production environment, a cluster of one Kafka and Zookeeper instances can be used.
+  # In a non-production environment, a cluster of one Kafka and Zookeeper instances can be used by setting replicas to 1.
   replicas: 3
   zookeeperReplicaCount: 3
 
-  # Max File Descriptors
-  ulimitNofiles: '131072'
+  pvcSpec:
+    storageClassName: null
+    size: 10Gi
 
   image:
     repository: ibmcom/fci-kafka
@@ -181,6 +347,7 @@ kafka:
       partitions: 1
     - name: sifs.email.in
       partitions: 10
+      config: "retention.ms=86400000"
     - name: sifs.chat.in
       partitions: 10
     - name: sifs.alert.in
@@ -190,7 +357,8 @@ kafka:
     - name: sifs.voice.in
       partitions: 1
     - name: sifs.attach.in
-      partitions: 3
+      partitions: 10
+      config: "retention.ms=86400000"
 
   ## Configuration Overrides. Specify any Kafka settings you would like set on the StatefulSet
   ## here in map format, as defined in the official docs.
@@ -208,7 +376,7 @@ kafka:
     "advertised.listeners": |-
      EXTERNAL://${MASTER_HOST}:${NODE_PORT}
 
-  #First Listerner Port to hit the kafka externally.
+  # First Listerner Port to hit the kafka externally.
   # Set to an empty string to use a random port
   nodeport:
     firstListenerPort: "31090"
@@ -221,6 +389,14 @@ kafka:
     # Set to an empty string to use a random port
     externalNodePort: "32181"
 
+    dataPvcSpec:
+      storageClassName: null
+      size: 10Gi
+
+    logPvcSpec:
+      storageClassName: null
+      size: 10Gi
+
 mongodb:
   enabled: True
   securityContext:
@@ -230,16 +406,27 @@ mongodb:
   # change this value to false so that mongodb will start.
   mongodbEnableIPv6: true
 
+  pvcSpec:
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: null
+    size: 10Gi
+
   image:
-    repository: "ibmcom/fci-mongodb"
-    tag: "<BUILD_TAG>"
-    pullPolicy: "IfNotPresent"
+    repository: ibmcom/fci-mongodb
+    tag: <BUILD_TAG>
+    pullPolicy: IfNotPresent
 
 elasticsearch:
   enabled: True
 
   config:
     ES_ADMIN_DN: "CN=FCI_server,OU=FCI_platform,O=FCI_Development,C=US"
+
+    # Set the minimum heap size (Xms) and maximum heap size (Xmx) to be equal to each other.
+    ES_JAVA_OPTS: "-Xmx1g -Xms1g"
+
+    # The Elasticsearch user id is fci_admin
     # The number of minutes to wait until Elasticsearch starts.
     # If Elasticsearch has not started within this amount of time, then the Elasticsearch
     # container will be restarted.
@@ -250,6 +437,13 @@ elasticsearch:
     repository: ibmcom/fci-logsearch
     tag: "<BUILD_TAG>"
     pullPolicy: "IfNotPresent"
+
+  # If upgrading from the 6.5 release, then change below to ReadWriteMany
+  pvcSpec:
+    accessModes:
+    - ReadWriteOnce
+    storageClassName: null
+    size: 10Gi
 
 odm:
   # set to False to disable ODM
@@ -267,12 +461,25 @@ odm:
       repository: ibmcom/fci-rms-odm
       tag: <BUILD_TAG>
       pullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "0.1"
+      limits:
+        memory: "8Gi"
+        cpu: "3"
 
   config:
     FLYWAY_BASELINE_VERSION: '01.01.01.00.005'
 
 wca:
   enabled: false
+
+  pvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 30Gi
 
   image:
     repository: ibmcom/fci-wca
@@ -287,9 +494,24 @@ cognos:
     tag: <BUILD_TAG>
     pullPolicy: "IfNotPresent"
 
+  pvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 1Gi
+
   resources:
     requests:
-      memory: 10Gi
+      memory: "10Gi"
+      cpu: "1"
+    limits:
+      memory: "16Gi"
+      cpu: "4"
+
+  config:
+    # MAX_HTTP_HEADER_SIZE is the maximum size, in bytes, of HTTP headers that Cognos will allow
+    # in HTTP requests
+    MAX_HTTP_HEADER_SIZE: "8000"
 
   proxy:
     resources: {}
@@ -298,81 +520,7 @@ cognos:
       tag: <BUILD_TAG>
       pullPolicy: "IfNotPresent"
 
-prometheus:
-
-  alertmanager:
-    image:
-      repository: prom/alertmanager
-
-  kubeStateMetrics:
-    image:
-      repository: quay.io/coreos/kube-state-metrics
-
-  nodeExporter:
-    image:
-      repository: prom/node-exporter
-
-  server:
-    image:
-      repository: prom/prometheus
-
-  alertmanagerConfig:
-    # How frequent do you want alerts for the same alert violation
-    repeat_interval: 4h
-
-    # Set this to true if you need email alerts specific to cluster resource utilization from alertmanager
-    enable_smtp: false
-
-    #Configure smtp if enable_smtp is set to true
-    # NOTE: remove the authentication mechanisms you won't use
-    smtp_config:
-      # SMTP Server to use to send emails with port
-      # example: mail.mycompany.com:587
-      # The port could be 25, 587 or 465 depending on your SMTP Server
-      smtp_smarthost: "<smtp_smarthost>"
-
-      # The sender of the email alerts
-      # example: noreply@mycompany.com
-      smtp_from: "<noreply@mycompany.com>"
-
-      # The authentication can happen in one of the three ways
-      # Provide smtp_auth_username and smtp_auth_password in global section of this file to use SMTP Auth using LOGIN
-      # The other two ways, PLAIN and CRAM-MD5 can be configured below for alertmanager
-
-      ## SMTP Auth using PLAIN, Comment this out if you are using another mechanism. Uncomment below line to use this method
-      #smtp_auth_identity: "<string>"
-
-      ## SMTP Auth using CRAM-MD5, Comment this out if you are using another mechanism. Uncomment below line to use this method
-      #smtp_auth_secret: "<secret>"
-
-      #SMTP TLS Requirement. If set to true, add smtp_server.crt to secrets directory prior install
-      smtp_require_tls: false
-
-    # We use only "default receiver" to configure alertmanager.
-    # email_configs is used if enable_smtp is set to true
-    receiver_email: "<receiver@mycompany.com>"
-
-    # Get notified once an alert is resolved
-    send_resolved: true
-
-    # Send in extra global configurations you want in the alertmanager.yml
-    extra_global_config: {}
-
-    # Send in additional receiver configs other than email optionally
-    # Refer https://prometheus.io/docs/alerting/configuration/#receiver
-    receiver_config: {}
-
-grafana:
-  image:
-    repository: ibmcom/fci-grafana
-    tag: <BUILD_TAG>
-    pullPolicy: "IfNotPresent"
-
-  #Set the username to login to the grafana
-  adminUser: "grafanauser"
-
 crypto-utils:
-  enabled: True
   image:
     repository: ibmcom/fci-crypto-utils
     tag: <BUILD_TAG>
@@ -380,14 +528,116 @@ crypto-utils:
 
   resources: {}
 
+  # Make a note of the fully qualified domain name of your OpenShift nodes (master and workers)
+  # for your installation.
+  #
+  # You MUST do one of the following.  Failure to do so will result in an installation failure.
+  #
+  # 1) Enter the values for CERT_DN, CERT_SAN_DNS_SPEC, and CERT_SAN_IP_SPEC.
+  #    This generates new, replacement SSL keystore artifacts (including a new
+  #    self-signed certificate).  This technique is often used for 'proof of concept' installations.
+  #
+  # 2) Obtain SSL/TLS certificates from a trusted certificate authority (CA)
+  #    and configure the FCI according the documentation section called Managing SSL/TLS universal keystores.
+  #    This technique is recommended for production installations.
+
+  config:
+    # REGENERATE_CERTS - this property determines if new, replacement universal SSL
+    #                   keystore artifacts are generated.
+    #
+    #                   Valid values are: true -or- false.
+    #
+    #                   If true is specified, then confirm the certificate information
+    #                   specified in the associated properties are correct for your
+    #                   installation.
+    #
+    #                   If false is specified, then certificates will only be generated if
+    #                   they do not already exist.
+    REGENERATE_CERTS: false
+
+    # SECRET_NAME is the name of the OpenShift secret object that contains the FCI
+    # keystore artifacts.  This typically does not need to be changed.
+    SECRET_NAME: 'platform-secret-files'
+
+    # USER_SECRET_NAME is the name of the pre-defined secret that contains a user's
+    # private key and certificate chain in PEM format.
+    # The private key must be 'key.pem'.
+    # The certificate chain must be 'crt.pem'.
+    # If this secret exists and the FCI keystore secret has not been created already,
+    # then the FCI keystore artifacts will be created from the key/certificate in this
+    # pre-existing secret.
+    # Enclose the values with ''
+    USER_SECRET_NAME: 'fci-user-secret-files'
+    # CERT_DN - use this property to set the Distinguished Name for the SSL
+    #           certificate. This does not have to match up or have similar values
+    #           for the CN or DN values of your LDAP (if your install specifies an LDAP server).
+    #           Typically the default value below is fine for most installations.
+    #
+    #           Example: 'CN=FCI_server,OU=FCI_platform,O=FCI_Development,C=US'
+    #
+    CERT_DN: 'CN=FCI_server,OU=FCI_platform,O=FCI_Development,C=US'
+    #
+    # CERT_SAN_DNS_SPEC - use this property to set the DNS names to be
+    #                     included in the certificate SubjectAlternativeName
+    #                     extension.
+    #
+    #                     Run the following command to get the httpsIngressSubdomain
+    #  oc get route console -n openshift-console | grep -v 'HOST/PORT' | awk '{print $2}' | cut -d'.' -f 2-
+    #
+    #                     The format is a comma-separated list of DNS names.
+    #                     Wildcard domain specifications are acceptable.
+    #                     There MUST BE no spaces before or after the comma in this list!!
+    #                     This must include openshfit cluster information and hdp servers information
+    #
+    #                     You MUST have at least two entries for the OpenShift cluster
+    #                     1) the full DNS name of your httpsIngressSubdomain (for example fciroute.yourco.com)
+    #                     2) *.full DNS name of your httpsIngressSubdomain (for example *.fciroute.yourco.com)
+    #                     If your https and tcp ingress are different you would have 4 entries for OpenShift
+    #
+    #                     Then you must include either the dns names for each HDP server or *.subdomain that includes
+    #                     all HDP servers.  Specifying each HDP server indivdually is more secure as it limits only
+    #                     those individual HDP servers to communicate to the openshift cluster
+    #
+    #                     For OpenShift include a wildcard for the subdomain and the domain itself (see example2 below)
+    #
+    #                     The localhost,127.0.0.1 at the end of this CERT_SANS_DNS_SPEC entry is optional
+    #
+    #                     Example1: CERT_SANS_DNS_SPEC = '*.localdomain,localdomain,localhost,127.0.0.1'
+    #
+    #                     Example2: The servers or virtual machines (nodes) for your install have
+    #                     httpsIngressSubdomain that matches your tcpIngressSubdomain for an OpenShift 4.3.x install
+    #                     the httpsIngressSubdomain is: fciroute.yourco.com
+    #                     The Hadoop nodes have dns names like ambari.yourhdp.com, hdp1.yourhdp.com, hdp2.yourhdp.com
+    #                     this line would need to look like either (note if all of your hdp machines are under
+    #                     .yourhdp.com, you can simply use *.yourhdp.com, NOTE: your HDP machines must be directly under
+    #                     .yourhdp.com for *.yourhdp.com to work, the HDP host cannot be hdp1.lab.yourhdp.com for example):
+    #
+    #                     CERT_SANS_DNS_SPEC = '*.fciroute.yourco.com,fciroute.yourco.com,*.yourhdp.com,localhost,127.0.0.1'
+    #                     or
+    # CERT_SANS_DNS_SPEC = '*.fciroute.yourco.com,fciroute.yourco.com,ambari.yourhdp.com,hdp1.yourhdp.com,hdp1.yourhdp.com,hdp2.yourhdp.com,localhost,127.0.0.1'
+    #
+    #                     Example3, same as Example 2 but the tcp ingress is tcpfciroute.yourco.com
+    #                     everything else is the same as Example2 (this could be an OpenShift 3.11.x install)
+    #
+    # CERT_SANS_DNS_SPEC = '*.fciroute.yourco.com,fciroute.yourco.com,*.tcpfciroute.yourco.com,tcpfciroute.yourco.com,*.yourhdp.com'
+    #
+    CERT_SAN_DNS_SPEC: '*.localdomain,localhost,127.0.0.1'
+    #
+    # CERT_SAN_IP_SPEC - use this property to set IP addresses to be
+    #                    included in the certificate SubjectAlternativeName
+    #                    extension.
+    #
+    #                    Typically this line is a comma-separated list of IP addresses.
+    #
+    #                    Example: CERT_SAN_IP_SPEC = '127.0.0.1'
+    #                    Typically this line is left unchanged.
+    CERT_SAN_IP_SPEC: '127.0.0.1'
+    # Set to false to generate unique certificates (recommended for production use)
+    USE_DEFAULT_CERTS: false
+
 logging:
   # set to False to disable logging infrastructure in a non-production environment
   enabled: True
-
-  filebeat:
-    image:
-      repository: ibmcom/fci-logshipper
-      tag: <BUILD_TAG>
 
   logstash:
     image:
@@ -398,41 +648,6 @@ logging:
     image:
       repository: ibmcom/fci-logvisualization
       tag: <BUILD_TAG>
-
-  logsearchCurator:
-    image:
-      repository: ibmcom/fci-logsearch-curator
-      tag: <BUILD_TAG>
-
-  #Set this to true if you want logs based alerting pointing to a logging stack outside FCI Platform
-  #Refer documentation to configure rules
-  elastalertOnly: False
-
-  elastalertConfig:
-    image:
-      repository: ibmcom/fci-elastalert
-      tag: <BUILD_TAG>
-    # Default interval between alert checks against the elasticsearch datasource, in minutes
-    runIntervalMins: 15
-    # The index to which elastalert will write its alerts and statuses
-    writebackIndex: elastalert
-    # Default time before realerting, in minutes
-    realertIntervalMins: 240
-
-    # If configuring email alerts in rules, set email_alerts to true
-    # Provide smtp_auth_username and smtp_auth_password in global section of this file to use SMTP Auth using LOGIN
-    # Credentials provided in the global section is mounted on to /opt/elastalert/smtp_auth.yml
-    # SMTP Configuration can be directly provided in the rules configured. Refer to documentation.
-    emailAlerts: false
-
-    #SMTP TLS Requirement. If set to true, add smtp_server.crt to secrets directory prior install
-    smtp_ssl: false
-
-    elasticsearch:
-      # elasticsearch endpoint
-      host: elasticsearch
-      # elasticsearch port
-      port: 9200
 
 security-audit:
   # set to False to disable auditing in a non-production environment
@@ -491,7 +706,6 @@ security-auth:
     ROLE_CASE_MANAGER: 'case_manager'
     ROLE_INSURANCE: 'insurance'
     ROLE_KYC: 'kyc'
-    ROLE_FTR: 'si-ftr'
     ROLE_GRAPH: 'graph'
     ROLE_ALERTS_INSIGHT: 'alerts_insight'
     ROLE_TOOLING: 'tooling'
@@ -526,7 +740,6 @@ security-auth:
     GROUP_CASE_MANAGER: 'CN=casemanager,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_INSURANCE: 'CN=insurance,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_KYC: 'CN=kyc,CN=Users,DC=aml,DC=ibm,DC=com'
-    GROUP_FTR: 'CN=ftr,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_GRAPH: 'CN=graph,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_ALERTS_INSIGHT: 'CN=alerts_insight,CN=Users,DC=aml,DC=ibm,DC=com'
     GROUP_TOOLING: 'CN=tooling,CN=Users,DC=aml,DC=ibm,DC=com'
@@ -542,60 +755,115 @@ security-auth:
 
 
 
-    # specify internal user registry (also known as basic registry)
-    # for each numbered user, specify the user's id, roles, and password
+    # specify internal user registry (also known as basic user registry) from WebSphere Liberty
+    # for each numbered user, specify the user's id, roles, tenants, and password
     # roles are comma separated
+    # tenants are comma separated
     # valid roles include: admin, analyst, investigator, supervisor, data_scientist
     # password are specified in the secrets.yaml file of the install toolkit
     # to add additional users, add additional user properties numbered 17, 18, etc.
     USER_ID_1: fciadmin
-    USER_ROLES_1: admin
-    USER_TEAMS_1: SupervisorTeam
+    USER_ROLES_1: admin,supervisor,investigator,analyst,data_scientist
+    USER_TEAMS_1: SupervisorTeam,InvestigationTeam,TriageTeam
+    USER_TENANTS_1: ibm.com
     USER_ID_2: fcianalyst
     USER_ROLES_2: analyst
     USER_TEAMS_2: TriageTeam
+    USER_TENANTS_2: ibm.com
     USER_ID_3: fciinvestigator
     USER_ROLES_3: investigator
     USER_TEAMS_3: InvestigationTeam
+    USER_TENANTS_3: ibm.com
     USER_ID_4: fcisupervisor
     USER_ROLES_4: supervisor
-    USER_TEAMS_4: SupervisorTeam
+    USER_TEAMS_4: SupervisorTeam,InvestigationTeam,TriageTeam
+    USER_TENANTS_4: ibm.com
     USER_ID_5: fcidatascientist
     USER_ROLES_5: data_scientist
     USER_TEAMS_5: InvestigationTeam
+    USER_TENANTS_5: ibm.com
     USER_ID_6: fciconfidential
     USER_ROLES_6: confidential
     USER_TEAMS_6: confidential
+    USER_TENANTS_6: ibm.com
     USER_ID_7: fciiadmin
     USER_ROLES_7: admin,insurance
     USER_TEAMS_7: SupervisorTeam,InsuranceTeam
+    USER_TENANTS_7: ibm.com
     USER_ID_8: fciianalyst
     USER_ROLES_8: analyst,insurance
     USER_TEAMS_8: TriageTeam,InsuranceTeam
+    USER_TENANTS_8: ibm.com
     USER_ID_9: fciiinvestigator
     USER_ROLES_9: investigator,insurance
     USER_TEAMS_9: InvestigationTeam,InsuranceTeam
+    USER_TENANTS_9: ibm.com
     USER_ID_10: fciisupervisor
     USER_ROLES_10: supervisor,insurance
     USER_TEAMS_10: SupervisorTeam,InsuranceTeam
+    USER_TENANTS_10: ibm.com
     USER_ID_11: tlsadmin
     USER_ROLES_11: admin,tls
     USER_TEAMS_11: SupervisorTeam
+    USER_TENANTS_11: ibm.com
     USER_ID_12: fcaisupervisor
     USER_ROLES_12: alerts_insight,supervisor
     USER_TEAMS_12: TriageTeam
+    USER_TENANTS_12: ibm.com
     USER_ID_13: fcaianalyst
     USER_ROLES_13: alerts_insight,analyst
     USER_TEAMS_13: TriageTeam
+    USER_TENANTS_13: ibm.com
     USER_ID_14: fcaiinvestigator
     USER_ROLES_14: alerts_insight,investigator
     USER_TEAMS_14: TriageTeam
+    USER_TENANTS_14: ibm.com
     USER_ID_15: fcaiadmin
     USER_ROLES_15: alerts_insight,admin
     USER_TEAMS_15: TriageTeam
-    USER_ID_16: toolingadmin
-    USER_ROLES_16: admin,data_scientist
-    USER_TEAMS_16: SupervisorTeam
+    USER_TENANTS_15: ibm.com
+    USER_ID_16: fcaiexecutive
+    USER_ROLES_16: alerts_insight,executive
+    USER_TEAMS_16: TriageTeam
+    USER_TENANTS_16: ibm.com
+    USER_ID_17: toolingadmin
+    USER_ROLES_17: admin,data_scientist,tooling
+    USER_TEAMS_17: SupervisorTeam
+    USER_TENANTS_17: ibm.com
+    USER_ID_18: graphadmin
+    USER_ROLES_18: admin,supervisor,graph
+    USER_TEAMS_18: SupervisorTeam
+    USER_TENANTS_18: ibm.com
+    USER_ID_19: sisupervisor
+    USER_ROLES_19: si,si-complaints,supervisor
+    USER_TEAMS_19: SupervisorTeam,InvestigationTeam,TriageTeam
+    USER_TENANTS_19: ibm.com
+    USER_ID_20: sianalyst
+    USER_ROLES_20: si,analyst
+    USER_TEAMS_20: TriageTeam
+    USER_TENANTS_20: ibm.com
+    USER_ID_21: siinvestigator
+    USER_ROLES_21: si,investigator
+    USER_TEAMS_21: InvestigationTeam
+    USER_TENANTS_21: ibm.com
+    USER_ID_22: siadmin
+    USER_ROLES_22: si,admin
+    USER_TEAMS_22: SupervisorTeam,InvestigationTeam,TriageTeam
+    USER_TENANTS_22: ibm.com
+    USER_ID_23: kycadmin
+    USER_ROLES_23: admin,supervisor,investigator,analyst,data_scientist,kyc
+    USER_TEAMS_23: SupervisorTeam,InvestigationTeam,TriageTeam
+    USER_MAIL_23: kycadmin@ibm.com
+    USER_DISPLAY_NAME_23: kycadmin
+    USER_TENANTS_23: ibm.com
+    USER_ID_24: fcilegal
+    USER_ROLES_24: supervisor,insurance
+    USER_TEAMS_24: LegalTeam
+    USER_TENANTS_24: ibm.com
+    USER_ID_25: fcivendor
+    USER_ROLES_25: analyst,insurance
+    USER_TEAMS_25: VendorTeam
+    USER_TENANTS_25: ibm.com
 
     # JWT_KEY_EXPIRY is the length of time before the security token expires
     # This controls the length of a user's session after logging in.
@@ -635,16 +903,16 @@ security-auth:
     # Tenant ID is specific to our App ID instance
     APPID_TENANTID: <tenantId>
     # The App ID oauth server URL which is used for redirecting user to IBM Cloud app ID based authentication.
-    APPID_OAUTH_SERVER_URL: "https://appid-oauth.ng.bluemix.net/oauth/v3/<tenantId>"
+    APPID_OAUTH_SERVER_URL: "https://us-south.appid.cloud.ibm.com/oauth/v4/<tenantId>"
     # The App ID profiles URL.
-    APPID_PROFILES_URL: "https://appid-profiles.ng.bluemix.net"
+    APPID_PROFILES_URL: "https://us-south.appid.cloud.ibm.com"
     # The App ID API version.
-    APPID_VERSION: "3"
+    APPID_VERSION: "4"
     # End Point for the app ID service.
     APPID_SERVICE_ENDPOINT: "https://us-south.appid.cloud.ibm.com"
     # Default Call back URL needed for redirecting to security-auth service after AppID authentication.
-    APPID_CALLBACK_URL: "/security-auth/ibm/bluemix/appid/callback"
-    # Default Call back URL needed for redirecting to security-auth service after AppID authentication.
+    APPID_CALLBACK_URL: "/security-auth/ibm/cloud/appid/callback"
+    # IBM Cloud IAM Token URL
     APPID_IAM_TOKEN_URL: "https://iam.cloud.ibm.com/identity/token"
 
     # BRUTE_THROTTLING is set to 'true' to enable throttling of requests from an IP address
@@ -655,15 +923,21 @@ security-auth:
     # BRUTE_FREE_RETRIES specifies the number of invalid logins before throttling begins
     BRUTE_FREE_RETRIES: '5'
 
+    # MULTI_TENANCY_ENABLED enable multi-tenancy fields in JWT
+    MULTI_TENANCY_ENABLED: 'true'
+    # Default tenants to use if none provided by LDAP and MULTI_TENANCY_ENABLED is set to true
+    DEFAULT_TENANT_IF_MISSING: 'ibm.com'
+
 case-manager:
   # set to False to disable Case Manager
   # set to True otherwise
   enabled: True
 
   mq:
-    #Load Balancer Node Ports - Port to expose in loadbalancer for CP4D installs
+    # Load Balancer Node Ports - Port to expose in loadbalancer for CP4D installs
     # Set to an empty string to use a random port
     mqNodePort: "30683"
+    mqSeriesNodePort: "30997"
     image:
       repository: ibmcom/fci-messaging
       tag: <BUILD_TAG>
@@ -671,7 +945,7 @@ case-manager:
     resources:
       requests:
         memory: "256Mi"
-        cpu: ".1"
+        cpu: ".5"
       limits:
         memory: "512Mi"
         cpu: "2"
@@ -686,15 +960,40 @@ case-manager:
     resources:
       requests:
         memory: "256Mi"
-        cpu: ".1"
+        cpu: "1"
       limits:
         memory: "9Gi"
         cpu: "4"
     nodeSelector: {}
     tolerations: []
     affinity: {}
+    # runAsUser is the user id that containers requiring updates to file system permissions
+    # run as if pvRequiresPermissionsFix is set to true
+    runAsUser: 1000
+  kerberosClient:
+    image:
+      repository: ibmcom/fci-hdp-client
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+
   libertyConfig:
     env_fci_batch_userid: 'fcibatch'
+    COM_FCI_HBASE_SITE_FILE: "/home/wlpadmin/hbase-site.xml"
+    COM_FCI_CORE_SITE_FILE: "/home/wlpadmin/core-site.xml"
+    COM_FCI_KRB5_CONF_FILE: "/home/wlpadmin/krb5.conf"
+
+  solutionPvcSpec:
+    accessModes:
+    - ReadWriteMany
+    storageClassName: null
+    size: 1Gi
+
+  # If upgrading from the 6.5 release, then change below to ReadWriteMany
+  mqPvcSpec:
+    accessModes:
+    - ReadWriteOnce
+    storageClassName: null
+    size: 1Gi
 
 cedm:
   # set to False to disable CEDM
@@ -708,21 +1007,42 @@ cedm:
     resources:
       requests:
         memory: "256Mi"
-        cpu: "0.03"
-      limits:
-        memory: "4Gi"
         cpu: "1"
+      limits:
+        memory: "12Gi"
+        cpu: "4"
+    # runAsUser is the user id that containers requiring updates to file system permissions
+    # run as if pvRequiresPermissionsFix is set to true
+    runAsUser: 1000
+  kerberosClient:
+    image:
+      repository: ibmcom/fci-hdp-client
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+
   db2:
     image:
       repository: ibmcom/fci-cedm-data-store-client
       tag: <BUILD_TAG>
 
+  libertyPvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 30Gi
+
   cedmConfig:
     FLYWAY_BASELINE_VERSION: '01.01.01.00.119'
+
+    #Kafka max message size in producer (Broker max message size - 1KB)
+    KAFKA_MAX_REQUEST_SIZE: '19998988'
 
     # Publish batch size and frequency
     PARTY_PUBLISH_BATCH_SIZE: '250'
     PARTY_PUBLISH_PERIOD_SECONDS: '300'
+
+    # HDP VERSION 2.6 or 3.1.0
+    HDP_VERSION: '3.1.0'
 
     # Big Match Oozie Workflow Config
     OOZIE_MAX_JVM_HEAP_SIZE: '4712'
@@ -733,12 +1053,12 @@ cedm:
     #OOZIE_NUM_OF_WORKER_TASKS: '2'
 
     OOZIE_NUM_OF_THREADS_FOR_EACH_WORKER: '1'
-    OOZIE_PORT: '11000'
+    OOZIE_PORT: '11443'
     OOZIE_JOBTRACKER_PORT: '8050'
-    OOZIE_SECURE_CONNECTION: 'false'
+    OOZIE_SECURE_CONNECTION: 'true'
     # The Fully Qualified DNS Name (FQDN) of the Oozie server.  The Oozie server is the
     # Hadoop Master for both production topology (6 servers), dev topology (3 servers) and
-    # single HDP server install.
+    # single HDP server install.  Do not include the <> in the hostname
     OOZIE_SERVER: '<hostname>'
     OOZIE_USER_NAME: 'bigmatch'
 
@@ -746,13 +1066,11 @@ cedm:
     # i) uncomment the the line below and provide HDP_MASTER_NODE (just delete the #)
     #HDP_NAME_NODE: 'hdfs://<HDP_MASTER_NODE>:8020'
     # ii) comment out the other line HDP_NAME_NODE: 'hdfs://fcicluster'
-
-    # If using the HDP production environment, leave the line below as is. For HDP dev env. & single server comment it out
-    HDP_NAME_NODE: 'hdfs://fcicluster'
-
-    # Scoring Oozie workflow config
-    SCORING_DRIVER_MEMORY: '5500m'
-    SCORING_EXECUTOR_MEMORY: '2600m'
+    #  Scoring Oozie workflow config
+    # By default, yarn decides the HDP container requirements. But it can be overridden by providing the below attributes.
+    # The values are indicative and will depend on HDP cluster resources.
+    SCORING_DRIVER_MEMORY: '2048m'
+    SCORING_EXECUTOR_MEMORY: '2048m'
     SCORING_NO_OF_EXECUTORS: '8'
     SCORING_NO_PARTITIONS: '8'
 
@@ -764,21 +1082,40 @@ cedm:
     # Daily scheduled time for running Entity Resolution (HH:mm)
     #RESOLUTION_RUNTIME: '23:59'
 
-    # Party enrichment configuration
-    # ENRICHMENT_ENDPOINT: 'https:<fully_qualified_host_name:port>'
+    # Time interval for running the Watchlist matching process (in seconds)
+    WATCHLIST_PROCESSING_INTERVAL: '300'
+    # Daily scheduled time for running the Watchlist matching process (HH:mm)
+    # WATCHLIST_PROCESSING_RUNTIME: '23:59'
+
+    ## Party enrichment configuration
+    # Entity Enrichment Endpoint(default=Entity Enrichment product exposed endpoint as specified below)
+    ENRICHMENT_ENDPOINT: 'https://fci-ees-engine:443/v1/entities/auto-enrich'
     # Comma separated list of plans to be executed
-    # ENRICHMENT_PLANS:
-    # Party type of enrich (o=Organizations, i=Individuals, a=All  default=o)
-    # ENRICHMENT_PARTY_TYPE:
-    # Party operation type to enrich (i=Insert, a=all (Insert and Update)  default=i)
-    # ENRICHMENT_OPERATION_TYPE:
-    # ENRICHMENT_CLIENT_ID:
-    # ENRICHMENT_CLIENT_SECRET:
+    # A value of '' means party enrichment is not enabled
+    ENRICHMENT_PLANS: ''
+    # Party type of enrich (o=Organizations, i=Individuals, a=All  default=a)
+    ENRICHMENT_PARTY_TYPE: 'a'
+    # Party operation type to enrich (i=Insert, a=all (Insert and Update)  default=a)
+    ENRICHMENT_OPERATION_TYPE: 'a'
+    # Party process type using enrichment. A value of
+    # i. 'false' allows only parties created via REST API to be enriched.
+    # ii.'true' allows all parties(created via async - bulk load, or sync - REST API) to be enriched
+    # default='true'
+    ENRICHMENT_ALL_PARTIES: 'true'
+    # Enrichment batch size and frequency
+    ENRICHMENT_PUBLISH_BATCH_SIZE: '100'
+    ENRICHMENT_PUBLISH_PERIOD_SECONDS: '300'
+
 
     # HBase REST Configuration
-    # HBASE_REST_SERVER: '<hostname>'
-    # HBASE_REST_PORT: '9081'
-    # HBASE_REST_SECURE_CONNECTION: 'true'
+    # The value is required for
+    # a) DERS
+    # b) watchlist processing
+
+    # fully qualified domain name of the Hadoop  (HDP) master node, for example HBASE_REST_SERVER: 'master.acme.com'
+    HBASE_REST_SERVER: '<hostname>'
+    HBASE_REST_PORT: '9081'
+    HBASE_REST_SECURE_CONNECTION: 'true'
 
 search:
   # set to False to disable Search
@@ -791,44 +1128,6 @@ search:
       repository: ibmcom/fci-search-liberty
       tag: <BUILD_TAG>
       pullPolicy: IfNotPresent
-
-rms:
-  # set to False to disable RMS
-  # set to True otherwise
-  enabled: False
-
-  db2Client:
-    image:
-      repository: ibmcom/fci-rms-data-store
-      tag: <BUILD_TAG>
-      pullPolicy: IfNotPresent
-
-  rmsDesignStudio:
-    image:
-      repository: ibmcom/fci-rms-designstudio
-      tag: <BUILD_TAG>
-
-  rmsStreamsVoice:
-    image:
-      repository: ibmcom/rms-streams-voice
-      tag: <BUILD_TAG>
-
-  rmsConfig:
-    FLYWAY_BASELINE_VERSION: '01.01.01.00.020'
-    #<hdp_host> is the active name node.
-    JUPYTER_URL: "https://<hdp_host>:5033/analytics/models/v1/jupyter/"
-    JOB_URL: "https://<hdp_host>:5006/job"
-    DISCOVERY_URL: "https://<hdp_host>:5004/discovery"
-    NLU_URL: "https://<hdp_host>:5007/nlu"
-    NLC_URL: "https://<hdp_host>:5001/nlc"
-    LIVY_URL: "https://<hdp_host>:8998/batches"
-    HDFS_URL: "hdfs://localhost/"
-    CANCEL_PIPELINE_JOB_URL: "https://<hdp_host>:5013/cancel"
-    HDFS_ACCESS_URL: "hdfs://<hdp_host>:50070"
-
-  config:
-    #Enter HDP MASTER IP and PASSWORD
-    HDP_MASTER_IP: '9.9.9.9'
 
 common-ui:
   nodejs:
@@ -859,10 +1158,32 @@ common-ui:
       repository: ibmcom/fci-investigative-ui-config-service
       tag: <BUILD_TAG>
 
+  iuiNarrativeService:
+  # set to False to disable Narrative Service
+  # set to True otherwise
+    enabled: False
+
+    image:
+      repository: ibmcom/fci-narrative-service
+      tag: <BUILD_TAG>
+
   nginxConfig:
     # INCLUDE_CONFIG is a comma-separated list of components to include
-    # valid values are: case,cedm,odm,search,rms,fcai,fcdd,sifs,graph
-    INCLUDE_CONFIG: 'case,cedm,odm,search,rms,graph'
+    # valid values are: case,cedm,odm,search,fcai,fcdd,sifs,graph
+    INCLUDE_CONFIG: 'case,cedm,odm,search,graph'
+
+
+  bkPvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 1Gi
+
+  nginxPvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 512Mi
 
   config:
     APP_ROLE_ANALYST: 'home'
@@ -886,16 +1207,42 @@ cdn-proxy:
       repository: ibmcom/fci-cdn-proxy
       tag: <BUILD_TAG>
 
-minio:
-  minio:
-    image:
-      repository: ibmcom/fci-docker-minio
-      tag: <BUILD_TAG>
+  bkPvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 5Gi
+
+dsf:
+  replicas: 0
+  image:
+    pullPolicy: IfNotPresent
+    repository: ibmcom/kyc-data-source-framework
+    tag: <BUILD_TAG>
+  dsfConfig:
+    DNB_USERNAME: ''
+    POPULATE_DEFINITIONS_ON_STARTUP: 'true'
+    DOWJONES_USERNAME: ''
+    DOWJONES_NAMESPACE: ''
+    KYCKR_USERNAME: ''
+    TRANSUNION_TLO_USERNAME: ''
+    TRANSUNION_EBUREAU_USERNAME: ''
+    TRANSUNION_IDVISION_USERNAME: ''
+
+ees-engine:
+  replicas: 0
+  image:
+    pullPolicy: IfNotPresent
+    repository: ibmcom/fci-shell-detection
+    tag: <BUILD_TAG>
 
 graph-writer:
   # set to False to disable Graph Liberty server
   # set to True otherwise
   enabled: True
+  # runAsUser is the user id that containers requiring updates to file system permissions
+  # run as if pvRequiresPermissionsFix is set to true
+  runAsUser: 1000
 
   liberty:
     image:
@@ -907,12 +1254,28 @@ graph-writer:
       repository: ibmcom/fci-graph-writer-init-pv
       tag: <BUILD_TAG>
 
+  kerberosClient:
+    image:
+      repository: ibmcom/fci-hdp-client
+      tag: <BUILD_TAG>
+      pullPolicy: IfNotPresent
+
   gremlin:
     image:
       repository: ibmcom/fci-graph-gremlin-server
       tag: <BUILD_TAG>
+    graphGremlinConfig:
+      gremlinNodePort: "30184"
 
 
-  graphGremlinConfig:
-    GRAPH_WRITER_ZOOKEEPER_ZNODE: /hbase-unsecure
-    GRAPH_WRITER_ELASTICSEARCH_HOSTNAME_VERIFICATION_DISABLE: 'true'
+  libertyPvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 1Gi
+
+  gremlinPvcSpec:
+    accessModes:
+      - ReadWriteMany
+    storageClassName: null
+    size: 1Gi
