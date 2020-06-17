@@ -3,9 +3,11 @@
 # Declare variables to be passed into your templates.
 
 global:
-  dockerRepository: ""
+  dockerRegistryPrefix: ""
   createPv: true
   nfsServer: ""
+  runAsUser: 1000
+
 
 enabled: True
 
@@ -30,8 +32,22 @@ liberty:
   - ReadWriteMany
   image:
     repository: ibmcom/fci-cedm-integration
-    tag: 6.5.0
+    tag: 6.5.2
     pullPolicy: IfNotPresent
+  readinessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 5
+    httpGet:
+      path: /console/api/docs/
+      port: 9443
+      scheme: HTTPS
+  livenessProbe:
+    initialDelaySeconds: 300
+    timeoutSeconds: 5
+    httpGet:
+      path: /console/api/docs/
+      port: 9443
+      scheme: HTTPS
   resources:
     requests:
       memory: "256Mi"
@@ -40,10 +56,41 @@ liberty:
       memory: "4Gi"
       cpu: "1"
 
+kerberosClient:
+  resources:
+    limits:
+      cpu: "100m"
+      memory: "128Mi"
+    requests:
+      cpu: "20m"
+      memory: "64Mi"
+  livenessProbe:
+    exec:
+      command:
+        - sh
+        - '-c'
+        - pgrep krblogin.sh
+    failureThreshold: 3
+    initialDelaySeconds: 300
+    periodSeconds: 60
+    successThreshold: 1
+    timeoutSeconds: 10
+  readinessProbe:
+    exec:
+      command:
+        - sh
+        - '-c'
+        - pgrep krblogin.sh
+    failureThreshold: 3
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    successThreshold: 1
+    timeoutSeconds: 10
+
 db2:
   image:
     repository: ibmcom/fci-cedm-data-store-client
-    tag: 6.5.0
+    tag: 6.5.2
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -116,14 +163,19 @@ cedmConfig:
 
   #Location of the search REST endpoint
   #SEARCH_HOST=found in configmap.yaml
-
-
+  
+  # Graph persistence configuration
+  # GRAPH_HOST: found in configmap.yaml
+  GRAPH_CONTENT_LENGTH: '81928192'
+  
+  
+  
 libertyPvNfsPath: /fci-cedm-integration-data
 
 libertyPvcSpec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-storage-class
+  storageClassName: null
   size: 30Gi
 
 livenessProbe:

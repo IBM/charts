@@ -30,7 +30,12 @@ Metering Annotations for CP4D
 {{- define "common.meteringAnnotations" -}}
 productName: "IBM Financial Crimes Insight for Conduct Surveillance Software"
 productID: "5737-E41"
-productVersion: "6.5.0"
+productVersion: "6.5.2"
+productMetric: "INSTALL"
+productChargedContainers: "All"
+cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+cloudpakName: "IBM Cloud Pak for Data"
+cloudpakVersion: "3.0.1"
 {{- end -}}
 
 {{/*
@@ -102,6 +107,38 @@ nodeAffinity:
         values:
         - {{ .Values.arch }}
 {{- end -}}
+
+
+{{/*
+*/}}
+{{- define "common.label.metadata" -}}
+  {{- $params := . }}
+  {{- $root := first $params }}
+  {{- $app := (index $params 1) }}
+  {{- $chart := (index $params 2) }}
+  {{- $release := (index $params 3) }}
+  {{- $heritage := (index $params 4) }}
+app: {{ $app }}
+chart: {{ $chart }}
+heritage: {{ $heritage }}
+release: {{ $release }}
+app.kubernetes.io/name: {{ $app }}
+helm.sh/chart: {{ $chart }}
+app.kubernetes.io/managed-by: {{ $heritage }}
+app.kubernetes.io/instance: {{ $release }}
+{{- end}}
+
+{{/*
+*/}}
+{{- define "common.selector.labels" -}}
+  {{- $params := . }}
+  {{- $root := first $params }}
+  {{- $app := (index $params 1) }}
+  {{- $release := (index $params 2) }}
+app.kubernetes.io/name: {{ $app }}
+app.kubernetes.io/instance: {{ $release }}
+{{- end}}
+
 
 {{/*
 */}}

@@ -4,22 +4,18 @@ metadata:
   name: {{ template "db2.fullname" . }}-datastore
   labels:
     podApplication: DB2
-    app: {{ template "db2.name" . }}-datastore
-    chart: {{ template "db2.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "db2.name" .) "datastore") (include "db2.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   serviceName: {{ template "db2.fullname" . }}-datastore
   selector:
     matchLabels:
-      app: {{ template "db2.name" . }}-datastore
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "db2.name" .) "datastore") .Release.Name ) | indent 6 }}
   replicas: {{ .Values.global.db2Instances }}
   volumeClaimTemplates:
   - metadata:
       name: {{ .Release.Name }}-{{ template "db2.name" . }}-db
     spec:
-      accessModes: [ "ReadWriteOnce" ]
+      accessModes: {{ .Values.dbPvcSpec.accessModes }}
       resources:
         requests:
           storage: {{ .Values.dbPvcSpec.size }}
@@ -35,13 +31,12 @@ spec:
 {{- if not .Values.global.persistence.useDynamicProvisioning }}
       selector:
         matchLabels:
-          app: {{ template "db2.name" . }}-db
-          release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "db2.name" .) "db") .Release.Name ) | indent 10 }}
 {{ end }}
   - metadata:
       name: {{ .Release.Name }}-{{ template "db2.name" . }}-instance
     spec:
-      accessModes: [ "ReadWriteOnce" ]
+      accessModes: {{ .Values.instancePvcSpec.accessModes }}
       resources:
         requests:
           storage: {{ .Values.instancePvcSpec.size }}
@@ -52,18 +47,17 @@ spec:
       storageClassName: {{ .Values.instancePvcSpec.storageClassName | quote }}
 {{-   end }}
 {{- else }}
-      storageClassName: {{ default "" .Values.instancePvcSpec.storageClassName | quote }}
+      storageClassName: {{ .Values.instancePvcSpec.storageClassName | quote }}
 {{- end }}
 {{- if not .Values.global.persistence.useDynamicProvisioning }}
       selector:
         matchLabels:
-          app: {{ template "db2.name" . }}-instance
-          release: {{ .Release.Name }}  
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "db2.name" .) "instance") .Release.Name ) | indent 6 }}
 {{ end }}
   - metadata:
       name: {{ .Release.Name }}-{{ template "db2.name" . }}-scripts
     spec:
-      accessModes: [ "ReadWriteMany" ]
+      accessModes: {{ .Values.scriptsPvcSpec.accessModes }}
       resources:
         requests:
           storage: {{ .Values.scriptsPvcSpec.size }}
@@ -74,13 +68,12 @@ spec:
       storageClassName: {{ .Values.scriptsPvcSpec.storageClassName | quote }}
 {{-   end }}
 {{- else }}
-      storageClassName: {{ default "" .Values.scriptsPvcSpec.storageClassName | quote }}
+      storageClassName: {{ .Values.scriptsPvcSpec.storageClassName | quote }}
 {{- end }}
 {{- if not .Values.global.persistence.useDynamicProvisioning }}
       selector:
         matchLabels:
-          app: {{ template "db2.name" . }}-scripts
-          release: {{ .Release.Name }}  
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "db2.name" .) "scripts") .Release.Name ) | indent 6 }}
 {{ end }}
   template:
     metadata:
@@ -88,19 +81,19 @@ spec:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
         podApplication: DB2
-        app: {{ template "db2.name" . }}-datastore
-        release: {{ .Release.Name }}
-        chart: {{ template "db2.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "db2.name" .) "datastore") (include "db2.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "db2") | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
-      serviceAccount: {{ .Release.Name }}-db2
-      serviceAccountName: {{ .Release.Name }}-db2
+      serviceAccount: fci-db2
+      serviceAccountName: fci-db2
       hostIPC: {{ .Values.hostIPC }}
       hostPID: false
       hostNetwork: false
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
       affinity:
-{{ include "common.ArchNodeAffinity" . | indent 8 }}    
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
 {{- if eq .Values.podAntiAffinity "hard" }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -125,7 +118,7 @@ spec:
               topologyKey: "kubernetes.io/hostname"
 {{- end }}
       volumes:
-        {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
+        {{- if .Values.unrootsquash }}
         - name: modifyetc
           hostPath:
             path: /etc
@@ -143,22 +136,20 @@ spec:
             secretName: {{ .Release.Name }}-platform-secret-files
       initContainers:
         - name: init-db2
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           command: ['sh','-c','/opt/ibm/fci/scripts/set_kernel_params.sh']
           securityContext:
-            allowPrivilegeEscalation: true
+{{ include "common.RootedContainerSecurityContext" . | indent 12 }}
             capabilities:
+              drop:
+              - ALL
               add:
               - SYS_RESOURCE
               - IPC_OWNER
               - SYS_NICE
-            privileged: true
-            readOnlyRootFilesystem: false
-            runAsNonRoot: false
-            runAsUser: 0
           volumeMounts:
           - name: proc
             mountPath: /host/proc
@@ -166,8 +157,8 @@ spec:
           - name: sys
             mountPath: /host/proc/sys
             readOnly: false
-        {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
-        - image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        {{- if .Values.unrootsquash }}
+        - image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           name: unrootsquash
@@ -180,25 +171,27 @@ spec:
                 sed -i 's/.*Domain =.*/Domain = slnfsv4.com/g' /modifyetc/idmapd.conf;
                 nfsidmap -c;
               fi
+          securityContext:
+{{ include "common.RootUserContainerSecurityContext" . | indent 12 }}
           volumeMounts:
             - name: modifyetc
               mountPath: /modifyetc
         {{- end }}
       containers:
         - name: db2-data-store
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           readinessProbe:
             exec:
               command:
-              - sh 
+              - sh
               - -c
               - "timeout --kill-after=30s --signal=INT 25s /opt/ibm/fci/scripts/healthcheck.sh"
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
             successThreshold: {{ .Values.readinessProbe.successThreshold }}
-            failureThreshold: {{ .Values.readinessProbe.failureThreshold }} 
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           livenessProbe:
             exec:
               command:
@@ -209,17 +202,19 @@ spec:
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
             successThreshold: {{ .Values.livenessProbe.successThreshold }}
-            failureThreshold: {{ .Values.livenessProbe.failureThreshold }} 
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
           securityContext:
-            allowPrivilegeEscalation: true
+{{ include "common.PrivilegedContainerSecurityContext" . | indent 12 }}
             capabilities:
+              drop:
+              - ALL
               add:
               - IPC_OWNER
               - SYS_NICE
               - SYS_RESOURCE
               - SYS_PTRACE
-            privileged: true
-            readOnlyRootFilesystem: false
+              - SETGID
+              - SETUID
           ports:
           - containerPort: 50000
           - containerPort: 56000
@@ -228,6 +223,9 @@ spec:
               name: {{ template "db2.fullname" . }}
           env:
 {{ include "common.db2LdapEnv" . | indent 10 }}
+{{- include "common.import-secret" (list . "com_fci_db2_password" "db2" "FCIAUTHID_PASSWORD") | indent 10 }}
+{{- include "common.import-secret" (list . "db2dbadm_password" "db2" "DB2DBADM_PASSWORD") | indent 10 }}
+{{- include "common.import-secret" (list . "db2inst1_password" "db2" "DB2INST1_PASSWORD") | indent 10 }}
           - name: LDAP_SSL_KEYFILE
             value: '/fci-audit-data-store-data/ks/fci_universal_ks.jks'
           - name: IPC_CLEAN
@@ -236,21 +234,6 @@ spec:
             {{- else }}
             value: 'false'
             {{- end }}
-          - name: com_fci_db2_password
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: FCIAUTHID_PASSWORD
-          - name: db2dbadm_password
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: DB2DBADM_PASSWORD
-          - name: db2inst1_password
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: DB2INST1_PASSWORD
           volumeMounts:
             - name: {{ .Release.Name }}-{{ template "db2.name" . }}-instance
               mountPath: /home/db2inst1-anchor
@@ -271,10 +254,6 @@ spec:
               subPath: fci_universal_ks.sth
           resources:
 {{ toYaml .Values.resources | indent 12 }}
-        {{- with .Values.nodeSelector }}
-          nodeSelector:
-{{ toYaml . | indent 12 }}
-        {{- end }}
         {{- with .Values.affinity }}
           affinity:
 {{ toYaml . | indent 12 }}
@@ -284,7 +263,7 @@ spec:
 {{ toYaml . | indent 12 }}
         {{- end }}
         - name: db2diag-log
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           securityContext:
 {{ include "common.AnyuidContainerSecurityContext" . | indent 12 }}
             capabilities:
@@ -293,7 +272,7 @@ spec:
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
 {{ include "common.sideCarHealthCheck" . | indent 10 }}
-          command: 
+          command:
           - sh
           - -c
           - |

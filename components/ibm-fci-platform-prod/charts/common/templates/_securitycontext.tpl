@@ -4,9 +4,6 @@ Pod related security context settings
 
 {{- define "common.RestrictedContainerSecurityContext" -}}
 runAsNonRoot: true
-{{- if (not .Values.global.deployOnCP4D) }}
-runAsUser: {{ .Values.global.runAsUser}}
-{{- end }}
 privileged: false
 readOnlyRootFilesystem:  false
 allowPrivilegeEscalation: false
@@ -30,7 +27,7 @@ hostIPC: false
 {{- end -}}
 
 {{- define "common.AnyuidContainerSecurityContext" -}}
-runAsNonRoot: false
+runAsNonRoot: true
 privileged: false
 readOnlyRootFilesystem:  false
 allowPrivilegeEscalation: false
@@ -43,4 +40,47 @@ readOnlyRootFilesystem:  false
 allowPrivilegeEscalation: true
 {{- end -}}
 
+{{- define "common.RootedContainerSecurityContext" -}}
+runAsNonRoot: false
+runAsUser: 0
+privileged: true
+readOnlyRootFilesystem:  false
+allowPrivilegeEscalation: true
+{{- end -}}
 
+{{- define "common.RootUserContainerSecurityContext" -}}
+runAsNonRoot: false
+runAsUser: 0
+privileged: false
+readOnlyRootFilesystem:  true
+allowPrivilegeEscalation: false
+capabilities:
+  drop:
+  - ALL
+{{- end -}}
+
+{{- define "common.RootChownerContainerSecurityContext" -}}
+runAsNonRoot: false
+runAsUser: 0
+privileged: false
+readOnlyRootFilesystem:  false
+allowPrivilegeEscalation: false
+capabilities:
+  drop:
+  - ALL
+  add:
+  - CHOWN
+{{- end -}}
+
+{{- define "common.RootFownerContainerSecurityContext" -}}
+runAsNonRoot: false
+runAsUser: 0
+privileged: false
+readOnlyRootFilesystem:  false
+allowPrivilegeEscalation: false
+capabilities:
+  drop:
+  - ALL
+  add:
+  - FOWNER
+{{- end -}}

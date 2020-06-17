@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-config
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "config" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "config" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: fci-common-scripts
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.global.commonScripts.resources | indent 12 }}
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          args: [ "{{ .Release.Namespace }}/{{ template "ibm-fci-conduct-surveillance.fullname" . }}-liberty" ]
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+      containers:
+        - name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-config
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          imagePullPolicy: {{ .Values.global.commonScripts.image.pullPolicy }}
+          env:
+          - name: RELEASE_NAME
+            value: {{ .Release.Name }}
+          - name: CORE_REL_NAME
+            value: {{ .Values.global.coreReleaseName }}
+          command:
+            - bash
+            - -c
+            - /common-scripts/sifs-config.sh
+          resources:
+{{ toYaml .Values.global.commonScripts.resources | indent 12 }}

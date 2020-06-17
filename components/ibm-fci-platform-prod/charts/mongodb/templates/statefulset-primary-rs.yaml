@@ -2,10 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   labels:
-    app: {{ template "mongodb.name" . }}
-    chart: {{ template "mongodb.chart" . }}
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
+{{- include "common.label.metadata" (list . (include "mongodb.name" .) (include "mongodb.chart" .) .Release.Name .Release.Service ) | indent 4 }}
   name: {{ template "mongodb.fullname" . }}-primary
 spec:
   serviceName: {{ template "mongodb.fullname" . }}-headless
@@ -16,29 +13,25 @@ spec:
 {{ end }}
   selector:
     matchLabels:
-      app: {{ template "mongodb.name" . }}
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (include "mongodb.name" .) .Release.Name ) | indent 6 }}
       component: primary
   template:
     metadata:
       labels:
-        app: {{ template "mongodb.name" . }}
-        chart: {{ template "mongodb.chart" . }}
-        release: {{ .Release.Name }}
+{{- include "common.label.metadata" (list . (include "mongodb.name" .) (include "mongodb.chart" .) .Release.Name .Release.Service ) | indent 8 }}
         component: primary
-        heritage: {{ .Release.Service }}
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       {{- if .Values.podAnnotations }}
 {{ toYaml .Values.podAnnotations | indent 8 }}
       {{- end }}
     spec:
-      serviceAccountName: {{ .Release.Name }}-common
+      serviceAccountName: fci-mongodb
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      {{- if and (.Values.securityContext.enabled) (not (or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS)) }}
+      {{- if .Values.securityContext.enabled }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
         runAsUser: {{ .Values.securityContext.runAsUser }}
@@ -51,24 +44,16 @@ spec:
 {{ toYaml .Values.nodeSelector | indent 8 }}
       {{- end }}
       initContainers:
-      {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS}}
+      {{- if .Values.global.pvRequiresPermissionsFix }}
       - name: permissionsfix
         args:
         - chown -R 1001:1001 /mount;
         command:
         - /bin/sh
         - -c
-        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         securityContext:
-          runAsNonRoot: false
-          privileged: false
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-            add:
-            - CHOWN 
+{{ include "common.RootChownerContainerSecurityContext" . | indent 10 }}
         resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 10 }}
         volumeMounts:
@@ -77,14 +62,12 @@ spec:
         {{- end }}
       containers:
         - name: {{ template "mongodb.name" . }}-primary
-          image: "{{ .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
-          {{- if .Values.global.deployOnCP4D }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-          {{- end }}
           ports:
           - containerPort: {{ .Values.service.port }}
             name: mongodb
@@ -138,63 +121,24 @@ spec:
             value: {{ .Values.mongodbExtraFlags | join " " }}
           - name: MONGODB_CLIENT_EXTRA_FLAGS
             value: {{ .Values.mongodbClientExtraFlags | join " " }}
-          - name: MONGODB_IUI_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-iui-password
-          - name: MONGODB_FCDD_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-fcdd-password
-          - name: MONGODB_TLS_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-fcai-tls-password
-          - name: MONGODB_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-password
-          - name: MONGODB_ROOT_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-root-password
-          - name: MONGODB_DSF_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-dsf-password
-          - name: MONGODB_ERAAS_INVESTIGATION_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-eraas-investigation-password
-          - name: MONGODB_ERAAS_PROXY_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-eraas-proxy-password
-          - name: MONGODB_ERAAS_KYC_ADAPTER_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-eraas-kyc-adapter-password
-          - name: MONGODB_REPLICA_SET_KEY
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-replica-set-key
+{{- include "common.import-secret" (list . "MONGODB_IUI_PASSWORD" "mongo" "mongodb-iui-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_FCDD_PASSWORD" "mongo" "mongodb-fcdd-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_TLS_PASSWORD" "mongo" "mongodb-fcai-tls-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_PASSWORD" "mongo" "mongodb-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ROOT_PASSWORD" "mongo" "mongodb-root-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_DSF_PASSWORD" "mongo" "mongodb-dsf-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ERAAS_EES_PASSWORD" "mongo" "mongodb-eraas-ees-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ERAAS_INVESTIGATION_PASSWORD" "mongo" "mongodb-eraas-investigation-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ERAAS_PROXY_PASSWORD" "mongo" "mongodb-eraas-proxy-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ERAAS_KYC_ADAPTER_PASSWORD" "mongo" "mongodb-eraas-kyc-adapter-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_REPLICA_SET_KEY" "mongo" "mongodb-replica-set-key") | indent 10 }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             exec:
               command:
                 - mongo
                 - --sslAllowInvalidCertificates
-                - --ssl                
+                - --ssl
                 - --eval
                 - "db.adminCommand('ping')"
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
@@ -209,7 +153,7 @@ spec:
               command:
                 - mongo
                 - --sslAllowInvalidCertificates
-                - --ssl                
+                - --ssl
                 - --eval
                 - "db.adminCommand('ping')"
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
@@ -261,7 +205,5 @@ spec:
 {{- if not .Values.global.persistence.useDynamicProvisioning }}
         selector:
           matchLabels:
-            app: {{ template "mongodb.name" . }}-primary
-            release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "mongodb.name" .) "primary") .Release.Name ) | indent 10 }}
 {{ end }}
-

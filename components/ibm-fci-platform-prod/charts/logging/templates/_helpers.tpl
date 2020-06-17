@@ -52,31 +52,3 @@ Return the appropriate apiVersion for cronjob APIs.
 {{- print "batch/v1beta1" }}
 {{- end -}}
 {{- end -}}
-
-{{/* vim: set filetype=mustache: */}}
-{{/*
-Expand the name of the chart.
-*/}}
-{{- define "elastalert.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
-{{/*
-Create a default fully qualified app name.
-We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
-*/}}
-{{- define "elastalert.fullname" -}}
-{{- $name := default .Chart.Name .Values.nameOverride -}}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
-{{/*
-Check if elastalert should be disabled
-*/}}
-{{- define "elastalert.scaleDownIfDisabled" -}}
-{{- if or .Values.enabled .Values.elastalertOnly }}
-replicas: 1
-{{- else }}
-replicas: 0
-{{- end }}
-{{- end -}}

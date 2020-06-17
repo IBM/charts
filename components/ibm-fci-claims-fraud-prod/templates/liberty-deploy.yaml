@@ -3,22 +3,15 @@ kind: Deployment
 metadata:
   name: {{ template "fci-insurance.fullname" . }}-liberty
   labels:
-    app: {{ template "fci-insurance.name" . }}-liberty
-    chart: {{ template "fci-insurance.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "fci-insurance.name" .) "liberty") (include "fci-insurance.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   selector:
     matchLabels:
-      app: {{ template "fci-insurance.name" . }}-liberty
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "fci-insurance.name" .) "liberty") .Release.Name ) | indent 6 }}
   template:
     metadata:
       labels:
-        app: {{ template "fci-insurance.name" . }}-liberty
-        release: {{ .Release.Name }}
-        chart: {{ template "fci-insurance.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "fci-insurance.name" .) "liberty") (include "fci-insurance.chart" .) .Release.Name .Release.Service ) | indent 8 }}
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
     spec:
@@ -62,7 +55,7 @@ spec:
         - name: init-svc-depend
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           command: [ "/common-scripts/init-container-svc-depend.sh" ]
           args: [ "{{ .Release.Namespace }}/{{ .Values.global.coreReleaseName }}-{{ .Values.config.DB2_SERVICE }}" ]
           resources:
@@ -70,7 +63,7 @@ spec:
         - name: fcii-data-store-client
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.dbClient.image.repository }}:{{ .Values.dbClient.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.dbClient.image.repository }}:{{ .Values.dbClient.image.tag }}"
           imagePullPolicy: {{ .Values.dbClient.image.pullPolicy }}
           args: ["migrate"]
           envFrom:
@@ -80,7 +73,7 @@ spec:
           - name: FLYWAY_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
+                name: {{ .Values.global.coreReleaseName }}-db2-secrets-env
                 key: DB2INST1_PASSWORD
           - name: SSL_KEYSTORE_PASSWORD_CONFIG
             valueFrom:
@@ -92,23 +85,14 @@ spec:
           resources:
 {{ toYaml .Values.dbClient.resources | indent 12 }}
           volumeMounts:
-{{- if hasKey .Values "global" }}
-{{-   if hasKey .Values.global "swidtag" }}
-{{-     if hasKey .Values.global.swidtag "file" }}
-            - name: swidtags
-              mountPath: /opt/ibm/fci/swidtag/{{ .Values.global.swidtag.file }}
-              subPath: {{ .Values.global.swidtag.file }}
-{{-     end }}
-{{-   end }}
-{{- end }}
             - name: file-secrets
               mountPath: /fci_universal_ks.jks
-              subPath: fci_universal_ks.jks      
+              subPath: fci_universal_ks.jks
       containers:
         - name: liberty
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.fciiUi.image.repository }}:{{ .Values.fciiUi.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.fciiUi.image.repository }}:{{ .Values.fciiUi.image.tag }}"
           imagePullPolicy: {{ .Values.fciiUi.image.pullPolicy }}
           resources:
 {{ toYaml .Values.fciiUi.resources | indent 12 }}
@@ -122,7 +106,7 @@ spec:
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
             successThreshold: {{ .Values.readinessProbe.successThreshold }}
-            failureThreshold: {{ .Values.readinessProbe.failureThreshold }} 
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           livenessProbe:
             exec:
               command:
@@ -133,7 +117,7 @@ spec:
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
             successThreshold: {{ .Values.livenessProbe.successThreshold }}
-            failureThreshold: {{ .Values.livenessProbe.failureThreshold }} 
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
           env:
           - name: JWT_KEY
             valueFrom:
@@ -148,15 +132,8 @@ spec:
           - name: com_fci_db2_password
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
+                name: {{ .Values.global.coreReleaseName }}-db2-secrets-env
                 key: FCIAUTHID_PASSWORD
-{{- if ne .Values.global.IDENTITY_SERVER_TYPE "none" }}
-          - name: LDAP_SERVER_BIND_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Values.global.coreReleaseName }}-platform-secrets-env
-                key: LDAP_SERVER_BINDCREDENTIALS    
-{{- end }}        
           envFrom:
           - configMapRef:
               name: {{ template "fci-insurance.fullname" . }}
@@ -174,7 +151,16 @@ spec:
             subPath: fci_universal_ks.jks
           - mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
             name: logs
-        - image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+{{- if hasKey .Values "global" }}
+{{-   if hasKey .Values.global "swidtag" }}
+{{-     if hasKey .Values.global.swidtag "file" }}
+          - name: swidtags
+            mountPath: /opt/ibm/fci/swidtag/{{ .Values.global.swidtag.file }}
+            subPath: {{ .Values.global.swidtag.file }}
+{{-     end }}
+{{-   end }}
+{{- end }}
+        - image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           name: message-log
@@ -198,7 +184,7 @@ spec:
           volumeMounts:
           - name: logs
             mountPath: /logs
-        - image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        - image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           livenessProbe:

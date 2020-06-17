@@ -3,25 +3,19 @@ kind: Deployment
 metadata:
   name: {{ template "graph-writer.fullname" . }}-gremlin
   labels:
-    app: {{ template "graph-writer.name" . }}-gremlin
-    chart: {{ template "graph-writer.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "graph-writer.name" .) "gremlin") (include "graph-writer.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
 {{ include "common.scaleDownIfDisabled" . | indent 2 }}
   selector:
     matchLabels:
-      app: {{ template "graph-writer.name" . }}-gremlin
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "graph-writer.name" .) "gremlin") .Release.Name ) | indent 6 }}
   revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
   template:
     metadata:
       labels:
         name: {{ template "graph-writer.fullname" . }}-gremlin
-        app: {{ template "graph-writer.name" . }}-gremlin
-        release: {{ .Release.Name }}
-        chart: {{ template "graph-writer.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "graph-writer.name" .) "gremlin") (include "graph-writer.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "elastic" "platform") | indent 8 }}
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
         fci/build: {{ .Values.image.timestamp | default .Release.Time}}
@@ -36,30 +30,63 @@ spec:
         - name: file-secrets
           secret:
             secretName: {{ .Release.Name }}-platform-secret-files
-      serviceAccountName: {{ .Release.Name }}-common-scripts
+        - name: graph-writer-gremlin-volume
+          persistentVolumeClaim:
+            claimName: {{ template "graph-writer.fullname" . }}-gremlin
+        - name: shared-data
+          emptyDir: {}
+        - name: keytab-file
+          secret:
+            secretName: {{ .Release.Name }}-graph-keytab
+        - name: logs
+          emptyDir: {}
+      {{- if .Values.global.pvRequiresPermissionsFix }}
+      serviceAccountName: fci-kube-api-fowner
+      {{- else }}
+      serviceAccountName: fci-common-scripts
+      {{- end }}
       initContainers:
         - name: init-svc-depend
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
           command: [ "/common-scripts/init-container-svc-depend.sh" ]
           args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-elasticsearch" ]
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+        {{- if .Values.global.pvRequiresPermissionsFix }}
+        - name: pv-permissions
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          securityContext:
+{{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
+          args:
+          - chmod -R g+w /pv;
+          command:
+          - /bin/sh
+          - -c
+          volumeMounts:
+          - name: graph-writer-gremlin-volume
+            mountPath: /pv
+          {{- end }}
       containers:
         - name: gremlin
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.gremlin.image.repository }}:{{ .Values.gremlin.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.gremlin.image.repository }}:{{ .Values.gremlin.image.tag }}"
           imagePullPolicy: {{ .Values.gremlin.image.pullPolicy }}
           resources:
 {{ toYaml .Values.gremlin.resources | indent 12 }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.runAsUser}}
+            {{- end }}
           readinessProbe:
             exec:
               command:
               - sh
               - -c
-              - "if [ -e /home/ibmadmin/readiness-healthcheck.sh ]; then /home/ibmadmin/readiness-healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+              - "if [ -e /opt/ibm/fcigraph/readiness-healthcheck.sh ]; then /opt/ibm/fcigraph/readiness-healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
             initialDelaySeconds: {{ default 30 .Values.graphWriterGremlin.readinessProbe.initialDelaySeconds }}
             timeoutSeconds: 30
           livenessProbe:
@@ -67,27 +94,23 @@ spec:
               command:
               - sh
               - -c
-              - "if [ -e /home/ibmadmin/liveness-healthcheck.sh ]; then /home/ibmadmin/liveness-healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+              - "if [ -e /opt/ibm/fcigraph/liveness-healthcheck.sh ]; then /opt/ibm/fcigraph/liveness-healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
             initialDelaySeconds: {{ default 30 .Values.graphWriterGremlin.livenessProbe.initialDelaySeconds }}
             failureThreshold: 3
-            periodSeconds: 60
-            timeoutSeconds: 30
+            periodSeconds: 120
+            timeoutSeconds: {{ default 30 .Values.graphWriterGremlin.livenessProbe.timeoutSeconds }}
           envFrom:
           - configMapRef:
               name: {{ template "graph-writer.fullname" . }}-gremlin
+          - configMapRef:
+              name: {{ template "graph-writer.fullname" . }}-gremlin-krb
           env:
-          - name: FCI_JKS_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ template "graph-writer.core-release-name" . }}-platform-secrets-env
-                key: FCI_JKS_PASSWORD
+{{- include "common.import-secret" (list . "FCI_JKS_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{- include "common.import-secret" (list . "ELASTICSEARCH_PASSWORD" "elastic" "ELASTIC_ADMIN_PASSWORD") | indent 10 }}
+          - name: HDP_SHARED_DIR
+            value: /home/fcigraph
           - name: ELASTICSEARCH_USERNAME
             value: fci_admin
-          - name: ELASTICSEARCH_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: ELASTIC_ADMIN_PASSWORD
           - name: hbase_zookeeper_quorum
             value: "{{ .Values.global.hbase.hbase_zookeeper_quorum }}"
           - name: ELASTICSEARCH_SERVICE_NAME
@@ -97,4 +120,54 @@ spec:
           volumeMounts:
           - name: file-secrets
             mountPath: /fciexports/graph-writer/fci_universal_ks.jks
-            subPath: fci_universal_ks.jks          
+            subPath: fci_universal_ks.jks
+          - name: graph-writer-gremlin-volume
+            mountPath: /fciexports/graph-writer
+          - name: shared-data
+            mountPath: /home/fcigraph
+          - mountPath: /etc/security/keytabs
+            name: keytab-file
+          - name: logs
+            mountPath: /opt/ibm/fcigraph/apache-tinkerpop-gremlin-server-3.4.4/logs
+        - envFrom:
+          - configMapRef:
+              name: {{ .Release.Name }}-ibm-fci-platform-prod-krb
+          - configMapRef:
+              name: {{ template "graph-writer.fullname" . }}-gremlin-krb
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.kerberosClient.image.repository }}:{{ .Values.kerberosClient.image.tag }}"
+          imagePullPolicy: {{ .Values.kerberosClient.image.pullPolicy }}
+          livenessProbe:
+{{ toYaml .Values.kerberosClient.livenessProbe | indent 12 }}
+          readinessProbe:
+{{ toYaml .Values.kerberosClient.readinessProbe | indent 12 }}
+          name: hdp-client
+          resources:
+{{ toYaml .Values.global.kerberos.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.global.kerberos.runAsUser }}
+            {{- end }}
+          volumeMounts:
+          - mountPath: /etc/security/keytabs
+            name: keytab-file
+          - name: shared-data
+            mountPath: /home/fcigraph
+        - name: graph-gremlin-log
+          resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+{{ include "common.livenessProbe" . | indent 10 }}
+{{ include "common.readinessProbe" . | indent 10 }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          args: [/bin/sh, -c, 'tail -500f /logs/gremlin.log']
+          volumeMounts:
+          - name: logs
+            mountPath: /logs

@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "ibm-fci-alert-triage.fullname" . }}-post-upgrade
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "post-upgrade") (include "ibm-fci-alert-triage.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-upgrade,post-install
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "post-upgrade") (include "ibm-fci-alert-triage.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      restartPolicy: Never
+      serviceAccountName: fci-common-scripts
+      {{- if .Values.fcai_alert_review.enabled }}
+      initContainers:
+      - name: init-svc-depend
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        command: [ "/common-scripts/init-container-svc-depend.sh" ]
+        securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        args: [ "{{ .Release.Namespace }}/{{ template "ibm-fci-alert-triage.core-release-name" . }}-odm" ]
+        {{- with .Values.fcai_alert_review.dbclient.resources }}
+        resources:
+{{    toYaml . | indent 12 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ template "ibm-fci-alert-triage.fullname" . }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          imagePullPolicy: {{ .Values.global.commonScripts.image.pullPolicy }}
+          env:
+          - name: RELEASE_NAME
+            value: {{ .Release.Name }}
+          - name: CORE_REL_NAME
+            value: {{ .Values.global.coreReleaseName }}
+          - name: ODM_ENABLED
+            value: "{{ .Values.fcai_alert_review.enabled }}"
+          - name: ODM_HOST
+            value: {{ .Values.global.coreReleaseName }}-odm
+          - name: FCI_ODM_SSL_PORT
+            value: "9443"
+          - name: ODM_RES_USER
+            value: resAdmin
+          - name: ODM_RES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.coreReleaseName }}-odm-secrets-env
+                key: odm_resadmin_password
+          command:
+            - bash
+            - -c
+            - /common-scripts/fcai-postinstall.sh
+          resources:
+{{ toYaml .Values.global.commonScripts.resources | indent 12 }}

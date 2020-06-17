@@ -3,10 +3,7 @@ kind: StatefulSet
 metadata:
   name: {{ template "kafka.fullname" . }}-zk
   labels:
-    app: {{ template "kafka.name" . }}-zk
-    chart: {{ template "kafka.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "kafka.name" .) "zk")  (include "kafka.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   serviceName: {{ template "kafka.fullname" . }}-zk
 {{ if .Values.enabled }}
@@ -16,8 +13,7 @@ spec:
 {{ end }}
   selector:
     matchLabels:
-      app: {{ template "kafka.name" . }}-zk
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list .  (printf "%s-%s" (include "kafka.name" .) "zk") .Release.Name ) | indent 6 }}
   volumeClaimTemplates:
   - metadata:
       name: {{ .Release.Name }}-data-zk
@@ -38,8 +34,7 @@ spec:
 {{- if not .Values.global.persistence.useDynamicProvisioning }}
       selector:
         matchLabels:
-          app: {{ template "kafka.name" . }}-zk
-          release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list .  (printf "%s-%s" (include "kafka.name" ) "zk") .Release.Name ) | indent 10 }}
 {{ end }}
   - metadata:
       name: {{ .Release.Name }}-log-zk
@@ -60,47 +55,35 @@ spec:
 {{- if not .Values.global.persistence.useDynamicProvisioning }}
       selector:
         matchLabels:
-          app: {{ template "kafka.name" . }}-zk-log
-          release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list .  (printf "%s-%s" (include "kafka.name" ) "zk-log") .Release.Name ) | indent 10 }}
 {{ end }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "kafka.name" . }}-zk
-        chart: {{ template "kafka.chart" . }}
-        release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "kafka.name" .) "zk")  (include "kafka.chart" .) .Release.Name .Release.Service ) | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
       securityContext:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
-      serviceAccountName: {{ .Release.Name }}-common
+      serviceAccountName: fci-kafka
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
       initContainers:
-        {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
+        {{- if .Values.global.pvRequiresPermissionsFix }}
         - name: permissionsfix
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           args:
           - chown -R 1000:1000 /mount;
           securityContext:
-            runAsNonRoot: false
-            privileged: false
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - ALL
-              add:
-              - CHOWN 
+{{ include "common.RootChownerContainerSecurityContext" . | indent 12 }}
           command:
           - /bin/sh
           - -c
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           volumeMounts:
           - mountPath: /mount
             name: {{ .Release.Name }}-data-zk
@@ -110,26 +93,18 @@ spec:
           args:
           - chown -R 1000:1000 /mount;
           securityContext:
-            runAsNonRoot: false
-            privileged: false
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - ALL
-              add:
-              - CHOWN 
+{{ include "common.RootChownerContainerSecurityContext" . | indent 12 }}
           command:
           - /bin/sh
           - -c
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           volumeMounts:
           - mountPath: /mount
             name: {{ .Release.Name }}-log-zk
         {{- end }}
       containers:
         - name: zookeeper
-          image: "{{ .Values.global.dockerRepository }}/{{ .Values.zookeeper.image.repository }}:{{ .Values.zookeeper.image.tag }}"
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.zookeeper.image.repository }}:{{ .Values.zookeeper.image.tag }}"
           resources:
 {{ toYaml .Values.zookeeper.resources | indent 12 }}
           imagePullPolicy: {{ .Values.zookeeper.image.pullPolicy }}
@@ -143,7 +118,13 @@ spec:
             name: server
           - containerPort: 3888
             name: leader-election
+          lifecycle:
+            preStop:
+              exec:
+                command: ["zookeeper-server-stop"]
           env:
+          - name: ZOOKEEPER_SNAPSHOT_TRUST_EMPTY
+            value: "true"
           - name: ZOOKEEPER_TICK_TIME
             value: "{{ .Values.zookeeper.tickTime }}"
           - name: ZOOKEEPER_CLIENT_PORT

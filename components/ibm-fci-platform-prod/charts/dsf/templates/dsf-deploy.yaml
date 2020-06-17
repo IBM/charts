@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "dsf.fullname" . }}
+  labels:
+{{- include "common.label.metadata" (list . (include "dsf.name" .)  (include "dsf.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (include "dsf.name" .) .Release.Name ) | indent 6 }}
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      labels:
+        name: {{ template "dsf.fullname" . }}
+{{- include "common.label.metadata" (list . (include "dsf.name" .)  (include "dsf.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "mongo" "platform") | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8}}
+    spec:
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      serviceAccountName: fci-common-scripts
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ .Release.Name }}-platform-secret-files
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.global.imagePullSecrets | indent 6 }}
+      {{- end }}
+      containers:
+        - name: dsf
+          image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health
+              port: 8443
+            initialDelaySeconds: {{ default 30 .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: 30
+          envFrom:
+            - configMapRef:
+                name: {{ template "dsf.fullname" . }}
+          env:
+{{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 12 }}
+{{- include "common.import-secret" (list . "MONGO_PWD" "mongo" "mongodb-dsf-password") | indent 12 }}
+            - name: DNB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecretName }}
+                  key: DNB_PASSWORD
+            - name: DOWJONES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecretName }}
+                  key: DOWJONES_PASSWORD
+            - name: OPENCORPORATES_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecretName }}
+                  key: OPENCORPORATES_API_TOKEN
+            - name: KYCKR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecretName }}
+                  key: KYCKR_PASSWORD
+            - name: TRANSUNION_TLO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecretName }}
+                  key: TRANSUNION_TLO_PASSWORD
+            - name: TRANSUNION_EBUREAU_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecretName }}
+                  key: TRANSUNION_EBUREAU_PASSWORD
+            - name: TRANSUNION_IDVISION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecretName }}
+                  key: TRANSUNION_IDVISION_PASSWORD
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: file-secrets
+              mountPath: /opt/app-root/src/ssl/{{ .Values.dsfConfig.APP_ENV }}/fci_universal_ks.pvtk.pem
+              subPath: fci_universal_ks.pvtk.pem
+              readOnly: true
+            - name: file-secrets
+              mountPath: /opt/app-root/src/ssl/{{ .Values.dsfConfig.APP_ENV }}/fci_universal_ks.crt.pem
+              subPath: fci_universal_ks.crt.pem
+              readOnly: true
+          {{- if .Values.resources }}
+          resources:
+            {{- if .Values.resources.requests }}
+            requests:
+              {{- if .Values.resources.requests.memory }}
+              memory: {{ .Values.resources.requests.memory }}
+              {{- end}}
+              {{- if .Values.resources.requests.cpu }}
+              cpu: {{ .Values.resources.requests.cpu }}
+              {{- end}}
+            {{- end}}
+            {{- if .Values.resources.limits }}
+            limits:
+              {{- if .Values.resources.limits.memory }}
+              memory: {{ .Values.resources.limits.memory }}
+              {{- end}}
+              {{- if .Values.resources.limits.cpu }}
+              cpu: {{ .Values.resources.limits.cpu }}
+              {{- end}}
+            {{- end}}
+          {{- end }}
+      restartPolicy: Always

@@ -6,11 +6,12 @@
 #     alert-review,case-manager,fci-rms-designstudio,fci-si,kyc
 
 global:
-  managerFQDN: ""
   coreReleaseName: ""
-  dockerRepository: ""
+  dockerRegistryPrefix: ""
   createPv: true
   nfsServer: ""
+  runAsUser: 1000
+
 
 #Lightweight initialization containers
 sideCarContainers:
@@ -38,7 +39,7 @@ nodejs:
   affinity: {}
   image:
     repository: ibmcom/fci-common-ui
-    tag: 6.5.0
+    tag: 6.5.2
     pullPolicy: "IfNotPresent"
 
 nginx:
@@ -55,7 +56,7 @@ nginx:
   affinity: {}
   image:
     repository: ibmcom/fci-common-ui-web
-    tag: 6.5.0
+    tag: 6.5.2
     pullPolicy: "IfNotPresent"
 
 nginxPvNfsPath: /fci-iui-nginx
@@ -63,7 +64,7 @@ nginxPvNfsPath: /fci-iui-nginx
 nginxPvcSpec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-storage-class
+  storageClassName: null
   size: 512Mi
 
 bkPvNfsPath: /fci-iui-bk
@@ -71,7 +72,7 @@ bkPvNfsPath: /fci-iui-bk
 bkPvcSpec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-storage-class
+  storageClassName: null
   size: 30Gi
 
 config:
@@ -79,7 +80,6 @@ config:
   HTTPS_KEY: "common-ui.pem"
   HTTPS_CERT: "common-ui.crt"
   SECURITY_API_PORT: "3000"
-  SSO_PORT: "3000"
   FCI_API_CERT: "fci-security.crt"
   JWT_ISSUER: "fci.ibm.com"
   MAX_COOKIE_AGE: "1800000"
@@ -102,6 +102,7 @@ config:
   CASE_MANAGER_DESCRIPTION: "Access workflow to manage cases being handled by your organization."
   FCI_RMS_DESIGNSTUDIO_TITLE: "Design Studio"
   FCI_RMS_DESIGNSTUDIO_DESCRIPTION: "Design rules for your solution."
+  CP4D_URI_PREFIX: "/fci"
 
 investigativeUI:
   replicas: 1
@@ -117,12 +118,12 @@ investigativeUI:
   affinity: {}
   image:
     repository: ibmcom/fci-investigative-ui
-    tag: 6.5.0
+    tag: 6.5.2
     pullPolicy: IfNotPresent
 
 nginxConfig:
   PRODUCTION: "true"
-  INCLUDE_CONFIG: "case,rms,search"
+  INCLUDE_CONFIG: "case,search"
   SI_ELASTIC_USER: "fci_admin"
 
 investigativeUIConfig:
@@ -148,7 +149,7 @@ iuiStaticConfig:
   #Static config container owned by IUI team
   image:
     repository: ibmcom/fci-investigative-ui-config
-    tag: 6.5.0
+    tag: 6.5.2
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -166,7 +167,7 @@ iuiConfigService:
   affinity: {}
   image:
     repository: ibmcom/fci-investigative-ui-config-service
-    tag: 6.5.0
+    tag: 6.5.2
     pullPolicy: IfNotPresent
   #Config service container owned by IUI Team
   resources:
@@ -184,5 +185,34 @@ iuiConfigServiceConfig:
   IUI_MONGODB_DATABASE: "iui"
   IUI_MONGODB_PORT: "27017"
   MONGODB_IUI_USER: "iui_user"
+  HTTPS_KEY: "investigative-ui.pem"
+  HTTPS_CERT: "investigative-ui.crt"
+  
+iuiNarrativeService:
+  enabled: True
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  image:
+    repository: ibmcom/fci-narrative-service
+    tag: 6.5.2
+    pullPolicy: IfNotPresent
+  #Config service container owned by IUI Team
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "0.05"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+  
+iuiNarrativeServiceConfig:
+  NODE_ENV: "production"
+  LOG_FILE_LEVEL: "info"
+  AUDIT_API_PORT: "9080"
+  MONGODB_NARRATIVES_DB: "narrative"
+  IUI_MONGODB_PORT: "27017"
+  MONGODB_NARRATIVES_USER: "narrativeuser"
   HTTPS_KEY: "investigative-ui.pem"
   HTTPS_CERT: "investigative-ui.crt"

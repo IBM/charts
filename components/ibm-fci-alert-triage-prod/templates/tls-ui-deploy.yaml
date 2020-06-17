@@ -3,10 +3,7 @@ kind: Deployment
 metadata:
   name: {{ template "ibm-fci-alert-triage.fullname" . }}-tls-ui
   labels:
-    app: {{ template "ibm-fci-alert-triage.name" . }}-tls-ui
-    chart: {{ template "ibm-fci-alert-triage.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "tls-ui") (include "ibm-fci-alert-triage.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   {{   if .Values.fcai_transaction_list_screening.enabled }}
   replicas: 1
@@ -15,17 +12,13 @@ spec:
   {{   end }}
   selector:
     matchLabels:
-      app: {{ template "ibm-fci-alert-triage.name" . }}-tls-ui
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "tls-ui") .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "ibm-fci-alert-triage.name" . }}-tls-ui
-        release: {{ .Release.Name }}
-        chart: {{ template "ibm-fci-alert-triage.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "tls-ui") (include "ibm-fci-alert-triage.chart" .) .Release.Name .Release.Service ) | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -37,7 +30,7 @@ spec:
         - name: file-secrets
           secret:
             secretName: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secret-files
-      serviceAccountName: {{ template "ibm-fci-alert-triage.core-release-name" . }}-common-scripts
+      serviceAccountName: fci-common-scripts
       {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
 {{ toYaml .Values.global.imagePullSecrets | indent 6 }}
@@ -46,7 +39,7 @@ spec:
       - name: tls-ui
         securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.fcai_transaction_list_screening.tlsUI.image.repository }}:{{ .Values.fcai_transaction_list_screening.tlsUI.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.fcai_transaction_list_screening.tlsUI.image.repository }}:{{ .Values.fcai_transaction_list_screening.tlsUI.image.tag }}
         volumeMounts:
         - name: file-secrets
           mountPath: /opt/ibm/fcai/certs/fci_universal_ks.pvtk.pem

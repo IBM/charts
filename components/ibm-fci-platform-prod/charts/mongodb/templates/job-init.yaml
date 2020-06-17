@@ -4,18 +4,13 @@ kind: Job
 metadata:
   name: "{{ template "mongodb.fullname" . }}-config"
   labels:
-    app: {{ template "mongodb.name" . }}-config
-    chart: {{ template "mongodb.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "mongodb.name" .) "config") (include "mongodb.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   template:
     metadata:
       labels:
-        app: {{ template "mongodb.name" . }}-config
-        chart: {{ template "mongodb.chart" . }}
-        release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "mongodb.name" .) "config") (include "mongodb.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "mongo") | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -29,10 +24,10 @@ spec:
           configMap:
             name: {{ template "mongodb.fullname" . }}-init-scripts
             defaultMode: 0755
-      serviceAccountName: {{ .Release.Name }}-common-scripts
+      serviceAccountName: fci-kube-api
       initContainers:
         - name: init-svc-depend
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           command: [ "/common-scripts/init-container-svc-depend.sh" ]
@@ -41,7 +36,7 @@ spec:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
       containers:
         - name: {{ template "mongodb.fullname" . }}-config
-          image: "{{ .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           securityContext:
@@ -53,60 +48,22 @@ spec:
           env:
           - name: MONGODB_HOSTNAME
             value: "{{ template "mongodb.fullname" . }}"
-          - name: MONGODB_IUI_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-iui-password
+{{- include "common.import-secret" (list . "MONGODB_IUI_PASSWORD" "mongo" "mongodb-iui-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_FCDD_PASSWORD" "mongo" "mongodb-fcdd-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_TLS_PASSWORD" "mongo" "mongodb-fcai-tls-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_PASSWORD" "mongo" "mongodb-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ROOT_PASSWORD" "mongo" "mongodb-root-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_DSF_PASSWORD" "mongo" "mongodb-dsf-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ERAAS_EES_PASSWORD" "mongo" "mongodb-eraas-ees-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ERAAS_INVESTIGATION_PASSWORD" "mongo" "mongodb-eraas-investigation-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ERAAS_PROXY_PASSWORD" "mongo" "mongodb-eraas-proxy-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_ERAAS_KYC_ADAPTER_PASSWORD" "mongo" "mongodb-eraas-kyc-adapter-password") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_REPLICA_SET_KEY" "mongo" "mongodb-replica-set-key") | indent 10 }}
+{{- include "common.import-secret" (list . "MONGODB_NARRATIVES_PASSWORD" "mongo" "mongodb-narratives-password") | indent 10 }}
           - name: MONGODB_REPLICA_SET_NAME
             value: {{ .Values.replicaSet.name | quote }}
           - name: MONGODB_ADVERTISED_HOSTNAME
             value: "$(MONGODB_HOSTNAME).{{ template "mongodb.fullname" . }}-headless.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-          - name: MONGODB_FCDD_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-fcdd-password
-          - name: MONGODB_TLS_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-fcai-tls-password
-          - name: MONGODB_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-password
-          - name: MONGODB_ROOT_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-root-password
-          - name: MONGODB_REPLICA_SET_KEY
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-replica-set-key
-          - name: MONGODB_DSF_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-dsf-password
-          - name: MONGODB_ERAAS_INVESTIGATION_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-eraas-investigation-password
-          - name: MONGODB_ERAAS_PROXY_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-eraas-proxy-password
-          - name: MONGODB_ERAAS_KYC_ADAPTER_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: mongodb-eraas-kyc-adapter-password
           volumeMounts:
             - name: custom-init-scripts
               mountPath: /tmp

@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-shared
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "shared" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+{{- if .Values.sharedPvcSpec.accessModes }}
+{{-   with .Values.sharedPvcSpec.accessModes }}
+  accessModes:
+{{      toYaml . | indent 4 -}}
+{{-   end -}}
+{{- end }}
+{{- if .Values.global.persistence.useDynamicProvisioning }}
+{{-   if not .Values.sharedPvcSpec.storageClassName }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ .Values.sharedPvcSpec.storageClassName | quote }}
+{{-   end }}
+{{- else }}
+  storageClassName: {{ default "" .Values.sharedPvcSpec.storageClassName | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.sharedPvcSpec.size }}
+{{- if not .Values.global.persistence.useDynamicProvisioning }}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "shared" ) .Release.Name ) | indent 6 }}
+{{- end -}}

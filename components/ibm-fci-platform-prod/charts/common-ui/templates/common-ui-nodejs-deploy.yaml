@@ -3,24 +3,18 @@ kind: Deployment
 metadata:
   name: {{ template "common-ui.fullname" . }}-nodejs
   labels:
-    app: {{ template "common-ui.name" . }}-nodejs
-    chart: {{ template "common-ui.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common-ui.name" .) "nodejs" ) (include "common-ui.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   selector:
     matchLabels:
-      app: {{ template "common-ui.name" . }}-nodejs
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "common-ui.name" .) "nodejs") .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "common-ui.name" . }}-nodejs
-        release: {{ .Release.Name }}
-        chart: {{ template "common-ui.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "common-ui.name" .) "nodejs" ) (include "common-ui.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "platform") | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -28,14 +22,14 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{ .Release.Name }}-common
+      serviceAccountName: fci-common
       volumes:
       - name: file-secrets
         secret:
           secretName: {{ template "common-ui.core-release-name" . }}-platform-secret-files
       containers:
       - name: nodejs
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.nodejs.image.repository }}:{{ .Values.nodejs.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.nodejs.image.repository }}:{{ .Values.nodejs.image.tag }}
         imagePullPolicy: {{ .Values.nodejs.image.pullPolicy }}
 {{ include "common.readinessProbe" . | indent 8 }}
 {{ include "common.livenessProbe" . | indent 8 }}
@@ -56,11 +50,7 @@ spec:
 {{ toYaml . | indent 10 }}
 {{- end }}
         env:
-        - name: JWT_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: JWT_KEY
+{{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 8 }}
         envFrom:
         - configMapRef:
             name: {{ template "common-ui.fullname" . }}
