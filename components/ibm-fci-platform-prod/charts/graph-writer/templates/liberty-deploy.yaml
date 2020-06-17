@@ -3,25 +3,19 @@ kind: Deployment
 metadata:
   name: {{ template "graph-writer.fullname" . }}-liberty
   labels:
-    app: {{ template "graph-writer.name" . }}-liberty
-    chart: {{ template "graph-writer.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "graph-writer.name" .) "liberty") (include "graph-writer.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
 {{ include "common.scaleDownIfDisabled" . | indent 2 }}
   selector:
     matchLabels:
-      app: {{ template "graph-writer.name" . }}-liberty
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "graph-writer.name" .) "liberty") .Release.Name ) | indent 6 }}
   revisionHistoryLimit: {{required "A valid .Values.revision_history_limit entry required!" .Values.revision_history_limit}}
   template:
     metadata:
       labels:
         name: {{ template "graph-writer.fullname" . }}-liberty
-        app: {{ template "graph-writer.name" . }}-liberty
-        release: {{ .Release.Name }}
-        chart: {{ template "graph-writer.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "graph-writer.name" .) "liberty") (include "graph-writer.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "platform") | indent 8 }}
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
         fci/build: {{ .Values.image.timestamp | default .Release.Time}}
@@ -32,7 +26,11 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{ .Release.Name }}-common
+      {{- if .Values.global.pvRequiresPermissionsFix }}
+      serviceAccountName: fci-kube-api-fowner
+      {{- else }}
+      serviceAccountName: fci-common-scripts
+      {{- end }}
       volumes:
         - name: file-secrets
           secret:
@@ -41,27 +39,41 @@ spec:
           persistentVolumeClaim:
             claimName: {{ template "graph-writer.fullname" . }}-liberty
         - name: logs
-          emptyDir: {}          
+          emptyDir: {}
       initContainers:
         - name: init-pv
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.libertyInitPv.image.repository }}:{{ .Values.libertyInitPv.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.libertyInitPv.image.repository }}:{{ .Values.libertyInitPv.image.tag }}"
           imagePullPolicy: {{ .Values.libertyInitPv.image.pullPolicy }}
           resources:
 {{ toYaml .Values.libertyInitPv.resources | indent 12 }}
           securityContext:
+          {{- if .Values.global.pvRequiresPermissionsFix }}
+{{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
+          {{- else }}
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
-          command: [ "sh", "-c", "/init-pv.sh" ]
+          {{- end }}
+          args:
+          - /init-pv.sh {{ .Values.libertyInitPv.image.tag }}
+          {{- if .Values.global.pvRequiresPermissionsFix }}
+          - chmod -R g+w /pv
+          {{- end }}
+          command:
+          - /bin/sh
+          - -c
           volumeMounts:
           - name: graph-writer-liberty-volume
-            mountPath: /pv            
+            mountPath: /pv
       containers:
         - name: liberty
           resources:
 {{ toYaml .Values.liberty.resources | indent 12 }}
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.liberty.image.repository }}:{{ .Values.liberty.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.liberty.image.repository }}:{{ .Values.liberty.image.tag }}"
           imagePullPolicy: {{ .Values.liberty.image.pullPolicy }}
           securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+            {{- if .Values.global.pvRequiresPermissionsFix }}
+            runAsUser: {{ .Values.runAsUser }}
+            {{- end }}
           readinessProbe:
             exec:
               command:
@@ -84,16 +96,8 @@ spec:
           - configMapRef:
               name: {{ template "graph-writer.fullname" . }}-liberty
           env:
-          - name: FCI_JKS_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ template "graph-writer.core-release-name" . }}-platform-secrets-env
-                key: FCI_JKS_PASSWORD
-          - name: JWT_KEY
-            valueFrom:
-              secretKeyRef:
-                name: {{ template "graph-writer.core-release-name" . }}-platform-secrets-env
-                key: JWT_KEY
+{{- include "common.import-secret" (list . "FCI_JKS_PASSWORD" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
+{{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 10 }}
           ports:
           - containerPort: 9554
           volumeMounts:
@@ -107,7 +111,7 @@ spec:
         - name: graph-liberty-log
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
 {{ include "common.livenessProbe" . | indent 10 }}
 {{ include "common.readinessProbe" . | indent 10 }}
           securityContext:

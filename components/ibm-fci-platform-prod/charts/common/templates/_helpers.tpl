@@ -30,7 +30,12 @@ Metering Annotations for CP4D
 {{- define "common.meteringAnnotations" -}}
 productName: "IBM Cloud Pak for Data Financial Crimes Insight"
 productID: "5737-E41"
-productVersion: "6.5.0"
+productVersion: "6.5.2"
+productMetric: "INSTALL"
+productChargedContainers: "All"
+cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+cloudpakName: "IBM Cloud Pak for Data"
+cloudpakVersion: "3.0.1"
 {{- end -}}
 
 {{/*
@@ -103,6 +108,39 @@ nodeAffinity:
         - {{ .Values.arch }}
 {{- end -}}
 
+
+
+{{/*
+*/}}
+{{- define "common.label.metadata" -}}
+  {{- $params := . }}
+  {{- $root := first $params }}
+  {{- $app := (index $params 1) }}
+  {{- $chart := (index $params 2) }}
+  {{- $release := (index $params 3) }}
+  {{- $heritage := (index $params 4) }}
+app: {{ $app }}
+chart: {{ $chart }}
+heritage: {{ $heritage }}
+release: {{ $release }}
+app.kubernetes.io/name: {{ $app }}
+helm.sh/chart: {{ $chart }}
+app.kubernetes.io/managed-by: {{ $heritage }}
+app.kubernetes.io/instance: {{ $release }}
+{{- end}}
+
+{{/*
+*/}}
+{{- define "common.selector.labels" -}}
+  {{- $params := . }}
+  {{- $root := first $params }}
+  {{- $app := (index $params 1) }}
+  {{- $release := (index $params 2) }}
+app.kubernetes.io/name: {{ $app }}
+app.kubernetes.io/instance: {{ $release }}
+{{- end}}
+
+
 {{/*
 */}}
 {{- define "common.configureHostAliases" -}}
@@ -121,20 +159,6 @@ replicas: 1
 {{   else }}
 replicas: 0
 {{   end }}
-{{- end -}}
-
-{{/*
-Create the initialize-pv string required for a given pod.
-
-call like this:
-{{ template "common.init-pv" dict "release" .Release.Name "initContainer" "init-pv" "app" "common-scripts" "archive" "fci-common-scripts-data.tar.gz" }}
-
-*/}}
-{{- define "common.init-pv" -}}
-./initialize-pv -p "$(kubectl get pod -l app={{ $.app }},release={{ $.release }}  | grep -v Terminating | grep -v NAME | awk '{print $1}' | head -1)" -i {{ $.initContainer }} -t __DATA_FILE_ARCHIVE_DIRECTORY__/{{ $.archive }}
-{{- end -}}
-{{- define "common.init-pv-db2" -}}
-./initialize-pv -p "$(kubectl get pod -l statefulset.kubernetes.io/pod-name={{ $.app }},release={{ $.release }}  | grep -v Terminating | grep -v NAME | awk '{print $1}' | head -1)" -i {{ $.initContainer }} -t __DATA_FILE_ARCHIVE_DIRECTORY__/{{ $.archive }}
 {{- end -}}
 
 
@@ -173,7 +197,50 @@ Add LDAP information for DB2
 - name: LDAP_SERVER_BINDPW
   valueFrom:
     secretKeyRef:
-      name: {{ .Release.Name }}-platform-secrets-env
-      key: LDAP_SERVER_BINDCREDENTIALS    
-{{- end }} 
-{{- end -}} 
+      name: {{ .Values.global.externalSecretName }}
+      key: LDAP_SERVER_BINDCREDENTIALS
+{{- end }}
+{{- end -}}
+
+{{/*
+Imports a secret into the pod from the secrets created by the pre-install job.
+Used in templates as follows:
+```
+    env:
+{{- include "common.import-secret (list . "name" "secret-category" "secret-key") | indent 6 }}
+```
+
+An example getting the db2 password:
+```
+    env:
+{{- include "common.import-secret (list . "FLYWAY_PASSWORD" "db2" "DB2INST1_PASSWORD") | indent 6 }}
+```
+
+*/}}
+{{- define "common.import-secret" -}}
+  {{- $params := . }}
+  {{- $root := first $params }}
+  {{- $env_name := (index $params 1) }}
+  {{- $cat := (index $params 2) }}
+  {{- $key_name := (index $params 3) }}
+- name: {{ $env_name | quote }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ printf "%s-%s-%s"  $root.Release.Name $cat "secrets-env" }}
+      key: {{ $key_name | quote }}
+{{- end -}}
+
+{{- define "common.import-all-secrets" -}}
+  {{- $params := . }}
+  {{- $root := first $params }}
+  {{- $cat := (index $params 1) }}
+- secretRef:
+    name: {{ printf "%s-%s-%s" "fci" $cat "secrets-env" }}
+{{- end -}}
+
+{{- define "common.using-secrets" -}}
+  {{- $params := . }}
+  {{- range $key := $params }}
+{{ printf "%s-%s-%s" "fci" $key "secrets-env" }}: "1"
+  {{- end -}}
+{{- end -}}

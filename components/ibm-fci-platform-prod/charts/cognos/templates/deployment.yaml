@@ -3,25 +3,19 @@ kind: Deployment
 metadata:
   name: {{ template "cognos.fullname" . }}
   labels:
-    app: {{ template "cognos.name" . }}
-    chart: {{ template "cognos.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "cognos.name" .) (include "cognos.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
 {{ include "common.scaleDownIfDisabled" . | indent 2 }}
   selector:
     matchLabels:
-      app: {{ template "cognos.name" . }}
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (include "cognos.name" .)  .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "cognos.name" . }}
-        release: {{ .Release.Name }}
-        chart: {{ template "cognos.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "cognos.name" .) (include "cognos.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "db2" "platform") | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -29,8 +23,8 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{ .Release.Name }}-cognos
-      serviceAccount: {{ .Release.Name }}-cognos
+      serviceAccountName: fci-cognos
+      serviceAccount: fci-cognos
       volumes:
         - name: dashboards
           persistentVolumeClaim:
@@ -49,7 +43,7 @@ spec:
             capabilities:
               drop:
               - ALL
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           command: [ "/common-scripts/init-container-svc-depend.sh" ]
           args: [ "{{ .Release.Namespace }}/{{ .Release.Name }}-{{ .Values.db2_service }}" ]
       containers:
@@ -58,11 +52,7 @@ spec:
         - configMapRef:
             name: {{ template "cognos.fullname" . }}
         env:
-        - name: COGNOS_DB2_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: FCIAUTHID_PASSWORD
+{{- include "common.import-secret" (list . "COGNOS_DB2_PASSWORD" "db2" "FCIAUTHID_PASSWORD") | indent 8 }}
         volumeMounts:
         - name: dashboards
           mountPath: "/opt/ibm/cognos/analytics/deployment"
@@ -89,15 +79,15 @@ spec:
           timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
           successThreshold: {{ .Values.livenessProbe.successThreshold }}
           failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
       - name: cognosserver-log
-        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 10 }}
         args: [/bin/sh, -c, 'tail -n+1 -F /logs/cognosserver.log']
-{{ include "common.sideCarHealthCheck" . | indent 8 }} 
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
         securityContext:
 {{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
           capabilities:
@@ -107,16 +97,11 @@ spec:
         - name: logs
           mountPath: /logs
       - name: 'cognos-proxy'
-{{ include "common.sideCarHealthCheck" . | indent 8 }}
         envFrom:
         - configMapRef:
             name: {{ template "cognos.fullname" . }}
         env:
-        - name: JWT_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: JWT_KEY
+{{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 8 }}
         securityContext:
 {{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
           capabilities:
@@ -132,10 +117,9 @@ spec:
           mountPath: /opt/ibm/fci/dashboards-proxy/ssl-cert.pem
           subPath: fci_universal_ks.crt.pem
         imagePullPolicy: {{ .Values.proxy.image.pullPolicy }}
+{{ include "common.livenessProbe" . | indent 8 }}
 {{ include "common.readinessProbe" . | indent 8 }}
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.proxy.image.repository }}:{{ .Values.proxy.image.tag }}
-        resources:
-{{ toYaml .Values.proxy.resources | indent 10 }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.proxy.image.repository }}:{{ .Values.proxy.image.tag }}
         ports:
         - containerPort: 3000
       restartPolicy: Always

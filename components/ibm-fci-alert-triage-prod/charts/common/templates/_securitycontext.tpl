@@ -15,6 +15,19 @@ capabilities:
   - ALL
 {{- end -}}
 
+{{- define "common.RootFownerContainerSecurityContext" -}}
+runAsNonRoot: false
+runAsUser: 0
+privileged: false
+readOnlyRootFilesystem:  false
+allowPrivilegeEscalation: false
+capabilities:
+  drop:
+  - ALL
+  add:
+  - FOWNER
+{{- end -}}
+
 {{- define "common.PodHostConfig" -}}
 hostNetwork: false
 hostPID: false
@@ -28,6 +41,3 @@ hostIPC: false
 {{ toYaml .Values.global.fsGroupConfig }}
 {{- end }}
 {{- end -}}
-
-
-

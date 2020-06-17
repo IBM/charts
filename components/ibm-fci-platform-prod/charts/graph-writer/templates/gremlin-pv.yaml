@@ -1,0 +1,28 @@
+{{- if .Values.global.createPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "graph-writer.fullname" . }}-gremlin
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "graph-writer.name" .) "gremlin") (include "graph-writer.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  nfs:
+    path: {{ .Values.gremlinPvNfsPath }}
+    server: {{ required "When global.createPv is set to true, global.nfsServer must specify the NFS server that holds the persistent volume." .Values.global.nfsServer }}
+    readOnly: false
+{{-   if .Values.gremlinPvcSpec.size }}
+  capacity:
+    storage: {{ .Values.gremlinPvcSpec.size }}
+{{-   end }}
+{{-   if .Values.gremlinPvcSpec.storageClassName }}
+  storageClassName: {{ .Values.gremlinPvcSpec.storageClassName | quote }}
+{{-   else }}
+  storageClassName: {{ default nil .Values.global.persistence.storageClassName | quote }}
+{{-   end }}
+{{-   if .Values.gremlinPvcSpec.accessModes }}
+{{-     with .Values.gremlinPvcSpec.accessModes }}
+  accessModes:
+{{        toYaml . | indent 4 -}}
+{{-     end -}}
+{{-   end }}
+{{- end -}}

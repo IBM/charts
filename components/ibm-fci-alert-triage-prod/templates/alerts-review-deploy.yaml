@@ -4,10 +4,7 @@ kind: Deployment
 metadata:
   name: {{ template "ibm-fci-alert-triage.fullname" . }}-ar
   labels:
-    app: {{ template "ibm-fci-alert-triage.name" . }}-ar
-    chart: {{ template "ibm-fci-alert-triage.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "ar") (include "ibm-fci-alert-triage.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   {{ if .Values.fcai_alert_review.enabled }}
   replicas: 1
@@ -16,17 +13,13 @@ spec:
   {{ end }}
   selector:
     matchLabels:
-      app: {{ template "ibm-fci-alert-triage.name" . }}-ar
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "ar") .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "ibm-fci-alert-triage.name" . }}-ar
-        release: {{ .Release.Name }}
-        chart: {{ template "ibm-fci-alert-triage.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "ar") (include "ibm-fci-alert-triage.chart" .) .Release.Name .Release.Service ) | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -34,7 +27,7 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{ template "ibm-fci-alert-triage.core-release-name" . }}-common-scripts
+      serviceAccountName: fci-common-scripts
       volumes:
         - name: db2-instance
           persistentVolumeClaim:
@@ -57,7 +50,7 @@ spec:
       {{- end }}
       initContainers:
       - name: init-svc-depend
-        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         command: [ "/common-scripts/init-container-svc-depend.sh" ]
         securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
@@ -67,7 +60,7 @@ spec:
 {{    toYaml . | indent 12 }}
         {{- end }}
       - name: fcai-data-store
-        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.fcai_alert_review.dbclient.image.repository }}:{{ .Values.fcai_alert_review.dbclient.image.tag }}"
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.fcai_alert_review.dbclient.image.repository }}:{{ .Values.fcai_alert_review.dbclient.image.tag }}"
         imagePullPolicy: {{ .Values.fcai_alert_review.dbclient.image.pullPolicy }}
         command: ["/bin/sh","-c"]
         securityContext:
@@ -80,7 +73,7 @@ spec:
         - name: FLYWAY_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-db2-secrets-env
               key: DB2INST1_PASSWORD
         - name: SSL_KEYSTORE_PASSWORD_CONFIG
           valueFrom:
@@ -101,7 +94,7 @@ spec:
         {{- end }}
       containers:
       - name: nodejs
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.fcai_alert_review.alertReview.image.repository }}:{{ .Values.fcai_alert_review.alertReview.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.fcai_alert_review.alertReview.image.repository }}:{{ .Values.fcai_alert_review.alertReview.image.tag }}
         imagePullPolicy: {{ .Values.fcai_alert_review.alertReview.image.pullPolicy }}
         {{- with .Values.fcai_alert_review.alertReview.resources }}
         resources:
@@ -157,7 +150,7 @@ spec:
         - name: DATABASE_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-db2-secrets-env
               key: FCIAUTHID_PASSWORD
         - name: JWT_KEY
           valueFrom:

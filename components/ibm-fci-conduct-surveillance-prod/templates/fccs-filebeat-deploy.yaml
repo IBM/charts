@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-filebeat
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "filebeat" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "filebeat" ) .Release.Name ) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "filebeat" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      serviceAccountName: fci-kube-api-fowner
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secret-files
+        - name: sifs-filebeat-volume
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-filebeat
+        - name: sifs-filebeat-base-liberty-volume
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-liberty
+        - name: sifs-filebeat-ecomm-liberty-volume
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-ecomm-liberty
+        - name: sifs-filebeat-voice-liberty-volume
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-voice-liberty
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          args: [ "{{ .Release.Namespace }}/{{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-elasticsearch","{{ .Release.Namespace }}/{{ template "ibm-fci-conduct-surveillance.fullname" . }}-logstash" ]
+          resources:
+{{ toYaml .Values.initContainerResource.resources | indent 12 }}
+        {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
+        - name: pv-permissions
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.initContainerResource.resources | indent 12 }}
+          securityContext:
+{{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
+          args:
+          - chmod -R g+w /mount;
+          command:
+          - /bin/sh
+          - -c
+          volumeMounts:
+          - mountPath: /mount
+            name: sifs-filebeat-volume
+        {{- end }}
+      containers:
+        - name: sifs-filebeat-1
+          image: {{ .Values.global.dockerRegistryPrefix }}/{{ .Values.surveillanceFilebeat.image.repository }}:{{ .Values.surveillanceFilebeat.image.tag }}
+          imagePullPolicy: {{ .Values.surveillanceFilebeat.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+            runAsUser: {{ .Values.global.runAsUser}}
+          env:
+          - name: LOGSTASH_HOST_PORT
+            value: "{{ template "ibm-fci-conduct-surveillance.fullname" . }}-logstash:5044"
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/sifs/filebeat/healthcheck.sh ]; then /opt/ibm/sifs/filebeat/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "if [ -e /opt/ibm/sifs/filebeat/healthcheck.sh ]; then /opt/ibm/sifs/filebeat/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          ports:
+          - containerPort: 6060
+          volumeMounts:
+            - name: sifs-filebeat-volume
+              mountPath: /home/filebeat-anchor
+            - name: sifs-filebeat-base-liberty-volume
+              mountPath: /fb-logs/base-liberty
+            - name: sifs-filebeat-ecomm-liberty-volume
+              mountPath: /fb-logs/ecomm-liberty
+            - name: sifs-filebeat-voice-liberty-volume
+              mountPath: /fb-logs/voice-liberty
+          resources:
+{{ toYaml .Values.surveillanceFilebeat.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}

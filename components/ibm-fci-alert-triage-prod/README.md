@@ -9,10 +9,11 @@ This chart deploys Financial Crimes Insight for Alert Triage Software. For more 
 ## Chart Details
 This Helm chart will install the following:
 
-- A Alerts Review component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) 
-- A Shiny component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) 
-- A TLS Analytics component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) 
-- A TLS UI component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) 
+- A Alerts Review component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- A TLS Analytics component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- A TLS UI component as a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+
+- Alert Triage Transaction Monitoring Performance Charts [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 
 ## Prerequisites
 To install using the command line, ensure you have the following:
@@ -92,7 +93,7 @@ These are the steps to install IBM Financial Crimes Insight for Alert Triage Sof
 
 ### Create Persistent Volumes
 
-Persistence is enabled by default.  One Physical volume is required for IBM Financial Crime Insight for Alert Triage Software on top of the requirements for IBM Financial Crime Insight base. 
+Persistence is enabled by default.  One Physical volume is required for IBM Financial Crime Insight for Alert Triage Software on top of the requirements for IBM Financial Crime Insight base.
 
 To create physical volumes, you must have the Cluster Administrator role.
 
@@ -137,4 +138,3 @@ More information about persistent volumes and the system administration steps re
 ## Documentation
 
 Find out more about [IBM Financial Crimes Insight](https://www.ibm.com/support/knowledgecenter/SSCKRH).
-

@@ -3,25 +3,19 @@ kind: Deployment
 metadata:
   name: {{ template "wca.fullname" . }}
   labels:
-    app: {{ template "wca.name" . }}
-    chart: {{ template "wca.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "wca.name" .) (include "wca.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
 {{ include "common.scaleDownIfDisabled" . | indent 2 }}
   selector:
     matchLabels:
-      app: {{ template "wca.name" . }}
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (include "wca.name" .) .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "wca.name" . }}
-        release: {{ .Release.Name }}
-        chart: {{ template "wca.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "wca.name" .) (include "wca.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "wca") | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -29,8 +23,8 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{ .Release.Name }}-wca
-      serviceAccount: {{ .Release.Name }}-wca
+      serviceAccountName: fci-wca
+      serviceAccount: fci-wca
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -46,11 +40,8 @@ spec:
         resources:
 {{ toYaml .Values.proxy.resources | indent 10 }}
         securityContext:
-{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
-          capabilities:
-            drop:
-            - ALL
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
         imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
         env:
         - name: "SERVICE_HOST_ENV_NAME"
@@ -69,11 +60,8 @@ spec:
       - name: 'admin-proxy'
 {{ include "common.sideCarHealthCheck" . | indent 8 }}
         securityContext:
-{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
-          capabilities:
-            drop:
-            - ALL
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+{{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
         imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
         resources:
 {{ toYaml .Values.proxy.resources | indent 10 }}
@@ -96,13 +84,9 @@ spec:
         - configMapRef:
             name: {{ template "wca.fullname" . }}
         env:
-        - name: "esadmin_password"
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: esadmin_password
+{{- include "common.import-secret" (list . "esadmin_password" "wca" "esadmin_password") | indent 8 }}
         securityContext:
-{{ include "common.AnyuidContainerSecurityContext" . | indent 10 }}
+{{ include "common.PrivilegedContainerSecurityContext" . | indent 10 }}
           capabilities:
             drop:
             - ALL
@@ -132,6 +116,6 @@ spec:
         - name: data
           mountPath: "/home/esadmin/esdata"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}

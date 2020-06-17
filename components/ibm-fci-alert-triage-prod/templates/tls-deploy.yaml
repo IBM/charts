@@ -3,10 +3,7 @@ kind: Deployment
 metadata:
   name: {{ template "ibm-fci-alert-triage.fullname" . }}-tls-analytics
   labels:
-    app: {{ template "ibm-fci-alert-triage.name" . }}-tls-analytics
-    chart: {{ template "ibm-fci-alert-triage.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "tls-analytics") (include "ibm-fci-alert-triage.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   {{   if .Values.fcai_transaction_list_screening.enabled }}
   replicas: 1
@@ -15,17 +12,13 @@ spec:
   {{   end }}
   selector:
     matchLabels:
-      app: {{ template "ibm-fci-alert-triage.name" . }}-tls-analytics
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "tls-analytics") .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "ibm-fci-alert-triage.name" . }}-tls-analytics
-        release: {{ .Release.Name }}
-        chart: {{ template "ibm-fci-alert-triage.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-alert-triage.name" .) "tls-analytics") (include "ibm-fci-alert-triage.chart" .) .Release.Name .Release.Service ) | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -33,7 +26,11 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{ template "ibm-fci-alert-triage.core-release-name" . }}-common-scripts
+      {{- if .Values.global.pvRequiresPermissionsFix }}
+      serviceAccountName: fci-kube-api-fowner
+      {{- else }}
+      serviceAccountName: fci-common-scripts
+      {{- end }}
       volumes:
 {{- if hasKey .Values "global" }}
 {{-   if hasKey .Values.global "swidtag" }}
@@ -55,8 +52,24 @@ spec:
 {{ toYaml .Values.global.imagePullSecrets | indent 6 }}
       {{- end }}
       initContainers:
+      {{- if .Values.global.pvRequiresPermissionsFix }}
+      - name: pv-permissions
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        resources:
+{{ toYaml .Values.sideCarContainers.resources | indent 12 }}
+        securityContext:
+{{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
+        args:
+        - chmod -R g+w /mount;
+        command:
+        - /bin/sh
+        - -c
+        volumeMounts:
+        - mountPath: /mount
+          name: tls
+      {{- end }}
       - name: init-svc-depend-gnm
-        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         command: [ "/common-scripts/init-container-svc-depend.sh" ]
         securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
@@ -66,7 +79,7 @@ spec:
 {{    toYaml . | indent 12 }}
         {{- end }}
       - name: init-svc-depend-mongodb
-        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         command: [ "/common-scripts/init-container-svc-depend.sh" ]
         securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
@@ -77,7 +90,7 @@ spec:
         {{- end }}
       containers:
       - name: tls
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.fcai_transaction_list_screening.tlsAnalytics.image.repository }}:{{ .Values.fcai_transaction_list_screening.tlsAnalytics.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.fcai_transaction_list_screening.tlsAnalytics.image.repository }}:{{ .Values.fcai_transaction_list_screening.tlsAnalytics.image.tag }}
         imagePullPolicy: {{ .Values.fcai_transaction_list_screening.tlsAnalytics.image.pullPolicy }}
         {{- with .Values.fcai_transaction_list_screening.tlsAnalytics.resources }}
         resources:
@@ -85,6 +98,9 @@ spec:
         {{- end }}
         securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
+          {{- if .Values.global.pvRequiresPermissionsFix }}
+          runAsUser:  {{ .Values.fcai_transaction_list_screening.tlsAnalytics.runAsUser}}
+          {{- end }}
         readinessProbe:
           exec:
             command:
@@ -145,12 +161,12 @@ spec:
         - name: MONGODB_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-mongo-secrets-env
               key: mongodb-root-password
         - name: MONGODB_TLS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-platform-secrets-env
+              name: {{ template "ibm-fci-alert-triage.core-release-name" . }}-mongo-secrets-env
               key: mongodb-fcai-tls-password
         - name: JWT_KEY
           valueFrom:

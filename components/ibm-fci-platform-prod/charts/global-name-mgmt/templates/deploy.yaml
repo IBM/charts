@@ -3,27 +3,21 @@ kind: Deployment
 metadata:
   name: {{ template "global-name-mgmt.fullname" . }}
   labels:
-    app: {{ template "global-name-mgmt.name" . }}
-    chart: {{ template "global-name-mgmt.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "global-name-mgmt.name" .) (include "global-name-mgmt.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
 {{ include "common.scaleDownIfDisabled" . | indent 2 }}
   selector:
     matchLabels:
-      app: {{ template "global-name-mgmt.name" . }}
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (include "global-name-mgmt.name" .) .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "global-name-mgmt.name" . }}
-        release: {{ .Release.Name }}
-        chart: {{ template "global-name-mgmt.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (include "global-name-mgmt.name" .) (include "global-name-mgmt.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "platform") | indent 8 }}
     spec:
-      serviceAccountName: {{ .Release.Name }}-common
+      serviceAccountName: fci-common
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
       securityContext:
@@ -39,7 +33,7 @@ spec:
             secretName: {{ .Release.Name }}-platform-secret-files
       containers:
         - name: global-name-mgmt
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
 {{ include "common.readinessProbe" . | indent 10 }}
 {{ include "common.livenessProbe" . | indent 10 }}
@@ -49,11 +43,7 @@ spec:
           - configMapRef:
               name: {{ template "global-name-mgmt.fullname" . }}
           env:
-          - name: GNM_ssl_ks_password
-            valueFrom:
-              secretKeyRef:
-                name: {{ .Release.Name }}-platform-secrets-env
-                key: FCI_JKS_PASSWORD
+{{- include "common.import-secret" (list . "GNM_ssl_ks_password" "platform" "FCI_JKS_PASSWORD") | indent 10 }}
           ports:
           - containerPort: 14500
           - containerPort: 14501
@@ -79,7 +69,7 @@ spec:
 {{ toYaml .Values.resources | indent 12 }}
         - name: message-log
 {{ include "common.sideCarHealthCheck" . | indent 10 }}
-          image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
           resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 12 }}
           args: [/bin/sh, -c, 'tail -n+1 -F /logs/messages.log']

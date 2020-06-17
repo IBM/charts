@@ -3,15 +3,11 @@ kind: Deployment
 metadata:
   name: {{ template "security-auth.fullname" . }}-redis
   labels:
-    app: {{ template "security-auth.name" . }}-redis
-    chart: {{ template "security-auth.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "security-auth.name" .) "redis") (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
   selector:
     matchLabels:
-      app: {{ template "security-auth.name" . }}-redis
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "security-auth.name" .) "redis" ) .Release.Name ) | indent 6 }}
   replicas: 1
   template:
     metadata:
@@ -19,10 +15,7 @@ spec:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
         name: {{ template "security-auth.fullname" . }}-redis
-        app: {{ template "security-auth.name" . }}-redis
-        chart: {{ template "security-auth.chart" . }}
-        release: {{ .Release.Name }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "security-auth.name" .) "redis") (include "security-auth.chart" .) .Release.Name .Release.Service ) | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -30,7 +23,7 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{ .Release.Name }}-common
+      serviceAccountName: fci-common
       volumes:
       - name: file-secrets
         secret:
@@ -44,21 +37,21 @@ spec:
         securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
         imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}
 {{ include "common.readinessProbe" . | indent 8 }}
 {{ include "common.livenessProbe" . | indent 8 }}
         resources:
 {{ toYaml .Values.redis.resources | indent 10 }}
         ports:
-        - containerPort: 6379  
+        - containerPort: 6379
       - name: 'redis-proxy'
-        image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
+        image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.nginxSslProxy.image.repository }}:{{ .Values.global.nginxSslProxy.image.tag }}
         imagePullPolicy: {{ .Values.global.nginxSslProxy.image.pullPolicy }}
         resources:
 {{ toYaml .Values.redis.resources | indent 10 }}
         securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
-{{ include "common.sideCarHealthCheck" . | indent 8 }}        
+{{ include "common.sideCarHealthCheck" . | indent 8 }}
         env:
         - name: "SERVICE_HOST_ENV_NAME"
           value: "localhost"

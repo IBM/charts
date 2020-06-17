@@ -3,25 +3,19 @@ kind: Deployment
 metadata:
   name: {{ template "search.fullname" . }}-liberty
   labels:
-    app: {{ template "search.name" . }}-liberty
-    chart: {{ template "search.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "search.name" .) "liberty") (include "search.chart" .) .Release.Name .Release.Service ) | indent 4 }}
 spec:
 {{ include "common.scaleDownIfDisabled" . | indent 2 }}
   selector:
     matchLabels:
-      app: {{ template "search.name" . }}-liberty
-      release: {{ .Release.Name }}
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "search.name" .) "liberty" ) .Release.Name ) | indent 6 }}
   template:
     metadata:
       annotations:
 {{ include "common.meteringAnnotations" . | indent 8 }}
       labels:
-        app: {{ template "search.name" . }}-liberty
-        release: {{ .Release.Name }}
-        chart: {{ template "search.chart" . }}
-        heritage: {{ .Release.Service }}
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "search.name" .) "liberty") (include "search.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+{{- include "common.using-secrets" (list "elastic" "platform") | indent 8 }}
     spec:
 {{ include "common.configureHostAliases" . | indent 6 }}
 {{ include "common.PodHostConfig" . | indent 6 }}
@@ -29,7 +23,7 @@ spec:
 {{ include "common.PodSecurityContextConfig" . | indent 8 }}
       affinity:
 {{ include "common.ArchNodeAffinity" . | indent 8 }}
-      serviceAccountName: {{template "case.core-release-name" . }}-common-scripts
+      serviceAccountName: fci-common-scripts
       volumes:
       - name: file-secrets
         secret:
@@ -38,7 +32,7 @@ spec:
         emptyDir: {}
       initContainers:
       - name: init-svc-depend
-        image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+        image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 10 }}
         command: [ "/common-scripts/init-container-svc-depend.sh" ]
@@ -46,27 +40,11 @@ spec:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
         args: [ {{ .Release.Namespace }}/{{ .Release.Name }}-elasticsearch ]
       containers:
-      - image: {{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.liberty.image.repository }}:{{ .Values.liberty.image.tag }}
+      - image: {{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.liberty.image.repository }}:{{ .Values.liberty.image.tag }}
         imagePullPolicy: {{ .Values.liberty.image.pullPolicy }}
         name: liberty
         securityContext:
 {{ include "common.RestrictedContainerSecurityContext" . | indent 10 }}
-        readinessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
-          initialDelaySeconds: 240
-          periodSeconds: 60
-        livenessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "if [ -e /opt/ibm/fci/scripts/healthcheck.sh ]; then /opt/ibm/fci/scripts/healthcheck.sh; else exit {{ default 0 .Values.global.enforceHealthCheck }}; fi"
-          initialDelaySeconds: 360
-          periodSeconds: 60
 {{- with .Values.liberty.resources }}
         resources:
 {{ toYaml . | indent 10 }}
@@ -83,45 +61,21 @@ spec:
         affinity:
 {{ toYaml . | indent 10 }}
 {{- end }}
+        livenessProbe:
+{{ toYaml .Values.liberty.livenessProbe | indent 10 }}
+        readinessProbe:
+{{ toYaml .Values.liberty.readinessProbe | indent 10 }}
         envFrom:
         - configMapRef:
             name: {{ template "search.fullname" . }}
         env:
-        - name: com_fci_password
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: com_fci_password
-        - name: SSL_TRUSTSTORE_PASSWORD_CONFIG
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: FCI_JKS_PASSWORD
-        - name: SSL_KEYSTORE_PASSWORD_CONFIG
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: FCI_JKS_PASSWORD
-        - name: SSL_KEY_PASSWORD_CONFIG
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: FCI_JKS_PASSWORD
-        - name: com_fci_keystore_password
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: FCI_JKS_PASSWORD
-        - name: JWT_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: JWT_KEY
-        - name: SEARCH_SERVICE_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-platform-secrets-env
-              key: ELASTIC_ADMIN_PASSWORD
+{{- include "common.import-secret" (list . "com_fci_password" "platform" "com_fci_password") | indent 8 }}
+{{- include "common.import-secret" (list . "SSL_TRUSTSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 8 }}
+{{- include "common.import-secret" (list . "SSL_KEYSTORE_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 8 }}
+{{- include "common.import-secret" (list . "SSL_KEY_PASSWORD_CONFIG" "platform" "FCI_JKS_PASSWORD") | indent 8 }}
+{{- include "common.import-secret" (list . "com_fci_keystore_password" "platform" "FCI_JKS_PASSWORD") | indent 8 }}
+{{- include "common.import-secret" (list . "JWT_KEY" "platform" "JWT_KEY") | indent 8 }}
+{{- include "common.import-secret" (list . "SEARCH_SERVICE_PASSWORD" "elastic" "ELASTIC_ADMIN_PASSWORD") | indent 8 }}
         ports:
         - containerPort: 9080
         - containerPort: 9443
@@ -131,7 +85,7 @@ spec:
           subPath: fci_universal_ks.jks
         - mountPath: /opt/ibm/wlp/usr/servers/fciServer/logs
           name: logs
-      - image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+      - image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         name: message-log
         resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 10 }}
@@ -142,7 +96,7 @@ spec:
         volumeMounts:
         - name: logs
           mountPath: /logs
-      - image: "{{ required "global.dockerRepository must specify from which repository the docker image should be fetched." .Values.global.dockerRepository }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+      - image: "{{ required "global.dockerRegistryPrefix must specify from which repository the docker image should be fetched." .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
         name: trace-log
         resources:
 {{ toYaml .Values.sideCarContainers.resources | indent 10 }}

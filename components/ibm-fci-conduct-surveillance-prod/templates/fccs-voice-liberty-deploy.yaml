@@ -1,0 +1,220 @@
+{{- $coreReleaseName := include "ibm-fci-conduct-surveillance.core-release-name" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-voice-liberty
+  labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "voice-liberty" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 4 }}
+spec:
+  {{   if .Values.surveillance_voice.enabled }}
+  replicas: 1
+  {{   else }}
+  replicas: 0
+  {{   end }}
+  selector:
+    matchLabels:
+{{- include "common.selector.labels" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "voice-liberty" ) .Release.Name ) | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{- include "common.label.metadata" (list . (printf "%s-%s" (include "ibm-fci-conduct-surveillance.name" .) "voice-liberty" ) (include "ibm-fci-conduct-surveillance.chart" .) .Release.Name .Release.Service ) | indent 8 }}
+      annotations:
+{{ include "common.meteringAnnotations" . | indent 8 }}
+    spec:
+{{ include "common.configureHostAliases" . | indent 6 }}
+{{ include "common.PodHostConfig" . | indent 6 }}
+      securityContext:
+{{ include "common.PodSecurityContextConfig" . | indent 8 }}
+      serviceAccountName: fci-kube-api-fowner
+      affinity:
+{{ include "common.ArchNodeAffinity" . | indent 8 }}
+      volumes:
+        - name: file-secrets
+          secret:
+            secretName: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secret-files
+        - name: fccs-voice-liberty-volume
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-voice-liberty
+        - name: fccs-shared-volume
+          persistentVolumeClaim:
+            claimName: {{ template "ibm-fci-conduct-surveillance.fullname" . }}-shared
+        - name: keytab-file
+          secret:
+            secretName: {{ .Release.Name }}-keytab
+{{- if hasKey .Values "surveillance_voice" }}
+{{-   if hasKey .Values.surveillance_voice "swidtag" }}
+{{-     if hasKey .Values.surveillance_voice.swidtag "file" }}
+        - name: swidtags
+          configMap:
+            name: {{ .Release.Name }}-swidtag-files
+{{-     end }}
+{{-   end }}
+{{- end }}
+      initContainers:
+        - name: init-svc-depend
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+          command: [ "/common-scripts/init-container-svc-depend.sh" ]
+          args: [ "{{ .Release.Namespace }}/{{ template "ibm-fci-conduct-surveillance.fullname" . }}-liberty","{{ .Release.Namespace }}/{{ template "ibm-fci-conduct-surveillance.fullname" . }}-ecomm-liberty" ]
+          resources:
+{{ toYaml .Values.initContainerResource.resources | indent 12 }}
+        {{- if or .Values.global.deployOnIBMCloud .Values.global.deployOnEKS }}
+        - name: pv-permissions
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.global.commonScripts.image.repository }}:{{ .Values.global.commonScripts.image.tag }}"
+          resources:
+{{ toYaml .Values.initContainerResource.resources | indent 12 }}
+          securityContext:
+{{ include "common.RootFownerContainerSecurityContext" . | indent 12 }}
+          args:
+          - chmod -R g+w /mount;
+          command:
+          - /bin/sh
+          - -c
+          volumeMounts:
+          - mountPath: /mount
+            name: fccs-voice-liberty-volume
+        {{- end }}
+      containers:
+        - name: fccs-voice
+          image: "{{ .Values.global.dockerRegistryPrefix }}/{{ .Values.surveillance_voice.voice.image.repository }}:{{ .Values.surveillance_voice.voice.image.tag }}"
+          imagePullPolicy: {{ .Values.surveillance_voice.voice.image.pullPolicy }}
+          securityContext:
+{{ include "common.RestrictedContainerSecurityContext" . | indent 12 }}
+            runAsUser: {{ .Values.global.runAsUser}}
+          readinessProbe:
+            httpGet:
+              path: /SIFSVoiceIngestionService/health
+              port: 9443
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /SIFSVoiceIngestionService/health
+              port: 9443
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "ibm-fci-conduct-surveillance.fullname" . }}
+          env:
+          - name: db2_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-db2-secrets-env
+                key: FCIAUTHID_PASSWORD
+          - name: fciauthid_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-db2-secrets-env
+                key: FCIAUTHID_PASSWORD
+          - name: fci_jks_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: JWT_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: JWT_KEY
+          - name: SSL_TRUSTSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: SSL_KEYSTORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: fci_kafka_msg_jks_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_KAFKA_MSG_JKS_PASSWORD
+          - name: FCI_KAFKA_MSG_KS_ALIASNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_KAFKA_MSG_JKS_ALIASNAME
+          - name: SERVER_TRUSTSTORE_PWD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: FCI_JKS_PASSWORD
+          - name: fciadmin_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-platform-secrets-env
+                key: com_fci_password
+          - name: fci_db2_password
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "ibm-fci-conduct-surveillance.core-release-name" . }}-db2-secrets-env
+                key: FCIAUTHID_PASSWORD
+          ports:
+          - containerPort: 9080
+          - containerPort: 9443
+          volumeMounts:
+{{- if hasKey .Values "surveillance_voice" }}
+{{-   if hasKey .Values.surveillance_voice "swidtag" }}
+{{-     if hasKey .Values.surveillance_voice.swidtag "file" }}
+            - name: swidtags
+              mountPath: /opt/ibm/fccs/swidtag/{{ .Values.surveillance_voice.swidtag.file }}
+              subPath: {{ .Values.surveillance_voice.swidtag.file }}
+{{-     end }}
+{{-   end }}
+{{- end }}
+            - name: fccs-voice-liberty-volume
+              mountPath: /home/liberty-anchor
+            - name: fccs-shared-volume
+              mountPath: /fccs-shared
+            - name: keytab-file
+              mountPath: /etc/security/keytabs
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.jks
+              subPath: fci_universal_ks.jks
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.pvtk.pem
+              subPath: fci_universal_ks.pvtk.pem
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.crt.pem
+              subPath: fci_universal_ks.crt.pem
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.kdb
+              subPath: fci_universal_ks.kdb
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_universal_ks.sth
+              subPath: fci_universal_ks.sth
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.truststore.jks
+              subPath: fci_universal_ks.jks
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/kafka.client.keystore.jks
+              subPath: fci_universal_ks.jks
+            - name: file-secrets
+              mountPath: /opt/ibm/wlp/usr/servers/fciServer/resources/security/fci_kafka_msg.p12
+              subPath: fci_kafka_msg.p12
+          resources:
+{{ toYaml .Values.surveillance_voice.voice.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
