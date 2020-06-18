@@ -33,7 +33,7 @@ sch:
       productVersion: "{{ .Chart.AppVersion }}"
       cloudpakName: "IBM Cloud Pak for Data"
       cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
-      cloudpakVersion: "3.0.0"
+      cloudpakVersion: "3.0.1"
       productChargedContainers: "All"
       productMetric: "VIRTUAL_PROCESSOR_CORE"
       serviceability.io/collection_type: "DEFAULT"
