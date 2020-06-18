@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-spellchecker-en"
+  labels: &deployment_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                    "conversation"
+      component:                  "spellcheck"
+      slot:                       "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                       "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "spellcheck"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+spec:
+  replicas: {{ include "assistant.spellcheck.en.replicas" . }}
+  selector:
+    matchLabels: *primary_labels # Don't touch or extend!
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+  progressDeadlineSeconds: {{ .Values.en.progressDeadlineSeconds }}
+  revisionHistoryLimit: 2
+  template:
+    metadata:
+      labels:
+        <<: *deployment_labels
+        # Any pod-specific labels go below
+      annotations:
+
+        productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+        productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+        productVersion:           "1.4.2"
+        cloudpakName:             "IBM Cloud Pak for Data"
+        cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion:          "3.0.0"
+        productChargedContainers: "All"
+        productMetric:            "VIRTUAL_PROCESSOR_CORE"
+    spec:
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      containers:
+        - name: conversation-spellchecker
+          image: "{{ if tpl ( .Values.en.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.en.image.repository | toString ) . ) }}{{ end }}/{{ .Values.en.image.name }}:{{ .Values.en.image.tag }}"
+          imagePullPolicy: {{ .Values.en.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+            runAsUser: 1002
+            {{- end }}
+          env:
+            - name: LOG_SPELLCHECK_METRICS
+              value: "False"
+          ports:
+            - containerPort: 40000
+            
+          volumeMounts:
+            - name: config
+              mountPath: /spellcheck_server/sharedconfig
+              readOnly: true
+          resources:
+            {{ .Values.en.resources | toYaml | indent 12 | trim }}
+          livenessProbe:
+            exec:
+              command: ["/bin/grpc_health_probe", "-addr=:40000", "-tls", "-tls-ca-cert", "/spellcheck_server/sharedconfig/spellcheck_certificate", "-tls-server-name=SpellcheckServer"]
+            {{ .Values.en.probes.livenessProbe  | toYaml | indent 12 | trim }}
+          readinessProbe:
+            exec:
+              command: ["/bin/grpc_health_probe", "-addr=:40000", "-tls", "-tls-ca-cert", "/spellcheck_server/sharedconfig/spellcheck_certificate", "-tls-server-name=SpellcheckServer"]
+            {{ .Values.en.probes.readinessProbe | toYaml | indent 12 | trim }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ .Release.Name }}-clu-config-secret
+      serviceAccountName: "{{ .Release.Name }}-restricted"
+
+        {{- if and (semverCompare ">=1.16" (printf "%s.%s" ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Major | toString ) "" ) ( regexReplaceAll "[^0-9]" (.Capabilities.KubeVersion.Minor | toString ) "" ))) .Values.global.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew:           {{ tpl ( .Values.global.topologySpreadConstraints.maxSkew           | toString ) . }}
+        topologyKey:       "{{ tpl ( .Values.global.topologySpreadConstraints.topologyKey       | toString ) . }}"
+        whenUnsatisfiable: "{{ tpl ( .Values.global.topologySpreadConstraints.whenUnsatisfiable | toString ) . }}"
+        labelSelector:
+          matchExpressions:
+          - key: "service"
+            operator: In
+            values:
+            - "conversation"
+          - key: "component"
+            operator: In
+            values:
+            - "spellcheck"
+          - key: "slot"
+            operator: In
+            values:
+            - "{{ .Release.Name }}"
+        {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: beta.kubernetes.io/arch
+                  operator: In
+                  values: [ "amd64" ]
+        {{- if .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions }}
+          {{- printf "\n%s" ( .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions | toYaml | indent 16 ) }}
+        {{- end }}
+        {{- if (or (eq .Values.global.podAntiAffinity "Enable") (and (eq .Values.global.deploymentType "Production") (ne .Values.global.podAntiAffinity "Disable"))) }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: service
+                operator: In
+                values:
+                - conversation
+              - key: component
+                operator: In
+                values:
+                - spellcheck
+              - key: slot
+                operator: In
+                values:
+                - {{ .Release.Name }}
+            topologyKey: "kubernetes.io/hostname"
+        {{- end }}

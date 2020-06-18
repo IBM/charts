@@ -1,0 +1,28 @@
+{{- if include "ibm-minio.licenseValidate" .  | required "License must be accepted by setting license key to true" }}
+{{- include "sch.config.init" (list . "ibmMinio.sch.config.values") -}}
+{{- if include "ibm-minio.boolConvertor" (list .Values.networkPolicy.enabled . ) }}
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ include "sch.names.fullName" (list .) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list .) | indent 4 }}
+{{- if include "ibm-minio.boolConvertor" (list .Values.keep . ) }}
+  annotations:
+    "helm.sh/resource-policy": keep
+{{- end }}
+spec:
+  podSelector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . .sch.chart.components.minioServer) | indent 6 }}
+  ingress:
+    - ports:
+        - port: {{ .Values.service.port }}
+      {{- if not (include "ibm-minio.boolConvertor" (list .Values.networkPolicy.allowExternal . )) }}
+      from:
+        - podSelector:
+            matchLabels:
+              {{ include "sch.names.fullName" (list .) }}-client: "true"
+      {{- end }}
+{{- end }}
+{{ end }}

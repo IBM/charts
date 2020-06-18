@@ -1,0 +1,59 @@
+{{ if ne .Values.global.tetheredNamespace .Values.global.zenControlPlaneNamespace }}
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $compName := "setup-rbac-tether" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName ) | trim | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": {{ .Values.preInstallHookWeightAnchor | quote }}
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 8 }}
+      name: {{ include "sch.names.fullCompName" (list . $compName) }}
+    spec:
+      serviceAccountName: {{ .Values.tether.sa }}
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      containers:
+      - name: setup-rbac-tether
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.creds) }}
+        resources:
+{{ toYaml .Values.creds.resources | trim | indent 10 }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        command:
+        - "/bin/bash"
+        - -c
+        - |
+          set -eu
+          # create rolebinding for admin sa to bind it to the watson-aiops-role created using cpd adm command
+          retval=0 && kubectl get rolebinding {{ .Values.tether.rolebinding.name }} -n {{ .Values.global.tetheredNamespace }} || retval=$?
+          if [[ $retval != 0 ]]; then
+            cat <<EOF | kubectl create -n {{ .Values.global.tetheredNamespace }} -f -
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: {{ .Values.tether.rolebinding.name }}
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: Role
+              name: {{ .Values.tether.rolebinding.roleName }}
+            subjects:
+            - kind: ServiceAccount
+              name: {{ .Values.tether.sa }}
+              namespace: {{ .Values.global.zenControlPlaneNamespace }}
+          EOF
+          fi
+      restartPolicy: Never
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+{{ end }}

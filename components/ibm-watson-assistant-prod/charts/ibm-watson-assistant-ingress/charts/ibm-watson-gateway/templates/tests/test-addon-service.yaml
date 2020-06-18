@@ -1,0 +1,52 @@
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := include "gateway.get-name-or-use-default" (list . "gw-test") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 4 }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  {{- if ne .Values.serviceAccount.name "" }}
+  serviceAccountName: {{ include "gateway.account.name" . }}
+  {{- end }}
+{{- if (include "gateway.icpDockerImageSecret" .) }}
+  imagePullSecrets:
+    - name: {{ include "gateway.icpDockerImageSecret" . }}
+{{- end }}
+  securityContext:
+    runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+    runAsUser: 8000
+{{- end }}
+  containers:
+  - name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+    image: "{{ include "gateway.icpDockerRepo" . }}{{ include "gateway.image-name-extract" .Values.addon.tls.image.repository }}:{{ .Values.addon.tls.image.tag }}"
+    command: ["sh", "-c", "curl -k --fail {{ include "gateway.addonService.endpoint" . -}}/healthz"]
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+      runAsUser: 8000
+{{- end }}
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        memory: 100Mi
+        cpu: '.2'
+      limits:
+        memory: 200Mi
+        cpu: '.5'
+  restartPolicy: Never
+  affinity:
+{{- include "gateway.affinity" (list . (dict "kind" "Pod" "component" $compName)) | indent 4 }}

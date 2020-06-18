@@ -1,0 +1,51 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .Values.global.kafka.strimzi.clusterName -}}
+
+{{ if .Values.global.kafka.strimzi.enabled }}
+apiVersion: kafka.strimzi.io/v1beta1
+kind: Kafka
+metadata:
+  name: {{ $name }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": {{ add 1 .Values.preInstallHookWeightAnchor | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+spec:
+  kafka:
+    version: 2.4.0
+    replicas: {{ .Values.global.kafka.strimzi.replicas }}
+    resources:
+{{ .Values.global.kafka.strimzi.resources | toYaml | indent 6 }}
+    jvmOptions:
+{{ .Values.global.kafka.strimzi.jvmOptions | toYaml | indent 6 }}
+    # Listeners must use scram-sha-512 and not support plain for security
+    listeners:
+      plain: {}
+      tls:
+        authentication:
+          type: scram-sha-512
+    config:
+{{ .Values.global.kafka.strimzi.config | toYaml | indent 6 }}
+    storage:
+{{ .Values.global.kafka.strimzi.storage | toYaml | indent 6 }}
+    template:
+{{ .Values.global.kafka.strimzi.template | toYaml | indent 6 }}
+  zookeeper:
+    replicas: {{ .Values.global.kafka.strimzi.zookeeper.replicas }}
+    resources:
+{{ .Values.global.kafka.strimzi.zookeeper.resources | toYaml | indent 6 }}
+    jvmOptions:
+{{ .Values.global.kafka.strimzi.zookeeper.jvmOptions | toYaml | indent 6 }}
+    storage:
+{{ .Values.global.kafka.strimzi.zookeeper.storage | toYaml | indent 6 }}
+    template:
+{{ .Values.global.kafka.strimzi.zookeeper.template | toYaml | indent 6 }}
+  entityOperator:
+    topicOperator:
+      resources:
+{{ .Values.global.kafka.strimzi.entityOperator.topicOperatorResources | toYaml | indent 8 }}
+    userOperator:
+      resources:
+{{ .Values.global.kafka.strimzi.entityOperator.userOperatorResources | toYaml | indent 8 }}
+{{ end }}

@@ -1,0 +1,35 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .Values.global.kafka.strimzi.clusterName -}}
+{{ if .Values.global.kafka.strimzi.enabled }}
+apiVersion: kafka.strimzi.io/v1beta1
+kind: KafkaUser
+metadata:
+  name: {{ include "zeno.kafkaUsername" . }}
+  labels:
+    strimzi.io/cluster: {{ $name }}
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": {{ add 1 .Values.preInstallHookWeightAnchor | quote }}
+spec:
+  authentication:
+    type: scram-sha-512
+    acls:
+{{ range .Values.global.kafka.strimzi.topics }}
+    - resource:
+        type: topic
+        name: {{ . }}
+        patternType: literal
+      operation: Read
+    - resource:
+        type: topic
+        name: {{ . }}
+        patternType: literal
+      operation: Write
+    - resource:
+        type: topic
+        name: {{ . }}
+        patternType: literal
+      operation: Describe
+{{ end }}
+{{ end }}

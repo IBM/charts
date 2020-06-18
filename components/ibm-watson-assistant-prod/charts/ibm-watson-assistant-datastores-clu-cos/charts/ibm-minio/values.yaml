@@ -1,0 +1,294 @@
+---
+## set kubernetes cluster domain where minio is running
+##
+clusterDomain: cluster.local
+
+## Set default image, imageTag, and imagePullPolicy. mode is used to indicate the
+##
+minio:
+  image:
+    name: "opencontent-minio"
+    tag: "1.1.3"
+    pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+
+minioClient:
+  image:
+    name: "opencontent-minio-client"
+    tag: "1.0.3"
+    pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+
+creds:
+  image:
+    name: "opencontent-icp-cert-gen-1"
+    tag: "1.1.4"
+    pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+
+global:
+  dockerRegistryPrefix: ""
+  image:
+    pullSecret: ""
+    pullPolicy: IfNotPresent
+  sch:
+    # global.sch.enabled - Specifies if the ibm-sch chart should be used as sub-chart. If set to false, a compatible version of sch chart should be provided by umbrella chart.
+    enabled: true
+  metering:
+    productName: "ibm-minio"
+    productID: "ibm_minio_1_0_0_Apache_2___55555"
+    productVersion: "1.0.0"
+    productMetric: "VIRTUAL_PROCESSOR_CORE"
+    productChargedContainers: "All"
+    cloudpakName: "IBM Cloud Pak for Data"
+    cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+    cloudpakVersion: "3.0.0"
+  deploymentType: "Production"
+  # Change license to true to indicate have read and agree to license agreements : http://ibm.biz/oms-license & http://ibm.biz/oms-apps-license
+  license: false
+  storageClassName: ""
+
+  ## minio data Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  ##
+  ## Storage class of PV to bind. By default it looks for standard storage class.
+  ## If the PV uses a different storage class, specify that here.
+
+#keep - if set to true, helm delete does not remove the generated resources (the minio will continue to run in kubernetes but will not be managed by the helm.)
+#keep - Templates like `{{ .Values.global.keepDatastores }}` are supported.
+keep: false
+
+# Set the uid for the containers
+securityContext:
+  minio:
+    runAsUser: 999
+  creds:
+    runAsUser: 523
+
+## Update strategy  for minio (statefull set)
+updateStrategy: RollingUpdate
+
+## Pod priority settings
+## ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+##
+priorityClassName: ""
+
+## Set default accesskey, secretkey, Minio config file path, volume mount path and
+## number of nodes (only used for Minio distributed mode)
+## Distributed Minio ref: https://docs.minio.io/docs/distributed-minio-quickstart-guide
+##
+existingSecret: ""
+configPath: "/workdir/home/.minio/"
+configPathmc: "/workdir/home/.mc/"
+mountPath: "/workdir/data"
+replicas: 4
+## Only works if .Values.global.deploymentType(Development | Production) is set and replicas unset
+replicasForDev: 4
+replicasForProd: 4
+
+## TLS Settings for Minio
+tls:
+  enabled: true
+  ## Create a secret with private.key and public.crt files and pass that here. Ref: https://github.com/minio/minio/tree/master/docs/tls/kubernetes#2-create-kubernetes-secret
+  certSecret: ""
+
+## Enable persistence using Persistent Volume Claims
+## ref: http://kubernetes.io/docs/user-guide/persistent-volumes/
+##
+persistence:
+  enabled: false
+  ## A manually managed Persistent Volume and Claim
+  ## Requires persistence.enabled: true
+  ## If defined, PVC must be created manually before volume will be bound
+  # existingClaim:
+  useDynamicProvisioning: true
+  # VolumeName: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+  ## If subPath is set mount a sub folder of a volume instead of the root of the volume.
+  ## This is especially handy for volume plugins that don't natively support sub mounting (like glusterfs).
+  ##
+  subPath: ""
+
+  # persistence.selector - if useDynamicProvisioning is disabled, user may either bound PV to PVC manually,
+  #   or specify selector (label and value) to bound pre-creaed PV to PVC based on the labels (useful for local-storage).
+  # Selector cannot be specified if dynamic provisioning is used.
+  selector:
+    # label - label that the PV should have to be boundable to created PVCs
+    label: ""
+    # value - value of the label that the PV should have to be boundable to created PVCs
+    value: ""
+
+## Expose the Minio service to be accessed from outside the cluster (LoadBalancer service).
+## or access it from within the cluster (ClusterIP service). Set the service type and the port to serve it.
+## ref: http://kubernetes.io/docs/user-guide/services/
+##
+
+service:
+  port: 9000
+## Configure Ingress based on the documentation here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+##
+
+## Node labels for pod assignment
+## Ref: https://kubernetes.io/docs/user-guide/node-selection/
+##
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# affinityMinio - Affinities for Minio stateful set. Overrides the generated affinities if provided.
+#  Supports templated values like "{{- include "umbrella-chart.ibm-minio.affinities" . -}}" as keys.
+#  Usage: e.g., generated podAntiAffinity, ...
+affinityMinio: {}
+
+# antiAffinity specification of the anti-affinity for minio statefulset pods
+antiAffinity:
+  # antiAffinity.policy -  Policy for anti affinity of the StatefulSet.
+  #      If **soft** is set, the scheduler tries to create the pods on nodes (with the default topology key) not to co-locate them,
+  #         but it will not be guaranteed.
+  #      If **hard**, the scheduler tries to create the pods on nodes not to co-locate them and will not create the pods in case of co-location.
+  #      If the other value, anti affinity is disabled.
+  #  Support templates
+  policy: "soft"
+
+  # antiAffinity.topologyKey - Key for the node label that the system uses to denote a topology domain.
+  #  Support templates
+  topologyKey: "kubernetes.io/hostname"
+
+# Additational pod annotations
+podAnnotations: {}
+
+## Liveness and Readiness probe values.
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+livenessProbe:
+  initialDelaySeconds: 20
+  periodSeconds: 30
+  timeoutSeconds: 1
+  successThreshold: 1
+  failureThreshold: 3
+readinessProbe:
+  initialDelaySeconds: 15
+  periodSeconds: 15
+  timeoutSeconds: 1
+  successThreshold: 1
+  failureThreshold: 3
+
+## Configure resource requests and limits
+## ref: http://kubernetes.io/docs/user-guide/compute-resources/
+##
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 250m
+  limits:
+    memory: 2048Mi
+
+## Post-install hook weights - internal purposes only, DO NOT CHANGE
+## See: https://github.com/helm/helm/blob/master/docs/charts_hooks.md
+postBucketCreationHookWeight: "0"
+
+## Create a bucket after minio install
+##
+defaultBucket:
+  enabled: true
+  ## If enabled, must be a string with length > 0
+  name: bucket
+  ## Can be one of none|download|upload|public
+  policy: none
+  ## Purge if bucket exists already
+  purge: false
+
+## Create multiple buckets after minio install
+## Enabling `defaultBucket` will take priority over this list
+##
+buckets: []
+  # - name: bucket1
+  #   policy: none
+  #   purge: false
+  # - name: bucket2
+  #   policy: none
+  #   purge: false
+
+## Use this field to add environment variables relevant to Minio server.
+## These fields will be passed on to Minio container(s) when Chart is deployed.
+##  The settings are converted from "camel case" to "snakecase" used by minio, i.e. minioBrowser gets changed to MINIO_BROWSER
+environment:
+  ## To disable Minio Browser, set this value to off
+  minioBrowser: "on"
+  ## To enable virtual-host-style requests, set this value to Minio host domain name.
+  # minioDomain: ""
+  ## Minio Cache settings, refer: https://docs.minio.io/docs/minio-disk-cache-guide.html
+  # minioCacheDrives: ""
+  # minioCacheExclude: ""
+  # minioCacheExpiry: ""
+  # minioCacheMaxuse: ""
+  ## Minio WORM setting, refer: https://docs.minio.io/docs/minio-server-configuration-guide.html
+  # minioWorm: ""
+  ## Minio KMS settings, refer: https://docs.minio.io/docs/minio-kms-quickstart-guide.html
+  # minioSseVaultEndpoint: ""
+  # minioSseVaultApproleId: ""
+  # minioSseVaultApproleSecret: ""
+  # minioSseVaultKeyName: ""
+  ## Minio Federation settings, refer: https://docs.minio.io/docs/minio-federation-quickstart-guide.html
+  # minioEtcdEndpoints: ""
+  # minioPublicIps: ""
+  ## Add other environment variables relevant to Minio server here. These values will be added to the container(s) as this Chart is deployed
+
+networkPolicy:
+  enabled: false
+  allowExternal: true
+
+
+rbac:
+  # rbac.create - specifies whether RBAC (Role and RoleBinding) resources should be created
+  create: true
+
+serviceAccount:
+  # serviceAccount.create - specifies whether a ServiceAccount should be created
+  create: true
+  # serviceAccount.name - the name of the ServiceAccount to use. If not provided the service account name is generated. Templates like `{{ .Values.global.serviceAccount.name }}` are supported.
+  name: ""
+
+
+# podDisruptionBudget - Configures the PodDisruptionBudget. For possible values see https://kubernetes.io/docs/tasks/run-application/configure-pdb/#specifying-a-poddisruptionbudget
+# you can specify either maxUnavailable or minAvailable (not both), value can be either number or percentage. Set the value to empty string to unspecify the values.
+podDisruptionBudget:
+  create: true
+  maxUnavailable: 1
+  minAvailable: "" # 75%
+
+## SSE-S3 Config
+sse:
+  enabled: false
+  # Name of the key within the secret
+  masterKeyName: "sseMasterKey"
+  # sse.masterKeySecret - Specify either a template (to evaluate) or directly the name of a secret where the master key is stored. If empty and sse is enabled, secret is automatically generated using random value.
+  masterKeySecret: ""
+
+# Metering details - specifies metering annotations to be used by the minio statefulset
+#  to get backward compatible behaviour set: metering: '{{ tpl ( .Values.global.metering | toYaml ) . }}'
+#
+# Default values if not specified
+#  productID:      "123456"
+#  productName:    "ibm-minio"
+#  productVersion: "0.0.1"
+#  cloudpakName:   "IBM Cloud Pak for Data"
+#  cloudpakId:     "eb9998dcc5d24e3eb5b6fb488f750fe2"
+metering: {}
+
+# topologySpreadConstraints configures how the pods are distributed access multiple reziliency/faulure zones. Requires kubernetes 1.16+ with enabled MZR support.
+#   See https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/ to get more info about topologyContraints.
+topologySpreadConstraints:
+  # topologySpreadConstraints.enabled - Specifies if the topoloy spread contraints should be added to statefullset
+  enabled:           false
+  
+  # topologySpreadConstraints.maxSkew - How much the available zone can differ in number of pods.
+  maxSkew:           1
+  
+  # topologySpreadConstraints.topologyKey - Label on nodes defining failure zone; the nodes with the same values of the label are consider to belong to the same failure zone.
+  topologyKey:       "failure-domain.beta.kubernetes.io/zone"
+  
+  # topologySpreadConstraints.whenUnsatisfiable - Specifies action in case new pod cannot be scheduled because topology contraints. Possible values are DoNotSchedule and ScheduleAnyway
+  whenUnsatisfiable: "ScheduleAnyway"

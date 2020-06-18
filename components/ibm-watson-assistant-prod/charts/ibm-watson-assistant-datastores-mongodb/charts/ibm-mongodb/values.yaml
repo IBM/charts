@@ -1,0 +1,277 @@
+replicas: 3
+port: 27017
+
+# replicaSetName - Specifies a name of the replica set to be used. Supports templates in the values, like: `{{ .Values.global.mongodb.replicaSetName }}`
+replicaSetName: rs0
+
+arch:
+  amd64: "2 - No preference"
+  
+config: 
+  image:
+    repository: '{{ tpl ( .Values.global.image.repository | toString ) . }}'
+    name: "opencontent-mongodb-config-copy"
+    tag: "1.1.4"
+    pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+
+# Specs for the Docker image for the init container that establishes the replica set
+mongodbInstall:
+  image:
+    repository: '{{ tpl ( .Values.global.image.repository | toString ) . }}'
+    name: "opencontent-mongodb-install"
+    tag: "1.1.3"
+    pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+
+mongodb:
+  image:
+    repository: '{{ tpl ( .Values.global.image.repository | toString ) . }}'
+    name: "opencontent-mongodb-3"
+    tag: "1.1.5"
+    pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+
+creds:
+  image: 
+    repository: '{{ tpl ( .Values.global.image.repository | toString ) . }}'
+    name: "opencontent-icp-cert-gen-1"
+    tag: "1.1.4"
+    pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 10m
+    limits:
+      memory: 256Mi
+      cpu: 50m
+
+test:
+  image:
+    repository: '{{ tpl ( .Values.global.image.repository | toString ) . }}'
+    name: "opencontent-bats"
+    tag: "1.1.3"
+    pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+
+# Prometheus Metrics Exporter
+metrics:
+  enabled: false
+  image:
+    repository: '{{ tpl ( .Values.global.image.repository | toString ) . }}'
+    name: "opencontent-mongodb-exporter"
+    tag: "1.1.3"
+    pullPolicy: '{{ tpl ( .Values.global.image.pullPolicy | toString ) .  }}'
+  port: 9216
+  path: "/metrics"
+  socketTimeout: 3s
+  syncTimeout: 1m
+  prometheusServiceDiscovery: true
+  resources: 
+    limits:
+      cpu: 100m
+      memory: 100Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+
+global:
+  image:
+    repository: ""
+    pullSecret: ""
+    pullPolicy: "IfNotPresent"
+  sch:
+    # global.sch.enabled - Specifies if the ibm-sch chart should be used as sub-chart. If set to false, a compatible version of sch chart should be provided by umbrella chart.
+    enabled: true
+
+#keep - if set to true, helm delete does not remove the generated resources (the mongodb will continue to run in kubernetes but will not be managedd by the helm.) 
+#keep - Templates like `{{ .Values.global.keepDatastores }}` are supported.
+keep: false
+
+
+# resource - Specified resources for stateful set.
+resources:
+  limits:
+    # resources.limits.cpu - If commented (i.e., not specified, by default the pod can get all currently unused CPU on the nodes it is running on.) 
+    # cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+persistentVolume:
+  enabled: false
+  useDynamicProvisioning: true
+  ## mongodb-replicaset data Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  ##
+  storageClass: "localvolume-storage"
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  selector:
+    label: ""
+    value: ""
+  annotations: {}
+
+auth:
+  # auth.enabled - Configures if authorization should be enabled for mongo. Templates like `{{ .Values.global.mongodb.auth.enabled }}` are supported.
+  enabled: true
+  # Predefined Secrets for MongoDB Authentication and Authorization
+  # auth.authSecretName - Secret name with admin username and password. If empty secret with random password and user admin is generated. Templates like `{{ .Release.Name }}-mongodb-auth` are supported.
+  authSecretName: ""
+
+  # auth.keySecretName - Secret name with jey. If empty secret with random password and user admin is generated. Templates like `{{ .Release.Name }}-mongodb-key` are supported.
+  keySecretName: ""
+
+  # auth.metricsSecretName - Secret name with username and password used to ship metrics (if metrics are enabled). If empty secret with random creds are generated. Templates like `{{ .Release.Name }}-mongodb-metrics` are supported.
+  metricsSecretName: ""
+
+tls:
+  # Enable or disable MongoDB TLS support. Templates like `{{ .Values.global.mongodb.tls.enabled }}` are supported.
+  enabled: true
+  # Predefined Secrets for MongoDB TLS. Templates like `{{ .Release.Name }}-mongodb-tls` are supported.
+  tlsSecretName: ""
+
+rbac:
+  # rbac.create - specifies whether RBAC (Role and RoleBinding) resources should be created
+  create: true
+
+serviceAccount:
+  # serviceAccount.create - specifies whether a ServiceAccount should be created
+  create: true
+  # serviceAccount.name - the name of the ServiceAccount to use. If not provided the service account name is generated. Templates like `{{ .Values.global.serviceAccount.name }}` are supported.
+  name: ""
+
+# With WiredTiger, MongoDB utilizes both the WiredTiger internal cache and the filesystem cache.
+# Starting in 3.4, the WiredTiger internal cache, by default, will use the larger of either: 
+# 50% of (RAM - 1 GB), or 256 MB.
+# Recommand to change this to 0.4 of your memory limit for container
+wiredTigerCacheSizeGb: 0.256
+
+# The maximum size in megabytes for the replication operation log
+# By default, the mongod process creates an oplog based on the maximum amount of space available. 
+# The oplog is typically 5% of available persistent volume.
+# Min: 990 MB, Max: 50 GB
+oplogSizeMB: 1000
+
+# Entries for the MongoDB config file
+configmap: >
+  {
+    "storage": {
+      "dbPath": "/data/db"
+    },
+    "net": {
+      "port": 27017,
+      "ssl": {
+        "mode": "requireSSL",
+        "CAFile": "/data/configdb/tls.crt",
+        "PEMKeyFile": "/home/mongodb/work-dir/mongo.pem",
+        "allowConnectionsWithoutCertificates": true
+      }
+    },
+    "replication": {
+      "replSetName": "{{ tpl .Values.replicaSetName . }}"
+    },
+    "security": {
+      "keyFile": "/data/configdb/key.txt"
+    }
+  }
+
+
+
+# Readiness probe
+readinessProbe:
+  initialDelaySeconds: 5
+  timeoutSeconds: 1
+  failureThreshold: 3
+  periodSeconds: 10
+  successThreshold: 1
+
+# Liveness probe
+livenessProbe:
+  initialDelaySeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+  periodSeconds: 10
+  successThreshold: 1
+
+securityContext:
+  mongodb:
+    runAsUser: 998
+    runAsGroup: 998
+    fsGroup: 998
+  creds:
+    runAsUser: 523
+
+# Annotations to be added to MongoDB pods
+podAnnotations: {}
+
+## Node selector
+## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+nodeSelector: {}
+
+affinity: {}
+
+# affinityMongodb - Affinities for Mongodb stateful set. Overrides the generated affinities if provided.
+#  Supports templated values like "{{- incluede "umbrella-chart.ibm-mongo.affinities" . -}}"
+#  Usage: e.g., generated podAntiAffinity, ...
+affinityMongodb: {}
+
+# antiAffinity specification of the anti-affinity for mongodb statefulset pods
+antiAffinity:
+  # antiAffinity.policy -  Policy for anti affinity of the StatefulSet.
+  #      If **soft** is set, the scheduler tries to create the pods on nodes (with the default topology key) not to co-locate them,
+  #         but it will not be guaranteed.
+  #      If **hard**, the scheduler tries to create the pods on nodes not to co-locate them and will not create the pods in case of co-location.
+  #      If the other value, anti affinity is disabled.
+  #  Support templates
+  policy: "soft"
+
+  # antiAffinity.topologyKey - Key for the node label that the system uses to denote a topology domain.
+  #  Support templates
+  topologyKey: "kubernetes.io/hostname"
+
+
+tolerations: []
+
+extraLabels: {}
+
+podDisruptionBudget: {}
+
+# Annotations to be added to the service
+serviceAnnotations: {}
+
+# Additional environment variables to be set in the container
+extraVars: {}
+
+# metering - Configures annotations for metering service (if present in the cluster). Supports string templates or dictionary type.
+#metering: "{{ .Values.global.umbrellaChartMetering | toYaml }}"
+#
+# Default values if not specified
+#metering:
+#  productID: "Mongodb_34_free_00000"
+#  productName: "Mongodb"
+#  productVersion: "3.4.0"
+metering: {}
+
+# clusterDomain - the suffix of all the cluster DNS names like service_name.service_namespace.svc.cluster.local. Supports templated values like "{{ .Values.global.clusterDomain }}"
+clusterDomain: "cluster.local"
+
+# topologySpreadConstraints configures how the pods are distributed across multiple reziliency/failure zones.
+#  Requires kubernetes 1.16+ with enabled MZR support.
+#  See https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/ to get more info about topologyContraints.
+topologySpreadConstraints:
+  # topologySpreadConstraints.enabled - Specifies if the topology spread contraints should be added to MongoDB statefullset
+  enabled:           false
+  
+  # topologySpreadConstraints.maxSkew - How much the failure/availity zones can differ in number of pods.
+  maxSkew:           1
+  
+  # topologySpreadConstraints.topologyKey - Label of nodes defining failure zone;
+  #     the nodes with the same values of the label are consider to belong to the same failure zone.
+  topologyKey:       "failure-domain.beta.kubernetes.io/zone"
+  
+  # topologySpreadConstraints.whenUnsatisfiable - Specifies action in case new pod cannot be scheduled because of topology contraints.
+  #   Possible values are DoNotSchedule and ScheduleAnyway
+  whenUnsatisfiable: "ScheduleAnyway"

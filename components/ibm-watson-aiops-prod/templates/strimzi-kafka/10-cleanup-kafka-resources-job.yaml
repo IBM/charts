@@ -1,0 +1,47 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $compName := "cleanup-kafka-resources" -}}
+{{- if .Values.global.kafka.strimzi.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 4 }}
+  annotations:
+    "helm.sh/hook": "post-delete"
+    "helm.sh/hook-weight": {{ (mul -1 .Values.preInstallHookWeightAnchor) | quote }}
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: "{{ include "sch.names.fullCompName" (list . $compName) }}"
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 8 }}
+    spec:
+      restartPolicy: Never
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+      serviceAccountName: {{ .Values.tether.sa }}
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      containers:
+      - name: cleanup
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.creds) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        resources:
+{{ toYaml .Values.creds.resources | trim | indent 10 }}
+        command:
+          - "/bin/sh"
+          - "-c"
+          - |
+            set -ex
+            kubectl delete -n {{ .Release.Namespace }} --ignore-not-found=true kafka {{ .Values.global.kafka.strimzi.clusterName }}
+            kubectl delete -n {{ .Release.Namespace }} --ignore-not-found=true kafkauser {{ .Values.global.kafka.strimzi.user }}
+
+            {{- range .Values.global.kafka.strimzi.topics }}
+              kubectl delete --ignore-not-found=true kafkatopics {{ . }}
+            {{- end }}
+{{- end }}

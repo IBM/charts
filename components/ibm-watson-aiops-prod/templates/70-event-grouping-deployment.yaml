@@ -1,0 +1,95 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.components.eventGrouping -}}
+{{- $minioTlsVolumeName := "minio-tls-secret" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 25
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 8 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+{{ include "zeno.podAntiAffinity" (list . $name) | trim | indent 8 }}
+{{- include "zeno.imagePullSecretTemplate" . | indent 6 }}
+      initContainers:
+# We could probably have here just the Localization Service as it is has dependency on Topology service and that on Persistence Service.
+# However this order allows us to fail fast and we do not need to increase timeouts as it runs in sequential order (in the future we
+# need to be careful about this timeouts).
+{{ include "zeno.minioInitContainerReadiness" (dict "root" . "tlsVolumeName" $minioTlsVolumeName) | indent 6 }}
+{{ include "zeno.initContainerReadiness.persistence" . | indent 6 }}
+{{ include "zeno.initContainerReadiness.topology" . | indent 6 }}
+{{ include "zeno.initContainerReadiness.alertLocalization" . | indent 6 }}
+# Add Kafka once used from subcharts (Post GA)
+      containers:
+      - name: {{ $name | quote }}
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.eventGrouping) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        resources:
+{{ toYaml .Values.eventGrouping.resources | trim | indent 10 }}
+        ports:
+        - containerPort: 8443
+          name: http
+{{ include "zeno.livenessProbeTemplate" . | indent 8 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.componentUrls) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.kafka) }}
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
+        env:
+{{ include "zeno.kafkaEnvSecrets" . | indent 8 }}
+        - name: TOPOLOGY_SERVICE_RANKED_RESOURCE_TYPES
+          value: {{ .Values.eventGrouping.rankedResourceTypes | quote }}
+        - name: KAFKA_CONSUMER_CLIENT_ID
+          value: event_grouping_aiokafka_consumer
+        - name: KAFKA_PRODUCER_CLIENT_ID
+          value: event_grouping_aiokafka_producer
+        - name: MINIO_ENDPOINT_URL
+          value: {{ include .Values.global.minio.endpointTpl . | quote }}
+        - name: MINIO_AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.minio.accessSecret.nameTpl . | quote }}
+              key: accesskey
+        - name: MINIO_AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.minio.accessSecret.nameTpl . | quote }}
+              key: secretkey
+        - name: MINIO_BUCKET_TITLE
+          value: {{ .Values.global.minio.buckets.eventGrouping | quote }}
+        - name: MINIO_METADATA_FILE_TITLE
+          value: model_latest.json
+        - name: MINIO_SSL_CERT_PATH
+          value: /etc/ssl/certs/minio-cert.pem
+        volumeMounts:
+{{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+{{ include "zeno.kafkaConfigVolumeMount" . | indent 8 }}
+        - name: {{ $minioTlsVolumeName }}
+          mountPath: /etc/ssl/certs/minio-cert.pem
+      volumes:
+{{ include "zeno.tlsVolume" . | indent 6 }}
+{{ include "zeno.kafkaConfigVolume" . | indent 6 }}
+      - name: {{ $minioTlsVolumeName }}
+        secret:
+          secretName: {{ include .Values.global.tls.secret.nameTpl . | quote }}
+          items:
+          - key: tls.cacrt
+            path: tls.cacrt

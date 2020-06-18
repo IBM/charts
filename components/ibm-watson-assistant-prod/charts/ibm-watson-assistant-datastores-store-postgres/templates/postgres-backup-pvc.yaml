@@ -1,0 +1,38 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2020. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- if and ( include "assistant.ibm-postgresql.boolConvertor" (list .Values.backup.persistence.enabled . )) (not ( tpl ( .Values.backup.dataPVC.existingClaimName | toString ) . )) }}
+{{ include "sch.config.init" (list . .Values.global.schConfigTemplate) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ ( tpl ( .Values.backup.dataPVC.name | toString ) . ) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+    component: "store-postgres-backup-cronjob"
+spec:
+  accessModes:
+  - {{ ( tpl ( .Values.backup.dataPVC.accessMode | toString ) . ) | quote }}
+  resources:
+    requests:
+      storage: {{ tpl ( .Values.backup.dataPVC.size | toString ) . }}
+  {{- if include "assistant.ibm-postgresql.boolConvertor" (list .Values.backup.persistence.useDynamicProvisioning . ) }}
+  storageClassName: {{ default nil (tpl ( .Values.backup.dataPVC.storageClassName | toString ) . ) | quote }}
+  {{- else }}
+  # bind to an existing pv.
+  # setting storageClassName to "" disables dynamic provisioning
+  storageClassName: {{ default "" (tpl ( .Values.backup.dataPVC.storageClassName | toString ) . ) | quote }}
+    {{- if tpl (.Values.backup.dataPVC.selector.label | toString) . }}
+  # use selectors in the binding process
+  selector:
+    matchExpressions:
+      - {key: {{ tpl (.Values.backup.dataPVC.selector.label | toString) . }}, operator: In, values: [{{ tpl (.Values.backup.dataPVC.selector.value | toString ) . }}]}
+    {{- end }}
+  {{- end }}
+{{- end }}

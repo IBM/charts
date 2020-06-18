@@ -1,0 +1,58 @@
+{{- if include "ibmRedis.licenseValidate" .  | required "License must be accepted by setting license key to true" }}
+{{/*
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+*/}}
+{{- include "sch.config.init" (list . "ibmRedis.sch.chart.config.values") -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sch.names.statefulSetName" (list . "sentinel-test") | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "sentinel-test" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "sentinel-test" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 4 }}
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.redisPodSecurityContext) | indent 4 }}
+  restartPolicy: Never
+  affinity:
+{{ include "ibmRedis.affinity" (list . (dict "kind" "Pod" "component" "sentinel-test")) | indent 4 }}
+{{- if tpl ( .Values.global.image.pullSecret | toString ) . }}
+  imagePullSecrets:
+  - name:  {{ tpl ( .Values.global.image.pullSecret | toString ) . }}
+{{- end }}
+  serviceAccountName: {{ include "ibmRedis.serviceAccountName" . | quote }}
+  containers:
+    - name: "sentinel-test"
+      image: "{{ if tpl ( .Values.global.dockerRegistryPrefix | toString ) .  }}{{ trimSuffix "/" (tpl ( .Values.global.dockerRegistryPrefix | toString ) . ) }}/{{ end }}{{ tpl ( .Values.image.name | toString ) . }}:{{ .Values.image.tag }}"
+      imagePullPolicy: {{ ( tpl ( .Values.image.pullPolicy | toString ) . ) | quote }}
+      resources:
+        requests:
+          memory: 128Mi
+          cpu: 10m
+        limits:
+          memory: 128Mi
+          cpu: 50m
+      securityContext:
+{{ include "sch.security.securityContext" (list . .sch.chart.redisContainerSecurityContext) | indent 8 }}
+      command:
+      - "redis-cli"
+      - "-h"
+      - {{ include "sch.names.fullCompName" (list . .sch.chart.components.sentinelService) | quote }}
+      - "-p"
+      - "26379"
+      - "SENTINEL"
+      - "masters"
+{{ end }}

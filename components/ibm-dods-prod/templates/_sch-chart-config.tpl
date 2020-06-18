@@ -28,10 +28,15 @@ sch:
     appName: "ibm-dods-prod"
     labelType: "prefixed"      
     metering:
-      productName: {{ .Chart.Description }}
-      productID: ICP4D-addon-DecisionOptimization_{{ .Chart.AppVersion | replace "." "" }}_perpetual_00000
-      productVersion: {{ .Chart.AppVersion }}
-      serviceability.io/collection_type: DEFAULT   
+      productName: "{{ .Chart.Description }}"
+      productID: "ICP4D-addon-DecisionOptimization_{{ .Chart.AppVersion | replace "." "" }}_perpetual_00000"
+      productVersion: "{{ .Chart.AppVersion }}"
+      cloudpakName: "IBM Cloud Pak for Data"
+      cloudpakId: "eb9998dcc5d24e3eb5b6fb488f750fe2"
+      cloudpakVersion: "3.0.0"
+      productChargedContainers: "All"
+      productMetric: "VIRTUAL_PROCESSOR_CORE"
+      serviceability.io/collection_type: "DEFAULT"
     nodeAffinity:
       nodeAffinityRequiredDuringScheduling:
         operator: In

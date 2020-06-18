@@ -1,0 +1,181 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-store-db-schema-update"
+  labels: &job_labels
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                     "conversation"
+      component:                   "store_db_schema_updater"
+      slot:                        "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                        "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "store_db_schema_updater"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+spec:
+  activeDeadlineSeconds: 1200
+  backoffLimit: 10
+  template:
+    metadata:
+      annotations:
+
+        productName:              "IBM Watson Assistant for IBM Cloud Pak for Data"
+        productID:                "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant"
+        productVersion:           "1.4.2"
+        cloudpakName:             "IBM Cloud Pak for Data"
+        cloudpakId:               "eb9998dcc5d24e3eb5b6fb488f750fe2"
+        cloudpakVersion:          "3.0.0"
+        productChargedContainers: "All"
+        productMetric:            "VIRTUAL_PROCESSOR_CORE"
+      labels:
+        <<: *job_labels
+        # Any pod-specific labels go below
+    spec:
+      {{- if tpl .Values.imagePullSecret . }}
+      imagePullSecrets:
+        - name: {{ tpl .Values.global.image.pullSecret . | quote }}
+      {{- end }}
+
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      initContainers:
+      - name: postgres-is-prepared
+        image: "{{ if tpl ( .Values.pgClient.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.pgClient.image.repository | toString ) . ) }}{{ end }}/{{ .Values.pgClient.image.name }}:{{ .Values.pgClient.image.tag }}"
+        imagePullPolicy: {{ .Values.pgClient.image.pullPolicy | quote }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
+          {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 2000
+          {{- end }}
+        command:
+        - "sh"
+        - "-c"
+        - |
+          echo "Waiting until postgres is running and store database and users are created"
+          while true ; do
+            psql --command "select 1" -w | grep -q 1 && break
+            echo "    - The basic command to postgres failed (retry in 5 sec)"
+            sleep 5
+          done
+          echo "Done. Postgres is running now. Let go to create/update the DB schema for store microservice."
+        env:
+        - name: "PGHOST"
+          value: "{{ include "assistant.postgres.hostname"       . }}"
+        - name: "PGPORT"
+          value: "{{ include "assistant.postgres.port"           . }}"
+        - name: "PGDATABASE"
+          value: "{{ include "assistant.postgres.store.database" . }}"
+        - name: "PGUSER"
+          value: "{{ include "assistant.postgres.store.user"     . }}"
+        - name: "PGPASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "assistant.postgres_store.secretName" . }}"
+              key:  "password"
+        - name: "PGSSLMODE"
+          value: "{{ .Values.global.postgres.sslMode               }}"
+        - name: "PGSSLROOTCERT"
+          value: "/etc/secrets/postgres/tls.crt"
+        resources:
+          {{ .Values.pgClient.resources | toYaml | indent 10 | trim }}
+        volumeMounts:
+          - name: postgres
+            mountPath: "/etc/secrets/postgres/"
+      containers:
+      - name: db-schema-updater
+        image: "{{ if tpl ( .Values.store.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.store.image.repository | toString ) . ) }}{{ end }}/{{ .Values.store.image.name }}:{{ .Values.store.image.tag }}"
+        imagePullPolicy: {{ .Values.store.image.pullPolicy | quote }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
+          {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 2000
+          {{- end }}
+        env:
+        - name: "CLOUD_ENVIRONMENT"
+          value: "dev" # Note this needs to be FIXED (independetly on the environment where we are actually running)
+        - name:  "ENABLE_PREMIUM"
+          value: "false" # Slot does not have a premium plan
+        - name:  "ENABLE_DEDICATED"
+          value: "false" # Slot is not dedicated
+        - name:  "ENABLE_ICP"
+          value: "true"
+        - name: "POSTGRES_HOSTNAME"
+          value: "{{ include "assistant.postgres.hostname"       . }}"
+        - name: "POSTGRES_PORT"
+          value: "{{ include "assistant.postgres.port"           . }}"
+        - name: "POSTGRES_SSL_MODE"
+          value: "{{ .Values.global.postgres.sslMode               }}"
+        - name: "PGSSLMODE"
+          value: "{{ .Values.global.postgres.sslMode               }}"
+        - name: "DATABASE_NAME"
+          value: "{{ include "assistant.postgres.store.database" . }}"
+        - name: "POSTGRES_USER"
+          value: "{{ include "assistant.postgres.store.user"     . }}"
+        - name: "POSTGRES_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "assistant.postgres_store.secretName" . }}"
+              key:  "password"
+        - name: "SCHEMA_VERSION"
+          value: "4.3.7.2"
+        command:
+          - "/bin/bash"
+          - "-c"
+          - |
+             export VCAP_SERVICES="{\"user-provided\": [ {\"name\": \"pgservice\", \"label\": \"user-provided\", \"credentials\": {\"database\": \"${DATABASE_NAME}\", \"host\": \"${POSTGRES_HOSTNAME}\", \"port\": \"${POSTGRES_PORT}\", \"username\": \"${POSTGRES_USER}\", \"password\": \"${POSTGRES_PASSWORD}\"}}]}"
+             node schema-update.js ||
+                 { echo "ERROR Update failed with error code $?" ; sleep 10 ; /bin/false ; }
+
+        resources:
+          {{ .Values.store.resources | toYaml | indent 10 | trim }}
+        volumeMounts:
+          - name: postgres
+            mountPath: "/etc/secrets/postgres/"
+      volumes:
+        - name: postgres
+          secret:
+            secretName: "{{ include "assistant.postgres.secret_name" . }}"
+      restartPolicy: Never
+      serviceAccountName: "{{ .Release.Name }}-restricted"
+      terminationGracePeriodSeconds: 30            # To get some time before retry. Remove once backoff limit is uncommented
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: beta.kubernetes.io/arch
+                  operator: In
+                  values: [ "amd64" ]
+        {{- if .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions }}
+          {{- printf "\n%s" ( .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions | toYaml | indent 16 ) }}
+        {{- end }}

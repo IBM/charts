@@ -1,0 +1,80 @@
+{{- include "sch.config.init" (list . "sch.chart.zeno.config.values") -}}
+{{- $name :=  .sch.chart.components.persistence -}}
+{{- $postgresTlsVolumeName := "postgres-tls-secret" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $name) }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 4 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 25
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 6 }}
+  template:
+    metadata:
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $name) | trim | indent 8 }}
+{{ include "zeno.meteringLabels" (dict "root" . "name" $name) | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+      affinity:
+{{ include "zeno.nodeAffinity" . | trim | indent 8 }}
+{{ include "zeno.podAntiAffinity" (list . $name) | trim | indent 8 }}
+{{ include "zeno.imagePullSecretTemplate" . | trim | indent 6 }}
+
+################### initContainer for Postgres ###############
+# Ensure postgres is already up before we spin up the Persistence Service to connect to it
+      initContainers:
+{{ include "zeno.postgresInitContainerReadiness" (dict "root" . "tlsVolumeName" $postgresTlsVolumeName) | indent 6 }}
+      containers:
+      - name: {{ $name | quote }}
+        image: {{ include "zeno.imageName" (dict "root" . "service" .Values.persistence) }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        resources:
+{{ toYaml .Values.persistence.resources | trim | indent 10 }}
+        ports:
+        - containerPort: 8443
+          name: http
+{{ include "zeno.livenessProbeTemplate" . | indent 8 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "sch.names.fullCompName" (list . .sch.chart.config.tls) }}
+        env:  # these vars are loaded into python for the persistence service
+        - name: ENVIRONMENT
+          value: "PRODUCTION"
+        - name: DATABASE_URL
+          value: "{{ include .Values.global.postgres.tls.hostnameTpl . }}:{{ .Values.global.postgres.endpointPort }}"
+        - name: DATABASE_USER
+          value: {{ .Values.global.postgres.authSecret.pgSuperuserName | quote }}
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include .Values.global.postgres.authSecret.nameTpl . | quote }}
+              key: pg_su_password
+        - name: SSL_ROOT_CERT
+          value: /etc/ssl/certs/postgres-cert.pem
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        volumeMounts:
+{{ include "zeno.tlsVolumeMounts" . | indent 8 }}
+        - name: {{ $postgresTlsVolumeName | quote }}
+          mountPath: /etc/ssl/certs/postgres-cert.pem
+          subPath: tls.crt
+      volumes:
+{{ include "zeno.tlsVolume" . | indent 6 }}
+      - name: {{ $postgresTlsVolumeName | quote }}
+        secret:
+          secretName: {{ include .Values.global.postgres.tls.secret.nameTpl . | quote }}

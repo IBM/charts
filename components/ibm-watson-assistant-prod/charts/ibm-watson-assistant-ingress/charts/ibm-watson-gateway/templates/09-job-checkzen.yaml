@@ -1,0 +1,69 @@
+{{- if .Values.preInstallValidation }}
+{{- include "sch.config.init" (list . .Values.schConfigName) -}}
+{{- $compName := include "gateway.get-name-or-use-default" (list . "gw-checkzen") -}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 8 }}
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" $compName "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 8 }}
+    spec:
+      affinity:
+{{- include "gateway.affinity" (list . (dict "kind" "Job" "component" $compName)) | indent 8 }}
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        runAsUser: 8000
+{{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ include "gateway.privileged-account.name" . }}
+      containers:
+      - name: checkzen
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+          runAsUser: 8000
+{{- end }}
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: '.2'
+          limits:
+            memory: 200Mi
+            cpu: '.5'
+        image: "{{ include "gateway.icpDockerRepo" . }}{{ include "gateway.image-name-extract" .Values.addon.tls.image.repository }}:{{ .Values.addon.tls.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+            set -e
+            URL={{ printf "http://zen-core-api-svc.%s:3333/v1/monitor" ( include "gateway.addonService.zenNamespace" . ) }}
+            curl -k --fail $URL
+            if [[ $? -ne 0 ]]; then
+              echo -e "\nError: $URL is unreachable - are you sure {{ include "gateway.addonService.zenNamespace" .  | quote }} is the namespace where Zen is located?"
+            fi
+{{- end }}

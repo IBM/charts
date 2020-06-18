@@ -1,0 +1,139 @@
+{{- include "sch.config.init" (list . .Values.global.schConfigTemplate) -}}apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-master-config"
+  labels:
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                     "conversation"
+      component:                   "master"
+      slot:                        "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                        "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "master"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+data:
+  master-config.properties: |
+    bluegoat.master.pagerduty_url=https://events.pagerduty.com/generic/2010-04-15/create_event.json
+  
+  job-pod.json: |
+    {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+        "annotations":
+            {
+                "cloudpakId": "eb9998dcc5d24e3eb5b6fb488f750fe2",
+                "cloudpakName": "IBM Cloud Pak for Data",
+                "cloudpakVersion": "3.0.0",
+                "productChargedContainers": "All",
+                "productID": "ICP4D-addon-fa92c14a5cd74c31aab1616889cbe97a-assistant",
+                "productMetric": "VIRTUAL_PROCESSOR_CORE",
+                "productName": "IBM Watson Assistant for IBM Cloud Pak for Data",
+                "productVersion": "1.4.2"
+            },
+        "labels":         {
+            "app.kubernetes.io/instance": "{{ .Release.Name }}",
+            "app.kubernetes.io/managed-by": "{{ .Release.Service }}",
+            "app.kubernetes.io/name": "ibm-watson-assistant",
+            "component": "training",
+            "helm.sh/chart": "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}",
+            "icpdsupport/addOnName": "assistant",
+            "icpdsupport/app": "training",
+            "icpdsupport/serviceInstanceId": "{{ .Values.global.zenServiceInstanceId | int64 }}",
+            "release": "{{ .Release.Name }}",
+            "service": "conversation",
+            "slot": "{{ .Release.Name }}",
+            "tenant": "PUBLIC"
+        }
+    },
+    "spec": {
+        "hostNetwork": false,
+        "hostPID": false,
+        "hostIPC": false,
+        "terminationGracePeriodSeconds": 3,
+        "containers": [{
+                "command": ["/opt/bluegoat/service/ascscripts/train.sh"],
+                "env": [],
+                "volumeMounts": [
+                    {
+                        "name":      "cos-certificate",
+                        "mountPath": "/etc/secrets/cos/",
+                        "readOnly":  true
+                    }
+                ],
+                "resources": {
+                    "requests": {},
+                    "limits": {}
+                },
+                "livenessProbe": {
+                    "initialDelaySeconds": 20,
+                    "periodSeconds": 10,
+                    "timeoutSeconds": 2,
+                    "exec": {
+                         "command": [ "true" ]
+                    }
+                },
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": [
+                      "all"
+                    ]
+                  },
+                  "privileged": false,
+                  "procMount": "Default",
+                  "readOnlyRootFilesystem": false,
+{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+                  "runAsUser": 2000,
+{{- end }}
+                  "runAsNonRoot": true
+                }
+            }],
+        "imagePullSecrets": [],
+        "volumes": [
+            {
+                "name":      "cos-certificate",
+                "secret": {
+                    "secretName": "{{ include "assistant.cos.tls.secretName" . }}",
+                    "defaultMode": 420,
+                    "items": [
+                        {
+                            "key": "tls.cacrt",
+                            "path": "ca.crt"
+                        }
+                    ]
+                }
+            }
+        ],
+        "serviceAccountName" : "{{ .Release.Name }}-restricted",
+        "affinity": {
+            "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                        {
+                            "matchExpressions": [
+                                {
+                                    "key": "beta.kubernetes.io/arch",
+                                    "operator": "In",
+                                    "values": [ "amd64" ]
+                                }
+{{- if .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions }}
+  {{- range $labelSelectorRequirements := .Values.global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions }}
+    {{- printf ",\n%s" ( $labelSelectorRequirements | toPrettyJson | indent 32 ) }}
+  {{- end }}
+{{- end }}
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "restartPolicy": "Never"
+    }
+    }

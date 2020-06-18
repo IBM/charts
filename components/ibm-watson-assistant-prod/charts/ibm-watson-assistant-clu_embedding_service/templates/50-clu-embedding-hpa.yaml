@@ -1,0 +1,29 @@
+{{- if .Values.global.autoscaling.enabled }}
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: "{{ .Release.Name }}-clu-embedding-service-hpa"
+  labels:
+    <<: &primary_labels # Don't touch or extend these labels!
+      service:                    "conversation"
+      component:                  "clu_embedding_service"
+      slot:                       "{{ .Release.Name }}"
+    # Make sure the indent of other labels is the same as this comment's
+    tenant:                       "PUBLIC"
+    release:                       "{{ .Release.Name }}"
+    app.kubernetes.io/instance:    "{{ .Release.Name }}"
+    app.kubernetes.io/managed-by:  "{{ .Release.Service }}"
+    app.kubernetes.io/name:        "ibm-watson-assistant"
+    helm.sh/chart:                 "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+    icpdsupport/addOnName:         "assistant"
+    icpdsupport/app:               "clu_embedding_service"
+    icpdsupport/serviceInstanceId: "{{ .Values.global.zenServiceInstanceId | int64 }}"
+spec:
+  scaleTargetRef:
+    apiVersion: extensions/v1beta1
+    kind: Deployment
+    name: "{{ .Release.Name }}-clu-embedding-service"
+  minReplicas: {{ include "assistant.cluEmbeddingService.replicas" . }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  targetCPUUtilizationPercentage: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

@@ -1,0 +1,75 @@
+{{- include "sch.config.init" (list . "sch.chart.flink.config.values") -}}
+{{- $compName :=  .sch.chart.components.jobManager -}}
+{{- $volumeMountTemplates := .Values.commonConfigMounts.volumeMountTemplates -}}
+{{- $volumeTemplates := .Values.commonConfigMounts.volumeTemplates -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sch.names.fullCompName" (list . $compName) | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 4 }}
+{{ if .Values.global.meteringLabelsTpl }}
+{{ include .Values.global.meteringLabelsTpl (dict "root" . "name" $compName) | indent 4 }}
+{{ end }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "sch.metadata.labels.standard" (list . $compName) | trim | indent 8 }}
+{{ if .Values.global.meteringLabelsTpl }}
+{{ include .Values.global.meteringLabelsTpl (dict "root" . "name" $compName) | indent 8 }}
+{{ end }}
+      annotations:
+{{ include "sch.metadata.annotations.metering" (list . .sch.chart.metering .sch.chart.metering.productMetric .sch.chart.metering.productCloudpakRatio nil) | trim | indent 8 }}
+    spec:
+{{ include "sch.security.securityContext" (list . .sch.chart.specSecurityContext) | trim | indent 6 }}
+{{- include "flink.imagePullSecretTemplate" . | indent 6 }}
+      containers:
+      - name: {{ $compName }}
+        image: {{ include "flink.imageName" . | quote }}
+        imagePullPolicy: {{ include "flink.imagePullPolicy" . | quote }}
+{{ include "sch.security.securityContext" (list . .sch.chart.podSecurityContext) | trim | indent 8 }}
+        args:
+        - jobmanager
+        ports:
+        - containerPort: 6123
+          name: rpc
+        - containerPort: 6124
+          name: blob
+        - containerPort: {{ .Values.jobmanager.service.port }}
+          name: api
+        env:
+        - name: FLINK_CONF_DIR
+          value: /etc/flink
+        livenessProbe:
+          httpGet:
+            path: /overview
+            port: api
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /overview
+            port: api
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+{{ toYaml .Values.jobmanager.resources | trim | indent 10 }}
+        volumeMounts:
+        - name: {{ include .Values.global.flink.flinkConfig.nameTpl . }}
+          mountPath: /etc/flink
+{{ include "flink.templateInjector" (list . $volumeMountTemplates) | indent 8 }}
+      volumes:
+      - name: {{ include .Values.global.flink.flinkConfig.nameTpl . }}
+        secret:
+          secretName: {{ include .Values.global.flink.flinkConfig.nameTpl . }}
+{{ include "flink.templateInjector" (list . $volumeTemplates) | indent 6 }}
+{{ include "flink.imagePullSecretTemplate" . | trim | indent 6 }}
+      affinity:
+{{ include "flink.nodeAffinity" . | trim | indent 8 }}

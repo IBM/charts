@@ -1,0 +1,76 @@
+###############################################################################
+# Licensed Materials - Property of IBM.
+# Copyright IBM Corporation 2018. All Rights Reserved.
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure 
+# restricted by GSA ADP Schedule Contract with IBM Corp.
+#
+# Contributors:
+#  IBM Corporation - initial API and implementation
+###############################################################################
+{{- include "sch.config.init" (list . .Values.global.schConfigTemplate) }}
+{{- define "assistant.store.postgres.authsecret" -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "assistant.postgres_store.secretName" . | quote }}
+  labels:
+{{ include "sch.metadata.labels.standard" (list . "") | indent 4 }}
+data:
+  password: $(openssl rand -base64 32  | tr '/' '-' | tr -d '\n' | base64 | tr -d '\n')
+{{- end }}
+
+{{- if not .Values.global.postgres.store.auth.authSecretName }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-gen-store-postgres-secret"
+  labels:  &labels
+{{ include "sch.metadata.labels.standard" (list . "" (dict "icpdsupport/addOnName" .Values.global.addOnName "icpdsupport/app" "helm-store-postgres-generate-password-secret" "icpdsupport/serviceInstanceId" (.Values.global.zenServiceInstanceId | int64))) | indent 4 }}
+    component: "helm-store-postgres-generate-password-secret"
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      name: cred-gen
+      annotations:
+{{- include "sch.metadata.annotations.metering" (list . .sch.chart.metering "" "" "") | indent 8 }}
+      labels: 
+        <<: *labels
+    spec:
+      serviceAccountName: {{ (printf "%s-credentials" .Release.Name) | quote }}
+      #imagePullSecrets:
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+
+      containers:
+      - name: cred-gen
+        image: "{{ if tpl ( .Values.creds.image.repository | toString ) . }}{{ trimSuffix "/" (tpl (.Values.creds.image.repository | toString ) . ) }}{{ end }}/{{ .Values.creds.image.name }}:{{ .Values.creds.image.tag }}"
+        imagePullPolicy: {{ .Values.creds.image.pullPolicy | quote }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+              - ALL
+          {{- if not ( .Capabilities.APIVersions.Has "security.openshift.io/v1" ) }}
+          runAsUser: 2000
+          {{- end }}
+
+        command:
+        - "/bin/sh"
+        - -c
+        - |
+          set -e
+          cat <<EOF | kubectl apply -n {{ .Release.Namespace }} -f -
+          ---
+{{ include "assistant.store.postgres.authsecret" . | indent 10 }}
+          EOF
+        resources:
+{{ .Values.creds.resources | toYaml | indent 10 }}
+      restartPolicy: Never
+      affinity:
+{{ include "assistant.nodeAffinities" . | indent 8 }}
+{{- end }}
